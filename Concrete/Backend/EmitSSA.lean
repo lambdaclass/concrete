@@ -353,7 +353,8 @@ private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
           | none => bareName
     .global resolved
   | .intConst val _ => .intLit val
-  | .floatConst val _ => .floatLit val
+  -- An f32 constant is rounded to f32 here, before it is printed as a double (bug 109).
+  | .floatConst val ty => .floatLit (if ty == .float32 then val.toFloat32.toFloat else val)
   | .boolConst b => .boolLit b
   | .strConst name => .global name
   | .strConstRef name => .global name  -- fallback; normally handled by ensurePtrOp

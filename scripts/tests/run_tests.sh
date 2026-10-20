@@ -7517,6 +7517,9 @@ run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
 # rejects) at every width; `<int> as bool` never had a meaning and is refused.
 run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
+# Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
+# (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
+run_ok "$TESTDIR/regress_109_float_literals.con" 42
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

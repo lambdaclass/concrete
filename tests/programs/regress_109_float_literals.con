@@ -1,0 +1,25 @@
+// Bug 109: float constants were printed to LLVM with a six-digit decimal
+// formatter. An inexact f32 literal (0.1) was rejected by llvm-as, and an f64
+// literal silently lost precision (0.123456789 became 0.123457 and 0.0000000001
+// became 0). Constants are now the hex of their IEEE bits, f32 rounded first.
+// (The interpreter has no floats, so this is a native-only regression.)
+fn main() -> i32 {
+    let x: f32 = 0.1;
+    if !(x > 0.0) { return 1; }
+    // f32(0.1) widened to f64 is exactly 0.100000001490116119384765625.
+    let w: f64 = x as f64;
+    if w != 0.100000001490116119384765625 { return 2; }
+    let half: f32 = 0.5;
+    if (half as f64) != 0.5 { return 3; }
+    let y: f64 = 0.123456789;
+    let scaled: f64 = y * 1000000000.0;
+    if !(scaled > 123456788.5) { return 4; }
+    if !(scaled < 123456789.5) { return 5; }
+    let tiny: f64 = 0.0000000001;
+    if !(tiny > 0.0) { return 6; }
+    if !(tiny * 10000000000.0 > 0.5) { return 7; }
+    let third: f32 = 0.3333333;
+    if !(third > 0.3333) { return 8; }
+    if !(third < 0.3334) { return 9; }
+    return 42;
+}

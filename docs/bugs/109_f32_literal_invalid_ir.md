@@ -1,8 +1,8 @@
 # Bug 109 — an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant
 
-**Status:** OPEN
+**Status:** FIXED (branch `backend-108-116`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
-**Severity:** compile failure at LLVM validation.
+**Severity:** compile failure at LLVM validation for `f32`; found while fixing it, the same printer was **silent wrong code** for `f64` (six significant decimals: `0.123456789` compiled as `0.123457`, `0.0000000001` as `0`).
 
 ## Reproducer
 
@@ -31,14 +31,35 @@ Emit `f32` constants in LLVM hex form (the f32 value widened to double). `f64` l
 
 examples/snippets/floats.con, manifest `known-bug 109`.
 
+## Cause
+
+`Concrete/Backend/EmitLLVM.lean`, `printLLVMOperand` for `.floatLit`: the constant was rendered with
+Lean's `toString` on `Float`, which prints six digits after the point. For `float` that is invalid
+whenever the value is not exactly an f32 (LLVM reads a `float` constant as a double and requires it to
+be exactly representable); for `double` it is accepted and wrong. `EmitSSA.svalToOperand` passed the
+f64 value of an f32 literal through unrounded.
+
+## Fix
+
+Every float constant is printed as `0x` plus the 16 hex digits of its IEEE double bits, the form LLVM
+reads exactly for both types, and `EmitSSA` rounds an `f32` constant to f32 (`Float.toFloat32`) before
+it is printed. The rounding goes decimal -> double (correctly rounded, in the lexer) -> f32, which can
+differ from a direct decimal -> f32 rounding in a double-rounding tie; that residual is recorded here,
+not fixed. Permanent leg: `tests/programs/regress_109_float_literals.con` in `run_tests.sh` (run_ok
+42: f32 0.1 compares and widens to exactly 0.100000001490116119384765625; f64 0.123456789 and
+0.0000000001 keep their value). The interpreter has no floats, so the leg is native-only.
+examples/snippets/floats.con is promoted to `compile` with a `@run` rule.
+
+Not repaired here (same lossy `toString` on `Float`, different consumers): the formatter
+(`Frontend/Format.lean`, so `concrete fmt` rewrites `0.0000000001` to `0.000000`) and the proof
+fingerprint/identity renderings (`ProofCore.fingerprintExpr`, `IdentityUseBytes`), where two distinct
+literals can render alike; floats are outside ProvableV1, so the identity sites carry no claim today.
+
 ## Structural cause
 
-Floating-point literals are rendered to LLVM text with a decimal formatter that assumes every constant is exactly representable; the literal's value is never converted to the target width before it is printed. The emitter decides a numeric encoding locally, unchecked against the type (classes 7 and 8 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)).
+Floating-point literals are rendered to LLVM text with a decimal formatter that assumes every constant is exactly representable; the literal's value is never converted to the target width before it is printed. The emitter decides a numeric encoding locally, unchecked against the type: the lexer computes the literal's value correctly and the printer gives the binary a different one (class 7 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)). The rendering of a float is also kept in four places (LLVM emitter, formatter, proof fingerprint, identity bytes), all with the same lossy `toString` (class 12). Reclassified from class 8 on the fix: the defect is in the emitter, not in `Lower`'s storage decisions.
 
 ## Structural owner
 
 R-0502 (S11 one `Layout`/scalar encoding for the backend) with R-0504 (S12 validators); f32 is outside ProvableV1, so the proposed interim owner is the float-cast gate (`check_float_cast.sh`) extended to f32 literals.
 
-## Containment while open
-
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.

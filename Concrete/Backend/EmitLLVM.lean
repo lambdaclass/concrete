@@ -40,9 +40,15 @@ partial def printLLVMTy : LLVMTy → String
 def printLLVMOperand : LLVMOperand → String
   | .reg name => "%" ++ name
   | .intLit val => toString val
+  -- A float constant is printed as the hex of its IEEE double bits (bug 109), the one
+  -- form LLVM reads exactly for both `double` and `float`. The decimal `toString`
+  -- printed six digits: an inexact `float` (0.1) was rejected by llvm-as, and a
+  -- `double` silently lost precision (0.123456789 became 0.123457, 1e-10 became 0).
+  -- A `float` operand must already be rounded to f32 (EmitSSA does it), since LLVM
+  -- accepts a `float` hex constant only when the double is exactly an f32.
   | .floatLit val =>
-    let str := toString val
-    if str.any (· == '.') || str.any (· == 'e') || str.any (· == 'E') then str else str ++ ".0"
+    let hex := (Nat.toDigits 16 val.toBits.toNat)
+    "0x" ++ String.ofList (List.replicate (16 - hex.length) '0' ++ hex)
   | .boolLit b => if b then "1" else "0"
   | .null_ => "null"
   | .global name => "@" ++ name

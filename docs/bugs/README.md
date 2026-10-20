@@ -147,6 +147,7 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 - [131_reference_parameter_repointed.md](131_reference_parameter_repointed.md) — FIXED (batch 2): a reference parameter re-pointed at a block-local value (`r = &local`) read a dead slot; batch 2's re-pointing rule refuses any reassignment of a reference binding, parameters included (E0238)
 - [132_module_constant_name_collision.md](132_module_constant_name_collision.md) — FIXED (contained, batch 2): two modules' constants of one name were one constant to Lower, so a submodule read another module's `A` (silent wrong code on main); refused at the use (E0602) until constants carry their module (R-0492)
 - [108_bool_cast_trunc.md](108_bool_cast_trunc.md) — FIXED: `bool as <int>` was emitted as `trunc i1` (LLVM rejects it); `bool` is now the 1-bit unsigned width (zext), and `<int> as bool`, which neither backend ever gave a meaning, is refused (E0553); pinned by `regress_108_bool_cast_widen.con` and `check_cast_matrix.sh`
+- [109_f32_literal_invalid_ir.md](109_f32_literal_invalid_ir.md) — FIXED: float constants were printed to LLVM with six decimals, so an inexact `f32` (0.1) was invalid IR and an `f64` silently lost precision (0.123456789 compiled as 0.123457); constants are now the hex of their IEEE bits, `f32` rounded first; pinned by `regress_109_float_literals.con`
 
 ## Open Numbered Bugs
 
@@ -164,7 +165,6 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 - [102_pointer_local_address_cast_miscompiled.md](102_pointer_local_address_cast_miscompiled.md) — `&mut x as *mut *mut T` on a pointer-typed local passes `x`'s value, not its address (silent wrong code; the interpreter refuses the cast, so differential testing misses it). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
 - [103_extern_destroy_replaced_by_empty_body.md](103_extern_destroy_replaced_by_empty_body.md) — Mono's drop-glue synthesizes an empty definition for any unresolved callee ending in `_destroy`, so an `extern fn foo_destroy` never reaches the C library (silent leak). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
 
-- [109_f32_literal_invalid_ir.md](109_f32_literal_invalid_ir.md) — OPEN: an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant (examples-health, 2026-10-20)
 - [110_array_value_store.md](110_array_value_store.md) — OPEN: an array value is stored as an aggregate where the SSA value is a pointer (examples-health, 2026-10-20)
 - [111_main_params_accepted.md](111_main_params_accepted.md) — OPEN: `main` may declare parameters, and the wrapper calls it with none (examples-health, 2026-10-20)
 - [112_user_intrinsic_e0116.md](112_user_intrinsic_e0116.md) — OPEN: the declaration std.mem uses for `sizeof` is rejected (E0116 at 0:0) outside std (examples-health, 2026-10-20)

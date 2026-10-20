@@ -191,7 +191,7 @@ examples/snippets/factorial_if.con compile
 examples/snippets/fib.con compile
 examples/snippets/fib_generic.con compile
 examples/snippets/fib_if.con compile
-examples/snippets/floats.con known-bug 109 floating point constant invalid for type
+examples/snippets/floats.con compile
 examples/snippets/for.con compile
 examples/snippets/for_loop.con compile
 examples/snippets/for_loop_var.con compile
@@ -341,6 +341,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/fib.con fib exit=55 ret=55 interp=yes stdout=empty
 @run examples/snippets/fib_generic.con fib_generic exit=55 ret=55 interp=yes stdout=empty
 @run examples/snippets/fib_if.con fib_if exit=55 ret=55 interp=yes stdout=empty
+@run examples/snippets/floats.con floats exit=1 interp=fails:float~literals~not~yet~supported stdout=empty
 @run examples/snippets/for.con for exit=10 ret=10 interp=yes stdout=empty
 @run examples/snippets/for_loop.con for_loop exit=10 ret=10 interp=yes stdout=empty
 @run examples/snippets/for_loop_var.con for_loop_var exit=0 ret=0 interp=yes stdout=empty
