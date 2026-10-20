@@ -1,0 +1,23 @@
+// Bug 108: `bool as <int>` was emitted as `trunc i1 to iN` (LLVM rejects it).
+// A bool widens with zext: true is 1 and false is 0 at every integer width,
+// both as a parameter (a runtime i1) and as a constant operand.
+fn widen(b: bool) -> Int {
+    let a: Int = (b as i8) as Int;
+    let c: Int = (b as i16) as Int;
+    let d: Int = (b as i32) as Int;
+    let e: Int = b as Int;
+    let f: Int = (b as u8) as Int;
+    let g: Int = (b as u16) as Int;
+    let h: Int = (b as u32) as Int;
+    let k: Int = (b as Uint) as Int;
+    return a + c + d + e + f + g + h + k;
+}
+fn main() -> Int {
+    let t: Int = widen(true);
+    let f: Int = widen(false);
+    let lit: i32 = true as i32;
+    let lit0: i32 = false as i32;
+    // true widens to 1 at all 8 widths (8), false to 0 (so f * 100 adds 0);
+    // the constant casts add 1 and 0: 8 + 0 + 1 + 0 + 33 = 42.
+    return t + f * 100 + (lit as Int) + (lit0 as Int) * 100 + 33;
+}

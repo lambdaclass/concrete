@@ -1053,10 +1053,12 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         else
           emitStructured s (.cast dst .inttoptr srcLLTy valOp .ptr)
     else if isIntegerTy srcTy && isIntegerTy targetTy then
-      let srcBits := match srcTy with
-        | .i8 | .u8 | .char => 8 | .i16 | .u16 => 16 | .i32 | .u32 => 32 | _ => 64
-      let dstBits := match targetTy with
-        | .i8 | .u8 | .char => 8 | .i16 | .u16 => 16 | .i32 | .u32 => 32 | _ => 64
+      -- `bool` is the 1-bit unsigned `i1` (bug 108: it fell into the 64-bit default,
+      -- so `b as i32` became `trunc i1 to i32`, which LLVM rejects).
+      let bits : Ty → Nat := fun t => match t with
+        | .bool => 1 | .i8 | .u8 | .char => 8 | .i16 | .u16 => 16 | .i32 | .u32 => 32 | _ => 64
+      let srcBits := bits srcTy
+      let dstBits := bits targetTy
       if srcBits < dstBits then
         if ssaIsSignedInt srcTy then emitStructured s (.cast dst .sext srcLLTy valOp dstLLTy)
         else emitStructured s (.cast dst .zext srcLLTy valOp dstLLTy)

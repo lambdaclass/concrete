@@ -55,6 +55,9 @@ run_src u8  0 1 200 255
 run_src u16 0 1 60000 65535
 run_src u32 0 1 4000000000 4294967295
 run_src u64 0 1 18000000000000000000
+# Bug 108: a bool source widens with zext (it was emitted as `trunc i1`, which
+# LLVM rejects); true is 1 and false 0 at every width.
+run_src bool true false
 
 # ---------------------------------------------------------------------------
 # Bug 088: CONSTANT operands. The matrix above casts a variable, so the SSA

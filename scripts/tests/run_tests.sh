@@ -7513,6 +7513,10 @@ fi
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.
 run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
+# Bug 108: `bool as <int>` widens with zext (it was `trunc i1`, which LLVM
+# rejects) at every width; `<int> as bool` never had a meaning and is refused.
+run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
+run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

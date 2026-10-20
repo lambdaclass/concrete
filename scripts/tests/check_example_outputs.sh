@@ -380,7 +380,6 @@ open_bug_reproducers() {
       *) no "$label: unknown mode '$mode'" ;;
     esac
   done <<'TABLE'
-108|bug108_bool_cast_trunc/repro.con|compile-fails|invalid cast opcode for cast from 'i1' to 'i32'
 109|bug109_f32_literal_invalid_ir/repro.con|compile-fails|floating point constant invalid for type
 110|bug110_array_value_store/repro.con|compile-fails|defined with type 'ptr' but expected '[2 x i64]'
 110|bug110_array_value_store/repro_cast.con|compile-fails|defined with type 'ptr' but expected '[3 x i8]'

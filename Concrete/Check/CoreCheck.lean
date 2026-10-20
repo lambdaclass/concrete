@@ -628,7 +628,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- Cast validity check
     let valid :=
       (isInteger innerTy && isInteger targetTy) ||
-      (isInteger innerTy && targetTy == .bool) ||
+      -- `bool as <int>` is 0/1 (zext). `<int> as bool` is refused: neither the binary
+      -- (an invalid `sext/zext/bitcast` to `i1`) nor the interpreter (an integer
+      -- tagged `bool`) ever gave it a meaning (bug 108), so it is not admitted until
+      -- one is chosen.
       (innerTy == .bool && isInteger targetTy) ||
       (isInteger innerTy && isFloat targetTy) ||
       (isFloat innerTy && isInteger targetTy) ||

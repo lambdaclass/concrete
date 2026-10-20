@@ -1,0 +1,8 @@
+// Bug 108: `<int> as bool` had no meaning in either backend (an invalid cast to
+// i1 in the binary, an integer tagged bool in the interpreter); it is refused.
+fn main() -> i32 {
+    let x: i32 = 6;
+    let b: bool = x as bool;
+    if b { return 1; }
+    return 0;
+}
