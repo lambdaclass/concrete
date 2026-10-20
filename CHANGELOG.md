@@ -151,6 +151,16 @@ reads every constant through `IntArith.wrapToType`, folds constant integer casts
 wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
 false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
 [docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
+### A Binder Cannot Consume The Binding It Shadows (bug 094)
+
+`let value = alloc(5); match mk(7) { Some { value } => free(value), None => free(value) }` compiled
+and leaked the outer `value` on the `Some` path: freeing the arm binder marked every binding named
+`value` consumed. Match-arm and destructure binders now refuse to shadow a still-live non-Copy
+binding (E0292, as `let` already did), and consume, use, reassignment, `defer` and the borrow-block
+freeze update only the binding the name resolves to, by identity. Fixtures `error_094_*.con` (three
+binder kinds) and positive controls `regress_094_shadowing_binders.con`,
+`regress_094_shadow_state_by_identity.con`.
+
 ### Checker Bindings Have An Identity, Not Just A Name (bug 093)
 
 The scope-exit check for a block or match arm treated any binding whose NAME existed before the block

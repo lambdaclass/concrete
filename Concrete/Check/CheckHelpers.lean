@@ -263,6 +263,16 @@ def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option
                           uid := env.nextVarUid }
   setEnv { env with vars := (name, info) :: env.vars, nextVarUid := env.nextVarUid + 1 }
 
+/-- H16 (E0292): binding `name` must not shadow a still-live non-Copy binding —
+    the shadowed value would become unreachable and silently dropped. Applies to
+    `let` and (bug 094) to match-arm binders. -/
+def checkNoLiveShadow (name : String) (span : Option Span := none) : CheckM Unit := do
+  match (← getEnv).vars.lookup name with
+  | some prev =>
+    if !prev.isCopy && prev.state != .consumed && prev.state != .reserved then
+      throwCheck (.shadowsLiveLinear name) span
+  | none => pure ()
+
 /-- The entry for binding `uid` (bugs 093/094: identity, not name). -/
 def lookupByUid (vars : List (String × VarInfo)) (uid : Nat) : Option VarInfo :=
   (vars.find? fun (_, vi) => vi.uid == uid).map Prod.snd
@@ -371,8 +381,9 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
       throwCheck (.variableFrozenByBorrow name) span
     if info.isCopy then return ()
     if info.state == .unconsumed || info.state == .reserved then
+      -- Only the innermost binding (`info`), by identity (bug 094).
       let vars' := env.vars.map fun (n, vi) =>
-        if n == name then
+        if vi.uid == info.uid then
           (n, { vi with
             state := if info.state == .reserved then .reserved else .used,
             movedAt := if vi.movedAt.isSome then vi.movedAt else span })
@@ -413,8 +424,11 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
           && env.rebindingVar != some name then
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
+      -- Mark ONLY the binding the name resolves to (the innermost), by
+      -- identity. Marking every same-named entry consumed a shadowed outer
+      -- binding too (bug 094): an arm binder `value` consumed the outer `value`.
       let vars' := env.vars.map fun (n, vi) =>
-        if n == name then (n, { vi with state := .consumed, movedAt := span })
+        if vi.uid == info.uid then (n, { vi with state := .consumed, movedAt := span })
         else (n, vi)
       setEnv { env with vars := vars' }
 

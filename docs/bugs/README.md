@@ -126,6 +126,7 @@ there or adds one.
 - [090_match_guard_moves_linear.md](090_match_guard_moves_linear.md) — FIXED: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
 - [092_reference_stored_in_aggregate.md](092_reference_stored_in_aggregate.md) — FIXED: a reference stored in a struct field, enum payload or array did not freeze its source, so `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory. References are never stored in an aggregate (E0239)
 - [093_shadowing_local_escapes_scope_check.md](093_shadowing_local_escapes_scope_check.md) — FIXED: a block local or match binder that shadowed an outer name was skipped by the never-consumed check (E0208), so it leaked; checker bindings now carry an identity and scope/merge checks match by it, not by name
+- [094_binding_state_updates_keyed_by_name.md](094_binding_state_updates_keyed_by_name.md) — FIXED: per-binding state updates (consume, use, reassign, `defer`, borrow freeze) marked every entry sharing the name, and match-arm and destructure binders skipped H16, so a binder shadowing a live linear binding consumed it too and the outer value leaked; every binder now refuses to shadow a live non-Copy binding (E0292) and state updates match by binding identity
 
 ## Open Numbered Bugs
 

@@ -1,0 +1,21 @@
+// Bug 094 positive control, part 2: a binding that shadows a CONSUMED one may
+// be read, consumed, reassigned and consumed again without resurrecting the
+// outer binding (marking every same-named entry live or used revived it).
+struct R { v: Int }
+fn eat(r: R) -> Int { let R { v } = r; return v; }
+fn main() -> Int {
+    let h: R = R { v: 1 };
+    let mut out: Int = eat(h);
+    let mut h: R = R { v: 2 };
+    out = out + h.v;
+    out = out + eat(h);
+    h = R { v: 3 };
+    out = out + eat(h);
+    while out < 10 {
+        let mut g: R = R { v: 4 };
+        out = out + eat(g);
+        g = R { v: 5 };
+        out = out + eat(g);
+    }
+    return out + 25;
+}

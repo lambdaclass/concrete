@@ -1,0 +1,24 @@
+// Bug 094 positive control: binders that shadow CONSUMED bindings stay legal,
+// and consuming a shadowing binder leaves the outer binding's own state alone.
+struct R { v: Int }
+struct P { value: R }
+fn eat(r: R) -> Int { let R { v } = r; return v; }
+fn mk(k: Int) -> Option<R> { return Option::Some { value: R { v: k } }; }
+fn main() -> Int {
+    let value: R = R { v: 5 };
+    let mut out: Int = eat(value);
+    match mk(7) {
+        Option::Some { value } => { out = out + eat(value); },
+        Option::None => { },
+    }
+    let p: P = P { value: R { v: 3 } };
+    let P { value } = p;
+    out = out + eat(value);
+    let a: R = R { v: 10 };
+    out = out + eat(a);
+    match mk(17) {
+        Option::Some { value } => { out = out + eat(value); },
+        Option::None => { },
+    }
+    return out;
+}

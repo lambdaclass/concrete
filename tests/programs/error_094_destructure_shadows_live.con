@@ -1,0 +1,11 @@
+// Bug 094: a destructure binder shadowing a LIVE linear binding. Consuming
+// the binder marked the outer `value` consumed too; the outer R leaked. E0292.
+struct R { v: Int }
+struct P { value: R }
+fn eat(r: R) -> Int { let R { v } = r; return v; }
+fn main() -> Int {
+    let value: R = R { v: 1 };
+    let p: P = P { value: R { v: 2 } };
+    let P { value } = p;
+    return eat(value);
+}

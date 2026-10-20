@@ -7140,6 +7140,16 @@ run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "E0208"
 run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "E0208"
 run_ok "$TESTDIR/regress_093_shadowing_locals_consumed.con" 42
+# Bug 094: per-binding state updates (consume, use, reassign, borrow freeze,
+# defer) marked EVERY entry sharing the name, so a binder that shadowed a live
+# linear binding consumed it too (the outer value leaked). Binders of every
+# kind now refuse to shadow a live non-Copy binding (E0292) and state updates
+# match the binding by identity.
+run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "E0292"
+run_err "$TESTDIR/error_094_destructure_shadows_live.con" "E0292"
+run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "E0292"
+run_ok "$TESTDIR/regress_094_shadowing_binders.con" 42
+run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5

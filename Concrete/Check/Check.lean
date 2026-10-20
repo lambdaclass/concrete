@@ -978,7 +978,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               let bindTy ← do
                 if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
                 else pure fieldTy
-              if binding != "_" then addVar binding bindTy
+              if binding != "_" then
+                -- H16 for arm binders (bug 094): shadowing a live linear hides it.
+                checkNoLiveShadow binding (some e.getSpan)
+                addVar binding bindTy
               -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
               -- borrowed view). A non-Copy OWNED field must be bound and consumed
               -- exactly once (destructure it, don't drop it).
@@ -990,7 +993,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             checkGuard guard
             pure body
           | .varArm _ binding guard body => do
-            if binding != "_" then addVar binding innerTyR
+            if binding != "_" then
+              checkNoLiveShadow binding (some e.getSpan)
+              addVar binding innerTyR
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1117,6 +1122,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- `match h { y => free(y) } ; free(h);` aliases one linear handle
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
+            checkNoLiveShadow binding (some e.getSpan)
             addVar binding bindTy
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
@@ -1499,21 +1505,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- shadowed value — scope exit resolves locals by name, so the older
       -- entry's obligation vanishes behind the new one. Consume it first
       -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
-      match ← lookupVarInfo name with
-      | some prev =>
-        if !prev.isCopy && prev.state != .consumed && prev.state != .reserved then
-          throwCheck (.shadowsLiveLinear name) (some stmt.getSpan)
-      | none => pure ()
+      checkNoLiveShadow name (some stmt.getSpan)
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
+      -- Record the borrow source on the binding just added (the head entry),
+      -- not on every entry sharing its name (bug 094).
+      let setSource (sourceName : String) : CheckM Unit :=
+        modify fun env =>
+          match env.vars with
+          | (n, info) :: rest => { env with vars := (n, { info with borrowedFrom := some sourceName }) :: rest }
+          | [] => env
       match value with
-      | .borrow _ (.ident _ sourceName) =>
-        modify fun env =>
-          { env with vars := env.vars.map fun (n, info) =>
-              if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-      | .borrowMut _ (.ident _ sourceName) =>
-        modify fun env =>
-          { env with vars := env.vars.map fun (n, info) =>
-              if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+      | .borrow _ (.ident _ sourceName) => setSource sourceName
+      | .borrowMut _ (.ident _ sourceName) => setSource sourceName
       | _ => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
@@ -1560,8 +1563,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           else
             -- The binding now holds a NEW live value.
             let env ← getEnv
+            -- Only the binding being assigned (innermost), by identity: marking
+            -- every `name` live resurrected a shadowed, consumed outer binding
+            -- (bug 094; masked while consumeVar also marked every `name`).
             let vars' := env.vars.map fun (n, vi) =>
-              if n == name then (n, { vi with state := .unconsumed, movedAt := none })
+              if vi.uid == inf.uid then (n, { vi with state := .unconsumed, movedAt := none })
               else (n, vi)
             setEnv { env with vars := vars' }
         | none => pure ()
@@ -1838,7 +1844,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           | some info =>
             if info.state == .consumed then
               let vars' := env.vars.map fun (n, vi) =>
-                if n == varName then (n, { vi with state := .reserved })
+                if vi.uid == info.uid then (n, { vi with state := .reserved })
                 else (n, vi)
               setEnv { env with vars := vars' }
           | none => pure ()
@@ -1867,7 +1873,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Save state and freeze the original variable
       let savedState := varInfo.state
       let vars' := env.vars.map fun (n, vi) =>
-        if n == var then (n, { vi with state := .frozen })
+        if vi.uid == varInfo.uid then (n, { vi with state := .frozen })
         else (n, vi)
       setEnv { env with vars := vars' }
       -- Add reference binding and track for escape analysis
@@ -1880,7 +1886,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Clean up: remove ref from borrowRefs and unfreeze original variable
       let env' ← getEnv
       let vars'' := (env'.vars.map fun (n, vi) =>
-        if n == var then (n, { vi with state := savedState })
+        if vi.uid == varInfo.uid then (n, { vi with state := savedState })
         else (n, vi)).filter fun (n, _) => n != ref
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
@@ -1966,7 +1972,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => pure ()
     for b in bindings do
       match ← lookupStructField structName b with
-      | some fieldTy => addVar b (substTy mapping fieldTy) true (declSpan := some stmt.getSpan)
+      | some fieldTy =>
+        -- H16 for destructure binders too (bug 094).
+        checkNoLiveShadow b (some stmt.getSpan)
+        addVar b (substTy mapping fieldTy) true (declSpan := some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do

@@ -50,7 +50,8 @@ rebuild, the branch-local filters and the function scope-exit check now match bi
 `lookupOutermost` is removed.
 
 The per-binding state updates (`consumeVar`, `useVar`, rebind, `defer`, borrow freeze) still mark
-every entry with the name; that is bug 094.
+every entry with the name; that is
+[bug 094](094_binding_state_updates_keyed_by_name.md), fixed separately.
 
 ## Gate
 

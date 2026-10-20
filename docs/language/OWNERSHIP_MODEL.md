@@ -76,6 +76,10 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
   `let f = mk(); let f = mk();` would silently drop the first value (scope exit
   resolves names). `let s = transform(s);` stays legal — the RHS consumed the
   old value before the new binding lands.
+  The rule covers every binder, not only `let`: an enum-payload or value-pattern
+  match binder and a struct destructure binder may not shadow a still-live
+  non-Copy binding either (bug 094). Ownership state (consume, use, reassign,
+  `defer`, borrow freeze) is tracked per binding identity, never per name.
 - **Match guards are read-only (E0300, bug 090):** a guard runs before its arm
   commits, and a false guard falls through to the next arm. Moving a non-Copy value
   in a guard (`1 if take(h) == 0 => …, _ => take(h)`) — an outer binding or the

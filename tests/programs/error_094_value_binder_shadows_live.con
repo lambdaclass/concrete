@@ -1,0 +1,10 @@
+// Bug 094: a value-pattern binder shadowing a LIVE linear binding; freeing the
+// binder marked the outer `a` freed too, so `a` leaked. E0292.
+fn main() with(Std) -> Int {
+    let a: Heap<Int> = alloc(1);
+    let b: Heap<Int> = alloc(2);
+    match b {
+        a => { free(a); },
+    }
+    return 0;
+}

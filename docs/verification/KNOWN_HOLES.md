@@ -602,6 +602,9 @@ one burn-down. Two were duplications (double-free class), three were leaks
   first). The ratified target language rejects that second binding under
   R-0435; this H16 entry records the already-closed resource-conservation bug,
   not the pending auditability rule.
+  Bug 094 closed the same hole for match-arm and destructure binders, which
+  skipped the check and then consumed the shadowed binding through the shared
+  name; every binder now calls the same check.
 - **H17 (leak): linear params (incl. by-value `self`) carried no consume
   obligation** — `fn drop_it(f: File) {}` was a universal silent-drop escape
   ("consumed by being received"), enforced only for generic-typed untouched
