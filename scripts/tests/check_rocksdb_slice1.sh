@@ -16,7 +16,7 @@
 #   C  Behaviour: exit 0, the exact stdout, the typed error (kind Open) for an invalid path, the
 #      value read back, an absent key, empty stderr, and the database really created on disk.
 #   D  Exactly-once release, observed OUTSIDE the program: a preloaded observer
-#      (tests/regressions/rocksdb_slice1/observer) records every RocksDB handle/buffer handed out
+#      (tests/regressions/rocksdb_slice1/release_observer.c) records every RocksDB handle/buffer handed out
 #      and every release. Each class must be acquired once and released once, none live, none bad.
 #   E  Observer has teeth: a binding mutated so Value::free never calls rocksdb_free must be
 #      reported as a live value by the same observer.
@@ -122,7 +122,7 @@ case "$HOW" in
 esac
 
 echo "=== D setup: the release observer ==="
-OBS_SRC="$CL/tests/regressions/rocksdb_slice1/observer/release_observer.c"
+OBS_SRC="$CL/tests/regressions/rocksdb_slice1/release_observer.c"
 if [ "$(uname -s)" = "Darwin" ]; then
   OBS="$TMP/release_observer.dylib"; OBS_FLAGS=(-dynamiclib); PRELOAD=DYLD_INSERT_LIBRARIES
 else
