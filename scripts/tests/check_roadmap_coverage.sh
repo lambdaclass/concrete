@@ -34,6 +34,15 @@
 #      text, and the backlog's latest review-log row names the current active phases.
 #  10. the queue summary table in "Phases and releases" lists exactly the queue's rows, each with the
 #      same task IDs as its queue row.
+#  11. (2026-10-20) the "Phase 1 exits" table gives every exit of rows 0-2 an ID (`2a`), an owner among
+#      its queue row's tasks, a completion condition, an acceptance test, a class ("blocks features" or
+#      "continues alongside") and a reason; each Phase 1 queue row names each of its exits and no other.
+#  12. the "Feature prerequisites" table partitions every exit into blocked-by / not-blocked-by for each
+#      deliverable; every "blocks features" exit blocks some deliverable and no "continues alongside"
+#      exit blocks any; a queue row's "prerequisite exits:" list equals its deliverables' blocked-by set.
+#  13. every bug in the "Implemented, not yet accepted" table is not recorded fixed in the bug ledger
+#      (docs/bugs: its README's Fixed list or its file's Status line), and every row names a branch and
+#      a remaining acceptance step.
 #
 # Run with no argument it checks ROADMAP.md and the backlog with the reconciliation record and then runs
 # its negative controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row
@@ -41,7 +50,11 @@
 # stub, a stub without its archived body, a removed inheritance entry and a fabricated one, a dropped pull
 # trigger, a task in both files, a lost task, a bad or missing Active phases value, a misplaced task in
 # either direction, a queued task in the backlog, a stale review log and a drifted or incomplete queue
-# summary must each fail; a crashed or silent checker must fail too.
+# summary must each fail; so must an exit missing its class or acceptance test, an exit owned outside
+# its row, a queue row that omits an exit, a continues-alongside exit that blocks a deliverable, a
+# blocks-features exit that blocks none, a prerequisite list that drops an exit or drifts from its queue
+# row, and an implemented-bug row that lists a fixed bug or lacks its branch or remaining step; a
+# crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -188,11 +201,12 @@ if gm:
 if not row_phase: no('could not read the queue-row-to-phase map from "Phases and releases"')
 qm = re.search(r'^## The current execution queue$', road, re.M)
 qrows = []
+qexit = {}
 if qm:
     for line in road[qm.end():].splitlines():
         if line.startswith('## '): break
         m = re.match(r'^\| (\d+) \| (.*?) \| (.*)\|$', line)
-        if m: qrows.append((int(m.group(1)), m.group(2)))
+        if m: qrows.append((int(m.group(1)), m.group(2))); qexit.setdefault(int(m.group(1)), m.group(3))
 if not qrows: no('no queue rows found')
 # The queue summary in "Phases and releases" (| row | tasks | goal |) restates each row's task IDs; it
 # must list exactly the queue's rows, each naming exactly the tasks its queue row names.
@@ -224,6 +238,127 @@ else:
         elif qmap[o] != summary[o]:
             no(f'queue summary row {o} names {sorted(summary[o])}, the queue row names {sorted(qmap[o])}'); sbad += 1
     if not sbad and not sbad_dup: ok(f'the queue summary lists the {len(summary)} queue rows with the same task IDs')
+# --- Phase 1 exits, feature prerequisites, and implemented-but-not-accepted bugs (2026-10-20)
+def table_rows(heading, first):
+    m = re.search(r'^#+ ' + re.escape(heading) + r'$', road, re.M)
+    if not m: return None
+    rows = []; started = False
+    for line in road[m.end():].split('\n'):
+        if line.startswith('#'): break
+        if line.startswith('|'):
+            cells = [c.strip() for c in line.strip().strip('|').split('|')]
+            if cells[0] == first: started = True; continue
+            if started and cells[0] and not set(cells[0]) <= set('-:'): rows.append(cells)
+        elif started and rows: break
+    return rows
+CLASSES = ('blocks features', 'continues alongside')
+qtasks = {o: set(expand(w)) for o, w in qrows}
+phase1_rows = sorted(o for o in qtasks if row_phase.get(o) == 1)
+exits = {}
+xrows = table_rows('Phase 1 exits', 'exit')
+ebad = 0
+if xrows is None or not xrows:
+    no('ROADMAP.md has no "### Phase 1 exits" table (| exit | owner | closes when | acceptance test | class | why this class |)'); ebad += 1
+    xrows = []
+for cells in xrows:
+    eid = cells[0]
+    if not re.fullmatch(r'\d[a-z]', eid):
+        no(f'Phase 1 exit "{eid}" is not an ID like 2a'); ebad += 1; continue
+    if eid in exits:
+        no(f'Phase 1 exit {eid} is listed more than once'); ebad += 1; continue
+    cells = cells + [''] * (6 - len(cells))
+    row = int(eid[0]); exits[eid] = cells[4]
+    if row not in phase1_rows:
+        no(f'exit {eid} belongs to queue row {row}, which is not a Phase 1 row'); ebad += 1
+    owners = expand(cells[1])
+    if not owners:
+        no(f'exit {eid} names no owning task'); ebad += 1
+    for t in owners:
+        if t not in qtasks.get(row, set()):
+            no(f"exit {eid}'s owner {t} is not a task of queue row {row}"); ebad += 1
+    if len(cells[2]) < 20: no(f'exit {eid} has no completion condition'); ebad += 1
+    if len(cells[3]) < 20: no(f'exit {eid} has no acceptance test'); ebad += 1
+    if cells[4] not in CLASSES: no(f'exit {eid} has no class (blocks features / continues alongside)'); ebad += 1
+    if len(cells[5]) < 10: no(f'exit {eid} gives no reason for its class'); ebad += 1
+for o in phase1_rows:
+    mine = sorted(e for e in exits if int(e[0]) == o)
+    if not mine:
+        no(f'Phase 1 queue row {o} has no exit in "Phase 1 exits"'); ebad += 1; continue
+    named = set(re.findall(r'\b(' + str(o) + r'[a-z])\b', qexit.get(o, '')))
+    for e in mine:
+        if e not in named: no(f'queue row {o} does not name its exit {e}'); ebad += 1
+    for e in sorted(named - set(mine)):
+        no(f'queue row {o} names exit {e}, which "Phase 1 exits" does not list'); ebad += 1
+if exits and not ebad:
+    ok(f'{len(exits)} Phase 1 exits each have an owner from their row, a completion condition, an acceptance test and a class, and their queue rows name them')
+prows = table_rows('Feature prerequisites', 'deliverable')
+pbad2 = 0
+blocked_any = set(); row_blocked = {}
+if not prows:
+    no('ROADMAP.md has no "### Feature prerequisites" table (| deliverable | blocked by | not blocked by |)'); pbad2 += 1
+    prows = []
+for cells in prows:
+    cells = cells + [''] * (3 - len(cells))
+    d = cells[0]
+    b = re.findall(r'\b(\d[a-z])\b', cells[1]); n = re.findall(r'\b(\d[a-z])\b', cells[2])
+    for e in sorted(set(b + n) - set(exits)):
+        no(f'prerequisites of "{d}" name exit {e}, which does not exist'); pbad2 += 1
+    for e in sorted(set(b) & set(n)):
+        no(f'prerequisites of "{d}" list exit {e} as both blocking and not blocking'); pbad2 += 1
+    for e in sorted(set(exits) - set(b) - set(n)):
+        no(f'prerequisites of "{d}" do not account for exit {e}'); pbad2 += 1
+    blocked_any |= set(b)
+    rm = re.search(r'\(row (\d+)', d)
+    if not rm:
+        no(f'deliverable "{d}" names no queue row'); pbad2 += 1
+    else:
+        row_blocked.setdefault(int(rm.group(1)), set()).update(b)
+for e, cls in sorted(exits.items()):
+    if cls == 'blocks features' and e not in blocked_any:
+        no(f'exit {e} is blocks features but no deliverable lists it as a prerequisite'); pbad2 += 1
+    if cls == 'continues alongside' and e in blocked_any:
+        no(f'exit {e} is continues alongside but blocks a deliverable'); pbad2 += 1
+for o, want in sorted(row_blocked.items()):
+    m = re.search(r'prerequisite exits: ([0-9a-z, ]+)', qexit.get(o, ''))
+    if not m:
+        no(f'queue row {o} has a deliverable but no "prerequisite exits:" list'); pbad2 += 1
+        continue
+    have = set(re.findall(r'\b(\d[a-z])\b', m.group(1)))
+    if have != want:
+        no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)}'); pbad2 += 1
+if prows and not pbad2:
+    ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
+irows = table_rows('Implemented, not yet accepted', 'bugs')
+ibad2 = 0
+import os, glob
+ledger_dir = 'docs/bugs'
+readme = open(os.path.join(ledger_dir, 'README.md'), encoding='utf-8').read() if os.path.exists(os.path.join(ledger_dir, 'README.md')) else ''
+fm = re.search(r'^## Fixed Bugs$', readme, re.M)
+fixed_list = ''
+if fm:
+    nx = re.compile(r'^## ', re.M).search(readme, fm.end())
+    fixed_list = readme[fm.end():(nx.start() if nx else len(readme))]
+if irows is None:
+    no('ROADMAP.md has no "## Implemented, not yet accepted" table (| bugs | branch | remaining acceptance step |)'); ibad2 += 1
+    irows = []
+seen_bug = {}
+for cells in irows:
+    cells = cells + [''] * (3 - len(cells))
+    bugs = re.findall(r'\b(\d{3})\b', cells[0])
+    if not bugs: no(f'implemented-bug row "{cells[0]}" names no bug number'); ibad2 += 1
+    if not re.findall(r'`[^`]+`', cells[1]): no(f'implemented-bug row "{cells[0]}" names no branch'); ibad2 += 1
+    if len(cells[2]) < 10: no(f'implemented-bug row "{cells[0]}" has no remaining acceptance step'); ibad2 += 1
+    for n in bugs:
+        if n in seen_bug: no(f'bug {n} is listed in more than one implemented-bug row'); ibad2 += 1
+        seen_bug[n] = cells[0]
+        fixed = re.search(r'\(' + n + r'_', fixed_list) is not None
+        for f in glob.glob(os.path.join(ledger_dir, n + '_*.md')):
+            st = re.search(r'^\*\*Status:\*\*\s*(\S+)', open(f, encoding='utf-8').read(), re.M)
+            if st and st.group(1).lower().startswith('fixed'): fixed = True
+        if fixed:
+            no(f'bug {n} is listed as not yet accepted but the bug ledger records it fixed; remove it from the table'); ibad2 += 1
+if irows and not ibad2:
+    ok(f'{len(irows)} implemented-but-not-accepted rows name {len(seen_bug)} bugs the ledger does not record fixed, each with a branch and a remaining step')
 qbad = 0; named = 0
 for order, work in qrows:
     for tid in expand(work):
@@ -523,6 +658,39 @@ PY
   neg inheritance_entry_fabricated \
     "old='- **R-0008** (superseded):'; assert s.count(old)==1; s=s.replace(old,'- **R-0019** (merged): fabricated transfer.\n'+old)" \
     "R-0492 has unexplained inherited obligations from R-0019"
+  neg exit_missing_class \
+    "old='| blocks features | known false proofs and unsound claims |'; assert s.count(old)==1; s=s.replace(old,'|  | known false proofs and unsound claims |')" \
+    "exit 0a has no class"
+  neg exit_missing_acceptance \
+    "import re; m=re.search(r'^\| 2d \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); c[3]=''; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
+    "exit 2d has no acceptance test"
+  neg exit_owner_outside_row \
+    "old='| 2a | R-0494 |'; assert s.count(old)==1; s=s.replace(old,'| 2a | R-0511 |')" \
+    "exit 2a's owner R-0511 is not a task of queue row 2"
+  neg queue_row_omits_exit \
+    "old='demonstrated enforcement (2l)'; assert s.count(old)==1; s=s.replace(old,'demonstrated enforcement')" \
+    "queue row 2 does not name its exit 2l"
+  neg continues_exit_blocks \
+    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l |')" \
+    "exit 2k is continues alongside but blocks a deliverable"
+  neg blocks_exit_unlisted \
+    "import re; m=re.search(r'^\| 2c \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); assert c[4]=='continues alongside'; c[4]='blocks features'; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
+    "exit 2c is blocks features but no deliverable lists it"
+  neg prerequisites_drop_exit \
+    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k |')" \
+    "prerequisites of \"V1a (row 3, R-0511)\" do not account for exit 2l"
+  neg queue_prerequisites_drift \
+    "old='prerequisite exits: 0b, 2i;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b;')" \
+    "queue row 5 names prerequisite exits \['0b'\], the prerequisites table says \['0b', '2i'\]"
+  neg implemented_bug_already_fixed \
+    "old='| 088 (batch 4) |'; assert s.count(old)==1; s=s.replace(old,'| 080, 088 (batch 4) |')" \
+    "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
+  neg implemented_bug_no_branch \
+    "old='| \`bug088-literal-range\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
+    "implemented-bug row \"088 (batch 4)\" names no branch"
+  neg implemented_bug_no_step \
+    "import re; s,n=re.subn(r'^\| 099, 100 \|[^\n]*$', '| 099, 100 | \`bug099-generic-destroy\` |  |', s, flags=re.M); assert n==1" \
+    "implemented-bug row \"099, 100\" has no remaining acceptance step"
   # The wrapper itself must not read a crashed or silent checker as a pass.
   if ( check_file() { return 17; }; run_on "$TARGET" ); then
     no "control checker_exit_failure: a nonzero checker exit passed"

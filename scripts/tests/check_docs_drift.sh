@@ -20,8 +20,11 @@
 #      no parallel queue/task headings.
 #   4. Every ROADMAP task has a phase or a recorded disposition, the
 #      reconciliation ledger and queue rows name real tasks in consistent phases,
-#      and every archived task body has its roadmap stub
-#      (check_roadmap_coverage.sh, with its own negative controls).
+#      and every archived task body has its roadmap stub; every Phase 1 exit has an
+#      owner, an acceptance test and a class that agrees with the feature
+#      prerequisites, and no bug listed as implemented-but-not-accepted is already
+#      recorded fixed in docs/bugs (check_roadmap_coverage.sh, with its own
+#      negative controls).
 #
 # DELIBERATELY NOT attempted (these are not mechanically robust and would make the
 # gate a false-positive generator — verified during design):
