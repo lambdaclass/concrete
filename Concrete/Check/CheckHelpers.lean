@@ -1019,9 +1019,10 @@ partial def borrowPathOf : Expr → Option (String × List String)
   | .arrayIndex _ arr _ =>
     (borrowPathOf arr).map fun (r, steps) => (r, steps ++ ["[]"])
   | .paren _ inner => borrowPathOf inner
-  -- `*r` names storage reached through `r`: same root, one more step, so `r.m(&*r)` with a
-  -- `&mut self` receiver overlaps (bug 091 round 3, Codex review).
-  | .deref _ inner => (borrowPathOf inner).map fun (r, steps) => (r, steps ++ ["*"])
+  -- `*r` names the storage `r` reaches, exactly as field access's implicit dereference does
+  -- (`(*r).p` and `r.p` are one place), so `r.m(&*r)` with a `&mut self` receiver overlaps
+  -- (bug 091 round 3, Codex review).
+  | .deref _ inner => borrowPathOf inner
   | _ => none
 
 /-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).

@@ -1333,8 +1333,20 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- and the inner value is moved out (legal for non-Copy). On any other
           -- base (`w.nt.0`) nothing is consumed, so a non-Copy inner value
           -- would be owned twice — the H11 projection rule applies.
-          match obj with
-          | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+          -- Through a REFERENCE (`w: &W`) the owner is elsewhere and nothing is consumed:
+          -- a by-value `w.0` would duplicate a non-Copy payload (bug 091 round 3).
+          let viaRef ← match stripParens obj with
+            | .ident _ varName => do
+              match ← lookupVarInfo varName with
+              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true | _ => false)
+              | none => pure false
+            | _ => pure false
+          match stripParens obj with
+          | .ident _ varName =>
+            if viaRef then
+              if mode != .place && !(← isCopyType innerFieldTy) then
+                throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference") (some e.getSpan)
+            else consumeVarIfExists varName (some e.getSpan)
           | _ =>
             if mode != .place && !(← isCopyType innerFieldTy) then
               throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}'") (some e.getSpan)
@@ -1822,7 +1834,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
           checkCallBorrowConflicts (receiverBorrowParts sig.selfKind obj ++ (← borrowArgParts args)) (some e.getSpan)
-          checkImplicitReceiverBorrow sig.selfKind obj objTy methodName (some e.getSpan)
+          -- `Destroy::destroy` consumes its receiver (`consumeDestroyReceiver` below); there
+          -- is no implicit borrow to check, and the owner may already be moved by `w.0`.
+          if !(foundBuiltin == some .destroy && methodName == destroyMethodName) then
+            checkImplicitReceiverBorrow sig.selfKind obj objTy methodName (some e.getSpan)
           for (arg, p) in args.zip params do
             let argTy ← checkExpr arg (some p.ty) .callArg
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
@@ -1845,7 +1860,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- (container-not-in-context, #18 §5.1).
       checkCallBorrowConflicts (receiverBorrowParts (selfKindOfParams sig.params) obj
         ++ (← borrowArgParts args)) (some e.getSpan)
-      checkImplicitReceiverBorrow (selfKindOfParams sig.params) obj objTy methodName (some e.getSpan)
+      let isDestroyImplCall := methodName == destroyMethodName &&
+        (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
+      if !isDestroyImplCall then
+        checkImplicitReceiverBorrow (selfKindOfParams sig.params) obj objTy methodName (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
       let objTypeArgs := match innerTy with
         | .generic _ args _ => args

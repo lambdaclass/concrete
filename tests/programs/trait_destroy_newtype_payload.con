@@ -1,0 +1,19 @@
+// Bug 091 round 3 (Codex review, seventh pass): `w.0.destroy()` on an OWNED newtype moves the
+// payload out of `w` and destroys it exactly once (was a false E0230: the implicit-borrow
+// check revisited the already-moved wrapper). Expected (compiled): 1. The interpreter does
+// not model newtype casts, so this fixture is compiled-only.
+mod m {
+    struct P { n: i64, cell: *mut u64 }
+    newtype W = P;
+    trusted impl Destroy for P { fn destroy(&self) { *self.cell = *self.cell + 1; } }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let w: W = W(P { n: 1, cell: cell });
+        w.0.destroy();
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

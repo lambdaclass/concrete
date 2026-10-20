@@ -294,4 +294,11 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   yielding an arm binder is an owned temporary under a projection. Fixtures
   `error_091_ref_repointed_in_branch.con` (E0238), `error_091_mut_receiver_paren_borrow_arg.con`,
   `error_091_mut_receiver_deref_reborrow_arg.con` (E0293), `trait_mut_receiver_match_owned_binder.con` (7).
+* **Codex review of round 3, seventh pass.** `w.0` with `w: &W` took the owned-newtype exemption
+  (now E0290 by value through a reference); `*r` no longer adds a path step, so `(*r).p` and
+  `r.p` are one place for E0293; a Destroy call skips the implicit-borrow check it never makes
+  (the owned `w.0.destroy()` was a false E0230). Fixtures
+  `error_091_newtype_payload_through_ref.con` (E0290), `error_091_mut_receiver_deref_field_arg.con`
+  (E0293), `trait_destroy_newtype_payload.con` (1, compiled; the interpreter does not model
+  newtype casts).
 

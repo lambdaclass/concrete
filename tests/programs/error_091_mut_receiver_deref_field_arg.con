@@ -1,0 +1,23 @@
+// Bug 091 round 3 (Codex review, seventh pass): `(*r).p.bump(&r.p)` — the explicit `*` and
+// field access's implicit dereference name one place, so the exclusive receiver and the
+// shared argument overlap. Expected: E0293.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl P {
+        fn bump(&mut self, other: &P) -> i64 {
+            self.n = self.n + 1;
+            return other.n;
+        }
+    }
+    fn f(r: &mut W) -> i64 {
+        return (*r).p.bump(&r.p);
+    }
+    fn main() -> Int {
+        let mut w: W = W { p: P { n: 1 } };
+        let result: i64 = f(&mut w);
+        let W { p } = w;
+        let P { n } = p;
+        return result;
+    }
+}

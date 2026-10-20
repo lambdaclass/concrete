@@ -1,0 +1,18 @@
+// Bug 091 round 3 (Codex review, seventh pass): `let p = w.0;` with `w: &W` took the
+// owned-newtype whole-owner exemption, consumed nothing and handed out an "owned" payload
+// the caller still owned (destroyed twice). Through a reference: E0290.
+mod m {
+    struct P { n: i64 }
+    newtype W = P;
+    impl Destroy for P { fn destroy(&self) {} }
+    fn kill(w: &W) {
+        let p: P = w.0;
+        p.destroy();
+    }
+    fn main() -> Int {
+        let w: W = W(P { n: 1 });
+        kill(&w);
+        destroy(w.0);
+        return 0;
+    }
+}
