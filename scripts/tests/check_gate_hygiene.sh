@@ -450,6 +450,26 @@ grep -qE '\[ "\$FAIL" -eq 0 \]' <<<"$wt" \
   || no "CONTROL: the summary/exit control flags a well-formed gate"
 rm -rf "$HTMP"
 
+# --- the campaign golden names the driver as it is in this tree ---
+# check_campaign_summary_golden.sh pins the mutation driver's digest, but it runs a real campaign
+# and only in a clone, so a push that edited the driver (cb8b9bac: one mutation anchor) reached CI
+# with a stale golden. This compares just the recorded digest with the current file, every push,
+# and names the regeneration command. The golden itself is still regenerated only by that command.
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/tests/lib/treestate.sh"
+GOLDEN_DRV=$(sed -n 's/^repo_driver_sha=//p' "$ROOT_DIR/scripts/tests/fixtures/campaign-summary.golden")
+TREE_DRV=$(ts_driver_digest "$ROOT_DIR")
+if [ -n "$GOLDEN_DRV" ] && [ "$GOLDEN_DRV" = "$TREE_DRV" ]; then
+  ok "the campaign golden's driver digest matches check_gate_mutation_coverage.sh"
+else
+  no "the campaign golden records driver ${GOLDEN_DRV:-<none>} but the tree's is $TREE_DRV — regenerate it with the command in check_campaign_summary_golden.sh's header (in a clone)"
+fi
+if [ -n "$TREE_DRV" ] && [ "$(printf 'x\n' | cat "$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh" - | ts_digest)" != "$TREE_DRV" ]; then
+  ok "CONTROL: a one-line driver change moves the digest"
+else
+  no "CONTROL: the driver digest does not see a driver change"
+fi
+
 echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
