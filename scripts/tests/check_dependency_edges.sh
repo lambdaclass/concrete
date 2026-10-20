@@ -830,7 +830,10 @@ mint_no(){ MINT_VERDICTS=$((MINT_VERDICTS + 1)); no "$1"; }
 
 # Same reconciliation as the mint batch, for the ordinary population.
 EXPECTED_ORDINARY_PROBES=247
-EXPECTED_ORDINARY_MANIFEST_SHA256="cc915502b99060359cf8765001101d3bcf97bcc4cf8ce1b87258eafd0d932a3c"
+# Re-pinned 2026-10-20 (land3, Codex round 3) for exactly one probe BODY: "attesting a model the table
+# contains is accepted" now gives its table a dispatch that answers `inc` with the attested model, since
+# scopedEntryEvidence refuses an attested model its key does not dispatch to. Label and expectation unchanged.
+EXPECTED_ORDINARY_MANIFEST_SHA256="73c7d402a8279124f00144286db0aec08c0b56ebca4f71e11cabe00d445e24d6"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
@@ -3389,8 +3392,8 @@ probe "a body/provenance mismatch still refuses on the scoped path" "true" "
   | _ => false"
 
 # CONVERSION PATH for the hand-written tables. They set `globals` for dispatch and carry
-# `@[simp] … .globals = … := rfl` lemmas the proofs rely on, so `ofAttested` — which nulls `globals` —
-# cannot convert them. `withAttestations` is a structure update: type and behaviour untouched, only
+# `@[simp] … .globals = … := rfl` lemmas the proofs rely on, so `ofAttested` — which derives `globals`
+# from its entries — cannot convert them. `withAttestations` is a structure update: type and behaviour untouched, only
 # evidence material added.
 probe "withAttestations preserves globals (the rfl simp lemmas keep working)" "true" '
 #eval
@@ -3417,7 +3420,9 @@ probe "attesting a model the table contains is accepted" "true" '
                       sourceBodyDigest := some { value := "496808fdd594d5047f23e823bc26b69c" },
                       params := [], body := PExpr.lit (PVal.int 0) }
   let idA := DefinitionIdentity.of? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "calls" "inc" "7afedf51e742f4ce04201459a3965bc8"
-  (scopedEntryEvidence (FnTable.withAttestations { entries := #[m], globals := fun _ => none } [AttestedPFnDef.of m idA])).toOption.isSome'
+  -- Its dispatch must answer `inc` with `m` (land3): a table whose calls reach nothing describes no
+  -- model a specification can evaluate, and scopedEntryEvidence refuses it (dispatchMismatch).
+  (scopedEntryEvidence (FnTable.withAttestations { entries := #[m], globals := fun k => if k == "inc" then some m else none } [AttestedPFnDef.of m idA])).toOption.isSome'
 
 # === DRIFT SUBSTITUTION IS CAUGHT (attestation-manifest acceptance condition) ==================
 # `thesis_demo/src/main_drifted.con` resolved as the reference source for `proofFns` when the

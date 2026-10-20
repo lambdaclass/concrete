@@ -85,6 +85,7 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.spec_in_nested_implication,
     `Examples.TestFixtures.Proofs.spec_in_proof_argument,
     `Examples.TestFixtures.Proofs.spec_inside_evaluated_term,
+    `No.Such.Theorem,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
   ]

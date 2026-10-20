@@ -128,7 +128,7 @@ bound_no=$(grep -c "spec: NOT bound" <<<"$st")
 cp=$("$C" std/src/lib.con --report check-proofs 2>&1)
 # not_proved <fn> — the claim is absent from the proved set in --report proof-status.
 not_proved() { ! grep -q "✓ \`$1\` — proof matches current body" <<<"$st"; }
-if grep -q '✓ std.option.option_Option_unwrap_or — Examples.PureCore.Proofs.option_unwrap_or_correct' <<<"$cp"; then
+if grep -qF '? std.option.option_Option_unwrap_or — Examples.PureCore.Proofs.option_unwrap_or_correct (claim verdict: ' <<<"$cp"; then
   if not_proved std.option.option_Option_unwrap_or; then
     ok "std.option.option_Option_unwrap_or: theorem verifies, and the claim is still NOT proved — kernel acceptance did not become evidence"
   else
@@ -139,7 +139,7 @@ elif grep -q 'Examples.PureCore.Proofs.option_unwrap_or_correct' <<<"$cp"; then
 else
   no "std.option.option_Option_unwrap_or is no longer replayed at all — replayTargetsOf must keep asking about needs_recheck claims, or the migration cannot clear them"
 fi
-if grep -q '✓ std.option.option_Option_map — Examples.PureCore.Proofs.option_map_correct' <<<"$cp"; then
+if grep -qF '? std.option.option_Option_map — Examples.PureCore.Proofs.option_map_correct (claim verdict: ' <<<"$cp"; then
   if not_proved std.option.option_Option_map; then
     ok "std.option.option_Option_map: theorem verifies, and the claim is still NOT proved — kernel acceptance did not become evidence"
   else
@@ -150,7 +150,7 @@ elif grep -q 'Examples.PureCore.Proofs.option_map_correct' <<<"$cp"; then
 else
   no "std.option.option_Option_map is no longer replayed at all — replayTargetsOf must keep asking about needs_recheck claims, or the migration cannot clear them"
 fi
-if grep -q '✓ std.result.result_Result_map — Examples.PureCore.Proofs.result_map_correct' <<<"$cp"; then
+if grep -qF '? std.result.result_Result_map — Examples.PureCore.Proofs.result_map_correct (claim verdict: ' <<<"$cp"; then
   if not_proved std.result.result_Result_map; then
     ok "std.result.result_Result_map: theorem verifies, and the claim is still NOT proved — kernel acceptance did not become evidence"
   else
@@ -161,7 +161,7 @@ elif grep -q 'Examples.PureCore.Proofs.result_map_correct' <<<"$cp"; then
 else
   no "std.result.result_Result_map is no longer replayed at all — replayTargetsOf must keep asking about needs_recheck claims, or the migration cannot clear them"
 fi
-if grep -q '✓ std.result.result_Result_map_err — Examples.PureCore.Proofs.result_map_err_correct' <<<"$cp"; then
+if grep -qF '? std.result.result_Result_map_err — Examples.PureCore.Proofs.result_map_err_correct (claim verdict: ' <<<"$cp"; then
   if not_proved std.result.result_Result_map_err; then
     ok "std.result.result_Result_map_err: theorem verifies, and the claim is still NOT proved — kernel acceptance did not become evidence"
   else
@@ -178,7 +178,7 @@ for pair in "numeric_NonZeroU32_try_new:numeric_try_new_correct" \
             "numeric_Port_try_new:numeric_try_new_correct" \
             "numeric_Port_try_from_u32:port_try_from_u32_correct"; do
   fn=${pair%%:*}; thm=${pair##*:}
-  if grep -q "✓ std.numeric.$fn — Examples.PureCore.Proofs.$thm" <<<"$cp"; then
+  if grep -qF "? std.numeric.$fn — Examples.PureCore.Proofs.$thm (claim verdict: " <<<"$cp"; then
     if not_proved "std.numeric.$fn"; then
       ok "$fn: theorem verifies, and the claim is still NOT proved — kernel acceptance did not become evidence"
     else
@@ -201,13 +201,18 @@ grep -q '✓ std.base64.base64_val_of — Examples.PureCore.Proofs.base64_val_of
 # asking about `needs_recheck` and `correspondenceUnjustified` claims — without that, the migration
 # could not ask about the very claims it exists to clear.
 #
+# 11 verified -> 2 verified + 9 refused (land3, Codex round 3): check-proofs now counts a replaying
+# theorem as VERIFIED only when its claim is proved, and lists the other nine — whose theorems still
+# typecheck — under "Type-checked but REFUSED" with their claim verdict (needs_recheck). The legs above
+# read that section, so "the theorem verifies" is still asserted per function, beside "not proved".
+#
 # VERIFIED IS NOT PROVED, and the distinction is the whole reason this number is allowed to rise.
 # Eleven theorems typecheck; two claims are proved. The legs above assert exactly that conjunction
 # per function, so a rise here cannot quietly become evidence. Zero failures still matters
 # independently: a link that entered the set and was refused is a real kernel failure, distinct from
 # one that was never asked about.
-grep -q 'Summary: 11 verified, 0 failed' <<<"$cp" \
-  && ok "check-proofs: exactly 11 verified, zero failures (2 of them proved — see the per-function legs)" \
+grep -q 'Summary: 2 verified, 0 failed; 9 refused (type-checked, NOT proved)' <<<"$cp" \
+  && ok "check-proofs: 2 verified (the proved claims), 9 type-checked but refused, zero failures" \
   || no "check-proofs count drifted or reports failures: $(grep -o 'Summary:.*' <<<"$cp" | head -1)"
 
 # 3. MUTATION: a body change must go STALE (evidence is load-bearing)

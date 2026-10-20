@@ -3134,7 +3134,17 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- 0 failed", so the counts and the exit code disagreed about the same run.
       let refs := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .refinement)
       let enss := fun (cs : List Proof.ReplayCheck) => cs.filter (·.target.kind == .ensures)
-      let verified := (refs res.accepted).map (·.target.subject)
+      -- A theorem the kernel accepts verifies a claim only when the claim's own verdict lets it: a
+      -- claim refused by its call keys (bug 081), its subject binding (bug 079) or its dependency
+      -- closure is TYPE-CHECKED, NOT PROVED. `stale` keeps its own rendering below, as before.
+      let claimStatus := fun (fn : String) =>
+        (statusBySubject.find? (·.1 == fn)).map (·.2) |>.getD "unknown"
+      let isRefused := fun (fn : String) =>
+        let st := claimStatus fn
+        st != "proved" && st != "stale"
+      let refused := (refs res.accepted).filter (fun c => isRefused c.target.subject)
+        |>.map (fun c => (c.target.subject, c.target.theoremName, claimStatus c.target.subject))
+      let verified := ((refs res.accepted).filter (fun c => !isRefused c.target.subject)).map (·.target.subject)
       let unboundChecked := (refs res.acceptedUnbound).map (·.target.subject)
       let ensFailed := (enss res.rejected).map fun c => (c.target.subject, c.target.theoremName)
       let failed := (refs res.rejected).map (fun c => (c.target.subject, c.target.theoremName)) ++ ensFailed
@@ -3170,14 +3180,19 @@ def compileAndReport (inputPath : String) (reportType : String)
           ((parsed.modules.flatMap Report.allFunctions).find?
             (fun (pfx, f) => pfx ++ f.name == fn)).map (fun (_, f) => f.span.line) |>.getD 0
         let has := fun (sub : String) => (combined.splitOn sub).length != 1
+        -- `checked` only for a claim whose verdict is `proved`; every other verdict (stale, and the
+        -- refusals: correspondence_unjustified, spec_unbound, deps_not_current, needs_recheck, ...)
+        -- is reported as itself. The kernel accepting a theorem says nothing about whether it proves
+        -- THIS body (Codex, land3: bug 081's aliased claim read `checked` here).
         let statusOf := fun (thm : String) (oblStatus : String) =>
           if generalFailure then "env_failure"
           else if has s!"`{thm}`" then (if has "unknown" then "missing_theorem" else "failed")
-          else if oblStatus == "stale" then "stale"
-          else "checked"
+          else if oblStatus == "proved" then "checked"
+          else oblStatus
         let checkObj := fun (fn thm kind origin oblStatus : String) =>
           String.join ["    {\"function\": ", q fn, ", \"theorem\": ", q thm, ", \"obligation_kind\": ", q kind,
             ", \"origin\": ", q origin, ", \"status\": ", q (statusOf thm oblStatus),
+            ", \"discharged\": ", (if statusOf thm oblStatus == "checked" then "true" else "false"),
             -- The FRESH KERNEL RE-CHECK verdict (R-0208), beside the lookup status above, so a
             -- frozen claim inventory can compare both across a toolchain upgrade.
             ", \"recheck\": ", q (((res.recheck.find? (·.1 == thm)).map (·.2.canonical)).getD "recheck_not_run"),
@@ -3210,7 +3225,8 @@ def compileAndReport (inputPath : String) (reportType : String)
           ",\n  \"checks\": [\n", ",\n".intercalate allObjs, "\n  ],\n",
           "  \"lean_error\": ", q leanErr,
           ",\n  \"summary\": {\"verified\": ", toString verified.length,
-          ", \"unbound\": ", toString unboundChecked.length, ", \"failed\": ", toString failed.length,
+          ", \"unbound\": ", toString unboundChecked.length, ", \"refused\": ", toString refused.length,
+          ", \"failed\": ", toString failed.length,
           ", \"total\": ", toString (refinementTargets.length + ensuresThms.length), "}\n}"])
         return (if failed.isEmpty && res.rejected.isEmpty && !generalFailure then 0 else 1)
       -- Render report
@@ -3245,6 +3261,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         out := out ++ s!"\n  Type-checked but UNBOUND — not proved ({unboundChecked.length}):\n"
         for fn in unboundChecked do
           out := out ++ s!"    ? {fn} — {theoremOf fn} (no stored proof-subject digest; add #[proof_fingerprint(\"...\")])\n"
+      if !refused.isEmpty then
+        out := out ++ s!"\n  Type-checked but REFUSED — not proved ({refused.length}):\n"
+        for (fn, thm, st) in refused do
+          out := out ++ s!"    ? {fn} — {thm} (claim verdict: {st})\n"
       if !failed.isEmpty then
         out := out ++ s!"\n  Failed ({failed.length}):\n"
         for (fn, proofName) in failed do
@@ -3291,6 +3311,8 @@ def compileAndReport (inputPath : String) (reportType : String)
       out := out ++ s!"\nSummary: {verified.length} verified, {failed.length} failed"
       if !unboundChecked.isEmpty then
         out := out ++ s!"; {unboundChecked.length} unbound (type-checked, NOT proved)"
+      if !refused.isEmpty then
+        out := out ++ s!"; {refused.length} refused (type-checked, NOT proved)"
       if generalFailure then
         -- "0 verified, 0 failed" alone reads like nothing was wrong. Say how many claims went
         -- unjudged, so the zero cannot be mistaken for a clean run.

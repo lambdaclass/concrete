@@ -502,8 +502,8 @@ deriving Repr
 
     The conversion path for the hand-written tables, and the reason `ofAttested` alone is not enough:
     those tables set `globals` for dispatch and carry `@[simp] … .globals = … := rfl` lemmas the
-    proofs rely on. `ofAttested` nulls `globals`, so converting through it would break evaluation and
-    those lemmas. This is a structure update, so `.globals` still reduces definitionally and the
+    proofs rely on. `ofAttested` derives `globals` from its entries, so converting through it would
+    replace that dispatch and break those lemmas. This is a structure update, so `.globals` still reduces definitionally and the
     `rfl` lemmas keep working — the table's TYPE and behaviour are untouched and only evidence
     material is added.
 
@@ -551,7 +551,12 @@ def FnTable.ofAttested (entries : List AttestedPFnDef) : FnTable :=
   , attested := (entries.filterMap (fun e =>
       e.attested.toOption.map (fun d => (e.model, d)))).toArray
   , attestationFailures := (entries.filter (fun e => e.attested.toOption.isNone)).length
-  , globals := fun _ => none }
+  -- DISPATCH FROM THE ENTRIES, not `fun _ => none`. `eval` resolves `.call key` through `globals`, and
+  -- `scopedEntryEvidence` now requires each attested model to be what its key dispatches to (Codex,
+  -- land3): a table whose calls reach nothing describes no model a specification can evaluate. The
+  -- first entry under a key answers it, so a second, different model under the same key is refused
+  -- at the evidence boundary rather than silently shadowed.
+  , globals := fun k => (entries.map (·.model)).find? (·.operationalKey == k) }
 
 /-- A table of definitions only — no locally bound callables. The common case.
 

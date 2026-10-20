@@ -248,6 +248,12 @@ inductive ScopedMembershipRefusal where
       model the table does not contain, so membership answered from it would be about something the
       table cannot dispatch to. -/
   | attestedModelNotInTable (definition : DefinitionIdentity)
+  /-- The table's DISPATCH does not answer an attested model's key with that exact model (Codex,
+      land3). Evaluation resolves `.call key` through `globals`, while this evidence is read from
+      `attested`/`entries`; a table attesting `checkClassFn` under `check_class` while `globals`
+      sends `check_class` to `checkVersionFn` would otherwise be evidence about a model no call can
+      reach. Exact `PFnDef` equality — parameters and body, not a body digest. -/
+  | dispatchMismatch (definition : DefinitionIdentity) (key : String)
 deriving Repr, BEq
 
 def ScopedMembershipRefusal.explain : ScopedMembershipRefusal → String
@@ -258,6 +264,8 @@ def ScopedMembershipRefusal.explain : ScopedMembershipRefusal → String
   | .duplicateDefinition d => s!"'{d.localName}' is attested twice"
   | .attestationIncomplete n => s!"{n} generated reference(s) failed validation — needs_recheck"
   | .attestedModelNotInTable d => s!"'{d.localName}' attests a model the table does not contain"
+  | .dispatchMismatch d k =>
+      s!"'{d.localName}' is attested under key `{k}`, but the table's dispatch does not answer `{k}` with that model"
 
 /-- Scoped membership for a table, or a named refusal.
 
@@ -289,6 +297,13 @@ def scopedEntryEvidence (t : FnTable)
         -- and membership answered from such an attestation would describe something the table
         -- cannot dispatch to.
         if !t.entries.toList.contains model then .error (.attestedModelNotInTable d) else
+        -- ...and it must be what a CALL reaches. `eval` dispatches `.call key` through `globals`,
+        -- not through `entries`, so membership in `entries` says nothing about which model a
+        -- specification's call evaluates. The whole model is compared (parameters included): two
+        -- models with one body and different parameter lists are different functions. A key two
+        -- attested models share cannot dispatch to both, so this also refuses conflicting entries.
+        if t.globals model.operationalKey != some model then
+          .error (.dispatchMismatch d model.operationalKey) else
         match model.sourceBodyDigest with
         | none => .error (.provenanceMissing d)
         | some stored =>
