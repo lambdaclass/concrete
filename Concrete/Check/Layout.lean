@@ -488,9 +488,21 @@ def enumTypeDefs (ctx : Ctx) (ed : CEnumDef) (typeArgs : List Ty := [])
     vfields.foldl (fun a (_, ft) => Nat.max a (tyAlign ctx ft)) maxA) 1) minPayloadAlign
   let payloadStart := alignUp 4 payloadAlign
   let needed := Nat.max (payloadStart + maxPayload) minEndBytes
-  let totalSize := alignUp needed (Nat.max 4 payloadAlign)
-  let payloadBytes := if totalSize <= 4 then 1 else totalSize - 4
-  let enumDef := s!"%enum.{ed.name} = type \{ i32, [{payloadBytes} x i8] }"
+  let enumAlign := Nat.max 4 payloadAlign
+  let totalSize := alignUp needed enumAlign
+  -- The LLVM type MUST have exactly the size and alignment `tySize`/`tyAlign`
+  -- give this enum: field offsets everywhere are computed from those (byte GEPs),
+  -- while aggregate loads, stores and allocas use LLVM's layout of this type.
+  -- Bug 121: a payload-less enum was declared `{ i32, [1 x i8] }` (8 bytes in
+  -- LLVM, 4 in `tySize`), and an align-8 payload enum carried only 4-byte
+  -- alignment, so a struct holding either was laid out differently by the two
+  -- and every aggregate copy of it moved its fields. A payload-less enum is
+  -- `{ i32, [0 x i8] }` (4 bytes); a zero-length `[0 x i64]` member raises the
+  -- alignment to 8 without adding bytes, keeping the tag at offset 0 and the
+  -- byte-array storage (poison-safe aggregate copies, see above).
+  let payloadBytes := totalSize - 4
+  let alignCarrier := if enumAlign ≥ 8 then "[0 x i64], " else ""
+  let enumDef := s!"%enum.{ed.name} = type \{ {alignCarrier}i32, [{payloadBytes} x i8] }"
   variantDefs ++ [enumDef]
 
 /-- LLVM type definitions for builtin types (String, Vec). -/
