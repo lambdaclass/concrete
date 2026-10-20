@@ -426,7 +426,7 @@ PY
   unit_control runs_sh_stdin 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash -es %s\n' "$real_owner" > "$fwf"
   unit_control runs_combined_stdin_flag 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
-  printf 'jobs:\n  a:\n    steps:\n      - run: env SHELLOPTS=noexec bash %s\n' "$real_owner" > "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: SHELLOPTS=noexec bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_shellopts_noexec 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: BASH_ENV=/dev/null bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_bash_env 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
@@ -434,7 +434,11 @@ PY
   unit_control runs_allowed_flags 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash -c true %s\n' "$real_owner" > "$fwf"
   unit_control runs_command_string 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
-  printf 'jobs:\n  a:\n    steps:\n      - run: X=1 timeout 60 bash -e ./%s arg\n' "$real_owner" > "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: timeout --help bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_timeout_wrapper 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: env SHELLOPTS=noexec bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_env_wrapper 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: X=1 bash -e ./%s arg\n' "$real_owner" > "$fwf"
   unit_control runs_prefixed_invocation 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
 
   # The owner is mentioned in the workflow only inside a comment: it runs nothing.

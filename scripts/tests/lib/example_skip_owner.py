@@ -14,7 +14,7 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            the command is split on UNQUOTED ; && || | ( ), the owner
                            is the executable of a simple command, or the script
                            operand of bash/sh/python3, after optional VAR=value
-                           assignments and `env`/`timeout N` prefixes. A step name, a
+                           assignments (no env/timeout wrappers). A step name, a
                            comment, quoted text, the path as an ordinary argument
                            (echo, printf, an assignment), or an interpreter option
                            outside a small allowlist (-n, -o noexec, -c, -s, -m ...)
@@ -161,8 +161,8 @@ def safe_assignment(word):
 
 def invoked_scripts(command):
     """The script an inline run: value invokes, when the WHOLE value is one simple
-    command: [VAR=value ...] [env [VAR=value ...]] [timeout N] <script> [args...]
-    or the same with bash/sh/python3 [options] <script> [args...]. Any unquoted
+    command: [VAR=value ...] <script> [args...] or [VAR=value ...] bash|sh|python3
+    [allowed options] <script> [args...] -- no wrapper command (env, timeout). Any unquoted
     operator (; & | ( ) -- a list, a pipeline, a subshell, a function, a
     redirection like 2>&1) makes it not count: execution context such as
     `true || <owner>` is not modelled, so it is refused."""
@@ -175,17 +175,8 @@ def invoked_scripts(command):
         if not safe_assignment(words[k]):
             return []
         k += 1
-    while k < len(words):
-        if words[k] == "env":
-            k += 1
-            while k < len(words) and ASSIGN.match(words[k]):
-                if not safe_assignment(words[k]):
-                    return []
-                k += 1
-        elif words[k] == "timeout" and k + 1 < len(words):
-            k += 2
-        else:
-            break
+    # No wrapper commands (env, timeout, nice, ...): each has its own options that can
+    # keep the script from running (timeout --help exits 0), and no owner needs one.
     if k >= len(words):
         return []
     if words[k] in ("bash", "sh", "python3"):
