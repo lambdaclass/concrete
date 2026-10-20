@@ -10,7 +10,7 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            common word does not count.
   runs <owner> <workflow>  CI is certain to execute the owner: some step's `run`
                            value is exactly the owner's path, optionally behind
-                           bash/sh/python3 with a few allowed options (INVOCATION),
+                           `bash` with a few allowed options (INVOCATION),
                            and the workflow, the step's job, every job it
                            transitively `needs`, and the step itself use only
                            allowlisted keys (no if:, env:, shell:,
@@ -38,14 +38,15 @@ STEP_KEYS = {"name", "run", "timeout-minutes"}
 JOB_ID = re.compile(r"[A-Za-z0-9_-]+")
 
 # The ONLY accepted spelling of an owner invocation: the whole run value is the
-# script path, optionally behind bash/sh (with -e/-u/-x clusters or -o errexit|nounset|
-# pipefail|xtrace) or python3 (with -I/-u/-B/-E). No arguments, assignments, quoting,
+# owner run by `bash` (owners are scripts/tests/*.sh bash scripts: sh may be dash and
+# python3 would not run them at all), with -e/-u/-x clusters or -o errexit|nounset|
+# pipefail|xtrace. No direct execution (it depends on the file mode and shebang), no
+# other interpreter, and no arguments, assignments, quoting,
 # expansions, redirections or operators -- every one of those has a way to keep the
 # script from running ($((1/0)), ${UNSET:?}, < /missing, true ||, ...), and the CI
 # workflow invokes its gates this way.
 INVOCATION = re.compile(
-    r"(?:(?:bash|sh)(?: +-[eux]+| +-o +(?:errexit|nounset|pipefail|xtrace))* +"
-    r"|python3(?: +-[IuBE])* +)?"
+    r"bash(?: +-[eux]+| +-o +(?:errexit|nounset|pipefail|xtrace))* +"
     r"(?P<script>(?:\./)?[A-Za-z0-9_][A-Za-z0-9_./-]*)")
 
 
@@ -60,7 +61,7 @@ def norm(p):
 
 def invoked_script(run):
     """The script a run value invokes, when the WHOLE value is exactly
-    [bash|sh|python3 <allowed options>] <script>; else None."""
+    bash [<allowed options>] <script>; else None."""
     # ASCII only, and only plain spaces between words: Unicode whitespace (a no-break
     # space) is not a shell separator, so a \s match would accept a command bash
     # cannot find.
