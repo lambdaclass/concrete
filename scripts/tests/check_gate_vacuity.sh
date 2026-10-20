@@ -95,13 +95,22 @@ fi
 # seventeen were PROSE, which means this ratchet had eleven slots of slack: a real
 # backtick-in-a-string bug could have been introduced without moving the number. An inflated
 # baseline is a ratchet that has already been loosened.
-# TRAILING COMMENTS ARE SKIPPED TOO (2026-10-20), but only a tail ` # ...` with no double quote
-# in it: such a tail cannot hold or close a double-quoted string, so cutting it can never hide a
-# real substitution, while a tail with a `"` in it is kept and still counted (fail closed). A
+# TRAILING COMMENTS ARE SKIPPED TOO (2026-10-20), but only where the '#' provably sits outside a
+# string (CUT_TAIL below); anything doubtful is kept and still counted (fail closed). A
 # trailing comment (check_example_outputs.sh) failed CI at cb8b9bac; a quote-aware parser was
 # tried and missed nested substitutions and here-strings, so the counter stays a grep that
 # over-counts. BASELINE 6 -> 5: check_fnptr_values.sh's hit was such a comment.
 BASELINE_SUBST=5
+# Cut a line at the first ' #' whose prefix holds an EVEN number of double quotes and whose tail
+# holds none: the '#' is then outside any string opened on this line, and the tail cannot close
+# one. A string opened on an earlier line was already invisible to the grep (it needs a '"' on the
+# line), so this adds no miss. echo "a # `id` (the string continues on the next line) keeps its
+# tail, because one '"' precedes the '#'.
+CUT_TAIL='{ n = length($0); q = 0
+  for (i = 1; i <= n; i++) { c = substr($0, i, 1)
+    if (c == "\"") q++
+    else if (c == "#" && i > 1 && substr($0, i-1, 1) ~ /[ \t]/ && q % 2 == 0 && index(substr($0, i), "\"") == 0) { print substr($0, 1, i-1); next } }
+  print }'
 echo "=== unintended command substitution in shell strings ==="
 # COMMENT LINES ARE SKIPPED. This counter matched any line with a backtick pair inside double
 # quotes, including SHELL COMMENTS — so prose describing a Lean identifier tripped it. On 2026-08-13
@@ -114,7 +123,9 @@ echo "=== unintended command substitution in shell strings ==="
 substcount=0
 for f in scripts/tests/check_*.sh; do
   [ "$(basename "$f")" = "check_gate_vacuity.sh" ] && continue
-  if grep -vE '^[[:space:]]*#' "$f" | sed -E 's/[[:space:]]#[^"]*$//' | grep -qE '"[^"]*[^\\]`[^"]*`'; then substcount=$((substcount+1)); fi
+  # grep -c, never -q: -q exits at the first hit, awk dies of SIGPIPE, and under pipefail the
+  # pipeline would report "no hit" for exactly the gates with the most hits.
+  if [ "$(grep -vE '^[[:space:]]*#' "$f" | awk "$CUT_TAIL" | grep -cE '"[^"]*[^\\]`[^"]*`')" -gt 0 ]; then substcount=$((substcount+1)); fi
 done
 echo "  gates with an unescaped backtick in a double-quoted string: $substcount (baseline $BASELINE_SUBST)"
 if [ "$substcount" -le "$BASELINE_SUBST" ]; then
@@ -134,14 +145,17 @@ printf '#!/usr/bin/env bash\n# a comment mentioning `an identifier` in prose\nec
 printf '#!/usr/bin/env bash\necho "danger `id` here"\n' > "$STB/check_real_subst.sh"
 printf '#!/usr/bin/env bash\nx="$1"   # a trailing comment with `name` in it\n' > "$STB/check_trailing_comment.sh"
 printf '#!/usr/bin/env bash\necho "a # inside quotes `id` still runs"\n' > "$STB/check_real_quoted_hash.sh"
+printf '#!/usr/bin/env bash\necho "danger # `id`\ncontinued"\n' > "$STB/check_real_multiline.sh"
 cnt=0
 for f in "$STB"/check_*.sh; do
-  if grep -vE '^[[:space:]]*#' "$f" | sed -E 's/[[:space:]]#[^"]*$//' | grep -qE '"[^"]*[^\\]`[^"]*`'; then cnt=$((cnt+1)); fi
+  # grep -c, never -q: -q exits at the first hit, awk dies of SIGPIPE, and under pipefail the
+  # pipeline would report "no hit" for exactly the gates with the most hits.
+  if [ "$(grep -vE '^[[:space:]]*#' "$f" | awk "$CUT_TAIL" | grep -cE '"[^"]*[^\\]`[^"]*`')" -gt 0 ]; then cnt=$((cnt+1)); fi
 done
-if [ "$cnt" = "2" ]; then
-  ok "the backtick counter ignores leading and trailing comments and still catches real substitutions (also after a quoted #)"
+if [ "$cnt" = "3" ]; then
+  ok "the backtick counter ignores leading and trailing comments and still catches real substitutions (also after a quoted #, and in a string that continues on the next line)"
 else
-  no "backtick-counter self-test found $cnt of an expected 2 — the counter is not trustworthy"
+  no "backtick-counter self-test found $cnt of an expected 3 — the counter is not trustworthy"
 fi
 
 echo "=== the ratchet can fail ==="
