@@ -1,6 +1,6 @@
 # Structural Classes of Bugs 039 – 107
 
-Status: reference (2026-10-20). Bugs 108 – 120 (the examples-health pass) and 123 – 124 (the exit 2i
+Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) and 123 – 124 (the exit 2i
 specification, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
@@ -37,7 +37,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 | class | bugs | structural owner |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118 | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment) | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
@@ -48,7 +48,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
-| 12. One fact kept in two places | 042, 057, 064, 070, 112 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
+| 12. One fact kept in two places | 042, 057, 064, 070, 112, 121, 122 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 111, 113, 115, 123, 124 | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
@@ -276,7 +276,9 @@ owners R-0494 (S2) and R-0495 (S9).
 
 **Bugs.** 042 (Resolve and Elab classified imports separately and disagreed), 057 (a hardcoded
 `HashMap` size disagreed with its declaration), 064 (two query-kind lists, one validating and both
-rendered), 070 (`builtinEnumList` built twice).
+rendered), 070 (`builtinEnumList` built twice), 121 and 122 (a type's layout computed by `Layout`
+for field offsets and restated as an LLVM type whose layout LLVM computes again: payload-less and
+align-8 enums in 121, the canonical builtin `Option`/`Result` union in 122).
 
 **Design cause.** A fact is recomputed or restated where it is needed instead of read from one
 owner.
@@ -284,8 +286,9 @@ owner.
 **Structural fix.** One resolver and builtin table shared by every pass; one `Layout` authority;
 report surfaces split by owner.
 
-**Owner.** R-0492/R-0514 (042, 070), R-0502 (S11, 057), R-0494 (S2 splits `Report.lean` by
-surface, 064).
+**Owner.** R-0492/R-0514 (042, 070), R-0502 (S11, 057, 121, 122), R-0494 (S2 splits `Report.lean` by
+surface, 064). Until R-0502, `check_enum_union_layout.sh` leg 5 compares LLVM's layout of every
+emitted struct and enum type with the compiler's (121, 122).
 
 ## 13. Documented rules with no enforcing site
 

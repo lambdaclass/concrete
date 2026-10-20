@@ -1,0 +1,64 @@
+# Bug 122 — the canonical builtin Option/Result union disagrees with each instantiation's layout
+
+**Status:** OPEN
+**Found:** 2026-10-20, by bug 121's layout probe (`check_enum_union_layout.sh` leg 5).
+**Severity:** silent wrong code; a stack overrun when the LLVM union is smaller than the compiler's
+layout of a user enum named `Result`.
+
+## Reproducer
+
+`tests/regressions/bug122_builtin_enum_canonical_layout/repro.con`:
+
+```concrete
+struct Copy Rec { o: Option<i32>, x: i32, y: i64 }
+fn mk(v: i32, x: i32, y: i64) -> Rec { return Rec { o: Option::<i32>::Some { value: v }, x: x, y: y }; }
+fn pass(r: Rec) -> Rec { return r; }
+fn big(n: i64) -> Option<i64> { return Option::<i64>::Some { value: n }; }
+// main: let b = big(5); let r = pass(mk(3, 9, 100000000000)); r.y != 100000000000 -> exit 2
+```
+
+Expected exit 0; actual exit 2 (deterministic, macOS and Linux).
+
+## Observed
+
+The builtin `Option` and `Result` are emitted as ONE LLVM union each (`%enum.Option`,
+`%enum.Result`), sized for the worst footprint over the program's instantiations
+(`scanBuiltinEnumArgs` in `EmitSSA`). `Layout.tySize` sizes each instantiation by its own payload.
+Above, `Option<i64>` makes `%enum.Option` 16 bytes while `Option<i32>` is 8 to the compiler, so in
+`Rec` the compiler reads `x` at 8 and `y` at 16 and LLVM's `%struct.Rec` puts them at 16 and 24: a
+whole-struct copy moves them.
+
+A user enum named `Option` or `Result` (generic or not) is also emitted as the canonical union
+(`emittedTypes` marks the names as taken). In `tests/programs/match_expr_linear.con`, the user's
+`enum Result { Ok { value: String }, Err { code: i32 } }` is 32 bytes to the compiler and the
+canonical `%enum.Result` is 16: the 24-byte `memcpy` of the `String` into the payload at offset 8
+writes 8 bytes past the alloca, and `load %enum.Result` drops the string's length and capacity. The
+test passes by accident. `let_else.con`, `test_defer_result_nested.con` and `wildcard_pattern.con`
+show the size/alignment disagreement without an observed failure.
+
+## Expected
+
+Every value of type `Option<T>` / `Result<T, E>` has one layout that the compiler and LLVM share:
+either per-instantiation LLVM types (as user generic enums already have since R-0001), or a
+`tySize`/`tyAlign` that returns the canonical union's footprint for every instantiation, and a user
+type named `Option`/`Result` that is not the builtin gets its own LLVM type.
+
+## Containment while open
+
+`check_example_outputs.sh` (open-bug reproducers, mode `runs-exit`) requires the reproducer to
+still exit 2, and `check_enum_union_layout.sh` leg 5 lists the ten known disagreements in
+`KNOWN_122`: a new disagreement fails the gate, and so does a listed one that stops disagreeing,
+until this record, the corpus entry and both lists are updated together.
+
+## Structural cause
+
+One fact kept in two places ([structural class](STRUCTURAL_CLASSES.md) 12, with 057 and 121): the
+canonical union's footprint is a program-wide fact computed in `EmitSSA` after lowering, while
+`Lower` and `Layout` compute offsets from a per-instantiation size, and builtin and user types are
+joined by the spelled names `Option`/`Result` (class 1).
+
+## Structural owner
+
+R-0502 (S11: `Layout` as the single authority emitting checked representation certificates), with
+R-0492 (S5 `DefId`) for the builtin/user name join; `check_enum_union_layout.sh` leg 5 contains it
+until then.

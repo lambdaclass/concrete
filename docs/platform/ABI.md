@@ -139,6 +139,10 @@ Enums use a tagged-union representation:
 - Payload starts at `alignUp(4, max_field_alignment)`
 - Payload size is the maximum variant payload size
 - Total size is `alignUp(tag_offset + payload_size, max(4, payload_align))`
+- The LLVM type has exactly that size and alignment: a payload-less enum is `{ i32, [0 x i8] }`
+  (4 bytes), and an enum whose alignment is 8 starts with a zero-length `[0 x i64]` member that
+  raises the alignment without adding bytes (bug 121; `check_enum_union_layout.sh` leg 5 compares
+  LLVM's layout of every emitted type with the compiler's)
 
 This representation is **not stable** and should not be relied upon across FFI boundaries. Enums are not FFI-safe.
 
