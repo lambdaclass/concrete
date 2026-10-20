@@ -1,0 +1,9 @@
+// Normalized place rule (Codex static review): casts to an alias of `&mut P` are reference
+// arguments too; two of them over one place overlap. E0293.
+mod m {
+    struct P { n: i64 }
+    type R = &mut P;
+    fn two(a: &mut P, b: &mut P) { a.n = 1; b.n = 2; }
+    fn f(r: &mut P) { two(r as R, r as R); }
+    fn main() -> Int { let mut p: P = P { n: 0 }; f(&mut p); let P { n } = p; return n; }
+}

@@ -111,7 +111,7 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
     across branches, so a reassignment may not RE-POINT a reference at different storage. -/
 def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
     (reassign : Bool := false) (pre : Option Norm := none) : CheckM Unit := do
-  match ty with
+  match ← resolvedOr ty with
   | .ref _ | .refMut _ =>
     let subject := s!"what reference '{name}' borrows"
     -- `pre`: the source normalized BEFORE `name` was (re)bound, so `let r = r` and a match
@@ -286,7 +286,8 @@ def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : Check
 
 /-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
     yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
-def checkRefArg (arg : Expr) (argTy : Ty) (span : Option Span) : CheckM Unit := do
+def checkRefArg (arg : Expr) (argTy0 : Ty) (span : Option Span) : CheckM Unit := do
+  let argTy ← resolvedOr argTy0
   -- A reference argument is an ACCESS through its normalized place, checked like any other:
   -- passing an exclusive reference while an alias of it is live is E0232, a shared one under a
   -- live exclusive alias E0231 (Codex review of the normalized rule).
@@ -1745,8 +1746,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- A literal operand gets the shared cast-operand hint (bug 088): `Uint` for a
     -- literal only `Uint` can hold, otherwise none (defaulted, range-checked `Int`).
     let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) .place
-    -- CoreCheck validates cast legality and capability requirements
-    return targetTy
+    -- CoreCheck validates cast legality and capability requirements. The target is returned
+    -- RESOLVED, so a reference spelled through an alias (`x as R`, `type R = &P`) is seen as a
+    -- reference by every check downstream (normalized place rule).
+    resolvedOr targetTy
   | .methodCall _ obj methodName typeArgs args =>
     -- The receiver is a place: `w.f.method()` auto-borrows for `&self` /
     -- `&mut self`. A by-value `self` on a projection receiver is re-checked
@@ -1959,7 +1962,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- reference records as its source or parent would silently re-point it (Codex review of
       -- the normalized place rule). Refused: use a different name.
       guardShadowedSource name (some stmt.getSpan)
-      let pre ← match finalTy with
+      let pre ← match ← resolvedOr finalTy with
         | .ref _ | .refMut _ => some <$> normRef value
         | _ => pure none
       addVar name finalTy mutable (declSpan := some stmt.getSpan)

@@ -546,9 +546,22 @@ def buildIdentity : String := "b1972706dc889a1c81282919e2285e81"
 =======
 def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
 >>>>>>> 9812b805 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
->>>>>>> 9de324af (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
 >>>>>>> aa197595 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
->>>>>>> d434c696 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+||||||| parent of 27ae4277 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+=======
+||||||| parent of 42e5a5f1 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+>>>>>>> 9de324af (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+=======
+||||||| parent of a2f7223e (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+=======
+||||||| parent of a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
+=======
+def buildIdentity : String := "520d8e8d226cccfd593d7dd580195a44"
+>>>>>>> a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+>>>>>>> a2f7223e (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+>>>>>>> 42e5a5f1 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+>>>>>>> 27ae4277 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
 
 /-- How many source files the identity above was computed over.
 

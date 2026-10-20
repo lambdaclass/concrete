@@ -1615,6 +1615,8 @@ error_091_norm_heap_ref_field_write:E0238
 error_091_norm_match_untraced_ref:E0238
 error_091_norm_alias_ref_field:E0238
 error_091_norm_nested_ref_binder:E0238
+error_091_norm_alias_cast_overlap:E0293
+error_091_norm_alias_cast_let:E0238
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok

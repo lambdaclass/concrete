@@ -1263,8 +1263,8 @@ def argBorrowParts (args : List Expr) : CheckM (List ((String × List String) ×
           | _ => pure none
         | none => pure none
       -- a cast to a reference borrows what its operand points to (`f(r as &mut P)`)
-      | c@(.cast _ _ ty) => do
-        match ty with
+      | c@(.cast _ _ ty0) => do
+        match ← resolvedOr ty0 with
         | .ref _ => pure (some (← normRef c, false))
         | .refMut _ => pure (some (← normRef c, true))
         | _ => pure none

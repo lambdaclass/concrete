@@ -1,0 +1,15 @@
+// Normalized place rule (Codex static review): `w.r as R` (`type R = &P`) in an inferred `let`
+// is a reference read out of an aggregate — untraced. E0238.
+mod m {
+    struct P { n: i64 }
+    type R = &P;
+    struct W { r: &P }
+    fn main() -> Int {
+        let p: P = P { n: 1 };
+        let w: W = W { r: &p };
+        let s = w.r as R;
+        let W { r } = w;
+        let P { n } = p;
+        return 0;
+    }
+}

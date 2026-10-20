@@ -444,3 +444,7 @@ so a reference spelled `type R = &P` is recognized in fields, casts, destructuri
 arguments; a value-pattern binder that loads a reference out of a referenced place (`r: & &T`
 binding `&T`) is E0238. Fixtures `error_091_norm_{alias_ref_field,nested_ref_binder}.con`.
 
+Tenth (static) pass: a cast's type is returned with aliases resolved, and provenance, reference
+arguments and the overlap check resolve the types they test, so a reference spelled through an
+alias is one reference everywhere. Fixtures `error_091_norm_{alias_cast_overlap,alias_cast_let}.con`.
+
