@@ -393,3 +393,9 @@ reference-argument check; and `*(h)` did not consume a heap. Raw-pointer targets
 (`*self.ptr = v`, `*((base + i) as *mut u8) = v`) name raw storage, whatever reached the
 pointer. Fixtures `error_091_norm_{field_write_under_reborrow,borrow_block_under_live_ref,paren_heap_load}.con`.
 
+Third pass: a bare assignment `x = v` overwrote a binding under a live shared reference (now
+E0232); a payload bound by matching THROUGH a reference got its own conflict key (it now records
+the scrutinee's provenance and ancestry); and `*w.h` loaded and freed a heap its owner still held
+(only a bare owned `Heap` binding is loaded; E0290). Fixtures
+`error_091_norm_{assign_under_shared_ref,heap_field_load}.con`.
+

@@ -361,9 +361,22 @@ def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
 =======
 def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
 >>>>>>> e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
->>>>>>> e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 >>>>>>> c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
->>>>>>> 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+||||||| parent of de31927b (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+=======
+||||||| parent of a2ba598c (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+>>>>>>> e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+||||||| parent of 7869d3ad (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+=======
+||||||| parent of 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+=======
+def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
+>>>>>>> 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+>>>>>>> 7869d3ad (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+>>>>>>> a2ba598c (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+>>>>>>> de31927b (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
 
 /-- How many source files the identity above was computed over.
 

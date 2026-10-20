@@ -1,0 +1,12 @@
+// Normalized place rule (Codex review, third pass): `x = 5` overwrote a binding while the live
+// shared reference `r = &x` borrowed it. E0232.
+mod m {
+    fn main() with(Std) -> Int {
+        let mut x: Int = 1;
+        let r: &Int = &x;
+        x = 5;
+        print_int(*r);
+        print_char(10);
+        return 0;
+    }
+}

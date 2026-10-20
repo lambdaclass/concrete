@@ -1,0 +1,13 @@
+// Normalized place rule (Codex review, third pass): `*w.h` loaded AND FREED a heap still owned
+// by `w`; a second `*w.h` freed it again. Only a bare owned `Heap` binding is loaded. E0290.
+mod m {
+    struct W { h: Heap<Int> }
+    fn main() with(Alloc) -> Int {
+        let w: W = W { h: alloc(7) };
+        let a: Int = *w.h;
+        let b: Int = *w.h;
+        let W { h } = w;
+        let c: Int = *h;
+        return a + b + c;
+    }
+}

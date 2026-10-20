@@ -1352,7 +1352,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               -- An arm binder may shadow a live binding: it is arm-scoped, so
               -- the outer binding is visible again (with its own obligation)
               -- after the match; state updates key on uid (bug 094).
-              if binding != "_" then addVar binding bindTy
+              if binding != "_" then
+                addVar binding bindTy
+                -- A payload bound THROUGH a reference borrows the scrutinee's storage: same
+                -- conflict key and ancestry as the scrutinee reference (normalized place rule).
+                if isRefScrutinee then
+                  recordRefProvenance binding bindTy scrutinee (some e.getSpan)
               -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
               -- borrowed view). A non-Copy OWNED field must be bound and consumed
               -- exactly once (destructure it, don't drop it).
@@ -1495,6 +1500,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
             addVar binding bindTy
+            if isRefScrutinee then
+              recordRefProvenance binding bindTy scrutinee (some e.getSpan)
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
           checkGuard guard
@@ -1611,10 +1618,14 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return t
     | .heap t =>
       -- *heap_ptr: loads value from heap, frees memory, consumes the Heap<T>
-      -- (`*(h)` is `*h`: parentheses never hide the consumed binding)
+      -- (`*(h)` is `*h`: parentheses never hide the consumed binding). A heap reached any
+      -- other way (`*w.h`, through a reference) would be freed while its owner still holds
+      -- it — a second `*w.h` freed it again — so only a bare owned binding is loaded.
       match stripParens inner with
       | .ident _ varName => consumeVar varName (some e.getSpan)
-      | _ => pure ()
+      | _ =>
+        throwCheck (.nonCopyProjection (tyToString innerTy)
+          "a heap shell that is not a bare owned binding (`*` loads and frees it); destructure its owner first") (some e.getSpan)
       return t
     | _ => throwCheck .cannotDerefNonRef (some e.getSpan)
   | .arrayLit _ elems =>
@@ -1895,6 +1906,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.assignToImmutable name) (some stmt.getSpan)
       if info.state == .frozen then
         throwCheck (.assignToFrozen name) (some stmt.getSpan)
+      -- Overwriting a binding while a live reference borrows it is a write under an alias
+      -- (normalized place rule; Codex review): E0232.
+      if !(activeBorrowRefs (← getEnv) name).isEmpty then
+        throwCheck (.cannotMutBorrowAlreadyBorrowed name) (some stmt.getSpan)
       -- Check the RHS FIRST: `acc = f(acc, x)` consumes `acc` while
       -- evaluating the RHS, which is exactly what makes the rebind legal.
       -- While doing so, mark `name` as the rebind target so consuming it in
