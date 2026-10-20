@@ -62,14 +62,59 @@ def plain_key(line):
     return m.group(1) if m else None
 
 
+def job_table(visible, jobs_at, jcol):
+    """id -> (plain-keys-ok, needs list or None when unrecognized) for every job."""
+    table, j = {}, jobs_at + 1
+    while j < len(visible):
+        line = visible[j]
+        if line.strip() and indent(line) < jcol:
+            break
+        if line.strip() and indent(line) == jcol:
+            hm = re.match(r"^\s*([A-Za-z0-9_-]+):\s*$", line)
+            k = j + 1
+            while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > jcol):
+                k += 1
+            props = [l for l in visible[j + 1:k] if l.strip()]
+            pcol = indent(props[0]) if props else None
+            top = [l for l in props if indent(l) == pcol]
+            ok = bool(hm) and pcol is not None and all(plain_key(l) in JOB_KEYS for l in top)
+            needs = []
+            for l in top:
+                if plain_key(l) == "needs":
+                    v = l.split(":", 1)[1].strip()
+                    nm = re.fullmatch(r"([A-Za-z0-9_-]+)|\[\s*([A-Za-z0-9_-]+(?:\s*,\s*[A-Za-z0-9_-]+)*)\s*\]", v)
+                    if not nm:
+                        needs = None          # block list, expression, ...: unrecognized
+                    else:
+                        needs += [x.strip() for x in (nm.group(1) or nm.group(2)).split(",")]
+            if hm:
+                table[hm.group(1)] = (ok, needs)
+            j = k
+        else:
+            j += 1
+    return table
+
+
+def job_runs_for_certain(job, table, seen=()):
+    """The job and every job it transitively needs are listed, allowlisted (so none
+    has an if:) and acyclic: a skipped dependency would skip this job too."""
+    if job in seen or job not in table:
+        return False
+    ok, needs = table[job]
+    if not ok or needs is None:
+        return False
+    return all(job_runs_for_certain(d, table, seen + (job,)) for d in needs)
+
+
 def run_commands(path):
     """The shell text of every inline `run:` value that CI is certain to execute:
 
     - the workflow's top-level keys are all in WORKFLOW_KEYS;
     - the run's job is found from the structure (the jobs' column is that of the first
       entry under `jobs:`; the nearest line at or left of it above the step must be a
-      plain `<id>:` header at exactly that column), and the job's own keys are all in
-      JOB_KEYS;
+      plain `<id>:` header at exactly that column), and the job's own keys -- and those
+      of every job it transitively `needs` (a skipped dependency skips it) -- are all
+      in JOB_KEYS, with `needs` a literal id or [id, ...] list and no cycle;
     - the run's step consists only of single-line STEP_KEYS at one column (no nested
       or continued lines).
 
@@ -95,6 +140,7 @@ def run_commands(path):
     jcol = next((indent(l) for l in visible[jobs_at + 1:] if l.strip()), 0)
     if not jcol:
         return []
+    jobs = job_table(visible, jobs_at, jcol)
     cmds = []
     for n, line in enumerate(visible):
         m = re.match(r"^(\s*)(-\s+)?run:\s+(.*)$", line)
@@ -117,7 +163,10 @@ def run_commands(path):
         j = start - 1
         while j > jobs_at and not (visible[j].strip() and indent(visible[j]) <= jcol):
             j -= 1
-        if j <= jobs_at or indent(visible[j]) != jcol or not re.match(r"^\s*[A-Za-z0-9_-]+:\s*$", visible[j]):
+        hm = re.match(r"^\s*([A-Za-z0-9_-]+):\s*$", visible[j])
+        if j <= jobs_at or indent(visible[j]) != jcol or not hm:
+            continue
+        if not job_runs_for_certain(hm.group(1), jobs):
             continue
         k = j + 1
         while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > jcol):
