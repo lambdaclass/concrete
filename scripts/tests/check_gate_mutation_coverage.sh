@@ -1197,8 +1197,8 @@ add "external-native-owners-exact" "scripts/tests/axiom_native_owners.txt" "chec
 # handed; the mutation drops the compiler library from it. Every remaining leg would still pass over
 # the smaller population — killed only by the source-module coverage leg, which is why it exists.
 add "external-population-both-libraries" "scripts/tools/proof_layer_theorems.lean" "check_external_checker.sh" no \
-  $'    | some `Concrete | some `Examples => true' \
-  $'    | some `Examples => true'
+  $'    | some `Concrete | some `Examples | some `DesignExamples => true' \
+  $'    | some `Examples | some `DesignExamples => true'
 
 # EXTERNAL RE-CHECK. STATEMENT FIDELITY COMPARES CONTENT. An exporter that rewrote a literal would
 # hand the checkers a different statement under the same name; the mutation makes the export-side

@@ -136,6 +136,23 @@ UNSEEN=$(sort -u "$TMP/env-modules.txt" | comm -13 - "$TMP/src-modules.txt")
 [ -s "$TMP/src-modules.txt" ] && [ -z "$UNSEEN" ] \
   && ok "every one of the $(grep -c . "$TMP/src-modules.txt") source modules declaring a theorem contributes to the population" \
   || no "source modules declaring theorems but absent from the population: $(echo $UNSEEN | cut -c1-300)"
+# Every Lean library the lakefile declares is in the population. The enumerator, its module filter
+# and the exporter name the libraries explicitly; a library added to lakefile.toml without them would
+# otherwise be built and never re-checked (DesignExamples reached CI that way at 03d2edec). The
+# source-module leg above only scans Concrete/ and proofs/, so this leg is what catches a library
+# whose srcDir is anywhere else.
+POP_LIBS="Concrete Examples DesignExamples"
+LAKE_LIBS=$(awk '/^\[\[lean_lib\]\]/{f=1; next} /^\[/{f=0} f && /^name *=/{gsub(/^name *= *"|"$/, ""); print}' lakefile.toml | sort -u)
+MISSING_LIBS=$(comm -23 <(echo "$LAKE_LIBS") <(printf '%s\n' $POP_LIBS | sort -u))
+EXPORTED_LIBS=$(grep -c "\"\$EXPORTER\" $POP_LIBS --" "$0")
+UNIMPORTED=""
+for lib in $POP_LIBS; do
+  grep -q "^import $lib\$" scripts/tools/proof_layer_theorems.lean \
+    && grep -q "some \`$lib\b" scripts/tools/proof_layer_theorems.lean || UNIMPORTED="$UNIMPORTED $lib"
+done
+[ -n "$LAKE_LIBS" ] && [ -z "$MISSING_LIBS" ] && [ "$EXPORTED_LIBS" = 2 ] && [ -z "$UNIMPORTED" ] \
+  && ok "every lakefile lean_lib ($(echo $LAKE_LIBS)) is in the exported population" \
+  || no "lakefile lean_libs outside the population or exporter: missing [$(echo $MISSING_LIBS)], exporter calls naming all of them: $EXPORTED_LIBS of 2; not imported or filtered by the enumerator: [$(echo $UNIMPORTED)]"
 comm -23 "$TMP/all-axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS | sort) > "$TMP/nonstd-axioms.txt"
 BAD_AX=$(grep -vE "$NATIVE_AXIOM_RE" "$TMP/nonstd-axioms.txt" || true)
 [ -z "$BAD_AX" ] && ok "no sorryAx and no axiom beyond the standard three and generated native ones" \
