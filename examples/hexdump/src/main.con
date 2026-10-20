@@ -38,6 +38,33 @@ mod hexdump {
         return 1;
     }
 
+    // Pure core of the ASCII gutter: a printable ASCII byte (0x20..0x7E)
+    // shows as itself, anything else as '.' (46), as xxd prints it.
+    // Capability-free, so it carries a Lean proof
+    // (Examples.Hexdump.Proofs.gutter_byte_correct). Two early returns
+    // rather than `b >= 32 && b <= 126`: the proof extractor does not model
+    // boolean `&&` (docs/verification/PROOF_EXTRACTION_GAPS.md).
+    #[spec(Examples.Hexdump.Proofs.gutterByteExpr)]
+    #[proof_by(Examples.Hexdump.Proofs.gutter_byte_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:6b47a1b0e3571b8a7acab1061c589dfd")]
+    fn gutter_byte(b: u64) -> u64 {
+        if b < 32 { return 46; }
+        if b > 126 { return 46; }
+        return b;
+    }
+
+    // Pure core of the line split: a line holds the remaining bytes, at
+    // most 16 (Examples.Hexdump.Proofs.line_len_correct).
+    #[spec(Examples.Hexdump.Proofs.lineLenExpr)]
+    #[proof_by(Examples.Hexdump.Proofs.line_len_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:168691431b07dce2cdaf24c83c0e5bef")]
+    fn line_len(remaining: u64) -> u64 {
+        if remaining > 16 { return 16; }
+        return remaining;
+    }
+
     // One xxd-format line for data[off .. off+n) where 1 <= n <= 16.
     fn dump_line(data: &Bytes, off: u64, n: u64, w: &Writer<Console>) with(Alloc, Console) {
         let mut line: String = String::new();
@@ -59,11 +86,7 @@ mod hexdump {
         let mut j: u64 = 0;
         while j < n {
             let b: u64 = data.get_unchecked(off + j) as u64;
-            if b >= 32 && b <= 126 {
-                line.push_char(b as char);
-            } else {
-                line.push_char('.');
-            }
+            line.push_char(gutter_byte(b) as char);
             j = j + 1;
         }
         line.push_char('\n');
@@ -81,8 +104,7 @@ mod hexdump {
         }
         let mut off: u64 = skip;
         while off < end {
-            let mut n: u64 = end - off;
-            if n > 16 { n = 16; }
+            let n: u64 = line_len(end - off);
             dump_line(data, off, n, w);
             off = off + 16;
         }

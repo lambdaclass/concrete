@@ -40,6 +40,8 @@ def sourceLinkedThms : List Name :=
     `Examples.FixedCapacity.Proofs.ring_new_correct,
     `Examples.FixedCapacity.Proofs.ring_push_then_contains_correct,
     `Examples.FixedCapacity.Proofs.ring_push_zero_correct,
+    `Examples.Hexdump.Proofs.gutter_byte_correct,
+    `Examples.Hexdump.Proofs.line_len_correct,
     `Examples.HmacSha256.Proofs.block_to_words_at_refines_spec,
     `Examples.HmacSha256.Proofs.block_to_words_refines_spec,
     `Examples.HmacSha256.Proofs.ch_refines,
