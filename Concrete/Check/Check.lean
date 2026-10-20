@@ -137,6 +137,15 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
           else (n, info) }
   | _ => pure ()
 
+/-- Every binding introduction (let, match binder, destructuring) goes through this guard:
+    provenance and reborrow ancestry are recorded BY NAME, so shadowing a name that a live
+    reference records as its source or parent would silently re-point it (E0238). -/
+def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
+  if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
+      (vi.borrowedFrom == some name || vi.refParent == some name)) then
+    throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
+      "shadowing it would detach them from the storage they borrow; use a different name") span
+
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
 def refAncestors (r : String) : CheckM (List String) := do
   let env ← getEnv
@@ -1364,6 +1373,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               -- the outer binding is visible again (with its own obligation)
               -- after the match; state updates key on uid (bug 094).
               if binding != "_" then
+                guardShadowedSource binding (some e.getSpan)
                 addVar binding bindTy
                 -- A payload bound THROUGH a reference borrows the scrutinee's storage: same
                 -- conflict key and ancestry as the scrutinee reference (normalized place rule).
@@ -1380,7 +1390,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             checkGuard guard
             pure body
           | .varArm _ binding guard body => do
-            if binding != "_" then addVar binding innerTyR
+            -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
+            -- reference (duplication, no provenance): refused (normalized place rule).
+            let isRefScrut := match scrTy with | .ref _ | .refMut _ => true | _ => false
+            if binding != "_" && isRefScrut && !(← isCopyType innerTyR) then
+              throwCheck (.nonCopyProjection (tyToString innerTyR)
+                "a reference (a catch-all match binder over a borrowed non-Copy enum); match its variants or bind `_`") (some e.getSpan)
+            if binding != "_" then
+              guardShadowedSource binding (some e.getSpan)
+              addVar binding innerTyR
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1511,6 +1529,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
             let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
+            guardShadowedSource binding (some e.getSpan)
             addVar binding bindTy
             if isRefScrutinee then
               recordRefProvenance binding bindTy scrutinee (some e.getSpan) (pre := scrutPre)
@@ -1908,10 +1927,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Provenance and reborrow ancestry are recorded BY NAME; shadowing a name that a live
       -- reference records as its source or parent would silently re-point it (Codex review of
       -- the normalized place rule). Refused: use a different name.
-      if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
-          (vi.borrowedFrom == some name || vi.refParent == some name)) then
-        throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
-          "shadowing it would detach them from the storage they borrow; use a different name") (some stmt.getSpan)
+      guardShadowedSource name (some stmt.getSpan)
       let pre ← match finalTy with
         | .ref _ | .refMut _ => some <$> normRef value
         | _ => pure none
@@ -2206,6 +2222,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
      | _ => pure ())
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type
+    -- `r[i] = v` with `r: &mut [T; N]` is the same place as `(*r)[i] = v` (normalized place
+    -- rule): the non-Copy overwrite rule applies through a reference too.
+    let arrTy := match arrTy with
+      | .ref (.array t n) | .refMut (.array t n) => Ty.array t n
+      | t => t
     match arrTy with
     | .array elemTy _ =>
       -- H15: overwriting a non-Copy element leaks the OLD value (arrays are
@@ -2397,9 +2418,17 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for b in bindings do
       match ← lookupStructField structName b with
       | some fieldTy =>
+        let bTy := substTy mapping fieldTy
         -- H16 for destructure binders too (bug 094).
         checkNoLiveShadow b (some stmt.getSpan)
-        addVar b (substTy mapping fieldTy) true (declSpan := some stmt.getSpan)
+        guardShadowedSource b (some stmt.getSpan)
+        -- a reference-valued field has no traced source (normalized place rule): E0238
+        match bTy with
+        | .ref _ | .refMut _ =>
+          throwCheck (.untraceablePlace s!"what the destructured reference '{b}' borrows"
+            "a reference read out of a struct field is not traced; borrow a named place instead") (some stmt.getSpan)
+        | _ => pure ()
+        addVar b bTy true (declSpan := some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do

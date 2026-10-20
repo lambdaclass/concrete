@@ -1,0 +1,12 @@
+// Normalized place rule (Codex static review): `r[i] = v` with `r: &mut [P; 2]` is the place
+// `(*r)[i]`, so overwriting a non-Copy element (leaking the old one) is refused through the
+// reference too. E0291.
+mod m {
+    struct P { n: i64 }
+    fn put(r: &mut [P; 2]) { r[0] = P { n: 9 }; }
+    fn main() -> Int {
+        let mut a: [P; 2] = [P { n: 1 }, P { n: 2 }];
+        put(&mut a);
+        return 0;
+    }
+}

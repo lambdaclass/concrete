@@ -417,3 +417,10 @@ a binder shadowing its scrutinee); a reference cast whose operand is itself a re
 integer operand, trusted raw code) yields untracked storage. Fixtures
 `error_091_norm_{double_deref_read,intrinsic_arg_under_reborrow}.con`.
 
+Sixth (static) pass — binding introductions: every binder (let, match arm binders, catch-all
+binders, struct destructuring) goes through one shadowing guard (`guardShadowedSource`); a
+catch-all binder over a borrowed non-Copy enum is refused (E0290) instead of binding the whole
+value out of the reference; a reference-valued field destructured out of a struct has no traced
+source and is E0238; and `r[i] = v` with `r: &mut [T; N]` obeys the non-Copy overwrite rule of
+`(*r)[i] = v`. Fixtures `error_091_norm_{ref_array_overwrite,catchall_binder_through_ref}.con`.
+

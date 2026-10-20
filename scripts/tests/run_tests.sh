@@ -1607,6 +1607,8 @@ error_091_norm_heap_field_load:E0290
 error_091_norm_paren_array_write:E0217
 error_091_norm_double_deref_read:E0238
 error_091_norm_intrinsic_arg_under_reborrow:E0232
+error_091_norm_ref_array_overwrite:E0291
+error_091_norm_catchall_binder_through_ref:E0290
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok

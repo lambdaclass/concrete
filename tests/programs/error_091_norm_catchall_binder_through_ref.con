@@ -1,0 +1,17 @@
+// Normalized place rule (Codex static review): a catch-all binder in a match over `&E` bound
+// the whole non-Copy `E` by value out of the reference (duplication). E0290.
+mod m {
+    struct P { n: i64 }
+    enum E { V { p: P } }
+    fn f(r: &E) -> i64 {
+        match r {
+            whole => { let E::V { p } = whole; let P { n } = p; return n; }
+        }
+    }
+    fn main() -> Int {
+        let e: E = E::V { p: P { n: 1 } };
+        let n: i64 = f(&e);
+        match e { E::V { p } => { let P { n } = p; } }
+        return n;
+    }
+}
