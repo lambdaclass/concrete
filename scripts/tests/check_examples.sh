@@ -140,27 +140,61 @@ project_root_of() {
   return 1
 }
 
-# Does owner script $1 name example $2? Its full path must appear literally, or,
-# for a .../src/main.con, the example's own directory (the parent of src/) —
-# gates commonly `cd` there to build. Nothing looser: a top-level directory plus
-# a short word matched shell keywords (`for`) and would let any gate own anything.
-owner_references() {
-  local owner="$1" src="$2" exdir
-  grep -qF -- "$src" "$owner" && return 0
-  case "$src" in
-    */src/main.con)
-      exdir=$(dirname "$(dirname "$src")")
-      # the directory, not a longer name it prefixes (..._map vs ..._mapX)
-      python3 -c 'import re, sys; s = open(sys.argv[1]).read(); sys.exit(0 if re.search(re.escape(sys.argv[2]) + r"(?![A-Za-z0-9_-])", s) else 1)' "$owner" "$exdir" ;;
-    *) return 1 ;;
-  esac
-}
-
-# Is gate $1 invoked by an executable (non-comment) line of the workflow, by its
-# full scripts/tests/ path? A mention in a YAML comment runs nothing.
-workflow_runs() {
-  grep -v '^[[:space:]]*#' "$WORKFLOW" | grep -qF -- "$1"
-}
+# Skip-owner checks, in Python so they read whole files (no grep -q under pipefail)
+# and compare whole TOKENS. A path token is a maximal run of [A-Za-z0-9_./-].
+#   ref  <owner> <src>: the owner names <src> as a complete token, or, for a
+#        .../src/main.con, the example directory as a complete token. A longer
+#        name (<dir>.backup, main.con.disabled, another file under <dir>) or a
+#        top-level directory plus a common word does not count.
+#   runs <owner> <workflow>: the owner is invoked by a `run:` command of the
+#        workflow — inline or block — as a complete token after shell comments
+#        are stripped. A step name, a YAML comment or an inline `# ...` does not.
+OWNER_PY='
+import re, sys
+TOK = re.compile(r"[A-Za-z0-9_./-]+")
+def tokens(text):
+    return set(t.rstrip(".") for t in TOK.findall(text)) | set(TOK.findall(text))
+def strip_shell_comment(line):
+    out, q = [], None
+    for i, c in enumerate(line):
+        if q:
+            if c == q: q = None
+        elif c in "\"'"'"'": q = c
+        elif c == "#" and (i == 0 or line[i - 1] in " \t;|&("): break
+        out.append(c)
+    return "".join(out)
+def run_commands(path):
+    lines = open(path).read().split("\n")
+    cmds, i = [], 0
+    while i < len(lines):
+        m = re.match(r"^(\s*)(?:-\s+)?run:\s*(.*)$", lines[i])
+        if not m:
+            i += 1; continue
+        indent, rest = len(m.group(1)), m.group(2)
+        if rest.strip() and rest.strip()[0] in "|>":
+            i += 1
+            while i < len(lines) and (not lines[i].strip() or len(lines[i]) - len(lines[i].lstrip()) > indent):
+                cmds.append(lines[i]); i += 1
+        else:
+            cmds.append(rest); i += 1
+    return [strip_shell_comment(c) for c in cmds]
+mode, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+if mode == "ref":
+    toks = tokens(open(a).read())
+    if b in toks: sys.exit(0)
+    if b.endswith("/src/main.con"):
+        d = b[: -len("/src/main.con")]
+        if d in toks or d + "/" in toks: sys.exit(0)
+    sys.exit(1)
+if mode == "runs":
+    for c in run_commands(b):
+        t = tokens(c)
+        if a in t or "./" + a in t: sys.exit(0)
+    sys.exit(1)
+sys.exit(2)
+'
+owner_references() { python3 -c "$OWNER_PY" ref "$1" "$2"; }
+workflow_runs() { python3 -c "$OWNER_PY" runs "$1" "$WORKFLOW"; }
 
 check_skip() { # src, rest-of-line
   local src="$1" rest="$2" owner reason
@@ -233,7 +267,7 @@ check_known_bug() { # src, number, marker
   found=0
   while IFS= read -r alt; do
     alt=$(echo "$alt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    [ -n "$alt" ] && printf '%s' "$out" | grep -qF -- "$alt" && found=1
+    [ -n "$alt" ] && grep -qF -- "$alt" <<< "$out" && found=1   # here-string: no pipe for -q to SIGPIPE
   done < <(printf '%s\n' "$marker" | awk '{n = split($0, a, " [|][|] "); for (i = 1; i <= n; i++) print a[i]}')
   if [ "$found" = 1 ]; then
     ok
@@ -370,6 +404,31 @@ PY
     "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 001 anything', 1)"
   control known_bug_no_doc "has no docs/bugs/" \
     "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 999 anything', 1)"
+  # Token-level controls on the owner checks (temporary owner / workflow files).
+  local real_owner="scripts/tests/check_returned_ref_provenance.sh" fake="$dir/fake_owner.sh" fwf="$dir/fake_workflow.yml"
+  local real_src="examples/known_holes/returned_ref_provenance_map/src/main.con"
+  unit_control() { # name, expected-exit (0 pass / 1 fail), command...
+    local name="$1" want="$2"; shift 2
+    "$@"; local rc=$?
+    if [ "$rc" = "$want" ]; then echo "  ok   control $name"; ok; else no "control $name: exit $rc, wanted $want"; fi
+  }
+  printf 'cd examples/known_holes/returned_ref_provenance_map.backup && build\n' > "$fake"
+  unit_control ref_backup_directory 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  printf 'run examples/known_holes/returned_ref_provenance_map/src/main.con.disabled\n' > "$fake"
+  unit_control ref_disabled_file 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  printf 'run xexamples/known_holes/returned_ref_provenance_map\n' > "$fake"
+  unit_control ref_prefixed_path 1 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  printf 'cd examples/known_holes/returned_ref_provenance_map && build\n' > "$fake"
+  unit_control ref_exact_directory 0 python3 -c "$OWNER_PY" ref "$fake" "$real_src"
+  unit_control ref_real_owner 0 python3 -c "$OWNER_PY" ref "$real_owner" "$real_src"
+  printf 'jobs:\n  a:\n    steps:\n      - name: %s\n        run: true # %s\n' "$real_owner" "$real_owner" > "$fwf"
+  unit_control runs_name_and_inline_comment 1 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          # bash %s\n          echo %s.bak\n' "$real_owner" "$real_owner" > "$fwf"
+  unit_control runs_block_comment_and_longer_name 1 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo start\n          bash ./%s\n' "$real_owner" > "$fwf"
+  unit_control runs_block_command 0 python3 -c "$OWNER_PY" runs "$real_owner" "$fwf"
+  unit_control runs_real_workflow 0 python3 -c "$OWNER_PY" runs "$real_owner" "$WORKFLOW"
+
   # The owner is mentioned in the workflow only inside a comment: it runs nothing.
   local owner wf="$dir/workflow_commented.yml"
   owner=$(echo "$skip_line" | sed -n 's/^.*owner=\([^[:space:]]*\).*$/\1/p')

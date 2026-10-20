@@ -269,7 +269,7 @@ while IFS= read -r line; do
       if [ -z "$marker" ]; then no "$label: interp=fails: needs a marker"; continue; fi
       if [ "$irc" -eq 0 ]; then
         no "$label: interp=fails:$marker but the interpreter now runs it (exit 0) — promote the rule to interp=yes"
-      elif ! cat "$TMP/int_$n.out" "$TMP/int_$n.err" | grep -qF -- "$marker"; then
+      elif ! grep -qF -- "$marker" "$TMP/int_$n.out" "$TMP/int_$n.err"; then
         no "$label: the interpreter fails, but not with '$marker':"
         cat "$TMP/int_$n.err" "$TMP/int_$n.out" | awk 'NR<=3'
       elif [ "$native_ok" = 1 ]; then
@@ -305,7 +305,7 @@ open_bug_reproducers() {
         if [ "$rc" -eq 0 ]; then no "$label now compiles — fixed? update docs/bugs/$num, the corpus entry and this table"; continue; fi
         found=0
         while IFS= read -r alt; do
-          [ -n "$alt" ] && printf '%s' "$out" | grep -qF -- "$alt" && found=1
+          [ -n "$alt" ] && grep -qF -- "$alt" <<< "$out" && found=1
         done < <(printf '%s\n' "$text" | awk '{n = split($0, a, " [|][|] "); for (i = 1; i <= n; i++) print a[i]}')
         if [ "$found" = 1 ]; then ok "$label still fails to compile ('$text')"; else no "$label fails differently than recorded ('$text'):"; printf '%s\n' "$out" | awk 'NR<=3'; fi
         ;;
@@ -316,7 +316,7 @@ open_bug_reproducers() {
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
         out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
         if [ "$rc" -eq 0 ]; then no "$label: the interpreter now runs it — fixed? update docs/bugs/$num, the corpus entry and this table"
-        elif printf '%s' "$out" | grep -qF -- "$text"; then ok "$label: the interpreter still fails ('$text')"
+        elif grep -qF -- "$text" <<< "$out"; then ok "$label: the interpreter still fails ('$text')"
         else no "$label: the interpreter fails differently than recorded ('$text'):"; printf '%s\n' "$out" | awk 'NR<=3'; fi
         ;;
       *) no "$label: unknown mode '$mode'" ;;
