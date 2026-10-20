@@ -1,0 +1,16 @@
+// Normalized place rule (Codex static review): `h.r.f = v` with `h: Heap<S>` and `S.r: &P`
+// writes through a reference stored in a heap-backed field. The type peek now auto-derefs the
+// heap shell, so `h.r` is seen as a reference — untraced (E0238), as `(*h.r).f` is.
+mod m {
+    struct P { f: i64 }
+    struct S { r: &P }
+    fn main() with(Alloc) -> Int {
+        let p: P = P { f: 1 };
+        let h: Heap<S> = alloc(S { r: &p });
+        h.r.f = 5;
+        let s: S = *h;
+        let S { r } = s;
+        let P { f } = p;
+        return f;
+    }
+}

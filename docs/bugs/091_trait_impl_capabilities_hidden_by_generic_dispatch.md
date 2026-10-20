@@ -433,3 +433,9 @@ substitutes a generic struct's type arguments into field types (`G<&P>.v` is `&P
 casts, so the normalized rule (and the intrinsic reference-argument check that uses it) sees
 those references. Fixtures `error_091_norm_{enum_payload_ref,generic_field_ref_write}.con`.
 
+Eighth (static) pass — the rule's type knowledge: `peekExprType` now auto-derefs heap shells and
+types a newtype's `.0`, and a projection base whose type the peek cannot determine is treated as
+untraceable unless it is a fresh temporary (fail closed); an intrinsic's place arguments must
+normalize whatever their peeked type; a matched reference must normalize even when the arms
+bind Copy values. Fixtures `error_091_norm_{heap_ref_field_write,match_untraced_ref}.con`.
+

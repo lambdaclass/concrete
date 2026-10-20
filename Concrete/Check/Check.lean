@@ -675,6 +675,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- An intrinsic's reference arguments are accesses like any call's (normalized place rule).
     if intrinsic.isSome then
       for arg in args do
+        -- a place argument must normalize whatever its peeked type (fail closed when the
+        -- peek cannot type it); a reference argument is an access
+        match arg with
+        | .fieldAccess .. | .arrayIndex .. | .deref .. =>
+          if let .reject why := (← normPlace arg) then
+            throwCheck (.untraceablePlace "an intrinsic argument" why) (some e.getSpan)
+        | _ => pure ()
         checkRefArg arg (← peekExprType arg) (some e.getSpan)
     -- Intercept sizeof::<T>() and alignof::<T>() builtins
     if intrinsic == some .sizeof || intrinsic == some .alignof then
@@ -1329,6 +1336,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- would bind as owned values the owner still holds); `match r` matches through the
     -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
     let scrTy ← checkExpr scrutinee
+    -- A match through a reference reads through it: the reference must normalize (E0238),
+    -- whatever the arms bind (normalized place rule).
+    match scrTy with
+    | .ref _ | .refMut _ =>
+      if let .reject why := (← normRef scrutinee) then
+        throwCheck (.untraceablePlace "the matched reference" why) (some e.getSpan)
+    | _ => pure ()
     -- Auto-deref through references for match
     let innerTy := match scrTy with
       | .ref t => t

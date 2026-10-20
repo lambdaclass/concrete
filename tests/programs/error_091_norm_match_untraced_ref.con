@@ -1,0 +1,12 @@
+// Normalized place rule (Codex static review): `match s.r { x => .. }` with `s.r: &i64` reads
+// through a reference stored in a field; a matched reference must normalize. E0238.
+mod m {
+    struct S { r: &i64 }
+    fn main() -> Int {
+        let v: i64 = 3;
+        let s: S = S { r: &v };
+        let n: i64 = match s.r { x => { x } };
+        let S { r } = s;
+        return n;
+    }
+}

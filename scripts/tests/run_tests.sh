@@ -1611,6 +1611,8 @@ error_091_norm_ref_array_overwrite:E0291
 error_091_norm_catchall_binder_through_ref:E0290
 error_091_norm_enum_payload_ref:E0238
 error_091_norm_generic_field_ref_write:E0238
+error_091_norm_heap_ref_field_write:E0238
+error_091_norm_match_untraced_ref:E0238
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok

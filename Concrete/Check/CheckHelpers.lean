@@ -693,6 +693,10 @@ partial def peekExprType (e : Expr) : CheckM Ty := do
   -- `ops.op` name the same field and must peek to the same type.
   | .fieldAccess _ obj fieldName =>
     let objTy ← peekExprType obj
+    -- field access auto-derefs one layer: a reference or a heap shell (`h.next`)
+    let objTy := match objTy with
+      | .ref (.heap t) | .refMut (.heap t) | .heap t | .heapArray t => t
+      | t => t
     let structName? : Option String :=
       match objTy with
       | .named n => some n
@@ -708,6 +712,12 @@ partial def peekExprType (e : Expr) : CheckM Ty := do
     let typeArgs : List Ty := match objTy with
       | .generic _ args _ | .ref (.generic _ args _) | .refMut (.generic _ args _) => args
       | _ => []
+    -- a newtype's `.0` is its wrapped type
+    let nt? ← match structName? with
+      | some sn => if fieldName == "0" then lookupNewtype sn else pure none
+      | none => pure none
+    if let some nt := nt? then
+      return substTy (nt.typeParams.zip typeArgs) nt.innerTy
     match structName? with
     | some sn =>
       match ← lookupStructField sn fieldName with
@@ -1128,6 +1138,13 @@ partial def normProjBase (base : Expr) : CheckM Norm := do
   | b =>
     match ← peekExprType b with
     | .ref _ | .refMut _ => normRef b
+    | .placeholder | .typeVar _ =>
+      -- the base's type is not known here, so it might be a reference: only a fresh
+      -- temporary (a call result, a literal) is safe to treat as owned (fail closed)
+      match ← normPlace b with
+      | .temp => return .temp
+      | .reject why => return .reject why
+      | .place _ => return .reject "the type of this projection's base is not known to the place rule; bind it to a typed name first"
     | _ => normPlace b
 
 /-- The place a REFERENCE-valued (or pointer-valued) expression points to. -/
