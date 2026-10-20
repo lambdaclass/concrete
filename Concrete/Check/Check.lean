@@ -110,12 +110,15 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
     normalize is refused (E0238). Provenance is one source per binding and is not joined
     across branches, so a reassignment may not RE-POINT a reference at different storage. -/
 def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
-    (reassign : Bool := false) : CheckM Unit := do
+    (reassign : Bool := false) (pre : Option Norm := none) : CheckM Unit := do
   match ty with
   | .ref _ | .refMut _ =>
     let subject := s!"what reference '{name}' borrows"
+    -- `pre`: the source normalized BEFORE `name` was (re)bound, so `let r = r` and a match
+    -- binder that shadows its scrutinee read the OLD binding, not the new one.
+    let n ← match pre with | some n => pure n | none => normRef value
     let (src?, parent?, path, exact) : Option String × Option String × List String × Bool ←
-      match ← normRef value with
+      match n with
       | .place p => pure (p.root, p.viaRef, p.steps, p.exact)
       | .temp => pure (none, none, [], false)
       | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -1212,10 +1215,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- by-value non-Copy field read would hand out a payload it still holds (bug 091 round 3).
     -- The base's NORMALIZED place decides "through a reference", whatever the spelling:
     -- `(*r).p` with `r: &Heap<W>` has a `Heap<W>`-typed base yet is reached through `&`.
+    -- Every field access normalizes (bug 091 round 3): a projection of an untraceable base
+    -- (`(**r).f`, `(if c { a } else { b }).f`) is refused (E0238), reads included.
     let baseThroughRef ← match ← normProjBase obj with
       | .place p => pure p.reach.throughRef
       | .temp => pure false
-      | .reject _ => pure true   -- untraceable: never exempt (fail closed)
+      | .reject why => throwCheck (.untraceablePlace "the base of this field access" why) (some e.getSpan)
     let isHeapShell := !baseThroughRef && match objTy with
       | .heap _ | .heapArray _ => true
       | _ => false
@@ -1344,6 +1349,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
+            -- the scrutinee's normalization, taken before any binder can shadow its name
+            let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
             for (binding, sf) in bindings.zip ev.fields do
               let fieldTy := substTy typeMapping sf.ty
               -- Matching THROUGH a reference must not move payloads out of the
@@ -1361,7 +1368,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
                 -- A payload bound THROUGH a reference borrows the scrutinee's storage: same
                 -- conflict key and ancestry as the scrutinee reference (normalized place rule).
                 if isRefScrutinee then
-                  recordRefProvenance binding bindTy scrutinee (some e.getSpan)
+                  recordRefProvenance binding bindTy scrutinee (some e.getSpan) (pre := scrutPre)
               -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
               -- borrowed view). A non-Copy OWNED field must be bound and consumed
               -- exactly once (destructure it, don't drop it).
@@ -1503,9 +1510,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- `match h { y => free(y) } ; free(h);` aliases one linear handle
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
+            let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
             addVar binding bindTy
             if isRefScrutinee then
-              recordRefProvenance binding bindTy scrutinee (some e.getSpan)
+              recordRefProvenance binding bindTy scrutinee (some e.getSpan) (pre := scrutPre)
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
           checkGuard guard
@@ -1606,6 +1614,13 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Reading THROUGH a ref/ptr does not consume the binding (place read);
     -- only the Heap load-and-free below consumes.
     let innerTy ← checkExpr inner none .place
+    -- Every `*` normalizes (bug 091 round 3): `**r` and `*` over an expression whose
+    -- reference is not traced are refused (E0238), reads included.
+    match innerTy with
+    | .ref _ | .refMut _ =>
+      if let .reject why := (← normRef inner) then
+        throwCheck (.untraceablePlace "the dereferenced reference" why) (some e.getSpan)
+    | _ => pure ()
     -- H11 (bug 091 round 3): `*r` read BY VALUE through a reference duplicates a non-Copy
     -- pointee its owner still holds (`P_destroy(*r)`, `let q = *r`). Place uses
     -- (`(*r).f`, `&*r`, a receiver) and Copy pointees are unaffected; raw pointers stay the
@@ -1651,6 +1666,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return .array firstTy elems.length
   | .arrayIndex _ arr index =>
     let arrTy ← checkExpr arr none .place
+    -- Every index base normalizes (bug 091 round 3), reads included (E0238).
+    if let .reject why := (← normProjBase arr) then
+      throwCheck (.untraceablePlace "the indexed place" why) (some e.getSpan)
     let _idxTy ← checkExpr index
     -- CoreCheck validates index type and array type. Resolve the element type
     -- through a reference/pointer to the array (`&[T;N]`, `&mut [T;N]`, raw ptr,
@@ -1894,8 +1912,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           (vi.borrowedFrom == some name || vi.refParent == some name)) then
         throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
           "shadowing it would detach them from the storage they borrow; use a different name") (some stmt.getSpan)
+      let pre ← match finalTy with
+        | .ref _ | .refMut _ => some <$> normRef value
+        | _ => pure none
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      recordRefProvenance name finalTy value (some stmt.getSpan)
+      recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv

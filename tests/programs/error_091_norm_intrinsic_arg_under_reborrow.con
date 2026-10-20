@@ -1,0 +1,15 @@
+// Normalized place rule (Codex static review): an intrinsic's reference argument is an access:
+// `string_push_char(r, ..)` while the shared reborrow `s = &*r` is live is E0232.
+mod m {
+    fn f(r: &mut String) with(Std) {
+        let s: &String = &*r;
+        string_push_char(r, 65);
+        print_string(s);
+    }
+    fn main() with(Std) -> Int {
+        let mut x: String = "a";
+        f(&mut x);
+        drop_string(x);
+        return 0;
+    }
+}

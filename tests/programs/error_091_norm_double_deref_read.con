@@ -1,0 +1,10 @@
+// Normalized place rule (Codex static review): every `*` normalizes, reads of Copy values
+// included — `**r` dereferences a reference the checker cannot trace. E0238.
+mod m {
+    fn get(r: & &i32) -> i32 { return **r; }
+    fn main() -> Int {
+        let x: i32 = 4;
+        let a: &i32 = &x;
+        return get(&a) as Int;
+    }
+}

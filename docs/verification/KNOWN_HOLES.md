@@ -48,8 +48,10 @@ some valid programs are rejected:
   `(if c { a } else { b }).bump()`) — bind it to a `let mut` first;
 - a projection whose base is an `if` / `match` (`(if c { w1 } else { w2 }).p.bump()`), even when
   every branch yields an owned value;
-- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
-  reference stored in a place (`*w.r`).
+- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r` — reads
+  of Copy values included), and a reference stored in a place (`*w.r`);
+- a field access or index whose base is not a traceable place
+  (`(if c { a } else { b }).f`, `(**r).f`);
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its

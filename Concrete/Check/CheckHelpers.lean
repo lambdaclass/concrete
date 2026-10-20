@@ -1148,10 +1148,21 @@ partial def normRef (e : Expr) : CheckM Norm := do
       let r : Reach := match ty with
         | .ref _ => .shared "the place is reached through a cast to `&`"
         | _ => .exclusive
-      match ← normProjBase inner with
+      -- the operand is itself a reference or pointer value (`(r as &T) as &T`, `&x as &T`):
+      -- the cast points where the operand points
+      let base ← match unparenExpr inner with
+        | .cast .. | .borrow .. | .borrowMut .. => normRef inner
+        | _ => normProjBase inner
+      match base with
       | .place p => return .place { p with reach := p.reach.join r, binding := none, heapLoad := false }
-      -- a reference cast from a computed address (trusted raw code): untracked storage
-      | _ => return .place { root := none, reach := r }
+      | .temp => return .place { root := none, reach := r }
+      | .reject why =>
+        -- a reference cast from a computed ADDRESS (trusted raw code): untracked storage;
+        -- anything else that does not normalize stays refused
+        match ← peekExprType inner with
+        | .ptrMut _ | .ptrConst _ | .int | .uint | .u32 | .i32 | .u16 | .i16 | .u8 | .i8 =>
+          return .place { root := none, reach := r }
+        | _ => return .reject why
     -- a cast to a raw pointer names raw storage, whatever the operand (`(base + i) as *mut u8`)
     | _ => return .place { root := none, reach := .raw }
   | .fieldAccess .. | .arrayIndex .. =>

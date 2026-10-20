@@ -32,15 +32,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 =======
 =======
-||||||| parent of bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
-||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
-||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
-def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
-=======
-def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
->>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
-=======
-=======
 >>>>>>> bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
 >>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 33383d3a (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
@@ -97,6 +88,11 @@ def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 =======
 >>>>>>> f2a9285d (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+=======
+>>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 ||||||| parent of 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 =======
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
@@ -203,6 +199,14 @@ def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
 ||||||| parent of 7c08f677 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
+||||||| parent of 4e265730 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+||||||| parent of ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+=======
+def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
+>>>>>>> ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+>>>>>>> 4e265730 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 ||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 =======
 ||||||| parent of 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
@@ -373,6 +377,14 @@ def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
 =======
 ||||||| parent of e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 =======
+||||||| parent of f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+||||||| parent of 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+=======
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+>>>>>>> 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+>>>>>>> f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 ||||||| parent of e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
 =======
@@ -404,9 +416,22 @@ def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
 =======
 def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
 >>>>>>> 08b91316 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
->>>>>>> 86c34685 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
 >>>>>>> ed9a3083 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
->>>>>>> f2a9285d (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+||||||| parent of 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+=======
+||||||| parent of 4e265730 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+>>>>>>> 86c34685 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+=======
+||||||| parent of f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+=======
+||||||| parent of 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
+=======
+def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
+>>>>>>> 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+>>>>>>> f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+>>>>>>> 4e265730 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+>>>>>>> 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 
 /-- How many source files the identity above was computed over.
 

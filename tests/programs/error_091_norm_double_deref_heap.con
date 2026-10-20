@@ -1,5 +1,5 @@
 // Normalized place rule (Codex review): `(**r).p` does not normalize, and an untraceable base
-// must never take the owned-heap exemption (fail closed): moving the payload out is E0290.
+// must never take the owned-heap exemption (fail closed); every `*` now normalizes, so it is E0238.
 // Bug 091 round 3, normalized place rule: `(**r).p` with `r: & &Heap<W>` is the place `r.p`
 // reached through `&` — the explicit `*` must not restore the owned-heap exemption that a
 // `Heap<W>`-typed base gets. Moving the non-Copy payload out is E0290.

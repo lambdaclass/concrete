@@ -356,8 +356,10 @@ programs rejected today with E0238:
   `(if c { a } else { b }).bump()`) — bind it to a `let mut` first;
 - a projection whose base is an `if` / `match` (`(if c { w1 } else { w2 }).p.bump()`), even when
   every branch yields an owned value;
-- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
-  reference stored in a place (`*w.r`).
+- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r` — reads
+  of Copy values included), and a reference stored in a place (`*w.r`);
+- a field access or index whose base is not a traceable place
+  (`(if c { a } else { b }).f`, `(**r).f`);
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
@@ -406,4 +408,12 @@ parenthesized spelling evaded. Check now runs on each body with every `.paren` n
 reference records the PATH it borrows (`VarInfo.borrowedPath`), so after `let r = &w.f`, `*r` keys
 as `(w, [f])` exactly as `w.f` does; a reassignment that changes the path is refused like one
 that changes the root. Fixture `error_091_norm_paren_array_write.con`.
+
+Fifth (static) pass: every `*`, field access and index now normalizes for READS too (an
+untraceable `**r` or `(**r).f` is E0238 even for a Copy value); a reference binding and a match
+binder record provenance from the source normalized BEFORE the new name is bound (`let r = r`,
+a binder shadowing its scrutinee); a reference cast whose operand is itself a reference
+(`(r as &T) as &T`) points where the operand points, and only a computed address (pointer or
+integer operand, trusted raw code) yields untracked storage. Fixtures
+`error_091_norm_{double_deref_read,intrinsic_arg_under_reborrow}.con`.
 
