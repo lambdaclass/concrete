@@ -388,7 +388,8 @@ private partial def tyHoldsRefInAggregateV : Ty → Bool
     body instantiated at `T = &U` (`Box<T>`, `[T; 2]`, `Heap<T>`) only shows the
     reference after monomorphization. Every instantiated struct/enum field, and
     every parameter, binding and expression type of an instantiated function, is
-    checked here. Extern (FFI) signatures are not: they are raw by contract. -/
+    checked here, as are module constants (their type and initializer). Extern
+    (FFI) signatures are not: they are raw by contract. -/
 partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
   let rec goModule (m : CModule) : List VerifyViolation :=
     let label := "a reference stored in an aggregate after monomorphization"
@@ -403,7 +404,12 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
       ed.variants.foldl (fun acc2 (vname, fields) =>
         fields.foldl (fun acc3 (fname, t) =>
           acc3 ++ if tyStoresRefV t then [{ fnName := s!"{ed.name}::{vname}", message := s!"{label}: enum field '{fname}' type {tyToStr t}" }] else []) acc2) acc) []
-    fnVs ++ structVs ++ enumVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+    -- Module constants: the declared type and every initializer subexpression.
+    let constVs := m.constants.foldl (fun acc (name, ty, value) =>
+      acc ++ (if tyHoldsRefInAggregateV ty
+              then [{ fnName := name, message := s!"{label} in constant type: {tyToStr ty}" }] else [])
+          ++ collectExprViolations name tyHoldsRefInAggregateV label value) []
+    fnVs ++ structVs ++ enumVs ++ constVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
   let violations := modules.foldl (fun acc m => acc ++ goModule m) []
   violations.map fun v => {
     severity := .error

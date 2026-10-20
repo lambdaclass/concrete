@@ -1,0 +1,6 @@
+// Bug 092 follow-up: a module constant of an aggregate type holding a reference.
+// E0239.
+const PARKED: [&Int; 1] = [&42];
+fn main() -> Int {
+    return 0;
+}

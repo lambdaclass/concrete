@@ -88,3 +88,7 @@ A declaration's own type parameters shadow module aliases of the same name: in
 Elab's expansion of struct and enum field types (pre-existing on origin/main, where `Box<Int>`'s
 Core field was `&Int`), ignored that; both now leave the declaration's own parameters unexpanded.
 `regress_092_type_param_shadows_ref_alias.con` must compile and return 42 (Codex round 3).
+
+Module constants were not checked: `const PARKED: [&Int; 1] = [&42];` compiled. The post-mono
+verifier now checks each constant's type and initializer. `error_092_const_ref_array.con` (E0239)
+compiled before (Codex round 4).
