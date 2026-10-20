@@ -740,12 +740,10 @@ mod Eval {
             }
         }
 
-        // Slow path: eval args into a new list
-        let args: Val = eval_list(rest, env_id, pool, envs, bindings, closures);
-        if args.tag() == 7 { return args; }
-
-        // Builtin function (list builtin or fallback)
+        // Builtin function (list builtin or fallback): eval args into a new list
         if is_builtin(func) {
+            let args: Val = eval_list(rest, env_id, pool, envs, bindings, closures);
+            if args.tag() == 7 { return args; }
             return apply_builtin(func.data(), args, pool);
         }
 
@@ -793,7 +791,13 @@ mod Eval {
                 }
             }
 
-            // General path: eval all args into a list, bind to params
+            // General path: eval all args into a list, bind to params.
+            // (The arguments are evaluated here, after the fast paths, and only
+            // once: evaluating them before the fast paths too re-ran every
+            // nested call, exponential in nesting depth -- (ack 2 3) never
+            // finished.)
+            let args: Val = eval_list(rest, env_id, pool, envs, bindings, closures);
+            if args.tag() == 7 { return args; }
             let fn_env: i32 = env_new(envs, bindings, cl.env_id());
             let mut params_cur: i32 = cl.params();
             let mut args_cur: Val = args;
