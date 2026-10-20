@@ -660,7 +660,14 @@ allowed.
 - Diagnostic: `resolveType` (`.fn_` case) in `Concrete/Check/CheckHelpers.lean`, "function type may
   not return a reference", **no code**.
 - Fixture: `check_returned_ref_provenance.sh` leg `ref_returning_fn_type`.
-- Status: **main**; no code (G2).
+- Status: **main** where the function type is written in a parameter, binding or return type
+  that Check resolves. Two spellings escape it on both revisions (gap G16): a type alias whose
+  target is such a type (`type Cb = fn(&Int) -> &Int;`, used as a parameter type; `resolveType`
+  returns the expanded alias without revisiting `.fn_`), and a struct or enum field declared with
+  one (`struct H { f: fn(&Int) -> &Int }`; the declaration check uses `tyStoresRef`, which does
+  not look into function types). No value of either type can be made in safe code, because every
+  function that could inhabit it is rejected by REF-1, so the gap admits no unsound program. No
+  code (G2).
 
 #### REF-3. No reference is stored
 
@@ -1030,9 +1037,11 @@ program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `mod
 `fmt` (formatter round-trip). `binary` and `interp` compare the exit code with `expected`.
 `model:<id>` names a row of a sidecar `tests/rules/exit_2i_model.tsv` (new) that gives the
 function to extract (`--report extraction`) and a structural assertion on its extracted body
-(for bug 087: the inner binder is a distinct `x.bN` and the read after the block is the outer
-`x`, as the `run_tests.sh` leg on `land2-fix` checks today); it is a structural check, not an
-evaluation of the model, and does not compare against `expected`. A gate
+(for bug 087, the leg on `land2-fix` today: the extracted `shadow_if` is
+`let x = 1; if (a > 0) then x else x` and `shadow_param` is `if (a > 0) then a else a`, the dead
+inner bindings eliminated, and `shadow_loop` binds `k.bN = 1000` in the loop body and reads
+`k.bN`); it is a structural check, not an evaluation of the model, and does not compare against
+`expected`. A renamed migration twin has its own sidecar row keyed to its own binder names. A gate
 `scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For every reject row it
 checks, in both the human and the JSON rendering, the code, the `rule` evidence with the exact
 rule and version, the `spec` evidence, and a non-empty `next` / `next_action`; for a SCOPE-1 row,
@@ -1054,6 +1063,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-1 | `error_2i_ref1_return_bare.con`, `error_2i_ref1_return_option.con`, `error_2i_ref1_return_fnptr_ref_param.con` (new; the last returns `fn(&Int) -> Int`) | reject E0236 REF-1@1 |
 | REF-1 | `escape_return.con`, `regress_092_refs_flow_down.con` | run (their current expected values) |
 | REF-2 | `error_2i_ref2_fn_type_returns_ref.con` (new) | reject E0236 REF-2@1 |
+| REF-2 | `error_2i_ref2_alias_fn_type_returns_ref.con`, `error_2i_ref2_field_fn_type_returns_ref.con` (new; G16) | reject E0236 REF-2@1 |
 | REF-2 | `regress_2i_ref2_callback_takes_ref.con` (new; `apply(&x, g)`, `g: fn(&Int) -> Int`) | run 42 |
 | REF-3 | the nine E0239 fixtures listed under REF-3 | reject E0239 REF-3@1 |
 | REF-3 | `error_2i_ref3_const_bare_ref.con` (new; `const R: &Int = &X;`, G1) | reject E0239 REF-3@1 |
@@ -1098,7 +1108,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 today) |
 | SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
 | SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
-| SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model:087-lexical` (the sidecar row asserts lexical binders for `shadow_if`, `shadow_param` and `shadow_loop`): run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in the same modes |
+| SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model:087-lexical` (the sidecar row asserts lexical binders for `shadow_if`, `shadow_param` and `shadow_loop`): run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in modes `binary,interp,model:087-renamed` (its own sidecar row: the renamed inner binders appear under their new names, with no `.bN` suffix); the `087-lexical` assertion moves with the shadowing fixture to the E0301-disabled mutation leg |
 | SCOPE-3 | `regress_087_borrow_shadow_uaf/` (a project fixture; success is exit 0) | modes `binary,interp` if the interpreter runs the project, otherwise `binary,interp-exempt:<the interpreter's refusal>`: run 0 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 0 in the same modes |
 | G4 | `regress_2i_renamed_pattern_binder.con` (new; `match`, `if let`, `while let`, destructuring `let`) | run 42, binary = `--interp`, formatter round-trip |
 
@@ -1159,4 +1169,5 @@ manifest row:
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
 | G14 | REF-6 on `main`: E0234 sees only a bare identifier, so `(r)` copies a borrow-block reference out, and `out = &*r` re-points an outer reference at the borrowed owner | exit 0b (batch 2 closes both: `unparenDeep` and the re-pointing rule) |
 | G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
+| G16 | REF-2: a reference-returning function type is accepted as a type alias target and as a struct or enum field type (no value of it can be made) | R-0500: validate function types after alias expansion and in declarations |
 | G11 | ROADMAP exit 2i's deliverable reads "none stored in an aggregate"; "strictly second-class" also covers REF-6 (never assigned or aliased into a binding that outlives its source; design example G8) | the roadmap owner (wording) |
