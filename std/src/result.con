@@ -181,26 +181,26 @@ mod result {
     }
 
     // 0c: unwrap_or_else feeds a non-Copy (linear) ERROR to `f`, which must
-    // consume it exactly once. RLin has no Copy — the conservation checker
+    // consume it exactly once. ResultTestLin has no Copy — the conservation checker
     // rejects any leak/dup, so this compiling is the guarantee; the empty
     // destroy keeps it Alloc-free.
-    struct RLin { v: i32 }
-    trusted impl Destroy for RLin {
+    struct ResultTestLin { v: i32 }
+    trusted impl Destroy for ResultTestLin {
         pub fn destroy(&self) { }
     }
-    fn rlin_to_code(e: RLin) -> i32 { let c: i32 = e.v; destroy(e); return c; }
-    fn rlin_from_code(e: i32) -> RLin { return RLin { v: e }; }
-    fn rlin_bump(x: RLin) -> RLin { let v: i32 = x.v; destroy(x); return RLin { v: v + 1 }; }
-    fn rlin_ok(x: RLin) -> Result<RLin, i32> { return Result::<RLin, i32>::Ok { value: x }; }
+    fn rlin_to_code(e: ResultTestLin) -> i32 { let c: i32 = e.v; destroy(e); return c; }
+    fn rlin_from_code(e: i32) -> ResultTestLin { return ResultTestLin { v: e }; }
+    fn rlin_bump(x: ResultTestLin) -> ResultTestLin { let v: i32 = x.v; destroy(x); return ResultTestLin { v: v + 1 }; }
+    fn rlin_ok(x: ResultTestLin) -> Result<ResultTestLin, i32> { return Result::<ResultTestLin, i32>::Ok { value: x }; }
 
     #[test]
     fn test_result_map_and_then_linear() with(Alloc, Console) -> i32 {
         // map and and_then now carry a non-Copy Ok payload (moved off the Copy
         // bound in 0c). The checker enforces exactly-once flow through f.
-        let r: Result<RLin, i32> = Result::<RLin, i32>::Ok { value: RLin { v: 41 } };
-        let m: Result<RLin, i32> = r.map::<RLin>(rlin_bump);
-        let c: Result<RLin, i32> = m.and_then::<RLin>(rlin_ok);
-        let got: RLin = c.unwrap_or_else(rlin_from_code);
+        let r: Result<ResultTestLin, i32> = Result::<ResultTestLin, i32>::Ok { value: ResultTestLin { v: 41 } };
+        let m: Result<ResultTestLin, i32> = r.map::<ResultTestLin>(rlin_bump);
+        let c: Result<ResultTestLin, i32> = m.and_then::<ResultTestLin>(rlin_ok);
+        let got: ResultTestLin = c.unwrap_or_else(rlin_from_code);
         let v: i32 = got.v;
         destroy(got);
         if !assert_eq(v, 42, "map+and_then thread a linear ok payload") { return 1; }
@@ -210,11 +210,11 @@ mod result {
     #[test]
     fn test_result_unwrap_or_else_linear() with(Alloc, Console) -> i32 {
         // Err: the non-Copy error flows into `f` and is consumed there.
-        let e: Result<i32, RLin> = Result::<i32, RLin>::Err { error: RLin { v: 5 } };
+        let e: Result<i32, ResultTestLin> = Result::<i32, ResultTestLin>::Err { error: ResultTestLin { v: 5 } };
         let got: i32 = e.unwrap_or_else(rlin_to_code);
         if !assert_eq(got, 5, "unwrap_or_else feeds the Err payload to f") { return 1; }
         // Ok: payload returned, `f` never called — no error is ever built.
-        let r: Result<i32, RLin> = Result::<i32, RLin>::Ok { value: 42 };
+        let r: Result<i32, ResultTestLin> = Result::<i32, ResultTestLin>::Ok { value: 42 };
         let got2: i32 = r.unwrap_or_else(rlin_to_code);
         if !assert_eq(got2, 42, "unwrap_or_else returns the Ok payload") { return 1; }
         return 0;

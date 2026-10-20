@@ -98,14 +98,14 @@ mod set {
         }
     }
 
-    struct SKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for SKey {
+    struct SetDropKey { id: i64, cell: *mut u64 }
+    trusted impl Destroy for SetDropKey {
         pub fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }
-    fn h_skey(k: &SKey) -> u64 { return k.id as u64; }
-    fn e_skey(a: &SKey, b: &SKey) -> bool { return a.id == b.id; }
+    fn h_skey(k: &SetDropKey) -> u64 { return k.id as u64; }
+    fn e_skey(a: &SetDropKey, b: &SetDropKey) -> bool { return a.id == b.id; }
     trusted fn s_cell_new() with(Alloc, Unsafe) -> *mut u64 {
         let p: *mut u64 = grow::<u64>(0 as *mut u64, 1);
         *p = 0;
@@ -118,10 +118,10 @@ mod set {
         // H18 keyed-remove through the wrapper: remove -> bool, stored key
         // destroyed by the inner map.
         let cell: *mut u64 = s_cell_new();
-        let mut st: HashSet<SKey> = HashSet::<SKey>::new(h_skey, e_skey);
-        discard(st.insert(SKey { id: 1, cell: cell }));
-        discard(st.insert(SKey { id: 2, cell: cell }));
-        let probe: SKey = SKey { id: 1, cell: cell };
+        let mut st: HashSet<SetDropKey> = HashSet::<SetDropKey>::new(h_skey, e_skey);
+        discard(st.insert(SetDropKey { id: 1, cell: cell }));
+        discard(st.insert(SetDropKey { id: 2, cell: cell }));
+        let probe: SetDropKey = SetDropKey { id: 1, cell: cell };
         let removed: bool = st.remove(&probe);
         destroy(probe);
         let after_remove: u64 = s_cell_get(cell);   // probe + stored key = 2

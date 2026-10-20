@@ -646,26 +646,26 @@ mod map {
     fn h_i64(k: &i64) -> u64 { return *k as u64; }
     fn e_i64(a: &i64, b: &i64) -> bool { return *a == *b; }
 
-    struct DKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for DKey {
+    struct MapDropKey { id: i64, cell: *mut u64 }
+    trusted impl Destroy for MapDropKey {
         pub fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }
-    fn h_dkey(k: &DKey) -> u64 { return k.id as u64; }
-    fn e_dkey(a: &DKey, b: &DKey) -> bool { return a.id == b.id; }
+    fn h_dkey(k: &MapDropKey) -> u64 { return k.id as u64; }
+    fn e_dkey(a: &MapDropKey, b: &MapDropKey) -> bool { return a.id == b.id; }
 
     #[test]
     fn test_map_remove_destroys_key() with(Alloc, Unsafe) -> i32 {
         // H18 keyed-remove rule: remove returns only V, so the STORED key is
         // destroyed by the map (not returned, not leaked).
         let cell: *mut u64 = m_cell_new();
-        let mut m: HashMap<DKey, i64> = HashMap::<DKey, i64>::new(h_dkey, e_dkey);
-        let o1: Option<i64> = m.insert(DKey { id: 1, cell: cell }, 10);
+        let mut m: HashMap<MapDropKey, i64> = HashMap::<MapDropKey, i64>::new(h_dkey, e_dkey);
+        let o1: Option<i64> = m.insert(MapDropKey { id: 1, cell: cell }, 10);
         discard(o1.is_none());
-        let o2: Option<i64> = m.insert(DKey { id: 2, cell: cell }, 20);
+        let o2: Option<i64> = m.insert(MapDropKey { id: 2, cell: cell }, 20);
         discard(o2.is_none());
-        let probe: DKey = DKey { id: 1, cell: cell };
+        let probe: MapDropKey = MapDropKey { id: 1, cell: cell };
         let r: Option<i64> = m.remove(&probe);
         destroy(probe);
         // probe destroy = +1; the REMOVED stored key = +1  => 2

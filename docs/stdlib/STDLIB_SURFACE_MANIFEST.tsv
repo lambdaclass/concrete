@@ -96,7 +96,7 @@ fmt	format_oct	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: u6
 fmt	format_bool	yes	constructs	infallible	Alloc	trusted-boundary	gated	(value: bool) with(Alloc) -> String	-
 fmt	pad_left	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String, width: u64, fill: char) with(Alloc) -> String	-
 fmt	pad_right	yes	constructs	infallible	Alloc	hosted-effect	gated	(s: &String, width: u64, fill: char) with(Alloc) -> String	-
-fmt	write_to	no	borrows	result	C	hosted-effect	gated	<cap C>(&self, w: &Writer<C>) with(C) -> Result<u64, IoError>	Point
+fmt	write_to	no	borrows	result	C	hosted-effect	gated	<cap C>(&self, w: &Writer<C>) with(C) -> Result<u64, IoError>	FmtWriteToPoint
 fs	open	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String, mode: &String) with(File,Alloc) -> Result<File, FsError>	File
 fs	create	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String) with(File,Alloc) -> Result<File, FsError>	File
 fs	write_bytes	no	borrows	infallible	File,Unsafe	trusted-boundary	gated	(&self, buf: *const u8, len: u64) with(File,Unsafe) -> u64	File
@@ -182,7 +182,7 @@ map	clear	yes	mut	infallible	Alloc	trusted-boundary	gated	(&mut self) with(Alloc
 map	drop	yes	consumes	infallible	Alloc	trusted-boundary	gated	(self) with(Alloc)	HashMap<K, V>
 map	destroy	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(Alloc)	HashMap<K, V>
 map	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	MTracked
-map	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	DKey
+map	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	MapDropKey
 math	sqrt	no	constructs	infallible	none	trusted-boundary	gated	(x: Float64) with() -> Float64	-
 math	sin	no	constructs	infallible	none	trusted-boundary	gated	(x: Float64) with() -> Float64	-
 math	cos	no	constructs	infallible	none	trusted-boundary	gated	(x: Float64) with() -> Float64	-
@@ -274,7 +274,7 @@ option	unwrap_or_else	no	consumes	infallible	none	pure-core	gated	(self, f: fn()
 option	map	no	consumes	option	none	pure-core	proved	<U>(self, f: fn(T) -> U) -> Option<U>	Option<T>
 option	and_then	no	consumes	option	none	pure-core	gated	<U>(self, f: fn(T) -> Option<U>) -> Option<U>	Option<T>
 option	unwrap_or	no	consumes	infallible	none	pure-core	proved	(self, default: T) -> T	Option<T>
-option	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	Lin
+option	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	OptionTestLin
 ordered_map	new	no	constructs	infallible	none	trusted-boundary	gated	(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V>	OrderedMap<K, V>
 ordered_map	with_value	no	borrows	option	C	trusted-boundary	gated	<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R>	OrderedMap<K, V>
 ordered_map	with_value_mut	no	mut	option	C	trusted-boundary	gated	<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R>	OrderedMap<K, V>
@@ -354,7 +354,7 @@ result	map_err	no	consumes	result	none	pure-core	proved	<F>(self, f: fn(E) -> F)
 result	unwrap_or	no	consumes	infallible	none	pure-core	gated	(self, default: T) -> T	Result<T, E>
 result	ok	no	consumes	option	none	pure-core	gated	(self) -> Option<T>	Result<T, E>
 result	err	no	consumes	option	none	pure-core	gated	(self) -> Option<E>	Result<T, E>
-result	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	RLin
+result	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	ResultTestLin
 set	new	yes	constructs	infallible	Alloc	hosted-effect	gated	(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc) -> HashSet<K>	HashSet<K>
 set	contains	no	borrows	infallible	none	deterministic	gated	(&self, key: &K) -> bool	HashSet<K>
 set	len	no	borrows	infallible	none	deterministic	gated	(&self) -> u64	HashSet<K>
@@ -367,7 +367,7 @@ set	insert	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self, key: K) with
 set	clear	yes	mut	infallible	Alloc	hosted-effect	gated	(&mut self) with(Alloc)	HashSet<K>
 set	drop	yes	consumes	infallible	Alloc	hosted-effect	gated	(self) with(Alloc)	HashSet<K>
 set	destroy	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(Alloc)	HashSet<K>
-set	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	SKey
+set	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	SetDropKey
 sha256	hash_raw	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary	gated	(data: *mut u8, data_len: u64) with(Alloc,Unsafe) -> Vec<u32>	-
 sha256	hash_string	yes	constructs	infallible	Alloc	trusted-boundary	gated	(s: &String) with(Alloc) -> Vec<u32>	-
 slice	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	Slice<T>
@@ -463,4 +463,4 @@ vec	destroy	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(All
 vec	set	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T) -> bool	Vec<T>
 vec	get_unchecked	no	borrows	infallible	none	trusted-boundary	gated	(&self, at: u64) -> T	Vec<T>
 vec	get	no	borrows	option	none	trusted-boundary	gated	(&self, at: u64) -> Option<T>	Vec<T>
-vec	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	Tracked
+vec	destroy	no	borrows	infallible	none	trusted-boundary	gated	(&self)	VecDropTracked

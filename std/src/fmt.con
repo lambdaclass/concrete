@@ -384,8 +384,8 @@ mod fmt {
 
     // 14b exemplar: a user type opting into the write_to convention — statically
     // dispatched, renders through the same Writer path as the built-ins.
-    struct Copy Point { x: i64, y: i64 }
-    impl Point {
+    struct Copy FmtWriteToPoint { x: i64, y: i64 }
+    impl FmtWriteToPoint {
         pub fn write_to<cap C>(&self, w: &Writer<C>) with(C) -> Result<u64, IoError> {
             let a: Result<u64, IoError> = write_char(w, '(');
             let b: Result<u64, IoError> = write_int(w, self.x);
@@ -457,7 +457,7 @@ mod fmt {
         let raw: BytesRaw = region.raw_view();
         let mut st: FixedSinkState = FixedSinkState { buf: raw.ptr, cap: 32, len: 0 };
         let w: Writer<{}> = fixed_writer(&mut st as *mut FixedSinkState);
-        let p: Point = Point { x: 3, y: -7 };
+        let p: FmtWriteToPoint = FmtWriteToPoint { x: 3, y: -7 };
         let r: Result<u64, IoError> = p.write_to(&w);
         let n: u64 = r.unwrap_or(0);
         let rc: Result<u64, IoError> = w.close();

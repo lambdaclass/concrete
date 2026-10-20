@@ -147,26 +147,26 @@ mod option {
     }
 
     // 0c: a non-Copy (linear) payload must flow through unwrap_or_else exactly
-    // once. Lin has no Copy — the conservation checker rejects any leak/dup, so
+    // once. OptionTestLin has no Copy — the conservation checker rejects any leak/dup, so
     // this test compiling at all is the guarantee; the empty destroy keeps it
     // Alloc-free while still exercising terminal linear consumption.
-    struct Lin { v: i32 }
-    trusted impl Destroy for Lin {
+    struct OptionTestLin { v: i32 }
+    trusted impl Destroy for OptionTestLin {
         pub fn destroy(&self) { }
     }
-    fn lin_fallback() -> Lin { return Lin { v: 7 }; }
-    fn lin_bump(x: Lin) -> Lin { let v: i32 = x.v; destroy(x); return Lin { v: v + 1 }; }
-    fn lin_some(x: Lin) -> Option<Lin> { return Option::<Lin>::Some { value: x }; }
+    fn lin_fallback() -> OptionTestLin { return OptionTestLin { v: 7 }; }
+    fn lin_bump(x: OptionTestLin) -> OptionTestLin { let v: i32 = x.v; destroy(x); return OptionTestLin { v: v + 1 }; }
+    fn lin_some(x: OptionTestLin) -> Option<OptionTestLin> { return Option::<OptionTestLin>::Some { value: x }; }
 
     #[test]
     fn test_option_map_and_then_linear() with(Alloc, Console) -> i32 {
         // map and and_then now carry a non-Copy payload (moved off the Copy
         // bound in 0c): the checker enforces the payload flows exactly once
         // through f, so this compiling is the guarantee.
-        let o: Option<Lin> = Option::<Lin>::Some { value: Lin { v: 41 } };
-        let m: Option<Lin> = o.map::<Lin>(lin_bump);
-        let c: Option<Lin> = m.and_then::<Lin>(lin_some);
-        let got: Lin = c.unwrap_or_else(lin_fallback);
+        let o: Option<OptionTestLin> = Option::<OptionTestLin>::Some { value: OptionTestLin { v: 41 } };
+        let m: Option<OptionTestLin> = o.map::<OptionTestLin>(lin_bump);
+        let c: Option<OptionTestLin> = m.and_then::<OptionTestLin>(lin_some);
+        let got: OptionTestLin = c.unwrap_or_else(lin_fallback);
         let v: i32 = got.v;
         destroy(got);
         if !assert_eq(v, 42, "map+and_then thread a linear payload") { return 1; }
@@ -176,14 +176,14 @@ mod option {
     #[test]
     fn test_option_unwrap_or_else_linear() with(Alloc, Console) -> i32 {
         // Some: the stored payload is returned; lin_fallback is never built.
-        let o: Option<Lin> = Option::<Lin>::Some { value: Lin { v: 42 } };
-        let got: Lin = o.unwrap_or_else(lin_fallback);
+        let o: Option<OptionTestLin> = Option::<OptionTestLin>::Some { value: OptionTestLin { v: 42 } };
+        let got: OptionTestLin = o.unwrap_or_else(lin_fallback);
         let v: i32 = got.v;
         destroy(got);
         if !assert_eq(v, 42, "unwrap_or_else returns the Some payload") { return 1; }
         // None: the fallback is built and returned; nothing leaks.
-        let n: Option<Lin> = Option::<Lin>::None;
-        let g2: Lin = n.unwrap_or_else(lin_fallback);
+        let n: Option<OptionTestLin> = Option::<OptionTestLin>::None;
+        let g2: OptionTestLin = n.unwrap_or_else(lin_fallback);
         let v2: i32 = g2.v;
         destroy(g2);
         if !assert_eq(v2, 7, "unwrap_or_else builds the fallback on None") { return 1; }
