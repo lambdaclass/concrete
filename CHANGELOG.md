@@ -23,7 +23,7 @@ promotion-pipeline section (fast affected checks, the integrated full gate set, 
 what invalidates each recorded result), a table of fixes implemented on branches but not yet accepted, and
 an entry rule: new blocking work needs a reproducer or a named dependency of the next deliverable.
 `check_roadmap_coverage.sh` gates the exits, the prerequisite partition against the classes and queue
-rows, and that no listed bug is already recorded fixed, with eleven new negative controls. No task's
+rows, and that no listed bug is already recorded fixed, with fourteen new negative controls. No task's
 obligations were dropped; row 2's obligations moved into its exits.
 
 ### The Roadmap Is A Scheduled Plan Plus A Backlog With Pull Rules (2026-10-19, roadmap only)

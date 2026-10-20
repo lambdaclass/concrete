@@ -294,12 +294,20 @@ if exits and not ebad:
 prows = table_rows('Feature prerequisites', 'deliverable')
 pbad2 = 0
 blocked_any = set(); row_blocked = {}
+# The first feature deliverables, each with its own row in the table and its own comparison against its
+# queue row's "prerequisite exits:" list: a union per row would let one deliverable mask another.
+REQUIRED_DELIVERABLES = ('RocksDB slice 1', 'V1a', 'V1b')
+seen_deliv = set()
 if not prows:
     no('ROADMAP.md has no "### Feature prerequisites" table (| deliverable | blocked by | not blocked by |)'); pbad2 += 1
     prows = []
 for cells in prows:
     cells = cells + [''] * (3 - len(cells))
     d = cells[0]
+    dname = d.split(' (')[0].strip()
+    if dname in seen_deliv:
+        no(f'deliverable {dname} is listed more than once in the prerequisites'); pbad2 += 1
+    seen_deliv.add(dname)
     b = re.findall(r'\b(\d[a-z])\b', cells[1]); n = re.findall(r'\b(\d[a-z])\b', cells[2])
     for e in sorted(set(b + n) - set(exits)):
         no(f'prerequisites of "{d}" name exit {e}, which does not exist'); pbad2 += 1
@@ -312,20 +320,24 @@ for cells in prows:
     if not rm:
         no(f'deliverable "{d}" names no queue row'); pbad2 += 1
     else:
-        row_blocked.setdefault(int(rm.group(1)), set()).update(b)
+        row_blocked.setdefault(int(rm.group(1)), []).append((dname, set(b)))
 for e, cls in sorted(exits.items()):
     if cls == 'blocks features' and e not in blocked_any:
         no(f'exit {e} is blocks features but no deliverable lists it as a prerequisite'); pbad2 += 1
     if cls == 'continues alongside' and e in blocked_any:
         no(f'exit {e} is continues alongside but blocks a deliverable'); pbad2 += 1
-for o, want in sorted(row_blocked.items()):
+for dname in REQUIRED_DELIVERABLES:
+    if dname not in seen_deliv:
+        no(f'the prerequisites table has no row for deliverable {dname}'); pbad2 += 1
+for o, delivs in sorted(row_blocked.items()):
     m = re.search(r'prerequisite exits: ([0-9a-z, ]+)', qexit.get(o, ''))
     if not m:
         no(f'queue row {o} has a deliverable but no "prerequisite exits:" list'); pbad2 += 1
         continue
     have = set(re.findall(r'\b(\d[a-z])\b', m.group(1)))
-    if have != want:
-        no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)}'); pbad2 += 1
+    for dname, want in delivs:
+        if have != want:
+            no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
 if prows and not pbad2:
     ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
 irows = table_rows('Implemented, not yet accepted', 'bugs')
@@ -682,6 +694,15 @@ PY
   neg queue_prerequisites_drift \
     "old='prerequisite exits: 0b, 2i;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b;')" \
     "queue row 5 names prerequisite exits \['0b'\], the prerequisites table says \['0b', '2i'\]"
+  neg prerequisites_deliverable_deleted \
+    "import re; s,n=re.subn(r'^\| V1b \(row 3[^\n]*\n', '', s, flags=re.M); assert n==1" \
+    "the prerequisites table has no row for deliverable V1b"
+  neg prerequisites_deliverable_duplicated \
+    "import re; m=re.search(r'^\| V1b \(row 3[^\n]*\n', s, re.M); assert m; s=s[:m.end()]+m.group(0)+s[m.end():]" \
+    "deliverable V1b is listed more than once"
+  neg prerequisites_one_deliverable_weakened \
+    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j | 0a, 0c,')" \
+    "for V1b"
   neg implemented_bug_already_fixed \
     "old='| 088 (batch 4) |'; assert s.count(old)==1; s=s.replace(old,'| 080, 088 (batch 4) |')" \
     "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
