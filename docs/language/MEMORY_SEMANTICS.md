@@ -532,9 +532,14 @@ Every rule has a stable identifier and a version (`REF-3@1`). Its status is one 
 - **gap**: enforced on neither. §15.7 gives each gap an owner.
 
 Statuses were read from the source at those SHAs and checked by compiling every rejected and
-accepted example below with binaries built from them (2026-10-21). Exit 2i closes when every rule
-is **main**, carries its versioned migration diagnostic (§15.5), and its acceptance rows (§15.6)
-pass.
+accepted example below with binaries built from them (2026-10-21).
+
+Exit 2i closes over the **rejection rules** REF-1 to REF-8 and SCOPE-1 and the **semantic
+guarantees** SCOPE-2 and SCOPE-3; SCOPE-4 is recorded but outside the exit. Each rejection rule
+must be **main**, carry its versioned migration diagnostic (§15.5) and pass its reject and run rows
+and its mutation rows (§15.6). Each semantic guarantee must be **main** and pass its run rows,
+which compare the binary with `--interp` (and with the extracted model where a row says so), and
+its positive-control mutations (§15.6); it has no diagnostic of its own.
 
 ### 15.1 Definitions
 
@@ -546,7 +551,12 @@ pass.
   in `Concrete/Check/CheckHelpers.lean`). A function-pointer type does not hold one (a
   `fn(&T) -> U` value stores no reference), and a raw pointer is not looked through. A named
   struct or enum can hold one only through its type arguments, because REF-3 forbids reference
-  fields.
+  fields. A bare outer reference is looked through for bindings (`tyHoldsRefInAggregate`), so a
+  binding of type `& &T` or `&[Int; 2]` holds no reference in an aggregate.
+- A type **contains a reference** when a reference type occurs anywhere in it, including inside
+  raw pointers, `Heap`, arrays, generic arguments and both the parameters and the result of a
+  function type (`tyContainsRef` in `Concrete/Check/CheckHelpers.lean`). REF-1, REF-2 and REF-4
+  use this wider predicate; REF-3 uses "holds".
 - A **canonical place** is a binding followed by any number of field (`.f`), index (`[i]`) and
   newtype (`.0`) projections, where each dereference `*e` is of a reference or raw pointer whose
   own source is traced. Parentheses and identity dereferences normalize away: `(*r).f` and `r.f`
@@ -554,8 +564,13 @@ pass.
   round 3). The **root** of a canonical place is its binding.
 - A **reference binding** is a local (parameter, `let`, pattern binder or borrow-block binder)
   whose type is a reference type. Its **source** is the canonical place it was made from, recorded
-  once per binding: root binding, projection path, and whether the path is exact. A reference
-  parameter's source is the caller's argument place, outside the callee.
+  once per binding: root binding, projection path, and whether the path is exact. In the path
+  every index projection is normalized to `[]` whatever the index (`normProjBase`, `land2-fix`),
+  so all elements of one array are one place for provenance; this is a conservative conflict key
+  for aliasing, and for lifetime it is exact, because every element of an array lives exactly as
+  long as its root. A reference parameter's source is the caller's argument place, outside the
+  callee. A reference binding may itself be borrowed (`let rr: & &Int = &r;`, accepted on both
+  revisions): `rr` then denotes the local slot of `r`, a canonical place rooted at `r`.
 - A binding is **visible** at a program point from its declaration to the end of the block that
   declares it, nested blocks included, whatever its state (live, used, consumed, reserved,
   frozen). A parameter is visible in the whole body; a match-arm, `if let` or `while let` binder
@@ -573,7 +588,10 @@ The rules establish two invariants, which are the proof targets for S8 and V1:
   binding belongs to `F` or to an activation below `F` on the stack. Wherever the reference can be
   used, that root binding is in scope, is the binding the reference was made from, and has not
   been moved, consumed, freed or destroyed. No reference resides in an aggregate, a heap cell, a
-  constant, the return channel, or storage behind another reference.
+  constant or the return channel. The only storage holding a reference is a local reference
+  binding's own slot (or an argument slot during a call); a reference to such a slot
+  (`& &T`) is allowed, but the inner reference can never be read out of it (REF-5) or written
+  through it (REF-7), so a reference behind a reference is never used as a reference.
 - **INV-SCOPE (one lexical name, one binding).** Within a function body a name denotes at most one
   visible local value binding at every program point, so a rule keyed by name is keyed by binding.
 
@@ -583,7 +601,7 @@ reference's; it never leaves its frame upward or into storage (REF-1 to REF-4, R
 root stays the same live binding while it lives (REF-8; SCOPE-1 makes "the same binding" a
 property of the name). SCOPE-1 implies INV-SCOPE. The scope argument also uses two facts the
 compiler already gives: a callee cannot retain a reference argument (REF-1, REF-3, REF-7), and a
-borrow-block reference cannot be assigned outside its block (E0234). The rules marked "deliberate
+borrow-block reference cannot be copied or assigned into any other binding (E0234, REF-6). The rules marked "deliberate
 restriction" are what keep INV-REF a lexical argument rather than a flow analysis (KNOWN_HOLES H28
 on `land2-fix`); R-0499 may relax them as new rule versions.
 
@@ -595,9 +613,10 @@ pin it, and its status. Fixtures are under `tests/programs/`. A fixture in *ital
 
 #### REF-1. No function returns a reference
 
-No function, method or trait method, `trusted` included, has a return type that holds a reference
-or a function type that does (REF-2), and a return type may not contain a raw pointer to a
-reference type either; the trusted escape is a raw pointer to the referent.
+No function, method or trait method, `trusted` included, has a return type that contains a
+reference (§15.1: a reference anywhere, including inside a function type or behind a raw
+pointer). The trusted escape is a raw pointer to the referent (`*const T` where `T` contains no
+reference).
 
 - Accepted: `fn get(v: &Vec<Int>, i: Int) -> Option<Int>` (a copy-out value); returning a raw
   pointer `*const T`.
@@ -618,7 +637,7 @@ reference type either; the trusted escape is a raw pointer to the referent.
 
 #### REF-2. No function type returns a reference
 
-A function-pointer type whose return type holds a reference cannot be written, so no callback can
+A function-pointer type whose return type contains a reference cannot be written, so no callback can
 hand a borrowed element back (this keeps `with_value` sound). Parameters of reference type are
 allowed.
 
@@ -661,7 +680,8 @@ an array literal element; a binding or parameter whose type holds a reference in
 
 #### REF-4. Generic instantiation preserves REF-1 and REF-3
 
-A type parameter may be instantiated with a type that holds a reference only when every occurrence
+A type parameter may be instantiated with a type that contains a reference (this includes
+`fn(&Int) -> Int`) only when every occurrence
 of the parameter in the generic's parameter types is at top level (`x: T`) or as a by-value
 parameter of a function type (`f: fn(T) -> U`). The instantiation is refused when the parameter
 occurs (a) in the return type, (b) in an aggregate the generic stores it in (`Box<T>`, `[T; N]`,
@@ -681,8 +701,10 @@ generic body is checked once at its opaque `T`.
   `refuseNestedRefSpecialization` (`Concrete/IR/Mono.lean`) at every specialization.
 - Fixtures: `check_returned_ref_provenance.sh` leg `generic_ref_in_return`;
   `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con` (E0239);
-  *`error_091_norm_generic_nested_ref.con`*, *`error_091_norm_generic_nested_alias_ref.con`*,
-  *`error_091_norm_generic_fn_mut_param.con`*, *`error_091_norm_generic_transitive_ref.con`*. The
+  *`error_091_norm_generic_fn_mut_param.con`*, *`error_091_norm_generic_transitive_ref.con`* (E0238).
+  *`error_091_norm_generic_nested_ref.con`* and *`error_091_norm_generic_nested_alias_ref.con`*
+  were written for (c) but report E0239, because the `W<&P>` they build is refused as storage
+  first; (c) has no fixture for a plain `r: &T` parameter (G7). The
   `r091_table` in *`run_tests.sh`* records the code each bug-091 fixture reports.
 - Status: (a) and (b) **main**, (a) without a front-end code (G2); (c) **land2**.
 
@@ -720,13 +742,17 @@ a reference:
 
 #### REF-6. A reference binding is never re-pointed
 
-A reassignment `r = e` of a reference binding is allowed only when `e`'s source has the same root
-and path as `r`'s recorded source. A reassignment that would point `r` at different storage is
-refused: provenance is one place per binding and is not joined across branches. This is the rule
+A reassignment `r = e` of a reference binding is allowed only when `e`'s source has the same root,
+the same normalized path (indices normalized to `[]`, §15.1) and the same exactness as `r`'s
+recorded source. Any other reassignment is refused: provenance is one place per binding and is not
+joined across branches. `r = &a[1]` after `let mut r = &a[0]` is therefore accepted (one array,
+one lifetime), and `r = &b` is not. This is the rule
 that keeps a reference out of any binding that outlives its source (design example B6, finding
 G8): a reference binding declared in an outer block can only point at a place whose root was
-visible at its declaration. A borrow-block reference may not be assigned to a variable outside its
-block.
+visible at its declaration. A borrow-block reference binder is stricter: it may not be copied or
+assigned into any other binding at all, inside the block or outside it
+(`borrow x as r in R { let s: &Int = r; }` is E0234 on both revisions); it may be passed as a call
+argument, dereferenced and projected.
 
 - Accepted: `let mut r: &P = &p; r = &p;`.
 - Rejected: `let mut leaked: &Point = &p; if true { let q: Point = ..; leaked = &q; }` (bug 104,
@@ -863,13 +889,17 @@ fields, which the human and the JSON renderers both print.
 
 1. it has a stable E-code, and the ledger row for that code names every rule it enforces with its
    version (`E0238: REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1`);
-2. the rendered diagnostic, human and JSON, names the rule, its version and this section
-   (`evidence = [("rule", "REF-6@1")]`, rendered as
-   `= rule: REF-6@1 (docs/language/MEMORY_SEMANTICS.md §15)`);
-3. it gives the mechanical rewrite for the rejected shape (`nextAction`, rendered as
-   `= migrate: …`), and for a binding conflict the earlier binding as a related span;
-4. each rejected shape has a fixture asserting the code, the rule tag and the presence of the
-   rewrite, paired with an accepted fixture that is the rewritten program (a migration pair).
+2. it names the rule, its version and this section through the existing `evidence` field:
+   `evidence = [("rule", "REF-6@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]`, which
+   the human renderer prints as `  rule: REF-6@1` and `  spec: …` lines and the JSON renderer as
+   the `evidence` array (`Concrete/Report/Diagnostic.lean`, `Diagnostic.render` and its JSON
+   counterpart; no renderer change is needed);
+3. it gives the mechanical rewrite for the rejected shape in the existing `nextAction` field
+   (human `  next: …`, JSON `next_action`), and for a binding conflict the earlier binding in
+   `related`;
+4. each rejected shape has a fixture asserting the code, the rule tag and a non-empty rewrite,
+   in both renderings, paired with an accepted fixture that is the rewritten program (a migration
+   pair).
 
 **Versioning policy.** A rule's version increments whenever its accepted set changes, by
 tightening or by relaxing. The table below is the record, and each change cites the commit that
@@ -895,11 +925,12 @@ accepted fixtures, with the diagnostic text updated.
 **Diagnostic text.** For SCOPE-1:
 
 ```text
-error[check]: (E0301) 'value' is already bound in an enclosing scope; a new binding may not reuse a visible name
-  = rule: SCOPE-1@1 (docs/language/MEMORY_SEMANTICS.md §15)
-  = note: the earlier binding is here: src/main.con:3:9
-  = migrate: give the new binding its own name; for a pattern field write `Variant { value: inner }`;
-             to replace the value of a `mut` binding, assign instead (`value = ...`)
+src/main.con:7:31: error[check]: (E0301) 'value' is already bound in an enclosing scope; a new binding may not reuse a visible name
+  <snippet and the related span of the earlier binding, src/main.con:3:9>
+  next: give the new binding its own name; for a pattern field write `Variant { value: inner }`;
+        to replace the value of a `mut` binding, assign instead (`value = ...`)
+  rule: SCOPE-1@1
+  spec: docs/language/MEMORY_SEMANTICS.md §15
 ```
 
 The rewrites for the other rules: REF-1, "return a value or an owned view, use a scoped callback
@@ -913,13 +944,21 @@ the rewrite and the related span are required.
 
 ### 15.6 Acceptance list
 
-The implementer adds a manifest `tests/rules/exit_2i.tsv` (new), one row per fixture: `rule`,
-`fixture`, `expected`, where `expected` is `reject:<code>:<rule@version>` or `run:<exit code>`;
-and a gate `scripts/tests/check_rules_2i.sh` (new, in the full gate set). For each reject row the
-gate checks the code, the rule tag and the presence of `= migrate:`; for each run row it runs the
-binary and `--interp` and requires both to give the expected result. It fails when a rule of this
-section has no reject row or no run row, when a row names a missing fixture, or when the ledger's
-rule and version for a code disagree with §15.5. Existing fixtures are referenced, not copied.
+The implementer adds a manifest `tests/rules/exit_2i.tsv` (new) with one row per fixture and five
+columns: `rule`; `fixture`; `expected`, either `reject:<code>:<rule@version>` or
+`run:<exit code>`; `pair`, an identifier shared by a reject row and the run row of its rewritten
+program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `model` (the extracted
+model of the named function agrees), `fmt` (formatter round-trip) and `json`. A gate
+`scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For each reject row it
+checks the code, and in the human rendering and, when `json` is listed, in the JSON rendering, the
+`rule` evidence and a non-empty `next` / `next_action`; for a SCOPE-1 row, also a related span.
+For each run row it runs every listed mode and requires the expected result from each. It fails
+when a rejection rule (REF-1 to REF-8, SCOPE-1) has no reject row, no run row or a reject row
+without a pair, when a semantic guarantee (SCOPE-2, SCOPE-3) has no run row in modes
+`binary,interp`, when a row names a missing fixture, or when the ledger's rule and version for a
+code disagree with §15.5. Existing fixtures are referenced, not copied. Every new reject row in
+the table below has a `pair` whose run row is its rewritten program; existing fixtures get one
+when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
@@ -935,7 +974,9 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-3 | `regress_2i_ref3_fnptr_field.con` (new; `struct H { f: fn(&Int) -> Int }`) | run 42 |
 | REF-4 | `error_2i_ref4_generic_return.con` (new; `wrap::<&i64>`) | reject E0236 REF-4@1 |
 | REF-4 | `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con` | reject E0239 REF-4@1 |
-| REF-4 | `error_091_norm_generic_nested_ref.con`, `error_091_norm_generic_nested_alias_ref.con`, `error_091_norm_generic_fn_mut_param.con`, `error_091_norm_generic_transitive_ref.con` | reject E0238 REF-4@1 |
+| REF-4 | `error_091_norm_generic_fn_mut_param.con`, `error_091_norm_generic_transitive_ref.con` | reject E0238 REF-4@1 |
+| REF-4 | `error_2i_ref4_nested_param_instantiation.con` (new; `fn peek<T>(r: &T) -> Int` called as `peek::<&P>(&rp)` with `rp: &P`: the argument type `& &P` holds no reference in an aggregate, so (c) is reached rather than E0239) | reject E0238 REF-4@1 |
+| REF-3 | `error_091_norm_generic_nested_ref.con`, `error_091_norm_generic_nested_alias_ref.con` (their `W<&P>` value is refused as storage before the instantiation check is reached) | reject E0239 REF-3@1 |
 | REF-4 | `trait_generic_fn_value_param.con`; `regress_2i_ref4_top_level_ref_arg.con` (new; `ignore::<&Int>` and `apply::<&Int>` above) | run |
 | REF-5 | `error_105_ref_valued_if_arg.con`, `error_105_ref_valued_if_field.con`, `error_091_norm_temporaries.con`, `error_091_norm_if_local_binding.con`, `error_091_norm_double_deref_read.con`, `error_091_norm_nested_ref_binder.con` | reject E0238 REF-5@1 |
 | REF-5 | `error_2i_ref5_borrow_temporary.con` (new; `&(40 + 2)`) | reject E0238 REF-5@1 |
@@ -945,8 +986,12 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-6 | `error_borrow_escape.con` | reject E0234 REF-6@1 |
 | REF-6 | `regress_2i_ref6_same_source.con` (new) | run 42 |
 | REF-7 | `error_091_norm_ref_write_through_ref.con` | reject E0238 REF-7@1 |
+| REF-7 | `regress_2i_ref7_write_value_through_mut_ref.con` (new; `*slot = 42` with `slot: &mut Int`) | run 42 |
 | REF-8 | `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232), `error_091_norm_copied_mut_ref.con` (E0231), `error_091_norm_assign_under_shared_ref.con` (E0232) | reject, code as given, REF-8@1 |
 | REF-8 | `error_2i_ref8_free_while_aliased.con` (new; `free(h)` under `let s = r`) | reject E0204 REF-8@1 |
+| REF-8 | `regress_2i_ref8_free_after_ref_block.con` (new; the reference lives in an inner block, `free(h)` after it) | run 42 |
+| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`) | reject E0234 REF-6@1 |
+| REF-6 | `regress_2i_ref6_index_same_array.con` (new; `r = &a[1]` after `&a[0]`) | run 42 |
 | REF-8 / SCOPE-1 | `error_107_shadow_under_live_ref.con`, `error_107_shadow_in_block_under_live_ref.con` | reject E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before |
 | SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
 | SCOPE-1 | `regress_2i_scope1_<shape>_renamed.con` (new), the migration twin of each fixture in the row above | run, binary = `--interp` |
@@ -954,7 +999,8 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 today) |
 | SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
 | SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
-| SCOPE-3 | `regress_087_let_block_shadow.con`, `regress_087_borrow_shadow_uaf/` | run 42 with binary = `--interp` = model until SCOPE-1 lands; then reject E0301 SCOPE-1@1, each with a renamed twin that runs 42 |
+| SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model`: run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in the same modes |
+| SCOPE-3 | `regress_087_borrow_shadow_uaf/` (a project fixture; success is exit 0) | modes `binary`: run 0 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 0 |
 | G4 | `regress_2i_renamed_pattern_binder.con` (new; `match`, `if let`, `while let`, destructuring `let`) | run 42, binary = `--interp`, formatter round-trip |
 
 The 092 and 093 reproducers stay rejected, the 093 ones by SCOPE-1 instead of E0208. 087's
@@ -973,9 +1019,23 @@ renamed value leg, and the live-shadow case of `fuzz_linearity.py` expects E0301
 `scope.sibling`) gets a minimum completed-comparison count in exit 2e's inventory. The proposed
 starting minimum is 20 completed comparisons per key per qualification run; 2e owns the number.
 
-**Mutations.** For each rule, deleting its check (the `throwCheck` at its site, or the
-`verifyNoStoredRefs` / `verifyNoReturnedRefs` call) must turn at least one reject row of the
-manifest into an acceptance; R-0498's claim manifest records the row.
+**Mutations.** R-0498's claim manifest records one row per mutation below, each killed by a named
+manifest row:
+
+- for each rejection rule and each of its enforcing sites, deleting the check (the `throwCheck` at
+  the site, or the `verifyNoStoredRefs` / `verifyNoReturnedRefs` call) turns at least one reject
+  row into an acceptance;
+- for SCOPE-1, one mutation per binder kind (parameter, duplicate parameter, `let`, destructuring
+  `let`, match-arm binder, `if let`, `while let`, `for` header, borrow-block reference, region
+  name), each omitting that kind from the check and killed by that kind's reject row (inherited
+  from R-0435);
+- positive-control mutations, killed by run rows: SCOPE-1 extended to treat assignment as binding
+  introduction (killed by `regress_2i_scope2_assign_rebind.con`), SCOPE-1 extended to sibling
+  scopes (killed by the SCOPE-2 sibling rows);
+- for SCOPE-3, the mutations bug 087's repair carries (removing `exitBlock`'s restoration of the
+  visible variables, or `bindLocal`'s renaming) are killed by `regress_087_let_block_shadow.con`
+  in modes `binary,interp,model` while shadowing is accepted; once SCOPE-1 makes shadowing
+  unreachable from source they move, like the 093 and 094 rows, to a leg that disables E0301.
 
 ### 15.7 Gaps and owners
 
@@ -987,7 +1047,7 @@ manifest into an acceptance; R-0498's claim manifest records the row.
 | G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
 | G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107 and the write-through-reference shape, and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
 | G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
-| G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`), and E0215 has no fixture | R-0500, with R-0513 for the inventory |
+| G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
 | G9 | `&mut` usage modes are inconsistent and partly unspecified: a borrow-block `&mut` is consumed when passed to a call (MUT_REF_SEMANTICS §3) yet may lapse unused; a parameter `&mut` is reborrowed at every call; a `let`-bound `&mut` (`let r: &mut Int = &mut x;`) is linear with no discharging use, since writing through it, passing it to a call, reborrowing it or moving it into another `let` all end in E0208 | an R-0500 decision with R-0511 (design examples B1, B2 and G1); not a 2i restriction, but the V1 model may not model a looser rule than the compiler enforces |
 | G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule |
