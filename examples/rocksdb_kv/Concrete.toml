@@ -1,0 +1,6 @@
+[package]
+name = "rocksdb_kv"
+version = "0.1.0"
+
+[dependencies]
+rocksdb = { path = "rocksdb" }

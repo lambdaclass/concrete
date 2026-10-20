@@ -1,0 +1,263 @@
+// rocksdb — hand-written binding package for the RocksDB C API (rocksdb/c.h),
+// the binding RocksDB slice 1 (ROADMAP R-0285) consumes. It is the interim
+// form of the reviewed binding package R-0285 will generate: until binding
+// generation exists, every declaration below is written and reviewed by hand.
+//
+// TRUST BOUNDARY (named, not proved):
+//   * the `extern fn` declarations are plain externs, never `trusted extern`:
+//     each one's safety depends on pointer validity, so only the `trusted`
+//     wrappers in this file may call them;
+//   * the declared effects of each extern (`with(File, Alloc)` etc.) are a
+//     reviewed assumption about RocksDB's behaviour, not a checked fact;
+//   * the ownership facts used by the wrappers are taken from c.h's comments
+//     and are assumptions: rocksdb_open/rocksdb_get/rocksdb_put report errors
+//     through `char** errptr`, a malloc'd message the caller releases with
+//     rocksdb_free; a non-NULL rocksdb_get result is a library-owned buffer
+//     the caller releases with rocksdb_free; every *_create has exactly one
+//     matching *_destroy, and rocksdb_open's handle exactly one rocksdb_close.
+//
+// OWNERSHIP: every RocksDB resource is a linear Concrete value (no `Copy`
+// marker) with exactly one consuming release verb. Concrete has no implicit
+// destructors, so the checker refuses a handle that is never released
+// (E0208) and any use after the release consumed it (E0205).
+//
+// AUTHORITY: opening, reading and writing a database names and touches
+// filesystem paths, so those operations require `File`; allocation-only
+// operations (options objects, error/value buffers) require `Alloc`.
+mod rocksdb {
+    import std.alloc.{dealloc, heap_new};
+    import std.bytes.{Bytes};
+
+    // ---- foreign declarations (rocksdb/c.h, RocksDB 10.x) -----------------
+    // Opaque handle types are all `*mut u8`: Concrete has no opaque foreign
+    // type declaration, so the distinct C types are kept apart by the
+    // distinct linear wrapper structs below, not by these signatures.
+    extern fn rocksdb_options_create() with(Alloc) -> *mut u8;
+    extern fn rocksdb_options_destroy(opts: *mut u8) with(Alloc);
+    extern fn rocksdb_options_set_create_if_missing(opts: *mut u8, v: u8) with();
+    extern fn rocksdb_writeoptions_create() with(Alloc) -> *mut u8;
+    extern fn rocksdb_writeoptions_destroy(opts: *mut u8) with(Alloc);
+    extern fn rocksdb_readoptions_create() with(Alloc) -> *mut u8;
+    extern fn rocksdb_readoptions_destroy(opts: *mut u8) with(Alloc);
+    extern fn rocksdb_open(opts: *mut u8, name: *const u8, errptr: *mut *mut u8) with(File, Alloc) -> *mut u8;
+    extern fn rocksdb_close(db: *mut u8) with(File, Alloc);
+    extern fn rocksdb_put(db: *mut u8, opts: *mut u8, key: *const u8, keylen: u64,
+                          val: *const u8, vallen: u64, errptr: *mut *mut u8) with(File, Alloc);
+    extern fn rocksdb_get(db: *mut u8, opts: *mut u8, key: *const u8, keylen: u64,
+                          vallen: *mut u64, errptr: *mut *mut u8) with(File, Alloc) -> *mut u8;
+    extern fn rocksdb_free(ptr: *mut u8) with(Alloc);
+    extern fn strlen(s: *const u8) with() -> u64;
+
+    // ---- typed errors -------------------------------------------------------
+    // Which operation failed. Copy, so callers can branch on it freely.
+    pub enum Copy DbErrorKind {
+        Open,
+        Put,
+        Get,
+    }
+
+    // A recoverable RocksDB failure: the operation and RocksDB's own message,
+    // copied into a Concrete String (the foreign message buffer is released
+    // with rocksdb_free before this value exists). Linear: drop it.
+    pub struct DbError {
+        pub kind: DbErrorKind,
+        pub message: String,
+    }
+
+    impl DbError {
+        pub fn drop(self) with(Alloc) {
+            let DbError { kind, message } = self;
+            message.drop();
+        }
+    }
+
+    // Copy a NUL-terminated, rocksdb-owned error message into a String and
+    // release the foreign buffer with rocksdb_free (the deallocator c.h names).
+    trusted fn take_error(kind: DbErrorKind, err: *mut u8) with(Alloc) -> DbError {
+        let n: u64 = strlen(err as *const u8);
+        let mut b: Bytes = Bytes::with_capacity(n);
+        let mut i: u64 = 0;
+        while i < n {
+            let p: *mut u8 = err + i;
+            b.push(*p);
+            i = i + 1;
+        }
+        rocksdb_free(err);
+        return DbError { kind: kind, message: b.to_string_unchecked() };
+    }
+
+    // ---- error out-parameter -------------------------------------------------
+    // c.h reports errors through `char** errptr`. The slot lives on the heap,
+    // not in a local: `&mut err as *mut *mut u8` on a pointer-typed local is
+    // miscompiled today (the callee receives the local's VALUE, NULL, not its
+    // address; docs/project/ROCKSDB_SLICE1.md, gap G2), which would make every
+    // RocksDB error invisible and turn a failed open into a NULL handle.
+    trusted fn new_err_slot() with(Alloc) -> *mut *mut u8 {
+        let slot: *mut *mut u8 = heap_new::<*mut u8>();
+        *slot = 0 as *mut u8;
+        return slot;
+    }
+
+    // Read the slot and free it; returns the foreign error message or NULL.
+    trusted fn take_err_slot(slot: *mut *mut u8) with(Alloc) -> *mut u8 {
+        let err: *mut u8 = *slot;
+        dealloc::<*mut u8>(slot);
+        return err;
+    }
+
+    // ---- linear handles -----------------------------------------------------
+
+    // rocksdb_options_t*: released by `destroy` (rocksdb_options_destroy).
+    pub struct Options {
+        handle: *mut u8,
+    }
+
+    trusted impl Options {
+        pub fn create() with(Alloc) -> Options {
+            return Options { handle: rocksdb_options_create() };
+        }
+
+        pub fn set_create_if_missing(&mut self, v: bool) {
+            let mut flag: u8 = 0;
+            if v { flag = 1; }
+            rocksdb_options_set_create_if_missing(self.handle, flag);
+        }
+
+        pub fn destroy(self) with(Alloc) {
+            let Options { handle } = self;
+            rocksdb_options_destroy(handle);
+        }
+    }
+
+    // rocksdb_writeoptions_t*: released by `destroy`.
+    pub struct WriteOptions {
+        handle: *mut u8,
+    }
+
+    trusted impl WriteOptions {
+        pub fn create() with(Alloc) -> WriteOptions {
+            return WriteOptions { handle: rocksdb_writeoptions_create() };
+        }
+
+        pub fn destroy(self) with(Alloc) {
+            let WriteOptions { handle } = self;
+            rocksdb_writeoptions_destroy(handle);
+        }
+    }
+
+    // rocksdb_readoptions_t*: released by `destroy`.
+    pub struct ReadOptions {
+        handle: *mut u8,
+    }
+
+    trusted impl ReadOptions {
+        pub fn create() with(Alloc) -> ReadOptions {
+            return ReadOptions { handle: rocksdb_readoptions_create() };
+        }
+
+        pub fn destroy(self) with(Alloc) {
+            let ReadOptions { handle } = self;
+            rocksdb_readoptions_destroy(handle);
+        }
+    }
+
+    // A value rocksdb_get returned: a LIBRARY-OWNED buffer, released by
+    // `free` (rocksdb_free — never Concrete's dealloc). Read it through
+    // `to_bytes`, which copies into Concrete-owned memory.
+    pub struct Value {
+        ptr: *mut u8,
+        len: u64,
+    }
+
+    trusted impl Value {
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn to_bytes(&self) with(Alloc) -> Bytes {
+            let mut b: Bytes = Bytes::with_capacity(self.len);
+            let mut i: u64 = 0;
+            while i < self.len {
+                let p: *mut u8 = self.ptr + i;
+                b.push(*p);
+                i = i + 1;
+            }
+            return b;
+        }
+
+        pub fn free(self) with(Alloc) {
+            let Value { ptr, len } = self;
+            rocksdb_free(ptr);
+        }
+    }
+
+    // rocksdb_t*: an open database, released by `close` (rocksdb_close).
+    // Options/WriteOptions/ReadOptions are BORROWED by each call: c.h does
+    // not retain them past the call, so the caller still owns and destroys
+    // them.
+    pub struct Db {
+        handle: *mut u8,
+    }
+
+    trusted impl Db {
+        // Open (or, with create_if_missing, create) the database at `path`.
+        // A failure is a typed DbError { kind: Open }, never an abort; on
+        // failure no rocksdb_t exists, so there is nothing to close.
+        pub fn open(opts: &Options, path: &String) with(File, Alloc) -> Result<Db, DbError> {
+            let cpath: *mut u8 = path.to_cstr();
+            let slot: *mut *mut u8 = new_err_slot();
+            let h: *mut u8 = rocksdb_open(opts.handle, cpath as *const u8, slot);
+            dealloc::<u8>(cpath);
+            let err: *mut u8 = take_err_slot(slot);
+            if err != (0 as *mut u8) {
+                // c.h returns NULL with an error; close defensively if not.
+                if h != (0 as *mut u8) { rocksdb_close(h); }
+                return Result::<Db, DbError>::Err { error: take_error(DbErrorKind::Open, err) };
+            }
+            if h == (0 as *mut u8) {
+                let m: String = "rocksdb_open returned NULL without an error message";
+                return Result::<Db, DbError>::Err { error: DbError { kind: DbErrorKind::Open, message: m } };
+            }
+            return Result::<Db, DbError>::Ok { value: Db { handle: h } };
+        }
+
+        // Write key -> value. Returns the number of value bytes written.
+        pub fn put(&self, wopts: &WriteOptions, key: &Bytes, val: &Bytes) with(File, Alloc) -> Result<u64, DbError> {
+            let slot: *mut *mut u8 = new_err_slot();
+            rocksdb_put(self.handle, wopts.handle,
+                        key.raw_ptr() as *const u8, key.len(),
+                        val.raw_ptr() as *const u8, val.len(),
+                        slot);
+            let err: *mut u8 = take_err_slot(slot);
+            if err != (0 as *mut u8) {
+                return Result::<u64, DbError>::Err { error: take_error(DbErrorKind::Put, err) };
+            }
+            return Result::<u64, DbError>::Ok { value: val.len() };
+        }
+
+        // Read key. Ok(None) = key absent; Ok(Some(v)) = a library-owned
+        // Value the caller must `free`.
+        pub fn get(&self, ropts: &ReadOptions, key: &Bytes) with(File, Alloc) -> Result<Option<Value>, DbError> {
+            let slot: *mut *mut u8 = new_err_slot();
+            let mut vlen: u64 = 0;
+            let p: *mut u8 = rocksdb_get(self.handle, ropts.handle,
+                                         key.raw_ptr() as *const u8, key.len(),
+                                         &mut vlen as *mut u64, slot);
+            let err: *mut u8 = take_err_slot(slot);
+            if err != (0 as *mut u8) {
+                if p != (0 as *mut u8) { rocksdb_free(p); }
+                return Result::<Option<Value>, DbError>::Err { error: take_error(DbErrorKind::Get, err) };
+            }
+            if p == (0 as *mut u8) {
+                return Result::<Option<Value>, DbError>::Ok { value: Option::<Value>::None };
+            }
+            let v: Value = Value { ptr: p, len: vlen };
+            return Result::<Option<Value>, DbError>::Ok { value: Option::<Value>::Some { value: v } };
+        }
+
+        pub fn close(self) with(File, Alloc) {
+            let Db { handle } = self;
+            rocksdb_close(handle);
+        }
+    }
+}
