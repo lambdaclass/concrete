@@ -204,12 +204,18 @@ def resolveType (ty : Ty) : CheckM Ty := do
     return .fn_ params' capSet retTy'
   | _ => return ty
 
-/-- `name` occurs in `ty` somewhere OTHER than as the whole type: inside a reference, pointer,
-    heap shell, array, generic argument or function type — a position the generic body can read
-    a `name` value out of. -/
-def tyParamOccursNested (name : String) : Ty → Bool
-  | .typeVar _ | .named _ => false
-  | t => tyParamOccursIn name t
+/-- `name` occurs in `ty` behind a reference or pointer — a position the generic body can load a
+    `name` value out of (`r: &T`, `w: &W<T>`). -/
+partial def tyParamOccursNested (name : String) : Ty → Bool
+  -- behind a reference or pointer: the body can load a `name` out of the pointee
+  | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => tyParamOccursIn name inner
+  -- inside a storage type, behind such a reference (`W<&T>`); a `name` stored directly in an
+  -- aggregate, array or heap cell is batch 4's E0239 domain (refused at the declaration and,
+  -- after monomorphization, by `verifyNoStoredRefs`), and a function type is not storage
+  | .generic _ args _ => args.any (tyParamOccursNested name)
+  | .array elem _ => tyParamOccursNested name elem
+  | .heap inner | .heapArray inner => tyParamOccursNested name inner
+  | _ => false
 
 /-- Bug 091 round 3 (normalized place rule): the place rule checks a generic body ONCE, at its
     type parameters, where `T` is opaque. A `T` instantiated to a REFERENCE in a parameter

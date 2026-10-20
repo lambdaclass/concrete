@@ -25,7 +25,6 @@ namespace Concrete
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
->>>>>>> 932afdfa (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
 =======
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 =======
@@ -145,6 +144,11 @@ def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 >>>>>>> 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
 =======
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+||||||| parent of 784bc531 (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
+=======
+>>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+>>>>>>> 784bc531 (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
 ||||||| parent of d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 =======
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
@@ -987,7 +991,14 @@ def buildIdentity : String := "bf51e0eea217c4cbd32b32e18ae4ebbd"
 =======
 def buildIdentity : String := "9a21f7736ab49a61954d370175788182"
 >>>>>>> f8220016 (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
->>>>>>> 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
+||||||| parent of 784bc531 (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
+=======
+||||||| parent of 7a6a394e (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
+def buildIdentity : String := "9a21f7736ab49a61954d370175788182"
+=======
+def buildIdentity : String := "cbda038ea329c0e3036a4298b94040c9"
+>>>>>>> 7a6a394e (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
+>>>>>>> 784bc531 (integrate: the nested reference-instantiation refusal covers T behind a reference or pointer only)
 
 /-- How many source files the identity above was computed over.
 
