@@ -517,6 +517,37 @@ print(('ok' if ok else 'bad'), d['summary']['failed'], nf)" "$JS" 2>/dev/null)"
       echo "  FAIL $fx: summaries/exit disagree — text failed=$TF json failed=$JF failed-checks=$JN ensures=$JOK exit=$TRC/$JRC (want $WANTF)"; FAIL=$((FAIL+1))
     fi
   done
+  # concrete prove --check is a fourth surface (Codex, land3): it mapped any type-checking ensures
+  # theorem to "checked", printed a check mark and all_checked=true for ens_unrelated_theorem, whose
+  # clause (result == 42) is false. The theorem replaying is not the postcondition being discharged.
+  S="$B89/ens_unrelated_theorem/src/main.con"
+  if PJ="$("$COMPILER" prove "$S" main.compute_tag --check --json 2>/dev/null)"; then PJRC=0; else PJRC=$?; fi
+  if PT="$("$COMPILER" prove "$S" main.compute_tag --check 2>&1)"; then PTRC=0; else PTRC=$?; fi
+  PV="$(python3 -c "
+import json,sys; d=json.loads(sys.argv[1])
+e=[c for c in d['checks'] if c['obligation_kind']=='ensures']
+r=[c for c in d['checks'] if c['obligation_kind']=='refinement']
+ens_ok = len(e)==2 and all(c['status']=='not_discharged' and c['discharged'] is False for c in e)
+ref_ok = len(r)==1 and r[0]['status']=='checked' and r[0]['discharged'] is True
+print('ok' if ens_ok and ref_ok and d['all_checked'] is False else 'bad')" "$PJ" 2>/dev/null)"
+  if [ "$PV" = ok ] && [ "$PJRC" = 2 ] && [ "$PTRC" = 2 ] \
+     && ! grep -q '✓ main.compute_tag#ensures' <<<"$PT" && grep -q '✗ main.compute_tag#ensures' <<<"$PT" \
+     && grep -q '✓ main.compute_tag#refines_spec' <<<"$PT"; then
+    echo "  ok   prove --check: the ensures link is not_discharged (no check mark, all_checked false, exit 2); the refinement theorem stays checked"; PASS=$((PASS+1))
+  else
+    echo "  FAIL prove --check overclaims the ensures link: json=$PV exit=$PJRC/$PTRC"; printf '%s\n' "$PT" | sed 's/^/      /'; FAIL=$((FAIL+1))
+  fi
+  S="$B89/ens_missing_with_proof_by/src/main.con"
+  if PJ="$("$COMPILER" prove "$S" main.compute_tag --check --json 2>/dev/null)"; then PJRC=0; else PJRC=$?; fi
+  PV="$(python3 -c "
+import json,sys; d=json.loads(sys.argv[1])
+e=[c for c in d['checks'] if c['obligation_kind']=='ensures']
+print('ok' if e and all(c['discharged'] is False and c['status'] in ('missing_theorem','failed','not_discharged') for c in e) and any(c['theorem']=='No.Such.Theorem' and c['status']=='missing_theorem' for c in e) and d['all_checked'] is False else 'bad')" "$PJ" 2>/dev/null)"
+  if [ "$PV" = ok ] && [ "$PJRC" != 0 ]; then
+    echo "  ok   prove --check: a nonexistent ensures theorem is missing_theorem, never discharged (exit $PJRC)"; PASS=$((PASS+1))
+  else
+    echo "  FAIL prove --check on ens_missing_with_proof_by: json=$PV exit=$PJRC"; FAIL=$((FAIL+1))
+  fi
   # Receipts: a rejected ensures theorem withholds the claim's receipt; a type-checking one does not
   # (that control makes the withholding attributable to the ensures replay, not to the fixture).
   R1="$("$COMPILER" "$B89/ens_missing_with_proof_by/src/main.con" --report receipts 2>&1)"
