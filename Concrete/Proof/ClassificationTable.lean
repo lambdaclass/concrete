@@ -99,6 +99,10 @@ private def classificationTable : List (String × String × String × List (Stri
   ("Examples.TestFixtures.Proofs.spec_in_nested_implication", "body", "c29343f575ea4dd81dcff2980acde5e1", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
   ("Examples.TestFixtures.Proofs.spec_in_proof_argument", "body", "972b867a2a9c7760e8cd06723810dcf2", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity"]),
   ("Examples.TestFixtures.Proofs.spec_inside_evaluated_term", "body", "1418b185be34a3484a8bcf981fcf5973", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["add_commutativity", "Examples.TestFixtures.Proofs.ignoreSpec"]),
+  ("Examples.Toml.Proofs.is_bare_key_char_correct", "body", "6d5e6f815bf7fafd6c28a90937de2561", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.Toml.Proofs.isBareKeyCharExpr"]),
+  ("Examples.Toml.Proofs.is_digit_correct", "body", "c5ea17f2bf8d47eabb8043c616a34b6b", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.Toml.Proofs.isDigitExpr"]),
+  ("Examples.Toml.Proofs.is_newline_correct", "body", "55773ccaa1588bd810b8a3ba1ecd6eae", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.Toml.Proofs.isNewlineExpr"]),
+  ("Examples.Toml.Proofs.is_ws_correct", "body", "86767361716909bc0e27b601373b172c", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["Examples.Toml.Proofs.isWsExpr"]),
   ("PureAdd.add_comm", "body", "1f64d1eca5de8c866eb02e9a15db0aa2", [("Concrete.Proof.FnTable.empty", "e5b492f72a85a8b2a13230ba87272d9c")], false, ["PureAdd.spec_add"])
 -- END GENERATED CLASSIFICATION ROWS
 ]
@@ -332,6 +336,10 @@ def specBindingTable : List (String × String × String × Option (List String))
   ("Examples.TestFixtures.Proofs.pure_mul_correct", "mul_associativity", "1732dea29f91dcd1550197c34018de59", (some ["a", "b"])),
   ("Examples.TestFixtures.Proofs.pure_sub_correct", "sub_identity", "b78f1fe80a3ad10957d1e5f906a62710", (some ["a", "b"])),
   ("Examples.TestFixtures.Proofs.right_add_correct", "right_add_spec", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"])),
+  ("Examples.Toml.Proofs.is_bare_key_char_correct", "Examples.Toml.Proofs.isBareKeyCharExpr", "efe555cd458c9bafe8c5f10b6cac91f4", (some ["ch"])),
+  ("Examples.Toml.Proofs.is_digit_correct", "Examples.Toml.Proofs.isDigitExpr", "c26f512a7ae29f3f879de17c01647278", (some ["ch"])),
+  ("Examples.Toml.Proofs.is_newline_correct", "Examples.Toml.Proofs.isNewlineExpr", "8c94e82580cc50fc239a322c4d6db2e0", (some ["ch"])),
+  ("Examples.Toml.Proofs.is_ws_correct", "Examples.Toml.Proofs.isWsExpr", "aeda8901d950841b11891e5a51294c5b", (some ["ch"])),
   ("PureAdd.add_comm", "PureAdd.spec_add", "1de00ea0e2dc3aeb5d1e04dd02390fba", (some ["a", "b"]))
 -- END GENERATED SPEC BINDINGS
 ]

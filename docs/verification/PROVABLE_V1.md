@@ -115,6 +115,10 @@ Excluded from `ProvableV1` until explicitly added:
 - string/char operations
 - allocation, FFI, raw pointer operations, or effectful calls
 
+Gaps that real workloads hit against this list (boolean `&&`/`||`, `u64`
+arithmetic, `Bytes` reads), with their exact refusals, are recorded in
+[PROOF_EXTRACTION_GAPS.md](PROOF_EXTRACTION_GAPS.md).
+
 ## Statements And State
 
 `ProvableV1` is not restricted to purely scalar expressions. It includes a

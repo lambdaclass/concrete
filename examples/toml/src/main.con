@@ -128,25 +128,59 @@ mod toml_parser {
 
     // ---- Lexer helpers (PURE) ----
 
+    // These four are the lexer's character classes, written as early-return
+    // chains rather than `&&`/`||` expressions: the proof extractor does not
+    // model boolean `&&`/`||` (docs/verification/PROOF_EXTRACTION_GAPS.md),
+    // and in this shape each carries a Lean theorem that it accepts exactly
+    // its TOML v1.0.0 ABNF class (Examples.Toml.Proofs).
+
+    // ws = %x20 / %x09
+    #[spec(Examples.Toml.Proofs.isWsExpr)]
+    #[proof_by(Examples.Toml.Proofs.is_ws_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:75ef5af48e40bd4da402285fe89d73c7")]
     fn is_ws(ch: Int) -> bool {
-        return ch == 32 || ch == 9;
+        if ch == 32 { return true; }
+        return ch == 9;
     }
 
+    // newline = %x0A / %x0D.0A; the lexer classifies the CR of a CRLF pair
+    // on its own, so the class is { LF, CR }.
+    #[spec(Examples.Toml.Proofs.isNewlineExpr)]
+    #[proof_by(Examples.Toml.Proofs.is_newline_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:81a132378537ccbcfefbc1b271243844")]
     fn is_newline(ch: Int) -> bool {
-        return ch == 10 || ch == 13;
+        if ch == 10 { return true; }
+        return ch == 13;
     }
 
+    // DIGIT = %x30-39
+    #[spec(Examples.Toml.Proofs.isDigitExpr)]
+    #[proof_by(Examples.Toml.Proofs.is_digit_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:c9a897dc9913ee39c2e47addb3fec44d")]
     fn is_digit(ch: Int) -> bool {
-        return ch >= 48 && ch <= 57;
+        if ch < 48 { return false; }
+        return ch <= 57;
     }
 
+    // unquoted-key char = ALPHA / DIGIT / %x2D / %x5F, tested in code-point
+    // order: '-' (45), 0-9 (48-57), A-Z (65-90), '_' (95), a-z (97-122).
+    #[spec(Examples.Toml.Proofs.isBareKeyCharExpr)]
+    #[proof_by(Examples.Toml.Proofs.is_bare_key_char_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("v2:141788d5363d9e05c913bdeaccad2322")]
     fn is_bare_key_char(ch: Int) -> bool {
-        if ch >= 97 && ch <= 122 { return true; }
-        if ch >= 65 && ch <= 90 { return true; }
-        if ch >= 48 && ch <= 57 { return true; }
+        if ch < 45 { return false; }
         if ch == 45 { return true; }
+        if ch < 48 { return false; }
+        if ch <= 57 { return true; }
+        if ch < 65 { return false; }
+        if ch <= 90 { return true; }
         if ch == 95 { return true; }
-        return false;
+        if ch < 97 { return false; }
+        return ch <= 122;
     }
 
     fn skip_ws(s: &String, pos: i32) -> i32 {

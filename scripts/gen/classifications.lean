@@ -85,6 +85,10 @@ def sourceLinkedThms : List Name :=
     `Examples.TestFixtures.Proofs.spec_in_nested_implication,
     `Examples.TestFixtures.Proofs.spec_in_proof_argument,
     `Examples.TestFixtures.Proofs.spec_inside_evaluated_term,
+    `Examples.Toml.Proofs.is_bare_key_char_correct,
+    `Examples.Toml.Proofs.is_digit_correct,
+    `Examples.Toml.Proofs.is_newline_correct,
+    `Examples.Toml.Proofs.is_ws_correct,
     `No.Such.Theorem,
     `Nonexistent.Module.totally_fake_theorem,
     `PureAdd.add_comm
