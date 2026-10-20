@@ -74,26 +74,43 @@ def norm(p):
     return p[2:] if p.startswith("./") else p
 
 
-OPERATORS = {";", "&&", "||", "|", "&", "(", ")", ";;", "|&"}
-
-
 def simple_commands(command):
-    """Split on UNQUOTED shell operators (quotes and escapes respected)."""
-    lex = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
-    lex.whitespace_split = True
-    cur = []
-    try:
-        for tok in lex:
-            if tok in OPERATORS or set(tok) <= set(";&|()"):
-                if cur:
-                    yield cur
-                cur = []
-            else:
-                cur.append(tok)
-    except ValueError:      # unbalanced quotes: nothing in it counts
-        return
-    if cur:
-        yield cur
+    """Split the raw text at UNQUOTED, UNESCAPED operator characters ; & | ( ),
+    tracking quote and backslash state, then word-split each piece with shlex.
+    (Splitting shlex's output instead would see a quoted ";" as an operator.)"""
+    pieces, cur, quote, i = [], [], None, 0
+    while i < len(command):
+        c = command[i]
+        if quote == "'":
+            if c == "'":
+                quote = None
+            cur.append(c)
+        elif c == "\\" and i + 1 < len(command):
+            cur.append(c + command[i + 1])
+            i += 1
+        elif quote == '"':
+            if c == '"':
+                quote = None
+            cur.append(c)
+        elif c in "'\"":
+            quote = c
+            cur.append(c)
+        elif c in ";&|()":
+            pieces.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    if quote:
+        return                  # unbalanced quotes: nothing in it counts
+    pieces.append("".join(cur))
+    for p in pieces:
+        try:
+            words = shlex.split(p, posix=True)
+        except ValueError:
+            continue
+        if words:
+            yield words
 
 
 def interpreter_script(name, args):
