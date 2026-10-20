@@ -89,7 +89,9 @@ def run_commands(path):
     excluded (`if: false` disables it; no condition is evaluated here), and so is
     any run whose effective shell -- step `shell:`, job or workflow
     `defaults.run.shell` -- is not plain bash/sh (a custom template such as
-    `bash -n {0}` would only syntax-check it). An owner
+    `bash -n {0}` would only syntax-check it). Any `env:` at workflow, job or step
+    scope also disqualifies (SHELLOPTS: noexec, BASH_ENV, PATH ... can keep the
+    script from running; rather than vet values, environments are refused). An owner
     must therefore be invoked by an inline `run:` of an unconditional step --
     fail-closed, and every CI owner today is spelled that way."""
     lines = open(path).read().split("\n")
@@ -106,6 +108,8 @@ def run_commands(path):
                 i += 1
     if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible, 0)):
         return []           # a workflow-wide custom shell: nothing qualifies
+    if any(re.match(r"^env:", l) for l in visible):
+        return []           # a workflow-wide environment: nothing qualifies
     cmds = []
     for n, line in enumerate(visible):
         m = re.match(r"^(\s*)(-\s+)?run:\s*(.*)$", line)
@@ -127,6 +131,8 @@ def run_commands(path):
             continue
         if any(v not in EXECUTING_SHELLS for v in shell_values(step)):
             continue
+        if any(re.match(r"^\s*(?:-\s+)?env:", l) for l in step):
+            continue
         # The job: the nearest `jobs.<id>:` header (indent 2) above the step.
         j = start
         while j > 0 and not re.match(r"^  [A-Za-z0-9_-]+:\s*$", visible[j]):
@@ -140,6 +146,8 @@ def run_commands(path):
         if job_conditional:
             continue
         if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible[j + 1:k], 4)):
+            continue
+        if any(re.match(r"^    env:", l) for l in visible[j + 1:k]):
             continue
         cmds.append(strip_shell_comment(m.group(3)))
     return cmds
