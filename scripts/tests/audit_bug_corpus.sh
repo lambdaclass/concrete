@@ -58,7 +58,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 093: a shadowing block local / match binder escaped E0208 (name-keyed scope check).
   [093]="error_093_shadowing_block_local_leak.con error_093_shadowing_match_binder_leak.con regress_093_shadowing_locals_consumed.con"
   # Bug 094: name-keyed state updates let a binder consume the live binding it shadowed (E0209/E0208/E0292).
-  [094]="error_094_arm_binder_shadows_live.con error_094_destructure_shadows_live.con error_094_value_binder_shadows_live.con regress_094_shadowing_binders.con regress_094_shadow_state_by_identity.con"
+  [094]="error_094_arm_binder_shadows_live.con error_094_destructure_shadows_live.con error_094_value_binder_shadows_live.con regress_094_shadowing_binders.con regress_094_shadow_state_by_identity.con error_094_borrow_block_shadow_leak.con"
   # Bug 092: a reference stored in an aggregate outlived its source (E0239).
   [092]="error_092_ref_struct_field.con error_092_ref_in_option.con error_092_ref_in_array.con regress_092_refs_flow_down.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

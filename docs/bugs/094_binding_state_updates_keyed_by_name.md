@@ -62,3 +62,10 @@ with E0209, E0292 and E0208 respectively (all three compiled on the previous com
 binding consumed after the match) and `regress_094_shadow_state_by_identity.con` must compile and
 return 42. The first positive control is rejected with a false E0209 if `consumeVar` reverts to
 marking every same-named entry; the second with a false E0208 if reassignment or `useVar` does.
+
+## Follow-up (Codex review of the landing batch)
+
+The borrow block `borrow x as r in R { .. }` removed its ref at exit by NAME, so a body local that
+shadowed the (Copy) ref, `let r: Heap<Int> = alloc(5);`, was deleted with it and leaked with no
+E0208. The block now checks its body's locals like any other block (H9) and drops the ref and the
+body's locals by identity. `error_094_borrow_block_shadow_leak.con` (E0208) compiled before.

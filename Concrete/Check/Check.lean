@@ -1893,9 +1893,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       checkStmts body env.currentRetTy
       -- Clean up: remove ref from borrowRefs and unfreeze original variable
       let env' ← getEnv
+      -- The body is a block: its non-Copy locals must be consumed in it (H9).
+      -- They are matched by identity, so a body local that shadows the Copy
+      -- ref name is still checked (bug 094).
+      checkBlockLocalsConsumed envWithRef.vars env'.vars (blockNonTerminating body) (some stmt.getSpan)
+      -- Drop the ref and the body's locals by identity, never by name: a
+      -- name filter also deleted a body local named like the ref (bug 094).
       let vars'' := (env'.vars.map fun (n, vi) =>
         if vi.uid == varInfo.uid then (n, { vi with state := savedState })
-        else (n, vi)).filter fun (n, _) => n != ref
+        else (n, vi)).filter fun (_, vi) => hasUid env.vars vi.uid
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
   | .break_ _ value lbl =>

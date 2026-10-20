@@ -1,0 +1,10 @@
+// Bug 094 follow-up: a borrow-block body local named like the (Copy) ref was
+// deleted with the ref at block exit (cleanup filtered by name), so its
+// Heap<Int> leaked with no E0208.
+fn main() with(Std) -> Int {
+    let x: Int = 1;
+    borrow x as r in R {
+        let r: Heap<Int> = alloc(5);
+    }
+    return 0;
+}

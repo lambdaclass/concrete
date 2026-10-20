@@ -7157,6 +7157,8 @@ run_err "$TESTDIR/error_094_destructure_shadows_live.con" "E0292"
 run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "E0208"
 run_ok "$TESTDIR/regress_094_shadowing_binders.con" 42
 run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
+# A borrow-block body local named like the ref was dropped with it by name.
+run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "E0208"
 # 0b construction rights: a module constructs its OWN newtype directly;
 # cross-module construction is private (error_047 project fixture).
 run_ok "$TESTDIR/newtype_construct_local.con" 5
