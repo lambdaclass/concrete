@@ -44,8 +44,8 @@ JOB_ID = re.compile(r"[A-Za-z0-9_-]+")
 # script from running ($((1/0)), ${UNSET:?}, < /missing, true ||, ...), and the CI
 # workflow invokes its gates this way.
 INVOCATION = re.compile(
-    r"(?:(?:bash|sh)(?:\s+-[eux]+|\s+-o\s+(?:errexit|nounset|pipefail|xtrace))*\s+"
-    r"|python3(?:\s+-[IuBE])*\s+)?"
+    r"(?:(?:bash|sh)(?: +-[eux]+| +-o +(?:errexit|nounset|pipefail|xtrace))* +"
+    r"|python3(?: +-[IuBE])* +)?"
     r"(?P<script>(?:\./)?[A-Za-z0-9_][A-Za-z0-9_./-]*)")
 
 
@@ -61,9 +61,15 @@ def norm(p):
 def invoked_script(run):
     """The script a run value invokes, when the WHOLE value is exactly
     [bash|sh|python3 <allowed options>] <script>; else None."""
-    if not isinstance(run, str) or "\n" in run.strip():
+    # ASCII only, and only plain spaces between words: Unicode whitespace (a no-break
+    # space) is not a shell separator, so a \s match would accept a command bash
+    # cannot find.
+    if not isinstance(run, str) or not run.isascii():
         return None
-    m = INVOCATION.fullmatch(run.strip())
+    run = run.strip(" \n")
+    if "\n" in run:
+        return None
+    m = INVOCATION.fullmatch(run)
     return norm(m.group("script")) if m else None
 
 
