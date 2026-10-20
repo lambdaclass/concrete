@@ -2480,7 +2480,9 @@ hand-targeted programs for each current bug class, under `examples/adversarial/`
 | `match_and_fnptrs` | match guards with effects, renamed and positional binders, function pointers reassigned across branches and read from struct fields, with their capabilities | 056, 063, 066, 084, 090 |
 | `statement_sequencing` | discarded `expr;`, `let` after assignment, loop-step sequencing, branch-local `let`, `if` without `else` falling through; claims on each shape | 085, 086, 101 |
 
-For cases still unresolved (054, 055, 063, 077 and the E0264 aliased-method case), separate fixtures pin
+Bug 063's fixed derived-function-pointer cases compile and run through both the function-call and the
+method-call path, and its generic-return controls keep E0242 as in `check_cap_inference.sh`. For cases
+still unresolved (054, 055, 077 and the E0264 aliased-method case), separate fixtures pin
 the documented collision diagnostic, rejection or containment result until the owning repair lands;
 runnable cases still require interpreter, native and expected agreement. The suite does not make those
 repairs prerequisites of any deliverable. The number-to-shape mappings for 082, 087, 088 and 090 – 100
@@ -2488,8 +2490,9 @@ are provisional until their checked-in records and reproducers land under 2b, an
 against those records before the suite is accepted.
 
 Each example has its own leg in `scripts/tests/check_adversarial_examples.sh` (new, in the full gate
-set): the interpreter's output and exit status, the native binary's and a checked-in expected result
-must agree; a rejection leg asserts its diagnostic code; where the example carries claims, its leg also
+set): interpreter and native observable output and normalized outcomes must agree with a checked-in
+expected result, where normal exits keep their exit status and traps keep their identity rather than
+counting every trap as equivalent; a rejection leg asserts its diagnostic code; where the example carries claims, its leg also
 runs `--report model-diff` on the claimed functions and asserts each claim's status. The gate fails on a
 missing example or leg, and a perturbed expected result must fail its leg (positive control). The
 evidence and report cases 058 – 062, 064, 065, 067, 068, 075, 076, 079, 081, 083 and 089 keep their
