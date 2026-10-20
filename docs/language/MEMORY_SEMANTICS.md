@@ -680,17 +680,21 @@ an array literal element; a binding or parameter whose type holds a reference in
 
 #### REF-4. Generic instantiation preserves REF-1 and REF-3
 
-A type parameter may be instantiated with a type that contains a reference (this includes
-`fn(&Int) -> Int`) only when every occurrence
-of the parameter in the generic's parameter types is at top level (`x: T`) or as a by-value
-parameter of a function type (`f: fn(T) -> U`). The instantiation is refused when the parameter
-occurs (a) in the return type, (b) in an aggregate the generic stores it in (`Box<T>`, `[T; N]`,
-`Heap<T>`; seen after monomorphization), or (c) behind a reference or pointer in a parameter type,
-including inside a function type (`w: &W<T>`, `r: &T`, `p: *mut T`, `f: fn(&mut T)`), because the
-generic body is checked once at its opaque `T`.
+Three separate conditions, each refusing an instantiation `T := A`:
+
+- (a) `A` **contains** a reference and `T` occurs in the generic's return type;
+- (b) after monomorphization, an instantiated field, binding, parameter, expression or constant
+  type **holds** a reference (REF-3's predicate, so `Box<T>` at `A = &Int` is refused but at
+  `A = fn(&Int) -> Int` is accepted: a function pointer stores no reference);
+- (c) `A` **contains** a reference and `T` occurs behind a reference or pointer in one of the
+  generic's parameter types, including inside a function type (`w: &W<T>`, `r: &T`,
+  `p: *mut T`, `f: fn(&mut T)`; `tyParamOccursNested`), because the generic body is checked once
+  at its opaque `T`. A top-level `x: T`, a by-value `W<T>` and a by-value callback parameter
+  `f: fn(T) -> U` are not nested positions.
 
 - Accepted: `fn ignore<T: Copy>(x: T, k: Int) -> Int` at `T = &Int`;
-  `fn apply<T>(x: T, f: fn(T) -> Int) -> Int` at `T = &Int`; *`trait_generic_fn_value_param.con`*.
+  `fn apply<T>(x: T, f: fn(T) -> Int) -> Int` at `T = &Int`; `Box<fn(&Int) -> Int>` holding a
+  callback; *`trait_generic_fn_value_param.con`*.
 - Rejected: `wrap::<&i64>(&x)` with `fn wrap<R>(r: R) -> R`; a `Box<T>` built at `T = &Int`;
   `forward::<&P>(w: &W<T>, ..)`; a generic passing its own opaque `T` on to a `&mut U` parameter
   (`relay` calling `update::<T>`).
@@ -728,12 +732,21 @@ a reference:
 - a read of a reference out of storage: a field, element, heap cell or referenced place whose type
   is a reference (`*w.r`, `**r`, `(**r).f`).
 
+The same normalized place rule also restricts ordinary value reads, which is a deliberate
+restriction of its own (H28), not a reference rule: the base of a field access or index, and the
+operand of `*`, must normalize to a canonical place or be a fresh owned temporary. So
+`(if c { a } else { b }).f` is refused even when every branch yields an owned non-reference value
+(E0238 on `land2-fix`, *`error_091_norm_if_projection.con`*; accepted on `main`), as are
+`(**r).f` and `*(if c { &r } else { &r })`. The rewrite binds the branch result first:
+`let w = if c { a } else { b }; w.f`. It belongs to REF-5's diagnostic (E0238) and version, and
+R-0499 may lift it as REF-5@2.
+
 - Accepted: `let r: &P = &w.p; f(r); f(&w.p); let s: &P = r;`.
 - Diagnostic: E0238 (`untraceablePlace`). Sites (`land2-fix`, `Concrete/Check/Check.lean`):
   `checkExpr` (the single entry that refuses a reference-typed call result or storage read),
   `refuseRefValuedBranch`, `checkImplicitReceiverBorrow`, `checkRefArg` and `recordRefProvenance`,
   over `normPlace` / `normRef`.
-- Fixtures (E0238): *`error_105_ref_valued_if_arg.con`*, *`error_105_ref_valued_if_field.con`*,
+- Fixtures (E0238): *`error_091_norm_if_projection.con`*, *`error_105_ref_valued_if_arg.con`*, *`error_105_ref_valued_if_field.con`*,
   *`error_091_norm_temporaries.con`*, *`error_091_norm_if_local_binding.con`*,
   *`error_091_norm_if_local_chain.con`*, *`error_091_norm_double_deref_read.con`*,
   *`error_091_norm_nested_ref_binder.con`*.
@@ -793,6 +806,20 @@ a shared reference to it is live or used while an exclusive one is (E0231 / E023
 a new binding of the same name (E0238, `guardShadowedSource`, `land2-fix`, bug 107). A reference's
 own uses obey the same exclusivity through its ancestry of reborrows and copies (`refParent`,
 `land2-fix`).
+
+Borrows that last only for one call obey the same exclusivity without any binding: the borrows a
+single call makes (each `&p` / `&mut p` argument, an implicit `&self` / `&mut self` receiver, and,
+on `land2-fix`, reference arguments by their normalized place) may not overlap when at least one
+is exclusive. Two borrows overlap when they have the same root and one projection path is a prefix
+of the other (`x` and `x.f`; distinct fields are disjoint; every index is the step `[]`, so two
+indexings of one array overlap). The diagnostic is E0293 (`conflictingCallBorrows`), from
+`checkCallBorrowConflicts` over `borrowPathOf` / `pathsOverlap` in
+`Concrete/Check/CheckHelpers.lean`, called from the call, method-call and static-method-call cases
+of `checkExpr` (**main**; `land2-fix` computes the keys from the normalized place, through
+`argBorrowParts` and `receiverBorrowParts`). Fixtures: the
+E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
+`neg_shared_plus_mut_borrow`, `neg_receiver_ctx_alias`), *`error_091_norm_cast_arg_overlap.con`*,
+*`error_091_mut_receiver_paren_borrow_arg.con`*.
 
 - Rejected: `let r: &Heap<B> = &h; let s: &Heap<B> = r; free(h);` (E0204, `main`);
   `let x: Int = 1; let r: &Int = &x; let x: Int = 2;` (E0238 on `land2-fix`; on `main` the binary
@@ -918,7 +945,7 @@ accepted fixtures, with the diagnostic text updated.
 | REF-5 | 1 | E0238 | batch 2, landing under exit 0b |
 | REF-6 | 1 | E0238; E0234 | batch 2; E0234 earlier |
 | REF-7 | 1 | E0238 | batch 2 (`a4ceab04`) |
-| REF-8 | 1 | E0204, E0203, E0231, E0232; E0238 | E0238 case batch 2 |
+| REF-8 | 1 | E0204, E0203, E0231, E0232, E0293; E0238 | E0238 case batch 2 |
 | SCOPE-1 | 1 | E0301 (proposed) | the change that closes G3 |
 | SCOPE-3 | 1 | none: a semantics rule, pinned by fixtures comparing `--interp`, the binary and the extracted model | bug 087, batch 2 |
 
@@ -948,11 +975,13 @@ The implementer adds a manifest `tests/rules/exit_2i.tsv` (new) with one row per
 columns: `rule`; `fixture`; `expected`, either `reject:<code>:<rule@version>` or
 `run:<exit code>`; `pair`, an identifier shared by a reject row and the run row of its rewritten
 program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `model` (the extracted
-model of the named function agrees), `fmt` (formatter round-trip) and `json`. A gate
-`scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For each reject row it
-checks the code, and in the human rendering and, when `json` is listed, in the JSON rendering, the
-`rule` evidence and a non-empty `next` / `next_action`; for a SCOPE-1 row, also a related span.
-For each run row it runs every listed mode and requires the expected result from each. It fails
+model of the named function agrees) and `fmt` (formatter round-trip). A gate
+`scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For every reject row it
+checks, in both the human and the JSON rendering, the code, the `rule` evidence with the exact
+rule and version, the `spec` evidence, and a non-empty `next` / `next_action`; for a SCOPE-1 row,
+also a related span. These diagnostic checks are mandatory and do not depend on `modes`, which
+lists only the execution modes of run rows (`binary`, `interp`, `model`, `fmt`). For each run row
+it runs every listed mode and requires the expected result from each. It fails
 when a rejection rule (REF-1 to REF-8, SCOPE-1) has no reject row, no run row or a reject row
 without a pair, when a semantic guarantee (SCOPE-2, SCOPE-3) has no run row in modes
 `binary,interp`, when a row names a missing fixture, or when the ledger's rule and version for a
@@ -990,6 +1019,11 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-8 | `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232), `error_091_norm_copied_mut_ref.con` (E0231), `error_091_norm_assign_under_shared_ref.con` (E0232) | reject, code as given, REF-8@1 |
 | REF-8 | `error_2i_ref8_free_while_aliased.con` (new; `free(h)` under `let s = r`) | reject E0204 REF-8@1 |
 | REF-8 | `regress_2i_ref8_free_after_ref_block.con` (new; the reference lives in an inner block, `free(h)` after it) | run 42 |
+| REF-8 | `error_2i_ref8_call_overlap.con` (new; `mix(&x, &mut x)`), `error_091_norm_cast_arg_overlap.con` | reject E0293 REF-8@1 |
+| REF-8 | `regress_2i_ref8_call_disjoint.con` (new; `mix(&x, &mut y)`, `two(&mut w.a, &mut w.b)`) | run 42 |
+| REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
+| REF-5 | `error_091_norm_if_projection.con` | reject E0238 REF-5@1 |
+| REF-5 | `regress_2i_ref5_bind_branch_first.con` (new; `let w = if c { a } else { b }; w.f`) | run 42 |
 | REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`) | reject E0234 REF-6@1 |
 | REF-6 | `regress_2i_ref6_index_same_array.con` (new; `r = &a[1]` after `&a[0]`) | run 42 |
 | REF-8 / SCOPE-1 | `error_107_shadow_under_live_ref.con`, `error_107_shadow_in_block_under_live_ref.con` | reject E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before |
@@ -1023,8 +1057,13 @@ starting minimum is 20 completed comparisons per key per qualification run; 2e o
 manifest row:
 
 - for each rejection rule and each of its enforcing sites, deleting the check (the `throwCheck` at
-  the site, or the `verifyNoStoredRefs` / `verifyNoReturnedRefs` call) turns at least one reject
-  row into an acceptance;
+  the site, or the `verifyNoStoredRefs` / `verifyNoReturnedRefs` call) is detected by a named gate
+  leg. Where the site is the only layer for some reject row, the leg is that row turning into an
+  acceptance. Where a second layer would still reject it (REF-1 and REF-4(a) at the front end and
+  after monomorphization; REF-3 in Check and in `verifyNoStoredRefs`), the leg checks the layer
+  directly: the diagnostic's `pass` (`check` or `post-mono`) for a fixture only that layer can see
+  (a generic instantiated at a reference type is visible only after monomorphization), or a run
+  with the other layer disabled by the mutation harness;
 - for SCOPE-1, one mutation per binder kind (parameter, duplicate parameter, `let`, destructuring
   `let`, match-arm binder, `if let`, `while let`, `for` header, borrow-block reference, region
   name), each omitting that kind from the check and killed by that kind's reject row (inherited
