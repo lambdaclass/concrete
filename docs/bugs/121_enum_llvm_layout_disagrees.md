@@ -80,6 +80,10 @@ Permanent legs:
   field offset, and compares them with the compiler's (`scripts/tests/lib/layout_probe.py`). Before
   the fix it reports 99 disagreements; after it only bug 122's, which it pins.
 - `examples/conlog` output test (`check_example_outputs.sh`) with the corrected golden.
+- `EXAMPLE_VALGRIND=1 check_example_outputs.sh` (the CI Examples job, Linux) runs every native
+  example binary under valgrind memcheck, so a memory error fails on every run instead of
+  crashing on some. At `d967b4f2` it fails conlog 3 of 3 times (`Invalid free()`); on the fixed
+  tree all 168 runs pass, and the whole script takes 94 s under valgrind (arm64 container).
 
 ## Structural cause
 

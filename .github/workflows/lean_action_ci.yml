@@ -1649,8 +1649,8 @@ jobs:
         with:
           build-args: "--log-level=warning"
 
-      - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Install clang and valgrind
+        run: sudo apt-get update && sudo apt-get install -y clang valgrind
 
       - name: Install PyYAML (check_examples.sh reads the workflow to verify skip owners)
         run: python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
@@ -1670,7 +1670,10 @@ jobs:
         # *lox*|*project* by name. Every runnable example now has explicit @run
         # rules (fixed args/stdin/fixtures, exact stdout + exit code, and the
         # interpreter's result) or an @norun with a reason, in the manifest.
-        run: bash ./scripts/tests/check_example_outputs.sh
+        # EXAMPLE_VALGRIND=1: every native run is under valgrind memcheck, so a
+        # memory error fails deterministically instead of crashing on some runs
+        # only (bug 121: conlog's invalid free segfaulted on one CI run in several).
+        run: EXAMPLE_VALGRIND=1 bash ./scripts/tests/check_example_outputs.sh
 
   extra-gates:
     name: Extra gates (dark-gate wiring, audit 2026-07-16)
