@@ -328,6 +328,43 @@ build_run "$TMP/delimtext" delimtext
 [ "$(cat "$TMP/delimtext.brc")" = "0" ] && [ "$(cat "$TMP/delimtext.rrc")" = "42" ] \
   && ok "delimiters inside a plain string or a comment do not hide the [native] section after them" \
   || no "delimiter-in-text manifest: brc=$(cat "$TMP/delimtext.brc") rrc=$(cat "$TMP/delimtext.rrc"): $(head -3 "$TMP/delimtext.build" | tr '\n' ' ')"
+# A multi-line string may close with four or five quotes; the section after it is still read.
+mkapp "$TMP/fourq" ''
+cat > "$TMP/fourq/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+description = """ends with a quote""""
+notes = '''ends with two'''''
+
+[native]
+libs = ["nladd"]
+lib-dirs = ["lib"]
+EOF
+mkdir -p "$TMP/fourq/lib" && cp "$TMP/static/libnladd.a" "$TMP/fourq/lib/"
+build_run "$TMP/fourq" fourq
+[ "$(cat "$TMP/fourq.brc")" = "0" ] && [ "$(cat "$TMP/fourq.rrc")" = "42" ] \
+  && ok "multi-line strings closed by four or five quotes are read correctly; [native] after them links" \
+  || no "four-quote manifest: brc=$(cat "$TMP/fourq.brc") rrc=$(cat "$TMP/fourq.rrc"): $(head -3 "$TMP/fourq.build" | tr '\n' ' ')"
+# A bracket line inside a multi-line ARRAY value is not a table header, so it cannot end the top
+# level and let a later top-level native key through.
+mkapp "$TMP/arrval" ''
+cat > "$TMP/arrval/Concrete.toml" <<'EOF'
+metadata = [
+  [1],
+]
+native.libs = ["nosuchlib"]
+[package]
+name = "nlapp"
+version = "0.1.0"
+EOF
+refused "$TMP/arrval" arrval "unsupported top-level key 'native.libs'" "a top-level native key after a multi-line array holding [1] is still refused"
+bad rpathcolon '
+[native]
+lib-dirs = ["lib:other"]' "is not an accepted library directory" "a ':' in a lib-dir is refused (an ELF rpath list separator)"
+bad rpathtoken '
+[native]
+lib-dirs = ["$ORIGIN/lib"]' "is not an accepted library directory" "a '\$' in a lib-dir is refused (an rpath token such as \$ORIGIN)"
 bad unterminated '
 notes = """
 [native]

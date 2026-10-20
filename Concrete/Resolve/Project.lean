@@ -261,10 +261,11 @@ def isLinkableLibName (s : String) : Bool :=
     !(["to_", "to-", "d_", "d-", "azy", "oad_", "ibrary"].any (s.startsWith ·))
 
 /-- A library directory as written: non-empty, not flag-shaped, no `,` (it is spliced into
-    `-Wl,-rpath,<dir>`), no control characters. -/
+    `-Wl,-rpath,<dir>`), no `:` (an ELF rpath list separator) or `$` (an rpath token such as
+    `$ORIGIN`), no control characters. Checked on the written and the canonical path. -/
 def isValidNativeDir (s : String) : Bool :=
   !s.isEmpty && s.length ≤ 4096 && !s.startsWith "-" &&
-    s.toList.all fun c => c != ',' && c.toNat ≥ 0x20 && c.toNat != 0x7f
+    s.toList.all fun c => c != ',' && c != ':' && c != '$' && c.toNat ≥ 0x20 && c.toNat != 0x7f
 
 /-- Parse a one-line TOML array of plain strings: `["a", "b"]`, optionally followed by a comment.
     Escapes are refused rather than interpreted. -/
@@ -327,24 +328,35 @@ private partial def tomlScanLiteral (cs : List Char) : Except String (List Char)
   | _ :: r => tomlScanLiteral r
   | [] => .error "unterminated string"
 
-/-- The string state at the end of one line, given the state at its start: 0 outside any string,
-    1 inside a multi-line basic string, 2 inside a multi-line literal string. Quote-, escape- and
-    comment-aware, so a delimiter inside a single-line string or a comment does not toggle it. -/
-private partial def tomlScanLine (st : Nat) (cs : List Char) : Except String Nat :=
-  match st, cs with
-  | 1, '\\' :: _ :: r => tomlScanLine 1 r
-  | 1, '"' :: '"' :: '"' :: r => tomlScanLine 0 r
-  | 1, _ :: r => tomlScanLine 1 r
-  | 2, '\'' :: '\'' :: '\'' :: r => tomlScanLine 0 r
-  | 2, _ :: r => tomlScanLine 2 r
-  | 0, '#' :: _ => .ok 0
-  | 0, '"' :: '"' :: '"' :: r => tomlScanLine 1 r
-  | 0, '\'' :: '\'' :: '\'' :: r => tomlScanLine 2 r
-  | 0, '"' :: r => do tomlScanLine 0 (← tomlScanBasic r)
-  | 0, '\'' :: r => do tomlScanLine 0 (← tomlScanLiteral r)
-  | 0, _ :: r => tomlScanLine 0 r
-  | st, [] => .ok st
-  | _, _ => .ok st
+/-- The scan state at the end of one line, given the state at its start: `(str, depth)` where `str`
+    is 0 outside any string, 1 inside a multi-line basic string, 2 inside a multi-line literal
+    string, and `depth` is the bracket/brace nesting of the VALUE being read (a multi-line array
+    or inline table). Quote-, escape- and comment-aware, so a delimiter or bracket inside a plain
+    string or a comment changes nothing. A multi-line string may end with up to two extra quotes
+    (`""""`, `"""""`), which belong to its content. Brackets of a table header balance on its line. -/
+private partial def tomlScanLine (st : Nat × Nat) (cs : List Char) : Except String (Nat × Nat) :=
+  let (str, d) := st
+  match str, cs with
+  | 1, '\\' :: _ :: r => tomlScanLine (1, d) r
+  | 1, '"' :: '"' :: '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
+  | 1, '"' :: '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
+  | 1, '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
+  | 1, _ :: r => tomlScanLine (1, d) r
+  | 2, '\'' :: '\'' :: '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
+  | 2, '\'' :: '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
+  | 2, '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
+  | 2, _ :: r => tomlScanLine (2, d) r
+  | 0, '#' :: _ => .ok (0, d)
+  | 0, '"' :: '"' :: '"' :: r => tomlScanLine (1, d) r
+  | 0, '\'' :: '\'' :: '\'' :: r => tomlScanLine (2, d) r
+  | 0, '"' :: r => do tomlScanLine (0, d) (← tomlScanBasic r)
+  | 0, '\'' :: r => do tomlScanLine (0, d) (← tomlScanLiteral r)
+  | 0, '[' :: r => tomlScanLine (0, d + 1) r
+  | 0, '{' :: r => tomlScanLine (0, d + 1) r
+  | 0, ']' :: r => if d == 0 then .error "unbalanced ']'" else tomlScanLine (0, d - 1) r
+  | 0, '}' :: r => if d == 0 then .error "unbalanced '}'" else tomlScanLine (0, d - 1) r
+  | 0, _ :: r => tomlScanLine (0, d) r
+  | _, _ => .ok (str, d)
 
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
@@ -352,14 +364,15 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
-  let mut strState : Nat := 0  -- tomlScanLine's state at the start of the current line
+  let mut strState : Nat × Nat := (0, 0)  -- tomlScanLine's state at the start of the current line
   for l in content.splitOn "\n" do
     let startState := strState
     strState ← match tomlScanLine startState l.toList with
       | .ok s => pure s
       | .error e => throw s!"{e} in line '{l.trimAscii}'"
-    -- A line that BEGINS inside a multi-line string is text, not structure.
-    if startState != 0 then continue
+    -- A line that BEGINS inside a multi-line string, array or inline table is part of a value,
+    -- not structure: it is neither a table header nor a key.
+    if startState != (0, 0) then continue
     let t := l.trimAscii.toString
     if t.startsWith "[" then
       atTop := false
@@ -405,13 +418,14 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
             | .pkgConfig => isValidNativeName v
           if !valid then
             throw (if kind == .libDir then
-              s!"'{key}': '{v}' is not an accepted library directory (non-empty, not starting with '-', no ',' or control characters)"
+              s!"'{key}': '{v}' is not an accepted library directory (non-empty, not starting with '-', no ',', ':', '$' or control characters)"
             else if kind == .lib && isValidNativeName v then
               s!"'{key}': '{v}' is not a library name: -l{v} would be read as a linker option"
             else
               s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
           out := out ++ [(kind, v)]
-  if strState != 0 then throw "unterminated multi-line string"
+  if strState.1 != 0 then throw "unterminated multi-line string"
+  if strState.2 != 0 then throw "unterminated array or inline table"
   return out
 
 /-- The section for the trust reports: every declared native library, by package. Empty when none
@@ -432,7 +446,7 @@ private def canonicalNativeDir (d : NativeLibDecl) (path : String) (origin : Str
     if !(← System.FilePath.isDir ⟨c⟩) then
       return .error s!"error: package '{d.package}' [native] {origin}: '{c}' is not a directory"
     if !isValidNativeDir c then
-      return .error s!"error: package '{d.package}' [native] {origin}: library directory '{c}' contains a character the link line cannot carry (',' or a control character)"
+      return .error s!"error: package '{d.package}' [native] {origin}: library directory '{c}' contains a character the link line cannot carry (',', ':', '$' or a control character)"
     return .ok c
 
 /-- The link flags for the declared native libraries, in declaration order (the root package's

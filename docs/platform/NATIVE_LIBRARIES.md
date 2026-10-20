@@ -53,7 +53,7 @@ what G1 recorded.
 | a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
 | a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |
-| a `lib-dirs` entry that is empty, starts with `-`, or contains `,` or a control character | load |
+| a `lib-dirs` entry (or canonical, or pkg-config `-L`, directory) that is empty, starts with `-`, or contains `,` (splits `-Wl,`), `:` (an ELF rpath separator), `$` (an rpath token such as `$ORIGIN`) or a control character | load (pkg-config: link) |
 | pkg-config not on `PATH` | link |
 | a pkg-config package pkg-config cannot find (its own `--print-errors` text is included) | link |
 | a pkg-config `--libs` token other than `-L<dir>`, `-l<name>`, `-pthread`, `-framework <name>` | link |
@@ -61,8 +61,10 @@ what G1 recorded.
 
 Lines inside a multi-line string (`"""` or `'''`) are text, not structure: a description that
 quotes a `[native]` section declares and refuses nothing. String boundaries are found by a quote-,
-escape- and comment-aware scan, so a delimiter inside a plain string or a comment opens nothing;
-an unterminated string is refused.
+escape- and comment-aware scan, so a delimiter inside a plain string or a comment opens nothing,
+and a closing run of four or five quotes is handled. Lines inside a multi-line array or inline
+table are likewise part of a value, never a header or key. An unterminated string, array or inline
+table is refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 
