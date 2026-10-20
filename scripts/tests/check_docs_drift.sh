@@ -149,22 +149,22 @@ PY
   python3 -I "$GEN" --check --roadmap "$CTMP/r.md" --record "$CTMP/c.tsv" >/dev/null 2>&1 || rc=$?
   [ "$rc" = "$4" ] && ok "candidate control $1 is refused (exit $rc)" || no "candidate control $1: exit $rc, expected $4"
 }
-cand_neg hand_edited_table "old='| batch4 |'; assert s.count(old)==1; s=s.replace(old,'| batch4x |')" roadmap 1
+cand_neg hand_edited_table "old='| type-identity |'; assert s.count(old)==1; s=s.replace(old,'| type-identityx |')" roadmap 1
 cand_neg row_deleted_from_table "import re; s,n=re.subn(r'^\\| batch3 \\|[^\\n]*\\n', '', s, flags=re.M); assert n==1" roadmap 1
 cand_neg markers_missing "old='<!-- END GENERATED: candidate record -->'; assert s.count(old)==1; s=s.replace(old,'')" roadmap 2
-cand_neg record_changed_not_regenerated "old='\\tland4\\t'; assert s.count(old)==1; s=s.replace(old,'\\tland4b\\t')" record 1
-cand_neg short_sha "import re; s,n=re.subn(r'^(batch4\\t(?:[^\\t]*\\t){3})([0-9a-f]{8})[0-9a-f]{32}\\t', r'\\1\\2\\t', s, flags=re.M); assert n==1" record 2
+cand_neg record_changed_not_regenerated "old='\\tbug096-type-identity\\t'; assert s.count(old)==1; s=s.replace(old,'\\tbug096-type-identityb\\t')" record 1
+cand_neg short_sha "import re; s,n=re.subn(r'^(type-identity\\t(?:[^\\t]*\\t){3})([0-9a-f]{8})[0-9a-f]{32}\\t', r'\\1\\2\\t', s, flags=re.M); assert n==1" record 2
 cand_neg result_at_other_sha "old='\\t0b\\tnot-run\\t'; assert s.count(old)>=1; s=s.replace(old,'\\t0b\\tpassed@'+'a'*40+'\\t',1)" record 2
-cand_neg stage_c_without_run_id "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tpassed@'+sha+'\\tpassed@'+sha+' run=1\\tpassed@'+sha)" record 2
-cand_neg stage_c_without_stage_b "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tnot-run\\tnot-run\\tpassed@'+sha+' run=7')" record 2
-cand_neg empty_cell "old='\\tland4\\t'; assert s.count(old)==1; s=s.replace(old,'\\t\\t')" record 2
-cand_neg duplicate_bug "old='081,083,089'; assert s.count(old)==1; s=s.replace(old,'081,083,088')" record 2
+cand_neg stage_c_without_run_id "import re; m=re.search(r'^type-identity\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tpassed@'+sha+'\\tpassed@'+sha+' run=1\\tpassed@'+sha)" record 2
+cand_neg stage_c_without_stage_b "import re; m=re.search(r'^type-identity\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tnot-run\\tnot-run\\tpassed@'+sha+' run=7')" record 2
+cand_neg empty_cell "old='\\tbug096-type-identity\\t'; assert s.count(old)==1; s=s.replace(old,'\\t\\t')" record 2
+cand_neg duplicate_bug "old='081,083,089'; assert s.count(old)==1; s=s.replace(old,'081,083,096')" record 2
 # Positive control: a well-formed stage (c) pass at the candidate, regenerated, passes.
 cp ROADMAP.md "$CTMP/p.md"; cp "$REC" "$CTMP/p.tsv"
 if python3 -I - "$CTMP/p.tsv" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p, encoding='utf-8').read()
-m = re.search(r'^batch4\t[^\t]*\t[^\t]*\t[^\t]*\t([0-9a-f]{40})', s, re.M); sha = m.group(1)
+m = re.search(r'^type-identity\t[^\t]*\t[^\t]*\t[^\t]*\t([0-9a-f]{40})', s, re.M); sha = m.group(1)
 old = sha + '\t0b\tnot-run\tnot-run\tnot-run'
 assert s.count(old) == 1
 s = s.replace(old, sha + '\t0b\tpassed@' + sha + '\tpassed@' + sha + ' run=1\tpassed@' + sha + ' run=2')
