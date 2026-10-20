@@ -636,7 +636,12 @@ reference).
 - Status: **main** for function, method and trait-impl definitions. A trait method *declaration*
   (`trait T { fn get(&self) -> &Int; }`) is accepted on both revisions: `checkFn` visits
   definitions only and `verifyNoReturnedRefs` scans module functions (gap G13; no unsound program
-  results, because every implementation is a definition and is rejected). Gap G2: the front-end
+  results, because every implementation is a definition and is rejected). An `extern fn`
+  declaration is checked by the FFI-safety rule instead: a reference return type is E0575
+  (`non-FFI-safe return type`, CoreCheck) on both revisions, but a raw pointer to a reference
+  (`extern fn f() with() -> *const &Int;`) is accepted, since the FFI predicate does not inspect
+  pointees (gap G15; on `land2-fix` reading the inner reference out of it is E0238 under REF-5).
+  Gap G2: the front-end
   rejection has no code, E0236 is missing from the
   `--report diagnostic-codes` ledger, and the post-mono predicate `tyExposesRef` is weaker than the
   front end's `tyContainsRef` (it does not look into function or raw-pointer types). The normative
@@ -863,6 +868,16 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
   reference, shadowing and ancestry **land2** (part of G5). Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
   `guardShadowedSource` stays as defense in depth.
 
+#### Adjacent rules, not part of exit 2i
+
+These rules constrain the same expressions and are cited so the reference rules are not read as
+the whole story; their own documents own them: overwriting a non-Copy place through a reference
+(`fn replace(slot: &mut String, v: String) { *slot = v; }`) is E0291
+(`cannotOverwriteLinearPlace`, OWNERSHIP_MODEL); a mutable borrow or `&mut self` receiver
+through a shared reference is E0237 (`land2-fix`, bug 091; MUT_REF_SEMANTICS); moving a non-Copy
+value out of a projection or through a reference is E0290 (H11); a match guard that moves is E0300
+(bug 090). Exit 2i does not version or migrate them.
+
 ### 15.4 Lexical binding rules
 
 #### SCOPE-1. One lexical name, one binding
@@ -1064,6 +1079,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-6 | `regress_2i_ref6_reborrow_same_owner.con` (new; `out` borrowed `x`, then `out = &*r` inside `borrow x as r`) | run 42 |
 | REF-5 | `error_2i_ref5_borrow_literal.con`, `error_2i_ref5_borrow_call_result.con`, `error_2i_ref5_borrow_aggregate_literal.con` (new; `&42`, `&mk()`, `&P { n: 1 }`) | reject E0238 REF-5@1 (G12) |
 | REF-1 | `error_2i_ref1_trait_decl_returns_ref.con` (new; `trait T { fn get(&self) -> &Int; }`) | reject E0236 REF-1@1 (G13) |
+| REF-1 | `error_2i_ref1_extern_ptr_to_ref.con` (new; `extern fn f() with() -> *const &Int;`) | reject E0575 REF-1@1 (G15) |
 | REF-6 | `regress_2i_ref6_index_same_array.con` (new; `r = &a[1]` after `&a[0]`) | run 42 |
 | REF-8 / SCOPE-1 | `error_107_shadow_under_live_ref.con`, `error_107_shadow_in_block_under_live_ref.con` | reject E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before |
 | SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
@@ -1132,4 +1148,5 @@ manifest row:
 | G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)` and temporary `&mut self` receivers are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
 | G14 | REF-6 on `main`: E0234 sees only a bare identifier, so `(r)` copies a borrow-block reference out, and `out = &*r` re-points an outer reference at the borrowed owner | exit 0b (batch 2 closes both: `unparenDeep` and the re-pointing rule) |
+| G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
 | G11 | ROADMAP exit 2i's deliverable reads "none stored in an aggregate"; "strictly second-class" also covers REF-6 (never assigned or aliased into a binding that outlives its source; design example G8) | the roadmap owner (wording) |
