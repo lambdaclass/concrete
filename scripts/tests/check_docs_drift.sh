@@ -153,7 +153,7 @@ cand_neg hand_edited_table "old='| batch4 |'; assert s.count(old)==1; s=s.replac
 cand_neg row_deleted_from_table "import re; s,n=re.subn(r'^\\| batch3 \\|[^\\n]*\\n', '', s, flags=re.M); assert n==1" roadmap 1
 cand_neg markers_missing "old='<!-- END GENERATED: candidate record -->'; assert s.count(old)==1; s=s.replace(old,'')" roadmap 2
 cand_neg record_changed_not_regenerated "old='\\tland4\\t'; assert s.count(old)==1; s=s.replace(old,'\\tland4b\\t')" record 1
-cand_neg short_sha "import re; s,n=re.subn(r'\\t0cd2037f[0-9a-f]{32}\\t', '\\t0cd2037f\\t', s); assert n==1" record 2
+cand_neg short_sha "import re; s,n=re.subn(r'^(batch4\\t(?:[^\\t]*\\t){3})([0-9a-f]{8})[0-9a-f]{32}\\t', r'\\1\\2\\t', s, flags=re.M); assert n==1" record 2
 cand_neg result_at_other_sha "old='\\t0b\\tnot-run\\t'; assert s.count(old)>=1; s=s.replace(old,'\\t0b\\tpassed@'+'a'*40+'\\t',1)" record 2
 cand_neg stage_c_without_run_id "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tpassed@'+sha+'\\tpassed@'+sha+' run=1\\tpassed@'+sha)" record 2
 cand_neg stage_c_without_stage_b "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tnot-run\\tnot-run\\tpassed@'+sha+' run=7')" record 2

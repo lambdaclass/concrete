@@ -75,7 +75,7 @@ borrow first (`let r2: &Heap<B> = &h; leaked = r2; free(h);`) is already refused
 
 ## Candidate repair
 
-Batch 2 (`land2-fix` at `0b897854`, bug 091's round-3 normalized place rule) rejects both
+Batch 2 (`land2-fix` at `0b897854` and again at `69254623`, bug 091's round-3 normalized place rule) rejects both
 reproducers with E0238: `recordRefProvenance` runs at reassignment, and a reassignment that
 re-points a reference binding at different storage is refused ("provenance is not joined across
 branches; use a new binding"), a deliberate restriction until R-0499. Verified by building that
