@@ -1,0 +1,6 @@
+// Bug 092 follow-up: a type alias hid a reference from the declaration check.
+type Ref = &Int;
+newtype Wrapped = Ref;
+fn main() -> Int {
+    return 0;
+}

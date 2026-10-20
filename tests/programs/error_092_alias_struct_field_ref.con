@@ -1,0 +1,6 @@
+// Bug 092 follow-up: a type alias hid a reference in a struct field.
+type Ref = &Int;
+struct S { r: Ref }
+fn main() -> Int {
+    return 0;
+}

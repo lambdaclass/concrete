@@ -77,3 +77,8 @@ as well) now rejects every instantiated struct/enum field, parameter, binding an
 stores a reference (E0239). A newtype's inner type is checked with struct and enum fields at the
 declaration (`newtype W = &Heap<B>` was refused only later, by Core-check's cast rule E0553).
 Fixtures `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con`, `error_092_newtype_ref.con`.
+
+The declaration check read field and newtype types unexpanded, so `type Ref = &Int; newtype W = Ref;`
+was accepted (a struct field of type `Ref` was caught only post-mono). Declaration types are now
+expanded through the module's type aliases first. `error_092_alias_newtype_ref.con` and
+`error_092_alias_struct_field_ref.con` require the Check-stage E0239 (Codex round 2).

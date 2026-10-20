@@ -7145,6 +7145,9 @@ run_err "$TESTDIR/error_092_ref_in_array.con" "E0239"
 run_err "$TESTDIR/error_092_generic_box_ref.con" "E0239"
 run_err "$TESTDIR/error_092_generic_array_ref.con" "E0239"
 run_err "$TESTDIR/error_092_newtype_ref.con" "E0239"
+# Through a type alias, at the declaration (the newtype one was accepted).
+run_err "$TESTDIR/error_092_alias_newtype_ref.con" "error[check]: (E0239)"
+run_err "$TESTDIR/error_092_alias_struct_field_ref.con" "error[check]: (E0239)"
 run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an

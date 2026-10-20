@@ -2376,7 +2376,9 @@ def checkModule (m : Module) (summary : FileSummary)
           v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", f.ty, ed.span))
     -- A newtype is a one-field wrapper: its inner type is a stored field too.
     ++ (m.newtypes.map fun nt => (s!"inner type of newtype '{nt.name}'", nt.innerTy, nt.span))
-  match refFields.find? (fun (_, ty, _) => tyStoresRef ty) with
+  -- Through type aliases (`type Ref = &Int; newtype W = Ref;`).
+  match refFields.find? (fun (_, ty, _) =>
+      tyStoresRef (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty)) with
   | some (desc, ty, sp) =>
     .error [{ severity := .error, message := CheckError.message (.refStoredInAggregate desc (tyToString ty)),
               pass := "check", span := some sp, hint := CheckError.hint (.refStoredInAggregate desc (tyToString ty)),
