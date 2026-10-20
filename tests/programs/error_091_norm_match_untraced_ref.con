@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `match s.r { x => .. }` with `s.r: &i64` reads
 // through a reference stored in a field; a matched reference must normalize. E0238.
 mod m {

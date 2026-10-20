@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `keep(h).r.f` reads a reference stored in a field
 // of a call's result; the place rule classified the base as a temporary because the peek could
 // not type `.r`. A field (or element, or dereference) whose checked type is a reference is now

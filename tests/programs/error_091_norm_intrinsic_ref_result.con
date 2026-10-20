@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `free(h)` of a `Heap<&P>` yielded a reference
 // from an intrinsic call, which the rule classifies as an owned temporary. No call may yield a
 // reference: E0238.

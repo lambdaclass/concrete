@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `w.r as R` (`type R = &P`) in an inferred `let`
 // is a reference read out of an aggregate — untraced. E0238.
 mod m {

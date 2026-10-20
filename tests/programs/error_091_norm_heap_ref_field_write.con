@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `h.r.f = v` with `h: Heap<S>` and `S.r: &P`
 // writes through a reference stored in a heap-backed field. The type peek now auto-derefs the
 // heap shell, so `h.r` is seen as a reference — untraced (E0238), as `(*h.r).f` is.

@@ -28,18 +28,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 >>>>>>> 932afdfa (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
 =======
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
-def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
-||||||| parent of 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
-||||||| parent of 88ed8312 (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
-||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
-=======
-||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
-||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
-def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
-=======
-def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
->>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 =======
 >>>>>>> 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 =======
@@ -148,6 +136,13 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 >>>>>>> a95f6bd7 (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
 =======
 >>>>>>> e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
+||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
+=======
+>>>>>>> e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+>>>>>>> 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
 =======
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 ||||||| parent of d65447f9 (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
@@ -724,7 +719,275 @@ def buildIdentity : String := "bf51e0eea217c4cbd32b32e18ae4ebbd"
 =======
 >>>>>>> fca9dcf4 (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
 >>>>>>> 92fe6c2b (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
->>>>>>> a95f6bd7 (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
+||||||| parent of 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
+=======
+||||||| parent of f8220016 (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
+def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
+||||||| parent of 82324ebb (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+=======
+||||||| parent of 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of a13aeb8a (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
+def buildIdentity : String := "4d6fcd563eb743b0c85d641a8c6b05a0"
+=======
+def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
+>>>>>>> a13aeb8a (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
+=======
+>>>>>>> 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
+=======
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+>>>>>>> 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+||||||| parent of 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+=======
+||||||| parent of 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
+=======
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+>>>>>>> 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+=======
+>>>>>>> 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+=======
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+>>>>>>> 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+||||||| parent of 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+||||||| parent of 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+=======
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+>>>>>>> 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+=======
+>>>>>>> 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+||||||| parent of 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+=======
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+>>>>>>> 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 158c12cb (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+=======
+||||||| parent of 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+=======
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+>>>>>>> 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+>>>>>>> 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+=======
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+>>>>>>> f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+||||||| parent of 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+||||||| parent of 86c34685 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+||||||| parent of f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+=======
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+>>>>>>> f950969f (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
+=======
+>>>>>>> 86c34685 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+||||||| parent of 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+=======
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+>>>>>>> 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+||||||| parent of f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+||||||| parent of 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
+=======
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+>>>>>>> 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+>>>>>>> f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+||||||| parent of e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+=======
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+>>>>>>> e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+||||||| parent of 7869d3ad (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+=======
+||||||| parent of ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+||||||| parent of e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+=======
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+>>>>>>> e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+>>>>>>> ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+||||||| parent of 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+=======
+def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
+>>>>>>> 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+||||||| parent of 86c34685 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+=======
+||||||| parent of 121fa78b (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+||||||| parent of 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+=======
+def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
+>>>>>>> 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
+=======
+>>>>>>> 121fa78b (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+||||||| parent of 08b91316 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
+=======
+def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
+>>>>>>> 08b91316 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+||||||| parent of f1e62480 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+=======
+||||||| parent of 793afd2c (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+||||||| parent of 08b91316 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+def buildIdentity : String := "13374fa6583c03971aa3cf243991d8ad"
+=======
+def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
+>>>>>>> 08b91316 (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
+=======
+>>>>>>> 793afd2c (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+||||||| parent of 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
+=======
+def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
+>>>>>>> 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+||||||| parent of fe03c831 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+=======
+||||||| parent of ddf62c9b (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+||||||| parent of 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+def buildIdentity : String := "aa8388a9d733729da0b763e072e0755b"
+=======
+def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
+>>>>>>> 8e846e7c (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
+=======
+>>>>>>> ddf62c9b (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+||||||| parent of 81b0c6c3 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
+=======
+def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
+>>>>>>> 81b0c6c3 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+||||||| parent of ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+||||||| parent of f0ab3ae4 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+||||||| parent of 81b0c6c3 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
+=======
+def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
+>>>>>>> 81b0c6c3 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+=======
+>>>>>>> f0ab3ae4 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+||||||| parent of 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
+=======
+def buildIdentity : String := "ba1d3d478c8838a74e6d38ab01dc42b3"
+>>>>>>> 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+||||||| parent of 121fa78b (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+=======
+||||||| parent of c1493c5b (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+||||||| parent of 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
+=======
+def buildIdentity : String := "ba1d3d478c8838a74e6d38ab01dc42b3"
+>>>>>>> 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+>>>>>>> c1493c5b (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+||||||| parent of df237863 (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+def buildIdentity : String := "ba1d3d478c8838a74e6d38ab01dc42b3"
+=======
+def buildIdentity : String := "b1972706dc889a1c81282919e2285e81"
+>>>>>>> df237863 (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+||||||| parent of 9de324af (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+=======
+||||||| parent of 9812b805 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+def buildIdentity : String := "b1972706dc889a1c81282919e2285e81"
+=======
+def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
+>>>>>>> 9812b805 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+||||||| parent of a2f7223e (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+=======
+||||||| parent of a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
+=======
+def buildIdentity : String := "520d8e8d226cccfd593d7dd580195a44"
+>>>>>>> a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+||||||| parent of 793afd2c (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+=======
+||||||| parent of 4ea4437a (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+def buildIdentity : String := "520d8e8d226cccfd593d7dd580195a44"
+=======
+def buildIdentity : String := "6bc4174f11a46097503bb3516fda188a"
+>>>>>>> 4ea4437a (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+||||||| parent of ddf62c9b (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+=======
+||||||| parent of e7435d55 (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+def buildIdentity : String := "6bc4174f11a46097503bb3516fda188a"
+=======
+def buildIdentity : String := "ee1731fce4a864963c0814819f1afcfa"
+>>>>>>> e7435d55 (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+||||||| parent of f0ab3ae4 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+=======
+||||||| parent of 86212091 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+def buildIdentity : String := "ee1731fce4a864963c0814819f1afcfa"
+=======
+def buildIdentity : String := "a170ebe10ae272f60d43171f3ad960be"
+>>>>>>> 86212091 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+||||||| parent of c1493c5b (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+=======
+||||||| parent of 0e440d31 (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+def buildIdentity : String := "a170ebe10ae272f60d43171f3ad960be"
+=======
+def buildIdentity : String := "bf51e0eea217c4cbd32b32e18ae4ebbd"
+>>>>>>> 0e440d31 (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+>>>>>>> c1493c5b (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+||||||| parent of fca9dcf4 (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
+||||||| parent of df237863 (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+def buildIdentity : String := "ba1d3d478c8838a74e6d38ab01dc42b3"
+=======
+def buildIdentity : String := "b1972706dc889a1c81282919e2285e81"
+>>>>>>> df237863 (fix: bug 091 normalized place rule — Codex static review pass 5: the rule's type knowledge fails closed)
+||||||| parent of 9812b805 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+def buildIdentity : String := "b1972706dc889a1c81282919e2285e81"
+=======
+def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
+>>>>>>> 9812b805 (fix: bug 091 normalized place rule — Codex static review pass 6: aliases resolved, nested-reference binders)
+||||||| parent of a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+def buildIdentity : String := "59ca5de370fb64cc7476a17ebfe86d25"
+=======
+def buildIdentity : String := "520d8e8d226cccfd593d7dd580195a44"
+>>>>>>> a099d1c3 (fix: bug 091 normalized place rule — Codex static review pass 7: casts resolve aliases)
+||||||| parent of 4ea4437a (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+def buildIdentity : String := "520d8e8d226cccfd593d7dd580195a44"
+=======
+def buildIdentity : String := "6bc4174f11a46097503bb3516fda188a"
+>>>>>>> 4ea4437a (fix: bug 091 normalized place rule — Codex static review pass 8: no call yields a reference)
+||||||| parent of e7435d55 (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+def buildIdentity : String := "6bc4174f11a46097503bb3516fda188a"
+=======
+def buildIdentity : String := "ee1731fce4a864963c0814819f1afcfa"
+>>>>>>> e7435d55 (fix: bug 091 normalized place rule — Codex static review pass 9: stored references refused from the checked type)
+||||||| parent of 86212091 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+def buildIdentity : String := "ee1731fce4a864963c0814819f1afcfa"
+=======
+def buildIdentity : String := "a170ebe10ae272f60d43171f3ad960be"
+>>>>>>> 86212091 (fix: bug 091 normalized place rule — Codex static review pass 10: generic bodies at reference instantiations)
+||||||| parent of 0e440d31 (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+def buildIdentity : String := "a170ebe10ae272f60d43171f3ad960be"
+=======
+def buildIdentity : String := "bf51e0eea217c4cbd32b32e18ae4ebbd"
+>>>>>>> 0e440d31 (fix: bug 091 normalized place rule — Codex static review pass 11: instantiation restrictions resolve aliases)
+=======
+>>>>>>> fca9dcf4 (integrate batch 2 onto main: provenance updates by binding identity, bugs 104/107 fixed with rejection fixtures, ledger and candidate table)
+=======
+def buildIdentity : String := "9a21f7736ab49a61954d370175788182"
+>>>>>>> f8220016 (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
+>>>>>>> 092341cb (integrate batch 2 onto batch 3: BuildIdentity regenerated; stored-reference fixtures expect batch 4's E0239)
 
 /-- How many source files the identity above was computed over.
 

@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): `g.v` of a `G<&P>` is a reference (the generic
 // field type is substituted), so writing through it is a write through an untraced reference.
 // E0238.

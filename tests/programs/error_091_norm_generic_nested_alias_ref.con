@@ -1,3 +1,5 @@
+// Since batch 4 (bug 092), storing a reference in an aggregate is itself refused at the
+// declaration (E0239), which fires first; the place rule's E0238 below stays as defense in depth.
 // Normalized place rule (Codex static review): the instantiation restriction resolves aliases —
 // `forward::<R>` with `type R = &P` is a reference instantiation. Original note: the rule checks a generic body once, at its
 // opaque `T`. `forward::<&P>` would let the body read a `T` (a stored reference) out of
