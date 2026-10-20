@@ -1,0 +1,10 @@
+// Bug 109 (witness 2): an array local cast to a raw pointer and then used
+// stores the pointer as if it were the aggregate. Expected: prints "hi", exit 0.
+// Actual: "'%t0' defined with type 'ptr' but expected '[3 x i8]'".
+extern fn puts(data: *mut u8) with(Console) -> i32;
+fn main() with(Console, Unsafe) -> i32 {
+    let x: [u8; 3] = [104, 105, 0];
+    let p: *mut u8 = x as *mut u8;
+    puts(p);
+    return 0;
+}

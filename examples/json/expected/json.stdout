@@ -1,0 +1,4 @@
+{"users":[{"name":"alice","age":30},{"name":"bob","age":25}],"count":2}
+[true,false,null,-7,[],{},"say \"hi\"\n"]
+ERROR@3
+json: all checks passed

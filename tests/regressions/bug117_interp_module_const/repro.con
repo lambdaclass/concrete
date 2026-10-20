@@ -1,0 +1,8 @@
+// Bug 117: the interpreter does not resolve module-level `const`s
+// ("interp: undefined variable 'K'"); the binary exits 7.
+mod m {
+    const K: i32 = 7;
+    fn main() -> i32 {
+        return K;
+    }
+}

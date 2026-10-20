@@ -1,0 +1,12 @@
+=== Fixed-Capacity Message Validator ===
+
+Test 1: OK type=1 seq=1 payload=16
+Test 2: OK type=2 seq=2 payload=0
+Test 3: OK type=3 seq=3 payload=4
+Test 4: FAIL error=7
+Test 5: FAIL error=1
+Test 6: FAIL error=2
+Test 7: FAIL error=3
+Test 8: FAIL error=4
+
+All 8 tests passed.

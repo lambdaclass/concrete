@@ -4,18 +4,39 @@
 # Drives scripts/tests/example_manifest.txt, the single source of truth for
 # what every .con file under examples/ is expected to do:
 #
-#   compile        — standalone compile must succeed
-#   project-build  — `concrete build` in the owning project dir must succeed
-#   expected-error — standalone compile must FAIL (diagnostics example)
-#   skip           — not checked here (pressure example or covered by a
-#                    dedicated gate; see the manifest header)
+#   compile         — standalone compile must succeed
+#   compile-lib     — a module with no `main` (proof/VC teaching code): its LLVM IR
+#                     must be emitted and compile to an object (`clang -c`)
+#   project-build   — `concrete build` in the owning project dir must succeed
+#   expected-error  — standalone compile must FAIL (diagnostics example)
+#   known-bug NNN M — a valid program a compiler bug blocks: compile must FAIL
+#                     with output containing M (alternatives separated by ` || `),
+#                     and docs/bugs/NNN_*.md must exist and not read FIXED. When
+#                     the bug is fixed the compile succeeds and THIS GATE FAILS,
+#                     so the entry is promoted instead of silently staying blocked.
+#   skip owner=G reason=R
+#                   — not compiled here because gate G (scripts/tests/*.sh) owns
+#                     it. G must exist, be run by the CI workflow, and reference
+#                     the file; R must be non-empty. A skip without a valid owner
+#                     FAILS: an example nobody checks is not an option.
+#
+# Lines starting with `@` are run rules for check_example_outputs.sh; this gate
+# ignores them.
 #
 # Coverage rule: a .con file under examples/ that is not in the manifest is a
 # FAILURE — new examples cannot silently go unchecked. A manifest entry whose
 # file no longer exists is also a failure.
 #
-# Compiled binaries are left in $EXAMPLES_OUT_DIR (default: a temp dir) so a
-# follow-up smoke step can run them.
+# Negative controls run at the end against temporary manifest copies (structure
+# only, no compiles): an unowned skip, an owner that does not reference its file,
+# an owner that does not exist, a missing reason, an unlisted .con, and a
+# known-bug naming a fixed bug must each FAIL; the real manifest must pass.
+#
+# Compiled binaries are left in $EXAMPLES_OUT_DIR (default: a temp dir).
+#
+# Environment (used by the controls): EXAMPLE_MANIFEST (manifest path),
+# EXAMPLES_STRUCTURE_ONLY=1 (validate the manifest without compiling),
+# EXAMPLES_IS_CONTROL=1 (do not recurse into the controls).
 
 set -uo pipefail
 
@@ -23,9 +44,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 COMPILER=".lake/build/bin/concrete"
-MANIFEST="scripts/tests/example_manifest.txt"
+MANIFEST="${EXAMPLE_MANIFEST:-scripts/tests/example_manifest.txt}"
+WORKFLOW=".github/workflows/lean_action_ci.yml"
+STRUCTURE_ONLY="${EXAMPLES_STRUCTURE_ONLY:-0}"
 
-if [ ! -x "$COMPILER" ]; then
+if [ "$STRUCTURE_ONLY" != 1 ] && [ ! -x "$COMPILER" ]; then
   echo "error: compiler not found at $COMPILER. Run 'lake build' first." >&2
   exit 2
 fi
@@ -33,18 +56,23 @@ if [ ! -f "$MANIFEST" ]; then
   echo "error: manifest not found at $MANIFEST" >&2
   exit 2
 fi
+if [ ! -f "$WORKFLOW" ]; then
+  echo "error: CI workflow not found at $WORKFLOW (skip owners are checked against it)" >&2
+  exit 2
+fi
 
 OUT_DIR="${EXAMPLES_OUT_DIR:-}"
+TMP_ROOT=$(mktemp -d)
+trap 'rm -rf "$TMP_ROOT"' EXIT
 if [ -z "$OUT_DIR" ]; then
-  OUT_DIR=$(mktemp -d)
-  trap 'rm -rf "$OUT_DIR"' EXIT
-else
-  mkdir -p "$OUT_DIR"
+  OUT_DIR="$TMP_ROOT/out"
 fi
+mkdir -p "$OUT_DIR"
 
 PASS=0
 FAIL=0
 SKIP=0
+BLOCKED=0
 errors=""
 
 ok() { PASS=$((PASS + 1)); }
@@ -54,9 +82,12 @@ no() {
   echo "FAIL: $1"
 }
 
+# The build-outcome lines: no comments, no blanks, no `@` run rules.
+entries() { grep -v '^[[:space:]]*#' "$MANIFEST" | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*@'; }
+
 # --- 1. Coverage: every .con under examples/ is in the manifest, and ---
 # --- every manifest path still exists on disk.                       ---
-manifest_paths=$(grep -v '^[[:space:]]*#' "$MANIFEST" | grep -v '^[[:space:]]*$' | awk '{print $1}' | LC_ALL=C sort)
+manifest_paths=$(entries | awk '{print $1}' | LC_ALL=C sort)
 disk_paths=$(find examples -name '*.con' | LC_ALL=C sort)
 
 # Collation is pinned to C for this comparison. `comm` assumes its inputs are sorted the way it
@@ -108,15 +139,115 @@ project_root_of() {
   return 1
 }
 
-while read -r src outcome; do
+# Does owner script $1 reference example $2? Either the full path appears, or the
+# example's top-level directory (examples/<x>) AND its leaf name both appear —
+# gates commonly build paths as "$DIR/$name/src/main.con". The leaf is the
+# directory above src/ for .../src/main.con, else the file's stem.
+owner_references() {
+  local owner="$1" src="$2" top leaf
+  grep -qF -- "$src" "$owner" && return 0
+  top=$(echo "$src" | cut -d/ -f1-2)
+  case "$src" in
+    */src/main.con) leaf=$(basename "$(dirname "$(dirname "$src")")") ;;
+    *) leaf=$(basename "$src" .con) ;;
+  esac
+  grep -qF -- "$top" "$owner" && grep -qw -- "$leaf" "$owner"
+}
+
+check_skip() { # src, rest-of-line
+  local src="$1" rest="$2" owner reason
+  owner=$(printf '%s\n' "$rest" | sed -n 's/^.*owner=\([^[:space:]]*\).*$/\1/p')
+  reason=$(printf '%s\n' "$rest" | sed -n 's/^.*reason=//p' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  if [ -z "$owner" ]; then
+    no "$src is 'skip' but has no owner (write 'skip owner=scripts/tests/<gate>.sh reason=<why>')"
+    return
+  fi
+  if [ -z "$reason" ]; then
+    no "$src is 'skip' with owner $owner but no reason= text"
+    return
+  fi
+  case "$owner" in
+    scripts/tests/*.sh) ;;
+    *) no "$src: skip owner '$owner' is not a scripts/tests/*.sh gate"; return ;;
+  esac
+  if [ ! -f "$owner" ]; then
+    no "$src: skip owner '$owner' does not exist"
+    return
+  fi
+  if ! grep -qF -- "$(basename "$owner")" "$WORKFLOW"; then
+    no "$src: skip owner '$owner' is not run by $WORKFLOW (an owner CI never runs checks nothing)"
+    return
+  fi
+  if ! owner_references "$owner" "$src"; then
+    no "$src: skip owner '$owner' does not reference this file"
+    return
+  fi
+  ok
+  SKIP=$((SKIP + 1))
+}
+
+check_known_bug() { # src, number, marker
+  local src="$1" num="$2" marker="$3" doc status out alt found
+  case "$num" in
+    [0-9][0-9][0-9]) ;;
+    *) no "$src: known-bug needs a three-digit bug number, got '$num'"; return ;;
+  esac
+  if [ -z "$marker" ]; then
+    no "$src: known-bug $num names no failure text to match"
+    return
+  fi
+  doc=$(ls docs/bugs/"$num"_*.md 2>/dev/null | awk 'NR==1')
+  if [ -z "$doc" ]; then
+    no "$src: known-bug $num has no docs/bugs/${num}_*.md"
+    return
+  fi
+  status=$(grep -m1 '^\*\*Status:\*\*' "$doc" | sed 's/^\*\*Status:\*\*[[:space:]]*//' | awk '{print toupper($1)}')
+  case "$status" in
+    OPEN*) ;;
+    *) no "$src: known-bug $num is not an open bug ($doc reads '$status') — promote the example"; return ;;
+  esac
+  BLOCKED=$((BLOCKED + 1))
+  [ "$STRUCTURE_ONLY" = 1 ] && { ok; return; }
+  local had_ll=0
+  [ -e "$src.ll" ] && had_ll=1
+  out=$("$COMPILER" "$src" -o "$OUT_DIR/known_bug_should_not_exist" 2>&1)
+  local rc=$?
+  [ "$had_ll" = 0 ] && rm -f "$src.ll"   # a failed link leaves <file>.ll beside the source
+  if [ "$rc" -eq 0 ]; then
+    no "$src compiled — bug $num no longer blocks it: promote the entry (and update the bug's status)"
+    return
+  fi
+  found=0
+  while IFS= read -r alt; do
+    alt=$(echo "$alt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -n "$alt" ] && printf '%s' "$out" | grep -qF -- "$alt" && found=1
+  done < <(printf '%s\n' "$marker" | awk '{n = split($0, a, " [|][|] "); for (i = 1; i <= n; i++) print a[i]}')
+  if [ "$found" = 1 ]; then
+    ok
+  else
+    no "$src (known-bug $num) failed differently than recorded; expected '$marker', got:"
+    printf '%s\n' "$out" | awk 'NR<=5'
+  fi
+}
+
+while read -r src outcome rest; do
+  case "$outcome" in
+    compile|compile-lib|project-build|expected-error)
+      if [ -n "${rest:-}" ]; then
+        no "$src: '$outcome' takes no further fields (got '$rest')"
+        continue
+      fi
+      ;;
+  esac
   case "$outcome" in
     compile)
+      [ "$STRUCTURE_ONLY" = 1 ] && { ok; continue; }
       out_name=$(echo "$src" | tr '/.' '__')
       if "$COMPILER" "$src" -o "$OUT_DIR/$out_name" > /dev/null 2>&1; then
         ok
       else
         no "$src (expected to compile)"
-        "$COMPILER" "$src" -o "$OUT_DIR/$out_name" 2>&1 | head -5
+        "$COMPILER" "$src" -o "$OUT_DIR/$out_name" 2>&1 | awk 'NR<=5'
       fi
       ;;
     project-build)
@@ -125,31 +256,115 @@ while read -r src outcome; do
         *" $proj "*) continue ;;
       esac
       built_projects="$built_projects $proj"
+      [ "$STRUCTURE_ONLY" = 1 ] && { ok; continue; }
       if (cd "$proj" && "$ROOT_DIR/$COMPILER" build > /dev/null 2>&1); then
         ok
       else
         no "$proj (project expected to build)"
-        (cd "$proj" && "$ROOT_DIR/$COMPILER" build 2>&1 | head -5)
+        (cd "$proj" && "$ROOT_DIR/$COMPILER" build 2>&1 | awk 'NR<=5')
+      fi
+      ;;
+    compile-lib)
+      [ "$STRUCTURE_ONLY" = 1 ] && { ok; continue; }
+      # No `main` (a proof/VC teaching module): emit LLVM IR and compile it to an
+      # object, which validates the IR exactly as linking a program would.
+      out_name=$(echo "$src" | tr '/.' '__')
+      if "$COMPILER" "$src" --emit-llvm > "$OUT_DIR/$out_name.ll" 2> "$OUT_DIR/$out_name.err" \
+         && clang -c -x ir -Wno-override-module "$OUT_DIR/$out_name.ll" -o "$OUT_DIR/$out_name.o" > "$OUT_DIR/$out_name.cc.log" 2>&1; then
+        ok
+      else
+        no "$src (expected to compile as a library: --emit-llvm + clang -c)"
+        cat "$OUT_DIR/$out_name.err" "$OUT_DIR/$out_name.cc.log" 2>/dev/null | grep -v 'argument unused' | awk 'NR<=5'
       fi
       ;;
     expected-error)
+      [ "$STRUCTURE_ONLY" = 1 ] && { ok; continue; }
       if "$COMPILER" "$src" -o "$OUT_DIR/should_not_exist" > /dev/null 2>&1; then
         no "$src (expected a compile error, but it compiled)"
       else
         ok
       fi
       ;;
+    known-bug)
+      num=$(echo "${rest:-}" | awk '{print $1}')
+      marker=$(echo "${rest:-}" | sed 's/^[[:space:]]*[^[:space:]]*[[:space:]]*//')
+      check_known_bug "$src" "$num" "$marker"
+      ;;
     skip)
-      SKIP=$((SKIP + 1))
+      check_skip "$src" "${rest:-}"
       ;;
     *)
       no "$src has unknown outcome '$outcome' in $MANIFEST"
       ;;
   esac
-done < <(grep -v '^[[:space:]]*#' "$MANIFEST" | grep -v '^[[:space:]]*$')
+done < <(entries)
+
+# --- 3. Negative controls (structure only, temporary manifest copies). ---
+run_controls() {
+  local dir="$TMP_ROOT/controls" real="$MANIFEST"
+  mkdir -p "$dir"
+  local skip_line first_skip compile_line
+  skip_line=$(entries | awk '$2=="skip"' | awk 'NR==1')
+  first_skip=$(echo "$skip_line" | awk '{print $1}')
+  compile_line=$(entries | awk '$2=="compile"' | awk 'NR==1')
+  if [ -z "$skip_line" ] || [ -z "$compile_line" ]; then
+    no "controls: the manifest has no skip or no compile entry to mutate — the controls would be vacuous"
+    return
+  fi
+  # control <name> <expected-substring> <python-edit of s>; the edit must change the manifest.
+  control() {
+    local name="$1" want="$2" edit="$3" m="$dir/$1.txt" log="$dir/$1.log"
+    MANIFEST_IN="$real" MANIFEST_OUT="$m" EDIT="$edit" python3 - <<'PY'
+import os
+s = open(os.environ['MANIFEST_IN']).read()
+before = s
+exec(os.environ['EDIT'])
+assert s != before, 'control edit changed nothing'
+open(os.environ['MANIFEST_OUT'], 'w').write(s)
+PY
+    if [ $? -ne 0 ]; then no "control $name: could not build its manifest"; return; fi
+    if EXAMPLE_MANIFEST="$m" EXAMPLES_STRUCTURE_ONLY=1 EXAMPLES_IS_CONTROL=1 bash "$0" > "$log" 2>&1; then
+      no "control $name: the gate PASSED a manifest it must reject"
+    elif grep -qF -- "$want" "$log"; then
+      echo "  ok   control $name fails as it must ($want)"
+      ok
+    else
+      no "control $name failed, but not for the expected reason ('$want'):"
+      awk 'NR<=5' "$log"
+    fi
+  }
+  export SKIP_LINE="$skip_line" COMPILE_LINE="$compile_line"
+  control unowned_skip "has no owner" \
+    "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r' owner=[^ ]*', '', l), 1)"
+  control no_reason "but no reason= text" \
+    "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r' reason=.*', '', l), 1)"
+  control owner_missing "does not exist" \
+    "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r'owner=[^ ]*', 'owner=scripts/tests/no_such_gate.sh', l), 1)"
+  control owner_unrelated "does not reference this file" \
+    "import re, os; l = os.environ['SKIP_LINE']; assert l in s; s = s.replace(l, re.sub(r'owner=[^ ]*', 'owner=scripts/tests/check_gate_hygiene.sh', l), 1)"
+  control unlisted_con "is not listed in" \
+    "import os; l = os.environ['COMPILE_LINE'] + '\n'; assert l in s; s = s.replace(l, '', 1)"
+  control known_bug_fixed "is not an open bug" \
+    "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 001 anything', 1)"
+  control known_bug_no_doc "has no docs/bugs/" \
+    "import os; l = os.environ['COMPILE_LINE']; assert l in s; s = s.replace(l, l.split()[0] + ' known-bug 999 anything', 1)"
+  # Positive control: the real manifest's structure passes.
+  if EXAMPLE_MANIFEST="$real" EXAMPLES_STRUCTURE_ONLY=1 EXAMPLES_IS_CONTROL=1 bash "$0" > "$dir/positive.log" 2>&1; then
+    echo "  ok   positive control: the real manifest's structure passes"
+    ok
+  else
+    no "positive control: the real manifest's structure is rejected:"
+    awk 'NR<=5' "$dir/positive.log"
+  fi
+}
+
+if [ "${EXAMPLES_IS_CONTROL:-0}" != 1 ]; then
+  echo "=== negative controls (temporary manifest copies) ==="
+  run_controls
+fi
 
 echo ""
-echo "=== Example coverage: $PASS passed, $FAIL failed, $SKIP skipped ==="
+echo "=== Example coverage: $PASS passed, $FAIL failed, $SKIP skipped (each with a valid owner), $BLOCKED blocked by an open bug ==="
 if [ "$FAIL" -gt 0 ]; then
   echo -e "Failures:$errors"
   exit 1

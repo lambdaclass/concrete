@@ -1,0 +1,45 @@
+--- Parsed TOML ---
+{
+  title = "TOML Example"
+  version = 42
+  enabled = true
+  debug = false
+  ports = [
+    8080,
+    8081,
+    8082
+  ]
+  tags = [
+    "web",
+    "server",
+    "concrete"
+  ]
+  mixed = [
+    1,
+    2,
+    3
+  ]
+  point = {
+    x = 10
+    y = 20
+  }
+  server = {
+    host = "0.0.0.0"
+    port = 443
+    ssl = true
+  }
+  database = {
+    name = "mydb"
+    max_connections = 100
+    enabled = true
+    hosts = [
+      "primary.example.com",
+      "replica.example.com"
+    ]
+  }
+  owner = {
+    name = "Tom Preston-Werner"
+    bio = "GitHub founder
+Likes tater tots"
+  }
+}

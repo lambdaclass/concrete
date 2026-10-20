@@ -1,0 +1,14 @@
+// Bug 118: the interpreter cannot call a function imported from a nested
+// module (`import a.b.{f}`): "interp: undefined function 'f'"; the binary
+// exits 5.
+mod m {
+    import a.b.{f};
+    fn main() -> i32 {
+        return f();
+    }
+}
+mod a {
+    mod b {
+        pub fn f() -> i32 { return 5; }
+    }
+}

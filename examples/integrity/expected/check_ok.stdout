@@ -1,0 +1,5 @@
+Checking files...
+  OK       testdata/a.txt
+  OK       testdata/b.txt
+
+Summary: 2 ok, 0 added, 0 modified, 0 removed, 0 errors

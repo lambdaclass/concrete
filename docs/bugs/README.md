@@ -109,6 +109,21 @@ Those belong in:
 - [070_builtin_enum_list_built_twice.md](070_builtin_enum_list_built_twice.md) — `builtinEnumList` built twice and `hasUserResult` computed from different inputs, so Elab and Check held different beliefs about a user `Result` (FIXED 2026-08-02; **renumbered from 065**, which a second, unrelated bug already held)
 - [071_cross_package_capability_requirements_unenforced.md](071_cross_package_capability_requirements_unenforced.md) — a capability declared in a dependency did not bind on its caller: a function declaring nothing read `$HOME` through `std.env.get`. Only hardcoded intrinsics were enforced across a package boundary (OPEN, partially repaired 2026-09-21)
 
+- [107_bool_cast_trunc.md](107_bool_cast_trunc.md) — OPEN: a `bool` cast to a wider integer is emitted as `trunc i1` (examples-health, 2026-10-20)
+- [108_f32_literal_invalid_ir.md](108_f32_literal_invalid_ir.md) — OPEN: an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant (examples-health, 2026-10-20)
+- [109_array_value_store.md](109_array_value_store.md) — OPEN: an array value is stored as an aggregate where the SSA value is a pointer (examples-health, 2026-10-20)
+- [110_main_params_accepted.md](110_main_params_accepted.md) — OPEN: `main` may declare parameters, and the wrapper calls it with none (examples-health, 2026-10-20)
+- [111_user_intrinsic_e0116.md](111_user_intrinsic_e0116.md) — OPEN: the declaration std.mem uses for `sizeof` is rejected (E0116 at 0:0) outside std (examples-health, 2026-10-20)
+- [112_submodule_extern_effects_unchecked.md](112_submodule_extern_effects_unchecked.md) — OPEN: R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules (examples-health, 2026-10-20)
+- [113_submodule_intrinsic_links_c_symbol.md](113_submodule_intrinsic_links_c_symbol.md) — OPEN: an intrinsic declared in a nested submodule and called by path lowers to a C call (examples-health, 2026-10-20)
+- [114_vec_get_duplicates_linear.md](114_vec_get_duplicates_linear.md) — OPEN: the builtin `vec_get` returns a non-Copy element by value, duplicating a linear value (examples-health, 2026-10-20)
+- [115_vec_push_first_field_through_ref.md](115_vec_push_first_field_through_ref.md) — OPEN: `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push` (examples-health, 2026-10-20)
+- [116_if_expr_literal_borrow_dangles.md](116_if_expr_literal_borrow_dangles.md) — OPEN: an if-expression whose arms borrow string literals yields a dangling reference (examples-health, 2026-10-20)
+- [117_interp_module_const.md](117_interp_module_const.md) — OPEN: the interpreter does not resolve module-level constants (examples-health, 2026-10-20)
+- [118_interp_nested_module_import.md](118_interp_nested_module_import.md) — OPEN: the interpreter cannot call a function imported from a nested module (examples-health, 2026-10-20)
+- [119_interp_generic_trait_method.md](119_interp_generic_trait_method.md) — OPEN: the interpreter cannot call a trait method on a type parameter (examples-health, 2026-10-20)
+- [120_interp_field_borrow_through_ref.md](120_interp_field_borrow_through_ref.md) — OPEN: the interpreter cannot borrow a field through a reference parameter (examples-health, 2026-10-20)
+
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 
 ## Still Open, But Not Numbered Bugs

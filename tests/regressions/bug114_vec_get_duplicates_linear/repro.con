@@ -1,0 +1,19 @@
+// Bug 114: the builtin vec_get returns the element BY VALUE with no Copy
+// requirement, so a linear String can be taken out of a Vec twice. Both
+// copies own the same buffer: the binary double-frees (abort, exit 133/134
+// on macOS) while the interpreter prints "AB" and exits 0.
+// Expected: a diagnostic (vec_get needs T: Copy). Actual: compiles.
+fn main() with(Std) -> Int {
+    let mut v: Vec<String> = vec_new::<String>();
+    let mut s: String = "";
+    string_push_char(&mut s, 65);
+    string_push_char(&mut s, 66);
+    vec_push::<String>(&mut v, s);
+    let a: String = vec_get::<String>(&mut v, 0);
+    let b: String = vec_get::<String>(&mut v, 0);
+    drop_string(a);
+    print_string(&b);
+    drop_string(b);
+    vec_free::<String>(v);
+    return 0;
+}

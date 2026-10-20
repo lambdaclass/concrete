@@ -1,0 +1,18 @@
+// Bug 115: vec_push on `&mut p.v`, where p is a `&mut P` parameter and v is
+// P's FIRST field, lowers to a call to the generic, undefined `@vec_push`
+// (llvm-as: "use of undefined value '@vec_push'"). Moving `v` to a later
+// field compiles. Expected: exit 1.
+struct P {
+    v: Vec<i32>,
+}
+fn add(p: &mut P, x: i32) with(Alloc) {
+    vec_push::<i32>(&mut p.v, x);
+}
+fn main() with(Alloc) -> Int {
+    let mut p: P = P { v: vec_new::<i32>() };
+    add(&mut p, 5);
+    let n: Int = vec_len::<i32>(&mut p.v) as Int;
+    let P { v } = p;
+    vec_free::<i32>(v);
+    return n;
+}

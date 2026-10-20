@@ -20,7 +20,7 @@ This document defines four promotion levels for examples, the bar required to re
 
 **Examples today**: grep, http, integrity, json, kvstore, lox, mal, policy_engine, toml, verify
 
-**Maintenance obligation**: none. A pressure example may rot if the language moves. That is acceptable — the gap it reveals is the point.
+**Maintenance obligation**: it must keep building and producing its recorded output. Until 2026-10-20 pressure examples were allowed to rot (json, mal, vm and policy_engine had stopped compiling behind a `skip`); now every example is compiled by `scripts/tests/check_examples.sh` and every runnable one has `@run` rules checked by `scripts/tests/check_example_outputs.sh`. When the language moves, port the example in the same change, or record the compiler bug that blocks it as `known-bug NNN` in the manifest.
 
 ### 2. Canonical example
 

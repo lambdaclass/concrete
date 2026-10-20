@@ -1,0 +1,12 @@
+// Bug 113: a `#[intrinsic = "sizeof"]` declared in a nested submodule and
+// called by path (`intrinsics::sizeof`) is not intercepted: it lowers to a C
+// call and the link fails ("_sizeof" undefined). Expected: exit 4.
+mod t {
+    mod intrinsics {
+        #[intrinsic = "sizeof"]
+        pub trusted fn sizeof<T>() -> u64;
+    }
+    pub fn main() -> i32 {
+        return intrinsics::sizeof::<i32>() as i32;
+    }
+}

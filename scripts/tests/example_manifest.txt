@@ -1,28 +1,46 @@
 # Example coverage manifest — single source of truth for CI example checking.
 #
-# Every .con file under examples/ MUST have exactly one line here:
-#   <path> <expected-outcome>
+# Every .con file under examples/ MUST have exactly one build-outcome line here:
+#   <path> <outcome> [fields]
 #
-# Outcomes:
+# Outcomes (checked by scripts/tests/check_examples.sh):
 #   compile        — must compile standalone: `concrete <file> -o <out>` exits 0.
+#   compile-lib    — a module with no `main` (proof/VC teaching code, owned
+#                    semantically by its gate): `concrete <file> --emit-llvm` must
+#                    succeed and the IR must compile to an object (`clang -c`).
 #   project-build  — file belongs to a project-form example; CI runs
 #                    `concrete build` once in the nearest ancestor directory
 #                    containing a Concrete.toml, which must exit 0.
 #   expected-error — intentionally-failing diagnostics example; standalone
 #                    compile MUST exit non-zero.
-#   skip           — not checked by this gate. Either a pressure example that
-#                    does not compile yet (see docs/project/EXAMPLE_LIFECYCLE.md), or a
-#                    file exercised by a dedicated gate with special flags
-#                    (proof_patterns, vc_discharge, vc_suite, smt/teaching,
-#                    contract_stability, obligation_core_probe, stale snippets,
-#                    two_kernel_demo and multi_kernel_policy — the last two need
-#                    an EXTERNAL kernel (coqc/isabelle) that this gate's shell
-#                    does not provide, so scripts/tests/check_multi_kernel.sh
-#                    owns them and skips itself when the tools are absent).
+#   known-bug NNN <text>
+#                  — a valid program an OPEN compiler bug blocks. The compile must
+#                    fail with <text> in its output (alternatives separated by
+#                    ` || `) and docs/bugs/NNN_*.md must read OPEN. Once the bug is
+#                    fixed the compile succeeds and the gate fails until the entry
+#                    is promoted.
+#   skip owner=scripts/tests/<gate>.sh reason=<why>
+#                  — not compiled here. The owner must exist, be run by the CI
+#                    workflow and reference the file; the reason is required. A
+#                    skip without a valid owner FAILS.
 #
-# Checked by scripts/tests/check_examples.sh, which FAILS if a .con file under
-# examples/ is missing from this manifest (or listed here but deleted on disk).
-# When adding a new example, add it here with the outcome it must satisfy.
+# Run rules (checked by scripts/tests/check_example_outputs.sh; see its header):
+# every `compile` entry and every project root (`examples/<dir>/`, for the
+# project-build entries) needs `@run` cases or one `@norun ... reason=...`.
+#   @run <unit> <case> exit=<N> interp=<yes|fails:<marker>> [ret=<V>]
+#        [stdin=<file>] [stdout=empty] [-- <args...>]
+# Expected stdout lives in <example dir>/expected/<case>.stdout; fixtures (args,
+# stdin) live under the example directory. In a fails: marker `~` stands for a
+# space.
+#
+# Removed examples (and why):
+#   examples/snippets/enum.con (2026-10-20) — obsolete: written in removed syntax
+#     (`Foo.Bar` paths, `->` match arms) around explicit enum discriminants, which
+#     the language rejects (E0001, a planned Phase 12 feature); enum_match.con
+#     covers enums and match.
+#
+# When adding a new example, add it here with the outcome it must satisfy, and,
+# if it is runnable, its @run rules and expected output.
 examples/backend_contracts/arithmetic.con compile
 examples/backend_contracts/assert_path.con compile
 examples/backend_contracts/capability.con compile
@@ -59,9 +77,9 @@ examples/contract_negatives/precondition_callsite/src/main.con expected-error
 examples/contract_negatives/spec_ghost_totality/src/main.con expected-error
 examples/contract_negatives/vacuous_contract/src/main.con expected-error
 examples/contract_negatives/weakened_postcondition/src/main.con expected-error
-examples/contract_positive/valid_complex_contract_scope/src/main.con skip
-examples/contract_stability/v1.con skip
-examples/contract_stability/v2.con skip
+examples/contract_positive/valid_complex_contract_scope/src/main.con compile-lib
+examples/contract_stability/v1.con compile-lib
+examples/contract_stability/v2.con compile-lib
 examples/crypto_verify/catches/01_alloc_in_pure_core.con expected-error
 examples/crypto_verify/src/main.con compile
 examples/crypto_verify_drifted/src/main.con compile
@@ -99,20 +117,20 @@ examples/hmac_sha256/src/main.con compile
 examples/http/src/main.con project-build
 examples/integrity/src/main.con project-build
 examples/json/main.con compile
-examples/known_holes/mono_name_collision/src/main.con skip
-examples/known_holes/nested_field_write/src/main.con skip
+examples/known_holes/mono_name_collision/src/main.con compile
+examples/known_holes/nested_field_write/src/main.con compile
 examples/known_holes/proven_div_zero/src/main.con expected-error
 examples/known_holes/proven_oob_index/src/main.con expected-error
-examples/known_holes/raw_ptr_to_local/src/main.con skip
-examples/known_holes/returned_ref_provenance_map/src/main.con skip
-examples/known_holes/returned_ref_provenance_vec/src/main.con skip
+examples/known_holes/raw_ptr_to_local/src/main.con compile
+examples/known_holes/returned_ref_provenance_map/src/main.con skip owner=scripts/tests/check_returned_ref_provenance.sh reason=H1-closed rejection witness: a std-importing project the owner asserts `concrete build` now REJECTS
+examples/known_holes/returned_ref_provenance_vec/src/main.con skip owner=scripts/tests/check_returned_ref_provenance.sh reason=H1-closed rejection witness: a std-importing project the owner asserts `concrete build` now REJECTS
 examples/kvstore/src/main.con project-build
 examples/loop_invariant/src/main.con compile
 examples/lox/src/main.con project-build
 examples/mal/main.con compile
-examples/multi_kernel_policy/allow/src/main.con skip
-examples/multi_kernel_policy/blocked/src/main.con skip
-examples/obligation_core_probe/src/main.con skip
+examples/multi_kernel_policy/allow/src/main.con compile
+examples/multi_kernel_policy/blocked/src/main.con compile
+examples/obligation_core_probe/src/main.con compile-lib
 examples/packet/src/main.con project-build
 examples/parse_validate/catches/01_authority_widening.con expected-error
 examples/parse_validate/src/main.con compile
@@ -126,33 +144,33 @@ examples/project/src/main.con compile
 examples/project/src/mymod/mod.con project-build
 examples/project/src/mymod/submodule.con project-build
 examples/project/src/other.con project-build
-examples/proof_patterns/array_update/src/main.con skip
-examples/proof_patterns/composition/src/main.con skip
-examples/proof_patterns/composition_deep_trust/src/main.con skip
-examples/proof_patterns/composition_trusted_helper/src/main.con skip
-examples/proof_patterns/composition_unlinked_helper/src/main.con skip
-examples/proof_patterns/fold/src/main.con skip
-examples/proof_patterns/ghost/src/main.con skip
-examples/proof_patterns/loop_copy/src/main.con skip
-examples/proof_patterns/repair/src/main.con skip
-examples/proof_patterns/runtime_safety/src/main.con skip
-examples/proof_patterns/stale_missing_partial/src/main.con skip
-examples/proof_patterns/straight_line/src/main.con skip
-examples/proof_patterns/workspace/src/main.con skip
+examples/proof_patterns/array_update/src/main.con compile-lib
+examples/proof_patterns/composition/src/main.con compile-lib
+examples/proof_patterns/composition_deep_trust/src/main.con compile-lib
+examples/proof_patterns/composition_trusted_helper/src/main.con compile-lib
+examples/proof_patterns/composition_unlinked_helper/src/main.con compile-lib
+examples/proof_patterns/fold/src/main.con compile-lib
+examples/proof_patterns/ghost/src/main.con compile-lib
+examples/proof_patterns/loop_copy/src/main.con compile-lib
+examples/proof_patterns/repair/src/main.con compile-lib
+examples/proof_patterns/runtime_safety/src/main.con compile-lib
+examples/proof_patterns/stale_missing_partial/src/main.con compile-lib
+examples/proof_patterns/straight_line/src/main.con compile-lib
+examples/proof_patterns/workspace/src/main.con compile-lib
 examples/proof_pressure/src/main.con compile
 examples/service_errors/src/main.con compile
 examples/smt/negatives/src/main.con expected-error
-examples/smt/nonlinear_overflow/src/main.con skip
+examples/smt/nonlinear_overflow/src/main.con compile-lib
 examples/smt/policy_allow/src/main.con compile
 examples/smt/policy_assumptions_missing/src/main.con compile
 examples/smt/policy_forbid/src/main.con compile
 examples/smt/red_team/src/main.con expected-error
-examples/smt/teaching/kernel_preferred.con skip
-examples/smt/teaching/path_feasibility.con skip
-examples/smt/teaching/range_block_count.con skip
-examples/smt/teaching/unsupported_theory.con skip
+examples/smt/teaching/kernel_preferred.con compile-lib
+examples/smt/teaching/path_feasibility.con compile-lib
+examples/smt/teaching/range_block_count.con compile-lib
+examples/smt/teaching/unsupported_theory.con compile-lib
 examples/snippets/arithmetic.con compile
-examples/snippets/arrays.con skip
+examples/snippets/arrays.con known-bug 109 defined with type 'ptr' but expected '[2 x i64]'
 examples/snippets/assoc_method.con compile
 examples/snippets/borrow.con compile
 examples/snippets/casts.con compile
@@ -160,7 +178,7 @@ examples/snippets/chars.con compile
 examples/snippets/check_errors.con expected-error
 examples/snippets/collatz.con compile
 examples/snippets/constants.con compile
-examples/snippets/direct_module_use.con skip
+examples/snippets/direct_module_use.con known-bug 113 Undefined symbols || undefined reference
 examples/snippets/enum_match.con compile
 examples/snippets/error_flow.con compile
 examples/snippets/fact.con compile
@@ -169,17 +187,17 @@ examples/snippets/factorial_if.con compile
 examples/snippets/fib.con compile
 examples/snippets/fib_generic.con compile
 examples/snippets/fib_if.con compile
-examples/snippets/floats.con skip
+examples/snippets/floats.con known-bug 108 floating point constant invalid for type
 examples/snippets/for.con compile
 examples/snippets/for_loop.con compile
 examples/snippets/for_loop_var.con compile
 examples/snippets/for_while.con compile
 examples/snippets/gcd.con compile
-examples/snippets/generic_enum_impl.con skip
+examples/snippets/generic_enum_impl.con known-bug 107 invalid cast opcode for cast from 'i1' to 'i32'
 examples/snippets/generic_struct.con compile
 examples/snippets/generics_basic.con compile
 examples/snippets/hello_world.con compile
-examples/snippets/hello_world_array.con skip
+examples/snippets/hello_world_array.con known-bug 109 defined with type 'ptr' but expected '[13 x i8]'
 examples/snippets/hello_world_hacky.con compile
 examples/snippets/if_else.con compile
 examples/snippets/if_if_false.con compile
@@ -202,14 +220,14 @@ examples/snippets/opaque_vec.con compile
 examples/snippets/refs.con compile
 examples/snippets/simple.con compile
 examples/snippets/simple_trait.con compile
-examples/snippets/sizeof_intrinsic.con skip
+examples/snippets/sizeof_intrinsic.con known-bug 111 (E0116) foreign binding 'sizeof' does not declare its effects
 examples/snippets/string_processing.con compile
 examples/snippets/structs.con compile
 examples/snippets/trait_dispatch.con compile
 examples/snippets/type_alias.con compile
 examples/snippets/union.con compile
 examples/snippets/variable_inside_if.con compile
-examples/snippets/vec.con skip
+examples/snippets/vec.con known-bug 111 (E0116) foreign binding 'sizeof' does not declare its effects
 examples/snippets/while.con compile
 examples/snippets/while_if_false.con compile
 examples/snippets/while_loop.con compile
@@ -221,37 +239,194 @@ examples/wordfreq/src/main.con project-build
 examples/thesis_demo/src/main.con compile
 examples/thesis_demo/src/main_drifted.con compile
 examples/toml/src/main.con project-build
-examples/two_kernel_demo/src/families.con skip
-examples/two_kernel_demo/src/main.con skip
+examples/two_kernel_demo/src/families.con compile-lib
+examples/two_kernel_demo/src/main.con compile-lib
 # H23 counterexample: compiles and reports its bounds obligation PROVED (three
 # kernels) while the invariant it assumes is unproven, and the binary then aborts.
-# `skip` because the corpus checks compile-and-run success and this is deliberately
-# a program whose evidence is wrong — R-0461's gate owns it and asserts the
-# obligation must NOT read proved.
-examples/unsound_hypothesis/src/main.con skip
+# It compiles (checked here); it is not run here because it is deliberately a
+# program whose evidence is wrong — check_known_wrong_corpus.sh (R-0461) owns the
+# runtime behavior and asserts the obligation must NOT read proved.
+examples/unsound_hypothesis/src/main.con compile
 # H24 counterexample: `d` reports its div obligation proved and traps on MIN/-1; `s`
-# generates NO obligation and traps on an over-width shift. `skip` for the same reason
-# as above — the corpus checks success and these programs are meant to trap. R-0464's
-# gate owns them.
-examples/trap_semantics_gap/src/main.con skip
-examples/vc_discharge/assumed.con skip
-examples/vc_discharge/bv_decide.con skip
-examples/vc_discharge/counterexample.con skip
-examples/vc_discharge/missing.con skip
-examples/vc_discharge/omega.con skip
-examples/vc_discharge/solver_trusted.con skip
-examples/vc_suite/chunked_hash_padding.con skip
-examples/vc_suite/fixed_point_filter.con skip
-examples/vc_suite/packet_window.con skip
-examples/vc_suite/rate_limiter.con skip
-examples/vc_suite/ring_buffer_indices.con skip
+# generates NO obligation and traps on an over-width shift. Compiled here; run by
+# check_known_wrong_corpus.sh (R-0464), which owns the traps.
+examples/trap_semantics_gap/src/main.con compile
+examples/vc_discharge/assumed.con compile-lib
+examples/vc_discharge/bv_decide.con compile-lib
+examples/vc_discharge/counterexample.con compile-lib
+examples/vc_discharge/missing.con compile-lib
+examples/vc_discharge/omega.con compile-lib
+examples/vc_discharge/solver_trusted.con compile-lib
+examples/vc_suite/chunked_hash_padding.con compile-lib
+examples/vc_suite/fixed_point_filter.con compile-lib
+examples/vc_suite/packet_window.con compile-lib
+examples/vc_suite/rate_limiter.con compile-lib
+examples/vc_suite/ring_buffer_indices.con compile-lib
 examples/verify/src/main.con project-build
 examples/vm/main.con compile
-examples/refine_kernel_demo/src/main.con skip
-# `skip`: driven by check_bool_kernel.sh, and it defines no `main`, so a standalone
-# compile cannot succeed. Added on the spike/multi-kernel-theories merge — the branch
-# introduced the example without a manifest line, which check_examples caught.
-examples/bool_kernel_demo/src/main.con skip
-examples/datatype_kernel_demo/src/main.con skip
-examples/euf_kernel_demo/src/main.con skip
-examples/contract_positive/pure_contract_calls/src/main.con skip
+examples/refine_kernel_demo/src/main.con compile-lib
+# Driven by check_bool_kernel.sh; it defines no `main`, so it is compiled as a
+# library. Added on the spike/multi-kernel-theories merge — the branch introduced
+# the example without a manifest line, which check_examples caught.
+examples/bool_kernel_demo/src/main.con compile-lib
+examples/datatype_kernel_demo/src/main.con compile-lib
+examples/euf_kernel_demo/src/main.con compile-lib
+examples/contract_positive/pure_contract_calls/src/main.con compile-lib
+
+# ---------------------------------------------------------------------------
+# Run rules (check_example_outputs.sh). Interpreter markers: project examples
+# fail with E0110 (the interpreter has no project mode, so `std.*` is unknown);
+# FFI/heap/argv/union/raw-pointer programs fail with the interpreter's explicit
+# unsupported-construct message; constants, nested-module imports, generic
+# trait calls and field borrows through a reference are open interpreter bugs
+# (docs/bugs/117-120).
+# ---------------------------------------------------------------------------
+@run examples/backend_contracts/arithmetic.con arithmetic exit=16 ret=16 interp=yes stdout=empty
+@run examples/backend_contracts/assert_path.con assert_path exit=3 ret=3 interp=yes stdout=empty
+@run examples/backend_contracts/capability.con capability exit=7 ret=7 interp=yes stdout=empty
+@run examples/backend_contracts/layout.con layout exit=3 ret=3 interp=yes stdout=empty
+@run examples/constant_time_tag/src/main.con constant_time_tag exit=0 ret=0 interp=yes
+@run examples/contract_negatives/assume_taint/src/main.con assume_taint exit=10 ret=10 interp=yes stdout=empty
+@run examples/crypto_verify/src/main.con crypto_verify exit=0 ret=0 interp=yes stdout=empty
+@run examples/crypto_verify_drifted/src/main.con crypto_verify_drifted exit=0 ret=0 interp=yes stdout=empty
+@run examples/error_conventions/src/main.con error_conventions exit=15 ret=15 interp=yes stdout=empty
+@run examples/evidence_classes/assumed_boundary/src/main.con assumed_boundary exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/partial_contract/src/main.con partial_contract exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/proved_by_kernel_decision_bv/src/main.con proved_by_kernel_decision_bv exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/proved_by_kernel_decision_omega/src/main.con proved_by_kernel_decision_omega exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/proved_by_lean/src/main.con proved_by_lean exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/runtime_checked/src/main.con runtime_checked exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/stale_proof/src/main.con stale_proof exit=0 ret=0 interp=yes stdout=empty
+@run examples/evidence_classes/tested_by_oracle/src/main.con tested_by_oracle exit=5 ret=5 interp=yes stdout=empty
+@run examples/evidence_classes/trusted_boundary/src/main.con trusted_boundary exit=0 ret=0 interp=yes stdout=empty
+@run examples/fixed_capacity/src/main.con fixed_capacity exit=0 ret=0 interp=yes
+@run examples/fixed_point/src/main.con fixed_point exit=75 ret=75 interp=yes stdout=empty
+@run examples/float_unprofiled/src/main.con float_unprofiled exit=0 ret=0 interp=yes stdout=empty
+@run examples/ghost_state/src/main.con ghost_state exit=0 ret=0 interp=yes stdout=empty
+@run examples/hmac_sha256/src/main.con hmac_sha256 exit=0 ret=0 interp=yes
+@run examples/json/main.con json exit=0 interp=fails:ref~step~.field~on~non-struct
+@run examples/loop_invariant/src/main.con loop_invariant exit=0 ret=0 interp=yes stdout=empty
+@run examples/mal/main.con mal exit=0 ret=0 interp=yes
+@run examples/parse_validate/src/main.con parse_validate exit=0 ret=0 interp=yes stdout=empty
+@run examples/policy_engine/main.con policy_engine exit=0 ret=0 interp=yes
+@run examples/project/src/main.con project exit=18 interp=fails:undefined~function~'test' stdout=empty
+@run examples/proof_pressure/src/main.con proof_pressure exit=33 ret=33 interp=yes
+@run examples/service_errors/src/main.con service_errors exit=0 ret=0 interp=yes stdout=empty
+@run examples/smt/policy_allow/src/main.con policy_allow exit=6 ret=6 interp=yes stdout=empty
+@run examples/smt/policy_assumptions_missing/src/main.con policy_assumptions_missing exit=6 ret=6 interp=yes stdout=empty
+@run examples/smt/policy_forbid/src/main.con policy_forbid exit=6 ret=6 interp=yes stdout=empty
+@run examples/snippets/arithmetic.con arithmetic exit=105 ret=103300713 interp=yes stdout=empty
+@run examples/snippets/assoc_method.con assoc_method exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/borrow.con borrow exit=6 ret=6 interp=yes stdout=empty
+@run examples/snippets/casts.con casts exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/chars.con chars exit=117 ret=117 interp=yes stdout=empty
+@run examples/snippets/collatz.con collatz exit=111 ret=111 interp=yes stdout=empty
+@run examples/snippets/constants.con constants exit=20 interp=fails:undefined~variable~'foo' stdout=empty
+@run examples/snippets/enum_match.con enum_match exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/error_flow.con error_flow exit=42 ret=42 interp=yes stdout=empty
+@run examples/snippets/fact.con fact exit=0 ret=479001600 interp=yes stdout=empty
+@run examples/snippets/factorial.con factorial exit=0 ret=3628800 interp=yes stdout=empty
+@run examples/snippets/factorial_if.con factorial_if exit=24 ret=24 interp=yes stdout=empty
+@run examples/snippets/fib.con fib exit=55 ret=55 interp=yes stdout=empty
+@run examples/snippets/fib_generic.con fib_generic exit=55 ret=55 interp=yes stdout=empty
+@run examples/snippets/fib_if.con fib_if exit=55 ret=55 interp=yes stdout=empty
+@run examples/snippets/for.con for exit=10 ret=10 interp=yes stdout=empty
+@run examples/snippets/for_loop.con for_loop exit=10 ret=10 interp=yes stdout=empty
+@run examples/snippets/for_loop_var.con for_loop_var exit=0 ret=0 interp=yes stdout=empty
+@run examples/snippets/for_while.con for_while exit=10 ret=10 interp=yes stdout=empty
+@run examples/snippets/gcd.con gcd exit=6 ret=6 interp=yes stdout=empty
+@run examples/snippets/generic_struct.con generic_struct exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/generics_basic.con generics_basic exit=4 ret=4 interp=yes stdout=empty
+@run examples/snippets/hello_world.con hello_world exit=0 interp=fails:field~access~on~non
+@run examples/snippets/hello_world_hacky.con hello_world_hacky exit=0 interp=fails:undefined~function~'malloc'
+@run examples/snippets/if_else.con if_else exit=59 ret=59 interp=yes stdout=empty
+@run examples/snippets/if_if_false.con if_if_false exit=7 ret=7 interp=yes stdout=empty
+@run examples/snippets/if_with_literals.con if_with_literals exit=1 ret=1 interp=yes stdout=empty
+@run examples/snippets/impl_block.con impl_block exit=8 ret=8 interp=yes stdout=empty
+@run examples/snippets/impl_block_mut.con impl_block_mut exit=4 ret=4 interp=yes stdout=empty
+@run examples/snippets/import.con import exit=12 interp=fails:undefined~function~'hello2' stdout=empty
+@run examples/snippets/import_struct.con import_struct exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/import_struct_impl.con import_struct_impl exit=8 ret=8 interp=yes stdout=empty
+@run examples/snippets/is_prime.con is_prime exit=25 ret=25 interp=yes stdout=empty
+@run examples/snippets/linearExample01.con linearExample01 exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/linearExample02.con linearExample02 exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/linearExample03if.con linearExample03if exit=0 ret=0 interp=yes stdout=empty
+@run examples/snippets/linked_list.con linked_list exit=60 interp=fails:undefined~function~'alloc' stdout=empty
+@run examples/snippets/malloc.con malloc exit=5 interp=fails:undefined~function~'malloc' stdout=empty
+@run examples/snippets/module_test.con module_test exit=42 ret=42 interp=yes stdout=empty
+@run examples/snippets/nested_calls.con nested_calls exit=42 ret=42 interp=yes stdout=empty
+@run examples/snippets/nested_if.con nested_if exit=138 ret=3210 interp=yes stdout=empty
+@run examples/snippets/opaque_vec.con opaque_vec exit=4 interp=fails:undefined~function~'malloc' stdout=empty
+@run examples/snippets/refs.con refs exit=6 ret=6 interp=yes stdout=empty
+@run examples/snippets/simple.con simple exit=8 ret=8 interp=yes stdout=empty
+@run examples/snippets/simple_trait.con simple_trait exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/string_processing.con string_processing exit=100 interp=fails:undefined~function~'string_to_int'
+@run examples/snippets/structs.con structs exit=8 ret=8 interp=yes stdout=empty
+@run examples/snippets/trait_dispatch.con trait_dispatch exit=26 interp=fails:undefined~function~'T_area' stdout=empty
+@run examples/snippets/type_alias.con type_alias exit=4 ret=4 interp=yes stdout=empty
+@run examples/snippets/union.con union exit=1 interp=fails:field~'baz' stdout=empty
+@run examples/snippets/variable_inside_if.con variable_inside_if exit=16 ret=16 interp=yes stdout=empty
+@run examples/snippets/while.con while exit=16 ret=16 interp=yes stdout=empty
+@run examples/snippets/while_if_false.con while_if_false exit=7 ret=7 interp=yes stdout=empty
+@run examples/snippets/while_loop.con while_loop exit=186 ret=5050 interp=yes stdout=empty
+@run examples/source_maps/obligation_located.con obligation_located exit=5 ret=5 interp=yes stdout=empty
+@run examples/thesis_demo/src/main.con thesis_demo exit=0 ret=0 interp=yes
+@run examples/thesis_demo/src/main_drifted.con drifted exit=0 ret=0 interp=yes
+@run examples/vm/main.con vm exit=0 interp=fails:undefined~function~'vec_pop'
+@run examples/known_holes/mono_name_collision/src/main.con mono_name_collision exit=18 ret=18 interp=yes stdout=empty
+@run examples/known_holes/nested_field_write/src/main.con nested_field_write exit=29 ret=7709 interp=yes stdout=empty
+@run examples/known_holes/raw_ptr_to_local/src/main.con raw_ptr_to_local exit=99 interp=fails:unsupported~cast stdout=empty
+@run examples/multi_kernel_policy/allow/src/main.con allow exit=5 ret=5 interp=yes stdout=empty
+@run examples/multi_kernel_policy/blocked/src/main.con blocked exit=6 ret=6 interp=yes stdout=empty
+@norun examples/unsound_hypothesis/src/main.con reason=deliberately aborts (H23 counterexample); check_known_wrong_corpus.sh owns its runtime behavior
+@norun examples/trap_semantics_gap/src/main.con reason=deliberately traps (H24 counterexample); check_known_wrong_corpus.sh owns its runtime behavior
+@run examples/elf_header/src/main.con usage exit=1 interp=fails:'__concrete_get_argc'
+@run examples/elf_header/src/main.con valid exit=0 interp=fails:'__concrete_get_argc' -- testdata/valid.bin
+@run examples/elf_header/src/main.con bad_magic exit=1 interp=fails:'__concrete_get_argc' -- testdata/bad_magic.bin
+@run examples/elf_header_drifted/src/main.con usage exit=1 interp=fails:'__concrete_get_argc'
+@run examples/elf_header_drifted/src/main.con real_header_rejected exit=1 interp=fails:'__concrete_get_argc' -- testdata/valid.bin
+@run examples/elf_header_drifted/src/main.con zero_magic_accepted exit=0 interp=fails:'__concrete_get_argc' -- testdata/zero_magic.bin
+@run examples/base64_cli/ encode exit=0 interp=fails:E0110 -- encode hello
+@run examples/base64_cli/ decode exit=0 interp=fails:E0110 -- decode aGVsbG8gd29ybGQ=
+@run examples/base64_cli/ decode_invalid exit=1 interp=fails:E0110 stdout=empty -- decode a$b
+@run examples/base64_cli/ usage exit=2 interp=fails:E0110 stdout=empty
+@run examples/byte_view/http_header_view/ http_header_view exit=0 interp=fails:E0110
+@run examples/byte_view/tlv_packet_view/ tlv_packet_view exit=0 interp=fails:E0110
+@run examples/byte_view/utf8_text_slice/ utf8_text_slice exit=0 interp=fails:E0110
+@run examples/byte_view/wrong_buffer/ wrong_buffer exit=0 interp=fails:E0110
+@run examples/cli_tool/ flags exit=0 interp=fails:E0110 -- -n 3 -v alpha beta
+@run examples/cli_tool/ bad_number exit=2 interp=fails:E0110 stdout=empty -- -n x a
+@run examples/cli_tool/ usage exit=2 interp=fails:E0110 stdout=empty
+@run examples/conlog/ sample exit=0 interp=fails:E0110 -- logs/sample.log
+@run examples/conlog/ usage exit=2 interp=fails:E0110 stdout=empty
+@run examples/defer/cleanup_order/ cleanup_order exit=0 ret=0 interp=yes
+@run examples/envcfg/ app exit=0 interp=fails:E0110 -- testdata/app.conf
+@run examples/envcfg/ malformed exit=1 interp=fails:E0110 -- testdata/bad.conf
+@run examples/grep/ line_numbers exit=0 interp=fails:E0110 -- -n quick testdata/poem.txt
+@run examples/grep/ count_ignore_case exit=0 interp=fails:E0110 -- -c -i quick testdata/poem.txt
+@run examples/grep/ invert exit=0 interp=fails:E0110 -- -v the testdata/poem.txt
+@run examples/hexdump/ full exit=0 interp=fails:E0110 -- testdata/sample.bin
+@run examples/hexdump/ skip_len exit=0 interp=fails:E0110 -- -s 32 -n 12 testdata/sample.bin
+@norun examples/httpget/ reason=network client (connects to <host> <port>); check_httpget_differential.sh runs it against a local server
+@norun examples/http/ reason=network server (binds 127.0.0.1:8080 and serves until killed); no terminating input exists
+@run examples/integrity/ scan exit=0 interp=fails:E0110 -- scan manifest.txt testdata/a.txt testdata/b.txt
+@run examples/integrity/ check_ok exit=0 interp=fails:E0110 -- check testdata/manifest.txt testdata/a.txt testdata/b.txt
+@run examples/integrity/ check_modified exit=1 interp=fails:E0110 -- check testdata/manifest_stale.txt testdata/a.txt testdata/b_changed.txt
+@run examples/kvstore/ list_empty exit=0 interp=fails:E0110 -- list
+@run examples/kvstore/ set exit=0 interp=fails:E0110 -- set k v
+@run examples/kvstore/ get_missing exit=0 interp=fails:E0110 -- get nope
+@run examples/lox/ hello exit=0 interp=fails:E0110 -- testdata/hello.lox
+@run examples/lox/ comprehensive exit=0 interp=fails:E0110 -- test_comprehensive.lox
+@run examples/packet/ packet exit=0 interp=fails:E0110
+@run examples/patterns/byte_ranges/ byte_ranges exit=0 ret=0 interp=yes
+@run examples/png_chunks/ tiny exit=0 interp=fails:E0110 -- testdata/tiny.png
+@run examples/png_chunks/ bad_crc exit=1 interp=fails:E0110 -- testdata/bad_crc.png
+@run examples/project/ project exit=18 interp=fails:undefined~function~'test' stdout=empty
+@run examples/tar_list/ sample exit=0 interp=fails:E0110 -- testdata/sample.tar
+@run examples/tar_list/ truncated exit=1 interp=fails:E0110 -- testdata/truncated.tar
+@norun examples/tcpserve/ reason=network server (accepts on <port> until killed); check_tcpserve.sh drives it over loopback
+@run examples/toml/ sample exit=0 interp=fails:E0110 -- test.toml
+@run examples/verify/ hash exit=0 interp=fails:E0110 -- testdata/hello.txt
+@run examples/verify/ match exit=0 interp=fails:E0110 -- testdata/hello.txt a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447
+@run examples/verify/ mismatch exit=1 interp=fails:E0110 -- testdata/hello.txt 0000000000000000000000000000000000000000000000000000000000000000
+@run examples/wordfreq/ words exit=0 interp=fails:E0110 -- testdata/words.txt

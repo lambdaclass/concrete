@@ -1,0 +1,9 @@
+body-start
+early-return
+d2
+d1
+----
+body-start
+body-end
+d2
+d1

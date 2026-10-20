@@ -1648,33 +1648,19 @@ jobs:
       - name: Check example coverage manifest
         # Every .con under examples/ must be listed in
         # scripts/tests/example_manifest.txt with its expected outcome
-        # (compile / project-build / expected-error / skip). The gate fails
-        # if a new example is added without being classified.
+        # (compile / compile-lib / project-build / expected-error / known-bug /
+        # skip). A skip must name an owning gate CI runs that references the
+        # file, and a reason; the gate's negative controls prove an unowned skip
+        # and an unlisted .con both fail.
         run: EXAMPLES_OUT_DIR=/tmp/concrete_examples_out bash ./scripts/tests/check_examples.sh
 
-      - name: Run compiled examples (smoke test)
-        run: |
-          CRASH=0
-          # Note: tr '/.' '__' yields single underscores (tr maps char-for-char),
-          # so binaries are named examples_<path>_main_con.
-          for exe in /tmp/concrete_examples_out/examples_*_main_con; do
-            [ -f "$exe" ] || continue
-            case "$exe" in
-              *net*|*tcp*|*http*|*grep*|*toml*|*lox*|*project*) continue ;;
-            esac
-            if [ -x "$exe" ]; then
-              timeout 5 "$exe" > /dev/null 2>&1 || rc=$?
-              rc=${rc:-0}
-              if [ "$rc" -eq 139 ] || [ "$rc" -eq 134 ] || [ "$rc" -eq 136 ]; then
-                echo "CRASH (exit $rc): $exe"
-                CRASH=$((CRASH + 1))
-              fi
-            fi
-          done
-          echo "=== Runtime crashes: $CRASH ==="
-          if [ "$CRASH" -gt 0 ]; then
-            exit 1
-          fi
+      - name: Check example outputs (native and interpreter)
+        # Replaces the old smoke step, which ran binaries with no input, failed
+        # only on crash signals and skipped *net*|*tcp*|*http*|*grep*|*toml*|
+        # *lox*|*project* by name. Every runnable example now has explicit @run
+        # rules (fixed args/stdin/fixtures, exact stdout + exit code, and the
+        # interpreter's result) or an @norun with a reason, in the manifest.
+        run: bash ./scripts/tests/check_example_outputs.sh
 
   extra-gates:
     name: Extra gates (dark-gate wiring, audit 2026-07-16)

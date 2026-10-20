@@ -1,0 +1,18 @@
+=== Packet Decoder ===
+
+Test 1: ping, no payload
+  OK: type=ping seq=1 payload=0 bytes
+Test 2: data, 32 bytes
+  OK: type=data seq=100 payload=32 bytes
+Test 3: ack, 8 bytes, extract payload
+  OK: type=ack seq=200 payload=8 bytes
+  extracted 8 bytes
+  owner-bound view agrees with the copy
+Test 4: truncated (5 bytes)
+  FAIL: packet too short
+Test 5: bad version
+  FAIL: bad version
+Test 6: bad checksum
+  FAIL: checksum mismatch
+
+All tests passed.

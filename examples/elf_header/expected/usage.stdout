@@ -1,0 +1,2 @@
+Usage: elf_header <file>
+Validates the first 7 bytes of an ELF file header.

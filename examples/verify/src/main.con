@@ -26,6 +26,7 @@ mod conhash {
     import std.sha256.{hash_raw};
     import std.hex.{encode_u32_vec};
     import std.string.{String};
+    import std.io.{eprintln};
 
     trusted extern fn free(ptr: *mut u8) with(Alloc);
 
@@ -148,7 +149,9 @@ mod conhash {
         timing.append(&"(");
         timing.append_int(elapsed_ms);
         timing.append(&" ms)");
-        println(timing);
+        // Timing is a diagnostic, so it goes to stderr: stdout stays the
+        // deterministic verification result (bench.sh times the process itself).
+        eprintln(&timing);
         timing.drop();
 
         expected.drop();

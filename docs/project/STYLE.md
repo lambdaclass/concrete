@@ -73,6 +73,9 @@ mechanically-enforced part is `concrete fmt` (gated by `check_concrete_fmt.sh`).
 ## Examples
 
 - Every example under `examples/` must be classified in
-  `scripts/tests/example_manifest.txt` in the same commit it is added.
+  `scripts/tests/example_manifest.txt` in the same commit it is added, and a
+  runnable one needs `@run` rules there (fixed inputs under the example
+  directory, expected stdout in its `expected/`, exit code, interpreter mode) or
+  an `@norun` with a reason.
 - Examples are documentation: prefer clarity over cleverness, comment the
   *why*, and keep them runnable and gated.

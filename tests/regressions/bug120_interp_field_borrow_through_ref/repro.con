@@ -1,0 +1,19 @@
+// Bug 120: the interpreter cannot borrow a field through a reference
+// parameter (`&mut p.v` where p: &mut P): "interp: ref step .field on
+// non-struct"; the binary exits 1. (`v` is the second field here so the
+// native side is not also hit by bug 115.)
+struct P {
+    n: Int,
+    v: Vec<i32>,
+}
+fn add(p: &mut P, x: i32) with(Alloc) {
+    vec_push::<i32>(&mut p.v, x);
+}
+fn main() with(Alloc) -> Int {
+    let mut p: P = P { n: 0, v: vec_new::<i32>() };
+    add(&mut p, 5);
+    let len: Int = vec_len::<i32>(&mut p.v) as Int;
+    let P { n, v } = p;
+    vec_free::<i32>(v);
+    return len;
+}

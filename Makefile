@@ -80,8 +80,9 @@ test-fuzz-differential: build ## Random interp-vs-compiled differential fuzzer s
 test-golden: build ## Golden baselines for --emit-core, --emit-ssa, --fmt
 	$(NIX_DEVELOP) bash ./scripts/tests/test_golden.sh
 
-test-examples: build ## Example coverage manifest gate (every examples/ .con is checked)
+test-examples: build ## Example coverage manifest gate + every runnable example's output (native and interpreter)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_examples.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_example_outputs.sh
 
 test-snapshots: build ## Diagnostic snapshot tests
 	$(NIX_DEVELOP) bash ./scripts/tests/check_snapshots.sh

@@ -1,0 +1,3 @@
+arith test: 21 (expected 21)
+6765
+fib(20) = 6765

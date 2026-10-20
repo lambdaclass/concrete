@@ -1,0 +1,17 @@
+// Bug 119: the interpreter runs pre-monomorphization Core and cannot resolve
+// a trait method called on a type parameter: "interp: undefined function
+// 'U_v'"; the binary exits 9.
+trait T {
+    fn v(&self) -> Int;
+}
+struct Copy S { x: Int }
+impl T for S {
+    fn v(&self) -> Int { return self.x; }
+}
+fn g<U: T + Copy>(u: U) -> Int {
+    return u.v();
+}
+fn main() -> Int {
+    let s: S = S { x: 9 };
+    return g(s);
+}

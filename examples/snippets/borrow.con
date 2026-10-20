@@ -1,7 +1,7 @@
 mod Example {
     // (This snippet used to read its input from a `main(argc: i64)` parameter.
     // `main` takes no parameters -- the wrapper calls it with none -- so the
-    // input is a local now; see docs/bugs/107 for why that form misbehaved.)
+    // input is a local now; see docs/bugs/110 for why that form misbehaved.)
     fn main() -> i64 {
         let x: i64 = 3;
         return references(x) + dereference(&x);

@@ -145,7 +145,7 @@ mod Gate {
 
         // Print: [ALLOW] admin read source_code
         // (Borrowing a literal inside an if-expression arm dangles once the arm
-        // ends -- bug 113 -- so each arm appends its own label.)
+        // ends -- bug 116 -- so each arm appends its own label.)
         let mut out: String = "[";
         if v == 1 { string_append(&mut out, &"ALLOW"); } else { string_append(&mut out, &"DENY"); }
         string_append(&mut out, &"] ");

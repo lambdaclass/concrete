@@ -1,0 +1,7 @@
+=== ELF Header Validator ===
+  magic:    INVALID
+  class:    valid (64-bit)
+  data:     valid (little-endian)
+  version:  valid (1)
+
+Result: INVALID ELF header

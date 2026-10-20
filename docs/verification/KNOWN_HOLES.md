@@ -24,8 +24,11 @@ The complete numbered list and status are in
 classes include structural destruction (bug 052 / R-0006), trap preservation
 (bug 053 / R-0005), specialization and import identity (bugs 054–055 /
 R-0007–R-0008), callable SSA identity (bug 056 / R-0436), proof-subject
-freshness (bugs 058–060 / R-0004), and ProofCore callable identity (bug 061 /
-R-0442). R-0010 will replace the legacy skip-based audit with mechanically
+freshness (bugs 058–060 / R-0004), ProofCore callable identity (bug 061 /
+R-0442), and memory safety in accepted programs: `vec_get` duplicating a linear
+element (bug 114, a double free) and a literal borrowed in an if-expression arm
+outliving it (bug 116, a dangling read), both found by the 2026-10-20 examples
+pass and pinned by `check_example_outputs.sh`. R-0010 will replace the legacy skip-based audit with mechanically
 checked per-bug states.
 
 ### H27. Contract validation is name-and-sort only, not type checking — OPEN

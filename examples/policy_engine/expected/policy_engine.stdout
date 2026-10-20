@@ -1,0 +1,5 @@
+[ALLOW] admin read source_code
+[ALLOW] developer exec prod_db
+[DENY] guest write prod_db
+[DENY] admin delete audit_log
+[ALLOW] auditor read audit_log

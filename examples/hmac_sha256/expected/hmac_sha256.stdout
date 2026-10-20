@@ -1,0 +1,2 @@
+hmac_sha256: SHA-256("abc") matches FIPS 180-4 and
+HMAC-SHA256 matches RFC 4231 TC1+TC2; all checks passed.

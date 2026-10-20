@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Every Example Builds And Its Output Is Checked, Natively And In The Interpreter (2026-10-20)
+
+json, mal, vm and policy_engine had stopped compiling behind `skip`, and the CI smoke step only caught
+crash signals while skipping examples by name. All four are ported (privacy kept through accessors and
+constructors in the defining modules), along with 18 snippets; the obsolete `enum` snippet is removed.
+The ports fixed two example bugs the old tests could not see: json's nested containers pointed at the
+wrong slots, and mal evaluated closure arguments twice (exponential; its benchmark never finished). In
+[scripts/tests/example_manifest.txt](scripts/tests/example_manifest.txt) a `skip` must name an owning
+gate that CI runs and that references the file (two remain), library-shaped proof examples compile as
+objects (`compile-lib`), and a program blocked by an open compiler bug is `known-bug NNN` with its
+failure text. The new `check_example_outputs.sh` runs every runnable example on fixed inputs and
+compares exact stdout and exit code natively and under `--interp`; network servers are `@norun` with
+reasons. Fourteen compiler and interpreter bugs found on the way are filed as
+[107](docs/bugs/107_bool_cast_trunc.md)–[120](docs/bugs/120_interp_field_borrow_through_ref.md), each
+with a reproducer the gate keeps pinned.
+
 ### Phase 1 Closes Through Classed Exits; Features Start On Their Own Prerequisites (2026-10-20, roadmap only)
 
 Queue rows 0 – 2 of [ROADMAP.md](ROADMAP.md) now close through sixteen individually closable exits
