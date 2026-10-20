@@ -562,7 +562,11 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   newtype (`.0`) projections, where each dereference `*e` is of a reference or raw pointer whose
   own source is traced. Parentheses and identity dereferences normalize away: `(*r).f` and `r.f`
   are one place, and `&*r` names `r`'s source (`normPlace` / `normRef`, `land2-fix`, bug 091
-  round 3). The **root** of a canonical place is its binding.
+  round 3). A field or index projection through an owned `Heap` or heap-array binding
+  (`h.v`, auto-dereferenced) is a canonical place rooted at that owner binding. An explicit `*h`
+  of an owned heap is not a place: it loads the value and consumes `h` (so `&*h` moves the heap,
+  and a later `free(h)` is E0213 on `main` and E0230 on `land2-fix`). The **root** of a canonical
+  place is its binding.
 - A **reference binding** is a local (parameter, `let`, pattern binder or borrow-block binder)
   whose type is a reference type. Its **source** is the canonical place it was made from, recorded
   once per binding: root binding, projection path, and whether the path is exact. In the path
@@ -688,9 +692,13 @@ an array literal element; a binding or parameter whose type holds a reference in
 Three separate conditions, each refusing an instantiation `T := A`:
 
 - (a) `A` **contains** a reference and `T` occurs in the generic's return type;
-- (b) after monomorphization, an instantiated field, binding, parameter, expression or constant
-  type **holds** a reference (REF-3's predicate, so `Box<T>` at `A = &Int` is refused but at
-  `A = fn(&Int) -> Int` is accepted: a function pointer stores no reference);
+- (b) after monomorphization (`verifyNoStoredRefs`), an instantiated struct or enum field type
+  holds a reference (`tyStoresRefV`: a bare `&Int` field counts), or an instantiated function's
+  parameter, binding or expression type, or a constant's type, holds a reference inside an
+  aggregate (`tyHoldsRefInAggregateV`: the outer reference is looked through, so a bare `&Int`
+  parameter or binding is allowed, as in `ignore::<&Int>`). So `Box<T>` at `A = &Int` is refused
+  and at `A = fn(&Int) -> Int` accepted, since a function pointer stores no reference. The
+  bare-reference constant falls through this predicate (G1);
 - (c) `A` **contains** a reference and `T` occurs behind a reference or pointer in one of the
   generic's parameter types, including inside a function type (`w: &W<T>`, `r: &T`,
   `p: *mut T`, `f: fn(&mut T)`; `tyParamOccursNested`), because the generic body is checked once
@@ -846,8 +854,13 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
 - Fixtures: `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232);
   *`error_107_shadow_under_live_ref.con`*, *`error_107_shadow_in_block_under_live_ref.con`*,
   *`error_091_norm_assign_under_shared_ref.con`*, *`error_091_norm_copied_mut_ref.con`*.
-- Status: moving, freeing, freezing and let-borrow conflicts **main**; shadowing and ancestry
-  **land2**. Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
+- Status: on `main` the source is recorded only for a direct `let r = &x` / `&mut x`
+  (`checkStmt` `let` case), so moving, freeing, freezing and let-borrow conflicts are enforced for
+  those. A projected borrow is not tracked on `main`: `let r: &Int = &h.v; free(h);` is accepted
+  and `*r` then reads freed memory, and assigning `x = 1` under a live `let r = &x` is accepted
+  (`*r` reads 1). Both are refused on `land2-fix` (E0204 and E0232: the recorded path and
+  `checkWriteAccess`). So: direct borrows **main**; projected borrows, writes under a shared
+  reference, shadowing and ancestry **land2** (part of G5). Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
   `guardShadowedSource` stays as defense in depth.
 
 ### 15.4 Lexical binding rules
@@ -1038,6 +1051,9 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 | REF-8 | `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232), `error_091_norm_copied_mut_ref.con` (E0231), `error_091_norm_assign_under_shared_ref.con` (E0232) | reject, code as given, REF-8@1 |
 | REF-8 | `error_2i_ref8_free_while_aliased.con` (new; `free(h)` under `let s = r`) | reject E0204 REF-8@1 |
 | REF-8 | `regress_2i_ref8_free_after_ref_block.con` (new; the reference lives in an inner block, `free(h)` after it) | run 42 |
+| REF-8 | `error_2i_ref8_free_under_projected_borrow.con` (new; `let r = &h.v; free(h);`) | reject E0204 REF-8@1 |
+| REF-8 | `error_2i_ref8_assign_under_shared.con` (new; `x = 1` under `let r = &x`) | reject E0232 REF-8@1 |
+| REF-5 | `regress_2i_ref5_heap_field_borrow.con` (new; `&h.v` read in an inner block, `free(h)` after it) | run 42 |
 | REF-8 | `error_2i_ref8_call_overlap.con` (new; `mix(&x, &mut x)`), `error_091_norm_cast_arg_overlap.con` | reject E0293 REF-8@1 |
 | REF-8 | `regress_2i_ref8_call_disjoint.con` (new; `mix(&x, &mut y)`, `two(&mut w.a, &mut w.b)`) | run 42 |
 | REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
@@ -1107,7 +1123,7 @@ manifest row:
 | G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
 | G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
 | G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
-| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107 and the write-through-reference shape, and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
+| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference, and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
 | G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
 | G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
