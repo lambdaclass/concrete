@@ -316,7 +316,11 @@ while read -r src outcome rest; do
       # No `main` (a proof/VC teaching module): emit LLVM IR and compile it to an
       # object, which validates the IR exactly as linking a program would.
       out_name=$(echo "$src" | tr '/.' '__')
-      if "$COMPILER" "$src" --emit-llvm > "$OUT_DIR/$out_name.ll" 2> "$OUT_DIR/$out_name.err" \
+      had_ll=0; [ -e "$src.ll" ] && had_ll=1
+      "$COMPILER" "$src" --emit-llvm > "$OUT_DIR/$out_name.ll" 2> "$OUT_DIR/$out_name.err"
+      emit_rc=$?
+      [ "$had_ll" = 0 ] && rm -f "$src.ll"   # --emit-llvm also writes <file>.ll beside the source
+      if [ "$emit_rc" -eq 0 ] \
          && clang -c -x ir -Wno-override-module "$OUT_DIR/$out_name.ll" -o "$OUT_DIR/$out_name.o" > "$OUT_DIR/$out_name.cc.log" 2>&1; then
         ok
       else
