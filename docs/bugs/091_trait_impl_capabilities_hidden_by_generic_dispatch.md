@@ -308,4 +308,13 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   shell is exempt now: E0290); `(w).0.destroy()` was a false E0290. Fixtures
   `error_091_mut_receiver_nested_reborrow_arg.con`, `error_091_mut_receiver_if_reborrow_arg.con`
   (E0293), `error_091_heap_field_through_ref.con` (E0290), `trait_destroy_newtype_payload_paren.con` (1).
+* **Codex review of round 3, ninth pass.** An `if`/`match` argument's branch borrows are ONE
+  borrow made of alternatives (they never conflict with each other — the eighth pass had made
+  `bump(if c { &mut p } else { &mut p })` a false E0293) and follow a block-local `let` the tail
+  names (`let s = &*r; s`: E0293 against the receiver `r`); a `&self` receiver read through a
+  reference while an exclusive reborrow of its storage is live is E0231. Fixtures
+  `error_091_mut_receiver_if_local_reborrow_arg.con` (E0293),
+  `error_091_ref_receiver_under_mut_reborrow.con` (E0231). Found while testing, NOT fixed here
+  (pre-existing, separate): the compiled binary of `bump(if true { &mut p } else { &mut p })`
+  segfaults while --interp prints 2 — a reference-valued `if` expression miscompiles.
 

@@ -471,7 +471,24 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
       | _ => checkMutBorrowPlace obj subject span
   | some .ref =>
     match objTy with
-    | .ref _ | .refMut _ => pure ()
+    | .ref _ | .refMut _ =>
+      -- Read through a reference binding `r` while an exclusive reborrow of its storage
+      -- (`let s = &mut *r`) is live: the `&self` access aliases it (E0231, Codex review).
+      match placePathRoot obj with
+      | some r =>
+        match ← lookupVarInfo r with
+        | some info =>
+          match info.ty with
+          | .ref _ | .refMut _ =>
+            let roots := r :: info.borrowedFrom.toList
+            let env ← getEnv
+            if env.vars.any (fun (n, vi) => n != r && vi.state != .consumed &&
+                (match vi.ty with | .refMut _ => true | _ => false) &&
+                (match vi.borrowedFrom with | some src => roots.contains src | none => false)) then
+              throwCheck (.cannotBorrowMutablyBorrowed r) span
+          | _ => pure ()
+        | none => pure ()
+      | none => pure ()
     | _ =>
       match ← receiverVia obj with
       | .temp => pure ()

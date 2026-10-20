@@ -1052,21 +1052,44 @@ partial def unparenExpr : Expr → Expr
   | .paren _ inner => unparenExpr inner
   | e => e
 
-/-- The borrows an `if`/`match` argument may yield: each branch tail that is a borrow. -/
-partial def branchBorrowParts (e : Expr) : List ((String × List String) × Bool) :=
-  let tailOf : List Stmt → List ((String × List String) × Bool) := fun stmts =>
+/-- The borrows an `if`/`match` argument may yield: each branch's tail borrow, following a
+    block-local `let` the tail names. -/
+partial def branchBorrowAlts (e : Expr) : List ((String × List String) × Bool) :=
+  let rec tailOf (stmts : List Stmt) (t : Expr) : List ((String × List String) × Bool) :=
+    match unparenExpr t with
+    | .borrow _ inner => (borrowPathOf inner).toList.map (·, false)
+    | .borrowMut _ inner => (borrowPathOf inner).toList.map (·, true)
+    | .ident _ n =>
+      match (stmts.filterMap fun (st : Stmt) => match st with
+          | .letDecl _ m _ _ v _ => if m == n then some v else none
+          | _ => none).getLast? with
+      | some v => tailOf stmts v
+      | none => []
+    | t' => branchBorrowAlts t'
+  let blockTail : List Stmt → List ((String × List String) × Bool) := fun stmts =>
     match stmts.getLast? with
-    | some (.expr _ t true) =>
-      match unparenExpr t with
-      | .borrow _ inner => (borrowPathOf inner).toList.map (·, false)
-      | .borrowMut _ inner => (borrowPathOf inner).toList.map (·, true)
-      | t' => branchBorrowParts t'
+    | some (.expr _ t true) => tailOf stmts.dropLast t
     | _ => []
   match e with
-  | .ifExpr _ _ t el => tailOf t ++ tailOf el
+  | .ifExpr _ _ t el => blockTail t ++ blockTail el
   | .match_ _ _ arms => arms.flatMap fun arm => match arm with
-      | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => tailOf b
+      | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => blockTail b
   | _ => []
+
+/-- One argument's branch alternatives as ONE borrow: only one branch runs, so the
+    alternatives never conflict with each other, but together they may alias the other
+    arguments. Same root: the longest common path prefix, `&mut` if any alternative is;
+    different roots: one part per root (each a possible borrow of that root). -/
+def branchBorrowParts (e : Expr) : List ((String × List String) × Bool) :=
+  let alts := branchBorrowAlts e
+  let roots := (alts.map (·.1.1)).eraseDups
+  roots.map fun r =>
+    let mine := alts.filter (·.1.1 == r)
+    let steps := match mine.head? with
+      | some ((_, s0), _) => mine.foldl (fun acc ((_, s), _) =>
+          ((acc.zip s).takeWhile (fun (x, y) => x == y)).map (·.1)) s0
+      | none => []
+    ((r, steps), mine.any (·.2))
 
 /-- Collect (path, isMut) pairs from syntactic borrow arguments AND from
     ident arguments that are themselves live borrows (alias-through-binding:

@@ -1,0 +1,20 @@
+// Bug 091 round 3 (Codex review, ninth pass): an `if` argument whose branches yield a
+// block-local reborrow (`let s = &*r; s`) aliased the exclusive receiver `r`. Expected: E0293.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self, other: &P) -> i64 {
+            self.n = self.n + 1;
+            return other.n;
+        }
+    }
+    fn f(r: &mut P) -> i64 {
+        return r.bump(if true { let s: &P = &*r; s } else { let s: &P = &*r; s });
+    }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let result: i64 = f(&mut p);
+        let P { n } = p;
+        return result;
+    }
+}
