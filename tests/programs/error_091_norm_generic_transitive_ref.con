@@ -1,0 +1,19 @@
+// Bug 091 normalized place rule (integration review): `relay<T>` has no nested occurrence of
+// T, so `relay::<&Int>` passes Check; inside it, `update::<T>(&mut x, ..)` passes too because
+// T is opaque there. Only after substitution is `update` instantiated at U = &Int with U
+// behind `&mut`, where its body stores and loads references the rule never traced. Mono
+// re-asks the instantiation question at every specialization (E0238).
+fn update<U: Copy>(slot: &mut U, value: U, consume: fn(U) -> Int) -> Int {
+    *slot = value;
+    let loaded: U = *slot;
+    return consume(loaded);
+}
+fn relay<T: Copy>(x: T, y: T, consume: fn(T) -> Int) -> Int {
+    return update::<T>(&mut x, y, consume);
+}
+fn read(x: &Int) -> Int { return *x; }
+fn main() -> Int {
+    let a: Int = 1;
+    let b: Int = 2;
+    return relay::<&Int>(&a, &b, read);
+}

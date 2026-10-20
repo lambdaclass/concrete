@@ -421,6 +421,46 @@ private def refuseDestroy (msg hint : String) : MonoM CExpr :=
            hint := some s!"{hint} Tracking: docs/bugs/052_array_element_destroy_noop.md"
            code := "E0814" }]
 
+/-- A type argument that IS or holds a reference (function types excluded: a function pointer
+    whose signature mentions a reference is not itself one). -/
+private partial def monoArgHoldsRef : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | .heap i | .heapArray i | .ptrMut i | .ptrConst i => monoArgHoldsRef i
+  | .array e _ => monoArgHoldsRef e
+  | .generic _ args _ => args.any monoArgHoldsRef
+  | _ => false
+
+private partial def monoParamOccurs (n : String) : Ty → Bool
+  | .typeVar m | .named m => m == n
+  | .ref i | .refMut i | .ptrMut i | .ptrConst i | .heap i | .heapArray i => monoParamOccurs n i
+  | .array e _ => monoParamOccurs n e
+  | .generic g args _ => g == n || args.any (monoParamOccurs n)
+  | .fn_ ps _ r => ps.any (monoParamOccurs n) || monoParamOccurs n r
+  | _ => false
+
+/-- `n` occurs behind a reference or pointer (including inside a function type): the place
+    Check's `tyParamOccursNested` refuses a reference instantiation for. -/
+private partial def monoParamBehindRef (n : String) : Ty → Bool
+  | .ref i | .refMut i | .ptrMut i | .ptrConst i => monoParamOccurs n i
+  | .generic _ args _ => args.any (monoParamBehindRef n)
+  | .array e _ => monoParamBehindRef n e
+  | .heap i | .heapArray i => monoParamBehindRef n i
+  | .fn_ ps _ r => ps.any (monoParamBehindRef n) || monoParamBehindRef n r
+  | _ => false
+
+/-- E0238 (bug 091, integration review): a generic body is checked once at its opaque type
+    parameters, so a reference instantiation where the parameter sits behind a reference in a
+    parameter type lets the body load or store a reference the place rule never traced. Check
+    refuses it at the call it can see (`refuseNestedRefInstantiation`); a generic caller passing
+    its OWN opaque `T` on (`update::<T>(&mut x, ..)` inside `relay<T>`) is only concrete here,
+    after substitution, so Mono re-asks the question at every specialization. -/
+private def refuseNestedRefSpecialization (fnDef : CFnDef) (typeArgs : List Ty) : MonoM Unit := do
+  for (tp, arg) in fnDef.typeParams.zip typeArgs do
+    if monoArgHoldsRef arg && fnDef.params.any (fun (_, t) => monoParamBehindRef tp t) then
+      throw [{ severity := .error, pass := "mono", span := fnDef.declSpan, code := "E0238"
+               message := s!"cannot trace what the reference instantiating '{tp}' of generic function '{fnDef.name}' borrows: '{tp}' := '{tyToStr arg}' occurs behind a reference in a parameter type, and the generic body was checked at an opaque '{tp}' (reached through another generic's type parameter)"
+               hint := some "instantiate the generic with an owned value, or pass the reference down as a top-level argument; this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)" }]
+
 /-- Mono's Copy judgment: the shared one over Core structs/enums PLUS newtypes. A newtype is
     fed as a declared-Copy aggregate with its one wrapped type as the field, so it is Copy
     exactly when the inner type is, with generic newtypes substituted like any aggregate. -/
@@ -538,6 +578,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             -- share the same specialization as direct calls.
             let genericNames ← getGenericFnNames
             let name := monoNameFor fnDef.name inferredArgs
+            refuseNestedRefSpecialization fnDef inferredArgs
             let mapping := fnDef.typeParams.zip inferredArgs
             let sub := substTy fnDef.typeParams mapping
             let callNameMap := mapping.map fun (paramName, ty) => (paramName, tyName ty)
@@ -566,6 +607,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         return .call fn typeArgs args' ty  -- not actually generic
       let genericNames ← getGenericFnNames
       -- Canonical-name specialization (see the inferred-args branch above).
+      refuseNestedRefSpecialization fnDef typeArgs
       let name := monoNameFor fnDef.name typeArgs
       let mapping := fnDef.typeParams.zip typeArgs
       let sub := substTy fnDef.typeParams mapping

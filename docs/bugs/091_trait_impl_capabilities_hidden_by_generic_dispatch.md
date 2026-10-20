@@ -491,4 +491,9 @@ integration review also found that writing a reference through a reference
 leaving the caller a dangling reference; the `&mut` deref-assignment now refuses a pointee type
 that holds a reference (E0238, `error_091_norm_ref_write_through_ref.con`). Raw-pointer stores
 stay the trusted escape.
+The next pass found the instantiation check saw only the call in front of it: `relay<T>` (no
+nested `T`) passing its own opaque `T` to `update::<T>(&mut x, ..)` reached `update` at
+`U = &Int` only after substitution. Mono now re-asks the question at every specialization
+(`refuseNestedRefSpecialization`, E0238 in the mono pass;
+`error_091_norm_generic_transitive_ref.con`).
 

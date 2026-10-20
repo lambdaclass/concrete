@@ -1648,6 +1648,7 @@ error_091_norm_generic_nested_ref:E0239
 error_091_norm_generic_nested_alias_ref:E0239
 error_091_norm_ref_write_through_ref:E0238
 error_091_norm_generic_fn_mut_param:E0238
+error_091_norm_generic_transitive_ref:E0238
 trait_generic_fn_value_param:ok
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
