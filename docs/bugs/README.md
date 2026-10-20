@@ -110,6 +110,7 @@ Those belong in:
 - [071_cross_package_capability_requirements_unenforced.md](071_cross_package_capability_requirements_unenforced.md) — a capability declared in a dependency did not bind on its caller: a function declaring nothing read `$HOME` through `std.env.get`. Only hardcoded intrinsics were enforced across a package boundary (OPEN, partially repaired 2026-09-21)
 - [102_pointer_local_address_cast_miscompiled.md](102_pointer_local_address_cast_miscompiled.md) — `&mut x as *mut *mut T` on a pointer-typed local passes `x`'s value, not its address (silent wrong code; the interpreter refuses the cast, so differential testing misses it). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
 - [103_extern_destroy_replaced_by_empty_body.md](103_extern_destroy_replaced_by_empty_body.md) — Mono's drop-glue synthesizes an empty definition for any unresolved callee ending in `_destroy`, so an `extern fn foo_destroy` never reaches the C library (silent leak). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
+- [104_assigned_reference_outlives_block_local.md](104_assigned_reference_outlives_block_local.md) — `leaked = &h` from an inner block records no borrow, so `h` can be freed (or go out of scope) while the outer reference is still read: use after free in safe code. Found by the V1 design examples (B6). Joins exit 0b.
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 
