@@ -44,6 +44,22 @@ float reader against the exact constants in the LLVM output, and a leg requiring
 spelling of each sampled double. The legacy proof fingerprint keeps its lossy float rendering, since changing it would
 move identities; floats carry no proof claims today, and the v2 identity bytes were already exact.
 
+### Workload Programs Carry Minted Proofs (2026-10-21)
+
+Three Phase 7 workloads, written for users rather than for the prover, now carry seven
+source-linked claims that reach `minted` receipts: toml's four lexer character classes
+(`is_ws`, `is_newline`, `is_digit`, `is_bare_key_char`) each accept exactly their TOML ABNF class;
+hexdump's `gutter_byte` and `line_len` implement xxd's printable-or-`.` and 16-bytes-per-line
+rules; png_chunks' `png_sig_ok` accepts exactly the PNG signature. Each theorem evaluates the
+function's extracted body and holds for every `Int` input; proofs use standard axioms only
+([proofs/Examples/Toml](proofs/Examples/Toml/Proofs.lean),
+[Hexdump](proofs/Examples/Hexdump/Proofs.lean),
+[PngChunks](proofs/Examples/PngChunks/Proofs.lean)). The claim inventory grows by seven
+rows. Getting there needed source rewrites, because the extractor refuses boolean `&&`/`||`. That
+gap, and two more (`u64` arithmetic, which keeps std's CRC32 out of reach, and `Bytes` reads that
+extract to calls no proof table models), are recorded with their exact refusals in
+[PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a
