@@ -1,4 +1,4 @@
-# Structural Classes of Bugs 039 – 106
+# Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 120 (the examples-health pass) are placed in the summary table
 from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
@@ -11,8 +11,8 @@ Most bugs since 039 fall into a dozen classes, and most classes are owned by a s
 [verified-compiler plan](../compiler/VERIFIED_PIPELINE.md) whose exit already names some of them.
 A bug may belong to more than one class; the first listed is its primary class.
 
-**Sources.** Bug records on main for 039 – 080, 084 – 086 and 101 – 104; on branches for 081, 083 and
-089 (`land3`), 082, 087 and 091 (`land2-fix`), 088, 090 and 092 – 094 (`land4`). **No checked-in
+**Sources.** Bug records on main for 039 – 080, 084 – 086, 088, 090, 092 – 094, 101 – 104 and 107;
+on branches for 081, 083 and 089 (`land3`), 082, 087 and 091 (`land2-fix`). **No checked-in
 record** exists yet for 095 – 100 (exit 2b requires them): 095 is classified from the
 verified-pipeline plan ("requires correct storage aliasing during lowering"; the historical 092/095
 aggregate-reference programs), 096 – 098 from exit 0b and the reproducer probes behind branch
@@ -36,11 +36,16 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118 | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098 | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
+| 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment) | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 108, 109, 110, 116 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
@@ -84,8 +89,10 @@ end for every user by R-0514 (queue row 4); R-0510 (S8a) owns specialization ide
 from the last arm's environment), 045 (nested same-named match binders shared one slot), 087 (a
 block `let` shadowing an outer name was not lexically scoped in the interpreter, the binary or the
 model), 093 (a shadowing block local was skipped by the never-consumed check because its name
-existed before the block), 094 (per-binding state updates marked every entry with the name), and
-068's binder half (a ghost `let` opened no scope slot).
+existed before the block), 094 (per-binding state updates marked every entry with the name), 107
+(a same-scope `let` shadowing a borrowed binding reused its Core name and so its stack slot: a
+reference to the old binding read the new value in the binary, not in the interpreter), and 068's
+binder half (a ghost `let` opened no scope slot).
 
 **Design cause.** The checker's environment is a list of `(name, VarInfo)`; scope exit, merges and
 state updates find bindings by name, and Elab alpha-renames only some binders.
@@ -93,7 +100,7 @@ state updates find bindings by name, and Elab alpha-renames only some binders.
 **Structural fix.** A `LocalId` for every binder from Resolve on, consumed by the source checker
 and Elab alike; the language rule "no block `let` shadowing a visible name" (exit 2i).
 
-**Owner.** R-0492 (S5, whose exit names 087, 093 and 094); R-0499/R-0514 (row 4) move the
+**Owner.** R-0492 (S5, whose exit names 087, 093 and 094, and must name 107); R-0499/R-0514 (row 4) move the
 checker's environments onto it.
 
 ## 3. Destruction dispatched by synthesized `<Type>_destroy` names
@@ -200,7 +207,8 @@ Core: 084 – 086, 101); the harness R-0491 (S1, exit 2c) detects the class mean
 **Bugs.** 078 (an `if`/`else` whose arms both diverge left its merge block open), 095 (no record:
 stale storage of aggregate references, "requires correct storage aliasing during lowering"), 102 (a
 pointer-typed local whose address is taken got no stack slot), 105 (a reference-valued `if`
-expression miscompiles).
+expression miscompiles), 107 (a shadowing `let` was given the shadowed binding's slot because slots
+are keyed by Core name, while a reference to the old binding was still live).
 
 **Design cause.** `Lower` performs sequencing, `defer`, match compilation, promotion, layout and
 bounds checks in one pass with no semantics of its own; storage is decided by recognizing
