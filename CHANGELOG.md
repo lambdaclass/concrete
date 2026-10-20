@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 1 Closes Through Classed Exits; Features Start On Their Own Prerequisites (2026-10-20, roadmap only)
+
+Queue rows 0 – 2 of [ROADMAP.md](ROADMAP.md) now close through sixteen individually closable exits
+(0a – 0c, 1a, 2a – 2l), each with an owning task, an acceptance test and a class: *blocks features*
+(a known false-proof, unsound-claim or memory-safety defect, or a named dependency of a deliverable) or
+*continues alongside* (consolidation or prevention with a finite acceptance test). A feature-prerequisite
+table names the exits each first deliverable waits for: RocksDB slice 1 (row 5, newly defined with its
+acceptance) waits for 0b and 2i; V1a and V1b (row 3, with the programs each must compile and the
+independently checked artifact) wait for 0a, 0b, 2a, 2g, 2h, 2i and 2j. The roadmap also gains a
+promotion-pipeline section (fast affected checks, the integrated full gate set, full qualification, and
+what invalidates each recorded result), a table of fixes implemented on branches but not yet accepted, and
+an entry rule: new blocking work needs a reproducer or a named dependency of the next deliverable.
+`check_roadmap_coverage.sh` gates the exits, the prerequisite partition against the classes and queue
+rows, and that no listed bug is already recorded fixed, with eleven new negative controls. No task's
+obligations were dropped; row 2's obligations moved into its exits.
+
 ### The Roadmap Is A Scheduled Plan Plus A Backlog With Pull Rules (2026-10-19, roadmap only)
 
 ROADMAP.md now keeps the phases, the execution queue and the tasks a queue row names or an active or

@@ -490,7 +490,7 @@ this file). Every other task lives, with its full text, ID and
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
-**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: it starts once RocksDB slice 1's [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
