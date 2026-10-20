@@ -70,7 +70,7 @@ reproducible setup is the distribution package that ships `rocksdb.pc`, for exam
 CI yet: `check_gate_registration.sh` lists it as a declared skip until acceptance is unblocked,
 and the CI job will need that install step.
 
-Gate result at the time of writing (macOS arm64, devshell): 26 legs pass, 5 fail. The failures
+Gate result at the time of writing (macOS arm64, devshell): 28 legs pass, 5 fail. The failures
 are exactly G1 (the no-flags build) and G3 (the compiler-defined `_destroy` symbols and the three
 leaked options objects the observer reports). Everything else — the typed error, the value read
 back, the absent key, the database on disk, exactly-once release of the database, value buffer
