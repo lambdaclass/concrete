@@ -256,3 +256,8 @@ examples/bool_kernel_demo/src/main.con skip
 examples/datatype_kernel_demo/src/main.con skip
 examples/euf_kernel_demo/src/main.con skip
 examples/contract_positive/pure_contract_calls/src/main.con skip
+# `skip`: RocksDB slice 1 (R-0285). Owned by check_rocksdb_slice1.sh: a plain `concrete build`
+# cannot link librocksdb yet (gap G1, docs/platform/ROCKSDB_SLICE1.md), so this gate would fail
+# for a reason the dedicated gate already reports; the library file defines no `main`.
+examples/rocksdb_kv/src/main.con skip
+examples/rocksdb_kv/rocksdb/src/lib.con skip

@@ -32,6 +32,13 @@ mod rocksdb {
     // Opaque handle types are all `*mut u8`: Concrete has no opaque foreign
     // type declaration, so the distinct C types are kept apart by the
     // distinct linear wrapper structs below, not by these signatures.
+    //
+    // KNOWN DEFECT (gap G3, docs/platform/ROCKSDB_SLICE1.md): the compiler
+    // replaces every call to an extern whose name ends in `_destroy` with an
+    // empty body it synthesizes (H18 drop-glue in Mono), so today the three
+    // rocksdb_*options_destroy calls below never reach RocksDB and those
+    // objects leak. The declarations stay correct; the gate fails until the
+    // compiler is fixed.
     extern fn rocksdb_options_create() with(Alloc) -> *mut u8;
     extern fn rocksdb_options_destroy(opts: *mut u8) with(Alloc);
     extern fn rocksdb_options_set_create_if_missing(opts: *mut u8, v: u8) with();
@@ -90,7 +97,7 @@ mod rocksdb {
     // c.h reports errors through `char** errptr`. The slot lives on the heap,
     // not in a local: `&mut err as *mut *mut u8` on a pointer-typed local is
     // miscompiled today (the callee receives the local's VALUE, NULL, not its
-    // address; docs/project/ROCKSDB_SLICE1.md, gap G2), which would make every
+    // address; docs/platform/ROCKSDB_SLICE1.md, gap G2), which would make every
     // RocksDB error invisible and turn a failed open into a NULL handle.
     trusted fn new_err_slot() with(Alloc) -> *mut *mut u8 {
         let slot: *mut *mut u8 = heap_new::<*mut u8>();

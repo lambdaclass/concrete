@@ -9,7 +9,7 @@
 # WHAT EACH LEG ESTABLISHES
 #   A  `concrete build` in the fresh clone, nothing else. This is the acceptance leg. It FAILS today:
 #      the compiler has no way to declare a native library, so the link of the RocksDB symbols
-#      fails (gap G1 in docs/project/ROCKSDB_SLICE1.md). The gate stays red until it passes.
+#      fails (gap G1 in docs/platform/ROCKSDB_SLICE1.md). The gate stays red until it passes.
 #   B  Interim harness, NOT acceptance evidence: when A fails, the same IR (`concrete build
 #      --emit-llvm`) is linked by this script with pkg-config's flags so the behaviour legs can run.
 #      Every behaviour result below says which binary it ran.
