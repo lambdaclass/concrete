@@ -165,11 +165,12 @@ cat > "$STUB/pkg-config" <<EOF
 # Stub pkg-config: knows 'nlstub' (links libnladd) and 'nlevil' (emits a flag outside the allow-list).
 case "\$*" in
   --version) echo 0.29.2 ;;
-  "--print-errors --exists nlstub"|"--print-errors --exists nlevil") exit 0 ;;
+  "--print-errors --exists nlstub"|"--print-errors --exists nlevil"|"--print-errors --exists nlopt") exit 0 ;;
   "--print-errors --exists "*) echo "Package \${3} was not found in the pkg-config search path." >&2
                                echo "No package '\${3}' found" >&2; exit 1 ;;
   "--libs nlstub") echo "-L$TMP/pc_static -lnladd" ;;
   "--libs nlevil") echo "-L$TMP/pc_static -lnladd -Wl,-undefined,dynamic_lookup" ;;
+  "--libs nlopt") echo "-L$TMP/pc_static -lnladd -ld_classic" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -197,6 +198,11 @@ mkapp "$TMP/app3evil" '
 pkg-config = ["nlevil"]'
 refused "$TMP/app3evil" app3evil "emitted '-Wl,-undefined,dynamic_lookup', which is not an accepted link flag" \
   "a pkg-config flag outside -L/-l/-pthread/-framework is refused, not forwarded" PATH="$STUB:$PATH"
+mkapp "$TMP/app3opt" '
+[native]
+pkg-config = ["nlopt"]'
+refused "$TMP/app3opt" app3opt "emitted '-ld_classic', which is not an accepted link flag" \
+  "a pkg-config -l token that is really a linker option (-ld_classic) is refused" PATH="$STUB:$PATH"
 
 echo "=== 4: malformed declarations fail closed; names cannot inject flags ==="
 bad(){ local tag="$1" native="$2" frag="$3" label="$4"
@@ -303,6 +309,35 @@ build_run "$TMP/multistr" multistr
 [ "$(cat "$TMP/multistr.brc")" = "0" ] && [ "$(cat "$TMP/multistr.rrc")" = "42" ] \
   && ok "[native] text inside multi-line strings is ignored; the real section still links" \
   || no "multi-line string manifest: brc=$(cat "$TMP/multistr.brc") rrc=$(cat "$TMP/multistr.rrc"): $(head -3 "$TMP/multistr.build" | tr '\n' ' ')"
+# Delimiters inside a single-line string or a comment do not open a multi-line string, so the
+# real section after them is still read (a mis-toggle would silently drop it).
+mkapp "$TMP/delimtext" ''
+cat > "$TMP/delimtext/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+description = "''' and \"\"\" inside a plain string"
+# a comment with ''' and """ in it
+
+[native] # '''
+libs = ["nladd"]
+lib-dirs = ["lib"]
+EOF
+mkdir -p "$TMP/delimtext/lib" && cp "$TMP/static/libnladd.a" "$TMP/delimtext/lib/"
+build_run "$TMP/delimtext" delimtext
+[ "$(cat "$TMP/delimtext.brc")" = "0" ] && [ "$(cat "$TMP/delimtext.rrc")" = "42" ] \
+  && ok "delimiters inside a plain string or a comment do not hide the [native] section after them" \
+  || no "delimiter-in-text manifest: brc=$(cat "$TMP/delimtext.brc") rrc=$(cat "$TMP/delimtext.rrc"): $(head -3 "$TMP/delimtext.build" | tr '\n' ' ')"
+bad unterminated '
+notes = """
+[native]
+libs = ["nladd"]' "unterminated multi-line string" "an unterminated multi-line string is refused"
+# -l<name> is not always a library: these spellings are linker options (ld64, clang, GNU ld).
+for nm in to_library d_classic azy_framework oad_hidden; do
+  bad "lopt_$nm" "
+[native]
+libs = [\"$nm\"]" "would be read as a linker option" "libs = [\"$nm\"] is refused (-l$nm is a linker option)"
+done
 bad dupsection '
 [native]
 libs = ["nladd"]

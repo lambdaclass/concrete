@@ -52,6 +52,7 @@ what G1 recorded.
 | a table header or top-level key written with a backslash escape (escapes are not decoded, so it could spell `native`) | load |
 | a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
+| a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |
 | a `lib-dirs` entry that is empty, starts with `-`, or contains `,` or a control character | load |
 | pkg-config not on `PATH` | link |
 | a pkg-config package pkg-config cannot find (its own `--print-errors` text is included) | link |
@@ -59,14 +60,18 @@ what G1 recorded.
 | a library directory that does not exist or is not a directory | link |
 
 Lines inside a multi-line string (`"""` or `'''`) are text, not structure: a description that
-quotes a `[native]` section declares and refuses nothing.
+quotes a `[native]` section declares and refuses nothing. String boundaries are found by a quote-,
+escape- and comment-aware scan, so a delimiter inside a plain string or a comment opens nothing;
+an unterminated string is refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 
 ## No flag injection
 
 Every value reaches clang as one argument vector element; no shell is involved. A name cannot
-begin with `-`, so it cannot become a flag, and it cannot contain a space or `,`. A directory
+begin with `-`, so it cannot become a flag, and it cannot contain a space or `,`. Prefixing `-l`
+is not by itself enough, because some linker options begin with `-l`; names that would spell one
+are refused (table above). A directory
 cannot contain `,`, which `-Wl,-rpath,<dir>` would otherwise split into further linker arguments.
 pkg-config output comes from a `.pc` file the manifest does not control, so it is checked against
 the allow-list above instead of being forwarded: a `.pc` that emits `-Wl,...` or any other flag is

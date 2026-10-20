@@ -250,6 +250,16 @@ def isValidNativeName (s : String) : Bool :=
   | [] => false
   | c :: _ => cs.length ≤ 128 && (c.isAlphanum || c == '_') && cs.all ok
 
+/-- A name `-l<name>` may carry: a valid native name whose `-l` spelling is not ALSO a driver or
+    linker option. Prefixing `-l` does not make an argument a library: ld64 reads `-lto_library`,
+    `-ld_classic`, `-ld_new`, `-lazy-l…`, `-lazy_library`, `-lazy_framework` and `-load_hidden` as
+    options, clang reads `-lazy_*` itself, and GNU ld matches single-dash long options such as
+    `-library…` before `-l`. Names beginning with those spellings are refused, in the manifest and
+    in pkg-config output alike. -/
+def isLinkableLibName (s : String) : Bool :=
+  isValidNativeName s &&
+    !(["to_", "to-", "d_", "d-", "azy", "oad_", "ibrary"].any (s.startsWith ·))
+
 /-- A library directory as written: non-empty, not flag-shaped, no `,` (it is spliced into
     `-Wl,-rpath,<dir>`), no control characters. -/
 def isValidNativeDir (s : String) : Bool :=
@@ -304,7 +314,37 @@ private def normTomlName (s : String) : String :=
 
     Lines inside a multi-line string (`"""` or `'''`) are text, not structure, and are skipped, so
     a description that mentions `[native]` declares nothing and refuses nothing. -/
-private def countSub (s d : String) : Nat := (s.splitOn d).length - 1
+private partial def tomlScanBasic (cs : List Char) : Except String (List Char) :=
+  match cs with
+  | '\\' :: _ :: r => tomlScanBasic r
+  | '"' :: r => .ok r
+  | _ :: r => tomlScanBasic r
+  | [] => .error "unterminated string"
+
+private partial def tomlScanLiteral (cs : List Char) : Except String (List Char) :=
+  match cs with
+  | '\'' :: r => .ok r
+  | _ :: r => tomlScanLiteral r
+  | [] => .error "unterminated string"
+
+/-- The string state at the end of one line, given the state at its start: 0 outside any string,
+    1 inside a multi-line basic string, 2 inside a multi-line literal string. Quote-, escape- and
+    comment-aware, so a delimiter inside a single-line string or a comment does not toggle it. -/
+private partial def tomlScanLine (st : Nat) (cs : List Char) : Except String Nat :=
+  match st, cs with
+  | 1, '\\' :: _ :: r => tomlScanLine 1 r
+  | 1, '"' :: '"' :: '"' :: r => tomlScanLine 0 r
+  | 1, _ :: r => tomlScanLine 1 r
+  | 2, '\'' :: '\'' :: '\'' :: r => tomlScanLine 0 r
+  | 2, _ :: r => tomlScanLine 2 r
+  | 0, '#' :: _ => .ok 0
+  | 0, '"' :: '"' :: '"' :: r => tomlScanLine 1 r
+  | 0, '\'' :: '\'' :: '\'' :: r => tomlScanLine 2 r
+  | 0, '"' :: r => do tomlScanLine 0 (← tomlScanBasic r)
+  | 0, '\'' :: r => do tomlScanLine 0 (← tomlScanLiteral r)
+  | 0, _ :: r => tomlScanLine 0 r
+  | st, [] => .ok st
+  | _, _ => .ok st
 
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
@@ -312,14 +352,14 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
-  let mut multi : Option String := none  -- the delimiter of the multi-line string we are inside
+  let mut strState : Nat := 0  -- tomlScanLine's state at the start of the current line
   for l in content.splitOn "\n" do
-    if let some d := multi then
-      if countSub l d % 2 == 1 then multi := none
-      continue
-    -- A line with an odd number of delimiters opens a multi-line string that later lines continue.
-    multi := if countSub l "\"\"\"" % 2 == 1 then some "\"\"\""
-      else if countSub l "'''" % 2 == 1 then some "'''" else none
+    let startState := strState
+    strState ← match tomlScanLine startState l.toList with
+      | .ok s => pure s
+      | .error e => throw s!"{e} in line '{l.trimAscii}'"
+    -- A line that BEGINS inside a multi-line string is text, not structure.
+    if startState != 0 then continue
     let t := l.trimAscii.toString
     if t.startsWith "[" then
       atTop := false
@@ -359,13 +399,19 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
           | .ok v => pure v
           | .error e => throw s!"'{key}': {e}"
         for v in vals do
-          let valid := if kind == .libDir then isValidNativeDir v else isValidNativeName v
+          let valid := match kind with
+            | .libDir => isValidNativeDir v
+            | .lib => isLinkableLibName v
+            | .pkgConfig => isValidNativeName v
           if !valid then
             throw (if kind == .libDir then
               s!"'{key}': '{v}' is not an accepted library directory (non-empty, not starting with '-', no ',' or control characters)"
+            else if kind == .lib && isValidNativeName v then
+              s!"'{key}': '{v}' is not a library name: -l{v} would be read as a linker option"
             else
               s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
           out := out ++ [(kind, v)]
+  if strState != 0 then throw "unterminated multi-line string"
   return out
 
 /-- The section for the trust reports: every declared native library, by package. Empty when none
@@ -436,7 +482,7 @@ def resolveNativeLinkFlags (decls : List NativeLibDecl) : IO (Except String (Arr
             match ← canonicalNativeDir d (tok.drop 2).toString s!"pkg-config '{d.value}'" with
             | .error e => return .error e
             | .ok c => flags := addDir flags c
-          else if tok.startsWith "-l" && isValidNativeName (tok.drop 2).toString then
+          else if tok.startsWith "-l" && isLinkableLibName (tok.drop 2).toString then
             flags := flags.push tok
           else if tok == "-pthread" then
             flags := flags.push tok
