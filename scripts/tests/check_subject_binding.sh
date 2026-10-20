@@ -179,7 +179,7 @@ grep -qF "✓ states.partial — Examples.ProofPatterns.Proofs.add_three_correct
   && ok "check-proofs: the stale claim sharing a theorem with a proved one is refused, not verified" \
   || no "check-proofs counts the stale claim as verified: $(grep -m1 'Summary' <<<"$SMP")"
 # Positive control for all_checked: a file whose every claim is proved and replays reads true.
-ACK="$("$C" examples/elf_header/src/main.con --report check-proofs --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['all_checked'], all(c['status']=='checked' for c in d['checks']))" 2>/dev/null)"
+ACK="$("$C" examples/elf_header/src/main.con --report check-proofs --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['all_checked'], len(d['checks'])>0 and all(c['status']=='checked' for c in d['checks']))" 2>/dev/null)"
 [ "$ACK" = "True True" ] \
   && ok "check-proofs: all_checked is true for elf_header, whose every claim is proved and checked" \
   || no "check-proofs all_checked positive control on elf_header reads '$ACK' (want True True)"
