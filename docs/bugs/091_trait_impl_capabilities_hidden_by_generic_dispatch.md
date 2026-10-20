@@ -358,6 +358,11 @@ programs rejected today with E0238:
   every branch yields an owned value;
 - `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
   reference stored in a place (`*w.r`).
+- shadowing a name that a live reference records as its source or parent
+  (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
+- any use of a reference binding — read, write, call — while a live exclusive alias of its
+  storage that is not its own ancestor exists (no non-lexical lifetimes: a reborrow stays live
+  to the end of its scope).
 
 Codex's last three open shapes are rejected: `(*r).p` with `r: &Heap<W>` (E0290, the heap-shell
 exemption now reads the normalized base), the conditional receiver hiding a conflicting
@@ -376,4 +381,15 @@ aliasing was decided by creation order, so a copied exclusive reference (`t = r`
 (now by reborrow/copy ancestry, `refParent`, with the valid nested reborrow still accepted);
 and an untraceable projection base (`(**r).p`) took the owned-heap exemption (now fail
 closed). Fixtures `error_091_norm_{cast_arg_overlap,parent_arg_under_reborrow,copied_mut_ref,double_deref_heap}.con`.
+
+Second pass of that review: reads and writes through a reference were not accesses — a field
+write `r.n = 5` or any use of `r` while `s = &mut *r` is live (now: any use of a reference binding
+under a live exclusive non-ancestor alias is E0231, and every assignment target is a normalized
+WRITE, `checkWriteAccess`: never through `&`, not while an alias of its reference is live, not
+into an owned root a live reference borrows); a scoped `borrow mut p as r` ignored live
+references to `p` and gave `r` a key unrelated to `p`; shadowing a name a live reference
+records as its source or parent detached it (now E0238); intrinsic calls skipped the
+reference-argument check; and `*(h)` did not consume a heap. Raw-pointer targets
+(`*self.ptr = v`, `*((base + i) as *mut u8) = v`) name raw storage, whatever reached the
+pointer. Fixtures `error_091_norm_{field_write_under_reborrow,borrow_block_under_live_ref,paren_heap_load}.con`.
 

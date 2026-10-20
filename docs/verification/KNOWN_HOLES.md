@@ -50,6 +50,11 @@ some valid programs are rejected:
   every branch yields an owned value;
 - `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
   reference stored in a place (`*w.r`).
+- shadowing a name that a live reference records as its source or parent
+  (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
+- any use of a reference binding — read, write, call — while a live exclusive alias of its
+  storage that is not its own ancestor exists (no non-lexical lifetimes: a reborrow stays live
+  to the end of its scope).
 
 Provenance is lexical and per binding (not flow-sensitive), and the source path behind a
 reference with recorded provenance is treated as the whole root (conservative). Owner: ROADMAP

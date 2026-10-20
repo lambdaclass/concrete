@@ -30,8 +30,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 ||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
-||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
->>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 =======
 >>>>>>> a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 =======
@@ -79,6 +77,18 @@ def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
 =======
 def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 >>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+||||||| parent of 88ed8312 (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
+||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+=======
+||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+=======
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+>>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+=======
+>>>>>>> 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 =======
 >>>>>>> 88ed8312 (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
 =======
@@ -160,6 +170,17 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 =======
 def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
+||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+=======
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+>>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 =======
 >>>>>>> 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 ||||||| parent of ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
@@ -327,9 +348,22 @@ def buildIdentity : String := "90d0f6b73fe5a4bb54088c51c857f23b"
 =======
 def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
 >>>>>>> 69254623 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
->>>>>>> 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 >>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
->>>>>>> 08943830 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+||||||| parent of c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+>>>>>>> 3acf4767 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+||||||| parent of e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+||||||| parent of e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+=======
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+>>>>>>> e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+>>>>>>> e6c0d249 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+>>>>>>> c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+>>>>>>> 6d428a2e (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 
 /-- How many source files the identity above was computed over.
 

@@ -1,0 +1,12 @@
+// Normalized place rule (Codex review, second pass): `(*(h)).take()` consumed nothing (the heap
+// load matched only a bare `*h`), so `(*h).take()` loaded the freed heap again. E0205.
+mod m {
+    struct P { n: Int }
+    impl P { fn take(self) -> Int { let P { n } = self; return n; } }
+    fn main() with(Alloc) -> Int {
+        let h: Heap<P> = alloc(P { n: 3 });
+        let a: Int = (*(h)).take();
+        let b: Int = (*h).take();
+        return a + b;
+    }
+}

@@ -1,0 +1,18 @@
+// Normalized place rule (Codex review, second pass): a field write through `r` while its
+// exclusive reborrow `s = &mut *r` is live aliases `s`. Any use of a reference binding
+// under a live exclusive non-ancestor alias is E0231.
+mod m {
+    struct P { n: i64 }
+    fn main() with(Std) -> Int {
+        let mut p: P = P { n: 1 };
+        if true {
+            let r: &mut P = &mut p;
+            let s: &mut P = &mut *r;
+            r.n = 5;
+            s.n = 7;
+            print_int(r.n);
+        }
+        let P { n } = p;
+        return 0;
+    }
+}

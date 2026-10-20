@@ -1068,11 +1068,11 @@ inductive Norm where
   | reject (why : String)
   deriving Inhabited
 
-private def NPlace.project (p : NPlace) (step : String) : NPlace :=
+def NPlace.project (p : NPlace) (step : String) : NPlace :=
   { p with steps := if p.exact then p.steps ++ [step] else p.steps,
            binding := none, heapLoad := false }
 
-private def Norm.project : Norm → String → Norm
+def Norm.project : Norm → String → Norm
   | .place p, step => .place (p.project step)
   | n, _ => n
 
@@ -1142,24 +1142,33 @@ partial def normRef (e : Expr) : CheckM Norm := do
       | _ => return .reject s!"'{n}' is not a reference"
     | none => return .reject s!"'{n}' is not a local binding"
   | .cast _ inner ty =>
-    let r : Reach := match ty with
-      | .ref _ => .shared "the place is reached through a cast to `&`"
-      | .refMut _ => .exclusive
-      | _ => .raw
-    match ← normProjBase inner with
-    | .place p => return .place { p with reach := p.reach.join r, binding := none, heapLoad := false }
-    | .temp => return .place { root := none, reach := r }
-    | .reject why => return .reject why
+    match ty with
+    | .ref _ | .refMut _ =>
+      let r : Reach := match ty with
+        | .ref _ => .shared "the place is reached through a cast to `&`"
+        | _ => .exclusive
+      match ← normProjBase inner with
+      | .place p => return .place { p with reach := p.reach.join r, binding := none, heapLoad := false }
+      -- a reference cast from a computed address (trusted raw code): untracked storage
+      | _ => return .place { root := none, reach := r }
+    -- a cast to a raw pointer names raw storage, whatever the operand (`(base + i) as *mut u8`)
+    | _ => return .place { root := none, reach := .raw }
   | .fieldAccess .. | .arrayIndex .. =>
     -- a pointer or heap shell stored in a field (`*self.ptr`)
     match ← peekExprType e with
-    | .ptrMut _ | .ptrConst _ => return (← normPlace e).reachedThrough .raw
+    -- the pointee of a raw pointer READ out of a place is raw storage, however that place
+    -- was reached (copying a pointer out of `&self` does not make its target shared)
+    | .ptrMut _ | .ptrConst _ => return .place { root := none, reach := .raw }
     | .heap _ | .heapArray _ => return (← normPlace e)
     | _ => return .reject "a reference stored in a place cannot be traced; bind it to a name first"
   | .deref .. => return .reject "a dereference of a dereference is not traced; bind the inner reference to a name first"
   | .ifExpr .. | .match_ .. =>
     return .reject "a reference produced by an `if`/`match` cannot be traced; borrow a named place in each branch's caller instead"
-  | _ => return .reject "the reference's source cannot be traced; bind it to a name first"
+  | other =>
+    -- pointer arithmetic and other raw-pointer-valued expressions name raw storage
+    match ← peekExprType other with
+    | .ptrMut _ | .ptrConst _ => return .place { root := none, reach := .raw }
+    | _ => return .reject "the reference's source cannot be traced; bind it to a name first"
 end
 
 /-- The conflict key of a normalized place: root + projection path (whole root when the

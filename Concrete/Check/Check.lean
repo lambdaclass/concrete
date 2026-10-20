@@ -207,6 +207,30 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
           if !info.mutable then
             throwCheck (.cannotMutBorrowImmutable root) span
 
+/-- A WRITE into a normalized place (`w.f = v`, `*r = v`, `a[i] = v`) is a mutable access
+    for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
+    is live (E0232), and not into an owned root that a live reference borrows (E0232). (The
+    binding-mutability rule for field writes is unchanged.) -/
+def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
+  let subject := "the assignment target"
+  match n with
+  | .reject why => throwCheck (.untraceablePlace subject why) span
+  | .temp => pure ()
+  | .place p =>
+    match p.reach with
+    | .shared desc => throwCheck (.mutReceiverThroughSharedRef subject desc) span
+    | .raw => pure ()
+    | .exclusive =>
+      match p.viaRef with
+      | some r => checkExclusiveRefUse r span
+      | none => pure ()
+    | .owned =>
+      match p.root with
+      | some root =>
+        if !(activeBorrowRefs (← getEnv) root).isEmpty then
+          throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+      | none => pure ()
+
 /-- The rules of `&place`, for every shared access to a normalized place: an owned root is not
     moved and not under a live `&mut` (E0231); through a reference binding, no newer exclusive
     reborrow of its storage is live (E0231); a place that does not normalize is E0238. -/
@@ -413,6 +437,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | none =>
     match ← lookupVarInfo name with
     | some info =>
+      -- Any use of a reference binding while a live EXCLUSIVE alias of its storage that is not
+      -- its own ancestor exists (`r` under `let s = &mut *r`) aliases that alias (E0231) — the
+      -- normalized place rule's "parent use during reborrow", for reads as well as calls.
+      match info.ty with
+      | .ref _ | .refMut _ => checkLiveExclusiveReborrow name (some e.getSpan)
+      | _ => pure ()
       if mode == .value then
         -- AUTO-CONSUME (the inversion): in value position, the ident read IS
         -- the move of a non-Copy binding. useVar first — the FROZEN check
@@ -626,6 +656,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     let env ← getEnv
     let isUserFn := env.userFnNames.contains fnName
     let intrinsic := if isUserFn then none else resolveIntrinsic fnName
+    -- An intrinsic's reference arguments are accesses like any call's (normalized place rule).
+    if intrinsic.isSome then
+      for arg in args do
+        checkRefArg arg (← peekExprType arg) (some e.getSpan)
     -- Intercept sizeof::<T>() and alignof::<T>() builtins
     if intrinsic == some .sizeof || intrinsic == some .alignof then
       if args.length != 0 then throwCheckMsg s!"{fnName} takes no value arguments"
@@ -1577,7 +1611,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return t
     | .heap t =>
       -- *heap_ptr: loads value from heap, frees memory, consumes the Heap<T>
-      match inner with
+      -- (`*(h)` is `*h`: parentheses never hide the consumed binding)
+      match stripParens inner with
       | .ident _ varName => consumeVar varName (some e.getSpan)
       | _ => pure ()
       return t
@@ -1837,6 +1872,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- entry's obligation vanishes behind the new one. Consume it first
       -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
       checkNoLiveShadow name (some stmt.getSpan)
+      -- Provenance and reborrow ancestry are recorded BY NAME; shadowing a name that a live
+      -- reference records as its source or parent would silently re-point it (Codex review of
+      -- the normalized place rule). Refused: use a different name.
+      if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
+          (vi.borrowedFrom == some name || vi.refParent == some name)) then
+        throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
+          "shadowing it would detach them from the storage they borrow; use a different name") (some stmt.getSpan)
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
       recordRefProvenance name finalTy value (some stmt.getSpan)
   | .assign _ name value =>
@@ -2043,6 +2085,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
     | _ => pure ()
     let objTy ← checkExpr obj none .place
+    checkWriteAccess ((← normProjBase obj).project field) (some stmt.getSpan)
     -- Auto-deref one layer: references, and (6D#3) the heap shells — the old
     -- `->` assignment semantics folded into `.`.
     let innerTy := match objTy with
@@ -2087,6 +2130,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
   | .derefAssign _ target value =>
     let targetTy ← checkExpr target none .place
+    checkWriteAccess (← normRef target) (some stmt.getSpan)
     match targetTy with
     | .refMut inner =>
       -- H15: `*r = v` through `&mut T` overwrites an INITIALIZED value — a
@@ -2105,6 +2149,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move happens in value-mode checkExpr (auto-consume).
   | .arrayIndexAssign _ arr index value =>
     let arrTy ← checkExpr arr none .place
+    checkWriteAccess ((← normProjBase arr).project "[]") (some stmt.getSpan)
     -- Bug 030: writing an element of a DIRECTLY-NAMED array requires the
     -- binding to be `mut` (same rule as scalar assignment). Writes through
     -- refs/ptrs are governed by their own &mut/(*mut) rules downstream.
@@ -2193,6 +2238,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Check for mutable borrow conflict: if var is already immutably borrowed, error
       if isMut && varInfo.borrowCount > 0 then
         throwCheck (.cannotMutBorrowImmBorrowed var) (some stmt.getSpan)
+      -- A scoped borrow is a borrow of `var` like `&var` / `&mut var`: it may not overlap a
+      -- live reference to it (normalized place rule; Codex review).
+      let liveRefs := activeBorrowRefs env var
+      if isMut && !liveRefs.isEmpty then
+        throwCheck (.cannotMutBorrowAlreadyBorrowed var) (some stmt.getSpan)
+      if !isMut && liveRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
+        throwCheck (.cannotBorrowMutablyBorrowed var) (some stmt.getSpan)
       -- Save state and freeze the original variable
       let savedState := varInfo.state
       let vars' := env.vars.map fun (n, vi) =>
@@ -2203,7 +2255,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let refTy := if isMut then Ty.refMut varInfo.ty else Ty.ref varInfo.ty
       addVar ref refTy true
       let envWithRef ← getEnv
-      setEnv { envWithRef with borrowRefs := ref :: envWithRef.borrowRefs }
+      -- The scoped reference's conflict key is its source binding.
+      setEnv { envWithRef with borrowRefs := ref :: envWithRef.borrowRefs,
+                               vars := envWithRef.vars.map fun (n, vi) =>
+                                 if n == ref then (n, { vi with borrowedFrom := some var }) else (n, vi) }
       -- Check body
       checkStmts body env.currentRetTy
       -- Clean up: remove ref from borrowRefs and unfreeze original variable

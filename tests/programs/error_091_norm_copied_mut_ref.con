@@ -1,5 +1,5 @@
 // Normalized place rule (Codex review): `t = r` copies an exclusive reference; using `t` while
-// the reborrow `s = &mut *r` is live aliases `s` (E0232). Aliases are told apart by the
+// the reborrow `s = &mut *r` is live aliases `s` (E0231 at the copy). Aliases are told apart by the
 // reborrow/copy ancestry (refParent), not creation order.
 mod m {
     struct P { n: i64 }

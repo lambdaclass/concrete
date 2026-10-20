@@ -1,5 +1,5 @@
 // Normalized place rule (Codex review): passing the parent `r` as a `&mut` argument while its
-// exclusive reborrow `s` is live is a use of `r` (E0232), as `r.bump()` is.
+// exclusive reborrow `s` is live is a use of `r` while an exclusive alias of it is live (E0231).
 mod m {
     struct P { n: i64 }
     impl P { fn bump(&mut self) { self.n = self.n + 1; } }

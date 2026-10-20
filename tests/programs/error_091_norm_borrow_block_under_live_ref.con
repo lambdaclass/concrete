@@ -1,0 +1,11 @@
+// Normalized place rule (Codex review, second pass): `borrow mut p as r in R { .. }` while
+// `s = &mut p` is live; a scoped borrow is a borrow of `p` like `&mut p`. E0232.
+mod m {
+    fn both(a: &mut Int, b: &mut Int) { *a = 1; *b = 2; }
+    fn main() -> Int {
+        let mut p: Int = 0;
+        let s: &mut Int = &mut p;
+        borrow mut p as r in R { both(r, s); }
+        return p;
+    }
+}
