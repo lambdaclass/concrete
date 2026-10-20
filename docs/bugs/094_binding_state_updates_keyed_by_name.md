@@ -39,22 +39,26 @@ entry with the name:
   (`borrowedFrom`) were keyed by name the same way.
 
 `let` refuses to shadow a still-live non-Copy binding (H16, E0292), but match-arm binders (enum
-payload and value patterns) and struct destructure binders did not, so a live outer binding could be
-shadowed and then consumed through the inner name.
+payload and value patterns) and struct destructure binders do not check it, so a live outer binding
+could be shadowed and then consumed through the inner name.
 
 ## Fix
 
-- H16 applies to every binder: enum payload binders, value-pattern binders and destructure binders
-  call the same `checkNoLiveShadow` as `let` (E0292). Shadowing a consumed binding stays legal.
 - `consumeVar`, `useVar`, reassignment, `defer`, and the borrow-block freeze and unfreeze update only
   the binding the name resolves to, by `uid`; a `let` borrow records its source on the binding just
-  added.
+  added. The reproducer is now E0209 (the arms disagree on the outer `value`).
+- A match-arm binder is arm-scoped: after the match the outer binding is visible again with its own
+  obligation, so an arm binder may shadow a live binding (`match v.byte(0) { Some { value } => .. }`
+  over a live `value` is valid; `tests/regressions/owner_bound` relies on it).
+- A struct destructure binder stays in scope for the rest of the block, so it calls the same
+  `checkNoLiveShadow` as `let` (E0292). Shadowing a consumed binding stays legal.
 
 ## Gate
 
 `scripts/tests/run_tests.sh`: `error_094_arm_binder_shadows_live.con`,
 `error_094_destructure_shadows_live.con` and `error_094_value_binder_shadows_live.con` must fail
-with E0292 (all three compiled on the previous compiler); `regress_094_shadowing_binders.con`
-(binders over consumed bindings) and `regress_094_shadow_state_by_identity.con` must compile and
-return 42. The second positive control is rejected with a false E0208 if either reassignment or
-`useVar` is reverted to marking every same-named entry.
+with E0209, E0292 and E0208 respectively (all three compiled on the previous compiler);
+`regress_094_shadowing_binders.con` (binders over consumed bindings, and arm binders over a live
+binding consumed after the match) and `regress_094_shadow_state_by_identity.con` must compile and
+return 42. The first positive control is rejected with a false E0209 if `consumeVar` reverts to
+marking every same-named entry; the second with a false E0208 if reassignment or `useVar` does.

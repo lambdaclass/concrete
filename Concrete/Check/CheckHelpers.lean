@@ -265,7 +265,8 @@ def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option
 
 /-- H16 (E0292): binding `name` must not shadow a still-live non-Copy binding —
     the shadowed value would become unreachable and silently dropped. Applies to
-    `let` and (bug 094) to match-arm binders. -/
+    `let` and (bug 094) to struct-destructure binders, which stay in scope for
+    the rest of the block. Match-arm binders are arm-scoped and may shadow. -/
 def checkNoLiveShadow (name : String) (span : Option Span := none) : CheckM Unit := do
   match (← getEnv).vars.lookup name with
   | some prev =>

@@ -155,11 +155,12 @@ false. Gated by new constant-fold and both-paths-reject sections in `check_cast_
 
 `let value = alloc(5); match mk(7) { Some { value } => free(value), None => free(value) }` compiled
 and leaked the outer `value` on the `Some` path: freeing the arm binder marked every binding named
-`value` consumed. Match-arm and destructure binders now refuse to shadow a still-live non-Copy
-binding (E0292, as `let` already did), and consume, use, reassignment, `defer` and the borrow-block
-freeze update only the binding the name resolves to, by identity. Fixtures `error_094_*.con` (three
-binder kinds) and positive controls `regress_094_shadowing_binders.con`,
-`regress_094_shadow_state_by_identity.con`.
+`value` consumed. Consume, use, reassignment, `defer` and the borrow-block freeze now update only
+the binding the name resolves to, by identity, so the arms disagree on the outer `value` (E0209); an
+arm binder stays arm-scoped and may shadow a live binding that is consumed after the match. A struct
+destructure binder, which stays in scope for the rest of the block, refuses to shadow a still-live
+non-Copy binding (E0292, as `let` already did). Fixtures `error_094_*.con` (three binder kinds) and
+positive controls `regress_094_shadowing_binders.con`, `regress_094_shadow_state_by_identity.con`.
 
 ### Checker Bindings Have An Identity, Not Just A Name (bug 093)
 

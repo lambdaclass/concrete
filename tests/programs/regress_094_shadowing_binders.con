@@ -1,9 +1,25 @@
 // Bug 094 positive control: binders that shadow CONSUMED bindings stay legal,
 // and consuming a shadowing binder leaves the outer binding's own state alone.
+// A match-arm binder is arm-scoped, so it may shadow a LIVE binding, which is
+// visible (and still owed) after the match: `arm_shadow` consumes it there.
+// With name-keyed consumption, freeing the binder consumed the outer one too
+// and the second arm left it live: a false E0209.
 struct R { v: Int }
 struct P { value: R }
 fn eat(r: R) -> Int { let R { v } = r; return v; }
 fn mk(k: Int) -> Option<R> { return Option::Some { value: R { v: k } }; }
+fn arm_shadow() -> Int {
+    let value: R = R { v: 6 };
+    let mut n: Int = 0;
+    match mk(4) {
+        Option::Some { value } => { n = eat(value); },
+        Option::None => { },
+    }
+    match 1 {
+        value => { n = n + value; },
+    }
+    return n + eat(value);
+}
 fn main() -> Int {
     let value: R = R { v: 5 };
     let mut out: Int = eat(value);
@@ -20,5 +36,5 @@ fn main() -> Int {
         Option::Some { value } => { out = out + eat(value); },
         Option::None => { },
     }
-    return out;
+    return out + arm_shadow() - 11;
 }

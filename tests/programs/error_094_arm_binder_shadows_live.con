@@ -1,7 +1,7 @@
 // Bug 094: an enum-arm binder shadowing a LIVE linear binding. Consuming the
 // binder marked the outer `value` consumed too, so on the Some path the outer
-// Heap<Int> leaked (the None arm's free(value) is the outer one). Now E0292,
-// as for `let`: a binder may not shadow a still-live non-Copy binding.
+// Heap<Int> leaked (the None arm's free(value) is the outer one). Consumption
+// now marks only the binder, so the arms disagree on the outer `value` (E0209).
 fn mk(k: Int) with(Alloc) -> Option<Heap<Int>> { return Option::Some { value: alloc(k) }; }
 fn main() with(Std) -> Int {
     let value: Heap<Int> = alloc(5);

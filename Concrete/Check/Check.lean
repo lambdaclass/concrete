@@ -978,10 +978,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               let bindTy ← do
                 if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
                 else pure fieldTy
-              if binding != "_" then
-                -- H16 for arm binders (bug 094): shadowing a live linear hides it.
-                checkNoLiveShadow binding (some e.getSpan)
-                addVar binding bindTy
+              -- An arm binder may shadow a live binding: it is arm-scoped, so
+              -- the outer binding is visible again (with its own obligation)
+              -- after the match; state updates key on uid (bug 094).
+              if binding != "_" then addVar binding bindTy
               -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
               -- borrowed view). A non-Copy OWNED field must be bound and consumed
               -- exactly once (destructure it, don't drop it).
@@ -993,9 +993,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             checkGuard guard
             pure body
           | .varArm _ binding guard body => do
-            if binding != "_" then
-              checkNoLiveShadow binding (some e.getSpan)
-              addVar binding innerTyR
+            if binding != "_" then addVar binding innerTyR
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1122,7 +1120,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             -- `match h { y => free(y) } ; free(h);` aliases one linear handle
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
-            checkNoLiveShadow binding (some e.getSpan)
             addVar binding bindTy
           else if !scrCopy then
             throwCheck (.wildcardDiscardsNonCopy (tyToString bindTy)) (some e.getSpan)
