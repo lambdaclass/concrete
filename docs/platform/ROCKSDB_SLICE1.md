@@ -34,6 +34,24 @@ checked facts. Nothing checks the declarations against `c.h` beyond the observer
 assertions (`size_t` = `u64`, `unsigned char` = `u8`, 64-bit pointers); signature checking
 belongs to R-0283/R-0287.
 
+## Failure and resource contract
+
+R-0285's failure and resource contract asks, for each fallible operation, what success and each
+recoverable error mean for ownership, partial progress, observable state and retry. For the three
+operations this slice binds:
+
+| operation | on error | ownership after the error | state and retry |
+|---|---|---|---|
+| `Db::open(&Options, &String)` | `Err(DbError { kind: Open, message })` | `Options` and the path stay caller-owned (borrowed); no `Db` exists, nothing to close; RocksDB's message buffer is released with `rocksdb_free` inside the wrapper | no rollback is promised: RocksDB may already have created directories or files under the path before failing. Retrying is the caller's decision; the wrapper claims nothing about it |
+| `Db::put(&self, &WriteOptions, &Bytes, &Bytes)` | `Err(DbError { kind: Put, message })` | the `Db`, options, key and value stay caller-owned; the `Db` must still be closed | no wrapper-level rollback and no safe-retry guarantee: whether the write reached the WAL or memtable is RocksDB's to say, and the C API reports only a status message |
+| `Db::get(&self, &ReadOptions, &Bytes)` | `Err(DbError { kind: Get, message })` | as for `put`; a value buffer returned alongside an error (not expected from c.h) is released with `rocksdb_free` | reads have no observable effect to roll back |
+
+Provenance: the ownership facts come from the pinned 10.9.1 `rocksdb/c.h` (its header comment:
+on failure `*errptr` is set to a `malloc()`ed NUL-terminated message, and on success it is left
+unchanged) and from `rocksdb_free` being the C API's release for buffers it returns. They are reviewed assumptions, not checked facts. Only the open failure is
+exercised by the gate: this slice has no independent observable control for a partial `put` or a
+retry (gap G7).
+
 ## Running it
 
 ```sh
@@ -90,9 +108,9 @@ every application that depends on it. Until then the gate's leg B links `concret
 
 `&mut x as *mut *mut T`, where `x` is a local of pointer type, passes `x`'s **value** instead of
 its address; the local never gets a stack slot. An integer local is fine. RocksDB reports every
-error through `char** errptr`, so a binding written the obvious way never sees an error and turns
-a failed open into a NULL `Db` treated as success; the first run of the example crashed with
-SIGSEGV.
+error through `char** errptr` and requires that slot to be non-NULL (`SaveError` in `db/c.cc`),
+so a binding written the obvious way hands RocksDB a NULL error slot, and error reporting asserts
+or dereferences NULL inside RocksDB; the first run of the example crashed with SIGSEGV.
 
 ```con
 trusted fn set_through(p: *mut *mut u8, q: *mut u8) {
@@ -160,6 +178,15 @@ generated workflow.
 
 The gate clones the sources but runs this checkout's compiler binary. Building the compiler in
 the clone is the fresh-consumer CI case R-0285 schedules after the first slice runs.
+
+### G7. No partial-progress or retry control
+
+The roadmap's failure contract asks for an independent observable control where the selected API
+supports partial progress or retry, or a stated limit. RocksDB's `put` can fail after partial work
+(WAL written, memtable not), but nothing in this slice injects such a failure, and the C API
+gives the caller no way to observe partial progress. The limit is stated in the table above; the
+control belongs to the first writer/runtime adapter that can inject a write failure, as the
+roadmap allows.
 
 ## Acceptance checklist (from the roadmap) and current state
 

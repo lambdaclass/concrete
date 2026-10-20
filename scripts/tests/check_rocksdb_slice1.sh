@@ -132,14 +132,23 @@ echo "=== B2: every foreign declaration stays foreign in the emitted IR ==="
   || { no "concrete build --emit-llvm failed: $(head -3 "$TMP/ir.err" | tr '\n' ' ')"; finish; }
 EXTERNS="$(sed -nE 's/^[[:space:]]*extern fn ([A-Za-z_][A-Za-z0-9_]*)\(.*/\1/p' "$EX/rocksdb/src/lib.con")"
 [ -n "$EXTERNS" ] || { no "found no extern fn declarations in the binding package"; finish; }
-n_ext=0; shadowed=""
+# Each extern must be exactly one `declare` and no `define`: a missing declaration (a call removed
+# or renamed by a compiler defect) fails as surely as a substituted body.
+n_ext=0; shadowed=""; undeclared=""
 for f in $EXTERNS; do
   n_ext=$((n_ext+1))
-  grep -qE "^define [^@]*@$f\(" "$TMP/ir.ll" && shadowed="$shadowed $f"
+  if grep -qE "^[[:space:]]*define [^@]*@$f\(" "$TMP/ir.ll"; then
+    shadowed="$shadowed $f"
+  elif [ "$(grep -cE "^[[:space:]]*declare [^@]*@$f\(" "$TMP/ir.ll")" != "1" ]; then
+    undeclared="$undeclared $f"
+  fi
 done
 [ -z "$shadowed" ] \
-  && ok "all $n_ext extern fns are declared, none defined by the compiler" \
+  && ok "none of the $n_ext extern fns is defined by the compiler" \
   || no "the compiler DEFINED foreign symbols with its own body (gap G3):$shadowed"
+[ -z "$undeclared" ] \
+  && ok "every extern that is not compiler-defined is exactly one foreign declaration" \
+  || no "extern fns without exactly one 'declare' in the IR:$undeclared"
 
 echo "=== D setup: the release observer ==="
 OBS_SRC="$CL/tests/regressions/rocksdb_slice1/release_observer.c"
@@ -224,9 +233,20 @@ PYEOF
 if [ $? -eq 0 ] && build_example "$MUT" "$TMP/mut_kv" mut; then
   run_observed "$TMP/mut_kv" mutrun "$TMP/mutdb" "$BAD"
   mline="$(grep -E '^value ' "$TMP/mutrun.obs" 2>/dev/null)"
-  one_record mutrun && [ "$mline" = "value acquired=1 released=0 live=1 bad=0" ] \
-    && ok "a leaked value buffer is reported live (observer is not vacuous)" \
-    || no "mutated binding not caught: [$mline]"
+  # The mutant must complete exactly like the baseline (same exit, transcript modulo the
+  # path-bearing error line, empty stderr) and its record may differ from the baseline's ONLY in
+  # the value line: the control then shows the observer sees this one leak and nothing else moved.
+  same_run=false
+  [ "$(cat "$TMP/mutrun.rc")" = "$(cat "$TMP/run.rc")" ] && [ ! -s "$TMP/mutrun.err" ] \
+    && [ "$(sed -n '2,$p' "$TMP/mutrun.out")" = "$(sed -n '2,$p' "$TMP/run.out")" ] && same_run=true
+  same_rest=false
+  one_record run && one_record mutrun \
+    && [ "$(grep -v '^value ' "$TMP/mutrun.obs")" = "$(grep -v '^value ' "$TMP/run.obs")" ] && same_rest=true
+  $same_run && ok "the mutant completes like the baseline (exit, transcript, empty stderr)" \
+    || no "the mutant did not complete like the baseline (rc=$(cat "$TMP/mutrun.rc"); stderr: $(head -2 "$TMP/mutrun.err" | tr '\n' ' '))"
+  $same_rest && [ "$mline" = "value acquired=1 released=0 live=1 bad=0" ] \
+    && ok "a leaked value buffer is reported live and nothing else changes (observer is not vacuous)" \
+    || no "mutated binding not caught as exactly one leaked value: [$mline]"
 else
   no "could not apply or build the observer mutation"
 fi

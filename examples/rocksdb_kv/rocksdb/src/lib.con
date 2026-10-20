@@ -65,7 +65,8 @@ mod rocksdb {
 
     // A recoverable RocksDB failure: the operation and RocksDB's own message,
     // copied into a Concrete String (the foreign message buffer is released
-    // with rocksdb_free before this value exists). Linear: drop it.
+    // with rocksdb_free before this value exists; a message that is not valid
+    // UTF-8 is replaced by a fixed one). Linear: drop it.
     pub struct DbError {
         pub kind: DbErrorKind,
         pub message: String,
@@ -90,15 +91,26 @@ mod rocksdb {
             i = i + 1;
         }
         rocksdb_free(err);
-        return DbError { kind: kind, message: b.to_string_unchecked() };
+        // RocksDB does not promise UTF-8 messages (paths are raw bytes), so
+        // the crossing into String is the checked one.
+        match b.to_string() {
+            Option::Some { value } => {
+                return DbError { kind: kind, message: value };
+            },
+            Option::None => {
+                let m: String = "RocksDB returned a non-UTF-8 error message";
+                return DbError { kind: kind, message: m };
+            },
+        }
     }
 
     // ---- error out-parameter -------------------------------------------------
     // c.h reports errors through `char** errptr`. The slot lives on the heap,
     // not in a local: `&mut err as *mut *mut u8` on a pointer-typed local is
     // miscompiled today (the callee receives the local's VALUE, NULL, not its
-    // address; docs/platform/ROCKSDB_SLICE1.md, gap G2), which would make every
-    // RocksDB error invisible and turn a failed open into a NULL handle.
+    // address; docs/platform/ROCKSDB_SLICE1.md, gap G2). RocksDB requires a
+    // non-NULL error slot, so error reporting would assert or dereference NULL
+    // inside RocksDB.
     trusted fn new_err_slot() with(Alloc) -> *mut *mut u8 {
         let slot: *mut *mut u8 = heap_new::<*mut u8>();
         *slot = 0 as *mut u8;
