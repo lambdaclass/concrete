@@ -285,32 +285,58 @@ partial def parseNativeStrArray (s : String) : Except String (List String) :=
   | '[' :: rest => elems rest []
   | _ => .error "expected an array of strings, like [\"name\"]"
 
-/-- The `[native]` declarations of one manifest, in order, or the reason they are refused. -/
+/-- A TOML key or table name with quoting and whitespace removed, so `"native"`, `'native'` and
+    ` native ` are recognised as the same name. Used only to RECOGNISE spellings of `native`, never
+    to accept them: any spelling but the plain one is refused. -/
+private def normTomlName (s : String) : String :=
+  String.ofList (s.toList.filter fun c => c != '"' && c != '\'' && c != ' ' && c != '\t')
+
+/-- The `[native]` declarations of one manifest, in order, or the reason they are refused.
+
+    Only the plain spelling is read: one `[native]` header, then `key = ["...", ...]` lines. Every
+    other TOML spelling that would name the same table — a quoted header (`["native"]`), a subtable
+    or array table (`[native.x]`, `[[native]]`), a top-level `native = {...}` inline table or
+    dotted key (`native.libs = [...]`) — is REFUSED rather than ignored, as are a second `[native]`
+    section and a repeated key: this line reader is not a full TOML parser, so anything it cannot
+    read exactly must stop the build instead of silently declaring nothing. -/
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
+  let mut seenNative := false
+  let mut atTop := true
+  let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
   for l in content.splitOn "\n" do
     let t := l.trimAscii.toString
     if t.startsWith "[" then
-      -- The table name, without brackets: `[native]`, `[native.x]` and `[[native]]` all name it.
-      let name := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile fun c => c != ']' && c != '.')
-      let afterHeader := (t.drop "[native]".length).trimAscii.toString
-      if name.trimAscii.toString == "native" then
+      atTop := false
+      let header := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile (· != ']'))
+      let name := normTomlName header
+      if name == "native" || name.startsWith "native." then
+        let afterHeader := (t.drop "[native]".length).trimAscii.toString
         if t.startsWith "[native]" && (afterHeader.isEmpty || afterHeader.startsWith "#") then
+          if seenNative then throw "a second [native] section (declare everything in one)"
           inNative := true
+          seenNative := true
         else
-          throw s!"unsupported table '{t}': native libraries are declared in one [native] section"
+          throw s!"unsupported table '{t}': native libraries are declared in one plain [native] section"
       else
         inNative := false
-    else if inNative && !t.isEmpty && !t.startsWith "#" then
-      match t.splitOn "=" with
-      | key :: valParts =>
-        let key := key.trimAscii.toString
+    else if !t.isEmpty && !t.startsWith "#" then
+      let rawKey := ((t.splitOn "=").headD "").trimAscii.toString
+      if atTop then
+        let k := normTomlName rawKey
+        if k == "native" || k.startsWith "native." then
+          throw s!"unsupported top-level key '{rawKey}': native libraries are declared in a plain [native] section"
+      else if inNative then
+        let valParts := (t.splitOn "=").drop 1
+        let key := normTomlName rawKey
         let kind ← match key with
           | "pkg-config" => pure NativeKind.pkgConfig
           | "libs" => pure NativeKind.lib
           | "lib-dirs" => pure NativeKind.libDir
-          | _ => throw s!"unknown key '{key}' (accepted: pkg-config, libs, lib-dirs)"
+          | _ => throw s!"unknown key '{rawKey}' (accepted: pkg-config, libs, lib-dirs)"
+        if seenKeys.contains key then throw s!"key '{key}' is given twice"
+        seenKeys := key :: seenKeys
         let vals ← match parseNativeStrArray ("=".intercalate valParts) with
           | .ok v => pure v
           | .error e => throw s!"'{key}': {e}"
@@ -322,7 +348,6 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
             else
               s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
           out := out ++ [(kind, v)]
-      | [] => throw s!"could not parse line '{t}'"
   return out
 
 /-- The section for the trust reports: every declared native library, by package. Empty when none
@@ -440,6 +465,26 @@ partial def findProjectRoot (startDir : String) : IO (Option String) := do
     if parent == dir || parent.isEmpty then return none
     up parent
   up start
+
+/-- The native declarations a SINGLE-FILE compile (`concrete <file> -o out`, `--test`) links: those
+    of the package enclosing the file, if any. File mode loads no dependency package, so no
+    dependency's code is linked and no dependency's library is needed; but the enclosing package's
+    own `[native]` is, and it is refused here exactly as `loadProject` refuses it, so the same
+    manifest cannot link in one mode and be ignored in the other. -/
+def fileModeNativeDecls (inputPath : String) : IO (Except String (List NativeLibDecl)) := do
+  match ← findProjectRoot (dirOf inputPath) with
+  | none => return .ok []
+  | some root =>
+    let tomlPath := root ++ "/Concrete.toml"
+    let toml ← try pure (Except.ok (← readFile tomlPath)) catch e => pure (Except.error (toString e))
+    match toml with
+    | .error e => return .error s!"error: cannot read {tomlPath}: {e}"
+    | .ok toml =>
+    match parseNativeSection toml with
+    | .error e => return .error s!"error: {tomlPath} [native]: {e}\nhint: see docs/platform/NATIVE_LIBRARIES.md"
+    | .ok v =>
+      let name := (Proof.packageField toml "name").getD "the project"
+      return .ok (v.map fun (kind, value) => { package := name, packageRoot := root, kind, value })
 
 /-- Resolve a dependency path relative to the project root. -/
 def resolveDependencyPath (projectRoot : String) (depPath : String) : String :=
@@ -610,7 +655,18 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     | .ok (modules, srcMap) =>
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
-      let depToml ← try pure (some (← readFile (resolvedPath ++ "/Concrete.toml"))) catch _ => pure none
+      -- ABSENT is not UNREADABLE. A dependency with no manifest is a legitimate standalone package;
+      -- a manifest that exists and cannot be read used to be treated the same way, silently
+      -- dropping its [native] declarations and its identity. It is refused instead.
+      let depTomlPath := resolvedPath ++ "/Concrete.toml"
+      let depTomlRead : Except String (Option String) ←
+        if !(← System.FilePath.pathExists ⟨depTomlPath⟩) then pure (.ok none)
+        else try pure (.ok (some (← readFile depTomlPath))) catch e => pure (.error (toString e))
+      let depToml ← match depTomlRead with
+        | .ok t => pure t
+        | .error e =>
+          IO.eprintln s!"error: dependency '{depName}': cannot read {depTomlPath}: {e}"
+          return Except.error 1
       -- The dependency's [native] declarations propagate to this build's link (G1).
       if let some t := depToml then
         match parseNativeSection t with

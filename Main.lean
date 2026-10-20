@@ -302,6 +302,16 @@ def tracePipeline (inputPath : String) : IO UInt32 := do
   emit ok none (Pipeline.telemetryJson git (Pipeline.astModuleNodes parsed.modules) validCore mono ssa 0)
   return 0
 
+/-- The link flags for a single-file compile: the enclosing package's own `[native]` declarations
+    (`fileModeNativeDecls`), or none outside a package; `none` after printing a refusal. -/
+def fileModeNativeLinkFlags (inputPath : String) : IO (Option (Array String)) := do
+  match ← fileModeNativeDecls inputPath with
+  | .error e => IO.eprintln e; return none
+  | .ok decls =>
+    match ← resolveNativeLinkFlags decls with
+    | .ok flags => return some flags
+    | .error e => IO.eprintln e; return none
+
 /-- Compile via SSA pipeline: Parse → Resolve → Check → Elab → CoreCanonicalize → CoreCheck → Mono → Lower → SSAVerify → SSACleanup → EmitSSA → clang -/
 def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO UInt32 := do
   let source ← readFile inputPath
@@ -341,8 +351,10 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
     if !llValid then
       IO.FS.removeFile ⟨llPath⟩
       return 1
-    -- Compile with clang
-    let args ← clangArgs llPath outputPath
+    -- Compile with clang, linking the enclosing package's declared native libraries ([native], G1).
+    let some native ← fileModeNativeLinkFlags inputPath
+      | IO.FS.removeFile ⟨llPath⟩; return 1
+    let args ← clangArgs llPath outputPath native
     let exitCode ← runCmd "clang" args
     if exitCode != 0 then
       IO.eprintln "clang compilation failed"
@@ -411,7 +423,9 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
     -- Validate LLVM IR (if llvm-as available)
     let llValid ← validateLLVMIR llPath
     if !llValid then return 1
-    let args ← clangArgs llPath outPath
+    let some native ← fileModeNativeLinkFlags inputPath
+      | return 1
+    let args ← clangArgs llPath outPath native
     let exitCode ← runCmd "clang" args
     if exitCode != 0 then
       IO.eprintln "clang compilation failed"
