@@ -33,17 +33,28 @@ def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 >>>>>>> 3396afcf (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
 =======
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
+>>>>>>> d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+>>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+=======
+||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
 =======
 def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 >>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
->>>>>>> d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 ||||||| parent of ae598662 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
 ||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 >>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+>>>>>>> d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+>>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 =======
+>>>>>>> a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+=======
+>>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
 ||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
@@ -109,14 +120,35 @@ def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
 =======
 ||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 =======
+||||||| parent of 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+||||||| parent of ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+=======
+def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
+>>>>>>> ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+>>>>>>> 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of cf45b39e (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
 =======
 def buildIdentity : String := "8afc64a24596743432018e98e8505fcb"
 >>>>>>> cf45b39e (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
->>>>>>> 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 >>>>>>> 7c08f677 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
->>>>>>> 18b24e9a (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
+||||||| parent of a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+=======
+||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+>>>>>>> 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
+=======
+||||||| parent of 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+=======
+||||||| parent of e1a51c88 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+def buildIdentity : String := "8afc64a24596743432018e98e8505fcb"
+=======
+def buildIdentity : String := "4d6fcd563eb743b0c85d641a8c6b05a0"
+>>>>>>> e1a51c88 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+>>>>>>> 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+>>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+>>>>>>> a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 
 /-- How many source files the identity above was computed over.
 

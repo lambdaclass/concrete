@@ -420,6 +420,9 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
       | .shared _ | .exclusiveRef =>
         if !(← isCopyType innerTy) then refusedRef
       | _ =>
+        let obj := match obj with
+          | .fieldAccess sp base f => Expr.fieldAccess sp (stripParens base) f
+          | o => o
         match obj with
         | .ident _ varName => consumeVarIfExists varName span
         | .fieldAccess _ (.ident _ _) f =>
@@ -1311,8 +1314,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Heap-shell access keeps the blessed `->` semantics: heap interiors are
     -- not linearity-tracked, so `h.next` + `free(h)` (the heap-node
     -- destructure) stays legal — H11 below is skipped for it.
+    -- Only an OWNED shell: through `&Heap<W>` / `&mut Heap<W>` the owner is elsewhere and a
+    -- by-value non-Copy field read would hand out a payload it still holds (bug 091 round 3).
     let isHeapShell := match objTy with
-      | .heap _ | .heapArray _ | .ref (.heap _) | .refMut (.heap _) => true
+      | .heap _ | .heapArray _ => true
       | _ => false
     -- Extract struct name, type args and capability args for substitution
     let (structName, typeArgs, capArgs) := match innerTy with

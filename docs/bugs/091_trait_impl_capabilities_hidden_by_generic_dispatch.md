@@ -301,4 +301,11 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_newtype_payload_through_ref.con` (E0290), `error_091_mut_receiver_deref_field_arg.con`
   (E0293), `trait_destroy_newtype_payload.con` (1, compiled; the interpreter does not model
   newtype casts).
+* **Codex review of round 3, eighth pass.** A borrow nested in a dereference (`&*(&*r)`) or
+  yielded by an `if`/`match` argument contributed no path to E0293 (`borrowPathOf` reads
+  through inner borrows; `branchBorrowParts`); the heap-interior exemption covered
+  `&Heap<W>` / `&mut Heap<W>` too, handing out a payload the heap still held (only an owned
+  shell is exempt now: E0290); `(w).0.destroy()` was a false E0290. Fixtures
+  `error_091_mut_receiver_nested_reborrow_arg.con`, `error_091_mut_receiver_if_reborrow_arg.con`
+  (E0293), `error_091_heap_field_through_ref.con` (E0290), `trait_destroy_newtype_payload_paren.con` (1).
 

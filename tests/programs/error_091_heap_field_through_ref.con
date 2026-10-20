@@ -1,0 +1,22 @@
+// Bug 091 round 3 (Codex review, eighth pass): `r.p` with `r: &Heap<W>` took the owned-heap
+// interior exemption and handed out a payload the heap still held (destroyed twice). Only an
+// owned `Heap<W>` shell is exempt. Expected: E0290.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl Destroy for P {
+        fn destroy(self) { let P { n } = self; }
+    }
+    fn f(r: &Heap<W>) {
+        let p: P = r.p;
+        p.destroy();
+    }
+    fn main() with(Alloc) -> Int {
+        let h: Heap<W> = alloc(W { p: P { n: 1 } });
+        f(&h);
+        let w: W = *h;
+        let W { p } = w;
+        p.destroy();
+        return 0;
+    }
+}

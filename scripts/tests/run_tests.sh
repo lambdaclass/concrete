@@ -1517,6 +1517,12 @@ run_ok  "$TESTDIR/trait_mut_receiver_match_owned_binder.con" "7" 0
 run_err "$TESTDIR/error_091_newtype_payload_through_ref.con"   "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_field_arg.con"  "(E0293)"
 run_ok  "$TESTDIR/trait_destroy_newtype_payload.con" "1" 0
+# Codex review of round 3 (eighth pass): nested and conditional reborrow arguments, a heap
+# interior read through `&Heap<W>`, and `(w).0.destroy()`.
+run_err "$TESTDIR/error_091_mut_receiver_nested_reborrow_arg.con" "(E0293)"
+run_err "$TESTDIR/error_091_mut_receiver_if_reborrow_arg.con"     "(E0293)"
+run_err "$TESTDIR/error_091_heap_field_through_ref.con"           "(E0290)"
+run_ok  "$TESTDIR/trait_destroy_newtype_payload_paren.con" "1" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

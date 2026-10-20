@@ -1023,6 +1023,8 @@ partial def borrowPathOf : Expr → Option (String × List String)
   -- (`(*r).p` and `r.p` are one place), so `r.m(&*r)` with a `&mut self` receiver overlaps
   -- (bug 091 round 3, Codex review).
   | .deref _ inner => borrowPathOf inner
+  -- `*(&x)` / `*(&*r)`: a borrow inside a place names the borrowed place itself.
+  | .borrow _ inner | .borrowMut _ inner => borrowPathOf inner
   | _ => none
 
 /-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
@@ -1050,13 +1052,31 @@ partial def unparenExpr : Expr → Expr
   | .paren _ inner => unparenExpr inner
   | e => e
 
+/-- The borrows an `if`/`match` argument may yield: each branch tail that is a borrow. -/
+partial def branchBorrowParts (e : Expr) : List ((String × List String) × Bool) :=
+  let tailOf : List Stmt → List ((String × List String) × Bool) := fun stmts =>
+    match stmts.getLast? with
+    | some (.expr _ t true) =>
+      match unparenExpr t with
+      | .borrow _ inner => (borrowPathOf inner).toList.map (·, false)
+      | .borrowMut _ inner => (borrowPathOf inner).toList.map (·, true)
+      | t' => branchBorrowParts t'
+    | _ => []
+  match e with
+  | .ifExpr _ _ t el => tailOf t ++ tailOf el
+  | .match_ _ _ arms => arms.flatMap fun arm => match arm with
+      | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => tailOf b
+  | _ => []
+
 /-- Collect (path, isMut) pairs from syntactic borrow arguments AND from
     ident arguments that are themselves live borrows (alias-through-binding:
     `let r = &mut c; c.scoped(r, cb)` — `r` counts as a borrow of `c`). -/
 def borrowArgParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
   let mut out : List ((String × List String) × Bool) := []
   for a in args do
-    -- `f((&p))` borrows `p` exactly as `f(&p)` does (bug 091 round 3, Codex review).
+    -- `f((&p))` borrows `p` exactly as `f(&p)` does (bug 091 round 3, Codex review); an
+    -- `if`/`match` argument borrows whatever any of its branches yields.
+    out := out ++ branchBorrowParts (unparenExpr a)
     match unparenExpr a with
     | .borrow _ inner =>
       match borrowPathOf inner with
