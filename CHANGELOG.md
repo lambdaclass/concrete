@@ -351,7 +351,11 @@ built a `&mut &T` and the callee wrote out of bounds), and an implicit receiver 
 the explicit borrow's mutability (E0233) and aliasing (E0232/E0231) rules. Bug 052's destructor
 dispatch (and ordinary `T$m` dispatch) no longer picks between two modules' same-named types:
 a top-level `Tracked`'s destructor had run for a nested `Tracked`. Both backends refuse an
-ambiguous type name or impl set (E0814/E0815) until type identity survives into Core.
+ambiguous type name or impl set (E0814/E0815) until type identity survives into Core. The receiver, borrow, argument,
+provenance and overlap checks now share ONE normalized place rule (`(*r).p` and `r.p` are one
+place); an expression it cannot trace is E0238 — a deliberate, documented restriction (KNOWN_HOLES
+H28, owned by R-0499) that rejects e.g. `if`-produced references and temporaries as `&mut self`
+receivers.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

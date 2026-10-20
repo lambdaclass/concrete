@@ -1470,8 +1470,8 @@ run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_deref.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_borrow.con"           "(E0237)"
 run_err "$TESTDIR/error_091_receiver_deref_borrow_moved.con"         "(E0290)"
-run_err "$TESTDIR/error_091_destroy_deref_if_ref.con"               "(E0290)"
-run_err "$TESTDIR/error_091_mut_receiver_deref_if_ref.con"           "(E0237)"
+run_err "$TESTDIR/error_091_destroy_deref_if_ref.con"               "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_if_ref.con"           "(E0238)"
 # Codex review of round 3 (second pass): a newtype projection through `&W`, a `&mut` reborrow
 # of a shared reference, a parenthesized `&(p)` that lost its provenance, and the EXPLICIT
 # `&mut` forms (through `&`, parenthesized immutable, projection through `&`). Owned
@@ -1482,7 +1482,7 @@ run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E02
 run_err "$TESTDIR/error_091_mut_borrow_explicit_through_ref.con"           "(E0237)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_paren_immutable.con"       "(E0233)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_projection_through_ref.con" "(E0237)"
-run_ok  "$TESTDIR/trait_mut_receiver_temporaries.con" "7" 0
+run_err "$TESTDIR/error_091_norm_temporaries.con" "(E0238)"
 # Codex review of round 3 (third pass): by-value `*r`, parenthesized call arguments, provenance
 # of `(&p)` and `&w.p`, and an owned `if` under a projection.
 run_err "$TESTDIR/error_091_destroy_defname_deref_arg.con"          "(E0290)"
@@ -1491,7 +1491,7 @@ run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0232)"
 run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0232)"
 run_err "$TESTDIR/error_091_deref_ref_by_value.con"                 "(E0290)"
 run_err "$TESTDIR/error_091_paren_call_arg_not_consumed.con"        "(E0205)"
-run_ok  "$TESTDIR/trait_mut_receiver_if_projection.con" "7" 0
+run_err "$TESTDIR/error_091_norm_if_projection.con" "(E0238)"
 # Codex review of round 3 (fourth pass): `*` of a borrow is through a reference, `match *r`
 # reads the pointee by value, provenance follows `*` and borrows, untraceable reference
 # bindings are refused, and a block-local owned tail is an owned temporary.
@@ -1499,19 +1499,19 @@ run_err "$TESTDIR/error_091_destroy_deref_borrow_mut.con"              "(E0290)"
 run_err "$TESTDIR/error_091_match_deref_ref_payload.con"               "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0232)"
 run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0238)"
-run_ok  "$TESTDIR/trait_mut_receiver_if_local_binding.con" "7" 0
+run_err "$TESTDIR/error_091_norm_if_local_binding.con" "(E0238)"
 # Codex review of round 3 (fifth pass): a `&mut` receiver reached through `&`, an exclusive
 # reference used under a live reborrow, provenance at reassignment, local-binding chains.
-run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0238)"
 run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0232)"
 run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0238)"
-run_ok  "$TESTDIR/trait_mut_receiver_if_local_chain.con" "7" 0
+run_err "$TESTDIR/error_091_norm_if_local_chain.con" "(E0238)"
 # Codex review of round 3 (sixth pass): re-pointing a reference in a branch, parenthesized and
 # dereferenced argument borrows against the receiver, owned match binders under a projection.
 run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0238)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_arg.con"     "(E0293)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_reborrow_arg.con"   "(E0293)"
-run_ok  "$TESTDIR/trait_mut_receiver_match_owned_binder.con" "7" 0
+run_err "$TESTDIR/error_091_norm_match_owned_binder.con" "(E0238)"
 # Codex review of round 3 (seventh pass): a newtype payload through `&W`, `(*r).p` vs `r.p` as one
 # place, and the owned `w.0.destroy()` (exactly once).
 run_err "$TESTDIR/error_091_newtype_payload_through_ref.con"   "(E0290)"
@@ -1520,20 +1520,101 @@ run_ok  "$TESTDIR/trait_destroy_newtype_payload.con" "1" 0
 # Codex review of round 3 (eighth pass): nested and conditional reborrow arguments, a heap
 # interior read through `&Heap<W>`, and `(w).0.destroy()`.
 run_err "$TESTDIR/error_091_mut_receiver_nested_reborrow_arg.con" "(E0293)"
-run_err "$TESTDIR/error_091_mut_receiver_if_reborrow_arg.con"     "(E0293)"
+run_err "$TESTDIR/error_091_mut_receiver_if_reborrow_arg.con"     "(E0238)"
 run_err "$TESTDIR/error_091_heap_field_through_ref.con"           "(E0290)"
 run_ok  "$TESTDIR/trait_destroy_newtype_payload_paren.con" "1" 0
 # Codex review of round 3 (ninth pass): block-local reborrows in `if` arguments, and a `&self`
 # receiver read through a reference under a live exclusive reborrow.
-run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0293)"
+run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0238)"
 run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0231)"
 run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
-r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
-if [ "$r091t_got" = "7" ]; then
-    echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"
+# The normalized place rule (bug 091 round 3, structural fix): Codex's last three open
+# shapes are rejected, and one table records what every spelling of the bug-091 corpus now
+# does, so a change to the rule shows up as a changed row.
+run_err "$TESTDIR/error_091_norm_heap_deref_payload.con"        "(E0290)"
+run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
+run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"
+r091_table="
+error_091_destroy_through_ref:E0290
+error_091_destroy_concrete_through_ref:E0290
+error_091_destroy_method_then_destroy:E0205
+error_091_destroy_paren_then_destroy:E0205
+error_091_destroy_static_borrowed:E0290
+error_091_destroy_deref_ref:E0290
+error_091_destroy_defname_borrowed:E0290
+error_091_destroy_deref_if_ref:E0238
+error_091_destroy_newtype_through_ref:E0290
+error_091_destroy_defname_deref_arg:E0290
+error_091_destroy_defname_paren_arg:E0205
+error_091_destroy_deref_borrow_mut:E0290
+error_091_receiver_deref_moved:E0290
+error_091_receiver_deref_borrow_moved:E0290
+error_091_mut_receiver_through_ref:E0237
+error_091_mut_receiver_through_ref_concrete:E0237
+error_091_mut_receiver_through_ref_projection:E0237
+error_091_mut_receiver_in_ref_self:E0237
+error_091_mut_receiver_immutable:E0233
+error_091_mut_receiver_immutable_concrete:E0233
+error_091_mut_receiver_borrowed:E0232
+error_091_mut_receiver_paren_deref:E0237
+error_091_mut_receiver_deref_borrow:E0237
+error_091_mut_receiver_deref_if_ref:E0238
+error_091_mut_receiver_reborrow_shared:E0237
+error_091_mut_receiver_paren_borrow_live:E0232
+error_091_mut_borrow_explicit_through_ref:E0237
+error_091_mut_borrow_explicit_paren_immutable:E0233
+error_091_mut_borrow_explicit_projection_through_ref:E0237
+error_091_mut_receiver_paren_borrow_outer:E0232
+error_091_mut_receiver_projection_borrow_live:E0232
+error_091_deref_ref_by_value:E0290
+error_091_paren_call_arg_not_consumed:E0205
+error_091_match_deref_ref_payload:E0290
+error_091_mut_receiver_deref_borrow_provenance:E0232
+error_091_borrow_provenance_unknown:E0238
+error_091_mut_receiver_ref_to_mut_ref:E0238
+error_091_mut_receiver_reborrowed_mut_ref:E0232
+error_091_mut_receiver_reassigned_ref:E0238
+error_091_ref_repointed_in_branch:E0238
+error_091_mut_receiver_paren_borrow_arg:E0293
+error_091_mut_receiver_deref_reborrow_arg:E0293
+error_091_newtype_payload_through_ref:E0290
+error_091_mut_receiver_deref_field_arg:E0293
+error_091_mut_receiver_nested_reborrow_arg:E0293
+error_091_mut_receiver_if_reborrow_arg:E0238
+error_091_heap_field_through_ref:E0290
+error_091_mut_receiver_if_local_reborrow_arg:E0238
+error_091_ref_receiver_under_mut_reborrow:E0231
+error_091_norm_heap_deref_payload:E0290
+error_091_norm_conditional_receiver:E0238
+error_091_norm_deref_read_under_reborrow:E0231
+error_091_norm_temporaries:E0238
+error_091_norm_if_projection:E0238
+error_091_norm_if_local_binding:E0238
+error_091_norm_if_local_chain:E0238
+error_091_norm_match_owned_binder:E0238
+trait_destroy_owned_receiver:ok
+trait_mut_receiver_forms:ok
+trait_generic_receiver_forms:ok
+trait_mut_receiver_nested_reborrow:ok
+trait_destroy_newtype_payload:ok
+trait_destroy_newtype_payload_paren:ok
+"
+r091_bad=""
+for row in $r091_table; do
+    f="${row%%:*}"; want="${row#*:}"
+    out=$($COMPILER "$TESTDIR/$f.con" -o "$TESTDIR/.r091_table_bin" 2>&1) && rc=0 || rc=$?
+    if [ "$want" = "ok" ]; then
+        [ "$rc" -eq 0 ] || r091_bad="$r091_bad $f(want ok)"
+    else
+        grep -qF "($want)" <<<"$out" || r091_bad="$r091_bad $f(want $want)"
+    fi
+done
+rm -f "$TESTDIR/.r091_table_bin"
+if [ -z "$r091_bad" ]; then
+    echo "  ok  bug 091: normalized-place table — every recorded spelling behaves as recorded"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  bug 091: trait_mut_receiver_temporaries — interp gave '$r091t_got', want 7"
+    echo "FAIL  bug 091: normalized-place table rows changed:$r091_bad"
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/trait_mut_receiver_forms.con" "8" 0

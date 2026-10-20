@@ -169,7 +169,7 @@ inductive CheckError where
   | mutReceiverThroughSharedRef (subject : String) (desc : String)
   -- Bug 091 round 3: a reference binding whose source the checker cannot trace would be a
   -- live borrow invisible to the aliasing rules.
-  | borrowProvenanceUnknown (name : String)
+  | untraceablePlace (subject : String) (why : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -322,7 +322,7 @@ def CheckError.message : CheckError → String
   | .cannotMutBorrowImmutable name => s!"cannot take mutable borrow of immutable variable '{name}'"
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
-  | .borrowProvenanceUnknown name => s!"cannot track what reference '{name}' borrows"
+  | .untraceablePlace subject why => s!"cannot trace {subject}: {why}"
   | .mutReceiverThroughSharedRef subject desc => s!"cannot mutably borrow {subject} through a shared reference ({desc})"
   -- Slice 4
   | .missingCapability callee cap caller => s!"function '{callee}' requires capability '{cap}' but '{caller}' does not declare it"
@@ -392,7 +392,7 @@ def CheckError.hint : CheckError → Option String
   | .destroyRequiresNamed _ => some "only struct and enum types can be destroyed"
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
-  | .borrowProvenanceUnknown _ => some "bind a borrow of a named place (`&x`, `&x.f`) in each branch instead"
+  | .untraceablePlace _ _ => some "use a named place (a binding, its fields, or `*` of a named reference); this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
   | .mutReceiverThroughSharedRef _ _ => some "take `&mut T` instead of `&T` (or `&mut self` instead of `&self`) where the value is mutated"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
   | .assignOverwritesLinear _ => some "the current value is still live — consume it first (move/destroy), then reassignment is a legal rebind (`acc = f(acc, x)`)"
@@ -471,7 +471,7 @@ def CheckError.code : CheckError → String
   | .referenceEscapesBorrowBlock _ => "E0234"
   | .cannotMutBorrowImmBorrowed _ => "E0235"
   | .mutReceiverThroughSharedRef _ _ => "E0237"
-  | .borrowProvenanceUnknown _ => "E0238"
+  | .untraceablePlace _ _ => "E0238"
   -- Slice 4: Capability (E0240–E0249)
   | .missingCapability _ _ _ => "E0240"
   | .traitBoundNotSatisfied _ _ _ => "E0241"

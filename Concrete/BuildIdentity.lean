@@ -30,8 +30,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 ||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
-||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
->>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 =======
 ||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
@@ -88,6 +86,14 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 ||||||| parent of 90cd6db8 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 >>>>>>> 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
+||||||| parent of 46595780 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+=======
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+>>>>>>> e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+=======
+>>>>>>> 46595780 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 ||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 =======
 ||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
@@ -195,14 +201,35 @@ def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
 =======
 ||||||| parent of 82324ebb (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 =======
+||||||| parent of 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of a13aeb8a (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
+def buildIdentity : String := "4d6fcd563eb743b0c85d641a8c6b05a0"
+=======
+def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
+>>>>>>> a13aeb8a (fix: bug 091 Codex round 3 review — branch borrows are alternatives, &self under a live reborrow)
+=======
+>>>>>>> 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 ||||||| parent of 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
 =======
 def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
 >>>>>>> 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
->>>>>>> 82324ebb (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 >>>>>>> 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
->>>>>>> 360208a3 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+||||||| parent of e524d976 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+=======
+||||||| parent of 46595780 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+>>>>>>> 82324ebb (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+=======
+||||||| parent of 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+=======
+||||||| parent of 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+=======
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+>>>>>>> 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+>>>>>>> 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+>>>>>>> 46595780 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+>>>>>>> e524d976 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 
 /-- How many source files the identity above was computed over.
 

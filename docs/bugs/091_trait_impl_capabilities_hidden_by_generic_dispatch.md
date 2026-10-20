@@ -326,3 +326,46 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   (`(if c { &mut *r } else { &mut *r }).bump(&*r)`) contributes no receiver path to E0293, and
   `(*r).read()` skips the live-exclusive-reborrow check that `r.read()` gets.
 
+## Round 3, structural fix: the normalized place rule
+
+The per-spelling repairs above did not converge: every Codex pass found another spelling of
+the same alias, because each check (explicit borrows, receivers, call arguments, provenance,
+the E0293 overlap check, moves out of places, destruction, the heap-shell exemption) walked
+expressions its own way. They now share ONE rule (`normPlace` / `normProjBase` / `normRef` in
+`Concrete/Check/CheckHelpers.lean`): a canonical place is a binding followed by field / index /
+newtype `.0` projections, where each `*` dereferences a reference or pointer whose source is
+itself traced — a reference binding (its recorded provenance), a borrow of a canonical place,
+or a cast of one. Parentheses and identity dereferences normalize away (`(*r).p` and `r.p` are
+one place; `&*r` names `r`'s source), and every check consults the normalized place:
+`checkMutAccess` / `checkSharedAccess` (explicit `&mut e` / `&e` and implicit receiver borrows),
+`argBorrowParts` / `receiverBorrowParts` (E0293), `recordRefProvenance`, `checkRefArg`,
+`consumeReceiver` / `consumeDestroyReceiver`, and the field-read heap-shell and newtype
+exemptions. An expression that does not normalize is refused with ONE code, E0238.
+
+**Deliberate restriction (fail closed), owned by ROADMAP row 4 / R-0499** — the authoritative
+checker on Core, which can replace this syntactic rule with one over Core places. Valid
+programs rejected today with E0238:
+
+- a reference produced by an `if` / `match` used as a method receiver, a `*` operand, a borrow
+  operand's base, or a reference-typed call argument (`(if c { &mut *r } else { &mut *r }).m()`,
+  `*(if c { &r } else { &r })`, `f(if c { &a } else { &b })`);
+- a reference binding initialized or reassigned from such an expression
+  (`let r = if c { &a } else { &b };`), and any reassignment that RE-POINTS a reference binding
+  at different storage (`r = &p` when `r` borrowed `q`; provenance is not joined across branches);
+- an owned TEMPORARY as a `&mut self` receiver (`make().bump()`, `(P { .. }).bump()`,
+  `(if c { a } else { b }).bump()`) — bind it to a `let mut` first;
+- a projection whose base is an `if` / `match` (`(if c { w1 } else { w2 }).p.bump()`), even when
+  every branch yields an owned value;
+- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
+  reference stored in a place (`*w.r`).
+
+Codex's last three open shapes are rejected: `(*r).p` with `r: &Heap<W>` (E0290, the heap-shell
+exemption now reads the normalized base), the conditional receiver hiding a conflicting
+argument borrow (E0238), and `(*r).read()` under a live `s = &mut *r` (E0231, one place with
+`r.read()`). Fixtures: `error_091_norm_heap_deref_payload.con`,
+`error_091_norm_conditional_receiver.con`, `error_091_norm_deref_read_under_reborrow.con`; the
+earlier positive fixtures for owned temporaries / `if` receivers are now the rejection fixtures
+`error_091_norm_{temporaries,if_projection,if_local_binding,if_local_chain,match_owned_binder}.con`.
+`run_tests.sh` carries a table of every bug-091 fixture with its expected outcome
+(`r091_table`), so a change to the rule shows up as a changed row.
+

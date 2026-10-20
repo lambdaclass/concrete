@@ -1,6 +1,10 @@
+// DELIBERATE RESTRICTION (normalized place rule, docs/bugs/091; owned by R-0499): this
+// valid program is now REJECTED with E0238 — a temporary or an `if`/`match` result is
+// not a named place, so it cannot be a `&mut self` receiver (fail closed). The text
+// below records why it was once accepted.
 // Bug 091 round 3 (Codex review, sixth pass): a `match` over an OWNED scrutinee yielding an
 // arm binder (`E::V { w } => { w }`) is an owned temporary under a projection (was a false
-// E0237). Expected (compiled AND --interp): 7.
+// E0237). Was: 7 (compiled and --interp). Now: E0238.
 mod m {
     struct P { n: i64 }
     struct W { p: P }

@@ -72,261 +72,68 @@ def selfKindOfParams (params : List (String × Ty)) : Option SelfKind :=
   | some ("self", _) => some .value
   | _ => none
 
-/-- E0293: the auto-borrowed receiver counts as a borrow of the receiver PLACE. -/
-def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) : List ((String × List String) × Bool) :=
-  match selfKind with
-  | some .ref => (match borrowPathOf obj with | some p => [(p, false)] | none => [])
-  | some .refMut => (match borrowPathOf obj with | some p => [(p, true)] | none => [])
-  | _ => []
-
 /-- An expression with its enclosing parentheses removed. -/
 partial def stripParens : Expr → Expr
   | .paren _ inner => stripParens inner
   | e => e
 
-/-- What a PLACE is reached through (bug 091 round 3). Field/index projections and `*`
-    look through one layer of their base exactly as Check types them (field access
-    auto-derefs), so the walk ends where the place's storage is named:
-      * `owned root`: an owned binding (its mutability and live borrows govern the place);
-      * `shared desc`: a `&T` — a binding, a `&` borrow, a cast to `&`, or an expression the
-        walk does not classify (fail closed: `*(if c { &r } else { &r })`);
-      * `exclusiveRef`: a `&mut T` binding or cast;
-      * `rawPtr`: a raw pointer (trusted code's own responsibility);
-      * `temp`: an owned temporary (a call result or literal — no code returns a reference).
-    A `&mut e` borrow is the place `e` itself: its exclusivity is only as good as `e`'s. -/
-inductive PlaceVia where
-  | owned (root : String)
-  | shared (desc : String)
-  | exclusiveRef
-  | rawPtr
-  | temp
+/-- A method receiver's normalized place (the normalized place rule, `normPlace` /
+    `normRef` in CheckHelpers). A receiver whose checked type is a reference is the place
+    that reference points to; a value-typed receiver is the place it names, and a value-typed
+    `if`/`match` receiver is an owned temporary (its checked type is a value, so it cannot be
+    a reference — only under a projection or `*` is such an expression refused). -/
+def receiverNorm (obj : Expr) (objTy : Ty) : CheckM Norm := do
+  match objTy with
+  | .ref _ | .refMut _ => normRef obj
+  | _ =>
+    match stripParens obj with
+    | .ifExpr .. | .match_ .. => return .temp
+    | _ => normPlace obj
 
-/-- Two branches' classifications joined: a branch reached through `&` makes the whole
-    possibly shared; then `&mut`, then a raw pointer; otherwise an owned temporary. -/
-def joinVia : PlaceVia → PlaceVia → PlaceVia
-  | .shared d, _ | _, .shared d => .shared d
-  | .exclusiveRef, _ | _, .exclusiveRef => .exclusiveRef
-  | .rawPtr, _ | _, .rawPtr => .rawPtr
-  | _, _ => .temp
+/-- E0293: the auto-borrowed receiver counts as a borrow of its NORMALIZED place. -/
+def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
+    CheckM (List ((String × List String) × Bool)) := do
+  match selfKind with
+  | some .ref | some .refMut =>
+    match ← receiverNorm obj objTy with
+    | .place p =>
+      match p.key with
+      | some k => return [(k, selfKind == some .refMut)]
+      | none => return []
+    | _ => return []
+  | _ => return []
 
-mutual
-/-- The classification of the VALUE a block yields: its trailing value expression, where a
-    moved owned binding is an owned temporary. A tail naming a binding the block itself
-    declared is classified by that `let` (its declared type, else its value). A block without
-    a value tail diverges, contributing nothing; one this walk cannot read fails closed. -/
-partial def tailVia (stmts : List Stmt) (owned : List String := []) : CheckM PlaceVia := do
-  let unclassified : PlaceVia :=
-    .shared "the place is reached through a block the checker does not classify; bind it to a name first"
-  match stmts.getLast? with
-  | some (.expr _ e true) => blockValueVia (stmts.dropLast) e owned
-  | some (.return_ ..) | some (.break_ ..) | some (.continue_ ..) => return .temp
-  | some (.expr _ e false) =>
-    match e with
-    | .call _ fn _ _ => if resolveIntrinsic fn == some .abort then return .temp else return unclassified
-    | _ => return unclassified
-  | _ => return unclassified
-
-/-- The classification of value `e` yielded at the end of a block whose earlier statements are
-    `before`: a name the block itself bound is followed to its `let` (its declared type, else
-    its initializer, classified against the statements before THAT `let`), so a chain
-    `let a = W {..}; let w = a; w` is an owned temporary. A moved owned binding is a temporary. -/
-partial def blockValueVia (before : List Stmt) (e : Expr) (owned : List String := []) : CheckM PlaceVia := do
-  let local? : Option (Nat × Option Ty × Expr) := match stripParens e with
-    | .ident _ n =>
-      ((List.range before.length).zip before).foldl (fun acc (i, st) => match st with
-        | .letDecl _ m _ ty v _ => if m == n then some (i, ty, v) else acc
-        | _ => acc) none
-    | _ => none
-  match local? with
-  | some (_, some ty, _) =>
-    match ty with
-    | .ref _ => return .shared "a branch yields a `&` binding"
-    | .refMut _ => return .exclusiveRef
-    | .ptrMut _ | .ptrConst _ => return .rawPtr
-    | _ => return .temp
-  | some (i, none, v) => blockValueVia (before.take i) v owned
-  | none =>
-    -- an arm binder of a match over an OWNED scrutinee holds an owned payload
-    match stripParens e with
-    | .ident _ n =>
-      if owned.contains n then return .temp
-      match ← placeVia e with
-      | .owned _ => return .temp
-      | v => return v
-    | _ =>
-      match ← placeVia e with
-      | .owned _ => return .temp
-      | v => return v
-
-/-- What the REFERENCE (or pointer) an expression yields points through: the operand of `*`.
-    A `&mut e` / `&e` / cast is that reference itself; a binding by its type; a field or
-    element holding a pointer by its peeked type (fail closed when unknown). -/
-partial def refVia (e : Expr) : CheckM PlaceVia := do
-  match stripParens e with
-  | .ident .. => placeVia e
-  | .borrow .. => return .shared "the place is reached through a `&` borrow"
-  | .borrowMut .. => return .exclusiveRef
-  | .cast .. | .ifExpr .. | .match_ .. => placeVia e
-  | inner@(.fieldAccess ..) | inner@(.arrayIndex ..) =>
-    match ← peekExprType inner with
-    | .ref _ => return .shared "the place is reached through a `&` stored in a field"
-    | .refMut _ => return .exclusiveRef
-    | .ptrMut _ | .ptrConst _ => return .rawPtr
-    | .heap _ | .heapArray _ => placeVia inner
-    | _ => return .shared "the place is reached through a dereference the checker does not classify; bind the reference to a name first"
-  | _ => return .shared "the place is reached through a dereference the checker does not classify; bind the reference to a name first"
-
-partial def placeVia (e : Expr) : CheckM PlaceVia := do
-  match e with
-  | .paren _ inner => placeVia inner
-  | .ident _ n =>
-    match ← lookupVarInfo n with
-    | some info =>
-      match info.ty with
-      | .ref _ => return .shared s!"'{n}' is a `&` reference"
-      | .refMut _ => return .exclusiveRef
-      | .ptrMut _ | .ptrConst _ => return .rawPtr
-      | _ => return .owned n
-    -- A name the walk cannot see here (a match-arm binder in a branch tail) may be a
-    -- reference: fail closed.
-    | none => return .shared s!"'{n}' is bound inside the expression; bind the value to a name first"
-  | .fieldAccess _ obj _ => placeVia obj
-  | .arrayIndex _ arr _ => placeVia arr
-  -- `*x` is reached through whatever reference `x` is — never "owned" because `x` names an
-  -- owned root behind a borrow (`*(&mut p)` traverses a reference; Codex review).
-  | .deref _ inner => refVia inner
-  -- A borrow expression as a place's base is a temporary reference; the borrow itself was
-  -- checked where it was written (explicit `&mut` follows `checkMutBorrowPlace`).
-  | .borrow _ _ => return .shared "the place is reached through a `&` borrow"
-  | .borrowMut _ _ => return .exclusiveRef
-  | .cast _ _ ty =>
-    match ty with
-    | .ref _ => return .shared "the place is reached through a cast to `&`"
-    | .refMut _ => return .exclusiveRef
-    | .ptrMut _ | .ptrConst _ => return .rawPtr
-    | _ => return .temp
-  | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
-  | .arrayLit .. | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. =>
-    return .temp
-  -- A conditional is whatever its branches yield: `if c { W {..} } else { W {..} }` is an
-  -- owned temporary, `*(if c { &r } else { &r })` is reached through `&` (Codex review).
-  | .ifExpr _ _ t el => return joinVia (← tailVia t) (← tailVia el)
-  | .match_ _ scrut arms =>
-    -- Arm binders of a match over an owned value (a binding it moves, or a temporary) are
-    -- owned payloads; over anything reached through a reference they are borrowed views,
-    -- which the walk fails closed on (Codex review of round 3).
-    let scrutOwned : Bool := match ← placeVia scrut with
-      | .owned _ | .temp => true
-      | _ => false
-    let mut acc : PlaceVia := .temp
-    for arm in arms do
-      let (body, binders) : List Stmt × List String := match arm with
-        | .mk _ _ _ bs _ b => (b, bs)
-        | .varArm _ v _ b => (b, [v])
-        | .litArm _ _ _ b | .rangeArm _ _ _ _ _ b => (b, [])
-      acc := joinVia acc (← tailVia body (if scrutOwned then binders else []))
-    return acc
-  | _ => return .shared "the place is reached through an expression that may be a `&` reference; bind it to a name first"
-end
-
-/-- What a reference's storage belongs to, for borrow provenance (bug 091 round 3):
-    a local owned ROOT binding, storage outside this function's bindings (a parameter's
-    pointee, a raw pointer, a temporary), or unknown. -/
-inductive BorrowProv where
-  | root (name : String)
-  | external
-  | unknown
-
-mutual
-/-- The root of a PLACE. -/
-partial def placeProv (e : Expr) : CheckM BorrowProv := do
-  match e with
-  | .paren _ inner => placeProv inner
-  | .ident _ n =>
-    match ← lookupVarInfo n with
-    | some info =>
-      match info.ty with
-      | .ref _ | .refMut _ =>
-        -- a place reached through a reference belongs to whatever that reference borrows;
-        -- a reference with no local source (a parameter) is itself the root, so a reborrow
-        -- `&*r` is a live borrow OF `r` (Codex review of round 3)
-        return match info.borrowedFrom with | some s => .root s | none => .root n
-      | .ptrMut _ | .ptrConst _ => return .external
-      | _ => return .root n
-    | none => return .unknown
-  | .fieldAccess _ obj _ => placeProv obj
-  | .arrayIndex _ arr _ => placeProv arr
-  | .deref _ inner => refProv inner
-  | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
-  | .arrayLit .. => return .external
-  | _ => return .unknown
-
-/-- The root of the storage a REFERENCE-valued expression points to. -/
-partial def refProv (e : Expr) : CheckM BorrowProv := do
-  match e with
-  | .paren _ inner => refProv inner
-  | .borrow _ inner | .borrowMut _ inner => placeProv inner
-  | .ident .. | .fieldAccess .. | .arrayIndex .. => placeProv e
-  | .deref _ inner => refProv inner
-  | .cast .. | .call .. | .methodCall .. | .staticMethodCall .. => return .external
-  | _ => return .unknown
-end
-
-/-- A binding of reference type is a live borrow of its source's ROOT binding: `&p`, `(&p)`,
-    `&(p)`, `&w.p`, `&*(&p)`, `&*r` and a copy of a tracked reference all record provenance
-    (bug 091 round 3), at `let` and at reassignment alike, so a later `&mut` of the root —
-    explicit or an implicit receiver — sees it. A reference whose source cannot be traced
-    (an `if` choosing between borrows) is refused rather than left untracked (E0238). -/
+/-- A binding of reference type is a live borrow of its source's ROOT binding: the root of the
+    normalized place the reference points to (`&p`, `(&p)`, `&w.p`, `&*(&p)`, `&*r`, a copy of
+    a tracked reference), recorded at `let` and at reassignment alike, so a later `&mut` of the
+    root — explicit or an implicit receiver — sees it. A reference whose source does not
+    normalize is refused (E0238). Provenance is one source per binding and is not joined
+    across branches, so a reassignment may not RE-POINT a reference at different storage. -/
 def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
     (reassign : Bool := false) : CheckM Unit := do
   match ty with
   | .ref _ | .refMut _ =>
-    let prov ← match stripParens value with
-      | .borrow _ inner | .borrowMut _ inner =>
-        match stripParens inner with
-        | .ident _ n => pure (BorrowProv.root n)  -- the binding itself, whatever its type
-        | _ => placeProv inner
-      | v => refProv v
-    let setSource : Option String → CheckM Unit := fun src =>
-      modify fun env =>
-        { env with vars := env.vars.map fun (n, info) =>
-            if n == name then (n, { info with borrowedFrom := src }) else (n, info) }
-    -- Provenance is one source per binding and is not merged across branches, so a
-    -- reassignment may not RE-POINT a reference at different storage (`if c { r = &p; }`
-    -- would leave `r` borrowing `p` invisibly after the branch): E0238, use a new binding.
+    let subject := s!"what reference '{name}' borrows"
+    let src? : Option String ← match ← normRef value with
+      | .place p => pure p.root
+      | .temp => pure none
+      | .reject why => throwCheck (.untraceablePlace subject why) span
     let current := ((← getEnv).vars.lookup name).bind (·.borrowedFrom)
-    let newSrc : Option String := match prov with
-      | .root s => if s != name then some s else current
-      | _ => none
+    let newSrc : Option String := match src? with
+      | some s => if s != name then some s else current
+      | none => none
     if reassign && newSrc != current then
-      throwCheck (.borrowProvenanceUnknown name) span
-    match prov with
-    | .root sourceName => if sourceName != name then setSource (some sourceName) else pure ()
-    | .external => setSource none
-    | .unknown => throwCheck (.borrowProvenanceUnknown name) span
+      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span
+    modify fun env =>
+      { env with vars := env.vars.map fun (n, info) =>
+          if n == name then (n, { info with borrowedFrom := newSrc }) else (n, info) }
   | _ => pure ()
-
-/-- A RECEIVER's place. At the top level an unclassified expression (`if`/`match`) whose
-    checked type is a value (the callers handle `&T`/`&mut T` receivers first) is an owned
-    temporary, not a possible reference — only bases under a projection or `*` fail closed. -/
-def receiverVia (obj : Expr) : CheckM PlaceVia := do
-  match stripParens obj with
-  | .ident .. | .fieldAccess .. | .arrayIndex .. | .deref .. | .borrow .. | .borrowMut ..
-  | .cast .. => placeVia obj
-  | _ => return .temp
-
-/-- The binding a place path is rooted at, through parentheses, projections and `*`. -/
-partial def placePathRoot : Expr → Option String
-  | .paren _ i => placePathRoot i
-  | .ident _ n => some n
-  | .fieldAccess _ o _ => placePathRoot o
-  | .arrayIndex _ a _ => placePathRoot a
-  | .deref _ i => placePathRoot i
-  | _ => none
 
 /-- Using an exclusive reference binding `r` (`&mut T`) mutably while another live reference
     borrows the same storage — a reborrow of `r` (`let s = &*r`) or another borrow of `r`'s
-    source — is the aliasing E0232 forbids for an owned binding (Codex review of round 3). -/
+    source — is the aliasing E0232 forbids for an owned binding. Only references created AFTER
+    `r` (newer bindings come first in `vars`) count: an older one sharing the root is `r`'s own
+    ancestor (`let r = &mut p; let s = &mut *r; s.bump()` uses the child, not the parent). -/
 def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo r with
   | some info =>
@@ -334,9 +141,6 @@ def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
     | .refMut _ =>
       let env ← getEnv
       let roots := r :: info.borrowedFrom.toList
-      -- Only references created AFTER `r` (newer bindings come first in `vars`) can be
-      -- reborrows of it; an older one sharing the root is `r`'s own ancestor
-      -- (`let r = &mut p; let s = &mut *r; s.bump()` uses the child, not the parent).
       let newer := env.vars.takeWhile (·.1 != r)
       let others := newer.filter fun (n, vi) =>
         n != r && vi.state != .consumed &&
@@ -346,62 +150,98 @@ def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
     | _ => pure ()
   | none => pure ()
 
-/-- The explicit-borrow rules of `&mut place`, shared by explicit `&mut e` and an implicit
-    `&mut self` receiver borrow (bug 091 round 3). A bare binding: not moved, not borrowed
-    (E0232), declared `mut` (E0233). Any other place: never reached through a shared
-    reference (E0237); an owned root must be `mut` and unborrowed, as the binding itself. -/
-def checkMutBorrowPlace (place : Expr) (subject : String) (span : Option Span) : CheckM Unit := do
-  let checkRoot (root : String) : CheckM Unit := do
-    match ← lookupVarInfo root with
-    | none => pure ()
-    | some info =>
-      if !info.isCopy && info.state == .consumed then
-        throwCheck (.cannotBorrowMoved root) span
-      let activeRefs := activeBorrowRefs (← getEnv) root
-      if info.borrowCount > 0 || activeRefs.any (fun r => match r.ty with | .ref _ | .refMut _ => true | _ => false) then
-        throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
-      if !info.mutable then
-        throwCheck (.cannotMutBorrowImmutable root) span
-  match stripParens place with
-  | .ident _ v =>
-    match ← lookupVarInfo v with
-    | some _ => checkRoot v
-    | none => throwCheck (.undeclaredVariable v) span
-  | other =>
-    match ← placeVia other with
+/-- A shared access through a reference binding `r` while a newer exclusive reborrow of its
+    storage (`let s = &mut *r`) is live aliases that reborrow (E0231). -/
+def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit := do
+  match ← lookupVarInfo r with
+  | some info =>
+    let roots := r :: info.borrowedFrom.toList
+    let newer := (← getEnv).vars.takeWhile (·.1 != r)
+    if newer.any (fun (n, vi) => n != r && vi.state != .consumed &&
+        (match vi.ty with | .refMut _ => true | _ => false) &&
+        (match vi.borrowedFrom with | some src => roots.contains src | none => false)) then
+      throwCheck (.cannotBorrowMutablyBorrowed r) span
+  | none => pure ()
+
+/-- The rules of `&mut place`, for EVERY mutable access to a normalized place — explicit
+    `&mut e` and an implicit `&mut self` receiver alike: never through a shared reference
+    (E0237); an owned root must be `mut` and unborrowed (E0233 / E0232) and not moved; an
+    exclusive reference must not be in use by a newer reborrow (E0232); a place that does not
+    normalize is refused (E0238). -/
+def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
+  match n with
+  | .reject why => throwCheck (.untraceablePlace subject why) span
+  | .temp => pure ()
+  | .place p =>
+    match p.reach with
     | .shared desc => throwCheck (.mutReceiverThroughSharedRef subject desc) span
-    | .owned root => checkRoot root
-    | .exclusiveRef =>
-      match placePathRoot other with
+    | .raw => pure ()
+    | .exclusive =>
+      match p.viaRef with
       | some r => checkExclusiveRefUse r span
       | none => pure ()
-    | _ => pure ()
+    | .owned =>
+      match p.root with
+      | none => pure ()
+      | some root =>
+        match ← lookupVarInfo root with
+        | none => pure ()
+        | some info =>
+          if !info.isCopy && info.state == .consumed then
+            throwCheck (.cannotBorrowMoved root) span
+          let activeRefs := activeBorrowRefs (← getEnv) root
+          if info.borrowCount > 0 || activeRefs.any (fun r => match r.ty with | .ref _ | .refMut _ => true | _ => false) then
+            throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+          if !info.mutable then
+            throwCheck (.cannotMutBorrowImmutable root) span
 
-/-- The explicit-borrow rule of `&place`: an owned root is not under a live `&mut` (E0231). -/
-def checkSharedBorrowPlace (place : Expr) (span : Option Span) : CheckM Unit := do
-  match ← placeVia place with
-  | .owned root =>
-    match ← lookupVarInfo root with
-    | some info =>
-      if !info.isCopy && info.state == .consumed then
-        throwCheck (.cannotBorrowMoved root) span
-      let activeRefs := activeBorrowRefs (← getEnv) root
-      if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
-        throwCheck (.cannotBorrowMutablyBorrowed root) span
-    | none => pure ()
+/-- The rules of `&place`, for every shared access to a normalized place: an owned root is not
+    moved and not under a live `&mut` (E0231); through a reference binding, no newer exclusive
+    reborrow of its storage is live (E0231); a place that does not normalize is E0238. -/
+def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
+  match n with
+  | .reject why => throwCheck (.untraceablePlace subject why) span
+  | .temp => pure ()
+  | .place p =>
+    match p.reach with
+    | .owned =>
+      match p.root with
+      | some root =>
+        match ← lookupVarInfo root with
+        | some info =>
+          if !info.isCopy && info.state == .consumed then
+            throwCheck (.cannotBorrowMoved root) span
+          let activeRefs := activeBorrowRefs (← getEnv) root
+          if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
+            throwCheck (.cannotBorrowMutablyBorrowed root) span
+        | none => pure ()
+      | none => pure ()
+    | _ =>
+      match p.viaRef with
+      | some r => checkLiveExclusiveReborrow r span
+      | none => pure ()
+
+/-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
+    yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
+def checkRefArg (arg : Expr) (argTy : Ty) (span : Option Span) : CheckM Unit := do
+  match argTy with
+  | .ref _ | .refMut _ =>
+    match ← normRef arg with
+    | .reject why => throwCheck (.untraceablePlace "a reference argument" why) span
+    | _ => pure ()
   | _ => pure ()
 
 /-- Receiver ownership of a method call, ONE rule for a concrete receiver and a receiver typed
-    by a trait-bounded type parameter (Codex round 2 of bug 091: the bound path never applied
-    the receiver form, so `x.consume(); return x;` returned an owner its impl had destroyed):
+    by a trait-bounded type parameter (Codex round 2 of bug 091):
       * `&self`: never consumes (a shared reference is Copy);
       * `&mut self`: consumes only a borrow-block exclusive ref (a scoped linear view);
-      * `self`: MOVES the receiver. An owned binding is consumed; a projection, or a
-        reference, leaves the place owning the same value, so a non-Copy receiver there is
-        refused (H11) — moving out through `&T` destroyed a value its owner still held. -/
+      * `self`: MOVES the receiver. An owned binding is consumed (`*h` of an owned heap and an
+        owned newtype's `.0` already consumed their owner); a projection leaves the place
+        owning the same value, and a value reached through a reference is still its owner's,
+        so a non-Copy receiver there is refused (H11, E0290) — whatever the spelling, since
+        the receiver is the NORMALIZED place. -/
 def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : Ty)
     (methodName : String) (span : Option Span) : CheckM Unit := do
-  -- `(x).m()` is `x.m()`: parentheses never hide the receiver place (Codex round 3).
   let obj := stripParens obj0
   match selfKind with
   | some .refMut =>
@@ -418,85 +258,47 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
     | .ref _ | .refMut _ =>
       if !(← isCopyType innerTy) then refusedRef
     | _ =>
-      -- A value reached through a reference (`(*r).m()`, `w.0.m()` with `w: &W`, ...)
-      -- moves out of the reference whatever the spelling (Codex review of round 3).
-      match ← receiverVia obj with
-      | .shared _ | .exclusiveRef =>
-        if !(← isCopyType innerTy) then refusedRef
-      | _ =>
-        let obj := match obj with
-          | .fieldAccess sp base f => Expr.fieldAccess sp (stripParens base) f
-          | o => o
-        match obj with
-        | .ident _ varName => consumeVarIfExists varName span
-        | .fieldAccess _ (.ident _ _) f =>
-          -- `v.0.drop()` on an OWNED newtype ident is a whole-owner move: the fieldAccess
-          -- already consumed `v`. Any other field projection leaves the place owning the
-          -- same value.
-          if f != newtypeFieldName && !(← isCopyType innerTy) then refused
-        | .fieldAccess .. | .arrayIndex .. =>
-          if !(← isCopyType innerTy) then refused
-        | _ => pure ()
+      match ← receiverNorm obj objTy with
+      | .temp => pure ()
+      | .reject why => throwCheck (.untraceablePlace s!"the receiver of '{methodName}'" why) span
+      | .place p =>
+        if p.reach.throughRef then
+          if !(← isCopyType innerTy) then refusedRef
+        else
+          match p.binding with
+          | some v => consumeVarIfExists v span
+          | none =>
+            if p.heapLoad || p.steps == [newtypeFieldName] then pure ()
+            else if !(← isCopyType innerTy) then refused
   | _ => pure ()
 
-/-- Bug 091 round 3: a method call's IMPLICIT receiver borrow obeys the rules of the explicit
-    `&place` / `&mut place` it stands for (one rule for concrete and trait-bound receivers):
-      * `&mut self` through a shared reference — the receiver itself (`x: &T`, `self` in a
-        `&self` method) or any `&` on the place's path (`w.p` with `w: &W`, `*(&p)`) — is
-        E0237. For `x: &T` Elab built a `&mut &T`, so the callee read and wrote the pointer's
-        slot as if it held the value (out of bounds);
-      * `&mut self` on an owned place needs a `mut` binding (E0233) with no live borrow of it
-        (E0232), exactly as `&mut x` does (`checkMutBorrowPlace`, shared with explicit `&mut`);
-      * `&self` on an owned place cannot overlap a live `&mut` of it (E0231), as `&x` cannot.
-    A receiver that already is `&mut T` is passed as-is; a temporary has no binding to check. -/
+/-- Bug 091 round 3: a method call's IMPLICIT receiver borrow is the explicit `&place` /
+    `&mut place` it stands for, checked by the same `checkSharedAccess` / `checkMutAccess` on
+    the receiver's NORMALIZED place (one rule for concrete and trait-bound receivers):
+      * `&mut self` through a shared reference is E0237 (for `x: &T` Elab built a `&mut &T`
+        and the callee wrote past the pointer); on an owned place the binding must be `mut`
+        and unborrowed (E0233 / E0232); an owned TEMPORARY is not a `&mut self` receiver
+        (E0238: bind it to a `let mut` first — fail closed);
+      * `&self` cannot overlap a live `&mut` of its storage (E0231);
+      * a receiver that does not normalize (a reference from an `if`/`match`, a projection of
+        one, `*` over a non-place) is refused (E0238). -/
 def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty)
     (methodName : String) (span : Option Span) : CheckM Unit := do
   let subject := s!"the receiver of `&mut self` method '{methodName}'"
+  let n ← receiverNorm obj objTy
+  if let .reject why := n then
+    throwCheck (.untraceablePlace s!"the receiver of '{methodName}'" why) span
   match selfKind with
   | some .refMut =>
     match objTy with
-    | .refMut _ =>
-      -- Passed as-is, but the `&mut` must be reachable without crossing a `&` (`(*s).m()`
-      -- with `s: &&mut P`), and no other live reference may share its storage.
-      match stripParens obj with
-      | .ident _ n => checkExclusiveRefUse n span
-      | _ =>
-        match ← placeVia obj with
-        | .shared desc => throwCheck (.mutReceiverThroughSharedRef subject desc) span
-        | _ =>
-          match placePathRoot obj with
-          | some r => checkExclusiveRefUse r span
-          | none => pure ()
     | .ref _ =>
       throwCheck (.mutReceiverThroughSharedRef subject "the receiver is a `&` reference") span
+    | .refMut _ => checkMutAccess n subject span
     | _ =>
-      match ← receiverVia obj with
-      | .temp => pure ()
-      | _ => checkMutBorrowPlace obj subject span
-  | some .ref =>
-    match objTy with
-    | .ref _ | .refMut _ =>
-      -- Read through a reference binding `r` while an exclusive reborrow of its storage
-      -- (`let s = &mut *r`) is live: the `&self` access aliases it (E0231, Codex review).
-      match placePathRoot obj with
-      | some r =>
-        match ← lookupVarInfo r with
-        | some info =>
-          match info.ty with
-          | .ref _ | .refMut _ =>
-            let roots := r :: info.borrowedFrom.toList
-            let env ← getEnv
-            if env.vars.any (fun (n, vi) => n != r && vi.state != .consumed &&
-                (match vi.ty with | .refMut _ => true | _ => false) &&
-                (match vi.borrowedFrom with | some src => roots.contains src | none => false)) then
-              throwCheck (.cannotBorrowMutablyBorrowed r) span
-          | _ => pure ()
-        | none => pure ()
-      | none => pure ()
-    | _ =>
-      match ← receiverVia obj with
-      | .temp => pure ()
-      | _ => checkSharedBorrowPlace obj span
+      if let .temp := n then
+        throwCheck (.untraceablePlace subject "a temporary is not a `&mut self` receiver; bind it to a `let mut` first") span
+      checkMutAccess n subject span
+  | some .ref => checkSharedAccess n s!"the receiver of '{methodName}'" span
   | _ => pure ()
 
 /-- Bug 091 round 3: `Destroy::destroy` is the PUBLIC destruction entry point, and its
@@ -517,11 +319,16 @@ def consumeDestroyReceiver (obj0 : Expr) (objTy innerTy : Ty) (span : Option Spa
   match objTy with
   | .ref _ | .refMut _ => destroyThroughRefRefused innerTy span
   | _ =>
-    -- `(*r).destroy()`, `w.0.destroy()` with `w: &W`, ...: destroying a value reached
-    -- through a reference or raw pointer is drop glue, trusted only.
-    match ← receiverVia obj with
-    | .shared _ | .exclusiveRef | .rawPtr => destroyThroughRefRefused innerTy span
-    | _ => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+    -- A value reached through a reference or raw pointer (`(*r).destroy()`, `w.0.destroy()`
+    -- with `w: &W`, `(*(&mut p)).destroy()`) — the normalized place says so whatever the
+    -- spelling — is drop glue, trusted only.
+    match ← receiverNorm obj objTy with
+    | .place p =>
+      match p.reach with
+      | .owned => consumeReceiver (some .value) obj objTy innerTy destroyMethodName span
+      | _ => destroyThroughRefRefused innerTy span
+    | .reject why => throwCheck (.untraceablePlace "the receiver of 'destroy'" why) span
+    | .temp => pure ()
 
 /-- A Destroy impl's `&self` destructor named DIRECTLY — `Type::destroy(&x)`, its definition
     name `Type_destroy(&x)`, or a function reference to it — runs the destructor through a
@@ -763,7 +570,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     if thenTy == .never then return elseTy else return thenTy
   | .call _sp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
+    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
@@ -1071,6 +878,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- Check each argument type
       for (arg, pTy) in args.zip paramTys do
         let argTy ← checkExpr arg (some pTy) .callArg
+        checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
         match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -1217,6 +1025,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
         let argTy ← checkExpr arg (some pTy) .callArg
+        checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{fnName}'" (some e.getSpan)
         -- If arg is a bare identifier of a linear type, consume it —
         -- but NOT if the parameter type is a reference (borrow, not move).
@@ -1337,7 +1146,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- destructure) stays legal — H11 below is skipped for it.
     -- Only an OWNED shell: through `&Heap<W>` / `&mut Heap<W>` the owner is elsewhere and a
     -- by-value non-Copy field read would hand out a payload it still holds (bug 091 round 3).
-    let isHeapShell := match objTy with
+    -- The base's NORMALIZED place decides "through a reference", whatever the spelling:
+    -- `(*r).p` with `r: &Heap<W>` has a `Heap<W>`-typed base yet is reached through `&`.
+    let baseThroughRef ← match ← normProjBase obj with
+      | .place p => pure p.reach.throughRef
+      | _ => pure false
+    let isHeapShell := !baseThroughRef && match objTy with
       | .heap _ | .heapArray _ => true
       | _ => false
     -- Extract struct name, type args and capability args for substitution
@@ -1366,7 +1180,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
               match ← lookupVarInfo varName with
               | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true | _ => false)
               | none => pure false
-            | _ => pure false
+            | _ => pure baseThroughRef
           match stripParens obj with
           | .ident _ varName =>
             if viaRef then
@@ -1704,27 +1518,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       return matchResultTy
   | .borrow _ inner =>
     let innerTy ← checkExpr inner none .place
-    -- Check the variable is not moved or already mutably borrowed. `&(x)` is `&x`, and a
-    -- projection's root obeys the same rule (bug 091 round 3).
-    if !(stripParens inner matches .ident ..) then checkSharedBorrowPlace inner (some e.getSpan)
-    match stripParens inner with
-    | .ident _ varName =>
-      match ← lookupVarInfo varName with
-      | some info =>
-        if !info.isCopy && info.state == .consumed then
-          throwCheck (.cannotBorrowMoved varName) (some e.getSpan)
-        let env ← getEnv
-        let activeRefs := activeBorrowRefs env varName
-        if activeRefs.any (fun refInfo => match refInfo.ty with | .refMut _ => true | _ => false) then
-          throwCheck (.cannotBorrowMutablyBorrowed varName) (some e.getSpan)
-      | none => throwCheck (.undeclaredVariable varName) (some e.getSpan)
-    | _ => pure ()
+    -- The normalized place rule (bug 091 round 3): `&e` borrows `e`'s normalized place;
+    -- one shared-access check whatever the spelling, E0238 if `e` is not a traceable place.
+    checkSharedAccess (← normPlace inner) "the borrowed place" (some e.getSpan)
     return .ref innerTy
   | .borrowMut _ inner =>
     let innerTy ← checkExpr inner none .place
     -- One rule for `&mut x`, `&mut (x)`, `&mut w.f` and `&mut (*r)`: never through a shared
     -- reference (E0237), and an owned root is `mut` and unborrowed (bug 091 round 3).
-    checkMutBorrowPlace inner "a place" (some e.getSpan)
+    checkMutAccess (← normPlace inner) "a place" (some e.getSpan)
     return .refMut innerTy
   | .deref _ inner =>
     -- Reading THROUGH a ref/ptr does not consume the binding (place read);
@@ -1859,13 +1661,14 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             throwCheckMsg s!"trait method '{foundTrait}::{methodName}' has no `self` receiver and cannot be called as a method"
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
-          checkCallBorrowConflicts (receiverBorrowParts sig.selfKind obj ++ (← borrowArgParts args)) (some e.getSpan)
+          checkCallBorrowConflicts ((← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)) (some e.getSpan)
           -- `Destroy::destroy` consumes its receiver (`consumeDestroyReceiver` below); there
           -- is no implicit borrow to check, and the owner may already be moved by `w.0`.
           if !(foundBuiltin == some .destroy && methodName == destroyMethodName) then
             checkImplicitReceiverBorrow sig.selfKind obj objTy methodName (some e.getSpan)
           for (arg, p) in args.zip params do
             let argTy ← checkExpr arg (some p.ty) .callArg
+            checkRefArg arg argTy (some e.getSpan)
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match stripParens arg with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -1884,8 +1687,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
       -- alias the container through the context and must reject
       -- (container-not-in-context, #18 §5.1).
-      checkCallBorrowConflicts (receiverBorrowParts (selfKindOfParams sig.params) obj
-        ++ (← borrowArgParts args)) (some e.getSpan)
+      checkCallBorrowConflicts ((← receiverBorrowParts (selfKindOfParams sig.params) obj objTy)
+        ++ (← argBorrowParts args)) (some e.getSpan)
       let isDestroyImplCall := methodName == destroyMethodName &&
         (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
       if !isDestroyImplCall then
@@ -1906,6 +1709,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         throwCheck (.wrongArgCount s!"method '{methodName}'" methodParams.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip methodParams do
         let argTy ← checkExpr arg (some pTy) .callArg
+        checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
         match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -1921,7 +1725,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← borrowArgParts args) (some e.getSpan)
+    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     checkDirectDestroyImplUse mangledName (some e.getSpan)
     match ← lookupFn mangledName with
@@ -1936,6 +1740,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         throwCheck (.wrongArgCount s!"static method '{methodName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
         let argTy ← checkExpr arg (some pTy) .callArg
+        checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
         match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)

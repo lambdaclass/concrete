@@ -30,6 +30,31 @@ element (bug 115, a double free, found by the 2026-10-20 examples pass and
 pinned by `check_example_outputs.sh`). R-0010 will replace the legacy skip-based audit with mechanically
 checked per-bug states.
 
+### H28. Places are checked by a syntactic normalized-place rule — OPEN (deliberate restriction)
+
+Borrows, receivers, reference arguments, reference provenance and the call-overlap check all
+run on ONE syntactic normalization of place expressions (bug 091 round 3,
+[docs/bugs/091](../bugs/091_trait_impl_capabilities_hidden_by_generic_dispatch.md)). The rule
+fails closed: an expression it cannot trace is E0238, never a guessed alias. The cost is that
+some valid programs are rejected:
+
+- a reference produced by an `if` / `match` used as a method receiver, a `*` operand, a borrow
+  operand's base, or a reference-typed call argument (`(if c { &mut *r } else { &mut *r }).m()`,
+  `*(if c { &r } else { &r })`, `f(if c { &a } else { &b })`);
+- a reference binding initialized or reassigned from such an expression
+  (`let r = if c { &a } else { &b };`), and any reassignment that RE-POINTS a reference binding
+  at different storage (`r = &p` when `r` borrowed `q`; provenance is not joined across branches);
+- an owned TEMPORARY as a `&mut self` receiver (`make().bump()`, `(P { .. }).bump()`,
+  `(if c { a } else { b }).bump()`) — bind it to a `let mut` first;
+- a projection whose base is an `if` / `match` (`(if c { w1 } else { w2 }).p.bump()`), even when
+  every branch yields an owned value;
+- `*` over a non-place or a double dereference (`(*s).m()` with `s: & &mut P`, `**r`), and a
+  reference stored in a place (`*w.r`).
+
+Provenance is lexical and per binding (not flow-sensitive), and the source path behind a
+reference with recorded provenance is treated as the whole root (conservative). Owner: ROADMAP
+row 4, R-0499 (the authoritative checker on Core).
+
 ### H27. Contract validation is name-and-sort only, not type checking — OPEN
 
 `Concrete/Check/Check.lean` rejects contracts that name identifiers which do not exist, and

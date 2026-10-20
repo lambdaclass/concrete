@@ -1,0 +1,21 @@
+// Bug 091 round 3, normalized place rule: a reference produced by an `if` does not
+// normalize to a traceable place, so it cannot be a receiver — it hid the receiver's
+// borrow from the overlap check against `&*r`. Fail closed: E0238.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self, other: &P) -> i64 {
+            self.n = self.n + 1;
+            return other.n;
+        }
+    }
+    fn f(r: &mut P) -> i64 {
+        return (if true { &mut *r } else { &mut *r }).bump(&*r);
+    }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let result: i64 = f(&mut p);
+        let P { n } = p;
+        return result;
+    }
+}

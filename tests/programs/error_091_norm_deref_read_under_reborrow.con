@@ -1,0 +1,22 @@
+// Bug 091 round 3, normalized place rule: `(*r).read()` and `r.read()` are one place, so a
+// shared read through `r` while the exclusive reborrow `s = &mut *r` is live is E0231 in
+// both spellings.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn read(&self) -> i64 { return self.n; }
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn f(r: &mut P) -> i64 {
+        let s: &mut P = &mut *r;
+        let x: i64 = (*r).read();
+        P::bump(s);
+        return x;
+    }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let x: i64 = f(&mut p);
+        let P { n } = p;
+        return x;
+    }
+}

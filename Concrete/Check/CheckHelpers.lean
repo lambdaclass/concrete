@@ -1009,23 +1009,164 @@ partial def inferMethodParamAndRetTys
 -- Type checking expressions and statements
 -- ============================================================
 
-/-- A borrow PATH: root variable + projection steps (field names; an array
-    index is the wildcard step "[]" — two indexings of one root are treated
-    as overlapping since indices are not statically comparable). -/
-partial def borrowPathOf : Expr → Option (String × List String)
-  | .ident _ n => some (n, [])
-  | .fieldAccess _ obj f =>
-    (borrowPathOf obj).map fun (r, steps) => (r, steps ++ [f])
-  | .arrayIndex _ arr _ =>
-    (borrowPathOf arr).map fun (r, steps) => (r, steps ++ ["[]"])
-  | .paren _ inner => borrowPathOf inner
-  -- `*r` names the storage `r` reaches, exactly as field access's implicit dereference does
-  -- (`(*r).p` and `r.p` are one place), so `r.m(&*r)` with a `&mut self` receiver overlaps
-  -- (bug 091 round 3, Codex review).
-  | .deref _ inner => borrowPathOf inner
-  -- `*(&x)` / `*(&*r)`: a borrow inside a place names the borrowed place itself.
-  | .borrow _ inner | .borrowMut _ inner => borrowPathOf inner
-  | _ => none
+/-- An expression with its enclosing parentheses removed. -/
+partial def unparenExpr : Expr → Expr
+  | .paren _ inner => unparenExpr inner
+  | e => e
+
+/-! ## The normalized place rule (bug 091 round 3)
+
+ONE rule decides what storage a place expression names, used by every check that cares:
+explicit `&e` / `&mut e`, implicit receiver borrows, reference-typed call arguments,
+reference provenance (`let r = ..`, `r = ..`), the call-overlap check (E0293), by-value
+moves out of a place, and destruction. A canonical place is a binding followed by field /
+index / newtype `.0` projections, where each `*` dereferences a reference (or pointer) whose
+own source is traced: a binding of reference type (its recorded provenance), a borrow of a
+canonical place, or a cast of one. Parentheses and identity dereferences normalize away, so
+`(*r).p` and `r.p` are one place and `&*r` names `r`'s source. Anything else — a reference
+produced by an `if`/`match`, `*` over a non-place, `**r` — does not normalize and is refused
+(E0238) wherever a place is required: the checker never guesses an alias it cannot see. -/
+
+/-- How a canonical place is reached. -/
+inductive Reach where
+  | owned
+  | exclusive
+  | raw
+  | shared (desc : String)
+  deriving Inhabited
+
+/-- Reaching a place through two links: a `&` anywhere makes it shared; then `&mut`; then
+    a raw pointer; otherwise it is owned storage. -/
+def Reach.join : Reach → Reach → Reach
+  | .shared d, _ | _, .shared d => .shared d
+  | .exclusive, _ | _, .exclusive => .exclusive
+  | .raw, _ | _, .raw => .raw
+  | _, _ => .owned
+
+def Reach.throughRef : Reach → Bool
+  | .shared _ | .exclusive => true
+  | _ => false
+
+/-- A normalized place. `root` is the conflict key (the binding whose storage this is);
+    `steps` are the projections from it, exact unless a dereference crossed a reference
+    whose source path is not recorded (then the place is the whole root, conservatively).
+    `binding` is set when the place IS a bare binding; `viaRef` names the innermost
+    reference binding dereferenced to reach it; `heapLoad` marks `*h` of an owned heap. -/
+structure NPlace where
+  root : Option String
+  steps : List String := []
+  exact : Bool := true
+  reach : Reach := .owned
+  binding : Option String := none
+  viaRef : Option String := none
+  heapLoad : Bool := false
+  deriving Inhabited
+
+inductive Norm where
+  | place (p : NPlace)
+  | temp
+  | reject (why : String)
+  deriving Inhabited
+
+private def NPlace.project (p : NPlace) (step : String) : NPlace :=
+  { p with steps := if p.exact then p.steps ++ [step] else p.steps,
+           binding := none, heapLoad := false }
+
+private def Norm.project : Norm → String → Norm
+  | .place p, step => .place (p.project step)
+  | n, _ => n
+
+private def Norm.reachedThrough : Norm → Reach → Norm
+  | .place p, r => .place { p with reach := p.reach.join r, binding := none }
+  | n, _ => n
+
+mutual
+/-- The storage the place expression `e` names. -/
+partial def normPlace (e : Expr) : CheckM Norm := do
+  match e with
+  | .paren _ inner => normPlace inner
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some _ => return .place { root := some n, binding := some n }
+    | none =>
+      if ((← getEnv).constants.lookup n).isSome then return .temp
+      return .reject s!"'{n}' is not a local binding"
+  | .fieldAccess _ base f => return (← normProjBase base).project f
+  | .arrayIndex _ base _ => return (← normProjBase base).project "[]"
+  | .deref _ inner => normRef inner
+  | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
+  | .arrayLit .. | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. =>
+    return .temp
+  | .borrow .. | .borrowMut .. =>
+    return .reject "a borrow is a reference, not a place; dereference a named reference instead"
+  | .ifExpr .. | .match_ .. =>
+    return .reject "an `if`/`match` result is not a named place; bind it to a name first"
+  | _ => return .reject "the expression is not a named place; bind it to a name first"
+
+/-- A projection's base: field access dereferences one layer of reference, pointer or heap
+    shell implicitly, exactly as `*` does, so `r.p` normalizes as `(*r).p`. -/
+partial def normProjBase (base : Expr) : CheckM Norm := do
+  match unparenExpr base with
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some info =>
+      match info.ty with
+      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ =>
+        normRef (.ident default n)
+      | _ => normPlace base
+    | none => normPlace base
+  | b =>
+    match ← peekExprType b with
+    | .ref _ | .refMut _ => normRef b
+    | _ => normPlace b
+
+/-- The place a REFERENCE-valued (or pointer-valued) expression points to. -/
+partial def normRef (e : Expr) : CheckM Norm := do
+  match e with
+  | .paren _ inner => normRef inner
+  | .borrow _ inner => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
+  | .borrowMut _ inner => return (← normPlace inner).reachedThrough .exclusive
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some info =>
+      let src := info.borrowedFrom.getD n
+      let exact := info.borrowedFrom.isNone
+      match info.ty with
+      | .ref _ =>
+        return .place { root := some src, exact := exact, viaRef := some n,
+                        reach := .shared s!"'{n}' is a `&` reference" }
+      | .refMut _ =>
+        return .place { root := some src, exact := exact, viaRef := some n, reach := .exclusive }
+      | .ptrMut _ | .ptrConst _ => return .place { root := some n, reach := .raw }
+      | .heap _ | .heapArray _ => return .place { root := some n, heapLoad := true }
+      | _ => return .reject s!"'{n}' is not a reference"
+    | none => return .reject s!"'{n}' is not a local binding"
+  | .cast _ inner ty =>
+    let r : Reach := match ty with
+      | .ref _ => .shared "the place is reached through a cast to `&`"
+      | .refMut _ => .exclusive
+      | _ => .raw
+    match ← normProjBase inner with
+    | .place p => return .place { p with reach := p.reach.join r, binding := none, heapLoad := false }
+    | .temp => return .place { root := none, reach := r }
+    | .reject why => return .reject why
+  | .fieldAccess .. | .arrayIndex .. =>
+    -- a pointer or heap shell stored in a field (`*self.ptr`)
+    match ← peekExprType e with
+    | .ptrMut _ | .ptrConst _ => return (← normPlace e).reachedThrough .raw
+    | .heap _ | .heapArray _ => return (← normPlace e)
+    | _ => return .reject "a reference stored in a place cannot be traced; bind it to a name first"
+  | .deref .. => return .reject "a dereference of a dereference is not traced; bind the inner reference to a name first"
+  | .ifExpr .. | .match_ .. =>
+    return .reject "a reference produced by an `if`/`match` cannot be traced; borrow a named place in each branch's caller instead"
+  | _ => return .reject "the reference's source cannot be traced; bind it to a name first"
+end
+
+/-- The conflict key of a normalized place: root + projection path (whole root when the
+    path through a dereference is not exact). `none` for storage outside this function's
+    bindings and for temporaries. -/
+def NPlace.key (p : NPlace) : Option (String × List String) :=
+  p.root.map fun r => (r, if p.exact then p.steps else [])
 
 /-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
     Disjoint fields (`w.a` vs `w.b`) do NOT overlap — precise, no over-reject;
@@ -1047,78 +1188,30 @@ def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (s
         throwCheck (.conflictingCallBorrows path.1) span
     seen := (path, isMut) :: seen
 
-/-- An expression with its enclosing parentheses removed. -/
-partial def unparenExpr : Expr → Expr
-  | .paren _ inner => unparenExpr inner
-  | e => e
-
-/-- The borrows an `if`/`match` argument may yield: each branch's tail borrow, following a
-    block-local `let` the tail names. -/
-partial def branchBorrowAlts (e : Expr) : List ((String × List String) × Bool) :=
-  let rec tailOf (stmts : List Stmt) (t : Expr) : List ((String × List String) × Bool) :=
-    match unparenExpr t with
-    | .borrow _ inner => (borrowPathOf inner).toList.map (·, false)
-    | .borrowMut _ inner => (borrowPathOf inner).toList.map (·, true)
-    | .ident _ n =>
-      match (stmts.filterMap fun (st : Stmt) => match st with
-          | .letDecl _ m _ _ v _ => if m == n then some v else none
-          | _ => none).getLast? with
-      | some v => tailOf stmts v
-      | none => []
-    | t' => branchBorrowAlts t'
-  let blockTail : List Stmt → List ((String × List String) × Bool) := fun stmts =>
-    match stmts.getLast? with
-    | some (.expr _ t true) => tailOf stmts.dropLast t
-    | _ => []
-  match e with
-  | .ifExpr _ _ t el => blockTail t ++ blockTail el
-  | .match_ _ _ arms => arms.flatMap fun arm => match arm with
-      | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => blockTail b
-  | _ => []
-
-/-- One argument's branch alternatives as ONE borrow: only one branch runs, so the
-    alternatives never conflict with each other, but together they may alias the other
-    arguments. Same root: the longest common path prefix, `&mut` if any alternative is;
-    different roots: one part per root (each a possible borrow of that root). -/
-def branchBorrowParts (e : Expr) : List ((String × List String) × Bool) :=
-  let alts := branchBorrowAlts e
-  let roots := (alts.map (·.1.1)).eraseDups
-  roots.map fun r =>
-    let mine := alts.filter (·.1.1 == r)
-    let steps := match mine.head? with
-      | some ((_, s0), _) => mine.foldl (fun acc ((_, s), _) =>
-          ((acc.zip s).takeWhile (fun (x, y) => x == y)).map (·.1)) s0
-      | none => []
-    ((r, steps), mine.any (·.2))
-
-/-- Collect (path, isMut) pairs from syntactic borrow arguments AND from
-    ident arguments that are themselves live borrows (alias-through-binding:
-    `let r = &mut c; c.scoped(r, cb)` — `r` counts as a borrow of `c`). -/
-def borrowArgParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
+/-- The borrows a call makes, as NORMALIZED places (E0293): a `&e` / `&mut e` argument
+    borrows `e`'s place, a reference binding argument borrows its source. Every spelling of
+    one place (`(&p)`, `&*(&*r)`, `&(*r).p`) yields the same key. -/
+def argBorrowParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
   let mut out : List ((String × List String) × Bool) := []
   for a in args do
-    -- `f((&p))` borrows `p` exactly as `f(&p)` does (bug 091 round 3, Codex review); an
-    -- `if`/`match` argument borrows whatever any of its branches yields.
-    out := out ++ branchBorrowParts (unparenExpr a)
-    match unparenExpr a with
-    | .borrow _ inner =>
-      match borrowPathOf inner with
-      | some p => out := out ++ [(p, false)]
-      | none => pure ()
-    | .borrowMut _ inner =>
-      match borrowPathOf inner with
-      | some p => out := out ++ [(p, true)]
-      | none => pure ()
-    | .ident _ n =>
-      match ← lookupVarInfo n with
-      | some info =>
-        match info.borrowedFrom with
-        | some root =>
-          let isMut := match info.ty with | .refMut _ => true | _ => false
-          out := out ++ [((root, []), isMut)]
-        | none => pure ()
+    let part? : Option (Norm × Bool) ← match unparenExpr a with
+      | .borrow _ inner => do pure (some (← normPlace inner, false))
+      | .borrowMut _ inner => do pure (some (← normPlace inner, true))
+      | .ident _ n => do
+        match ← lookupVarInfo n with
+        | some info =>
+          match info.ty with
+          | .ref _ => pure (some (← normRef (.ident default n), false))
+          | .refMut _ => pure (some (← normRef (.ident default n), true))
+          | _ => pure none
+        | none => pure none
+      | _ => pure none
+    match part? with
+    | some (.place p, isMut) =>
+      match p.key with
+      | some k => out := (k, isMut) :: out
       | none => pure ()
     | _ => pure ()
-  return out
+  return out.reverse
 
 end Concrete

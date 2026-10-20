@@ -1,7 +1,11 @@
+// DELIBERATE RESTRICTION (normalized place rule, docs/bugs/091; owned by R-0499): this
+// valid program is now REJECTED with E0238 — a temporary or an `if`/`match` result is
+// not a named place, so it cannot be a `&mut self` receiver (fail closed). The text
+// below records why it was once accepted.
 // Bug 091 round 3 (Codex review): an owned temporary is a legal `&mut self` receiver —
 // an `if` value, a struct literal, a call result. The place walk must not mistake the
 // `if` for a possible reference, and --interp must give each temporary storage (it
-// failed with "unsupported borrow target shape"). Expected (compiled AND --interp): 7.
+// failed with "unsupported borrow target shape"). Was: 7 (compiled and --interp). Now: E0238.
 mod m {
     struct P { n: i64 }
     impl P { fn bump(&mut self) { self.n = self.n + 1; } }
