@@ -221,6 +221,17 @@ def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : Check
       | some r => checkLiveExclusiveReborrow r span
       | none => pure ()
 
+/-- An `if` / `match` expression whose value is a REFERENCE never normalizes to a traced
+    place (which branch's borrow is live is decided at run time), and the backend miscompiles
+    one (bug 105: the binary segfaulted where --interp printed the value). The normalized place
+    rule refuses it at its source, wherever it would flow (E0238). -/
+def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : CheckM Unit := do
+  match ty with
+  | .ref _ | .refMut _ =>
+    throwCheck (.untraceablePlace s!"the reference produced by {what}"
+      "a reference chosen at run time between branches is not a traced place (bug 105); borrow a named place, or branch around the use") span
+  | _ => pure ()
+
 /-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
     yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
 def checkRefArg (arg : Expr) (argTy : Ty) (span : Option Span) : CheckM Unit := do
@@ -567,7 +578,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Both branches must agree on type
     if thenTy != elseTy && thenTy != .never && elseTy != .never then
       throwCheck (.ifBranchTypeMismatch (tyToString thenTy) (tyToString elseTy)) (some e.getSpan)
-    if thenTy == .never then return elseTy else return thenTy
+    let ifTy := if thenTy == .never then elseTy else thenTy
+    refuseRefValuedBranch "an `if` expression" ifTy (some e.getSpan)
+    return ifTy
   | .call _sp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
@@ -1398,6 +1411,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             | none => (n, vi)
           setEnv { envBefore with vars := vars' }
         | none => setEnv envBefore
+        refuseRefValuedBranch "a `match` expression" matchResultTy (some e.getSpan)
         return matchResultTy
       | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
     else
@@ -1515,6 +1529,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           | none => (n, vi)
         setEnv { envBefore with vars := vars' }
       | none => setEnv envBefore
+      refuseRefValuedBranch "a `match` expression" matchResultTy (some e.getSpan)
       return matchResultTy
   | .borrow _ inner =>
     let innerTy ← checkExpr inner none .place

@@ -1,0 +1,12 @@
+// Bug 105: an `if` yielding a reference passed as an argument. The compiled binary
+// segfaulted (rc 139) where --interp printed 2. Contained at the checker: E0238.
+mod m {
+    struct P { n: i64 }
+    fn bump(p: &mut P) { p.n = p.n + 1; }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        bump(if true { &mut p } else { &mut p });
+        let P { n } = p;
+        return n;
+    }
+}

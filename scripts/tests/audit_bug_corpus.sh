@@ -71,6 +71,7 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
+  [105]="OPEN -- reference-valued if/match miscompiles; contained at the checker (E0238). Regression vehicle: tests/programs/error_105_ref_valued_if_{arg,field}.con assert the containment; no positive agreement fixture until the lowering is fixed (would segfault)"
   [006]="string literal collision -- fixed in EmitSSA, covered by cross-module tests"
   [009]="const decls not lowered -- fixed in Lower.lean, no standalone repro needed"
   [010]="missing string_substr -- stdlib addition"

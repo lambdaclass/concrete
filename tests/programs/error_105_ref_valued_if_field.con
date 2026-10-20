@@ -1,0 +1,13 @@
+// Bug 105: a field read through an `if` yielding a reference. The compiled binary
+// segfaulted (rc 139) where --interp printed 5. Contained at the checker: E0238.
+mod m {
+    struct P { n: i64 }
+    fn main() with(Std) -> Int {
+        let p: P = P { n: 5 };
+        let x: i64 = (if true { &p } else { &p }).n;
+        print_int(x);
+        print_char(10);
+        let P { n } = p;
+        return 0;
+    }
+}

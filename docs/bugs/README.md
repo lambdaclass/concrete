@@ -178,6 +178,7 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 - [129_user_fn_captures_libc_symbol.md](129_user_fn_captures_libc_symbol.md) — OPEN: user functions are emitted under bare names, so a safe `fn malloc` becomes the program's allocator and `alloc` calls it; the binary is killed by a signal (SIGABRT on arm64 macOS) (semantics probes N3, 2026-10-21). Joins exit 0b.
 - [130_int_as_bool_invalid_ir.md](130_int_as_bool_invalid_ir.md) — OPEN: `x as bool` with `x: Int` passes the checker and fails in `llvm-as` (`bitcast i64 to i1`), and the interpreter refuses it; the reverse of bug 108, refused with E0553 by the unlanded `backend-108-116` (semantics probes N4, 2026-10-21). Joins exit 2c.
 - [131_reference_parameter_repointed.md](131_reference_parameter_repointed.md) — OPEN: a reference parameter can be re-pointed at a block-local value (`r = &local`), and the binary reads the dead slot while `--interp` fails; the parameter variant of bug 104, refused with E0238 on `land2-fix` (semantics probes, 2026-10-21). Joins exit 0b.
+- [105_reference_valued_if_miscompiles.md](105_reference_valued_if_miscompiles.md) — an `if`/`match` yielding a reference miscompiles (binary segfaults, --interp correct); contained at the checker (E0238, bug 091 normalized place rule), lowering defect open (2026-10-20)
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 

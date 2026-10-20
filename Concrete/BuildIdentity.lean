@@ -31,12 +31,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 ||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 =======
-||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
-||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
-def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
-=======
-def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
->>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 ||||||| parent of ae598662 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
 ||||||| parent of eef1b0a1 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
@@ -48,6 +42,16 @@ def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 =======
 >>>>>>> a3beb9fc (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 =======
+||||||| parent of bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+=======
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+>>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+=======
+=======
+>>>>>>> bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
 >>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 =======
@@ -102,6 +106,17 @@ def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 =======
 def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 >>>>>>> e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+||||||| parent of e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+||||||| parent of e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+=======
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+>>>>>>> e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+=======
+>>>>>>> e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
 =======
 >>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 ||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
@@ -222,14 +237,35 @@ def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
 =======
 ||||||| parent of 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 =======
+||||||| parent of 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+||||||| parent of 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+def buildIdentity : String := "2ab1e7072fa0849880c8d551f0d61715"
+=======
+def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
+>>>>>>> 4b14e540 (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+=======
+>>>>>>> 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
 ||||||| parent of 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 def buildIdentity : String := "55c97717f6baa62339941c71e0da7d16"
 =======
 def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
 >>>>>>> 0b897854 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
->>>>>>> 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
 >>>>>>> 46595780 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
->>>>>>> e524d976 (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+||||||| parent of bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+||||||| parent of e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+>>>>>>> 837fea6f (fix: bug 091 round 3 — one normalized place rule for borrows, receivers, arguments and overlap)
+=======
+||||||| parent of 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+=======
+||||||| parent of 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+def buildIdentity : String := "7374f99d16c68754afa551e470841aca"
+=======
+def buildIdentity : String := "38a09dc71192eb2951b6d2d4cbadc57b"
+>>>>>>> 50299870 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+>>>>>>> 2e5c8235 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+>>>>>>> e8b21b62 (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
+>>>>>>> bf63d8bd (fix: bug 105 contained — Check refuses a reference-valued if/match (E0238))
 
 /-- How many source files the identity above was computed over.
 

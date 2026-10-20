@@ -1532,6 +1532,9 @@ run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 # shapes are rejected, and one table records what every spelling of the bug-091 corpus now
 # does, so a change to the rule shows up as a changed row.
 run_err "$TESTDIR/error_091_norm_heap_deref_payload.con"        "(E0290)"
+# Bug 105 (OPEN, contained): a reference-valued `if`/`match` miscompiles; Check refuses it.
+run_err "$TESTDIR/error_105_ref_valued_if_arg.con"   "(E0238)"
+run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
 run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"
 r091_table="
