@@ -23,23 +23,26 @@ The theorems are stated over the *semantics* (trace counts of `alloc`/`free` eve
 the checker, so they are not true by construction of `chk`. Rejected programs are shown to
 misbehave in the erased semantics, which demonstrates that each rule is load-bearing.
 
+`LinearSound.lean` proves the general statement for this model: every program `chk` accepts
+conserves every resource on every input and every normal or `return` exit, never destroys twice
+even on `abort`, and its erased run produces the instrumented run's trace.
+
 This is a design model, not Core: it imports nothing from the compiler.
 -/
 
 namespace DesignExamples.Linear
 
-abbrev Var := Nat
-abbrev Res := Nat
+/-! Variables and resources are `Nat`s (resource `r` is the `r`-th acquisition). -/
 
 /-- Statements of the model. `ite c` branches on the `c`-th input bit, so a theorem that
 quantifies over the input bits covers every path. -/
 inductive Stmt where
   /-- `let x = acquire();` — a fresh linear resource. -/
-  | acquire (x : Var)
+  | acquire (x : Nat)
   /-- `let y = x;` — moves (consumes) `x`. -/
-  | move (x y : Var)
+  | move (x y : Nat)
   /-- `destroy(x);` — consumes `x` and runs its cleanup. -/
-  | destroy (x : Var)
+  | destroy (x : Nat)
   | seq (a b : Stmt)
   | ite (c : Nat) (a b : Stmt)
   /-- early `return` from the function. -/
@@ -51,14 +54,14 @@ inductive Stmt where
 
 /-- Ghost resource events. Whether these are *observable* is design question L1 (README). -/
 inductive Event where
-  | alloc (r : Res)
-  | free (r : Res)
+  | alloc (r : Nat)
+  | free (r : Nat)
   deriving Repr, DecidableEq
 
 structure St where
   /-- variable ↦ the resource it currently owns (instrumented) or names (erased). -/
-  own : List (Var × Res)
-  next : Res
+  own : List (Nat × Nat)
+  next : Nat
   trace : List Event
   deriving Repr, DecidableEq
 
@@ -72,11 +75,11 @@ inductive Out where
   | stuck
   deriving Repr, DecidableEq
 
-def lookup (x : Var) : List (Var × Res) → Option Res
+def lookup (x : Nat) : List (Nat × Nat) → Option Nat
   | [] => none
   | (y, r) :: rest => if y = x then some r else lookup x rest
 
-def erase (x : Var) : List (Var × Res) → List (Var × Res)
+def erase (x : Nat) : List (Nat × Nat) → List (Nat × Nat)
   | [] => []
   | (y, r) :: rest => if y = x then erase x rest else (y, r) :: erase x rest
 
@@ -138,7 +141,7 @@ def runErased (inp : List Bool) (p : Stmt) : Out := execErased inp p init
 
 /-! ## The properties, stated over traces -/
 
-def frees (t : List Event) (r : Res) : Nat := t.count (.free r)
+def frees (t : List Event) (r : Nat) : Nat := t.count (.free r)
 
 /-- No resource is destroyed twice, and nothing unallocated is destroyed. -/
 def noDoubleDestroy (s : St) : Bool :=
@@ -164,14 +167,14 @@ def traceOf : Out → Option (List Event)
 
 inductive CRes where
   /-- falls through with this set of live owners. -/
-  | fall (live : List Var)
+  | fall (live : List Nat)
   /-- every path leaves the function (`return` or `abort`). -/
   | exits
   deriving Repr, DecidableEq
 
-def setEq (a b : List Var) : Bool := a.all (b.contains ·) && b.all (a.contains ·)
+def setEq (a b : List Nat) : Bool := a.all (b.contains ·) && b.all (a.contains ·)
 
-def chk : Stmt → List Var → Option CRes
+def chk : Stmt → List Nat → Option CRes
   | .acquire x, L => if L.contains x then none else some (.fall (x :: L))
   | .move x y, L =>
     if L.contains x then

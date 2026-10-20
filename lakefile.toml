@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete", "Examples", "pipeline-test"]
+defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test"]
 
 [leanOptions]
 warningAsError = true
@@ -14,6 +14,15 @@ name = "Concrete"
 # still kernel-checks them. srcDir avoids a case-collision with the .con `examples/`.
 [[lean_lib]]
 name = "Examples"
+srcDir = "proofs"
+
+# Verified-pipeline DESIGN EXAMPLES (ROADMAP row 3, R-0511; docs/compiler/VERIFIED_PIPELINE.md
+# "Early semantic risk retirement"): small self-contained models of move/destroy, borrows and
+# reborrowing, cleanup and typed-value representation. They import NOTHING from the compiler,
+# so they test the plan's intended design rather than today's implementation. Root
+# proofs/DesignExamples.lean; see proofs/DesignExamples/README.md.
+[[lean_lib]]
+name = "DesignExamples"
 srcDir = "proofs"
 
 [[lean_exe]]
