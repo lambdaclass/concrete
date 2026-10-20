@@ -1,0 +1,22 @@
+// Bug 091 round 3 (Codex review, fifth pass): a branch tail reached through a chain of
+// block-local bindings (`let a = W {..}; let w = a; w`) is an owned temporary (was a false
+// E0237). Expected (compiled AND --interp): 7.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        (if true {
+            let a: W = W { p: P { n: 0 } };
+            let w: W = a;
+            w
+        } else {
+            W { p: P { n: 1 } }
+        }).p.bump();
+        print_int(7);
+        print_char(10);
+        return 0;
+    }
+}

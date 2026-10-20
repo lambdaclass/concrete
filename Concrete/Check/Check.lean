@@ -118,33 +118,37 @@ partial def tailVia (stmts : List Stmt) : CheckM PlaceVia := do
   let unclassified : PlaceVia :=
     .shared "the place is reached through a block the checker does not classify; bind it to a name first"
   match stmts.getLast? with
-  | some (.expr _ e true) =>
-    let local? := match stripParens e with
-      | .ident _ n => (stmts.filterMap fun (st : Stmt) => match st with
-          | .letDecl _ m _ ty v _ => if m == n then some ((ty : Option Ty), v) else none
-          | _ => none).getLast?
-      | _ => none
-    match local? with
-    | some (some ty, _) =>
-      match ty with
-      | .ref _ => return .shared "a branch yields a `&` binding"
-      | .refMut _ => return .exclusiveRef
-      | .ptrMut _ | .ptrConst _ => return .rawPtr
-      | _ => return .temp
-    | some (none, v) =>
-      match ← placeVia v with
-      | .owned _ => return .temp
-      | r => return r
-    | none =>
-      match ← placeVia e with
-      | .owned _ => return .temp
-      | v => return v
+  | some (.expr _ e true) => blockValueVia (stmts.dropLast) e
   | some (.return_ ..) | some (.break_ ..) | some (.continue_ ..) => return .temp
   | some (.expr _ e false) =>
     match e with
     | .call _ fn _ _ => if resolveIntrinsic fn == some .abort then return .temp else return unclassified
     | _ => return unclassified
   | _ => return unclassified
+
+/-- The classification of value `e` yielded at the end of a block whose earlier statements are
+    `before`: a name the block itself bound is followed to its `let` (its declared type, else
+    its initializer, classified against the statements before THAT `let`), so a chain
+    `let a = W {..}; let w = a; w` is an owned temporary. A moved owned binding is a temporary. -/
+partial def blockValueVia (before : List Stmt) (e : Expr) : CheckM PlaceVia := do
+  let local? : Option (Nat × Option Ty × Expr) := match stripParens e with
+    | .ident _ n =>
+      ((List.range before.length).zip before).foldl (fun acc (i, st) => match st with
+        | .letDecl _ m _ ty v _ => if m == n then some (i, ty, v) else acc
+        | _ => acc) none
+    | _ => none
+  match local? with
+  | some (_, some ty, _) =>
+    match ty with
+    | .ref _ => return .shared "a branch yields a `&` binding"
+    | .refMut _ => return .exclusiveRef
+    | .ptrMut _ | .ptrConst _ => return .rawPtr
+    | _ => return .temp
+  | some (i, none, v) => blockValueVia (before.take i) v
+  | none =>
+    match ← placeVia e with
+    | .owned _ => return .temp
+    | v => return v
 
 /-- What the REFERENCE (or pointer) an expression yields points through: the operand of `*`.
     A `&mut e` / `&e` / cast is that reference itself; a binding by its type; a field or
@@ -227,8 +231,10 @@ partial def placeProv (e : Expr) : CheckM BorrowProv := do
     | some info =>
       match info.ty with
       | .ref _ | .refMut _ =>
-        -- a place reached through a reference belongs to whatever that reference borrows
-        return match info.borrowedFrom with | some s => .root s | none => .external
+        -- a place reached through a reference belongs to whatever that reference borrows;
+        -- a reference with no local source (a parameter) is itself the root, so a reborrow
+        -- `&*r` is a live borrow OF `r` (Codex review of round 3)
+        return match info.borrowedFrom with | some s => .root s | none => .root n
       | .ptrMut _ | .ptrConst _ => return .external
       | _ => return .root n
     | none => return .unknown
@@ -250,6 +256,30 @@ partial def refProv (e : Expr) : CheckM BorrowProv := do
   | _ => return .unknown
 end
 
+/-- A binding of reference type is a live borrow of its source's ROOT binding: `&p`, `(&p)`,
+    `&(p)`, `&w.p`, `&*(&p)`, `&*r` and a copy of a tracked reference all record provenance
+    (bug 091 round 3), at `let` and at reassignment alike, so a later `&mut` of the root —
+    explicit or an implicit receiver — sees it. A reference whose source cannot be traced
+    (an `if` choosing between borrows) is refused rather than left untracked (E0238). -/
+def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span) : CheckM Unit := do
+  match ty with
+  | .ref _ | .refMut _ =>
+    let prov ← match stripParens value with
+      | .borrow _ inner | .borrowMut _ inner =>
+        match stripParens inner with
+        | .ident _ n => pure (BorrowProv.root n)  -- the binding itself, whatever its type
+        | _ => placeProv inner
+      | v => refProv v
+    let setSource : Option String → CheckM Unit := fun src =>
+      modify fun env =>
+        { env with vars := env.vars.map fun (n, info) =>
+            if n == name then (n, { info with borrowedFrom := src }) else (n, info) }
+    match prov with
+    | .root sourceName => if sourceName != name then setSource (some sourceName) else pure ()
+    | .external => setSource none
+    | .unknown => throwCheck (.borrowProvenanceUnknown name) span
+  | _ => pure ()
+
 /-- A RECEIVER's place. At the top level an unclassified expression (`if`/`match`) whose
     checked type is a value (the callers handle `&T`/`&mut T` receivers first) is an owned
     temporary, not a possible reference — only bases under a projection or `*` fail closed. -/
@@ -258,6 +288,33 @@ def receiverVia (obj : Expr) : CheckM PlaceVia := do
   | .ident .. | .fieldAccess .. | .arrayIndex .. | .deref .. | .borrow .. | .borrowMut ..
   | .cast .. => placeVia obj
   | _ => return .temp
+
+/-- The binding a place path is rooted at, through parentheses, projections and `*`. -/
+partial def placePathRoot : Expr → Option String
+  | .paren _ i => placePathRoot i
+  | .ident _ n => some n
+  | .fieldAccess _ o _ => placePathRoot o
+  | .arrayIndex _ a _ => placePathRoot a
+  | .deref _ i => placePathRoot i
+  | _ => none
+
+/-- Using an exclusive reference binding `r` (`&mut T`) mutably while another live reference
+    borrows the same storage — a reborrow of `r` (`let s = &*r`) or another borrow of `r`'s
+    source — is the aliasing E0232 forbids for an owned binding (Codex review of round 3). -/
+def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
+  match ← lookupVarInfo r with
+  | some info =>
+    match info.ty with
+    | .refMut _ =>
+      let env ← getEnv
+      let roots := r :: info.borrowedFrom.toList
+      let others := env.vars.filter fun (n, vi) =>
+        n != r && vi.state != .consumed &&
+          (match vi.borrowedFrom with | some src => roots.contains src | none => false)
+      if !others.isEmpty then
+        throwCheck (.cannotMutBorrowAlreadyBorrowed r) span
+    | _ => pure ()
+  | none => pure ()
 
 /-- The explicit-borrow rules of `&mut place`, shared by explicit `&mut e` and an implicit
     `&mut self` receiver borrow (bug 091 round 3). A bare binding: not moved, not borrowed
@@ -284,6 +341,10 @@ def checkMutBorrowPlace (place : Expr) (subject : String) (span : Option Span) :
     match ← placeVia other with
     | .shared desc => throwCheck (.mutReceiverThroughSharedRef subject desc) span
     | .owned root => checkRoot root
+    | .exclusiveRef =>
+      match placePathRoot other with
+      | some r => checkExclusiveRefUse r span
+      | none => pure ()
     | _ => pure ()
 
 /-- The explicit-borrow rule of `&place`: an owned root is not under a live `&mut` (E0231). -/
@@ -361,7 +422,18 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
   match selfKind with
   | some .refMut =>
     match objTy with
-    | .refMut _ => pure ()
+    | .refMut _ =>
+      -- Passed as-is, but the `&mut` must be reachable without crossing a `&` (`(*s).m()`
+      -- with `s: &&mut P`), and no other live reference may share its storage.
+      match stripParens obj with
+      | .ident _ n => checkExclusiveRefUse n span
+      | _ =>
+        match ← placeVia obj with
+        | .shared desc => throwCheck (.mutReceiverThroughSharedRef subject desc) span
+        | _ =>
+          match placePathRoot obj with
+          | some r => checkExclusiveRefUse r span
+          | none => pure ()
     | .ref _ =>
       throwCheck (.mutReceiverThroughSharedRef subject "the receiver is a `&` reference") span
     | _ =>
@@ -1862,27 +1934,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
       checkNoLiveShadow name (some stmt.getSpan)
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      -- A binding of reference type is a live borrow of its source's ROOT binding:
-      -- `&p`, `(&p)`, `&(p)`, `&w.p`, `&*(&p)` and a copy of a tracked reference all record
-      -- provenance (bug 091 round 3), so a later `&mut` of the root — explicit or an implicit
-      -- receiver — sees it. A reference whose source cannot be traced (an `if` choosing
-      -- between borrows) is refused rather than left untracked (E0238).
-      match finalTy with
-      | .ref _ | .refMut _ =>
-        let prov ← match stripParens value with
-          | .borrow _ inner | .borrowMut _ inner =>
-            match stripParens inner with
-            | .ident _ n => pure (BorrowProv.root n)  -- the binding itself, whatever its type
-            | _ => placeProv inner
-          | v => refProv v
-        match prov with
-        | .root sourceName =>
-          modify fun env =>
-            { env with vars := env.vars.map fun (n, info) =>
-                if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
-        | .external => pure ()
-        | .unknown => throwCheck (.borrowProvenanceUnknown name) (some stmt.getSpan)
-      | _ => pure ()
+      recordRefProvenance name finalTy value (some stmt.getSpan)
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
@@ -1915,6 +1967,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let envPost ← getEnv
       setEnv { envPost with rebindingVar := envPre.rebindingVar }
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
+      -- `r = &p` re-points `r`: its provenance is the NEW source (Codex review of round 3).
+      if !selfAssign then recordRefProvenance name info.ty value (some stmt.getSpan)
       -- Linear REBIND rule: a linear variable may be reassigned only once its
       -- OLD value has been consumed (one binding, one LIVE resource) — the
       -- fold/accumulate pattern `acc = f(acc, x)` requires it. Overwriting a

@@ -1500,6 +1500,12 @@ run_err "$TESTDIR/error_091_match_deref_ref_payload.con"               "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0232)"
 run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0238)"
 run_ok  "$TESTDIR/trait_mut_receiver_if_local_binding.con" "7" 0
+# Codex review of round 3 (fifth pass): a `&mut` receiver reached through `&`, an exclusive
+# reference used under a live reborrow, provenance at reassignment, local-binding chains.
+run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0237)"
+run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0232)"
+run_ok  "$TESTDIR/trait_mut_receiver_if_local_chain.con" "7" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

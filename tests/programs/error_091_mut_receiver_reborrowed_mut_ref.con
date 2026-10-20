@@ -1,0 +1,19 @@
+// Bug 091 round 3 (Codex review, fifth pass): `let s = &*r; r.bump();` mutated through the
+// exclusive reference `r` while the shared reborrow `s` was live. Expected: E0232.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn f(r: &mut P) with(Std) {
+        let s: &P = &*r;
+        r.bump();
+        print_int(s.n);
+    }
+    fn main() with(Std) -> Int {
+        let mut p: P = P { n: 1 };
+        f(&mut p);
+        let P { n } = p;
+        return 0;
+    }
+}

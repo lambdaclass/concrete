@@ -1,0 +1,20 @@
+// Bug 091 round 3 (Codex review, fifth pass): a receiver of type `&mut P` reached through a
+// shared reference (`(*s).bump()` with `s: & &mut P`) was passed as-is and mutated through
+// the `&`. Expected: E0237.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn f(r: &mut P) with(Std) {
+        let s: & &mut P = &r;
+        (*s).bump();
+        print_int(r.n);
+    }
+    fn main() with(Std) -> Int {
+        let mut p: P = P { n: 1 };
+        f(&mut p);
+        let P { n } = p;
+        return 0;
+    }
+}

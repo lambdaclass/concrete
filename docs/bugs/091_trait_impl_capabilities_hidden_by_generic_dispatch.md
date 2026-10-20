@@ -278,4 +278,13 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_destroy_deref_borrow_mut.con`, `error_091_match_deref_ref_payload.con` (E0290),
   `error_091_mut_receiver_deref_borrow_provenance.con` (E0232),
   `error_091_borrow_provenance_unknown.con` (E0238), `trait_mut_receiver_if_local_binding.con` (7).
+* **Codex review of round 3, fifth pass.** A receiver already typed `&mut P` was passed as-is even
+  when reached through a `&` (`(*s).bump()`, `s: & &mut P`: now E0237) or while a shared reborrow
+  of it was live (`let s = &*r; r.bump()`: `checkExclusiveRefUse`, E0232 — a reborrow of a
+  parameter reference records the reference itself as its source); `r = &p` did not update
+  provenance (`recordRefProvenance` runs at `let` and at reassignment); a branch tail reached
+  through a chain of block-local bindings is classified through the chain (`blockValueVia`).
+  Fixtures `error_091_mut_receiver_ref_to_mut_ref.con` (E0237),
+  `error_091_mut_receiver_reborrowed_mut_ref.con`, `error_091_mut_receiver_reassigned_ref.con`
+  (E0232), `trait_mut_receiver_if_local_chain.con` (7).
 

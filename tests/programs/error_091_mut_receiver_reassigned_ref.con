@@ -1,0 +1,22 @@
+// Bug 091 round 3 (Codex review, fifth pass): `r = &p` did not update `r`'s provenance, so
+// `p.bump()` ran under the live `r`. Reassignment records the new source: E0232.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn f(q: &P) with(Std) {
+        let mut p: P = P { n: 1 };
+        let mut r: &P = q;
+        r = &p;
+        p.bump();
+        print_int(r.n);
+        let P { n } = p;
+    }
+    fn main() with(Std) -> Int {
+        let q: P = P { n: 9 };
+        f(&q);
+        let P { n } = q;
+        return 0;
+    }
+}
