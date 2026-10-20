@@ -93,7 +93,8 @@ GATES=36
 # 43 -> 44 with the external re-check families, which introduced `check_external_checker.sh`.
 # 44 -> 45 with bug 079's subject-binding families, which introduced `check_subject_binding.sh`.
 # 45 -> 46 with bug 080's model-diff family, which introduced `check_model_diff.sh`.
-DRIVER_GATES=46
+# 46 -> 47 with bug 088's literal-range families, which introduced `check_cast_matrix.sh`.
+DRIVER_GATES=47
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2
