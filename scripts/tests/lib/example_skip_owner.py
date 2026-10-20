@@ -16,8 +16,9 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            operand of bash/sh/python3, after optional VAR=value
                            assignments and `env`/`timeout N` prefixes. A step name, a
                            comment, quoted text, the path as an ordinary argument
-                           (echo, printf, an assignment), a syntax check (bash -n,
-                           -o noexec) or a command string (-c) does not count.
+                           (echo, printf, an assignment), or an interpreter option
+                           outside a small allowlist (-n, -o noexec, -c, -s, -m ...)
+                           does not count.
 
 Exit status: 0 holds, 1 does not, 2 usage error.
 """
@@ -119,22 +120,28 @@ def simple_commands(command):
             yield words
 
 
+SHELL_FLAGS = set("eux")                     # errexit, nounset, xtrace
+SHELL_O_NAMES = {"errexit", "nounset", "pipefail", "xtrace"}
+PYTHON_FLAGS = {"-I", "-u", "-B", "-E"}
+
+
 def interpreter_script(name, args):
-    """The script a bash/sh/python3 invocation runs, or None when it runs none
-    (a syntax check -n / -o noexec, a command string -c, a module -m)."""
+    """The script a bash/sh/python3 invocation runs, or None. Options are an
+    ALLOWLIST: anything else (-n / -o noexec syntax checks, -c command strings,
+    -s stdin scripts, -m modules, long options) means no script operand is run."""
     k = 0
-    while k < len(args) and args[k].startswith("-") and args[k] != "-":
+    while k < len(args) and args[k].startswith(("-", "+")) and args[k] not in ("-", "+"):
         opt = args[k]
-        if opt in ("-c", "-m") or opt.startswith("--"):
-            return None
         if name in ("bash", "sh"):
             if opt in ("-o", "+o"):
-                if k + 1 < len(args) and args[k + 1] == "noexec":
-                    return None
-                k += 2
-                continue
-            if "n" in opt[1:] or "c" in opt[1:]:
+                if k + 1 < len(args) and args[k + 1] in SHELL_O_NAMES:
+                    k += 2
+                    continue
                 return None
+            if opt.startswith("--") or not set(opt[1:]) <= SHELL_FLAGS:
+                return None
+        elif opt not in PYTHON_FLAGS:
+            return None
         k += 1
     return args[k] if k < len(args) else None
 
