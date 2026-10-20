@@ -537,6 +537,20 @@ print('ok' if ens_ok and ref_ok and d['all_checked'] is False else 'bad')" "$PJ"
   else
     echo "  FAIL prove --check overclaims the ensures link: json=$PV exit=$PJRC/$PTRC"; printf '%s\n' "$PT" | sed 's/^/      /'; FAIL=$((FAIL+1))
   fi
+  # Plain prove --json and the proof workspace gave every #[ensures] obligation the REFINEMENT claim's
+  # status, so this false clause read "proved" there (Codex, land3 round 2).
+  PJS="$("$COMPILER" prove "$S" main.compute_tag --json 2>/dev/null | python3 -c "
+import json,sys; d=json.load(sys.stdin)
+print(d['status'], ','.join(o['status'] for o in d['obligations'] if o['kind']=='ensures'))" 2>/dev/null)"
+  WSD="$(mktemp -d)"
+  "$COMPILER" prove "$S" main.compute_tag --workspace "$WSD/ws" > /dev/null 2>&1
+  WSS="$(cat "$WSD"/ws/obligations/*ensures*.json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])" 2>/dev/null)"
+  rm -rf "$WSD"
+  if [ "$PJS" = "proved unproven" ] && [ "$WSS" = "unproven" ]; then
+    echo "  ok   prove --json and the workspace read the ensures obligation unproven (the body stays proved)"; PASS=$((PASS+1))
+  else
+    echo "  FAIL prove --json / workspace overclaim the ensures obligation: json='$PJS' workspace='$WSS' (want 'proved unproven' / 'unproven')"; FAIL=$((FAIL+1))
+  fi
   S="$B89/ens_missing_with_proof_by/src/main.con"
   if PJ="$("$COMPILER" prove "$S" main.compute_tag --check --json 2>/dev/null)"; then PJRC=0; else PJRC=$?; fi
   PV="$(python3 -c "

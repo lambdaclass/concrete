@@ -253,10 +253,16 @@ assert_exit "check missing → exit 2" 2 "$COMPILER" prove "$PP" main.clamp_valu
 assert_json "capabilities check=true" 'd["features"]["check"] is True' "$COMPILER" prove --capabilities
 # Kernel-backed "checked" path: only when the Lean toolchain is on PATH (always in CI).
 if command -v lake >/dev/null 2>&1; then
+  # count_up's theorem replays but is about its loop step, not its body (spec not bound, bug 079):
+  # --check reported it "checked" and exited 0 because it mapped every verdict but stale to checked.
   assert_json "check proved → checked (kernel)" \
-    'd["all_checked"] is True and d["checks"][0]["status"]=="checked" and "." in d["checks"][0]["theorem"]' \
+    'd["all_checked"] is True and d["checks"][0]["status"]=="checked" and d["checks"][0]["discharged"] is True and "." in d["checks"][0]["theorem"]' \
+    "$COMPILER" prove examples/elf_header/src/main.con main.check_magic --check --json
+  assert_exit "check proved → exit 0" 0 "$COMPILER" prove examples/elf_header/src/main.con main.check_magic --check --json
+  assert_json "check replaying but spec-unbound → spec_unbound, not discharged" \
+    'd["all_checked"] is False and d["checks"][0]["status"]=="spec_unbound" and d["checks"][0]["discharged"] is False' \
     "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
-  assert_exit "check proved → exit 0" 0 "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
+  assert_exit "check spec_unbound → exit 2" 2 "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
 else
   echo "  skip kernel --check assertions (lake not on PATH)"
 fi

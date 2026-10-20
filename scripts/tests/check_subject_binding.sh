@@ -136,6 +136,24 @@ grep -q "$EV \[claim_not_proved\]" "$TMP/x.issue" && ! grep -q "^== $EV" "$TMP/x
 grep -q "^== main.check_magic" "$TMP/x.store" \
   && ok "X: the fixture's own unaliased claims still mint (the refusal is not the whole package)" \
   || no "X: the fixture minted nothing — the refusal leg may be refusing everything"
+# concrete prove --check is a surface too (Codex, land3): it mapped every verdict but `stale` to
+# "checked" once the theorem replayed, so the refused claim read discharged=true and exited 0.
+# check_info <file> <qual> — "<status> <discharged> <exit>" of its one refinement check.
+check_info(){
+  local js rc=0
+  js="$("$C" prove "$1" "$2" --check --json 2>/dev/null)" || rc=$?
+  python3 -c "
+import json,sys; d=json.loads(sys.argv[1]); r=[c for c in d['checks'] if c['obligation_kind']=='refinement']
+print(r[0]['status'] if len(r)==1 else 'none', r[0]['discharged'] if len(r)==1 else 'none', d['all_checked'], sys.argv[2])" "$js" "$rc" 2>/dev/null || echo "unparsable"
+}
+CI="$(check_info "$FX" "$EV")"
+[ "$CI" = "correspondence_unjustified False False 2" ] \
+  && ok "X: prove --check reports the aliased claim correspondence_unjustified, not discharged, exit 2" \
+  || no "X: prove --check on the aliased claim reads '$CI' (want correspondence_unjustified False False 2)"
+CI="$(check_info "$FX" main.check_magic)"
+[ "$CI" = "checked True True 0" ] \
+  && ok "X: control — prove --check discharges the fixture's unaliased check_magic (exit 0)" \
+  || no "X: control — prove --check on check_magic reads '$CI' (want checked True True 0)"
 # The same attack where `check_class` IS defined. The call graph then resolves the spelling to the
 # definition, not the import, so the edge set it reports is not what the elaborator resolved.
 FC=tests/programs/bug081_alias_key_collide/src/main.con
@@ -259,6 +277,10 @@ grep -q "^-- spec not bound to body" <<<"$B" \
   && grep -q "declares parameters \[key, message, nonce\], the function has \[message, key, nonce\]" <<<"$B" \
   && ok "K: the same body with permuted parameters is not bound, and the parameters are named" \
   || no "K: a parameter mismatch was not refused: $(head -1 <<<"$B")"
+CI="$(check_info "$PK" main.compute_tag)"
+[ "$CI" = "spec_unbound False False 2" ] \
+  && ok "K: prove --check reports it spec_unbound, not discharged, exit 2 (the theorem replays)" \
+  || no "K: prove --check on the permuted-parameter claim reads '$CI' (want spec_unbound False False 2)"
 
 echo ""
 echo "=== N: a theorem whose statement evaluates no specification ==="

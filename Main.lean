@@ -1776,20 +1776,26 @@ def compileAndReport (inputPath : String) (reportType : String)
             let status :=
               if envFailure then "env_failure"
               else if failed then (if has combined "unknown" then "missing_theorem" else "failed")
-              else if st == "stale" then "stale"
               -- The theorem replays, but nothing checks that it concludes the clause (bug 089):
               -- the postcondition is not discharged, whatever the link names.
               else if st == "ensures" then "not_discharged"
-              else "checked"
+              -- A replaying theorem discharges a refinement claim only when the claim's own verdict
+              -- is `proved`. Every other verdict (stale, and the refusals correspondence_unjustified,
+              -- spec_unbound, deps_not_current, needs_recheck, ...) is reported as itself: the kernel
+              -- accepting a theorem says nothing about whether it proves THIS body.
+              else if st == "proved" then "checked"
+              else st
             (id, thm, status)
           let allChecked := results.all (fun (_, _, st) => st == "checked")
           let exitCode : UInt32 :=
             if envFailure then 5
             else if results.any (fun (_, _, st) => st == "failed") then 4
-            else if results.any (fun (_, _, st) => st == "missing_theorem" || st == "not_discharged") then 2
+            else if results.any (fun (_, _, st) => st == "missing_theorem") then 2
             else if results.any (fun (_, _, st) => st == "stale") then 3
+            -- not_discharged and every refused verdict: nothing proves this.
+            else if results.any (fun (_, _, st) => st != "checked") then 2
             else 0
-          let leanErr := if results.all (fun (_, _, st) => st == "checked" || st == "not_discharged") then "" else String.ofList (combined.toList.take 800)
+          let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (combined.toList.take 800)
           if proveJson then
             let body := results.map fun (id, thm, st) =>
               String.join ["    {\"obligation_id\": ", q id, ", \"theorem\": ", q thm, ", \"status\": ", q st,

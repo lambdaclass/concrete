@@ -4009,7 +4009,9 @@ def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
     -- the function postcondition (#[ensures]) as an obligation
     for ens in f.ensures do
       let reqHyps := f.requires.map Concrete.fmtExpr
-      obls := obls ++ [oblObj s!"{e.qualName}#ensures" (Int.ofNat (f.span.line)) "ensures" reqHyps (Concrete.fmtExpr ens) status]
+      -- THE verdict (bug 089), never the refinement claim's status: a proved body is not a
+      -- discharged postcondition.
+      obls := obls ++ [oblObj s!"{e.qualName}#ensures" (Int.ofNat (f.span.line)) "ensures" reqHyps (Concrete.fmtExpr ens) (ensuresVerdictOf registry e.qualName).status]
     -- proofkit hints
     let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
     let mut hints : List String := []
@@ -4575,8 +4577,9 @@ def workspaceFiles (pc : Concrete.ProofCore) (registry : ProofRegistry)
       -- function" rendered identically to "an obligation exists and is missing". A consumer
       -- comparing against the valid status set accepts both, which is the shape that made a stale
       -- edge-kind line produce a false finding rather than an obvious wrong answer.
-      let st := (pc.obligations.find? (·.functionId.qualName == qualName)).map (·.status.canonical)
-                  |>.getD Concrete.noObligationRecord
+      -- An ensures obligation's status is THE verdict (bug 089), never the refinement claim's: the
+      -- function's obligation record says whether the BODY is proved, not whether this clause is.
+      let st := (ensuresVerdictOf registry qualName).status
       files := files ++ [(s!"obligations/{artifactDirName s!"{qualName}#ensures"}.json", oblFile s!"{qualName}#ensures" "ensures" st (toString f.span.line) reqHyps (Concrete.fmtExpr ens))]
   | none => pure ()
   files := files ++ [("check.sh", s!"#!/usr/bin/env bash\n# Kernel-verify this function's linked Lean proof (structured JSON).\nconcrete prove {inputPath} {qualName} --check --json\n")]
