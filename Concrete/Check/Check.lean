@@ -434,6 +434,16 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       throwCheck (.untraceablePlace "the reference produced by this call"
         "no call may yield a reference (a reference stored in a heap cell or collection is not traced); borrow a named place instead") (some e.getSpan)
     | _ => return t
+  -- A field, element or dereference whose TYPE is a reference reads a reference stored in
+  -- storage — an aggregate, an array, a heap cell, a reference to a reference — whose source
+  -- is not traced. Refused at the read itself, from the checked type (never a peek), so no
+  -- such reference reaches any place, borrow or argument check (normalized place rule).
+  | .fieldAccess .. | .arrayIndex .. | .deref .. =>
+    match ← resolvedOr t with
+    | .ref _ | .refMut _ =>
+      throwCheck (.untraceablePlace "the reference read here"
+        "a reference stored in a field, element or referenced place is not traced; borrow a named place instead") (some e.getSpan)
+    | _ => return t
   | _ => return t
 
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do

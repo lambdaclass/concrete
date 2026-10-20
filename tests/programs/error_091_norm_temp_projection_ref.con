@@ -1,0 +1,16 @@
+// Normalized place rule (Codex static review): `keep(h).r.f` reads a reference stored in a field
+// of a call's result; the place rule classified the base as a temporary because the peek could
+// not type `.r`. A field (or element, or dereference) whose checked type is a reference is now
+// refused at the read itself: E0238.
+mod m {
+    struct P { f: i64 }
+    struct Holder { r: &P }
+    fn keep(h: Holder) -> Holder { return h; }
+    fn main() -> Int {
+        let p: P = P { f: 1 };
+        let h: Holder = Holder { r: &p };
+        let x: i64 = keep(h).r.f;
+        let P { f } = p;
+        return x;
+    }
+}

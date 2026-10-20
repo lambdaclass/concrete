@@ -360,9 +360,9 @@ programs rejected today with E0238:
   of Copy values included), and a reference stored in a place (`*w.r`);
 - a field access or index whose base is not a traceable place
   (`(if c { a } else { b }).f`, `(**r).f`);
-- a reference read back out of an aggregate — a struct field, an enum payload, or a generic
-  field instantiated at a reference type — used as a place, binder or argument (storing a
-  reference in an aggregate is accepted, but what it borrows is not traced afterwards);
+- ANY read of a reference stored in a field, array element, heap cell or referenced place, and
+  any call (intrinsics included) whose result is a reference: storing a reference in an
+  aggregate is accepted, but it can never be read back out (what it borrows is not traced);
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
@@ -453,4 +453,11 @@ yields a reference (VALUE_MODEL; declared and generic returns are refused, E0236
 monomorphization). Intrinsics were outside that invariant (`free(h)` of a `Heap<&P>`), so every
 expression is now checked through one entry (`checkExpr` over `checkExprCore`) that refuses any
 call form whose type is a reference (E0238). Fixture `error_091_norm_intrinsic_ref_result.con`.
+
+Twelfth (static) pass: the rule's reference detection no longer depends on the type peek. The
+single `checkExpr` entry refuses, from the CHECKED type, any field access, index or dereference
+whose value is a reference (a reference stored in an aggregate, array, heap cell or referenced
+place is not traced), alongside any call yielding one. So no stored reference reaches a place,
+borrow or argument check however its base is spelled (`keep(h).r.f`, `print(keep(h).r)`).
+Fixture `error_091_norm_temp_projection_ref.con`.
 
