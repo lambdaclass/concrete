@@ -101,13 +101,15 @@ fi
 # tried and missed nested substitutions and here-strings, so the counter stays a grep that
 # over-counts. BASELINE 6 -> 5: check_fnptr_values.sh's hit was such a comment.
 BASELINE_SUBST=5
-# Cut a line at the first ' #' whose prefix holds an EVEN number of double quotes and whose tail
-# holds none: the '#' is then outside any string opened on this line, and the tail cannot close
+# Cut a line at the first ' #' whose prefix holds an EVEN number of double quotes, no backslash and
+# no single quote (either makes quote parity meaningless: an escaped or single-quoted '"'), and
+# whose tail holds no double quote: the '#' is then outside any string opened on this line, and the tail cannot close
 # one. A string opened on an earlier line was already invisible to the grep (it needs a '"' on the
 # line), so this adds no miss. echo "a # `id` (the string continues on the next line) keeps its
 # tail, because one '"' precedes the '#'.
 CUT_TAIL='{ n = length($0); q = 0
   for (i = 1; i <= n; i++) { c = substr($0, i, 1)
+    if (c == "\\" || c == "\047") { print; next }
     if (c == "\"") q++
     else if (c == "#" && i > 1 && substr($0, i-1, 1) ~ /[ \t]/ && q % 2 == 0 && index(substr($0, i), "\"") == 0) { print substr($0, 1, i-1); next } }
   print }'
@@ -146,16 +148,18 @@ printf '#!/usr/bin/env bash\necho "danger `id` here"\n' > "$STB/check_real_subst
 printf '#!/usr/bin/env bash\nx="$1"   # a trailing comment with `name` in it\n' > "$STB/check_trailing_comment.sh"
 printf '#!/usr/bin/env bash\necho "a # inside quotes `id` still runs"\n' > "$STB/check_real_quoted_hash.sh"
 printf '#!/usr/bin/env bash\necho "danger # `id`\ncontinued"\n' > "$STB/check_real_multiline.sh"
+printf '#!/usr/bin/env bash\necho "danger \\" # `id`\ncontinued"\n' > "$STB/check_real_escaped_quote.sh"
+printf "#!/usr/bin/env bash\nx='\"'; echo \"a # \`id\`\ncontinued\"\n" > "$STB/check_real_squoted_quote.sh"
 cnt=0
 for f in "$STB"/check_*.sh; do
   # grep -c, never -q: -q exits at the first hit, awk dies of SIGPIPE, and under pipefail the
   # pipeline would report "no hit" for exactly the gates with the most hits.
   if [ "$(grep -vE '^[[:space:]]*#' "$f" | awk "$CUT_TAIL" | grep -cE '"[^"]*[^\\]`[^"]*`')" -gt 0 ]; then cnt=$((cnt+1)); fi
 done
-if [ "$cnt" = "3" ]; then
+if [ "$cnt" = "5" ]; then
   ok "the backtick counter ignores leading and trailing comments and still catches real substitutions (also after a quoted #, and in a string that continues on the next line)"
 else
-  no "backtick-counter self-test found $cnt of an expected 3 — the counter is not trustworthy"
+  no "backtick-counter self-test found $cnt of an expected 5 — the counter is not trustworthy"
 fi
 
 echo "=== the ratchet can fail ==="
