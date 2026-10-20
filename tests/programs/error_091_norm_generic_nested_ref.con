@@ -1,0 +1,18 @@
+// Normalized place rule (Codex static review): the rule checks a generic body once, at its
+// opaque `T`. `forward::<&P>` would let the body read a `T` (a stored reference) out of
+// `w: &W<T>` that the rule never saw, so instantiating a type parameter with a reference where
+// it occurs inside a parameter type is refused: E0238.
+mod m {
+    struct P { n: i64 }
+    struct W<T> { v: T }
+    fn show(p: &P) { }
+    fn forward<T: Copy>(w: &W<T>, f: fn(T)) { f(w.v); }
+    fn main() -> Int {
+        let p: P = P { n: 1 };
+        let w: W<&P> = W::<&P> { v: &p };
+        forward::<&P>(&w, show);
+        let W { v } = w;
+        let P { n } = p;
+        return n;
+    }
+}

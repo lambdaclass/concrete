@@ -363,6 +363,9 @@ programs rejected today with E0238:
 - ANY read of a reference stored in a field, array element, heap cell or referenced place, and
   any call (intrinsics included) whose result is a reference: storing a reference in an
   aggregate is accepted, but it can never be read back out (what it borrows is not traced);
+- instantiating a type parameter with a reference type where the parameter occurs inside a
+  parameter type of the generic function or method (`forward::<&P>(w: &W<T>, ..)`), since the
+  generic body is checked once at its opaque `T`;
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
@@ -460,4 +463,11 @@ whose value is a reference (a reference stored in an aggregate, array, heap cell
 place is not traced), alongside any call yielding one. So no stored reference reaches a place,
 borrow or argument check however its base is spelled (`keep(h).r.f`, `print(keep(h).r)`).
 Fixture `error_091_norm_temp_projection_ref.con`.
+
+Thirteenth (static) pass — generic bodies: the rule checks a generic body once, at its opaque
+type parameters, so a `T` instantiated to a reference where it occurs INSIDE a parameter type
+(`w: &W<T>`, `h: Heap<T>`, `[T; N]`, `fn(T)`) would let the body read a stored reference the rule
+never saw. Such an instantiation is refused at every call form (`refuseNestedRefInstantiation`:
+free calls, static and instance methods); a top-level `x: T` stays allowed (the caller's own
+reference, checked at the call). Fixture `error_091_norm_generic_nested_ref.con`.
 

@@ -1025,6 +1025,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       for (pName, pTy) in mapping do
         if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
           throwCheckMsg s!"generic function '{fnName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      refuseNestedRefInstantiation s!"generic function '{fnName}'" mapping (sig.params.map (·.2))
       -- Check trait bounds
       if !sig.typeBounds.isEmpty then
         checkTraitBounds sig.typeBounds mapping s!"generic function '{fnName}'"
@@ -1910,6 +1911,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       for (pName, pTy) in mapping do
         if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
           throwCheckMsg s!"static method '{methodName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md)."
+      refuseNestedRefInstantiation s!"static method '{methodName}'" mapping (sig.params.map (·.2))
       let paramTypes := sig.params.map fun (n, t) => (n, substTy mapping t)
       let retTy := substTy mapping sig.retTy
       if args.length != paramTypes.length then

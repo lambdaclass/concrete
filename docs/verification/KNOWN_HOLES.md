@@ -55,6 +55,9 @@ some valid programs are rejected:
 - ANY read of a reference stored in a field, array element, heap cell or referenced place, and
   any call (intrinsics included) whose result is a reference: storing a reference in an
   aggregate is accepted, but it can never be read back out (what it borrows is not traced);
+- instantiating a type parameter with a reference type where the parameter occurs inside a
+  parameter type of the generic function or method (`forward::<&P>(w: &W<T>, ..)`), since the
+  generic body is checked once at its opaque `T`;
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
