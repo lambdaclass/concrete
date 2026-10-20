@@ -110,6 +110,12 @@ def run_commands(path):
         return []           # a workflow-wide custom shell: nothing qualifies
     if any(re.match(r"^env:", l) for l in visible):
         return []           # a workflow-wide environment: nothing qualifies
+    jobs_at = next((n for n, l in enumerate(visible) if re.match(r"^jobs:\s*$", l)), None)
+    jcol = None
+    if jobs_at is not None:
+        jcol = next((indent(l) for l in visible[jobs_at + 1:] if l.strip()), None)
+        if not jcol:
+            jobs_at = None
     cmds = []
     for n, line in enumerate(visible):
         m = re.match(r"^(\s*)(-\s+)?run:\s*(.*)$", line)
@@ -133,21 +139,29 @@ def run_commands(path):
             continue
         if any(re.match(r"^\s*(?:-\s+)?env:", l) for l in step):
             continue
-        # The job: the nearest `jobs.<id>:` header (indent 2) above the step.
+        # The job, from the structure: the nearest header at the jobs' own column
+        # (derived from the first entry under `jobs:`, any indentation width) above
+        # the step; its properties sit at the column of the job's first property.
+        # A run whose job cannot be established does not count.
+        if jobs_at is None or n <= jobs_at:
+            continue
         j = start
-        while j > 0 and not re.match(r"^  [A-Za-z0-9_-]+:\s*$", visible[j]):
+        while j > jobs_at and not (indent(visible[j]) == jcol and visible[j].strip()
+                                   and re.match(r"^\s*[A-Za-z0-9_-]+:\s*$", visible[j])):
             j -= 1
+        if j <= jobs_at:
+            continue
         k = j + 1
-        job_conditional = False
-        while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > 2):
-            if re.match(r"^    if:", visible[k]):
-                job_conditional = True
+        while k < len(visible) and (not visible[k].strip() or indent(visible[k]) > jcol):
             k += 1
-        if job_conditional:
+        body = visible[j + 1:k]
+        props = [l for l in body if l.strip()]
+        if not props:
             continue
-        if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible[j + 1:k], 4)):
+        pcol = indent(props[0])
+        if any(indent(l) == pcol and re.match(r"^\s*(if|env):", l) for l in props):
             continue
-        if any(re.match(r"^    env:", l) for l in visible[j + 1:k]):
+        if any(v not in EXECUTING_SHELLS for v in defaults_shells(body, pcol)):
             continue
         cmds.append(strip_shell_comment(m.group(3)))
     return cmds
