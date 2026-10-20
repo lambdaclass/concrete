@@ -471,3 +471,8 @@ never saw. Such an instantiation is refused at every call form (`refuseNestedRef
 free calls, static and instance methods); a top-level `x: T` stays allowed (the caller's own
 reference, checked at the call). Fixture `error_091_norm_generic_nested_ref.con`.
 
+Fourteenth (static) pass: the instantiation restrictions (reference in a nested parameter
+position, and the existing reference-in-return-type rule) resolve aliases first, so
+`f::<R>` with `type R = &P` is a reference instantiation. Fixture
+`error_091_norm_generic_nested_alias_ref.con`.
+

@@ -145,25 +145,6 @@ partial def tyParamOccursIn (name : String) : Ty → Bool
   | .fn_ params _ retTy => params.any (tyParamOccursIn name) || tyParamOccursIn name retTy
   | _ => false
 
-/-- `name` occurs in `ty` somewhere OTHER than as the whole type: inside a reference, pointer,
-    heap shell, array, generic argument or function type — a position the generic body can read
-    a `name` value out of. -/
-def tyParamOccursNested (name : String) : Ty → Bool
-  | .typeVar _ | .named _ => false
-  | t => tyParamOccursIn name t
-
-/-- Bug 091 round 3 (normalized place rule): the place rule checks a generic body ONCE, at its
-    type parameters, where `T` is opaque. A `T` instantiated to a REFERENCE in a parameter
-    position the body can read a `T` out of (`w: &W<T>`, `h: Heap<T>`, `a: [T; N]`) would let
-    the body read a stored reference the rule never saw. Refused at the instantiation; a
-    top-level `x: T` (the caller's own reference, checked at the call) stays allowed. -/
-def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
-    (paramTys : List Ty) : CheckM Unit := do
-  for (pName, pTy) in mapping do
-    if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then
-      throwCheck (.untraceablePlace s!"what the reference instantiating '{pName}' of {what} borrows"
-        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none
-
 def getEnv : CheckM TypeEnv := get
 def setEnv (env : TypeEnv) : CheckM Unit :=
   modify fun cur => { env with nextVarUid := max cur.nextVarUid env.nextVarUid }
@@ -222,6 +203,29 @@ def resolveType (ty : Ty) : CheckM Ty := do
       throwCheckMsg s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)."
     return .fn_ params' capSet retTy'
   | _ => return ty
+
+/-- `name` occurs in `ty` somewhere OTHER than as the whole type: inside a reference, pointer,
+    heap shell, array, generic argument or function type — a position the generic body can read
+    a `name` value out of. -/
+def tyParamOccursNested (name : String) : Ty → Bool
+  | .typeVar _ | .named _ => false
+  | t => tyParamOccursIn name t
+
+/-- Bug 091 round 3 (normalized place rule): the place rule checks a generic body ONCE, at its
+    type parameters, where `T` is opaque. A `T` instantiated to a REFERENCE in a parameter
+    position the body can read a `T` out of (`w: &W<T>`, `h: Heap<T>`, `a: [T; N]`) would let
+    the body read a stored reference the rule never saw. Refused at the instantiation; a
+    top-level `x: T` (the caller's own reference, checked at the call) stays allowed. -/
+def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
+    (paramTys : List Ty) (retTy : Ty := .unit) : CheckM Unit := do
+  for (pName, pTy0) in mapping do
+    -- aliases resolved: `f::<R>` with `type R = &P` is a reference instantiation
+    let pTy ← tryCatch (resolveType pTy0) (fun _ => pure pTy0)
+    if tyContainsRef pTy && tyParamOccursIn pName retTy then
+      throwCheckMsg s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+    if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then
+      throwCheck (.untraceablePlace s!"what the reference instantiating '{pName}' of {what} borrows"
+        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none
 
 /-- Type-variable substitution over surface types. Delegates to the one shared
     definition (`Layout.substTyVars`); the two were byte-for-byte equivalent
@@ -956,7 +960,7 @@ partial def inferMethodParamAndRetTys
   for (pName, pTy) in fullMapping do
     if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
       throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
-  refuseNestedRefInstantiation s!"method '{callName}'" fullMapping (sig.params.map (·.2))
+  refuseNestedRefInstantiation s!"method '{callName}'" fullMapping (sig.params.map (·.2)) sig.retTy
   -- 2. Infer capability-variable bindings: from the RECEIVER first (R-0484 — on
   --    `impl<cap C> Sink<C>`, `s.run(..)` with `s: &Sink<Console>` binds C := Console),
   --    then from the arguments.
