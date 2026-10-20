@@ -28,7 +28,10 @@ if [ ! -x "$COMPILER" ]; then
     echo "       Run 'make build' from the repo root first."
     exit 1
 fi
-"$COMPILER" "$CON_SRC" -o "$CON_BIN"
+BENCH_SRC="$(mktemp -d)/convm_bench.con"
+sed 's/fn bench_mode() -> bool { return false; }/fn bench_mode() -> bool { return true; }/' "$CON_SRC" > "$BENCH_SRC"
+grep -q 'fn bench_mode() -> bool { return true; }' "$BENCH_SRC"
+"$COMPILER" "$BENCH_SRC" -o "$CON_BIN"
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 

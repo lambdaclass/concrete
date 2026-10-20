@@ -4,10 +4,16 @@ mod UnionExample {
         baz: i64,
     }
 
-    fn main() -> i32 {
-        let mut foo: Foo = Foo { bar: 1 };
+    // Reading a union field reinterprets shared memory, so it lives in a
+    // trusted function. Destructuring is also the consume of the owned union.
+    trusted fn read_bar(foo: Foo) -> i32 {
+        let Foo { bar, baz } = foo;
+        return bar;
+    }
 
-		// unsafe!
-		let bar: i32 = foo.bar;
+    fn main() -> i32 {
+        let foo: Foo = Foo { bar: 1 };
+        let bar: i32 = read_bar(foo);
+        return bar;
     }
 }

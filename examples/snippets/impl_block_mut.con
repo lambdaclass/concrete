@@ -1,5 +1,5 @@
 mod ImplBlockMut {
-    struct A {
+    struct Copy A {
         a: i32,
         b: i32,
     }

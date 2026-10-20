@@ -1,10 +1,16 @@
 mod A {
-    struct X {
+    // The type and its methods are public; the field is not, so other modules
+    // construct an X through the associated function `new`.
+    pub struct Copy X {
         a: i32
     }
 
     impl X {
-        fn mul(&self, other: i32) -> i32 {
+        pub fn new(a: i32) -> X {
+            return X { a: a };
+        }
+
+        pub fn mul(&self, other: i32) -> i32 {
             return self.a * other;
         }
     }
@@ -14,9 +20,7 @@ mod Example {
     import A.{X};
 
     pub fn main() -> i32 {
-        let x: X = X {
-            a: 2,
-        };
+        let x: X = X::new(2);
 
         return x.mul(4);
     }

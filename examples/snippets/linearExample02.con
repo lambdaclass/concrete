@@ -13,7 +13,10 @@ mod LinearExampleStub {
                     };
 		// linear value is written/consumed
 		consume_x(&mut xy);
-		return xy.x;
+		// the linear value must be consumed before main returns:
+		// destructuring it is that consumption.
+		let Linear { x, y } = xy;
+		return x;
 	}
 	
 	fn consume_x(value: & mut Linear) {

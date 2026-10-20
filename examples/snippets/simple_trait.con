@@ -3,7 +3,7 @@ mod simple_trait {
         fn hello(&self) -> u32;
     }
 
-    struct Test {
+    struct Copy Test {
         a: u32,
     }
 

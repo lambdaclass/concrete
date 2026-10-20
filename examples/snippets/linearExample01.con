@@ -13,6 +13,9 @@ mod LinearExampleStub {
                     };
 		// linear value is written/consumed
 		xy.x = xy.x + 1;
-		return xy.x;
+		// the linear value must be consumed before main returns:
+		// destructuring it is that consumption.
+		let Linear { x, y } = xy;
+		return x;
 	}				
 }

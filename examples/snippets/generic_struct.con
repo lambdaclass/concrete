@@ -1,5 +1,5 @@
 mod MyMod {
-    struct GenericStruct<T> {
+    struct Copy GenericStruct<T> {
         a: T,
         b: u32,
     }

@@ -30,6 +30,14 @@ mod Types {
         data: i32,
     }
 
+    // Fields are private to Types: other modules build values with mk_val /
+    // the mk_* constructors and read them through tag() / data().
+    impl Val {
+        pub fn tag(&self) -> i32 { return self.tag; }
+        pub fn data(&self) -> i32 { return self.data; }
+    }
+
+    pub fn mk_val(tag: i32, data: i32) -> Val { return Val { tag: tag, data: data }; }
     pub fn mk_nil() -> Val { return Val { tag: 0, data: 0 }; }
     pub fn mk_int(n: i32) -> Val { return Val { tag: 1, data: n }; }
     pub fn mk_sym(id: i32) -> Val { return Val { tag: 2, data: id }; }
@@ -95,7 +103,7 @@ mod SymTable {
         let mut i: Int = 0;
         while i < slen {
             let ch: Int = string_char_at(s, i);
-            h = h * 31 + (ch as i32);
+            h = wrapping_add(wrapping_mul(h, 31), ch as i32);  // the hash wraps mod 2^32
             i = i + 1;
         }
         return h;
@@ -132,14 +140,15 @@ mod SymTable {
         let mut i: i32 = start;
         while i < end {
             let ch: Int = string_char_at(s, i as Int);
-            h = h * 31 + (ch as i32);
+            h = wrapping_add(wrapping_mul(h, 31), ch as i32);  // the hash wraps mod 2^32
             i = i + 1;
         }
         return h;
     }
 
     // Precomputed keyword hashes — pure functions, no string allocation needed
-    // hash = fold (h * 31 + ch) over each character code
+    // hash = fold (h * 31 + ch) over each character code, wrapping mod 2^32
+    // (only "empty?" is long enough to wrap)
     pub fn hash_def() -> i32 { return ((100 * 31 + 101) * 31 + 102) * 31 + 33; }   // "def!"
     pub fn hash_let() -> i32 { return ((108 * 31 + 101) * 31 + 116) * 31 + 42; }   // "let*"
     pub fn hash_fn() -> i32 { return (102 * 31 + 110) * 31 + 42; }                  // "fn*"
@@ -185,13 +194,16 @@ mod SymTable {
     // Multi-char builtins
     pub fn hash_list() -> i32 { return ((108 * 31 + 105) * 31 + 115) * 31 + 116; }   // "list"
     pub fn hash_count() -> i32 { return (((99 * 31 + 111) * 31 + 117) * 31 + 110) * 31 + 116; } // "count"
-    pub fn hash_empty() -> i32 { return ((((101 * 31 + 109) * 31 + 112) * 31 + 116) * 31 + 121) * 31 + 63; } // "empty?"
+    pub fn hash_empty() -> i32 {  // "empty?"
+        let h5: i32 = (((101 * 31 + 109) * 31 + 112) * 31 + 116) * 31 + 121;
+        return wrapping_add(wrapping_mul(h5, 31), 63);
+    }
 }
 
 // ---- Cons pool (list storage) ----
 
 mod Pool {
-    import Types.{ Val };
+    import Types.{ Val, mk_val };
 
     pub struct Copy Cell {
         car_tag: i32,
@@ -200,13 +212,20 @@ mod Pool {
         cdr_data: i32,
     }
 
+    impl Cell {
+        pub fn car_tag(&self) -> i32 { return self.car_tag; }
+        pub fn car_data(&self) -> i32 { return self.car_data; }
+        pub fn cdr_tag(&self) -> i32 { return self.cdr_tag; }
+        pub fn cdr_data(&self) -> i32 { return self.cdr_data; }
+    }
+
     pub fn alloc_cell(pool: &mut Vec<Cell>, car: Val, cdr: Val) with(Alloc) -> i32 {
         let idx: Int = vec_len::<Cell>(pool) as Int;
         let cell: Cell = Cell {
-            car_tag: car.tag,
-            car_data: car.data,
-            cdr_tag: cdr.tag,
-            cdr_data: cdr.data,
+            car_tag: car.tag(),
+            car_data: car.data(),
+            cdr_tag: cdr.tag(),
+            cdr_data: cdr.data(),
         };
         vec_push::<Cell>(pool, cell);
         return idx as i32;
@@ -214,23 +233,23 @@ mod Pool {
 
     pub fn get_car(pool: &mut Vec<Cell>, idx: i32) -> Val {
         let cell: Cell = vec_get::<Cell>(pool, idx as Int);
-        return Val { tag: cell.car_tag, data: cell.car_data };
+        return mk_val(cell.car_tag, cell.car_data);
     }
 
     pub fn get_cdr(pool: &mut Vec<Cell>, idx: i32) -> Val {
         let cell: Cell = vec_get::<Cell>(pool, idx as Int);
-        return Val { tag: cell.cdr_tag, data: cell.cdr_data };
+        return mk_val(cell.cdr_tag, cell.cdr_data);
     }
 
     // List length
     pub fn list_len(pool: &mut Vec<Cell>, v: Val) -> i32 {
-        if v.tag != 3 { return 0; }
-        if v.data < 0 { return 0; }
+        if v.tag() != 3 { return 0; }
+        if v.data() < 0 { return 0; }
         let mut count: i32 = 0;
         let mut cur: Val = v;
-        while cur.tag == 3 && cur.data >= 0 {
+        while cur.tag() == 3 && cur.data() >= 0 {
             count = count + 1;
-            cur = get_cdr(pool, cur.data);
+            cur = get_cdr(pool, cur.data());
         }
         return count;
     }
@@ -240,12 +259,12 @@ mod Pool {
         let mut cur: Val = v;
         let mut i: i32 = 0;
         while i < n {
-            if cur.tag != 3 || cur.data < 0 { return Val { tag: 7, data: 0 }; }
-            cur = get_cdr(pool, cur.data);
+            if cur.tag() != 3 || cur.data() < 0 { return mk_val(7, 0); }
+            cur = get_cdr(pool, cur.data());
             i = i + 1;
         }
-        if cur.tag != 3 || cur.data < 0 { return Val { tag: 7, data: 0 }; }
-        return get_car(pool, cur.data);
+        if cur.tag() != 3 || cur.data() < 0 { return mk_val(7, 0); }
+        return get_car(pool, cur.data());
     }
 }
 
@@ -258,6 +277,17 @@ mod Closures {
         body_data: i32,
         env_id: i32,   // environment id
     }
+
+    pub fn mk_closure_rec(params: i32, body_tag: i32, body_data: i32, env_id: i32) -> Closure {
+        return Closure { params: params, body_tag: body_tag, body_data: body_data, env_id: env_id };
+    }
+
+    impl Closure {
+        pub fn params(&self) -> i32 { return self.params; }
+        pub fn body_tag(&self) -> i32 { return self.body_tag; }
+        pub fn body_data(&self) -> i32 { return self.body_data; }
+        pub fn env_id(&self) -> i32 { return self.env_id; }
+    }
 }
 
 // ---- Environments ----
@@ -268,7 +298,7 @@ mod Closures {
 // Cost: O(bindings_in_env * depth), not O(total_bindings).
 
 mod Env {
-    import Types.{ Val };
+    import Types.{ Val, mk_val };
 
     pub struct Copy EnvMeta {
         parent: i32,   // parent env_id, -1 for none
@@ -295,8 +325,8 @@ mod Env {
         let idx: i32 = vec_len::<Binding>(bindings) as i32;
         vec_push::<Binding>(bindings, Binding {
             sym_id: sym_id,
-            val_tag: v.tag,
-            val_data: v.data,
+            val_tag: v.tag(),
+            val_data: v.data(),
             prev: meta.last,
         });
         vec_set::<EnvMeta>(envs, env_id as Int,
@@ -314,14 +344,14 @@ mod Env {
             while idx >= 0 {
                 let b: Binding = vec_get::<Binding>(bindings, idx as Int);
                 if b.sym_id == sym_id {
-                    return Val { tag: b.val_tag, data: b.val_data };
+                    return mk_val(b.val_tag, b.val_data);
                 }
                 idx = b.prev;
             }
             cur_env = meta.parent;
             depth = depth + 1;
         }
-        return Val { tag: 7, data: 0 };
+        return mk_val(7, 0);
     }
 }
 
@@ -329,7 +359,7 @@ mod Env {
 // Parses a string into a Val AST.
 
 mod Reader {
-    import Types.{ Val, mk_nil, mk_int, mk_sym, mk_list, mk_bool, mk_error };
+    import Types.{ Val, mk_val, mk_nil, mk_int, mk_sym, mk_list, mk_bool, mk_error };
     import Pool.{ Cell, alloc_cell };
     import SymTable.{ SymEntry, intern, intern_by_hash, slice_hash, SYM_TRUE, SYM_FALSE, SYM_NIL };
 
@@ -481,11 +511,11 @@ mod Reader {
 
         // Read first element
         let first: ReadResult = read_form(s, syms, pool, p);
-        if first.val.tag == 7 { return first; }
+        if first.val.tag() == 7 { return first; }
 
         // Read rest as list
         let rest: ReadResult = read_list(s, syms, pool, first.pos);
-        if rest.val.tag == 7 { return rest; }
+        if rest.val.tag() == 7 { return rest; }
 
         // Cons first onto rest
         let idx: i32 = alloc_cell(pool, first.val, rest.val);
@@ -503,7 +533,7 @@ mod Reader {
 // ---- Printer ----
 
 mod Printer {
-    import Types.{ Val };
+    import Types.{ Val, mk_val };
     import Pool.{ Cell, get_car, get_cdr };
     import IO.{ put_char, put_int, put_str };
 
@@ -511,49 +541,49 @@ mod Printer {
     pub fn val_tag_id(tag: i32) -> i32 { return tag; }
 
     pub fn pr_str(v: Val, pool: &mut Vec<Cell>) with(Console) {
-        if v.tag == 0 {
+        if v.tag() == 0 {
             // "nil" via put_char — no allocation
             put_char(110); put_char(105); put_char(108);
             return;
         }
-        if v.tag == 1 {
-            put_int(v.data);
+        if v.tag() == 1 {
+            put_int(v.data());
             return;
         }
-        if v.tag == 2 {
+        if v.tag() == 2 {
             // "<sym>"
             put_char(60); put_char(115); put_char(121); put_char(109); put_char(62);
             return;
         }
-        if v.tag == 3 {
+        if v.tag() == 3 {
             put_char(40); // '('
             pr_list(v, pool);
             put_char(41); // ')'
             return;
         }
-        if v.tag == 4 {
-            if v.data == 1 {
+        if v.tag() == 4 {
+            if v.data() == 1 {
                 // "true"
                 put_char(116); put_char(114); put_char(117); put_char(101);
             }
-            if v.data != 1 {
+            if v.data() != 1 {
                 // "false"
                 put_char(102); put_char(97); put_char(108); put_char(115); put_char(101);
             }
             return;
         }
-        if v.tag == 5 {
+        if v.tag() == 5 {
             // "<fn>"
             put_char(60); put_char(102); put_char(110); put_char(62);
             return;
         }
-        if v.tag == 6 {
+        if v.tag() == 6 {
             // "<builtin>"
             put_char(60); put_char(98); put_char(117); put_char(105); put_char(108);
             put_char(116); put_char(105); put_char(110); put_char(62);
             return;
         }
-        if v.tag == 7 {
+        if v.tag() == 7 {
             // "ERROR"
             put_char(69); put_char(82); put_char(82); put_char(79); put_char(82);
             return;
@@ -561,11 +591,11 @@ mod Printer {
     }
 
     fn pr_list(v: Val, pool: &mut Vec<Cell>) with(Console) {
-        if v.tag != 3 || v.data < 0 { return; }
-        let car: Val = get_car(pool, v.data);
+        if v.tag() != 3 || v.data() < 0 { return; }
+        let car: Val = get_car(pool, v.data());
         pr_str(car, pool);
-        let cdr: Val = get_cdr(pool, v.data);
-        if cdr.tag == 3 && cdr.data >= 0 {
+        let cdr: Val = get_cdr(pool, v.data());
+        if cdr.tag() == 3 && cdr.data() >= 0 {
             put_char(32); // space
             pr_list(cdr, pool);
         }
@@ -575,11 +605,11 @@ mod Printer {
 // ---- Eval ----
 
 mod Eval {
-    import Types.{ Val, mk_nil, mk_int, mk_list, mk_bool, mk_error,
+    import Types.{ Val, mk_val, mk_nil, mk_int, mk_list, mk_bool, mk_error,
                    mk_closure, is_nil, is_int, is_sym, is_list, is_builtin,
                    is_closure, is_error, is_truthy, is_self_evaluating };
     import Pool.{ Cell, alloc_cell, get_car, get_cdr, list_len, list_nth };
-    import Closures.{ Closure };
+    import Closures.{ Closure, mk_closure_rec };
     import Env.{ EnvMeta, Binding, env_new, env_set, env_get };
     import SymTable.{ SYM_DEF, SYM_LET, SYM_FN, SYM_IF, SYM_DO };
 
@@ -596,68 +626,63 @@ mod Eval {
         }
 
         // Symbol — lookup
-        if v.tag == 2 {
-            return env_get(envs, bindings, env_id, v.data);
+        if v.tag() == 2 {
+            return env_get(envs, bindings, env_id, v.data());
         }
 
         // Not a list — error
-        if v.tag != 3 { return mk_error(); }
+        if v.tag() != 3 { return mk_error(); }
 
         // Empty list
-        if v.data < 0 { return v; }
+        if v.data() < 0 { return v; }
 
-        let head: Val = get_car(pool, v.data);
-        let rest: Val = get_cdr(pool, v.data);
+        let head: Val = get_car(pool, v.data());
+        let rest: Val = get_cdr(pool, v.data());
 
         // Special forms
-        if head.tag == 2 {
+        if head.tag() == 2 {
             // def!
-            if head.data == SYM_DEF() {
+            if head.data() == SYM_DEF() {
                 let sym: Val = list_nth(pool, rest, 0);
                 let val_expr: Val = list_nth(pool, rest, 1);
                 let val: Val = eval(val_expr, env_id, pool, envs, bindings, closures);
                 if is_error(val) { return val; }
-                env_set(envs, bindings, env_id, sym.data, val);
+                env_set(envs, bindings, env_id, sym.data(), val);
                 return val;
             }
 
             // let*
-            if head.data == SYM_LET() {
+            if head.data() == SYM_LET() {
                 let bind_list: Val = list_nth(pool, rest, 0);
                 let body: Val = list_nth(pool, rest, 1);
                 let let_env: i32 = env_new(envs, bindings, env_id);
                 // Process bindings in pairs
                 let mut cur: Val = bind_list;
-                while cur.tag == 3 && cur.data >= 0 {
-                    let sym: Val = get_car(pool, cur.data);
-                    let next: Val = get_cdr(pool, cur.data);
-                    if next.tag != 3 || next.data < 0 { return mk_error(); }
-                    let val_expr: Val = get_car(pool, next.data);
+                while cur.tag() == 3 && cur.data() >= 0 {
+                    let sym: Val = get_car(pool, cur.data());
+                    let next: Val = get_cdr(pool, cur.data());
+                    if next.tag() != 3 || next.data() < 0 { return mk_error(); }
+                    let val_expr: Val = get_car(pool, next.data());
                     let val: Val = eval(val_expr, let_env, pool, envs, bindings, closures);
                     if is_error(val) { return val; }
-                    env_set(envs, bindings, let_env, sym.data, val);
-                    cur = get_cdr(pool, next.data);
+                    env_set(envs, bindings, let_env, sym.data(), val);
+                    cur = get_cdr(pool, next.data());
                 }
                 return eval(body, let_env, pool, envs, bindings, closures);
             }
 
             // fn*
-            if head.data == SYM_FN() {
+            if head.data() == SYM_FN() {
                 let params: Val = list_nth(pool, rest, 0);
                 let body: Val = list_nth(pool, rest, 1);
                 let cl_idx: Int = vec_len::<Closure>(closures) as Int;
-                let cl: Closure = Closure {
-                    params: params.data,
-                    body_tag: body.tag,
-                    body_data: body.data,
-                    env_id: env_id,
-                };
+                let cl: Closure = mk_closure_rec(params.data(), body.tag(), body.data(), env_id);
                 vec_push::<Closure>(closures, cl);
                 return mk_closure(cl_idx as i32);
             }
 
             // if
-            if head.data == SYM_IF() {
+            if head.data() == SYM_IF() {
                 let cond_expr: Val = list_nth(pool, rest, 0);
                 let cond: Val = eval(cond_expr, env_id, pool, envs, bindings, closures);
                 if is_error(cond) { return cond; }
@@ -674,14 +699,14 @@ mod Eval {
             }
 
             // do
-            if head.data == SYM_DO() {
+            if head.data() == SYM_DO() {
                 let mut cur: Val = rest;
                 let mut result: Val = mk_nil();
-                while cur.tag == 3 && cur.data >= 0 {
-                    let expr: Val = get_car(pool, cur.data);
+                while cur.tag() == 3 && cur.data() >= 0 {
+                    let expr: Val = get_car(pool, cur.data());
                     result = eval(expr, env_id, pool, envs, bindings, closures);
                     if is_error(result) { return result; }
-                    cur = get_cdr(pool, cur.data);
+                    cur = get_cdr(pool, cur.data());
                 }
                 return result;
             }
@@ -694,73 +719,73 @@ mod Eval {
         // Fast path: builtin with known arity — skip list allocation
         if is_builtin(func) {
             // Binary builtins (+, -, *, /, =, <, >): eval 2 args directly
-            if is_binary_builtin(func.data) && rest.tag == 3 && rest.data >= 0 {
-                let a1_expr: Val = get_car(pool, rest.data);
-                let a1_cdr: Val = get_cdr(pool, rest.data);
-                if a1_cdr.tag == 3 && a1_cdr.data >= 0 {
-                    let a2_expr: Val = get_car(pool, a1_cdr.data);
+            if is_binary_builtin(func.data()) && rest.tag() == 3 && rest.data() >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data());
+                let a1_cdr: Val = get_cdr(pool, rest.data());
+                if a1_cdr.tag() == 3 && a1_cdr.data() >= 0 {
+                    let a2_expr: Val = get_car(pool, a1_cdr.data());
                     let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
                     if is_error(a1) { return a1; }
                     let a2: Val = eval(a2_expr, env_id, pool, envs, bindings, closures);
                     if is_error(a2) { return a2; }
-                    return apply_builtin_2(func.data, a1, a2);
+                    return apply_builtin_2(func.data(), a1, a2);
                 }
             }
             // Unary builtins (count, empty?): eval 1 arg directly
-            if is_unary_builtin(func.data) && rest.tag == 3 && rest.data >= 0 {
-                let a1_expr: Val = get_car(pool, rest.data);
+            if is_unary_builtin(func.data()) && rest.tag() == 3 && rest.data() >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data());
                 let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
                 if is_error(a1) { return a1; }
-                return apply_builtin_1(func.data, a1, pool);
+                return apply_builtin_1(func.data(), a1, pool);
             }
         }
 
         // Slow path: eval args into a new list
         let args: Val = eval_list(rest, env_id, pool, envs, bindings, closures);
-        if args.tag == 7 { return args; }
+        if args.tag() == 7 { return args; }
 
         // Builtin function (list builtin or fallback)
         if is_builtin(func) {
-            return apply_builtin(func.data, args, pool);
+            return apply_builtin(func.data(), args, pool);
         }
 
         // Closure — fast path for 1-2 args (skip list allocation)
         if is_closure(func) {
-            let cl: Closure = vec_get::<Closure>(closures, func.data as Int);
+            let cl: Closure = vec_get::<Closure>(closures, func.data() as Int);
 
             // Check for 1-arg fast path
-            if rest.tag == 3 && rest.data >= 0 {
-                let a1_expr: Val = get_car(pool, rest.data);
-                let a1_cdr: Val = get_cdr(pool, rest.data);
+            if rest.tag() == 3 && rest.data() >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data());
+                let a1_cdr: Val = get_cdr(pool, rest.data());
                 // Exactly 1 arg and 1 param
-                if (a1_cdr.tag != 3 || a1_cdr.data < 0) && cl.params >= 0 {
-                    let param_cell: Cell = vec_get::<Cell>(pool, cl.params as Int);
-                    if param_cell.cdr_tag != 3 || param_cell.cdr_data < 0 {
+                if (a1_cdr.tag() != 3 || a1_cdr.data() < 0) && cl.params() >= 0 {
+                    let param_cell: Cell = vec_get::<Cell>(pool, cl.params() as Int);
+                    if param_cell.cdr_tag() != 3 || param_cell.cdr_data() < 0 {
                         let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
                         if is_error(a1) { return a1; }
-                        let fn_env: i32 = env_new(envs, bindings, cl.env_id);
-                        env_set(envs, bindings, fn_env, param_cell.car_data, a1);
-                        let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+                        let fn_env: i32 = env_new(envs, bindings, cl.env_id());
+                        env_set(envs, bindings, fn_env, param_cell.car_data(), a1);
+                        let body: Val = mk_val(cl.body_tag(), cl.body_data());
                         return eval(body, fn_env, pool, envs, bindings, closures);
                     }
                 }
                 // Check for 2-arg fast path
-                if a1_cdr.tag == 3 && a1_cdr.data >= 0 {
-                    let a2_expr: Val = get_car(pool, a1_cdr.data);
-                    let a2_cdr: Val = get_cdr(pool, a1_cdr.data);
-                    if (a2_cdr.tag != 3 || a2_cdr.data < 0) && cl.params >= 0 {
-                        let p1_cell: Cell = vec_get::<Cell>(pool, cl.params as Int);
-                        if p1_cell.cdr_tag == 3 && p1_cell.cdr_data >= 0 {
-                            let p2_cell: Cell = vec_get::<Cell>(pool, p1_cell.cdr_data as Int);
-                            if p2_cell.cdr_tag != 3 || p2_cell.cdr_data < 0 {
+                if a1_cdr.tag() == 3 && a1_cdr.data() >= 0 {
+                    let a2_expr: Val = get_car(pool, a1_cdr.data());
+                    let a2_cdr: Val = get_cdr(pool, a1_cdr.data());
+                    if (a2_cdr.tag() != 3 || a2_cdr.data() < 0) && cl.params() >= 0 {
+                        let p1_cell: Cell = vec_get::<Cell>(pool, cl.params() as Int);
+                        if p1_cell.cdr_tag() == 3 && p1_cell.cdr_data() >= 0 {
+                            let p2_cell: Cell = vec_get::<Cell>(pool, p1_cell.cdr_data() as Int);
+                            if p2_cell.cdr_tag() != 3 || p2_cell.cdr_data() < 0 {
                                 let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
                                 if is_error(a1) { return a1; }
                                 let a2: Val = eval(a2_expr, env_id, pool, envs, bindings, closures);
                                 if is_error(a2) { return a2; }
-                                let fn_env: i32 = env_new(envs, bindings, cl.env_id);
-                                env_set(envs, bindings, fn_env, p1_cell.car_data, a1);
-                                env_set(envs, bindings, fn_env, p2_cell.car_data, a2);
-                                let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+                                let fn_env: i32 = env_new(envs, bindings, cl.env_id());
+                                env_set(envs, bindings, fn_env, p1_cell.car_data(), a1);
+                                env_set(envs, bindings, fn_env, p2_cell.car_data(), a2);
+                                let body: Val = mk_val(cl.body_tag(), cl.body_data());
                                 return eval(body, fn_env, pool, envs, bindings, closures);
                             }
                         }
@@ -769,25 +794,25 @@ mod Eval {
             }
 
             // General path: eval all args into a list, bind to params
-            let fn_env: i32 = env_new(envs, bindings, cl.env_id);
-            let mut params_cur: i32 = cl.params;
+            let fn_env: i32 = env_new(envs, bindings, cl.env_id());
+            let mut params_cur: i32 = cl.params();
             let mut args_cur: Val = args;
-            while params_cur >= 0 && args_cur.tag == 3 && args_cur.data >= 0 {
+            while params_cur >= 0 && args_cur.tag() == 3 && args_cur.data() >= 0 {
                 let param_cell: Cell = vec_get::<Cell>(pool, params_cur as Int);
-                let param_sym_data: i32 = param_cell.car_data; // symbol id
-                let arg_val: Val = get_car(pool, args_cur.data);
+                let param_sym_data: i32 = param_cell.car_data(); // symbol id
+                let arg_val: Val = get_car(pool, args_cur.data());
                 env_set(envs, bindings, fn_env, param_sym_data, arg_val);
                 // next param
-                let param_cdr_data: i32 = param_cell.cdr_data;
-                if param_cell.cdr_tag == 3 {
+                let param_cdr_data: i32 = param_cell.cdr_data();
+                if param_cell.cdr_tag() == 3 {
                     params_cur = param_cdr_data;
                 }
-                if param_cell.cdr_tag != 3 {
+                if param_cell.cdr_tag() != 3 {
                     params_cur = 0 - 1;
                 }
-                args_cur = get_cdr(pool, args_cur.data);
+                args_cur = get_cdr(pool, args_cur.data());
             }
-            let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+            let body: Val = mk_val(cl.body_tag(), cl.body_data());
             return eval(body, fn_env, pool, envs, bindings, closures);
         }
 
@@ -800,15 +825,15 @@ mod Eval {
                  envs: &mut Vec<EnvMeta>,
                  bindings: &mut Vec<Binding>,
                  closures: &mut Vec<Closure>) with(Alloc) -> Val {
-        if v.tag != 3 || v.data < 0 {
+        if v.tag() != 3 || v.data() < 0 {
             return mk_list(0 - 1); // empty list
         }
-        let car: Val = get_car(pool, v.data);
-        let cdr: Val = get_cdr(pool, v.data);
+        let car: Val = get_car(pool, v.data());
+        let cdr: Val = get_cdr(pool, v.data());
         let eval_car: Val = eval(car, env_id, pool, envs, bindings, closures);
-        if eval_car.tag == 7 { return eval_car; }
+        if eval_car.tag() == 7 { return eval_car; }
         let eval_cdr: Val = eval_list(cdr, env_id, pool, envs, bindings, closures);
-        if eval_cdr.tag == 7 { return eval_cdr; }
+        if eval_cdr.tag() == 7 { return eval_cdr; }
         let idx: i32 = alloc_cell(pool, eval_car, eval_cdr);
         return mk_list(idx);
     }
@@ -816,25 +841,25 @@ mod Eval {
     // Pure: apply a 2-arg builtin directly (no list allocation needed)
     fn apply_builtin_2(id: i32, a: Val, b: Val) -> Val {
         if id >= 0 && id <= 3 {
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if id == 0 { return mk_int(a.data + b.data); }
-            if id == 1 { return mk_int(a.data - b.data); }
-            if id == 2 { return mk_int(a.data * b.data); }
-            if b.data == 0 { return mk_error(); }
-            return mk_int(a.data / b.data);
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if id == 0 { return mk_int(a.data() + b.data()); }
+            if id == 1 { return mk_int(a.data() - b.data()); }
+            if id == 2 { return mk_int(a.data() * b.data()); }
+            if b.data() == 0 { return mk_error(); }
+            return mk_int(a.data() / b.data());
         }
         if id == 4 {
-            if a.tag == b.tag && a.data == b.data { return mk_bool(1); }
+            if a.tag() == b.tag() && a.data() == b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
         if id == 5 {
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if a.data < b.data { return mk_bool(1); }
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if a.data() < b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
         if id == 6 {
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if a.data > b.data { return mk_bool(1); }
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if a.data() > b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
         return mk_error();
@@ -843,15 +868,15 @@ mod Eval {
     // Pure: apply a 1-arg builtin directly
     fn apply_builtin_1(id: i32, a: Val, pool: &mut Vec<Cell>) -> Val {
         if id == 8 {
-            if a.tag == 0 { return mk_int(0); }
-            if a.tag != 3 { return mk_error(); }
+            if a.tag() == 0 { return mk_int(0); }
+            if a.tag() != 3 { return mk_error(); }
             let n: i32 = list_len(pool, a);
             return mk_int(n);
         }
         if id == 9 {
-            if a.tag == 0 { return mk_bool(1); }
-            if a.tag == 3 && a.data < 0 { return mk_bool(1); }
-            if a.tag == 3 {
+            if a.tag() == 0 { return mk_bool(1); }
+            if a.tag() == 3 && a.data() < 0 { return mk_bool(1); }
+            if a.tag() == 3 {
                 let n: i32 = list_len(pool, a);
                 if n == 0 { return mk_bool(1); }
             }
@@ -877,13 +902,13 @@ mod Eval {
         if id >= 0 && id <= 3 {
             let a: Val = list_nth(pool, args, 0);
             let b: Val = list_nth(pool, args, 1);
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if id == 0 { return mk_int(a.data + b.data); }
-            if id == 1 { return mk_int(a.data - b.data); }
-            if id == 2 { return mk_int(a.data * b.data); }
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if id == 0 { return mk_int(a.data() + b.data()); }
+            if id == 1 { return mk_int(a.data() - b.data()); }
+            if id == 2 { return mk_int(a.data() * b.data()); }
             if id == 3 {
-                if b.data == 0 { return mk_error(); }
-                return mk_int(a.data / b.data);
+                if b.data() == 0 { return mk_error(); }
+                return mk_int(a.data() / b.data());
             }
         }
 
@@ -891,21 +916,21 @@ mod Eval {
         if id == 4 {
             let a: Val = list_nth(pool, args, 0);
             let b: Val = list_nth(pool, args, 1);
-            if a.tag == b.tag && a.data == b.data { return mk_bool(1); }
+            if a.tag() == b.tag() && a.data() == b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
         if id == 5 {
             let a: Val = list_nth(pool, args, 0);
             let b: Val = list_nth(pool, args, 1);
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if a.data < b.data { return mk_bool(1); }
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if a.data() < b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
         if id == 6 {
             let a: Val = list_nth(pool, args, 0);
             let b: Val = list_nth(pool, args, 1);
-            if a.tag != 1 || b.tag != 1 { return mk_error(); }
-            if a.data > b.data { return mk_bool(1); }
+            if a.tag() != 1 || b.tag() != 1 { return mk_error(); }
+            if a.data() > b.data() { return mk_bool(1); }
             return mk_bool(0);
         }
 
@@ -917,8 +942,8 @@ mod Eval {
         // count
         if id == 8 {
             let a: Val = list_nth(pool, args, 0);
-            if a.tag == 0 { return mk_int(0); }
-            if a.tag != 3 { return mk_error(); }
+            if a.tag() == 0 { return mk_int(0); }
+            if a.tag() != 3 { return mk_error(); }
             let n: i32 = list_len(pool, a);
             return mk_int(n);
         }
@@ -926,9 +951,9 @@ mod Eval {
         // empty?
         if id == 9 {
             let a: Val = list_nth(pool, args, 0);
-            if a.tag == 0 { return mk_bool(1); }
-            if a.tag == 3 && a.data < 0 { return mk_bool(1); }
-            if a.tag == 3 {
+            if a.tag() == 0 { return mk_bool(1); }
+            if a.tag() == 3 && a.data() < 0 { return mk_bool(1); }
+            if a.tag() == 3 {
                 let n: i32 = list_len(pool, a);
                 if n == 0 { return mk_bool(1); }
             }
@@ -942,10 +967,10 @@ mod Eval {
 // ---- Main ----
 
 mod Main {
-    import Types.{ Val, mk_nil, mk_int, mk_list, mk_bool, mk_builtin, mk_error,
+    import Types.{ Val, mk_val, mk_nil, mk_int, mk_list, mk_bool, mk_builtin, mk_error,
                    is_error };
     import Pool.{ Cell };
-    import Closures.{ Closure };
+    import Closures.{ Closure, mk_closure_rec };
     import Env.{ EnvMeta, Binding, env_new, env_set };
     import SymTable.{ SymEntry, init_keywords, intern, intern_by_hash,
                        hash_plus, hash_minus, hash_star, hash_slash,
@@ -993,11 +1018,11 @@ mod Main {
                 expected: i32,
                 err_code: Int) with(Console, Alloc) -> Int {
         let ast: Val = read_str(&input, syms, pool);
-        input.drop();
+        drop_string(input);
         if is_error(ast) { return err_code; }
         let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
         if is_error(result) { return err_code; }
-        if result.tag != 1 || result.data != expected {
+        if result.tag() != 1 || result.data() != expected {
             // "FAIL: expected " via put_char — no allocation
             put_char(70); put_char(65); put_char(73); put_char(76);
             put_char(58); put_char(32); put_char(101); put_char(120);
@@ -1023,11 +1048,11 @@ mod Main {
                  expected: i32,
                  err_code: Int) with(Console, Alloc) -> Int {
         let ast: Val = read_str(&input, syms, pool);
-        input.drop();
+        drop_string(input);
         if is_error(ast) { return err_code; }
         let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
         if is_error(result) { return err_code; }
-        if result.tag != 4 || result.data != expected {
+        if result.tag() != 4 || result.data() != expected {
             // "FAIL bool" via put_char — no allocation
             put_char(70); put_char(65); put_char(73); put_char(76);
             put_char(32); put_char(98); put_char(111); put_char(111); put_char(108);
@@ -1047,12 +1072,31 @@ mod Main {
            input: String,
            err_code: Int) with(Alloc) -> Int {
         let ast: Val = read_str(&input, syms, pool);
-        input.drop();
+        drop_string(input);
         if is_error(ast) { return err_code; }
         let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
         if is_error(result) { return err_code; }
         return 0;
     }
+
+    // Read, evaluate and print one form.
+    fn show(syms: &mut Vec<SymEntry>,
+            pool: &mut Vec<Cell>,
+            envs: &mut Vec<EnvMeta>,
+            bindings: &mut Vec<Binding>,
+            closures: &mut Vec<Closure>,
+            env_id: i32,
+            input: String) with(Console, Alloc) {
+        let ast: Val = read_str(&input, syms, pool);
+        drop_string(input);
+        let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
+        pr_str(result, pool);
+        put_newline();
+    }
+
+    // The benchmark switch. bench.sh compiles a copy of this file with `false`
+    // replaced by `true`; the checked-in default is the deterministic run.
+    fn bench_mode() -> bool { return false; }
 
     // Cleanup helper
     fn cleanup(pool: Vec<Cell>, syms: Vec<SymEntry>,
@@ -1065,6 +1109,9 @@ mod Main {
         vec_free::<Closure>(closures);
     }
 
+    // Default: the step 1-5 correctness tests, then a few forms printed back.
+    // In bench mode (see bench_mode): also the benchmark section (fib 30,
+    // deep recursion, closure pressure).
     fn main() with(Std) -> Int {
         let mut pool: Vec<Cell> = vec_new::<Cell>();
         let mut syms: Vec<SymEntry> = vec_new::<SymEntry>();
@@ -1180,6 +1227,24 @@ mod Main {
                        root_env, "(fib 10)", 55, 54);
         if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
 
+        // ---- Print results back ----
+        show(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+             root_env, "(list 1 (+ 1 1) (list 3 (* 2 2)) (list))");
+        show(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+             root_env, "(let* (n 3) (if (> n 2) (count (list n n n)) nil))");
+        show(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+             root_env, "(empty? (list))");
+        show(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+             root_env, "(fact 10)");
+        show(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+             root_env, "double");
+
+        if !bench_mode() {
+            println("mal: all tests passed");
+            cleanup(pool, syms, envs, bindings, closures);
+            return 0;
+        }
+
         // ---- Benchmarks ----
 
         // fib 30 = 832040 (~1.8M calls)
@@ -1294,6 +1359,7 @@ mod Main {
                        root_env, "((compose-n inc 100) 0)", 100, 86);
         if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
 
+        println("mal: all tests and benchmarks passed");
         cleanup(pool, syms, envs, bindings, closures);
         return 0;
     }

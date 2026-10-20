@@ -41,6 +41,26 @@ mod Domain {
         action: i32,
     }
 
+    // Fields are private to Domain: other modules build values through the
+    // constructors and read them through these accessors.
+    impl Rule {
+        pub fn principal(&self) -> i32 { return self.principal; }
+        pub fn resource(&self) -> i32 { return self.resource; }
+        pub fn action(&self) -> i32 { return self.action; }
+        pub fn verdict(&self) -> i32 { return self.verdict; }
+        pub fn specificity(&self) -> i32 { return self.specificity; }
+    }
+
+    impl Request {
+        pub fn principal(&self) -> i32 { return self.principal; }
+        pub fn resource(&self) -> i32 { return self.resource; }
+        pub fn action(&self) -> i32 { return self.action; }
+    }
+
+    pub fn make_request(principal: i32, resource: i32, action: i32) -> Request {
+        return Request { principal: principal, resource: resource, action: action };
+    }
+
     pub fn make_rule(principal: i32, resource: i32, action: i32,
                      verdict: i32) -> Rule {
         let mut spec: i32 = 0;
@@ -59,7 +79,7 @@ mod Domain {
 // ---- Evaluator (PURE — zero capabilities) ----
 
 mod Evaluator {
-    import Domain.{ Rule, Request };
+    import Domain.{ Rule, Request, make_request };
 
     // ---------------------------------------------------------------
     // evaluate: the core of the policy engine.
@@ -80,16 +100,16 @@ mod Evaluator {
         while i < count {
             let rule: Rule = vec_get::<Rule>(rules, i);
 
-            let p_ok: bool = rule.principal < 0 || rule.principal == req.principal;
-            let r_ok: bool = rule.resource < 0 || rule.resource == req.resource;
-            let a_ok: bool = rule.action == req.action;
+            let p_ok: bool = rule.principal() < 0 || rule.principal() == req.principal();
+            let r_ok: bool = rule.resource() < 0 || rule.resource() == req.resource();
+            let a_ok: bool = rule.action() == req.action();
 
             if p_ok {
                 if r_ok {
                     if a_ok {
-                        if rule.specificity >= best_spec {
-                            best_spec = rule.specificity;
-                            best_verdict = rule.verdict;
+                        if rule.specificity() >= best_spec {
+                            best_spec = rule.specificity();
+                            best_verdict = rule.verdict();
                         }
                     }
                 }
@@ -104,11 +124,7 @@ mod Evaluator {
     // can: convenience wrapper
     pub fn can(rules: &mut Vec<Rule>, principal: i32, resource: i32,
                action: i32) -> bool {
-        let req: Request = Request {
-            principal: principal,
-            resource: resource,
-            action: action,
-        };
+        let req: Request = make_request(principal, resource, action);
         return evaluate(rules, req) == 1;
     }
 }
@@ -128,20 +144,21 @@ mod Gate {
         let v: i32 = evaluate(rules, req);
 
         // Print: [ALLOW] admin read source_code
-        let v_label: &String = if v == 1 { &"ALLOW" } else { &"DENY" };
+        // (Borrowing a literal inside an if-expression arm dangles once the arm
+        // ends -- bug 113 -- so each arm appends its own label.)
         let mut out: String = "[";
-        out.append(v_label);
-        out.append(&"] ");
-        out.append(&p_name);
-        out.append(&" ");
-        out.append(&a_name);
-        out.append(&" ");
-        out.append(&r_name);
+        if v == 1 { string_append(&mut out, &"ALLOW"); } else { string_append(&mut out, &"DENY"); }
+        string_append(&mut out, &"] ");
+        string_append(&mut out, &p_name);
+        string_append(&mut out, &" ");
+        string_append(&mut out, &a_name);
+        string_append(&mut out, &" ");
+        string_append(&mut out, &r_name);
         println(out);
-        out.drop();
-        p_name.drop();
-        r_name.drop();
-        a_name.drop();
+        drop_string(out);
+        drop_string(p_name);
+        drop_string(r_name);
+        drop_string(a_name);
         return v;
     }
 }
@@ -149,7 +166,7 @@ mod Gate {
 // ---- Main ----
 
 mod Main {
-    import Domain.{ Rule, Request, make_rule };
+    import Domain.{ Rule, Request, make_rule, make_request };
     import Evaluator.{ can };
     import Gate.{ gate };
 
@@ -250,23 +267,23 @@ mod Main {
 
         // ---- Gate: human-readable decisions (requires Console) ----
 
-        let r1: Request = Request { principal: 0, resource: 0, action: READ() };
+        let r1: Request = make_request(0, 0, READ());
         let v1: i32 = gate(&mut rules, r1, "admin", "source_code", "read");
         if v1 != 1 { vec_free::<Rule>(rules); return 60; }
 
-        let r2: Request = Request { principal: 1, resource: 1, action: EXEC() };
+        let r2: Request = make_request(1, 1, EXEC());
         let v2: i32 = gate(&mut rules, r2, "developer", "prod_db", "exec");
         if v2 != 1 { vec_free::<Rule>(rules); return 61; }
 
-        let r3: Request = Request { principal: 3, resource: 1, action: WRITE() };
+        let r3: Request = make_request(3, 1, WRITE());
         let v3: i32 = gate(&mut rules, r3, "guest", "prod_db", "write");
         if v3 != 0 { vec_free::<Rule>(rules); return 62; }
 
-        let r4: Request = Request { principal: 0, resource: 2, action: DELETE() };
+        let r4: Request = make_request(0, 2, DELETE());
         let v4: i32 = gate(&mut rules, r4, "admin", "audit_log", "delete");
         if v4 != 0 { vec_free::<Rule>(rules); return 63; }
 
-        let r5: Request = Request { principal: 2, resource: 2, action: READ() };
+        let r5: Request = make_request(2, 2, READ());
         let v5: i32 = gate(&mut rules, r5, "auditor", "audit_log", "read");
         if v5 != 1 { vec_free::<Rule>(rules); return 64; }
 

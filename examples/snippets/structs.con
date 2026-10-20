@@ -1,5 +1,5 @@
 mod StructExample {
-    struct Foo {
+    struct Copy Foo {
         bar: i32,
         baz: i64,
     }

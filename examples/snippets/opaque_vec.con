@@ -1,7 +1,10 @@
 mod opaque_vec {
     extern fn malloc(size: u64) with(Alloc) -> *mut u8;
     extern fn realloc(ptr: *mut u8, size: u64) with(Alloc) -> *mut u8;
+    extern fn free(ptr: *mut u8) with(Alloc);
 
+    // A type-erased growable buffer: it stores raw bytes and the element size,
+    // and each typed access names the element type at the call site.
     struct OpaqueVec {
         ptr: *mut u8,
         len: u64,
@@ -10,8 +13,8 @@ mod opaque_vec {
     }
 
     impl OpaqueVec {
-        pub fn push<T>(&mut self, value: T) {
-            if self.len <= self.cap {
+        pub fn push<T>(&mut self, value: T) with(Alloc, Unsafe) {
+            if self.len >= self.cap {
                 let new_cap: u64 = self.cap * 2;
                 self.ptr = realloc(self.ptr, self.element_size * new_cap);
                 self.cap = new_cap;
@@ -21,14 +24,21 @@ mod opaque_vec {
             self.len = self.len + 1;
         }
 
-        pub fn get<T>(&self, at: u64) -> &T {
+        // References never leave a function, so an element is read out by value.
+        pub fn get<T: Copy>(&self, at: u64) with(Unsafe) -> T {
             // todo: bounds check
             let target_ptr: *mut T = (self.ptr + (at * self.element_size)) as *mut T;
-            return target_ptr as &T;
+            return *target_ptr;
+        }
+
+        // The buffer is linear: releasing it consumes the vector.
+        pub fn free(self) with(Alloc, Unsafe) {
+            let OpaqueVec { ptr, len, cap, element_size } = self;
+            free(ptr);
         }
     }
 
-    fn main() -> i32 {
+    fn main() with(Alloc, Unsafe) -> i32 {
         // Still missing impl static methods.
 
         let element_size: u64 = 4;
@@ -43,8 +53,9 @@ mod opaque_vec {
         vec.push::<i32>(3);
         vec.push::<i32>(4);
         vec.push::<i32>(5);
-        let pushed: &i32 = vec.get::<i32>(2);
+        let pushed: i32 = vec.get::<i32>(2);
+        vec.free();
 
-        return *pushed;
+        return pushed;
     }
 }

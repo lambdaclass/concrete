@@ -1,13 +1,14 @@
  mod Example {
-    fn main() -> char {
-        let a: char = hello_chars('\t');
+    // chars are not arithmetic types: convert to their code points to add them.
+    fn main() -> i32 {
+        let a: i32 = hello_chars('\t');
         return a;
     }
 
-    fn hello_chars(a: char) -> char {
+    fn hello_chars(a: char) -> i32 {
         let x: char = 'b';
         let newline: char = '\n';
 
-        return x + newline + a;
+        return (x as i32) + (newline as i32) + (a as i32);
     }
 }

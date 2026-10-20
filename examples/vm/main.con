@@ -345,20 +345,31 @@ fn build_arith_test() with(Alloc) -> Vec<i32> {
 
 // --- Main ---
 
+// The benchmark switch. bench.sh compiles a copy of this file with `false`
+// replaced by `true`; the checked-in default is the deterministic run.
+fn bench_mode() -> bool { return false; }
+
+// Default: a deterministic run -- the arithmetic test and fib(20), with no
+// timing -- so the output can be checked exactly. In bench mode: fib(35) plus
+// the VM wall time, the line bench.sh parses.
 fn main() with(Std) -> Int {
+    let bench: bool = bench_mode();
+    let mut fib_n: i32 = 20;
+    if bench { fib_n = 35; }
+
     // Correctness test: 3 + 4*5 - 2 = 21
     let mut arith_prog: Vec<i32> = build_arith_test();
     let arith_result: i32 = vm_run(&mut arith_prog);
     vec_free::<i32>(arith_prog);
 
     let mut m0: String = "arith test: ";
-    m0.append_int(arith_result as Int);
-    m0.append(&" (expected 21)");
+    string_append_int(&mut m0, arith_result as Int);
+    string_append(&mut m0, &" (expected 21)");
     println(m0);
-    m0.drop();
+    drop_string(m0);
 
-    // Benchmark: fib(35) via recursive VM calls
-    let mut fib_prog: Vec<i32> = build_fib_program(35);
+    // fib(fib_n) via recursive VM calls (the program's PRINT shows the result)
+    let mut fib_prog: Vec<i32> = build_fib_program(fib_n);
 
     let t0: Int = clock_monotonic_ns();
     let fib_result: i32 = vm_run(&mut fib_prog);
@@ -366,13 +377,17 @@ fn main() with(Std) -> Int {
     vec_free::<i32>(fib_prog);
 
     let elapsed_ms: Int = (t1 - t0) / 1000000;
-    let mut m1: String = "fib(35) = ";
-    m1.append_int(fib_result as Int);
-    m1.append(&", vm time: ");
-    m1.append_int(elapsed_ms);
-    m1.append(&" ms");
+    let mut m1: String = "fib(";
+    string_append_int(&mut m1, fib_n as Int);
+    string_append(&mut m1, &") = ");
+    string_append_int(&mut m1, fib_result as Int);
+    if bench {
+        string_append(&mut m1, &", vm time: ");
+        string_append_int(&mut m1, elapsed_ms);
+        string_append(&mut m1, &" ms");
+    }
     println(m1);
-    m1.drop();
+    drop_string(m1);
 
     return 0;
 }

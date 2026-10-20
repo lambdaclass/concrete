@@ -1,20 +1,25 @@
 mod A {
-    struct X {
+    // `pub` exports the type name and the functions; the field stays private
+    // to this module, so other modules build an X through `new`.
+    pub struct X {
         a: i32
     }
 
-    fn hello(x: X) -> i32 {
-        return x.a;
+    pub fn new(a: i32) -> X {
+        return X { a: a };
+    }
+
+    pub fn hello(x: X) -> i32 {
+        let X { a } = x;
+        return a;
     }
 }
 
 mod ImportStruct {
-    import A.{X, hello};
+    import A.{X, new, hello};
 
     pub fn main() -> i32 {
-        let x: X = X {
-            a: 2,
-        };
+        let x: X = new(2);
 
         return hello(x);
     }

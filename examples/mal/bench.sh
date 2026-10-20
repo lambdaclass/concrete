@@ -6,7 +6,9 @@ ROOT="$(cd "$DIR/../.." && pwd)"
 
 echo "Building..."
 cd "$ROOT"
-~/.elan/bin/lake env concrete examples/mal/main.con --emit-llvm > /tmp/mal.ll 2>&1
+sed 's/fn bench_mode() -> bool { return false; }/fn bench_mode() -> bool { return true; }/' examples/mal/main.con > /tmp/mal_bench.con
+grep -q 'fn bench_mode() -> bool { return true; }' /tmp/mal_bench.con
+~/.elan/bin/lake env concrete /tmp/mal_bench.con --emit-llvm > /tmp/mal.ll 2>&1
 clang /tmp/mal.ll -o /tmp/mal_O2 -O2 -Wno-override-module 2>/dev/null
 clang -O2 "$DIR/bench_c_native.c" -o /tmp/bench_c 2>/dev/null
 

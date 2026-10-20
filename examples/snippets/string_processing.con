@@ -17,7 +17,7 @@ fn parse_and_sum(input: String) with(Std) -> Int {
                 Result::Ok { value } => { sum = sum + value; },
                 Result::Err { error } => {},
             }
-            part.drop();
+            drop_string(part);
             start = i + 1;
         }
         i = i + 1;
@@ -31,10 +31,10 @@ fn parse_and_sum(input: String) with(Std) -> Int {
             Result::Ok { value } => { sum = sum + value; },
             Result::Err { error } => {},
         }
-        last.drop();
+        drop_string(last);
     }
 
-    input.drop();
+    drop_string(input);
     return sum;
 }
 
@@ -44,10 +44,10 @@ fn main() with(Std) -> Int {
     // Print: "Sum: 100"
     let num_str: String = int_to_string(result);
     let mut msg: String = "Sum: ";
-    msg.append(&num_str);
-    num_str.drop();
+    string_append(&mut msg, &num_str);
+    drop_string(num_str);
     print_string(&msg);
     print_char(10);
-    msg.drop();
+    drop_string(msg);
     return result;
 }

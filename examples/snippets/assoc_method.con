@@ -1,5 +1,5 @@
 mod assoc {
-    struct Test {
+    struct Copy Test {
         a: i32,
     }
 

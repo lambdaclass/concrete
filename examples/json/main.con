@@ -45,6 +45,13 @@ mod Types {
 
     pub fn is_error(v: Val) -> bool { return v.tag == 6; }
 
+    // Fields are private to this module; other modules read them through
+    // these accessors and build values through the mk_* constructors.
+    impl Val {
+        pub fn tag(&self) -> i32 { return self.tag; }
+        pub fn data(&self) -> i32 { return self.data; }
+    }
+
     // Pure check: does the value's tag match?
     pub fn check_tag(v: Val, expected_tag: i32) -> bool {
         return v.tag == expected_tag;
@@ -61,10 +68,28 @@ mod Types {
         len: i32,
     }
 
+    pub fn mk_array_desc(start: i32, len: i32) -> ArrayDesc {
+        return ArrayDesc { start: start, len: len };
+    }
+
+    impl ArrayDesc {
+        pub fn start(&self) -> i32 { return self.start; }
+        pub fn len(&self) -> i32 { return self.len; }
+    }
+
     // Object descriptor: (start_index, length) into the kv-pairs pool
     pub struct Copy ObjDesc {
         start: i32,
         len: i32,
+    }
+
+    pub fn mk_obj_desc(start: i32, len: i32) -> ObjDesc {
+        return ObjDesc { start: start, len: len };
+    }
+
+    impl ObjDesc {
+        pub fn start(&self) -> i32 { return self.start; }
+        pub fn len(&self) -> i32 { return self.len; }
     }
 
     // Key-value pair for objects
@@ -73,16 +98,71 @@ mod Types {
         val_tag: i32,
         val_data: i32,
     }
+
+    pub fn mk_kv(key: i32, v: Val) -> KVPair {
+        return KVPair { key: key, val_tag: v.tag, val_data: v.data };
+    }
+
+    impl KVPair {
+        pub fn key(&self) -> i32 { return self.key; }
+        pub fn val(&self) -> Val { return Val { tag: self.val_tag, data: self.val_data }; }
+    }
 }
 
 // ---- String pool ----
 
 mod StringPool {
-    // Store parsed strings. Returns index for later retrieval.
-    pub fn store(pool: &mut Vec<String>, s: String) with(Alloc) -> i32 {
-        let idx: Int = vec_len::<String>(pool) as Int;
-        vec_push::<String>(pool, s);
+    // Parsed strings are appended to one owned text buffer; each stored string
+    // is a (start, len) span into it. Strings are linear, so a pool of separate
+    // Strings could only hand an element out by moving it; spans let the
+    // printer read a stored string in place, and freeing the pool is one drop.
+    struct Copy StrSpan {
+        start: Int,
+        len: Int,
+    }
+
+    pub struct StrPool {
+        text: String,
+        spans: Vec<StrSpan>,
+    }
+
+    pub fn new_pool() with(Alloc) -> StrPool {
+        return StrPool { text: "", spans: vec_new::<StrSpan>() };
+    }
+
+    // Store a parsed string. Returns its index for later retrieval.
+    pub fn store(pool: &mut StrPool, s: String) with(Alloc) -> i32 {
+        let idx: Int = vec_len::<StrSpan>(&mut pool.spans) as Int;
+        let start: Int = string_length(&pool.text);
+        let len: Int = string_length(&s);
+        string_append(&mut pool.text, &s);
+        drop_string(s);
+        vec_push::<StrSpan>(&mut pool.spans, StrSpan { start: start, len: len });
         return idx as i32;
+    }
+
+    // Print stored string `idx` as JSON string contents (without the quotes),
+    // re-escaping the characters the parser unescaped.
+    pub fn print_str(pool: &mut StrPool, idx: i32) with(Console, Alloc) {
+        let span: StrSpan = vec_get::<StrSpan>(&mut pool.spans, idx as Int);
+        let mut i: Int = 0;
+        while i < span.len {
+            let ch: Int = string_char_at(&pool.text, span.start + i);
+            if ch == 34 || ch == 92 { print_char(92); print_char(ch); }  // \" \\
+            else if ch == 10 { print_char(92); print_char(110); }        // \n
+            else if ch == 9 { print_char(92); print_char(116); }         // \t
+            else if ch == 13 { print_char(92); print_char(114); }        // \r
+            else if ch == 8 { print_char(92); print_char(98); }          // \b
+            else if ch == 12 { print_char(92); print_char(102); }        // \f
+            else { print_char(ch); }
+            i = i + 1;
+        }
+    }
+
+    pub fn free_pool(pool: StrPool) with(Alloc) {
+        let StrPool { text, spans } = pool;
+        drop_string(text);
+        vec_free::<StrSpan>(spans);
     }
 }
 
@@ -183,15 +263,21 @@ mod Lex {
 
 mod Parser {
     import Types.{ Val, ArrayDesc, ObjDesc, KVPair,
+                   mk_array_desc, mk_obj_desc, mk_kv,
                    mk_null, mk_bool, mk_number, mk_string,
                    mk_array, mk_object, mk_error, is_error };
     import Lex.{ is_digit, skip_ws, map_escape, classify_start,
                   match_true, match_false, match_null };
-    import StringPool.{ store };
+    import StringPool.{ StrPool, store };
 
     pub struct Copy ParseResult {
         val: Val,
         pos: i32,
+    }
+
+    impl ParseResult {
+        pub fn val(&self) -> Val { return self.val; }
+        pub fn pos(&self) -> i32 { return self.pos; }
     }
 
     fn err(pos: i32) -> ParseResult {
@@ -202,7 +288,7 @@ mod Parser {
     // Uses flag pattern for loop control:
     //   done=0: still scanning, done=1: found closing quote, done=2: error
     fn parse_string(s: &String, pos: i32,
-                    strings: &mut Vec<String>) with(Alloc) -> ParseResult {
+                    strings: &mut StrPool) with(Alloc) -> ParseResult {
         let len: i32 = string_length(s) as i32;
         let mut p: i32 = pos + 1;
         let mut buf: String = "";
@@ -232,7 +318,7 @@ mod Parser {
             let idx: i32 = store(strings, buf);
             return ParseResult { val: mk_string(idx), pos: p + 1 };
         }
-        buf.drop();
+        drop_string(buf);
         return err(p);
     }
 
@@ -259,7 +345,7 @@ mod Parser {
 
     // Parse any JSON value
     pub fn parse_value(s: &String, pos: i32,
-                       strings: &mut Vec<String>,
+                       strings: &mut StrPool,
                        arrays: &mut Vec<ArrayDesc>,
                        objects: &mut Vec<ObjDesc>,
                        kvpairs: &mut Vec<KVPair>,
@@ -305,7 +391,7 @@ mod Parser {
 
     // Parse array elements after opening [
     fn parse_array(s: &String, pos: i32,
-                   strings: &mut Vec<String>,
+                   strings: &mut StrPool,
                    arrays: &mut Vec<ArrayDesc>,
                    objects: &mut Vec<ObjDesc>,
                    kvpairs: &mut Vec<KVPair>,
@@ -317,17 +403,21 @@ mod Parser {
         if p < len && string_char_at(s, p as Int) as i32 == 93 { // ']'
             let idx: i32 = vec_len::<ArrayDesc>(arrays) as i32;
             let start: i32 = vec_len::<Val>(vals) as i32;
-            vec_push::<ArrayDesc>(arrays, ArrayDesc { start: start, len: 0 });
+            vec_push::<ArrayDesc>(arrays, mk_array_desc(start, 0));
             return ParseResult { val: mk_array(idx), pos: p + 1 };
         }
 
-        let start: i32 = vec_len::<Val>(vals) as i32;
+        // Elements are collected here and appended to `vals` only after the
+        // closing ]: nested arrays push their own elements into `vals` while
+        // this one is being parsed, so appending as we go would interleave them.
+        let mut items: Vec<Val> = vec_new::<Val>();
+        defer vec_free::<Val>(items);
         let mut count: i32 = 0;
 
         // First element
         let r: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
         if is_error(r.val) { return r; }
-        vec_push::<Val>(vals, r.val);
+        vec_push::<Val>(&mut items, r.val);
         count = count + 1;
         p = skip_ws(s, r.pos);
 
@@ -336,7 +426,7 @@ mod Parser {
             p = p + 1;
             let elem: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
             if is_error(elem.val) { return elem; }
-            vec_push::<Val>(vals, elem.val);
+            vec_push::<Val>(&mut items, elem.val);
             count = count + 1;
             p = skip_ws(s, elem.pos);
         }
@@ -346,14 +436,20 @@ mod Parser {
             return err(p);
         }
 
+        let start: i32 = vec_len::<Val>(vals) as i32;
+        let mut i: i32 = 0;
+        while i < count {
+            vec_push::<Val>(vals, vec_get::<Val>(&mut items, i as Int));
+            i = i + 1;
+        }
         let idx: i32 = vec_len::<ArrayDesc>(arrays) as i32;
-        vec_push::<ArrayDesc>(arrays, ArrayDesc { start: start, len: count });
+        vec_push::<ArrayDesc>(arrays, mk_array_desc(start, count));
         return ParseResult { val: mk_array(idx), pos: p + 1 };
     }
 
     // Parse object entries after opening {
     fn parse_object(s: &String, pos: i32,
-                    strings: &mut Vec<String>,
+                    strings: &mut StrPool,
                     arrays: &mut Vec<ArrayDesc>,
                     objects: &mut Vec<ObjDesc>,
                     kvpairs: &mut Vec<KVPair>,
@@ -365,15 +461,18 @@ mod Parser {
         if p < len && string_char_at(s, p as Int) as i32 == 125 { // '}'
             let idx: i32 = vec_len::<ObjDesc>(objects) as i32;
             let start: i32 = vec_len::<KVPair>(kvpairs) as i32;
-            vec_push::<ObjDesc>(objects, ObjDesc { start: start, len: 0 });
+            vec_push::<ObjDesc>(objects, mk_obj_desc(start, 0));
             return ParseResult { val: mk_object(idx), pos: p + 1 };
         }
 
-        let start: i32 = vec_len::<KVPair>(kvpairs) as i32;
+        // Pairs are collected here and appended to `kvpairs` after the closing }
+        // (nested objects push their own pairs while this one is parsed).
+        let mut items: Vec<KVPair> = vec_new::<KVPair>();
+        defer vec_free::<KVPair>(items);
         let mut count: i32 = 0;
 
         // Parse first key-value pair
-        let kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals);
+        let kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals, &mut items);
         if is_error(kv.val) { return kv; }
         count = count + 1;
         p = skip_ws(s, kv.pos);
@@ -381,7 +480,7 @@ mod Parser {
         // Remaining pairs
         while p < len && string_char_at(s, p as Int) as i32 == 44 { // ','
             p = p + 1;
-            let next_kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals);
+            let next_kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals, &mut items);
             if is_error(next_kv.val) { return next_kv; }
             count = count + 1;
             p = skip_ws(s, next_kv.pos);
@@ -392,18 +491,25 @@ mod Parser {
             return err(p);
         }
 
+        let start: i32 = vec_len::<KVPair>(kvpairs) as i32;
+        let mut i: i32 = 0;
+        while i < count {
+            vec_push::<KVPair>(kvpairs, vec_get::<KVPair>(&mut items, i as Int));
+            i = i + 1;
+        }
         let idx: i32 = vec_len::<ObjDesc>(objects) as i32;
-        vec_push::<ObjDesc>(objects, ObjDesc { start: start, len: count });
+        vec_push::<ObjDesc>(objects, mk_obj_desc(start, count));
         return ParseResult { val: mk_object(idx), pos: p + 1 };
     }
 
-    // Parse a single "key": value pair
+    // Parse a single "key": value pair into `dest`
     fn parse_kv(s: &String, pos: i32,
-                strings: &mut Vec<String>,
+                strings: &mut StrPool,
                 arrays: &mut Vec<ArrayDesc>,
                 objects: &mut Vec<ObjDesc>,
                 kvpairs: &mut Vec<KVPair>,
-                vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+                vals: &mut Vec<Val>,
+                dest: &mut Vec<KVPair>) with(Alloc) -> ParseResult {
         let len: i32 = string_length(s) as i32;
         let mut p: i32 = skip_ws(s, pos);
 
@@ -413,7 +519,7 @@ mod Parser {
         }
         let key_result: ParseResult = parse_string(s, p, strings);
         if is_error(key_result.val) { return key_result; }
-        let key_idx: i32 = key_result.val.data;
+        let key_idx: i32 = key_result.val.data();
         p = skip_ws(s, key_result.pos);
 
         // Expect colon
@@ -426,11 +532,7 @@ mod Parser {
         let val_result: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
         if is_error(val_result.val) { return val_result; }
 
-        vec_push::<KVPair>(kvpairs, KVPair {
-            key: key_idx,
-            val_tag: val_result.val.tag,
-            val_data: val_result.val.data,
-        });
+        vec_push::<KVPair>(dest, mk_kv(key_idx, val_result.val));
 
         // Return an object-typed value with pos advanced
         return ParseResult { val: mk_null(), pos: val_result.pos };
@@ -441,78 +543,75 @@ mod Parser {
 
 mod Printer {
     import Types.{ Val, ArrayDesc, ObjDesc, KVPair };
+    import StringPool.{ StrPool, print_str };
 
     pub fn print_val(v: Val,
-                     strings: &mut Vec<String>,
+                     strings: &mut StrPool,
                      arrays: &mut Vec<ArrayDesc>,
                      objects: &mut Vec<ObjDesc>,
                      kvpairs: &mut Vec<KVPair>,
                      vals: &mut Vec<Val>) with(Console, Alloc) {
-        if v.tag == 0 {
+        if v.tag() == 0 {
             print("null");
             return;
         }
-        if v.tag == 1 {
-            if v.data == 1 {
+        if v.tag() == 1 {
+            if v.data() == 1 {
                 print("true");
             } else {
                 print("false");
             }
             return;
         }
-        if v.tag == 2 {
-            print(v.data as Int);
+        if v.tag() == 2 {
+            print(v.data() as Int);
             return;
         }
-        if v.tag == 3 {
+        if v.tag() == 3 {
             print("\"");
-            let s: String = vec_get::<String>(strings, v.data as Int);
-            defer s.drop();
-            print(s);
+            print_str(strings, v.data());
             print("\"");
             return;
         }
-        if v.tag == 4 {
-            let desc: ArrayDesc = vec_get::<ArrayDesc>(arrays, v.data as Int);
+        if v.tag() == 4 {
+            let desc: ArrayDesc = vec_get::<ArrayDesc>(arrays, v.data() as Int);
             print("[");
             let mut i: i32 = 0;
-            while i < desc.len {
+            while i < desc.len() {
                 if i > 0 {
                     print(",");
                 }
-                let elem: Val = vec_get::<Val>(vals, (desc.start + i) as Int);
+                let elem: Val = vec_get::<Val>(vals, (desc.start() + i) as Int);
                 print_val(elem, strings, arrays, objects, kvpairs, vals);
                 i = i + 1;
             }
             print("]");
             return;
         }
-        if v.tag == 5 {
-            let desc: ObjDesc = vec_get::<ObjDesc>(objects, v.data as Int);
+        if v.tag() == 5 {
+            let desc: ObjDesc = vec_get::<ObjDesc>(objects, v.data() as Int);
             print("{");
             let mut i: i32 = 0;
-            while i < desc.len {
+            while i < desc.len() {
                 if i > 0 {
                     print(",");
                 }
-                let kv: KVPair = vec_get::<KVPair>(kvpairs, (desc.start + i) as Int);
+                let kv: KVPair = vec_get::<KVPair>(kvpairs, (desc.start() + i) as Int);
                 print("\"");
-                let k: String = vec_get::<String>(strings, kv.key as Int);
-                defer k.drop();
-                print(k);
+                print_str(strings, kv.key());
                 print("\"");
                 print(":");
-                let val: Val = Val { tag: kv.val_tag, data: kv.val_data };
+                let val: Val = kv.val();
                 print_val(val, strings, arrays, objects, kvpairs, vals);
                 i = i + 1;
             }
             print("}");
             return;
         }
-        if v.tag == 6 {
+        if v.tag() == 6 {
             let mut msg: String = "ERROR@";
-            defer msg.drop();
-            msg.append_int(v.data as Int);
+            defer drop_string(msg);
+            string_append_int(&mut msg, v.data() as Int);
             print(msg);
             return;
         }
@@ -525,6 +624,8 @@ mod Main {
     import Types.{ Val, ArrayDesc, ObjDesc, KVPair, mk_error, is_error, check_tag, check_val };
     import Parser.{ ParseResult, parse_value };
     import Lex.{ skip_ws };
+    import StringPool.{ StrPool, new_pool, free_pool };
+    import Printer.{ print_val };
 
     // Pure check: did parsing consume the entire input (after skipping trailing whitespace)?
     fn is_fully_consumed(input: &String, pos: i32) -> bool {
@@ -535,36 +636,36 @@ mod Main {
 
     // Parse a complete JSON string. Verifies entire input is consumed.
     fn parse_json(input: &String,
-                  strings: &mut Vec<String>,
+                  strings: &mut StrPool,
                   arrays: &mut Vec<ArrayDesc>,
                   objects: &mut Vec<ObjDesc>,
                   kvpairs: &mut Vec<KVPair>,
                   vals: &mut Vec<Val>) with(Alloc) -> Val {
         let r: ParseResult = parse_value(input, 0, strings, arrays, objects, kvpairs, vals);
-        if is_error(r.val) { return r.val; }
-        if !is_fully_consumed(input, r.pos) {
-            let p: i32 = skip_ws(input, r.pos);
+        if is_error(r.val()) { return r.val(); }
+        if !is_fully_consumed(input, r.pos()) {
+            let p: i32 = skip_ws(input, r.pos());
             return mk_error(p);
         }
-        return r.val;
+        return r.val();
     }
 
     // Test: parse succeeds and returns expected tag
     fn test_tag(input: String, expected_tag: i32,
-                strings: &mut Vec<String>,
+                strings: &mut StrPool,
                 arrays: &mut Vec<ArrayDesc>,
                 objects: &mut Vec<ObjDesc>,
                 kvpairs: &mut Vec<KVPair>,
                 vals: &mut Vec<Val>,
                 err_code: Int) with(Console, Alloc) -> Int {
-        defer input.drop();
+        defer drop_string(input);
         let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
         if !check_tag(v, expected_tag) {
             let mut msg: String = "FAIL: expected tag ";
-            defer msg.drop();
-            msg.append_int(expected_tag as Int);
-            msg.append(&" got ");
-            msg.append_int(v.tag as Int);
+            defer drop_string(msg);
+            string_append_int(&mut msg, expected_tag as Int);
+            string_append(&mut msg, &" got ");
+            string_append_int(&mut msg, v.tag() as Int);
             println(msg);
             return err_code;
         }
@@ -573,25 +674,25 @@ mod Main {
 
     // Test: parse succeeds, tag matches, data matches
     fn test_val(input: String, expected_tag: i32, expected_data: i32,
-                strings: &mut Vec<String>,
+                strings: &mut StrPool,
                 arrays: &mut Vec<ArrayDesc>,
                 objects: &mut Vec<ObjDesc>,
                 kvpairs: &mut Vec<KVPair>,
                 vals: &mut Vec<Val>,
                 err_code: Int) with(Console, Alloc) -> Int {
-        defer input.drop();
+        defer drop_string(input);
         let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
         if !check_val(v, expected_tag, expected_data) {
             let mut msg: String = "FAIL: expected (";
-            defer msg.drop();
-            msg.append_int(expected_tag as Int);
-            msg.append(&",");
-            msg.append_int(expected_data as Int);
-            msg.append(&") got (");
-            msg.append_int(v.tag as Int);
-            msg.append(&",");
-            msg.append_int(v.data as Int);
-            msg.append(&")");
+            defer drop_string(msg);
+            string_append_int(&mut msg, expected_tag as Int);
+            string_append(&mut msg, &",");
+            string_append_int(&mut msg, expected_data as Int);
+            string_append(&mut msg, &") got (");
+            string_append_int(&mut msg, v.tag() as Int);
+            string_append(&mut msg, &",");
+            string_append_int(&mut msg, v.data() as Int);
+            string_append(&mut msg, &")");
             println(msg);
             return err_code;
         }
@@ -600,30 +701,36 @@ mod Main {
 
     // Test: parse should fail (return error)
     fn test_error(input: String,
-                  strings: &mut Vec<String>,
+                  strings: &mut StrPool,
                   arrays: &mut Vec<ArrayDesc>,
                   objects: &mut Vec<ObjDesc>,
                   kvpairs: &mut Vec<KVPair>,
                   vals: &mut Vec<Val>,
                   err_code: Int) with(Alloc) -> Int {
-        defer input.drop();
+        defer drop_string(input);
         let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
         if !is_error(v) { return err_code; }
         return 0;
     }
 
-    fn cleanup(strings: Vec<String>, arrays: Vec<ArrayDesc>,
+    // Parse and print one document: the printer is the only part of the
+    // program that needs Console.
+    fn show(input: String,
+            strings: &mut StrPool,
+            arrays: &mut Vec<ArrayDesc>,
+            objects: &mut Vec<ObjDesc>,
+            kvpairs: &mut Vec<KVPair>,
+            vals: &mut Vec<Val>) with(Console, Alloc) {
+        defer drop_string(input);
+        let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
+        print_val(v, strings, arrays, objects, kvpairs, vals);
+        println("");
+    }
+
+    fn cleanup(strings: StrPool, arrays: Vec<ArrayDesc>,
                objects: Vec<ObjDesc>, kvpairs: Vec<KVPair>,
                vals: Vec<Val>) with(Alloc) {
-        // Free stored strings
-        let slen: Int = vec_len::<String>(&mut strings) as Int;
-        let mut si: Int = 0;
-        while si < slen {
-            let s: String = vec_get::<String>(&mut strings, si);
-            s.drop();
-            si = si + 1;
-        }
-        vec_free::<String>(strings);
+        free_pool(strings);
         vec_free::<ArrayDesc>(arrays);
         vec_free::<ObjDesc>(objects);
         vec_free::<KVPair>(kvpairs);
@@ -631,7 +738,7 @@ mod Main {
     }
 
     fn main() with(Std) -> Int {
-        let mut strings: Vec<String> = vec_new::<String>();
+        let mut strings: StrPool = new_pool();
         let mut arrays: Vec<ArrayDesc> = vec_new::<ArrayDesc>();
         let mut objects: Vec<ObjDesc> = vec_new::<ObjDesc>();
         let mut kvpairs: Vec<KVPair> = vec_new::<KVPair>();
@@ -767,6 +874,15 @@ mod Main {
                        &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 60);
         if err != 0 { return err; }
 
+        // ---- Print parsed documents back (compact form) ----
+
+        show("{\"users\": [{\"name\": \"alice\", \"age\": 30}, {\"name\": \"bob\", \"age\": 25}], \"count\": 2}",
+             &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals);
+        show(" [true, false, null, -7, [], {}, \"say \\\"hi\\\"\\n\"] ",
+             &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals);
+        show("[1,]", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals);
+
+        println("json: all checks passed");
         return 0;
     }
 }
