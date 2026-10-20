@@ -95,7 +95,13 @@ fi
 # seventeen were PROSE, which means this ratchet had eleven slots of slack: a real
 # backtick-in-a-string bug could have been introduced without moving the number. An inflated
 # baseline is a ratchet that has already been loosened.
-BASELINE_SUBST=6
+# TRAILING COMMENTS ARE SKIPPED TOO (2026-10-20), but only a tail ` # ...` with no double quote
+# in it: such a tail cannot hold or close a double-quoted string, so cutting it can never hide a
+# real substitution, while a tail with a `"` in it is kept and still counted (fail closed). A
+# trailing comment (check_example_outputs.sh) failed CI at cb8b9bac; a quote-aware parser was
+# tried and missed nested substitutions and here-strings, so the counter stays a grep that
+# over-counts. BASELINE 6 -> 5: check_fnptr_values.sh's hit was such a comment.
+BASELINE_SUBST=5
 echo "=== unintended command substitution in shell strings ==="
 # COMMENT LINES ARE SKIPPED. This counter matched any line with a backtick pair inside double
 # quotes, including SHELL COMMENTS — so prose describing a Lean identifier tripped it. On 2026-08-13
@@ -108,7 +114,7 @@ echo "=== unintended command substitution in shell strings ==="
 substcount=0
 for f in scripts/tests/check_*.sh; do
   [ "$(basename "$f")" = "check_gate_vacuity.sh" ] && continue
-  if grep -vE '^[[:space:]]*#' "$f" | grep -qE '"[^"]*[^\\]`[^"]*`'; then substcount=$((substcount+1)); fi
+  if grep -vE '^[[:space:]]*#' "$f" | sed -E 's/[[:space:]]#[^"]*$//' | grep -qE '"[^"]*[^\\]`[^"]*`'; then substcount=$((substcount+1)); fi
 done
 echo "  gates with an unescaped backtick in a double-quoted string: $substcount (baseline $BASELINE_SUBST)"
 if [ "$substcount" -le "$BASELINE_SUBST" ]; then
@@ -126,14 +132,16 @@ fi
 STB="$(mktemp -d)"; trap 'rm -rf "$STB"' EXIT
 printf '#!/usr/bin/env bash\n# a comment mentioning `an identifier` in prose\necho "safe"\n' > "$STB/check_comment_only.sh"
 printf '#!/usr/bin/env bash\necho "danger `id` here"\n' > "$STB/check_real_subst.sh"
+printf '#!/usr/bin/env bash\nx="$1"   # a trailing comment with `name` in it\n' > "$STB/check_trailing_comment.sh"
+printf '#!/usr/bin/env bash\necho "a # inside quotes `id` still runs"\n' > "$STB/check_real_quoted_hash.sh"
 cnt=0
 for f in "$STB"/check_*.sh; do
-  if grep -vE '^[[:space:]]*#' "$f" | grep -qE '"[^"]*[^\\]`[^"]*`'; then cnt=$((cnt+1)); fi
+  if grep -vE '^[[:space:]]*#' "$f" | sed -E 's/[[:space:]]#[^"]*$//' | grep -qE '"[^"]*[^\\]`[^"]*`'; then cnt=$((cnt+1)); fi
 done
-if [ "$cnt" = "1" ]; then
-  ok "the backtick counter ignores comments and still catches a real command substitution"
+if [ "$cnt" = "2" ]; then
+  ok "the backtick counter ignores leading and trailing comments and still catches real substitutions (also after a quoted #)"
 else
-  no "backtick-counter self-test found $cnt of an expected 1 — the counter is not trustworthy"
+  no "backtick-counter self-test found $cnt of an expected 2 — the counter is not trustworthy"
 fi
 
 echo "=== the ratchet can fail ==="
