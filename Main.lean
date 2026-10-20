@@ -3215,11 +3215,19 @@ def compileAndReport (inputPath : String) (reportType : String)
             ", \"recheck\": ", q (((res.recheck.find? (·.1 == thm)).map (·.2.canonical)).getD "recheck_not_run"),
             ", \"source_line\": ", toString (lineOf fn), "}"]
         let allObjs := refChecks ++ ensChecks
+        -- all_checked is the AGGREGATE of the statuses emitted above (Codex, land3 round 5), as in
+        -- `prove --check`: every refinement check `checked` (a proved claim whose theorem replayed),
+        -- and no ensures link, since none is ever discharged (bug 089). The exit code below still
+        -- answers only whether every linked theorem replayed.
+        let refStatuses := refinementTargets.map fun t =>
+          statusOf t.theoremName ((statusBySubject.find? (·.1 == t.subject)).map (·.2) |>.getD "unknown")
+        let allChecked := !generalFailure && failed.isEmpty && ensuresThms.isEmpty
+          && refStatuses.all (· == "checked")
         let leanErr := if generalFailure || !failed.isEmpty then String.ofList (combined.toList.take 800) else ""
         IO.println (String.join [
           "{\n  \"schema_version\": ", q "1", ",\n  \"toolchain\": ", q tc,
           ",\n  \"checker\": ", q ((res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"),
-          ",\n  \"all_checked\": ", (if failed.isEmpty && !generalFailure then "true" else "false"),
+          ",\n  \"all_checked\": ", (if allChecked then "true" else "false"),
           ",\n  \"checks\": [\n", ",\n".intercalate allObjs, "\n  ],\n",
           "  \"lean_error\": ", q leanErr,
           ",\n  \"summary\": {\"verified\": ", toString verified.length,

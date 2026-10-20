@@ -160,14 +160,14 @@ CPJ="$("$C" "$FX" --report check-proofs --json 2>/dev/null)"
 CPV="$(python3 -c "
 import json,sys; d=json.loads(sys.argv[1]); c={x['function']:x for x in d['checks'] if x['obligation_kind']=='refinement'}
 e=c.get(sys.argv[2],{}); m=c.get('main.check_magic',{})
-print(e.get('status'), e.get('discharged'), m.get('status'), m.get('discharged'), d['summary'].get('refused'))" "$CPJ" "$EV" 2>/dev/null)"
+print(e.get('status'), e.get('discharged'), m.get('status'), m.get('discharged'), d['summary'].get('refused'), d['all_checked'])" "$CPJ" "$EV" 2>/dev/null)"
 CPT="$("$C" "$FX" --report check-proofs 2>&1)"
 # 2 refused: the aliased claim and the fixture's stale check_class_orig (a stale claim is not verified).
-[ "$CPV" = "correspondence_unjustified False checked True 2" ] \
+[ "$CPV" = "correspondence_unjustified False checked True 2 False" ] \
   && grep -qF "? $EV — Examples.ElfHeader.Proofs.validate_header_correct (claim verdict: correspondence_unjustified)" <<<"$CPT" \
   && ! grep -qF "✓ $EV" <<<"$CPT" \
   && ok "X: check-proofs reports the aliased claim refused (not checked, not kernel-verified); check_magic stays checked" \
-  || no "X: check-proofs on the aliased claim reads '$CPV' (want correspondence_unjustified False checked True 2)"
+  || no "X: check-proofs on the aliased claim reads '$CPV' (want correspondence_unjustified False checked True 2 False)"
 # A STALE claim is not verified either (Codex, land3 round 4): stale_missing_partial links one theorem to
 # a proved claim (states.partial) and a stale one (states.stale); only the proved one is kernel-verified.
 SMP="$("$C" examples/proof_patterns/stale_missing_partial/src/main.con --report check-proofs 2>&1)"
@@ -175,8 +175,14 @@ grep -qF "✓ states.partial — Examples.ProofPatterns.Proofs.add_three_correct
   && grep -qF "? states.stale — Examples.ProofPatterns.Proofs.add_three_correct (claim verdict: stale)" <<<"$SMP" \
   && ! grep -qF "✓ states.stale" <<<"$SMP" \
   && grep -qF "Summary: 1 verified, 0 failed; 1 refused (type-checked, NOT proved)" <<<"$SMP" \
+  && [ "$("$C" examples/proof_patterns/stale_missing_partial/src/main.con --report check-proofs --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['all_checked'])" 2>/dev/null)" = False ] \
   && ok "check-proofs: the stale claim sharing a theorem with a proved one is refused, not verified" \
   || no "check-proofs counts the stale claim as verified: $(grep -m1 'Summary' <<<"$SMP")"
+# Positive control for all_checked: a file whose every claim is proved and replays reads true.
+ACK="$("$C" examples/elf_header/src/main.con --report check-proofs --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['all_checked'], all(c['status']=='checked' for c in d['checks']))" 2>/dev/null)"
+[ "$ACK" = "True True" ] \
+  && ok "check-proofs: all_checked is true for elf_header, whose every claim is proved and checked" \
+  || no "check-proofs all_checked positive control on elf_header reads '$ACK' (want True True)"
 # THE TABLE SIDE OF THE KEY (Codex, land3). A specification's `.call key` evaluates whatever the
 # table's `globals` dispatch returns, while scoped evidence was read from `attested`/`entries` alone: a
 # table attesting checkClassFn under `check_class` while dispatching `check_class` to checkVersionFn

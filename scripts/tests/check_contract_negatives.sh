@@ -503,7 +503,7 @@ if command -v lake >/dev/null 2>&1; then
     VERD="$(python3 -c "
 import json,sys; d=json.loads(sys.argv[1])
 e=[c for c in d['checks'] if c['obligation_kind']=='ensures']
-ok = e and all(c['discharged'] is False and c['status'] in ('failed','not_discharged') for c in e)
+ok = e and all(c['discharged'] is False and c['status'] in ('failed','not_discharged') for c in e) and d['all_checked'] is False
 nf = sum(1 for c in d['checks'] if c['status'] in ('failed','missing_theorem'))
 print(('ok' if ok else 'bad'), d['summary']['failed'], nf)" "$JS" 2>/dev/null)"
     read -r JOK JF JN <<<"$VERD"
