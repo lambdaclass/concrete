@@ -11,6 +11,9 @@
 #   project-build  — file belongs to a project-form example; CI runs
 #                    `concrete build` once in the nearest ancestor directory
 #                    containing a Concrete.toml, which must exit 0.
+#   project-lib    — a project that cannot be linked in CI (a native library is
+#                    absent): `concrete build --emit-llvm` in its package root must
+#                    succeed and the IR must compile to an object (`clang -c`).
 #   expected-error — intentionally-failing diagnostics example; standalone
 #                    compile MUST exit non-zero.
 #   known-bug NNN <text>
@@ -273,6 +276,13 @@ examples/bool_kernel_demo/src/main.con compile-lib
 examples/datatype_kernel_demo/src/main.con compile-lib
 examples/euf_kernel_demo/src/main.con compile-lib
 examples/contract_positive/pure_contract_calls/src/main.con compile-lib
+
+# RocksDB slice 1 (R-0285): `concrete build` cannot link librocksdb here (gap G1,
+# docs/platform/ROCKSDB_SLICE1.md), so both packages are compiled without linking
+# (`project-lib`); check_rocksdb_slice1.sh builds and runs the program where the
+# library is available.
+examples/rocksdb_kv/src/main.con project-lib
+examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 
 # ---------------------------------------------------------------------------
 # Run rules (check_example_outputs.sh). Interpreter markers: project examples

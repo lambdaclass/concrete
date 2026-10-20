@@ -8,6 +8,8 @@
 #   compile-lib     — a module with no `main` (proof/VC teaching code): its LLVM IR
 #                     must be emitted and compile to an object (`clang -c`)
 #   project-build   — `concrete build` in the owning project dir must succeed
+#   project-lib     — a project that cannot be linked in CI: `concrete build
+#                     --emit-llvm` there must succeed and the IR compile to an object
 #   expected-error  — standalone compile must FAIL (diagnostics example)
 #   known-bug NNN M — a valid program a compiler bug blocks: compile must FAIL
 #                     with output containing M (alternatives separated by ` || `),
@@ -230,7 +232,7 @@ check_known_bug() { # src, number, marker
 
 while read -r src outcome rest; do
   case "$outcome" in
-    compile|compile-lib|project-build|expected-error)
+    compile|compile-lib|project-build|project-lib|expected-error)
       if [ -n "${rest:-}" ]; then
         no "$src: '$outcome' takes no further fields (got '$rest')"
         continue
@@ -276,6 +278,31 @@ while read -r src outcome rest; do
         ok
       else
         no "$src (expected to compile as a library: --emit-llvm + clang -c)"
+        cat "$OUT_DIR/$out_name.err" "$OUT_DIR/$out_name.cc.log" 2>/dev/null | grep -v 'argument unused' | awk 'NR<=5'
+      fi
+      ;;
+    project-lib)
+      proj=$(project_root_of "$src") || { no "$src (project-lib, but no Concrete.toml ancestor)"; continue; }
+      case " $built_projects " in
+        *" $proj "*) continue ;;
+      esac
+      built_projects="$built_projects $proj"
+      [ "$STRUCTURE_ONLY" = 1 ] && { ok; continue; }
+      # A project that cannot be linked here (a native library is absent): emit its
+      # LLVM IR and compile that to an object -- everything but the link.
+      out_name=$(echo "$proj" | tr '/.' '__')
+      before_ll=$(find "$proj" -name '*.con.ll' | LC_ALL=C sort)
+      (cd "$proj" && "$ROOT_DIR/$COMPILER" build --emit-llvm > "$OUT_DIR/$out_name.ll" 2> "$OUT_DIR/$out_name.err")
+      emit_rc=$?
+      # --emit-llvm also writes <file>.ll beside each source; remove the ones it created.
+      LC_ALL=C comm -13 <(echo "$before_ll") <(find "$proj" -name '*.con.ll' | LC_ALL=C sort) | while IFS= read -r ll; do
+        [ -n "$ll" ] && rm -f "$ll"
+      done
+      if [ "$emit_rc" -eq 0 ] \
+         && clang -c -x ir -Wno-override-module "$OUT_DIR/$out_name.ll" -o "$OUT_DIR/$out_name.o" > "$OUT_DIR/$out_name.cc.log" 2>&1; then
+        ok
+      else
+        no "$proj (project expected to compile without linking: build --emit-llvm + clang -c)"
         cat "$OUT_DIR/$out_name.err" "$OUT_DIR/$out_name.cc.log" 2>/dev/null | grep -v 'argument unused' | awk 'NR<=5'
       fi
       ;;

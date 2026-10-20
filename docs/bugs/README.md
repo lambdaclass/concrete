@@ -22,6 +22,37 @@ Those belong in:
 - [research/workloads/phase-h-findings.md](../../research/workloads/phase-h-findings.md)
 - the relevant research note under `research/`
 
+## Filing a bug
+
+A bug record is `docs/bugs/NNN_short_name.md` (the next unused number), an entry in
+`scripts/tests/audit_bug_corpus.sh` (`BUG_TEST_MAP` with a fixture, or `SKIP_BUGS` with a rationale
+naming the coverage), and a line in the open or fixed list below. Every time a bug is found, ask
+whether an underlying problem in the compiler's design produced it, and record the answer: a fix
+that repairs one spelling of a recurring cause leaves the next spelling open. The record has these
+parts:
+
+```
+# Bug NNN — one-line statement of the defect
+
+**Status:** OPEN | FIXED (branch, commit)
+**Found:** date, by what (workload, hunt, review, example)
+**Severity:** what goes wrong for a user (wrong code, unsound claim, crash, refusal)
+
+## Reproducer        the smallest program or command, its observed and expected result
+## Cause             the code that produces it (file, function)
+## Fix               (when fixed) what changed, and the permanent regression leg
+## Structural cause  the design fact that let this bug exist: which missing model, duplicated
+                     authority, name-based join or fail-open default it is an instance of, and
+                     the other bugs of that class
+## Structural owner  the roadmap task, exit or verified-pipeline stage that removes the cause
+                     for the whole class (not only this spelling), or a proposed owner
+```
+
+`Structural cause` and `Structural owner` are required for every bug numbered 102 or higher
+(`scripts/tests/check_bug_filing_complete.sh` fails without them). The classes found so far, with
+their owners, are in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md); a new bug either joins a class
+there or adds one.
+
 ## Fixed Bugs
 
 - [001_cross_module_struct_field_offset.md](001_cross_module_struct_field_offset.md)
@@ -108,6 +139,9 @@ Those belong in:
 - [069_aliased_imported_type_unresolvable.md](069_aliased_imported_type_unresolvable.md) — an aliased imported struct/enum was registered under its definition-site spelling, so the importer's local alias did not resolve (FIXED 2026-08-02; **renumbered from 064**, which a second, unrelated bug already held)
 - [070_builtin_enum_list_built_twice.md](070_builtin_enum_list_built_twice.md) — `builtinEnumList` built twice and `hasUserResult` computed from different inputs, so Elab and Check held different beliefs about a user `Result` (FIXED 2026-08-02; **renumbered from 065**, which a second, unrelated bug already held)
 - [071_cross_package_capability_requirements_unenforced.md](071_cross_package_capability_requirements_unenforced.md) — a capability declared in a dependency did not bind on its caller: a function declaring nothing read `$HOME` through `std.env.get`. Only hardcoded intrinsics were enforced across a package boundary (OPEN, partially repaired 2026-09-21)
+- [102_pointer_local_address_cast_miscompiled.md](102_pointer_local_address_cast_miscompiled.md) — `&mut x as *mut *mut T` on a pointer-typed local passes `x`'s value, not its address (silent wrong code; the interpreter refuses the cast, so differential testing misses it). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
+- [103_extern_destroy_replaced_by_empty_body.md](103_extern_destroy_replaced_by_empty_body.md) — Mono's drop-glue synthesizes an empty definition for any unresolved callee ending in `_destroy`, so an `extern fn foo_destroy` never reaches the C library (silent leak). Found by RocksDB slice 1 groundwork, 2026-10-20 (OPEN)
+- [104_assigned_reference_outlives_block_local.md](104_assigned_reference_outlives_block_local.md) — `leaked = &h` from an inner block records no borrow, so `h` can be freed (or go out of scope) while the outer reference is still read: use after free in safe code. Found by the V1 design examples (B6). Joins exit 0b.
 
 - [108_bool_cast_trunc.md](108_bool_cast_trunc.md) — OPEN: a `bool` cast to a wider integer is emitted as `trunc i1` (examples-health, 2026-10-20)
 - [109_f32_literal_invalid_ir.md](109_f32_literal_invalid_ir.md) — OPEN: an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant (examples-health, 2026-10-20)

@@ -1,0 +1,195 @@
+// rocksdb_kv — RocksDB slice 1 (ROADMAP row 5, R-0285).
+// Usage: rocksdb_kv <db-dir> <invalid-db-path>
+//
+// Imports the RocksDB C library through the `rocksdb` binding package (a
+// normal [dependencies] entry and a normal import), then:
+//   1. opens <invalid-db-path> and expects a TYPED error (DbError, kind Open),
+//      not an abort;
+//   2. opens (creating) <db-dir>, writes one key, reads it back and checks the
+//      bytes, and reads an absent key;
+//   3. releases every handle exactly once: the library-owned value buffer,
+//      the read/write options, the database and the options. Each release is
+//      a consuming call on a linear value, so forgetting one or using a handle
+//      after its release is a compile error, not a runtime one.
+//
+// Exit codes (ERROR_CONVENTIONS 13t): 0 = all steps behaved, 1 = a RocksDB
+// operation behaved differently from the expectation above, 2 = usage.
+mod rocksdb_kv {
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.io.{println, eprintln};
+    import rocksdb.{Db, DbError, DbErrorKind, Options, ReadOptions, WriteOptions, Value};
+
+    fn kind_name(k: DbErrorKind) with(Alloc) -> String {
+        match k {
+            DbErrorKind::Open => { return "Open"; },
+            DbErrorKind::Put => { return "Put"; },
+            DbErrorKind::Get => { return "Get"; },
+        }
+    }
+
+    fn report(prefix: String, e: DbError) with(Console, Alloc) {
+        let mut line: String = prefix;
+        let k: String = kind_name(e.kind);
+        line.append(&k);
+        k.drop();
+        let sep: String = " message=";
+        line.append(&sep);
+        sep.drop();
+        line.append(&e.message);
+        println(&line);
+        line.drop();
+        e.drop();
+    }
+
+    fn usage(msg: String) with(Console, Alloc) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 2;
+    }
+
+    // Step 1: the invalid path must produce Err { kind: Open }.
+    fn open_invalid(opts: &Options, bad: &String) with(File, Console, Alloc) -> bool {
+        match Db::open(opts, bad) {
+            Result::Ok { value } => {
+                value.close();
+                let m: String = "rocksdb_kv: opening the invalid path succeeded";
+                eprintln(&m);
+                m.drop();
+                return false;
+            },
+            Result::Err { error } => {
+                let is_open: bool = match error.kind {
+                    DbErrorKind::Open => true,
+                    DbErrorKind::Put => false,
+                    DbErrorKind::Get => false,
+                };
+                report("open-invalid: error kind=", error);
+                return is_open;
+            },
+        }
+    }
+
+    // Step 2: write then read back through an open database. Borrows `db`;
+    // the caller closes it.
+    fn write_read(db: &Db) with(File, Console, Alloc) -> bool {
+        let wopts: WriteOptions = WriteOptions::create();
+        let ropts: ReadOptions = ReadOptions::create();
+        let ks: String = "slice1-key";
+        let vs: String = "linear handles, destroyed once";
+        let key: Bytes = Bytes::from_string(&ks);
+        let val: Bytes = Bytes::from_string(&vs);
+        ks.drop();
+        let mut ok: bool = true;
+
+        match db.put(&wopts, &key, &val) {
+            Result::Err { error } => { report("put: error kind=", error); ok = false; },
+            Result::Ok { value } => {
+                let mut line: String = "put: ok bytes=";
+                line.append_int(value as Int);
+                println(&line);
+                line.drop();
+            },
+        }
+
+        match db.get(&ropts, &key) {
+            Result::Err { error } => { report("get: error kind=", error); ok = false; },
+            Result::Ok { value } => {
+                match value {
+                    Option::None => {
+                        let m: String = "get: key missing after put";
+                        eprintln(&m);
+                        m.drop();
+                        ok = false;
+                    },
+                    Option::Some { value } => {
+                        let got: Bytes = value.to_bytes();
+                        value.free();
+                        if got.eq(&val) {
+                            let mut line: String = "get: ";
+                            line.append(&vs);
+                            println(&line);
+                            line.drop();
+                        } else {
+                            let m: String = "get: value differs from what was written";
+                            eprintln(&m);
+                            m.drop();
+                            ok = false;
+                        }
+                        got.drop();
+                    },
+                }
+            },
+        }
+
+        let absent_s: String = "slice1-absent";
+        let absent: Bytes = Bytes::from_string(&absent_s);
+        absent_s.drop();
+        match db.get(&ropts, &absent) {
+            Result::Err { error } => { report("get-absent: error kind=", error); ok = false; },
+            Result::Ok { value } => {
+                match value {
+                    Option::None => {
+                        let m: String = "get-absent: none";
+                        println(&m);
+                        m.drop();
+                    },
+                    Option::Some { value } => {
+                        value.free();
+                        let m: String = "get-absent: unexpectedly present";
+                        eprintln(&m);
+                        m.drop();
+                        ok = false;
+                    },
+                }
+            },
+        }
+
+        vs.drop();
+        absent.drop();
+        key.drop();
+        val.drop();
+        ropts.destroy();
+        wopts.destroy();
+        return ok;
+    }
+
+    fn main() with(Std) -> u8 {
+        if count() != 3 {
+            return usage("usage: rocksdb_kv <db-dir> <invalid-db-path>");
+        }
+        let dir: String = get(1);
+        let bad: String = get(2);
+
+        let mut opts: Options = Options::create();
+        opts.set_create_if_missing(true);
+
+        let invalid_ok: bool = open_invalid(&opts, &bad);
+        bad.drop();
+
+        let mut status: u8 = 0;
+        if !invalid_ok { status = 1; }
+
+        match Db::open(&opts, &dir) {
+            Result::Err { error } => {
+                report("open: error kind=", error);
+                status = 1;
+            },
+            Result::Ok { value } => {
+                let m: String = "open: ok";
+                println(&m);
+                m.drop();
+                if !write_read(&value) { status = 1; }
+                value.close();
+            },
+        }
+        dir.drop();
+        opts.destroy();
+        if status == 0 {
+            let m: String = "done: all handles released";
+            println(&m);
+            m.drop();
+        }
+        return status;
+    }
+}

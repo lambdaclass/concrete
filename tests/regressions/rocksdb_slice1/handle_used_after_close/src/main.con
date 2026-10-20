@@ -1,0 +1,34 @@
+// RocksDB slice 1 compile-fail fixture (ROADMAP R-0285): a database handle
+// used after `close` consumed it must be REJECTED (E0205). `close(self)`
+// moves the linear Db, so any later use is a use of a moved value.
+// scripts/tests/check_rocksdb_slice1.sh asserts the rejection names `db`,
+// and that deleting the DEFECT line makes this compile.
+mod handle_used_after_close {
+    import std.bytes.{Bytes};
+    import rocksdb.{Db, DbError, Options, WriteOptions};
+
+    fn main() with(Std) -> u8 {
+        let mut opts: Options = Options::create();
+        opts.set_create_if_missing(true);
+        let path: String = "used_after_close.db";
+        match Db::open(&opts, &path) {
+            Result::Err { error } => {
+                error.drop();
+            },
+            Result::Ok { value } => {
+                let db: Db = value;
+                let wopts: WriteOptions = WriteOptions::create();
+                let k: String = "k";
+                let key: Bytes = Bytes::from_string(&k);
+                k.drop();
+                db.close();
+                match db.put(&wopts, &key, &key) { Result::Ok { value } => { discard(value); }, Result::Err { error } => { error.drop(); }, } // DEFECT
+                key.drop();
+                wopts.destroy();
+            },
+        }
+        path.drop();
+        opts.destroy();
+        return 0;
+    }
+}

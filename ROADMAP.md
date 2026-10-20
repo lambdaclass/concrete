@@ -18,14 +18,18 @@ experimental systems preview; its [blockers](#next-release-blockers) are listed 
 **Next phases:** 2, 3
 
 **What is next.** Rows 0 – 2 finish Phase 1 through individually closable
-[Phase 1 exits](#phase-1-exits). Features do not wait for all of them. The usable-language track
-(Phase 3: interop, workloads and usability, rows 5, 7 and 8) begins with its first deliverable,
-**RocksDB slice 1** (row 5), as soon as that deliverable's
-[prerequisite checklist](#feature-prerequisites) is satisfied, not when all of row 2 closes. The proof
-track (Phase 2: V1a/V1b and the authoritative Core checker, rows 3 – 4) runs alongside it, and V1a and
-V1b are accepted once their own checklists are satisfied. The remaining exits continue alongside both
-tracks and still close Phase 1. New soundness defects take priority over every phase; other new work
-enters the queue only under the [entry rule](#the-current-execution-queue).
+[Phase 1 exits](#phase-1-exits). Features do not wait for them to start. The usable-language track
+(Phase 3: interop, workloads and usability, rows 5, 7 and 8) is working on its first deliverable,
+**RocksDB slice 1** (row 5), and the proof track (Phase 2: V1a/V1b and the authoritative Core checker,
+rows 3 – 4) runs alongside it. Implementation and experiments on both may proceed now: early executable
+feedback is how defects surface (the RocksDB groundwork already found bugs 102 and 103). What a
+deliverable's [prerequisite checklist](#feature-prerequisites) controls is **acceptance**: RocksDB
+slice 1, V1a and V1b are not accepted, and their safety is not advertised, until their prerequisite
+exits hold. The remaining exits continue alongside both tracks and still close Phase 1. New soundness
+defects take priority over every phase; other new work enters the queue only under the
+[entry rule](#the-current-execution-queue). Every bug record states the design fact behind it and
+its structural owner; the recurring [structural classes](docs/bugs/STRUCTURAL_CLASSES.md) of bugs
+039 – 106 map each class to the task that removes it.
 
 **Where things live.** This file answers *what happens next, in what order*: the phases, the one
 execution queue, the release plan, the standing decisions, and the tasks a queue row names or an active
@@ -52,20 +56,30 @@ or next phase schedules.
 
 ## Implemented, not yet accepted
 
-Fixes implemented on a branch but not yet on main, keyed by bug number. A row leaves this table when
-its fix lands on main and the [bug ledger](docs/bugs/README.md) records it fixed;
-`scripts/tests/check_roadmap_coverage.sh` fails if a listed bug is already recorded fixed there, or if a
-row lacks a branch or a remaining step. Stages (b) and (c) are the
-[promotion pipeline](#promotion-pipeline)'s full gate set and full qualification.
+Work implemented on a branch (or landed without acceptance) but not yet accepted on main: bug fixes
+keyed by bug number, and feature deliverables. Each row is one candidate: its branch, its exact
+candidate SHA, the Phase 1 exits it contributes to or is blocked by, its [promotion-pipeline](#promotion-pipeline)
+results (each at that SHA, or not run), what its acceptance unlocks and its remaining step. The table is
+generated from the candidate record [`docs/project/candidates.tsv`](docs/project/candidates.tsv) by
+`scripts/gen/candidate_table.py --write`; whoever lands, re-points or validates a candidate updates its
+row and regenerates in the same commit, and `check_docs_drift.sh` fails when the table differs from the
+record. A row leaves when its work is accepted on main and, for bug fixes, the
+[bug ledger](docs/bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
+listed bug is already recorded fixed there, or if a row lacks a branch or a remaining step. A stage (c)
+pass is the [one qualification verdict](#promotion-pipeline) over every required job at the candidate
+SHA, never the mutation aggregate alone.
 
-| bugs | branch | remaining acceptance step |
-|---|---|---|
-| 052, 065, 082, 087, 091 (batch 2) | `land2-fix` | Codex round 3, then stage (b) and stage (c) on the integrated candidate |
-| 081, 083, 089 (batch 3) | `land3`, integrating `bug081-callee-key`, `bug083-hardcoded-proved` and `bug089-ensures-proof` | finish the integration on `land3`, then Codex review and stages (b) and (c) |
-| 088 (batch 4) | `bug088-literal-range` | integration into a landing batch, Codex review, stages (b) and (c) |
-| 090, 092, 093, 094 (batch 4) | `bug090-checker-ownership` | finish 094 (090, 092 and 093 are implemented), then Codex review and stages (b) and (c) |
-| 096, 097, 098 | `bug096-type-identity` | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
-| 099, 100 | `bug099-generic-destroy` | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
+<!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->
+| candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
+|---|---|---|---|---|---|---|---|---|---|---|
+| batch2 | 052, 065, 082, 087, 091, 104, 105, 106 | — | `land2-fix` | `69254623243e` | 0a (065), 0b | not run | not run | not run | exits 0a/0b progress toward RocksDB slice 1, V1a and V1b acceptance | Codex round 3; add bug 104's two reproducers as rejection fixtures (E0238 already rejects them at this SHA); 105 is contained at the checker (E0238), its lowering defect stays open; then stage (b) and stage (c) on the integrated candidate |
+| batch3 | 081, 083, 089 | — | `land3` | `b8b9f7aa8efe` | 0a | not run | not run | not run | exit 0a progress toward V1a and V1b acceptance | finish integrating bug081-callee-key, bug083-hardcoded-proved and bug089-ensures-proof on land3, then Codex review and stages (b) and (c) |
+| batch4 | 088, 090, 092, 093, 094 | — | `land4` | `4dfe0a498ec8` | 0b | not run | not run | not run | exit 0b progress toward RocksDB slice 1, V1a and V1b acceptance | Codex review, then stages (b) and (c) |
+| type-identity | 096, 097, 098 | — | `bug096-type-identity` | `dd651baa7c0a` | 0b | not run | not run | not run | exit 0b progress | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
+| generic-destroy | 099, 100 | — | `bug099-generic-destroy` | `c745f795c6f7` | 0b | not run | not run | not run | exit 0b progress | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
+| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bugs 102, 103), 2i | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | landed on main at 094e51bf but not accepted: exits 0b (bugs 102, 103) and 2i, and G1 (declaring the native library, so it builds with no manual flags) |
+| v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
+<!-- END GENERATED: candidate record -->
 
 ## Phases and releases
 
@@ -91,7 +105,7 @@ All checkpoints share the capacity rule, and new soundness defects take priority
 | 2 | R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513 | Immediate protections (exits 2a – 2l): one verdict authority, prevention harness, trustworthy gates, axiom policy, one `IntArith`, language rules, demonstrated enforcement |
 | 3 | R-0511, R-0517 | First cumulative verified releases: design proofs, V1a and V1b, each accepted when its [prerequisites](#feature-prerequisites) hold |
 | 4 | R-0492, R-0497, R-0499, R-0514 | Shared front end: identities and the authoritative Core checker for the whole language |
-| 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: RocksDB slice 1 once its [prerequisites](#feature-prerequisites) hold, then the four-adapter checkpoint |
+| 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: RocksDB slice 1 (work proceeds now; accepted when its [prerequisites](#feature-prerequisites) hold), then the four-adapter checkpoint |
 | 6 | R-0491–R-0510, R-0512 | Slices V2 – V7 and evidence migration to generated Core statements |
 | 7 | R-0490 | Continuous application feedback toward the ethlambda port |
 | 8 | R-0515 | Usability track alongside the proofs: onboarding, pilots, diagnostics, editor, performance |
@@ -110,7 +124,7 @@ above names the same task IDs per row (checked by `scripts/tests/check_roadmap_c
 
 ### Phase details
 
-- **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** every [Phase 1 exit](#phase-1-exits): each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. Features start earlier, when their [prerequisites](#feature-prerequisites) hold. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
+- **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** every [Phase 1 exit](#phase-1-exits): each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. Feature work starts now and is accepted when its [prerequisites](#feature-prerequisites) hold. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
 - **Phase 2 — Verified foundation** (rows 3 – 4). **Goal:** The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language. **Exit:** V1a and V1b theorems with explicit boundaries; the Core checker authoritative for every program. **Release:** **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins.
 - **Phase 3 — Usable language** (rows 5, 7, 8). **Goal:** Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance. **Exit:** the four-adapter interop checkpoint; continuing workloads and pilots; each usability checkpoint's exit. **Release:** no release of its own: it runs alongside and feeds every release from 0.1 on (onboarding, pilots, tooling, the minimal editor path for beta).
 - **Phase 4 — Verified growth** (row 6). **Goal:** Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved. **Exit:** each slice's cumulative theorem; V7 covers the maintained feature inventory. **Release:** **0.3 – 0.8 Verified-subset milestones** (a slice may span several releases); V7 is required for 1.0.
@@ -140,14 +154,24 @@ deliverable on it, naming that deliverable: today RocksDB slice 1 for the usable
 V1a for the proof track ([feature prerequisites](#feature-prerequisites)). Everything else goes to the
 [backlog](docs/project/ROADMAP_BACKLOG.md) with a pull trigger.
 
+**Example rule.** Every example has a gate: besides its entry in `scripts/tests/example_manifest.txt`, a
+new example has a gate leg that asserts its behaviour (expected output and exit status, an expected
+rejection with its diagnostic code, or its claims' statuses); a compile-only manifest entry does not
+count, and there are no ungated demos. New examples are workload-driven and targeted: each serves a bug
+class (R-0491's [adversarial example suite](#task-r-0491)), an upcoming deliverable (the
+[RocksDB slice 1 companions](#task-r-0285), [V1a's target programs](#task-r-0511)) or an application
+workload (R-0490). All example work follows R-0135's lifecycle and owner policy: user-facing examples
+record their lifecycle and owner, while pure regression and rejection fixtures live in the owning
+test or bug corpus and are invoked by the example's gate.
+
 | order | work | exit before advancing |
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration. Closes through exits 0a, 0b and 0c ([Phase 1 exits](#phase-1-exits)) |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair. Closes through exit 1a |
-| 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | closes through the individually closable exits listed in [Phase 1 exits](#phase-1-exits), each with its owner, acceptance test and class: one `Verdict` authority renders every evidence surface (2a); permanent reproducer controls for 080 – 101 (2b) and the prevention harness (2c); trustworthy gate execution — checked inventories instead of incidental count pins (2d), minimum completed comparisons (2e), a fast push tier separate from full qualification (2f); the axiom-policy gate on today's evidence (2g); one `IntArith` for the existing pipeline (2h); the rules the next slice needs written down and enforced with versioned migration diagnostics — strictly second-class references and no block `let` shadowing (2i); typed literals, literal range, statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting (2j); explicit match binders and cast semantics per width (2k); demonstrated enforcement (2l). Known authority and safety defects are repaired under row 0. An exit classed *blocks features* holds back only the deliverables whose [prerequisites](#feature-prerequisites) name it; the others continue alongside feature work. Broader prevention coverage continues throughout and does not block isolated proof development |
+| 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | closes through the individually closable exits listed in [Phase 1 exits](#phase-1-exits), each with its owner, acceptance test and class: one `Verdict` authority renders every evidence surface (2a); permanent reproducer controls for 080 – 101 (2b) and the prevention harness (2c); trustworthy gate execution — checked inventories instead of incidental count pins (2d), minimum completed comparisons (2e), a fast push tier separate from full qualification (2f); the axiom-policy gate on today's evidence (2g); one `IntArith` for the existing pipeline (2h); the rules the next slice needs written down and enforced with versioned migration diagnostics — strictly second-class references and no block `let` shadowing (2i); typed literals, literal range, statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting (2j); explicit match binders and cast semantics per width (2k); demonstrated enforcement (2l). Known authority and safety defects are repaired under row 0. An exit classed *blocks features* holds back the acceptance of only the deliverables whose [prerequisites](#feature-prerequisites) name it; the others continue alongside feature work. Broader prevention coverage continues throughout and does not block isolated proof development |
 | 3 | **First cumulative verified releases (R-0511, with R-0517)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 through the Lean Compiler Backend, R-0517, with final-image correspondence; LCB's Stage 1 exit is necessary but insufficient — V1b needs a pinned certified LCB domain covering every reachable V1 operation and behaviour, including checked-arithmetic trap paths, direct calls and `print_int`, plus Concrete's proved adapter and semantic bridges; a smaller leaf-function intersection ships only as a separately named intermediate theorem; R-0517's explicitly selected fallback does not complete this row) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. The design examples and isolated proof development start now; V1a and V1b are accepted only when their prerequisite exits hold (prerequisite exits: 0a, 0b, 2a, 2g, 2h, 2i, 2j; the programs each must compile and the independently checked artifact are under [feature prerequisites](#feature-prerequisites)). See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
 | 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3: the parts V1a's subset exercises proceed with V1a, and the whole-language rollout starts once row 2 lands; the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
-| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | first deliver **RocksDB slice 1**, the first executable feature deliverable, once its prerequisites hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
+| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | first deliver **RocksDB slice 1**, the first executable feature deliverable: implementation and experiments proceed now (its groundwork on main already found bugs 102 and 103), and it is accepted, and its safety advertised, only when its prerequisite exits hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
 | 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
 | 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
@@ -167,7 +191,7 @@ Rows 0 – 2 close through these exits, each closable on its own. The **class** 
 back:
 
 - **blocks features**: the exit repairs or permanently guards a known false-proof, unsound-claim or
-  memory-safety defect, or a feature deliverable names it as a dependency. It holds back exactly the
+  memory-safety defect, or a feature deliverable names it as a dependency. It holds back the acceptance of exactly the
   deliverables whose [prerequisites](#feature-prerequisites) list it.
 - **continues alongside**: consolidation or prevention without a reproduced defect or a named
   dependency. It proceeds next to feature work, with a finite acceptance test, and still closes Phase 1.
@@ -181,12 +205,12 @@ agree with the classes.
 | exit | owner | closes when | acceptance test | class | why this class |
 |---|---|---|---|---|---|
 | 0a | R-0482 | bug 079's subject/model/spec binding is closed at status, issuance and receipt consumption, and the evidence and model repairs land: the bug 080 cast model, 081, 083 – 086, 089, 101 and the 065 stack-depth policy verdict | each bug's reproducer is a permanent gate leg (the `check_model_diff.sh` legs for 080, 084 – 086 and 101; the 079, 081, 083 and 089 reproducers in the evidence gates; 065's in the stack-depth policy gates), and the [bug ledger](docs/bugs/README.md) records each fixed on main | blocks features | known false proofs and unsound claims |
-| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095 and 096 – 100 | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091), and silent wrong code (082, 088, 096 – 098) |
-| 0c | R-0482 | campaign isolation is repaired and a qualified campaign result naming its exact commit is retained before the identity migration closes | a [stage (c)](#promotion-pipeline) qualification record whose aggregate verdict is `qualified=1` at that commit | continues alongside | qualification of the identity migration; no deliverable depends on it |
+| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095, 096 – 100, 102, 103 and 104 | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091, and 104: a reference assigned from an inner block outlives its source), silent wrong code (082, 088, 096 – 098, 102), and a foreign destructor silently replaced by an empty body (103, a leak of every C resource released through a `*_destroy` function) |
+| 0c | R-0482 | campaign isolation is repaired and a qualified campaign result naming its exact commit is retained before the identity migration closes | a [stage (c)](#promotion-pipeline) qualification record with `verdict=qualified` at that commit: every required job succeeded there, the mutation aggregate's `qualified=1` among them | continues alongside | qualification of the identity migration; no deliverable depends on it |
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
 | 2b | R-0491 | permanent reproducer controls for 080 – 101: each bug has a checked-in record, reproducer, expected outcome and pre-fix/fixed SHA pair | each assigned control fails at its pre-fix SHA and passes at its fix; `check_bug_filing_complete.sh` and `audit_bug_corpus.sh` fail on a missing inventory entry | continues alongside | the reproducers already block as gate legs under 0a and 0b; this exit proves each one load-bearing |
-| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`) | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance |
+| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
 | 2d | R-0513 | checked inventories replace incidental count pins: every expected claim and comparison is accounted for, exclusions carry reasons, and missing entries, skipped work or unexpected eligibility shrinkage fail | adding a legitimate proved example needs no incidental count edit; controls with a deleted inventory entry, a disabled generator, an empty suite and altered eligibility each fail | continues alongside | gate affordability; no reproduced soundness defect |
 | 2e | R-0513, R-0491 | minimum completed comparisons by semantic feature, with permanent positive and negative controls | every generated feature has a pinned minimum completed-comparison count, and a run below it fails | continues alongside | prevention; no reproduced defect |
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
@@ -199,8 +223,12 @@ agree with the classes.
 
 ### Feature prerequisites
 
-The first feature deliverables wait only for the exits listed against them. Isolated proof development
-(the reviewed design examples, proof libraries) waits for none. Every *blocks features* exit appears in
+Implementation and experiments on the first feature deliverables proceed now: early executable
+feedback is how defects surface, and the RocksDB slice 1 groundwork already found bugs 102 and 103. The
+exits listed against a deliverable are required before it is **accepted** or its safety is advertised;
+none of them is removed or weakened by starting early, and a defect the early work finds enters the
+queue under the entry rule. Isolated proof development (the reviewed design examples, proof libraries)
+waits for none. Every *blocks features* exit appears in
 at least one *blocked by* list and no *continues alongside* exit appears in any.
 
 | deliverable | blocked by | not blocked by |
@@ -222,12 +250,17 @@ at least one *blocked by* list and no *continues alongside* exit appears in any.
   front end, which 0b's defects broke; 2i states the reference and scoping rules its handles and
   borrows are checked under. Evidence, proof-surface and gate-infrastructure exits do not affect it.
   It is the first acceptance point of R-0285's
-  [first executable slice](#task-r-0285); the four-adapter checkpoint follows.
+  [first executable slice](#task-r-0285); the four-adapter checkpoint follows. R-0285's four
+  companion FFI and resource examples (a file-handle wrapper, a C library holding a callback and its
+  context, a resource pool, multi-step error paths that release everything) are accepted with or after
+  this slice; they do not block it.
 - **V1a** (R-0511). Must compile, from checked Core to executable BIR, every program of the V1a subset:
   `i64`, `u64`, `bool`, locals and assignment, conditionals, a general loop with structured exits,
   non-recursive direct calls, comparisons, checked addition, subtraction and multiplication, and one
   capability-authorized `print_int` event, with terminating, trapping and divergent behaviours. Other
-  widths, casts, division, shifts, recursion and further loop forms are later V1 increments.
+  widths, casts, division, shifts, recursion and further loop forms are later V1 increments. R-0511's
+  [V1a target programs](#task-r-0511) are the named instances of this subset and V1a's regression set;
+  they do not widen it.
   **Independently checked artifact:** the Lean proof of checked Core → BIR refinement for that subset
   and its retained artifacts with a minimal canonical task identity, replayed by the independent
   retained-artifact consumer
@@ -278,11 +311,11 @@ why the difference cannot affect it.
 |---|---|---|---|---|
 | **(a) fast affected checks** | every push, during development | the [pre-push hook](.githooks/pre-push) (`make pre-push`): gate hygiene always; for a docs-only push (every changed path under `docs/` or ending `.md`) the docs-drift gate (which runs `check_roadmap_coverage.sh`) and `check_roadmap_linear.sh`; otherwise the fast surface gates, the bug-filing check when bug files change, and the gates and CI jobs of the touched areas, resolved by `run_ci_gates_local.sh`. Branch pushes also run the fast surface gates in the branch-health workflow | the hook's validation record (`scripts/tests/lib/prepush_record.sh`), bound to the pushed commit, a clean tree, untracked files, the toolchain and compiler binary, the gate definitions, the selection and the changed-file list | any change to one of those inputs; the hook reruns rather than reuse a mismatched record. A stage (a) pass never stands for (b) or (c) |
 | **(b) integrated full gate set** | on the integrated candidate before it merges to main, and on main after each push | the CI workflow's ([`lean_action_ci.yml`](.github/workflows/lean_action_ci.yml)) push/pull-request jobs: CI on pushes to main and pull requests, or `gh workflow run CI --ref <branch>` for a branch (dispatch also starts the stage (c) jobs). This includes the Phase 6C observability capstone (`check_phase6c_observability.sh`) and, on pushes to main, the multi-kernel evidence gate. Locally, `scripts/tests/run_ci_gates_local.sh` extracts the same gate commands but excludes the mutation campaign, its aggregator and `checker_acceptance_evidence.sh`, and does not reproduce step-level environments; `make pre-push-full` runs it in parallel for feedback only. A local completion record needs closure mode (`CONCRETE_CLOSURE_RUN=1`, which forces `JOBS=1`) on a clean candidate and covers only that locally runnable population | the CI run ID and its head SHA; or a local closure-mode summary with `completed=1` and that head, which never stands in for the CI-only steps | any change outside documentation (compiler, `std`, examples, proofs, gate scripts, workflow, toolchain, lake or nix inputs) reruns the whole set. A docs-only change reruns only the gates that read the changed documents (docs drift and roadmap gates, links, and the hole-status, claims and axiom-inventory gates when those documents change) |
-| **(c) full qualification** | on an immutable candidate: before a release candidate or nightly, and before closing an exit that names a qualified result | stage (b) on the same SHA, plus the jobs that run only on schedule or dispatch: the gate-mutation campaign (`check_gate_mutation_coverage.sh`, sharded by CI's mutation plan, shard and aggregate jobs on the nightly schedule or `workflow_dispatch`; it refuses a dirty tree and a git worktree, so a local campaign runs in a fresh clone of the candidate), the weekly clean-checkout proof replay, the nightly differential fuzz campaigns and the scheduled multi-kernel mutation coverage (`MULTI_KERNEL_MUTATE=1`); the con-leche external re-check already runs in (b) | the aggregate verdict (`qualified=1` only when every planned shard completed) with its run ID and SHA, kept in R-0333's candidate record for a release | any change outside documentation, including a rebase onto a new base; a docs-only change invalidates neither (b) nor (c) except their document-reading gates |
+| **(c) full qualification** | on an immutable candidate: before a release candidate or nightly, and before closing an exit that names a qualified result | stage (b) on the same SHA, plus the jobs that run only on schedule or dispatch: the gate-mutation campaign (`check_gate_mutation_coverage.sh`, sharded by CI's mutation plan, shard and aggregate jobs on the nightly schedule or `workflow_dispatch`; it refuses a dirty tree and a git worktree, so a local campaign runs in a fresh clone of the candidate), the weekly clean-checkout proof replay, the nightly differential fuzz campaigns and the scheduled multi-kernel mutation coverage (`MULTI_KERNEL_MUTATE=1`); the con-leche external re-check already runs in (b) | one qualification verdict over **every** required job at the same candidate SHA: `scripts/ci/qualification_record.py` reads the record of exactly one run: the first attempt of a `workflow_dispatch` run of the candidate (the only event that starts every job; scheduled runs skip each other's jobs, partial runs are never combined, and a rerun could hide a failure) and emits the candidate SHA, each job of the candidate commit's own `lean_action_ci.yml` (read from that commit and parsed structurally; a workflow shape it does not understand is refused) with its run, head SHA, status and conclusion (each mutation shard 1..N individually), and `verdict=qualified` only when the run and every required job succeeded at that SHA and every unconditional step of each job, plus the conditional multi-kernel mutation coverage, ran exactly once and succeeded. The mutation aggregate's `qualified=1` (every planned shard completed) is one component of it, never the verdict: the aggregate succeeds while proof replay, fuzzing, the multi-kernel and checker checks or the regression suites fail. A missing, cancelled, skipped, failed or in-progress job or required step, a missing, duplicate or unexpected shard, a run at another SHA or with a non-success conclusion, or a failure hidden behind a successful rerun at the same SHA prevents qualification, and a workflow the parser does not understand is refused rather than read as fewer jobs (`check_qualification_record.sh` attacks the verdict with these records). A local closure-mode summary cannot qualify. The record, with its run IDs, is kept in R-0333's candidate record for a release and in the [candidate record](#implemented-not-yet-accepted) for an exit | any change outside documentation, including a rebase onto a new base; a docs-only change invalidates neither (b) nor (c) except their document-reading gates |
 
 R-0513 owns making stage (a) a dependency-closure-selected fast tier within its budget and keeping
 stage (c) bound to exact commits, toolchains and artifacts (Phase 1 exit 2f); R-0516 automates (c)'s
-record for releases.
+record for releases (today `qualification_record.py` is run by hand against the run IDs).
 
 ### Release map
 
@@ -489,7 +522,7 @@ this file). Every other task lives, with its full text, ID and
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
-**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: it starts once RocksDB slice 1's [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
@@ -2442,12 +2475,74 @@ exhaustion, crash), never skipped. model-diff for zero-argument, `bool` and aggr
 plus a binary leg, with a pinned claimed-function inventory. The four 2026-10-18 hunts and the
 checker hunt run before every release candidate.
 
+**Structural classes (2026-10-20).** Prevention covers causes, not only spellings. This task keeps
+[docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md): every bug record from 102 on
+states its structural cause and owner (`check_bug_filing_complete.sh` refuses one without them), and
+each new bug joins a class there, with the owning task, exit or verified-pipeline stage, or adds a
+class with a proposed owner in the same change. A class whose owner is not yet scheduled is raised in
+the queue under the entry rule when a new bug of that class is reproduced.
+
 **Exit:** each of 080 – 095 has a checked-in bug record, reproducer, expected outcome and
 pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084 – 088;
 name-binding controls detect 081 – 082; evidence and cross-surface controls detect 083 and 089;
 checker mutants detect 090 – 094; the binary leg detects 095. Each assigned control fails at its
 pre-fix SHA and passes at its fix; generated features have pinned minimum completed-comparison
-counts; missing inventory entries fail.
+counts; missing inventory entries fail. The adversarial example suite below passes every leg (exit 2c).
+
+**Adversarial example suite (exit 2c; 2026-10-20; planned).** Phase 7's workloads (`base64_cli`,
+`png_chunks`, `wordfreq`, `httpget`, `tcpserve`) and interpreter-vs-compiled probing found many of the
+compiler's wrong-code bugs; generated programs are bounded by their grammar. This suite writes small
+hand-targeted programs for each current bug class, under `examples/adversarial/`:
+
+| example | exercises | classes |
+|---|---|---|
+| `linear_flow` | linear handles moved, consumed and destroyed across `if`/`else` and `match` arms, early `return` from inside loops and branches, `break`/`continue` with a live handle, consume-then-exit; rejection legs for a handle leaked on one arm and one moved by a match guard | 078, 087, 090, 093 |
+| `generic_destroy` | generic `Destroy` through trait bounds and impls, collections of arrays and of generic structs, nested composition; a rejection leg for an impl's capability hidden behind generic dispatch | 052, 091, 099, 100 |
+| `nested_names` | same-named types, functions and methods in nested and sibling modules and against generated specialization names, type-argument arity, relative calls into a nested submodule (its leg asserts today's refusal until 077 is fixed); builtin versus local and imported user-defined `Result` | 054, 070, 073, 077, 096 – 098 |
+| `import_aliases` | function, type, method and sibling-module aliases, an alias against a same-named local definition, alias order, colliding aliases rejected | 039, 055, 069, 082, the E0264 aliased-method case |
+| `casts_widths` | every cast width pair (narrowing, widening, sign change) at boundary values, literals at each type's minimum and maximum, checked negation; claims on cast functions | 053, 080, 088 |
+| `mut_receivers` | `&mut self` methods called through `&mut` parameters, struct fields and array elements and in both arms of a branch; stack-array storage mutated through a borrowed raw pointer (018), mutation of an array extracted from a struct field (019), and receiver borrowing on the right of `&&`/`||` (034), with mutations observed afterwards | 018, 019, 031, 034 |
+| `match_and_fnptrs` | match guards with effects, renamed and positional binders, function pointers reassigned across branches and read from struct fields, with their capabilities | 056, 063, 066, 084, 090 |
+| `statement_sequencing` | discarded `expr;`, `let` after assignment, loop-step sequencing, branch-local `let`, `if` without `else` falling through; claims on each shape | 085, 086, 101 |
+
+Bug 063's fixed derived-function-pointer cases compile and run through both the function-call and the
+method-call path, and its generic-return controls keep E0242 as in `check_cap_inference.sh`. For cases
+still unresolved (054, 055, 077 and the E0264 aliased-method case), separate fixtures pin
+the documented collision diagnostic, rejection or containment result until the owning repair lands;
+runnable cases still require interpreter, native and expected agreement. The suite does not make those
+repairs prerequisites of any deliverable. The number-to-shape mappings for 082, 087, 088 and 090 – 100
+are provisional until their checked-in records and reproducers land under 2b, and are reconciled
+against those records before the suite is accepted.
+
+Each example has its own leg in `scripts/tests/check_adversarial_examples.sh` (new, in the full gate
+set): interpreter and native observable output and normalized outcomes must agree with a checked-in
+expected result, where normal exits keep their exit status and traps keep their identity rather than
+counting every trap as equivalent; a rejection leg asserts its diagnostic code; where the example carries claims, its leg also
+runs `--report model-diff` on the claimed functions and asserts each claim's status. The gate fails on a
+missing example or leg, and a perturbed expected result must fail its leg (positive control). The
+evidence and report cases 058 – 062, 064, 065, 067, 068, 075, 076, 079, 081, 083 and 089 keep their
+existing controls (exit 2b covers only 080 – 101). Capability case 071 keeps
+`check_cross_package_caps.sh` and `check_cap_sibling_module.sh`; runtime case 072 keeps
+`check_spawn_exit.sh`; package-name collision 074 keeps its rejection controls; collection case 057
+keeps its collection controls; 092 keeps the 2i controls; 094 and 095 keep the checker and binary
+controls of the detection map above. A defect an example newly reproduces is a
+reproducer: it enters the queue under the [entry rule](#the-current-execution-queue), as a new row-0
+exit when it is an authority or safety defect, and the example keeps its leg as that defect's gate.
+
+**Scaled differential campaigns (2026-10-20; planned).** The nightly `fuzz-campaign` job in
+`.github/workflows/lean_action_ci.yml` runs `fuzz_differential.py` at 2,000 depth-3 and 500 depth-4
+programs and `fuzz_linearity.py` at 400 per date-derived seed (R-0272's seed rotation, merged here).
+Once the third side exists, the same generators compare interpreter, native binary and proof model
+(model-diff on generated claimed functions) at campaign scale: at least a hundred times the nightly
+counts per campaign, sharded by seed range. This CPU-bound work runs first on short-lived remote build
+servers once they are available (R-0513 owns the remote runner infrastructure); no provider
+credentials live in the repository, and the GitHub nightly keeps its current counts meanwhile. Each
+campaign records its commit SHA, toolchain, seed ranges, outcome classification and per-feature
+completed comparisons against exit 2e's minima; failures are minimized automatically and checked in as
+reproducers, which enter the queue under the entry rule. This campaign is not part of exit 2c's
+acceptance and no deliverable waits for it; it is accepted when one campaign at that scale completes
+with every outcome classified and every per-feature minimum met, and recurs before each release
+candidate with the hunts above.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -3089,6 +3184,32 @@ V1 is described as source-to-native only once its frontend correspondence is pro
 published theorem states that it starts at `CheckedCore`. An outside expert's review of Core's V1
 semantics and the design examples is recorded.
 
+**V1a target programs (2026-10-20; planned).** Small programs inside V1a's scalar subset as the
+[plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) defines it, under
+`examples/v1a/`, with `#[proof_by]` claims proved through today's evidence pipeline on the four
+non-divergent targets:
+
+- `sum_to`: an `i64` loop with a structured exit accumulating with checked `+` and printing its result
+  through `print_int`; a claim relates the result to a Lean reference function.
+- `max3`: `bool` conditions, comparisons and non-recursive direct calls; a claim that the result is one
+  of the arguments and no smaller than any.
+- `checked_trap`: checked `*` and `-` on `i64` and `u64` reaching overflow and underflow; the trapping
+  behaviour is asserted, with a claim on the non-trapping inputs.
+- `counter_u64`: `u64` locals and assignment in a loop with comparisons; a claim on the final value.
+- `diverge`: a loop with no exit after a `print_int` prefix; its regression leg checks the prefix and
+  nontermination within a fixed bound, recording exhaustion rather than claiming that this finite
+  observation proves divergence; it carries no claim.
+
+`scripts/tests/check_v1a_targets.sh` (new, in the full gate set) gives each program a leg: terminating
+and trapping runs compare interpreter and native output and normalized outcomes with a checked-in
+expected result, and `diverge` uses the bounded prefix and exhaustion check above; `--report model-diff`
+agrees on every claimed function and each claim reads proved; and a subset check fails when a program
+steps outside V1a's subset (another width, a cast, division, a shift, recursion, another loop form, an
+aggregate or a reference). Once V1a's pipeline exists these programs are its acceptance programs and its
+regression set: each compiles from checked Core to BIR and its BIR behaviour matches the recorded one.
+They add nothing to V1a's theorem: its scope stays the subset the plan defines, and their claims are
+candidates for this task's one transported claim, not new theorem statements.
+
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
@@ -3185,7 +3306,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
 `verified` profile.
 
-**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout follows the immediate protections in rows 0 – 2. Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
+**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout follows the immediate protections in rows 0 – 2. Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
 and elaboration rebuilds the program independently, so the program checked is not the program compiled;
 bugs 087 (borrow-block use-after-free), 090 and 092 – 094 lived in that gap, and name-keyed
 environments produced 082, 087, 093, 094 and 096 – 098. The slices prove these rules only as they reach
@@ -10378,8 +10499,9 @@ bindings and one build command, before the bulk ethlambda port.
 
 **Scheduling (2026-10-17; amended 2026-10-20):** promoted into the current execution queue after the
 active soundness and R-0482 work. Its first deliverable is **RocksDB slice 1**, defined with its
-acceptance and its prerequisite checklist under [feature prerequisites](#feature-prerequisites): it
-starts when Phase 1 exits 0b and 2i hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
+acceptance and its prerequisite checklist under [feature prerequisites](#feature-prerequisites): its
+implementation and experiments proceed now, and it is accepted, and its safety advertised, when Phase 1
+exits 0b and 2i hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
 R-0283/R-0287 own ABI checks, R-0286 owns exports/library artifacts and R-0289 owns sanitizer
 validation. The later full BackendIR, independent verifier and functional-proof milestones are
 not prerequisites for a tested foreign-library integration. Changes to evidence formats still
@@ -10430,6 +10552,32 @@ as applicable. R-0352/R-0354 reuse this consumer for distribution acceptance.
 Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
+
+**Companion FFI and resource examples (2026-10-20; planned).** Four examples exercise linear handles
+and exit 2i's rules (no reference stored in an aggregate, no block `let` shadowing a visible name) at
+the foreign boundary, each with its own leg in `scripts/tests/check_ffi_companions.sh` (new, in the full
+gate set):
+
+- `examples/ffi_file_handle`: a linear file handle wrapping the C `open`/`read`/`write`/`close` calls,
+  consumed by a `close` that returns its `Result`; a written file is read back, and a missing path
+  returns a typed error.
+- `examples/ffi_callback_context`: a small vendored C library that stores a callback and its context
+  pointer and calls them later; the registration is a linear handle whose release unregisters it, and
+  the context outlives the registration (the binding contract's callback retention).
+- `examples/ffi_resource_pool`: a fixed-capacity pool of foreign handles checked out and returned as
+  linear values; exhaustion returns a typed error, and shutdown releases every handle exactly once.
+- `examples/ffi_error_release`: a multi-step acquisition (two foreign handles and a foreign buffer)
+  in which every step can fail on request; every failure path releases exactly what was acquired.
+
+Each leg compares the native output with a checked-in expected result, and the interpreter's where it
+supports the foreign calls (otherwise the leg records that it is native-only); the foreign side counts
+acquisitions and releases, and the leg asserts one release per handle on every path. Compile-fail
+fixtures per example stay rejected: a handle not released on one error path, a handle used after
+release, a reference stored in a handle aggregate, a block `let` shadowing a live handle, and a
+context destroyed while its callback registration remains active. The examples use today's explicit foreign
+declarations and move to generated bindings when this task's workflow covers them. They are
+companions accepted with or after RocksDB slice 1, not prerequisites of it; their 2i rejection
+fixtures join when exit 2i lands.
 
 **Failure and resource contract (2026-10-18; planned):** for each selected
 fallible operation, state what success and each recoverable error mean for

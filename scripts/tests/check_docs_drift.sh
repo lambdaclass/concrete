@@ -25,6 +25,9 @@
 #      prerequisites, and no bug listed as implemented-but-not-accepted is already
 #      recorded fixed in docs/bugs (check_roadmap_coverage.sh, with its own
 #      negative controls).
+#   5. ROADMAP's "Implemented, not yet accepted" table equals the one generated from
+#      docs/project/candidates.tsv (scripts/gen/candidate_table.py --check), with
+#      negative controls for a hand edit, a stale table and a malformed record.
 #
 # DELIBERATELY NOT attempted (these are not mechanically robust and would make the
 # gate a false-positive generator — verified during design):
@@ -121,6 +124,58 @@ if bash scripts/tests/check_roadmap_coverage.sh; then
 else
   no "ROADMAP task coverage (check_roadmap_coverage.sh)"
 fi
+
+echo "=== 5. the roadmap's candidate table is generated from the candidate record ==="
+# ROADMAP "Implemented, not yet accepted" is generated from docs/project/candidates.tsv by
+# scripts/gen/candidate_table.py. A hand edit of the table, or a record changed without regenerating,
+# fails here. Controls run the same --check against mutated copies, so a checker that accepts
+# everything fails too.
+GEN=scripts/gen/candidate_table.py
+REC=docs/project/candidates.tsv
+if python3 -I "$GEN" --check; then ok "the candidate table matches $REC"
+else no "the candidate table differs from $REC (run python3 $GEN --write)"; fi
+CTMP="$(mktemp -d)"; trap 'rm -rf "$CTMP"' EXIT
+cand_neg() { # name, python edit over s, target (roadmap|record), expected exit
+  cp ROADMAP.md "$CTMP/r.md"; cp "$REC" "$CTMP/c.tsv"
+  local t="$CTMP/r.md"; [ "$3" = record ] && t="$CTMP/c.tsv"
+  if ! python3 -I - "$t" "$2" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding='utf-8').read()
+exec(sys.argv[2])
+open(p, 'w', encoding='utf-8').write(s)
+PY
+  then no "candidate control $1: could not build its copy"; return; fi
+  local rc=0
+  python3 -I "$GEN" --check --roadmap "$CTMP/r.md" --record "$CTMP/c.tsv" >/dev/null 2>&1 || rc=$?
+  [ "$rc" = "$4" ] && ok "candidate control $1 is refused (exit $rc)" || no "candidate control $1: exit $rc, expected $4"
+}
+cand_neg hand_edited_table "old='| batch4 |'; assert s.count(old)==1; s=s.replace(old,'| batch4x |')" roadmap 1
+cand_neg row_deleted_from_table "import re; s,n=re.subn(r'^\\| batch3 \\|[^\\n]*\\n', '', s, flags=re.M); assert n==1" roadmap 1
+cand_neg markers_missing "old='<!-- END GENERATED: candidate record -->'; assert s.count(old)==1; s=s.replace(old,'')" roadmap 2
+cand_neg record_changed_not_regenerated "old='\\tland4\\t'; assert s.count(old)==1; s=s.replace(old,'\\tland4b\\t')" record 1
+cand_neg short_sha "import re; s,n=re.subn(r'^(batch4\\t(?:[^\\t]*\\t){3})([0-9a-f]{8})[0-9a-f]{32}\\t', r'\\1\\2\\t', s, flags=re.M); assert n==1" record 2
+cand_neg result_at_other_sha "old='\\t0b\\tnot-run\\t'; assert s.count(old)>=1; s=s.replace(old,'\\t0b\\tpassed@'+'a'*40+'\\t',1)" record 2
+cand_neg stage_c_without_run_id "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tpassed@'+sha+'\\tpassed@'+sha+' run=1\\tpassed@'+sha)" record 2
+cand_neg stage_c_without_stage_b "import re; m=re.search(r'^batch4\\t[^\\t]*\\t[^\\t]*\\t[^\\t]*\\t([0-9a-f]{40})', s, re.M); sha=m.group(1); old=sha+'\\t0b\\tnot-run\\tnot-run\\tnot-run'; assert s.count(old)==1; s=s.replace(old, sha+'\\t0b\\tnot-run\\tnot-run\\tpassed@'+sha+' run=7')" record 2
+cand_neg empty_cell "old='\\tland4\\t'; assert s.count(old)==1; s=s.replace(old,'\\t\\t')" record 2
+cand_neg duplicate_bug "old='081,083,089'; assert s.count(old)==1; s=s.replace(old,'081,083,088')" record 2
+# Positive control: a well-formed stage (c) pass at the candidate, regenerated, passes.
+cp ROADMAP.md "$CTMP/p.md"; cp "$REC" "$CTMP/p.tsv"
+if python3 -I - "$CTMP/p.tsv" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p, encoding='utf-8').read()
+m = re.search(r'^batch4\t[^\t]*\t[^\t]*\t[^\t]*\t([0-9a-f]{40})', s, re.M); sha = m.group(1)
+old = sha + '\t0b\tnot-run\tnot-run\tnot-run'
+assert s.count(old) == 1
+s = s.replace(old, sha + '\t0b\tpassed@' + sha + '\tpassed@' + sha + ' run=1\tpassed@' + sha + ' run=2')
+open(p, 'w', encoding='utf-8').write(s)
+PY
+then
+  if python3 -I "$GEN" --write --roadmap "$CTMP/p.md" --record "$CTMP/p.tsv" >/dev/null 2>&1 \
+     && python3 -I "$GEN" --check --roadmap "$CTMP/p.md" --record "$CTMP/p.tsv" >/dev/null 2>&1; then
+    ok "positive control: a recorded stage (c) pass at the candidate regenerates and checks"
+  else no "positive control: a well-formed record failed to regenerate or check"; fi
+else no "positive control: could not build its copy"; fi
 
 echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"

@@ -26,6 +26,41 @@ reasons. Thirteen compiler and interpreter bugs found on the way are filed as
 [108](docs/bugs/108_bool_cast_trunc.md)–[120](docs/bugs/120_interp_field_borrow_through_ref.md), each
 with a reproducer the gate keeps pinned; policy_engine also hit bug 105 (a reference-valued `if`).
 
+### One Qualification Verdict, Generated Candidate Record, Structural Bug Classes, Bug 104 (2026-10-20)
+
+Stage (c) qualification is now one verdict over every required job at one candidate SHA:
+`scripts/ci/qualification_record.py` derives the required set from every job of the CI workflow (plus
+the scheduled multi-kernel mutation step) and emits `verdict=qualified` only when all succeeded at
+that SHA; the mutation aggregate's `qualified=1` is one component and can no longer stand for the
+verdict. `check_qualification_record.sh` (CI, campaign-publisher job; gate commands 251 → 252) refuses
+cancelled, failed, skipped, missing, in-progress, other-SHA and mutation-only run records. The roadmap
+now separates starting from accepting: RocksDB slice 1, V1a and V1b may be implemented and
+experimented with now, and their prerequisite exits gate acceptance and any safety claim. The
+"Implemented, not yet accepted" table is generated from `docs/project/candidates.tsv` (candidate SHA,
+exits, stage (a)/(b)/(c) results at that SHA, what acceptance unlocks) by
+`scripts/gen/candidate_table.py`; `check_docs_drift.sh` fails on a hand-edited or stale table or a
+malformed record. Bug records from 102 on must state a structural cause and owner
+(`check_bug_filing_complete.sh`), and [docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md)
+groups bugs 039 – 106 into fifteen classes with their owning tasks. Bug 104 is filed (OPEN, exit 0b):
+a reference assigned from an inner block into an outer reference variable records no borrow, so its
+source can be freed while the reference is read; batch 2's normalized place rule rejects both
+reproducers.
+
+### Targeted Examples And Scaled Differential Fuzzing Join The Plan (2026-10-20, roadmap only)
+
+[ROADMAP.md](ROADMAP.md) gains an example rule (every example has a behaviour-asserting gate; new
+examples target a bug class, an upcoming deliverable or a workload) and four scheduled example and
+fuzzing programs, all under existing tasks. Exit 2c (R-0491) gets a finite acceptance: eight named
+adversarial examples (linear flow, generic `Destroy`, nested same-named types, import aliases, casts at
+every width, `&mut self` receivers, match guards and function pointers, statement sequencing), each with
+its own leg comparing interpreter, native and expected output and, where claims exist, the proof model;
+it stays *continues alongside*. R-0285 gains four FFI and resource companions to RocksDB slice 1
+(file handle, callback with context, resource pool, release-everything error paths) that do not block
+it. R-0511 gains five V1a target programs with `#[proof_by]` claims inside V1a's scalar subset, its
+regression set, without widening the theorem. R-0491 gains scaled interpreter/native/model fuzzing
+campaigns, at least a hundred times the nightly counts, to run first on short-lived remote build
+servers once available.
+
 ### Phase 1 Closes Through Classed Exits; Features Start On Their Own Prerequisites (2026-10-20, roadmap only)
 
 Queue rows 0 – 2 of [ROADMAP.md](ROADMAP.md) now close through sixteen individually closable exits

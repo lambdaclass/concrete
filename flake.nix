@@ -71,6 +71,11 @@
             rustc
             typst
             zola
+            # RocksDB slice 1 (R-0285): the C library examples/rocksdb_kv binds, at the
+            # revision flake.lock pins, found through pkg-config. check_rocksdb_slice1.sh
+            # fails closed when pkg-config cannot find it; it never skips.
+            rocksdb
+            pkg-config
           ];
         in {
           # Default shell stays light: the pre-existing toolchain only. The

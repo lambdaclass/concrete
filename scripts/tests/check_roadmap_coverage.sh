@@ -42,7 +42,9 @@
 #      exit blocks any; a queue row's "prerequisite exits:" list equals its deliverables' blocked-by set.
 #  13. every bug in the "Implemented, not yet accepted" table is not recorded fixed in the bug ledger
 #      (docs/bugs: its README's Fixed list or its file's Status line), and every row names a branch and
-#      a remaining acceptance step.
+#      a remaining acceptance step. The table is generated from docs/project/candidates.tsv
+#      (check_docs_drift.sh checks freshness); columns are found by header name, and a row names
+#      bugs or a feature deliverable.
 #
 # Run with no argument it checks ROADMAP.md and the backlog with the reconciliation record and then runs
 # its negative controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row
@@ -347,7 +349,23 @@ for o, delivs in sorted(row_blocked.items()):
             no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
 if prows and not pbad2:
     ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
-irows = table_rows('Implemented, not yet accepted', 'bugs')
+irows = table_rows('Implemented, not yet accepted', 'candidate')
+# Columns are located by header name: the table is generated from docs/project/candidates.tsv
+# (scripts/gen/candidate_table.py), and a row names bugs or a deliverable ("—" for none).
+ihdr = None
+_im = re.search(r'^## Implemented, not yet accepted$', road, re.M)
+if _im:
+    for line in road[_im.end():].split('\n'):
+        if line.startswith('#'): break
+        if line.startswith('| candidate |'):
+            ihdr = [c.strip() for c in line.strip().strip('|').split('|')]; break
+icol = {}
+if irows is not None:
+    for want in ('bugs', 'deliverable', 'branch', 'remaining acceptance step'):
+        if not ihdr or want not in ihdr:
+            no(f'the "Implemented, not yet accepted" table has no "{want}" column'); irows = []
+        else:
+            icol[want] = ihdr.index(want)
 ibad2 = 0
 import os, glob
 ledger_dir = os.environ.get('BUG_LEDGER_DIR', 'docs/bugs')
@@ -360,15 +378,17 @@ if fm:
     nx = re.compile(r'^## ', re.M).search(readme, fm.end())
     fixed_list = readme[fm.end():(nx.start() if nx else len(readme))]
 if irows is None:
-    no('ROADMAP.md has no "## Implemented, not yet accepted" table (| bugs | branch | remaining acceptance step |)'); ibad2 += 1
+    no('ROADMAP.md has no "## Implemented, not yet accepted" table (| candidate | bugs | deliverable | branch | ... | remaining acceptance step |)'); ibad2 += 1
     irows = []
 seen_bug = {}
 for cells in irows:
-    cells = cells + [''] * (3 - len(cells))
-    bugs = re.findall(r'\b(\d{3})\b', cells[0])
-    if not bugs: no(f'implemented-bug row "{cells[0]}" names no bug number'); ibad2 += 1
-    if not re.findall(r'`[^`]+`', cells[1]): no(f'implemented-bug row "{cells[0]}" names no branch'); ibad2 += 1
-    if len(cells[2]) < 10: no(f'implemented-bug row "{cells[0]}" has no remaining acceptance step'); ibad2 += 1
+    cells = cells + [''] * (len(ihdr) - len(cells))
+    bugs = re.findall(r'\b(\d{3})\b', cells[icol['bugs']])
+    deliv = cells[icol['deliverable']].strip('— ')
+    if not bugs and not deliv: no(f'implemented-bug row "{cells[0]}" names no bug number and no deliverable'); ibad2 += 1
+    if cells[icol['bugs']] not in ('—', '-') and not bugs: no(f'implemented-bug row "{cells[0]}" has a bugs cell with no bug number'); ibad2 += 1
+    if not re.findall(r'`[^`]+`', cells[icol['branch']]): no(f'implemented-bug row "{cells[0]}" names no branch'); ibad2 += 1
+    if len(cells[icol['remaining acceptance step']]) < 10: no(f'implemented-bug row "{cells[0]}" has no remaining acceptance step'); ibad2 += 1
     for n in bugs:
         if n in seen_bug: no(f'bug {n} is listed in more than one implemented-bug row'); ibad2 += 1
         seen_bug[n] = cells[0]
@@ -383,6 +403,8 @@ for cells in irows:
             no(f'bug {n} is listed as not yet accepted but the bug ledger records it fixed; remove it from the table'); ibad2 += 1
 if irows and not ibad2:
     ok(f'{len(irows)} implemented-but-not-accepted rows name {len(seen_bug)} bugs the ledger does not record fixed, each with a branch and a remaining step')
+if irows and not ibad2 and not seen_bug:
+    no('the "Implemented, not yet accepted" table names no bug at all'); ibad2 += 1
 qbad = 0; named = 0
 for order, work in qrows:
     for tid in expand(work):
@@ -719,14 +741,20 @@ PY
     "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l |')" \
     "deliverable V1b is labelled row 5, but queue row 3 schedules it"
   neg implemented_bug_already_fixed \
-    "old='| 088 (batch 4) |'; assert s.count(old)==1; s=s.replace(old,'| 080, 088 (batch 4) |')" \
+    "old='| batch4 | 088,'; assert s.count(old)==1; s=s.replace(old,'| batch4 | 080, 088,')" \
     "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
   neg implemented_bug_no_branch \
-    "old='| \`bug088-literal-range\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
-    "implemented-bug row \"088 (batch 4)\" names no branch"
+    "old='| \`land4\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
+    "implemented-bug row \"batch4\" names no branch"
   neg implemented_bug_no_step \
-    "import re; s,n=re.subn(r'^\| 099, 100 \|[^\n]*$', '| 099, 100 | \`bug099-generic-destroy\` |  |', s, flags=re.M); assert n==1" \
-    "implemented-bug row \"099, 100\" has no remaining acceptance step"
+    "import re; s,n=re.subn(r'^(\| generic-destroy \|.*\|) [^|]+ \|$', r'\\1  |', s, flags=re.M); assert n==1" \
+    "implemented-bug row \"generic-destroy\" has no remaining acceptance step"
+  neg implemented_row_no_bug_no_deliverable \
+    "old='| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) |'; assert s.count(old)==1; s=s.replace(old,'| rocksdb-slice1 | — | — |')" \
+    "implemented-bug row \"rocksdb-slice1\" names no bug number and no deliverable"
+  neg implemented_table_column_dropped \
+    "old='| candidate | bugs | deliverable | branch |'; assert s.count(old)==1; s=s.replace(old,'| candidate | bug list | deliverable | branch |')" \
+    "has no \"bugs\" column"
   # Bug-ledger controls: the same roadmap against a mutated copy of docs/bugs, one way of recording a
   # fix at a time (README's Fixed list alone, a bold Status line alone, a plain Status line alone).
   bugneg() { # name, python-edit over s (file named in $3, relative to docs/bugs), file, expected-substring
@@ -761,9 +789,9 @@ PY
   if python3 - "$TMPD/open_entry.md" <<'PY'
 import sys
 p = sys.argv[1]; s = open(p, encoding='utf-8').read()
-old = '| 088 (batch 4) |'
+old = '| batch4 | 088,'
 assert s.count(old) == 1
-s = s.replace(old, '| 077, 088 (batch 4) |')
+s = s.replace(old, '| batch4 | 077, 088,')
 open(p, 'w', encoding='utf-8').write(s)
 PY
   then

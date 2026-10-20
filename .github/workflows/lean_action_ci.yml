@@ -1542,6 +1542,13 @@ jobs:
       - name: Sharded mutation campaign aggregator (hostile shard sets fail closed)
         run: bash scripts/tests/check_mutation_shard_aggregate.sh
 
+      # Stage (c)'s verdict is one record over EVERY job of this workflow at one SHA
+      # (the qualification_record tool under the CI scripts); the mutation aggregate above is one component.
+      - name: Qualification record (one verdict over every required job; hostile run records fail closed)
+        run: |
+          python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+          bash scripts/tests/check_qualification_record.sh
+
   thesis-evidence:
     name: Thesis evidence smoke test
     runs-on: ubuntu-latest
