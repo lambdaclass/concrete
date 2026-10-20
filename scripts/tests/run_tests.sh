@@ -7153,6 +7153,8 @@ run_err "$TESTDIR/error_092_alias_struct_field_ref.con" "error[check]: (E0239)"
 run_ok "$TESTDIR/regress_092_type_param_shadows_ref_alias.con" 42
 # A module constant holding references in an aggregate (compiled before).
 run_err "$TESTDIR/error_092_const_ref_array.con" "E0239"
+# A phantom reference type argument, checked before Mono renames the instance.
+run_err "$TESTDIR/error_092_phantom_ref_type_arg.con" "E0239"
 run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an

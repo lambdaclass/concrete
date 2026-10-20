@@ -1165,7 +1165,12 @@ private partial def monoTypesInProgram (modules : List CModule)
 -- Entry point
 -- ============================================================
 
-def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
+def monoProgram (modules : List CModule)
+    -- Run on the function-specialized program BEFORE type specialization
+    -- renames generic instances: a type argument the instance's fields do not
+    -- use (`Marker<&Int>` with a phantom `T`) is visible only here (bug 092).
+    (preTypeCheck : List CModule → Diagnostics := fun _ => []) :
+    Except Diagnostics (List CModule) :=
   let allFns := modules.foldl (fun acc m => acc ++ collectAllModuleFns m) []
   let allAliases := modules.foldl (fun acc m => acc ++ collectAllModuleAliases m) []
   -- Build the name→def map once, keeping the FIRST occurrence (matches the old
@@ -1176,6 +1181,8 @@ def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms0 =>
+    let preDs := preTypeCheck ms0
+    if !preDs.isEmpty then .error preDs else
     match monoTypesInProgram ms0 with
     | .error e => .error e
     | .ok ms =>

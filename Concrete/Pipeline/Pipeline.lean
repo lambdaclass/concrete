@@ -135,7 +135,7 @@ def verifyPostElab (modules : List CModule) : Diagnostics :=
 
 /-- Monomorphize generic functions.  Runs the post-Mono verifier (no Ty.typeVar). -/
 def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram :=
-  match monoProgram vc.coreModules with
+  match monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
   | .ok modules =>
     let monoDs := verifyPostMono modules
     if !monoDs.isEmpty then .error monoDs
@@ -217,7 +217,7 @@ end VerifyReport
     downstream pass (mono / lower) fails outright. -/
 def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
   let postElab := verifyPostElab vc.coreModules
-  match monoProgram vc.coreModules with
+  match monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
   | .error ds =>
     -- Mono refused to even run; surface its diagnostics as post-mono
     -- errors. We keep the per-gate label on what the diagnostics

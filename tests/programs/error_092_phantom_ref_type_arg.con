@@ -1,0 +1,14 @@
+// Bug 092 follow-up: a reference type argument of a generic aggregate whose
+// fields do not use it (`Marker<&Int>`) disappeared when Mono renamed the
+// instance, so it escaped the post-mono check that rejects writing the same
+// type directly. Checked before type specialization now. E0239.
+struct Marker<T> { n: Int }
+fn test<T: Copy>(x: T) -> Int {
+    let m: Marker<T> = Marker::<T> { n: 42 };
+    let Marker { n } = m;
+    return n;
+}
+fn main() -> Int {
+    let x: Int = 1;
+    return test::<&Int>(&x);
+}

@@ -92,3 +92,9 @@ Core field was `&Int`), ignored that; both now leave the declaration's own param
 Module constants were not checked: `const PARKED: [&Int; 1] = [&42];` compiled. The post-mono
 verifier now checks each constant's type and initializer. `error_092_const_ref_array.con` (E0239)
 compiled before (Codex round 4).
+
+A reference type argument that an instance's fields do not use (`struct Marker<T> { n: Int }` at
+`T = &Int` inside a generic body) vanished when Mono renamed the instance, so `Marker<&Int>` passed
+although writing it directly is E0239. `monoProgram` now runs the same verifier on the
+function-specialized program before type specialization (`preTypeCheck`, passed by both Pipeline
+call sites). `error_092_phantom_ref_type_arg.con` compiled before (Codex round 5).
