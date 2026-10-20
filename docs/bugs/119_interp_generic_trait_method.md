@@ -1,6 +1,6 @@
 # Bug 119 — the interpreter cannot call a trait method on a type parameter
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-20 (batch 2)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement.
 
@@ -39,6 +39,15 @@ Dispatch on the runtime value's type in the interpreter (or interpret monomorphi
 ## Where it showed up
 
 examples/snippets/trait_dispatch.con, recorded `interp=fails:` in the manifest.
+
+## Fix
+
+Batch 2 (bug 052 Codex round 2, "destroy dispatch carries the trait; interp uses the impl table"): the interpreter dispatches a `T$m` call on a
+type parameter through the trait-impl table on the runtime receiver's type (`evalTraitParamCall`,
+`traitImplKey`), as Mono's per-instantiation rewrite does. The reproducer now agrees: `--interp`
+and the binary both give 9. Permanent leg: `run_tests.sh` compares `--interp` with the native exit
+on `tests/regressions/bug119_interp_generic_trait_method/repro.con`; `examples/snippets/trait_dispatch.con`
+is promoted to `interp=yes` in the example manifest.
 
 ## Structural cause
 

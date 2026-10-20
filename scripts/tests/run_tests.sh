@@ -1537,6 +1537,24 @@ run_err "$TESTDIR/error_105_ref_valued_if_arg.con"   "(E0238)"
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
+# Bugs 119 and 120 (fixed by batch 2's interpreter changes): the interpreter agrees with the
+# binary on both examples-health reproducers.
+for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref; do
+    r119_src="tests/regressions/$r119/repro.con"
+    r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
+    r119_n=""
+    if $COMPILER "$r119_src" -o "$TESTDIR/.r119_bin" >/dev/null 2>&1; then
+        "$TESTDIR/.r119_bin" >/dev/null 2>&1; r119_n=$?
+    fi
+    rm -f "$TESTDIR/.r119_bin"
+    if [ -n "$r119_n" ] && [ "$r119_i" = "$r119_n" ]; then
+        echo "  ok  $r119: --interp == binary ($r119_n)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r119: --interp gave '$r119_i', binary exit '$r119_n'"
+        FAIL=$((FAIL + 1))
+    fi
+done
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"

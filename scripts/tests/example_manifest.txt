@@ -315,7 +315,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/float_unprofiled/src/main.con float_unprofiled exit=0 ret=0 interp=yes stdout=empty
 @run examples/ghost_state/src/main.con ghost_state exit=0 ret=0 interp=yes stdout=empty
 @run examples/hmac_sha256/src/main.con hmac_sha256 exit=0 ret=0 interp=yes
-@run examples/json/main.con json exit=0 interp=fails:ref~step~.field~on~non-struct
+@run examples/json/main.con json exit=0 interp=fails:undefined~function~'string_append_int'
 @run examples/loop_invariant/src/main.con loop_invariant exit=0 ret=0 interp=yes stdout=empty
 @run examples/mal/main.con mal exit=0 ret=0 interp=yes
 @run examples/parse_validate/src/main.con parse_validate exit=0 ret=0 interp=yes stdout=empty
@@ -373,7 +373,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/simple_trait.con simple_trait exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/string_processing.con string_processing exit=100 interp=fails:undefined~function~'string_to_int'
 @run examples/snippets/structs.con structs exit=8 ret=8 interp=yes stdout=empty
-@run examples/snippets/trait_dispatch.con trait_dispatch exit=26 interp=fails:undefined~function~'T_area' stdout=empty
+@run examples/snippets/trait_dispatch.con trait_dispatch exit=26 ret=26 interp=yes stdout=empty
 @run examples/snippets/type_alias.con type_alias exit=4 ret=4 interp=yes stdout=empty
 @run examples/snippets/union.con union exit=1 interp=fails:field~'baz' stdout=empty
 @run examples/snippets/variable_inside_if.con variable_inside_if exit=16 ret=16 interp=yes stdout=empty
@@ -386,7 +386,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/vm/main.con vm exit=0 interp=fails:undefined~function~'vec_pop'
 @run examples/known_holes/mono_name_collision/src/main.con mono_name_collision exit=18 ret=18 interp=yes stdout=empty
 @run examples/known_holes/nested_field_write/src/main.con nested_field_write exit=29 ret=7709 interp=yes stdout=empty
-@run examples/known_holes/raw_ptr_to_local/src/main.con raw_ptr_to_local exit=99 interp=fails:unsupported~cast stdout=empty
+@run examples/known_holes/raw_ptr_to_local/src/main.con raw_ptr_to_local exit=99 ret=99 interp=yes stdout=empty
 @run examples/multi_kernel_policy/allow/src/main.con allow exit=5 ret=5 interp=yes stdout=empty
 @run examples/multi_kernel_policy/blocked/src/main.con blocked exit=6 ret=6 interp=yes stdout=empty
 @norun examples/unsound_hypothesis/src/main.con reason=deliberately aborts (H23 counterexample); check_known_wrong_corpus.sh owns its runtime behavior

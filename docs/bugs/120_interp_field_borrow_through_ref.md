@@ -1,6 +1,6 @@
 # Bug 120 — the interpreter cannot borrow a field through a reference parameter
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-20 (batch 2)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement; INTERPRETER_TRUST.md lists path borrows across calls as supported.
 
@@ -41,6 +41,16 @@ Follow the reference before applying the field step.
 ## Where it showed up
 
 examples/json (`StringPool.store`), recorded `interp=fails:` in the manifest.
+
+## Fix
+
+Batch 2 (bug 091 Codex round 3, "implicit receiver borrows obey the explicit borrow rules"): a borrow of a projection whose base is a reference forwards
+the reference's path (`evalProjectionBase`) instead of stepping into the `.ref` value, so
+`&mut w.p` with `w: &mut W` names the pointee. The reproducer now agrees: `--interp` and the binary
+both give 1. Permanent leg: `run_tests.sh` compares `--interp` with the native exit on
+`tests/regressions/bug120_interp_field_borrow_through_ref/repro.con`; `examples/known_holes/raw_ptr_to_local`
+is promoted to `interp=yes`, and `examples/json` now stops at a different interpreter gap
+(`string_append_int`).
 
 ## Structural cause
 
