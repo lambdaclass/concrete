@@ -97,6 +97,9 @@ def run_commands(path):
     lines = open(path).read().split("\n")
     block = re.compile(r"^(\s*(?:-\s+)?)[^\s#:][^:]*:\s*[|>][-+0-9]*\s*(#.*)?$")
     # Pass 1: blank out block-scalar bodies so nothing inside them is a key.
+    # Comment-only lines are not structure: blank them first, so a comment cannot set
+    # a job's property column or end a block.
+    lines = ["" if l.strip().startswith("#") else l for l in lines]
     visible, i = list(lines), 0
     while i < len(lines):
         b = block.match(lines[i])
@@ -253,11 +256,12 @@ def invoked_scripts(command):
     """The script an inline run: value invokes, when the WHOLE value is one simple
     command: [VAR=value ...] <script> [args...] or [VAR=value ...] bash|sh|python3
     [allowed options] <script> [args...] -- no wrapper command (env, timeout). Any unquoted
-    operator (; & | ( ) -- a list, a pipeline, a subshell, a function, a
-    redirection like 2>&1) makes it not count: execution context such as
+    operator (; & | ( ) -- a list, a pipeline, a subshell, a function), any
+    redirection (< >: a failed open stops the command before it starts) or command
+    substitution (` or $( ) makes it not count: execution context such as
     `true || <owner>` is not modelled, so it is refused."""
     pieces = list(simple_commands(command))
-    if len(pieces) != 1 or re.search(r"[;&|()]", unquoted_text(command)):
+    if len(pieces) != 1 or re.search(r"[;&|()<>`]|\$\(", unquoted_text(command)):
         return []
     words = pieces[0]
     k = 0
