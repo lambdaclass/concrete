@@ -1,0 +1,20 @@
+// Bug 091 round 3 (Codex review, sixth pass): a `match` over an OWNED scrutinee yielding an
+// arm binder (`E::V { w } => { w }`) is an owned temporary under a projection (was a false
+// E0237). Expected (compiled AND --interp): 7.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    enum E { V { w: W } }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        let e: E = E::V { w: W { p: P { n: 1 } } };
+        (match e {
+            E::V { w } => { w }
+        }).p.bump();
+        print_int(7);
+        print_char(10);
+        return 0;
+    }
+}

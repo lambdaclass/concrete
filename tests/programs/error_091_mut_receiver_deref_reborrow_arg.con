@@ -1,0 +1,18 @@
+// Bug 091 round 3 (Codex review, sixth pass): `r.bump(&*r)` with `r: &mut P` passed an
+// exclusive receiver and a shared reborrow of the same storage. Expected: E0293.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self, other: &P) -> i64 {
+            self.n = self.n + 1;
+            return other.n;
+        }
+    }
+    fn g(r: &mut P) -> i64 { return r.bump(&*r); }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let result: i64 = g(&mut p);
+        let P { n } = p;
+        return result;
+    }
+}

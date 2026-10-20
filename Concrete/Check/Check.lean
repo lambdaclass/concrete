@@ -114,11 +114,11 @@ mutual
     moved owned binding is an owned temporary. A tail naming a binding the block itself
     declared is classified by that `let` (its declared type, else its value). A block without
     a value tail diverges, contributing nothing; one this walk cannot read fails closed. -/
-partial def tailVia (stmts : List Stmt) : CheckM PlaceVia := do
+partial def tailVia (stmts : List Stmt) (owned : List String := []) : CheckM PlaceVia := do
   let unclassified : PlaceVia :=
     .shared "the place is reached through a block the checker does not classify; bind it to a name first"
   match stmts.getLast? with
-  | some (.expr _ e true) => blockValueVia (stmts.dropLast) e
+  | some (.expr _ e true) => blockValueVia (stmts.dropLast) e owned
   | some (.return_ ..) | some (.break_ ..) | some (.continue_ ..) => return .temp
   | some (.expr _ e false) =>
     match e with
@@ -130,7 +130,7 @@ partial def tailVia (stmts : List Stmt) : CheckM PlaceVia := do
     `before`: a name the block itself bound is followed to its `let` (its declared type, else
     its initializer, classified against the statements before THAT `let`), so a chain
     `let a = W {..}; let w = a; w` is an owned temporary. A moved owned binding is a temporary. -/
-partial def blockValueVia (before : List Stmt) (e : Expr) : CheckM PlaceVia := do
+partial def blockValueVia (before : List Stmt) (e : Expr) (owned : List String := []) : CheckM PlaceVia := do
   let local? : Option (Nat × Option Ty × Expr) := match stripParens e with
     | .ident _ n =>
       ((List.range before.length).zip before).foldl (fun acc (i, st) => match st with
@@ -144,11 +144,19 @@ partial def blockValueVia (before : List Stmt) (e : Expr) : CheckM PlaceVia := d
     | .refMut _ => return .exclusiveRef
     | .ptrMut _ | .ptrConst _ => return .rawPtr
     | _ => return .temp
-  | some (i, none, v) => blockValueVia (before.take i) v
+  | some (i, none, v) => blockValueVia (before.take i) v owned
   | none =>
-    match ← placeVia e with
-    | .owned _ => return .temp
-    | v => return v
+    -- an arm binder of a match over an OWNED scrutinee holds an owned payload
+    match stripParens e with
+    | .ident _ n =>
+      if owned.contains n then return .temp
+      match ← placeVia e with
+      | .owned _ => return .temp
+      | v => return v
+    | _ =>
+      match ← placeVia e with
+      | .owned _ => return .temp
+      | v => return v
 
 /-- What the REFERENCE (or pointer) an expression yields points through: the operand of `*`.
     A `&mut e` / `&e` / cast is that reference itself; a binding by its type; a field or
@@ -203,12 +211,20 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
   -- A conditional is whatever its branches yield: `if c { W {..} } else { W {..} }` is an
   -- owned temporary, `*(if c { &r } else { &r })` is reached through `&` (Codex review).
   | .ifExpr _ _ t el => return joinVia (← tailVia t) (← tailVia el)
-  | .match_ _ _ arms =>
+  | .match_ _ scrut arms =>
+    -- Arm binders of a match over an owned value (a binding it moves, or a temporary) are
+    -- owned payloads; over anything reached through a reference they are borrowed views,
+    -- which the walk fails closed on (Codex review of round 3).
+    let scrutOwned : Bool := match ← placeVia scrut with
+      | .owned _ | .temp => true
+      | _ => false
     let mut acc : PlaceVia := .temp
     for arm in arms do
-      let body := match arm with
-        | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => b
-      acc := joinVia acc (← tailVia body)
+      let (body, binders) : List Stmt × List String := match arm with
+        | .mk _ _ _ bs _ b => (b, bs)
+        | .varArm _ v _ b => (b, [v])
+        | .litArm _ _ _ b | .rangeArm _ _ _ _ _ b => (b, [])
+      acc := joinVia acc (← tailVia body (if scrutOwned then binders else []))
     return acc
   | _ => return .shared "the place is reached through an expression that may be a `&` reference; bind it to a name first"
 end
@@ -261,7 +277,8 @@ end
     (bug 091 round 3), at `let` and at reassignment alike, so a later `&mut` of the root —
     explicit or an implicit receiver — sees it. A reference whose source cannot be traced
     (an `if` choosing between borrows) is refused rather than left untracked (E0238). -/
-def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span) : CheckM Unit := do
+def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
+    (reassign : Bool := false) : CheckM Unit := do
   match ty with
   | .ref _ | .refMut _ =>
     let prov ← match stripParens value with
@@ -274,6 +291,15 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
       modify fun env =>
         { env with vars := env.vars.map fun (n, info) =>
             if n == name then (n, { info with borrowedFrom := src }) else (n, info) }
+    -- Provenance is one source per binding and is not merged across branches, so a
+    -- reassignment may not RE-POINT a reference at different storage (`if c { r = &p; }`
+    -- would leave `r` borrowing `p` invisibly after the branch): E0238, use a new binding.
+    let current := ((← getEnv).vars.lookup name).bind (·.borrowedFrom)
+    let newSrc : Option String := match prov with
+      | .root s => if s != name then some s else current
+      | _ => none
+    if reassign && newSrc != current then
+      throwCheck (.borrowProvenanceUnknown name) span
     match prov with
     | .root sourceName => if sourceName != name then setSource (some sourceName) else pure ()
     | .external => setSource none
@@ -1968,7 +1994,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       setEnv { envPost with rebindingVar := envPre.rebindingVar }
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
       -- `r = &p` re-points `r`: its provenance is the NEW source (Codex review of round 3).
-      if !selfAssign then recordRefProvenance name info.ty value (some stmt.getSpan)
+      if !selfAssign then recordRefProvenance name info.ty value (some stmt.getSpan) (reassign := true)
       -- Linear REBIND rule: a linear variable may be reassigned only once its
       -- OLD value has been consumed (one binding, one LIVE resource) — the
       -- fold/accumulate pattern `acc = f(acc, x)` requires it. Overwriting a

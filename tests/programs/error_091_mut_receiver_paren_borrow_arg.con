@@ -1,0 +1,17 @@
+// Bug 091 round 3 (Codex review, sixth pass): `p.bump((&p))` hid the argument borrow behind
+// parentheses from the receiver-vs-argument aliasing check. Expected: E0293.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self, other: &P) -> i64 {
+            self.n = self.n + 1;
+            return other.n;
+        }
+    }
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let result: i64 = p.bump((&p));
+        let P { n } = p;
+        return result;
+    }
+}

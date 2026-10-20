@@ -1,0 +1,23 @@
+// Bug 091 round 3 (Codex review, sixth pass): `if c { r = &p; }` re-pointed `r` inside a
+// branch, and branch merging dropped the new provenance, so `p.bump()` ran under the live
+// `r`. A reassignment may not re-point a reference at different storage: E0238.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn f(q: &P) with(Std) {
+        let mut p: P = P { n: 1 };
+        let mut r: &P = q;
+        if true { r = &p; } else { r = q; }
+        p.bump();
+        print_int(r.n);
+        let P { n } = p;
+    }
+    fn main() with(Std) -> Int {
+        let q: P = P { n: 9 };
+        f(&q);
+        let P { n } = q;
+        return 0;
+    }
+}

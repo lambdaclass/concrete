@@ -285,6 +285,13 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   provenance (`recordRefProvenance` runs at `let` and at reassignment); a branch tail reached
   through a chain of block-local bindings is classified through the chain (`blockValueVia`).
   Fixtures `error_091_mut_receiver_ref_to_mut_ref.con` (E0237),
-  `error_091_mut_receiver_reborrowed_mut_ref.con`, `error_091_mut_receiver_reassigned_ref.con`
-  (E0232), `trait_mut_receiver_if_local_chain.con` (7).
+  `error_091_mut_receiver_reborrowed_mut_ref.con` (E0232), `error_091_mut_receiver_reassigned_ref.con`
+  (E0238 since the sixth pass), `trait_mut_receiver_if_local_chain.con` (7).
+* **Codex review of round 3, sixth pass.** Provenance is one source per binding and branch
+  merging does not join it, so a reassignment may no longer RE-POINT a reference at different
+  storage (`if c { r = &p; }`: E0238, use a new binding); call-argument borrows are read through
+  parentheses and `*` (`p.bump((&p))`, `r.bump(&*r)`: E0293); a `match` over an owned scrutinee
+  yielding an arm binder is an owned temporary under a projection. Fixtures
+  `error_091_ref_repointed_in_branch.con` (E0238), `error_091_mut_receiver_paren_borrow_arg.con`,
+  `error_091_mut_receiver_deref_reborrow_arg.con` (E0293), `trait_mut_receiver_match_owned_binder.con` (7).
 

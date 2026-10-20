@@ -1504,8 +1504,14 @@ run_ok  "$TESTDIR/trait_mut_receiver_if_local_binding.con" "7" 0
 # reference used under a live reborrow, provenance at reassignment, local-binding chains.
 run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0232)"
-run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0238)"
 run_ok  "$TESTDIR/trait_mut_receiver_if_local_chain.con" "7" 0
+# Codex review of round 3 (sixth pass): re-pointing a reference in a branch, parenthesized and
+# dereferenced argument borrows against the receiver, owned match binders under a projection.
+run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_arg.con"     "(E0293)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_reborrow_arg.con"   "(E0293)"
+run_ok  "$TESTDIR/trait_mut_receiver_match_owned_binder.con" "7" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

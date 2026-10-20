@@ -1,5 +1,6 @@
 // Bug 091 round 3 (Codex review, fifth pass): `r = &p` did not update `r`'s provenance, so
-// `p.bump()` ran under the live `r`. Reassignment records the new source: E0232.
+// `p.bump()` ran under the live `r`. Re-pointing a reference at different storage is
+// refused (provenance is not joined across branches): E0238.
 mod m {
     struct P { n: i64 }
     impl P {

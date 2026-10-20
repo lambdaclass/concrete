@@ -33,12 +33,6 @@ def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
 >>>>>>> 3396afcf (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
 =======
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
-||||||| parent of 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
-||||||| parent of de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
-def buildIdentity : String := "2191e45042f2de34824c0084897f1896"
-=======
-def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
->>>>>>> de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
 =======
 >>>>>>> 492014c2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 ||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
@@ -75,14 +69,35 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 =======
 ||||||| parent of b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 =======
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+||||||| parent of e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+=======
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+>>>>>>> e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
+=======
+>>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 ||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 =======
 def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
->>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 >>>>>>> 90cd6db8 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
->>>>>>> d92fb92f (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of b6b40a8e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+||||||| parent of a2bb78a4 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+>>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+||||||| parent of ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+=======
+def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
+>>>>>>> ab41e479 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+>>>>>>> 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+>>>>>>> a2bb78a4 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+>>>>>>> b6b40a8e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 
 /-- How many source files the identity above was computed over.
 

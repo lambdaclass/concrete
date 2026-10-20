@@ -1019,6 +1019,9 @@ partial def borrowPathOf : Expr → Option (String × List String)
   | .arrayIndex _ arr _ =>
     (borrowPathOf arr).map fun (r, steps) => (r, steps ++ ["[]"])
   | .paren _ inner => borrowPathOf inner
+  -- `*r` names storage reached through `r`: same root, one more step, so `r.m(&*r)` with a
+  -- `&mut self` receiver overlaps (bug 091 round 3, Codex review).
+  | .deref _ inner => (borrowPathOf inner).map fun (r, steps) => (r, steps ++ ["*"])
   | _ => none
 
 /-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
@@ -1041,13 +1044,19 @@ def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (s
         throwCheck (.conflictingCallBorrows path.1) span
     seen := (path, isMut) :: seen
 
+/-- An expression with its enclosing parentheses removed. -/
+partial def unparenExpr : Expr → Expr
+  | .paren _ inner => unparenExpr inner
+  | e => e
+
 /-- Collect (path, isMut) pairs from syntactic borrow arguments AND from
     ident arguments that are themselves live borrows (alias-through-binding:
     `let r = &mut c; c.scoped(r, cb)` — `r` counts as a borrow of `c`). -/
 def borrowArgParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
   let mut out : List ((String × List String) × Bool) := []
   for a in args do
-    match a with
+    -- `f((&p))` borrows `p` exactly as `f(&p)` does (bug 091 round 3, Codex review).
+    match unparenExpr a with
     | .borrow _ inner =>
       match borrowPathOf inner with
       | some p => out := out ++ [(p, false)]

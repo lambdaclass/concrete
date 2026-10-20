@@ -50,7 +50,9 @@ check Concrete/IR/SSAVerify.lean         2
 check Concrete/Backend/EmitSSA.lean      34
 check Concrete/Resolve/Resolve.lean      8
 check Concrete/Check/Check.lean          4
-check Concrete/Check/CheckHelpers.lean   8
+# 8->9 (2026-10-20, bug 091 round 3): +1 `steps ++ ["*"]` in borrowPathOf's deref case,
+# the same per-step shape as its field/index cases: one append per syntactic path step.
+check Concrete/Check/CheckHelpers.lean   9
 # 57->58 (2026-08-06): +1 one-shot `initEv ++ [loop ...]` building the desugared
 # for-loop's evidence block. `initEv` holds at most one statement and the append runs
 # once per for-loop, not once per element of anything.
