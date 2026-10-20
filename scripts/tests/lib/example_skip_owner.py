@@ -8,8 +8,8 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            token. A longer name (<dir>.backup, main.con.disabled,
                            another file under <dir>) or a top-level directory plus a
                            common word does not count.
-  runs <owner> <workflow>  some `run:` command of the workflow (inline or block)
-                           INVOKES the owner: after shell comments are stripped and
+  runs <owner> <workflow>  some INLINE `run:` command of the workflow INVOKES the
+                           owner (block scalars are not read; see run_commands): after shell comments are stripped and
                            the command is split on UNQUOTED ; && || | ( ), the owner
                            is the executable of a simple command, or the script
                            operand of bash/sh/python3, after optional VAR=value
@@ -47,27 +47,23 @@ def strip_shell_comment(line):
 
 
 def run_commands(path):
-    """The shell text of every `run:` key, inline or block scalar."""
-    lines = open(path).read().split("\n")
-    cmds, i = [], 0
-    while i < len(lines):
-        m = re.match(r"^(\s*(?:-\s+)?)run:\s*(.*)$", lines[i])
+    """The shell text of every INLINE `run:` value (`run: <command>` on one line).
+
+    Block scalars (`run: |`) are deliberately ignored: their lines share quote,
+    heredoc and continuation state across newlines, and reading them line by line
+    took printed text (a heredoc body, a multi-line echo) for commands. An owner
+    must therefore be invoked by an inline `run:` -- fail-closed, and every CI
+    owner today is spelled that way."""
+    cmds = []
+    for line in open(path).read().split("\n"):
+        m = re.match(r"^\s*(?:-\s+)?run:\s*(.*)$", line)
         if not m:
-            i += 1
             continue
-        key_col = len(m.group(1))          # column of `run`, including any `- `
-        rest = m.group(2)
-        i += 1
-        if rest.strip()[:1] in ("|", ">"):
-            # Block scalar: lines indented deeper than the key; a sibling key at
-            # the key's column (`name:` after `- run: |`) ends it.
-            while i < len(lines) and (not lines[i].strip()
-                                      or len(lines[i]) - len(lines[i].lstrip()) > key_col):
-                cmds.append(lines[i])
-                i += 1
-        else:
-            cmds.append(rest)
-    return [strip_shell_comment(c) for c in cmds]
+        rest = m.group(1)
+        if rest.strip()[:1] in ("|", ">", ""):
+            continue
+        cmds.append(strip_shell_comment(rest))
+    return cmds
 
 
 def norm(p):

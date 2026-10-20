@@ -20,9 +20,10 @@
 #                    fixed the compile succeeds and the gate fails until the entry
 #                    is promoted.
 #   skip owner=scripts/tests/<gate>.sh reason=<why>
-#                  — not compiled here. The owner must exist, be run by the CI
-#                    workflow and reference the file; the reason is required. A
-#                    skip without a valid owner FAILS.
+#                  — not compiled here. The owner must exist, be invoked by an
+#                    inline `run:` command of the CI workflow, and name the file
+#                    (or its example directory) as a whole path token; the reason
+#                    is required. A skip without a valid owner FAILS.
 #
 # Run rules (checked by scripts/tests/check_example_outputs.sh; see its header):
 # every `compile` entry and every project root (`examples/<dir>/`, for the

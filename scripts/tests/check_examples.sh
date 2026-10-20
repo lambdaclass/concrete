@@ -16,8 +16,9 @@
 #                     so the entry is promoted instead of silently staying blocked.
 #   skip owner=G reason=R
 #                   — not compiled here because gate G (scripts/tests/*.sh) owns
-#                     it. G must exist, be run by the CI workflow, and reference
-#                     the file; R must be non-empty. A skip without a valid owner
+#                     it. G must exist, be invoked by an inline `run:` command of
+#                     the CI workflow, and reference the file by its full path (or
+#                     its example directory) as a whole token; R must be non-empty. A skip without a valid owner
 #                     FAILS: an example nobody checks is not an option.
 #
 # Lines starting with `@` are run rules for check_example_outputs.sh; this gate
@@ -380,7 +381,13 @@ PY
   printf 'jobs:\n  a:\n    steps:\n      - run: |\n          # bash %s\n          echo %s.bak\n' "$real_owner" "$real_owner" > "$fwf"
   unit_control runs_block_comment_and_longer_name 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo start\n          bash ./%s\n' "$real_owner" > "$fwf"
-  unit_control runs_block_command 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  # Block scalars are not read at all (fail-closed): a genuine block invocation does
+  # not count either, so an owner must be invoked by an inline run:.
+  unit_control runs_block_not_read 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          cat <<EOF\n          bash %s\n          EOF\n' "$real_owner" > "$fwf"
+  unit_control runs_heredoc_body 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo "first\n          bash %s"\n' "$real_owner" > "$fwf"
+  unit_control runs_multiline_echo 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   unit_control runs_real_workflow 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$WORKFLOW"
   printf 'jobs:\n  a:\n    steps:\n      - run: |\n          echo harmless\n        name: %s\n' "$real_owner" > "$fwf"
   unit_control runs_name_after_block_run 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
