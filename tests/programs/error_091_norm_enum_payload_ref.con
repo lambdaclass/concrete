@@ -1,0 +1,13 @@
+// Normalized place rule (Codex static review): a reference stored in an enum payload has no
+// traced source; binding it out of the enum is E0238.
+mod m {
+    struct P { n: i64 }
+    enum E { V { r: &P } }
+    fn main() -> Int {
+        let p: P = P { n: 1 };
+        let e: E = E::V { r: &p };
+        match e { E::V { r } => { let n: i64 = r.n; } }
+        let P { n } = p;
+        return 0;
+    }
+}

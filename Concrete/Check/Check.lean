@@ -1362,6 +1362,14 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
             for (binding, sf) in bindings.zip ev.fields do
               let fieldTy := substTy typeMapping sf.ty
+              -- A reference STORED in a payload has no traced source: binding it out of the
+              -- enum would be an alias the checker cannot see (normalized place rule, E0238).
+              if binding != "_" then
+                match ← resolveType fieldTy with
+                | .ref _ | .refMut _ =>
+                  throwCheck (.untraceablePlace s!"what the payload reference '{binding}' borrows"
+                    "a reference stored in an enum payload is not traced; borrow a named place instead") (some e.getSpan)
+                | _ => pure ()
               -- Matching THROUGH a reference must not move payloads out of the
               -- borrow: a non-Copy payload binds as a borrowed view (&T — Copy,
               -- freely droppable), a Copy payload binds by value. An OWNED

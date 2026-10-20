@@ -702,12 +702,22 @@ partial def peekExprType (e : Expr) : CheckM Ty := do
       | .ref (.generic n _ _) => some n
       | .refMut (.generic n _ _) => some n
       | _ => none
+    -- the type arguments of a generic struct substitute into the field's declared type
+    -- (`G<&P>.v` is `&P`, not `T`), so the normalized place rule sees a reference stored in
+    -- a generic field as one (bug 091 round 3, Codex review)
+    let typeArgs : List Ty := match objTy with
+      | .generic _ args _ | .ref (.generic _ args _) | .refMut (.generic _ args _) => args
+      | _ => []
     match structName? with
     | some sn =>
       match ← lookupStructField sn fieldName with
-      | some ty => return ty
+      | some ty =>
+        match ← lookupStruct sn with
+        | some sd => return substTy (sd.typeParams.zip typeArgs) ty
+        | none => return ty
       | none => return .placeholder
     | none => return .placeholder
+  | .cast _ _ ty => return ty
   -- Borrows must carry the reference wrapper so generic inference can unify
   -- `&T` against `&i64` (ROADMAP Phase 5 #6b). Without these, `peekExprType
   -- (&w)` fell through to `.placeholder` and `id(&w)` could not infer `T`,

@@ -1,0 +1,14 @@
+// Normalized place rule (Codex static review): `g.v` of a `G<&P>` is a reference (the generic
+// field type is substituted), so writing through it is a write through an untraced reference.
+// E0238.
+mod m {
+    struct P { n: i64 }
+    struct G<T> { v: T }
+    fn poke(g: G<&P>) { g.v.n = 5; let G { v } = g; }
+    fn main() -> Int {
+        let p: P = P { n: 1 };
+        poke(G::<&P> { v: &p });
+        let P { n } = p;
+        return n;
+    }
+}

@@ -360,6 +360,9 @@ programs rejected today with E0238:
   of Copy values included), and a reference stored in a place (`*w.r`);
 - a field access or index whose base is not a traceable place
   (`(if c { a } else { b }).f`, `(**r).f`);
+- a reference read back out of an aggregate — a struct field, an enum payload, or a generic
+  field instantiated at a reference type — used as a place, binder or argument (storing a
+  reference in an aggregate is accepted, but what it borrows is not traced afterwards);
 - shadowing a name that a live reference records as its source or parent
   (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
@@ -423,4 +426,10 @@ catch-all binder over a borrowed non-Copy enum is refused (E0290) instead of bin
 value out of the reference; a reference-valued field destructured out of a struct has no traced
 source and is E0238; and `r[i] = v` with `r: &mut [T; N]` obeys the non-Copy overwrite rule of
 `(*r)[i] = v`. Fixtures `error_091_norm_{ref_array_overwrite,catchall_binder_through_ref}.con`.
+
+Seventh (static) pass — references stored in aggregates: a payload binder whose declared type is
+a reference is E0238 (a reference stored in an enum has no traced source), and `peekExprType`
+substitutes a generic struct's type arguments into field types (`G<&P>.v` is `&P`) and types
+casts, so the normalized rule (and the intrinsic reference-argument check that uses it) sees
+those references. Fixtures `error_091_norm_{enum_payload_ref,generic_field_ref_write}.con`.
 

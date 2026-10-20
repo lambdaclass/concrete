@@ -30,7 +30,6 @@ def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
 ||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
->>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
 ||||||| parent of 33383d3a (fix: bug 106 — model-diff runs under a loop budget; its gate fails on hangs and crashes)
 =======
 >>>>>>> 836e013d (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
@@ -101,6 +100,11 @@ def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 >>>>>>> b0d869a2 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
 =======
 >>>>>>> 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+||||||| parent of 99b08d91 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+>>>>>>> 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
+=======
+>>>>>>> 99b08d91 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
 ||||||| parent of e06d05e2 (fix: bug 091 Codex round 3 review — deref through borrows, match *r, traced provenance)
 def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
 =======
@@ -231,6 +235,11 @@ def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
 >>>>>>> b20ab015 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
 =======
 >>>>>>> 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+||||||| parent of bb79f4c7 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+>>>>>>> 9b927620 (fix: bug 091 Codex round 3 review — nested/conditional reborrow args, borrowed heap interiors)
+=======
+>>>>>>> bb79f4c7 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
 ||||||| parent of cf45b39e (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
 def buildIdentity : String := "9941464b15dfa750c2ceae8ac82fcaa9"
 =======
@@ -412,6 +421,14 @@ def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
 =======
 ||||||| parent of 7869d3ad (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
 =======
+||||||| parent of ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+||||||| parent of e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+def buildIdentity : String := "2e0f72c3d6051855c78fed906488751d"
+=======
+def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
+>>>>>>> e8a386f4 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+=======
+>>>>>>> ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
 ||||||| parent of 91003b79 (fix: bug 091 normalized place rule — Codex review pass 3: bare assignment, match-through-ref binders, heap field loads)
 def buildIdentity : String := "4f5c7d08f266f675a58507c89c213091"
 =======
@@ -456,9 +473,22 @@ def buildIdentity : String := "1f41a5e32458234de8cd9c14aee9e6e7"
 =======
 def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
 >>>>>>> 81b0c6c3 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
->>>>>>> fe03c831 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
 >>>>>>> b20ab015 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
->>>>>>> b0d869a2 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+||||||| parent of 99b08d91 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+||||||| parent of bb79f4c7 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+>>>>>>> fe03c831 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
+=======
+||||||| parent of ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+=======
+||||||| parent of 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+def buildIdentity : String := "84a1e4376f94f4c7328d5eea3204fb5d"
+=======
+def buildIdentity : String := "ba1d3d478c8838a74e6d38ab01dc42b3"
+>>>>>>> 0244652e (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+>>>>>>> ea2e04ea (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+>>>>>>> bb79f4c7 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
+>>>>>>> 99b08d91 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
 
 /-- How many source files the identity above was computed over.
 
