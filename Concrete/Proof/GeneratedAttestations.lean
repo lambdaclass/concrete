@@ -17,8 +17,6 @@ def empty_1217df44_ch : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "ch" "3e315e17b9a1420dc0c9c4988af52511"
 def empty_1217df44_sha256_init : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_init" "1cbbcac2dedb20c50ca91b1953ab562f"
-def empty_2f5aa307_weak : Except DefinitionIdentityRefusal DefinitionIdentity :=
-  DefinitionIdentity.of? "2f5aa307cbb8bc210430f39bf9e03cee" "cn" "weak" "ff19cefd91e9ef7261e5d696e6228cad"
 def empty_30eb5d05_scale_by_two : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "30eb5d05d96a3ffd5a9f7725fa5d88bd" "workspace" "scale_by_two" "5dbfd1f078e081530352591407626e2c"
 def empty_540f289a_plain : Except DefinitionIdentityRefusal DefinitionIdentity :=
@@ -31,6 +29,8 @@ def empty_80b53ab2_partial : Except DefinitionIdentityRefusal DefinitionIdentity
   DefinitionIdentity.of? "80b53ab23c73575a465098c7427b5ce8" "states" "partial" "ecd934a117e4376625071651869df4c5"
 def empty_80b53ab2_stale : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "80b53ab23c73575a465098c7427b5ce8" "states" "stale" "c850a160887198d750551e999bf5bc83"
+def empty_a539af0d_weak : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "a539af0d0d3bf9ad2012b1349cf544a2" "cn" "weak" "ff19cefd91e9ef7261e5d696e6228cad"
 def empty_c18a72a0_copy2 : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "c18a72a043d1ab40465e5b00132f77c7" "loopcopy" "copy2" "c8a37b314145120f678fcf80ca1d6d27"
 def empty_c5ebe6be_add_three : Except DefinitionIdentityRefusal DefinitionIdentity :=
@@ -49,8 +49,8 @@ def cryptoFns_65a04a5b_verify_message : Except DefinitionIdentityRefusal Definit
   DefinitionIdentity.of? "65a04a5b84bac21b95b6a7da81b01e56" "main" "verify_message" "424aecbf3aafee722fe95c69fb8b1c25"
 def cryptoFns_65a04a5b_verify_tag : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "65a04a5b84bac21b95b6a7da81b01e56" "main" "verify_tag" "20035d4f9ef9b58229a6fa855cbfbaa3"
-def ctTagFns_3d667120_ct_compare : Except DefinitionIdentityRefusal DefinitionIdentity :=
-  DefinitionIdentity.of? "3d6671204c40ee1de99e283701f028b1" "demo" "ct_compare" "4d81ef861a6be6f536dae068b2052b79"
+def ctTagFns_71cc40e4_ct_compare : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "71cc40e43e176a7b87226ff08f301cc9" "demo" "ct_compare" "4d81ef861a6be6f536dae068b2052b79"
 def ctTagFns_f22d795a_ct_compare : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "f22d795a709dbafac2f9ac2b316e4f3d" "constant_time_tag" "ct_compare" "18f6e83241d4e9da29cc8cd88d604da0"
 def ctTagFns_f2ce224d_ct_compare : Except DefinitionIdentityRefusal DefinitionIdentity :=
@@ -89,6 +89,10 @@ def parseValidateFns_3cf1596c_validate_total_len : Except DefinitionIdentityRefu
   DefinitionIdentity.of? "3cf1596ce454b867e4a21ea984699f24" "parse_validate" "validate_total_len" "867ba31c93068cc4a2e4f29d41424155"
 def parseValidateFns_3cf1596c_validate_version : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "3cf1596ce454b867e4a21ea984699f24" "parse_validate" "validate_version" "5eea51e813c69ef88321a943434cf957"
+def proofFns_83ce3163_check_length : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "83ce31635f6afef8edcf7e5ef6279893" "main" "check_length" "124a2854cd57d9c4172763074d9843eb"
+def proofFns_83ce3163_parse_byte : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "83ce31635f6afef8edcf7e5ef6279893" "main" "parse_byte" "79c5aced1f7a362adbf8860c5a17f403"
 def shaFns_1217df44_big_sigma0 : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "big_sigma0" "2fc56fcc1fe1179b08d9634389f4e6da"
 def shaFns_1217df44_big_sigma1 : Except DefinitionIdentityRefusal DefinitionIdentity :=

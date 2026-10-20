@@ -60,10 +60,14 @@ fi
 # deleted rather than repointed — no theorem proves that body — so the subject moved from
 # "has a table" to "has no table". The 86 total is unchanged because the declaration still exists;
 # what left is a claim that was false.
-if [ "$ROWS" = "86" ] && [ "$MAPPED" = "47" ] && [ "$UNTABLED" = "39" ] && [ "$NOID" = "0" ]; then
-  ok "corpus accounting is exactly rows=86 attested=47 untabled=39 no-identity=0"
+# 86/47/39 -> 89/49/40 ON 2026-10-20 (bug 083): examples/thesis_demo's claims were made by the removed
+# name-keyed provedFunctions table and carried no attribute, so the fixture was outside the manifest.
+# They now live in source: its three declarations enter as subjects, parse_byte and check_length
+# attested under Concrete.Proof.proofFns and validate untabled (it is not claimed).
+if [ "$ROWS" = "89" ] && [ "$MAPPED" = "49" ] && [ "$UNTABLED" = "40" ] && [ "$NOID" = "0" ]; then
+  ok "corpus accounting is exactly rows=89 attested=49 untabled=40 no-identity=0"
 else
-  no "corpus accounting moved: rows=$ROWS attested=$MAPPED untabled=$UNTABLED no-identity=$NOID (was 86/47/39/0) — say which subjects changed and why"
+  no "corpus accounting moved: rows=$ROWS attested=$MAPPED untabled=$UNTABLED no-identity=$NOID (was 89/49/40/0) — say which subjects changed and why"
 fi
 
 # NO SILENT DEFECTS. Each of these has been zero since the collapse was closed; a non-zero value is a

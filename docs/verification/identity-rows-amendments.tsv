@@ -22,3 +22,45 @@ A	link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd
 A	link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 # 2026-10-19, Codex land1 confirmation review: the spec nested inside the term eval runs.
 A	link	tests/programs/spec_inside_evaluated_term/test_spec_inside.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+# 2026-10-20, bug 081 (land3): tests/programs/bug081_alias_key imports `check_version as check_class`
+# and pins each elf_header claim in source, so the aliased claim exists to be refused.
+A	link	tests/programs/bug081_alias_key/src/main.con	check_class_orig	v2:a5b26ee3698719fea42b20621a7efbda
+A	link	tests/programs/bug081_alias_key/src/main.con	check_data	v2:7ac6fe15f54ef809d5e742d7c5be7dc7
+A	link	tests/programs/bug081_alias_key/src/main.con	check_magic	v2:a669dd14614bc56a33be35aa10226679
+A	link	tests/programs/bug081_alias_key/src/main.con	check_version	v2:0d368796ab5dee78d031bac527ddeced
+A	link	tests/programs/bug081_alias_key/src/main.con	validate_header	v2:699ea3b7418991f75c805053cd1d23d7
+# 2026-10-20, bug 083 (land3): the name-keyed provedFunctions table's claims moved into source.
+# Each function it proved by NAME now carries #[spec]/#[proof_by]/#[proof_fingerprint]: links in
+# examples/ and tests/programs/; thesis_demo becomes an attested scope (its proofFns subjects and the
+# two generated references selecting them). No existing row changed.
+A	link	examples/crypto_verify_drifted/src/main.con	check_nonce	v2:47ad120ae2795812e4c855ab356556e1
+A	link	examples/crypto_verify_drifted/src/main.con	compute_tag	v2:8fd9d38950ec5907778483f166e61e26
+A	link	examples/crypto_verify_drifted/src/main.con	verify_tag	v2:e5cc8653ab87df9679ec9a084811d21e
+A	link	examples/thesis_demo/src/main.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+A	link	examples/thesis_demo/src/main.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	examples/thesis_demo/src/main_drifted.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+A	link	examples/thesis_demo/src/main_drifted.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/adversarial_profile_mixed_evidence.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/adversarial_proof_cross_module.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/adversarial_proof_wrong_arity.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/adversarial_proof_wrong_semantics.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/proof_decode_header.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+A	link	tests/programs/proof_decode_header.con	decode_header	v2:6148e017316e54dc76b959dafa14d732
+A	link	tests/programs/proof_decode_header.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/proof_maintenance_decode_header.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+A	link	tests/programs/proof_maintenance_decode_header.con	decode_header	v2:6148e017316e54dc76b959dafa14d732
+A	link	tests/programs/proof_maintenance_decode_header.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/report_check_predictable_core_vs_shell.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	link	tests/programs/report_evidence_check_length.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+A	link	tests/programs/report_evidence_stable.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+A	reference	proofFns_@_check_length	examples/thesis_demo/src/main.con	main	check_length	124a2854cd57d9c4172763074d9843eb
+A	reference	proofFns_@_parse_byte	examples/thesis_demo/src/main.con	main	parse_byte	79c5aced1f7a362adbf8860c5a17f403
+A	scope	examples/thesis_demo/src/main.con
+A	subject	examples/thesis_demo/src/main.con	main	check_length	124a2854cd57d9c4172763074d9843eb	Concrete.Proof.check_length_rejects_short	Concrete.Proof.proofFns	-
+A	subject	examples/thesis_demo/src/main.con	main	parse_byte	79c5aced1f7a362adbf8860c5a17f403	Concrete.Proof.parse_byte_correct	Concrete.Proof.proofFns	-
+A	subject	examples/thesis_demo/src/main.con	main	validate	7425f4f6896095e113deb15243234c4e	-	-	-
+# 2026-10-20, bug 089 (land3): the three ensures-link regression fixtures each pin compute_tag's claim,
+# so the bogus #[ensures_proof] sits beside a real refinement link.
+A	link	tests/regressions/bug089_ensures_proof/ens_coverage_only/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
+A	link	tests/regressions/bug089_ensures_proof/ens_missing_with_proof_by/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
+A	link	tests/regressions/bug089_ensures_proof/ens_unrelated_theorem/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5

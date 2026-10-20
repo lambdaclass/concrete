@@ -25,8 +25,10 @@
 # legitimately re-frozen after the baseline is listed there as its baseline value (`-`) and its new
 # value (`+`). Each `-` row must appear exactly once in the baseline or the tool refuses; it is
 # replaced before pairing and reported as an `amended` line. Anything not listed still has to pair.
-# A row listed as `A` is a subject the baseline never had (a new fixture, not a migrated subject):
-# it must be absent from the baseline, is entered as if the baseline had it, and is reported `added`.
+# A row listed as `A` is a row the baseline never had (a new fixture, not a migrated subject), written
+# NORMALIZED as check_identity_rows.sh reads it; it is resolved to the one raw row of the new tree it
+# normalizes from, must be absent from the baseline, is entered as if the baseline had it, and is
+# reported `added`.
 # Without the argument nothing is amended, which is how the committed R-0482 map was produced.
 #
 # Usage: scripts/tools/identity_migration_map.sh BASELINE_RAW NEW_RAW [AMENDMENTS]
@@ -65,14 +67,44 @@ if len(sys.argv) > 3:
         amended_lines.append("\t".join(["amended", o[0], "\t".join(o[1:]), "->", "\t".join(n[1:])]))
     # ADDED rows (`A`): subjects the baseline never had (new fixtures, not migrated subjects). Each must
     # be absent from the baseline; it is entered as if the baseline had it, so it must still pair.
+    # An `A` row is written as check_identity_rows.sh reads it: NORMALIZED (package digests replaced
+    # by the producing fixture's label, `scope` for a fixture). A `link` row is the same in both forms.
+    # For every other kind the row is resolved to the ONE raw row of the new tree whose normalization
+    # it is (the rules of identity_rows.sh's normalize) — none or several is a refusal, never a guess —
+    # and that raw row is what is entered.
+    lab_new_a = {pkg: label for label, pkg in new.get("fixture", [])}
+    ref_pkg_new = {r[0]: r[1] for r in new.get("reference", [])}
+    def L(p): return "-" if p == "-" else lab_new_a.get(p, "UNMAPPED:" + p)
+    def T(sym, p):
+        pre = "_" + p[:8] + "_"
+        return sym.replace(pre, "_@_", 1) if p and pre in sym else "NOPREFIX:" + sym
+    norm = {
+        "fixture":    lambda r: ["scope", r[0]],
+        "subject":    lambda r: ["subject", r[0], r[3], r[4], r[5], r[6], r[7], r[8]],
+        "dependency": lambda r: ["dependency", r[0], r[2], r[3], r[4], r[5], L(r[7]), r[8], r[9], r[10]],
+        "reference":  lambda r: ["reference", T(r[0], r[1]), L(r[1]), r[2], r[3], r[4]],
+        "selection":  lambda r: ["selection", r[0], r[1], r[2], T(r[3], ref_pkg_new.get(r[3], "")),
+                                 L(ref_pkg_new.get(r[3], "-"))],
+    }
     for line in open(sys.argv[3], encoding="utf-8"):
         line = line.rstrip("\n")
         if not line.startswith("A\t"): continue
         a = line[2:].split("\t")
-        if a[1:] in old.get(a[0], []):
+        if a[0] == "link":
+            kind, raw = "link", a[1:]
+        else:
+            kind = "fixture" if a[0] == "scope" else a[0]
+            if kind not in norm:
+                print("FATAL: added row of unknown kind: " + "\t".join(a), file=sys.stderr); sys.exit(2)
+            hits = [r for r in new.get(kind, []) if norm[kind](r) == a]
+            if len(hits) != 1:
+                print(f"FATAL: added row matches {len(hits)} rows of the tree, not one: " + "\t".join(a),
+                      file=sys.stderr); sys.exit(2)
+            raw = hits[0]
+        if raw in old.get(kind, []):
             print("FATAL: added row is already a baseline row: " + "\t".join(a), file=sys.stderr); sys.exit(2)
-        old.setdefault(a[0], []).append(a[1:])
-        amended_lines.append("\t".join(["added", a[0], "\t".join(a[1:])]))
+        old.setdefault(kind, []).append(raw)
+        amended_lines.append("\t".join(["added", kind, "\t".join(raw)]))
 
 def emit(kind, verdict, *parts):
     out.append("\t".join((verdict, kind) + parts))

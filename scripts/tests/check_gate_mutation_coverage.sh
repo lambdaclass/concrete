@@ -1343,7 +1343,7 @@ add "attestation-conversion-complete-parsevalidate" "Concrete/Proof/Proof.lean" 
 # 2 attested + 1 declared exclusion) and only the drift check can catch it — and only because it
 # reads what the table site BOUND, not what the exclusion list DECLARED.
 add "attestation-never-binds-drifted-impl" "Concrete/Proof/Proof.lean" "check_attestation_manifest.sh" yes \
-  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_3d667120_ct_compare ]' \
+  $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_71cc40e4_ct_compare ]' \
   $'    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_f2ce224d_ct_compare ]'
 
 # R-0004 package 2. A DEPENDENCY REFERENCE LEFT UNBOUND. The subject/dependency split only matters if
@@ -1423,8 +1423,8 @@ add "scoped-join-membership-answers-identity" "Concrete/Proof/DependencyEdge.lea
 # authority pass accept every subject, which is the state the corpus was in before it was wired —
 # and `main_drifted`'s cross-program closure reports `proved` again.
 add "authority-consumes-correspondence" "Concrete/Proof/ProofCore.lean" "check_dependency_edges.sh" yes \
-  $'      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty then true\n      else (Proof.correspond i).usable i.requestedEdges.length' \
-  $'      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty then true\n      else true'
+  $'      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty && i.keyRefusals.isEmpty then true\n      else (Proof.correspond i).usable i.requestedEdges.length' \
+  $'      if i.requestedEdges.isEmpty && i.unscopedEdges.isEmpty && i.keyRefusals.isEmpty then true\n      else true'
 
 
 # R-0004 package 2. THE LEAF-BOUNDARY RULE. Only a TRUSTED exclusion may be a dependency-node leaf:

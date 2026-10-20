@@ -64,6 +64,19 @@ FREEZE_KEYS=55     # distinct (module, declaration, implementation) triples
 FREEZE_IMPLS=55    # distinct implementation digests — equal to the key count, so an implementation
                    # digest identifies its (module, declaration) uniquely in this corpus today
 
+# A reference ADDED after the freeze (a new attested scope, explained as an `A` row in the amendments
+# that check_identity_rows.sh verifies) is not a migrated symbol: the frozen numbers plus the explained
+# additions are what must hold. Each added reference must be a new distinct key and implementation — the
+# duplication gap below stays pinned, so an addition that duplicated a key would still fail there — and
+# each added `scope` row is one new package identity.
+AMEND_FILE="docs/verification/identity-rows-amendments.tsv"
+ADD_REFS="$(grep -cE "^A	reference	" "$AMEND_FILE" 2>/dev/null || true)"
+ADD_PKGS="$(grep -cE "^A	scope	" "$AMEND_FILE" 2>/dev/null || true)"
+FREEZE_REFS=$(( FREEZE_REFS + ${ADD_REFS:-0} ))
+FREEZE_PKGS=$(( FREEZE_PKGS + ${ADD_PKGS:-0} ))
+FREEZE_KEYS=$(( FREEZE_KEYS + ${ADD_REFS:-0} ))
+FREEZE_IMPLS=$(( FREEZE_IMPLS + ${ADD_REFS:-0} ))
+
 check(){ # name got want
   if [ "$2" = "$3" ]; then ok "$1: $2 (frozen)"
   else no "$1 moved: $2, frozen at $3 — if this is the migration, update the freeze in the SAME commit as the generator, references, consumers and deletion of old symbols"; fi

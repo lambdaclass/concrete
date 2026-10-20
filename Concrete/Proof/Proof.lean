@@ -2664,7 +2664,7 @@ def ctTagFns : FnTable :=
   FnTable.withAttestations
     { entries := #[ctCompareFn], globals := ctTagFnsGlobals }
     [ AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_f22d795a_ct_compare
-    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_3d667120_ct_compare ]
+    , AttestedPFnDef.of ctCompareFn GeneratedAttestations.ctTagFns_71cc40e4_ct_compare ]
 
 -- Keeps `simp only [eval, ctTagFns_globals, ctTagFnsGlobals]` working WITHOUT delta-unfolding
 -- the bare `ctTagFns`. The old `def ctTagFns : FnTable | "x" => …` produced equation lemmas

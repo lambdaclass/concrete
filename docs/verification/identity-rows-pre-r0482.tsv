@@ -51,6 +51,9 @@ link	examples/crypto_verify/src/main.con	check_nonce	v2:47ad120ae2795812e4c855ab
 link	examples/crypto_verify/src/main.con	compute_tag	v2:8fd9d38950ec5907778483f166e61e26
 link	examples/crypto_verify/src/main.con	verify_message	v2:29d1db440995f5f106d444664dd19b60
 link	examples/crypto_verify/src/main.con	verify_tag	v2:e5cc8653ab87df9679ec9a084811d21e
+link	examples/crypto_verify_drifted/src/main.con	check_nonce	v2:47ad120ae2795812e4c855ab356556e1
+link	examples/crypto_verify_drifted/src/main.con	compute_tag	v2:8fd9d38950ec5907778483f166e61e26
+link	examples/crypto_verify_drifted/src/main.con	verify_tag	v2:e5cc8653ab87df9679ec9a084811d21e
 link	examples/elf_header/src/main.con	check_class	v2:a5b26ee3698719fea42b20621a7efbda
 link	examples/elf_header/src/main.con	check_data	v2:7ac6fe15f54ef809d5e742d7c5be7dc7
 link	examples/elf_header/src/main.con	check_magic	v2:a669dd14614bc56a33be35aa10226679
@@ -88,6 +91,10 @@ link	examples/proof_patterns/straight_line/src/main.con	add_three	v2:226e202500f
 link	examples/proof_patterns/workspace/src/main.con	scale_by_two	v2:d593e451cb49882e5eeae10652cae683
 link	examples/proof_pressure/src/main.con	check_nonce	v2:e83f888fed44f06537168062486f4da1
 link	examples/proof_pressure/src/main.con	compute_checksum	v2:deadbeefdeadbeefdeadbeefdeadbeef
+link	examples/thesis_demo/src/main.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+link	examples/thesis_demo/src/main.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	examples/thesis_demo/src/main_drifted.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+link	examples/thesis_demo/src/main_drifted.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	std/src/base64.con	char_of	v2:7ee3e9b442c7c72d7bcef43f20564802
 link	std/src/base64.con	val_of	v2:f5d49a083d382998eb015eb63d430a43
 link	std/src/numeric.con	try_from_u32	f87fb5c677827de64b3ead111edf1faf
@@ -104,17 +111,38 @@ link	tests/programs/adversarial_crossmod_deps/test_crossmod.con	add	v2:a9da9205f
 link	tests/programs/adversarial_obligations/test_obligations.con	pure_add	v2:40abbb4c0f93a96458e8e4db73175690
 link	tests/programs/adversarial_obligations/test_obligations.con	pure_stale	v2:deadbeefdeadbeefdeadbeefdeadbeef
 link	tests/programs/adversarial_policy_require_proofs_stale/src/main.con	pure_add	v2:deadbeefdeadbeefdeadbeefdeadbeef
+link	tests/programs/adversarial_profile_mixed_evidence.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	tests/programs/adversarial_proof_cross_module.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	tests/programs/adversarial_proof_fabricated/test_proof_registry.con	pure_add	v2:fff25163361682c3986b813bed064983
+link	tests/programs/adversarial_proof_wrong_arity.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	tests/programs/adversarial_proof_wrong_semantics.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	tests/programs/adversarial_spec_drift/test_drift.con	simple_add	de2a547f92ade3a8659292ab6adf0eef
 link	tests/programs/adversarial_spec_identity/test_spec.con	pure_add	v2:40abbb4c0f93a96458e8e4db73175690
 link	tests/programs/adversarial_spec_identity/test_spec.con	pure_mul	v2:8fa79500f4deac6fa02ddbf8f74baea8
+link	tests/programs/bug081_alias_key/src/main.con	check_class_orig	v2:a5b26ee3698719fea42b20621a7efbda
+link	tests/programs/bug081_alias_key/src/main.con	check_data	v2:7ac6fe15f54ef809d5e742d7c5be7dc7
+link	tests/programs/bug081_alias_key/src/main.con	check_magic	v2:a669dd14614bc56a33be35aa10226679
+link	tests/programs/bug081_alias_key/src/main.con	check_version	v2:0d368796ab5dee78d031bac527ddeced
+link	tests/programs/bug081_alias_key/src/main.con	validate_header	v2:699ea3b7418991f75c805053cd1d23d7
+link	tests/programs/proof_decode_header.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+link	tests/programs/proof_decode_header.con	decode_header	v2:6148e017316e54dc76b959dafa14d732
+link	tests/programs/proof_decode_header.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	tests/programs/proof_maintenance_decode_header.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+link	tests/programs/proof_maintenance_decode_header.con	decode_header	v2:6148e017316e54dc76b959dafa14d732
+link	tests/programs/proof_maintenance_decode_header.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	tests/programs/proof_registry_stale/test_proof_registry.con	pure_add	v2:deadbeefdeadbeefdeadbeefdeadbeef
 link	tests/programs/proof_registry_test/test_proof_registry.con	pure_add	v2:47394250fca010d361f59cb719c404ed
+link	tests/programs/report_check_predictable_core_vs_shell.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	tests/programs/report_evidence_check_length.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
+link	tests/programs/report_evidence_stable.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	tests/programs/spec_in_hypothesis_only/test_spec_hyp.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_in_irrelevant_disjunction/test_spec_disj.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_in_nested_implication/test_spec_nested.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_in_proof_argument/test_spec_arg.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
 link	tests/programs/spec_inside_evaluated_term/test_spec_inside.con	add	v2:7bd7ae4e79b8542ec15512b64e4242ad
+link	tests/regressions/bug089_ensures_proof/ens_coverage_only/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
+link	tests/regressions/bug089_ensures_proof/ens_missing_with_proof_by/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
+link	tests/regressions/bug089_ensures_proof/ens_unrelated_theorem/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
 reference	combineFns_@_combine	examples/proof_patterns/composition/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_trusted_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
 reference	combineFns_@_combine	examples/proof_patterns/composition_unlinked_helper/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42
@@ -161,6 +189,8 @@ reference	parseValidateFns_@_validate_msg_type	examples/parse_validate/src/main.
 reference	parseValidateFns_@_validate_payload_len	examples/parse_validate/src/main.con	parse_validate	validate_payload_len	4c20bb22a0c4d96a48ef4abcc4b0dd0f
 reference	parseValidateFns_@_validate_total_len	examples/parse_validate/src/main.con	parse_validate	validate_total_len	867ba31c93068cc4a2e4f29d41424155
 reference	parseValidateFns_@_validate_version	examples/parse_validate/src/main.con	parse_validate	validate_version	5eea51e813c69ef88321a943434cf957
+reference	proofFns_@_check_length	examples/thesis_demo/src/main.con	main	check_length	124a2854cd57d9c4172763074d9843eb
+reference	proofFns_@_parse_byte	examples/thesis_demo/src/main.con	main	parse_byte	79c5aced1f7a362adbf8860c5a17f403
 reference	shaFns_@_big_sigma0	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma0	2fc56fcc1fe1179b08d9634389f4e6da
 reference	shaFns_@_big_sigma1	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma1	bf9e5f67627630de3db89a6a505259bb
 reference	shaFns_@_block_to_words	examples/hmac_sha256/src/main.con	hmac_sha256	block_to_words	2566f0877ae2ddb261ffb5ffe3d745ff
@@ -202,6 +232,7 @@ scope	examples/proof_patterns/stale_missing_partial/src/main.con
 scope	examples/proof_patterns/straight_line/src/main.con
 scope	examples/proof_patterns/workspace/src/main.con
 scope	examples/proof_pressure/src/main.con
+scope	examples/thesis_demo/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	checkNonceFn	cryptoFns_@_check_nonce	examples/crypto_verify/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	checkNonceFn	cryptoFns_@_check_nonce	examples/proof_pressure/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	computeTagFn	cryptoFns_@_compute_tag	examples/crypto_verify/src/main.con
@@ -332,3 +363,6 @@ subject	examples/proof_pressure/src/main.con	main	clamp_value	a8e7551998577b0cdb
 subject	examples/proof_pressure/src/main.con	main	classify_range	74db3623a4cf9aaf344e213fa4a75e35	-	-	-
 subject	examples/proof_pressure/src/main.con	main	compute_checksum	559e2c19d3007672a10be5150d1e4cae	Concrete.Proof.compute_checksum_correct	-	-
 subject	examples/proof_pressure/src/main.con	main	validate_header	84329dda14c4d9302270a3c20ac18dc3	-	-	-
+subject	examples/thesis_demo/src/main.con	main	check_length	124a2854cd57d9c4172763074d9843eb	Concrete.Proof.check_length_rejects_short	Concrete.Proof.proofFns	-
+subject	examples/thesis_demo/src/main.con	main	parse_byte	79c5aced1f7a362adbf8860c5a17f403	Concrete.Proof.parse_byte_correct	Concrete.Proof.proofFns	-
+subject	examples/thesis_demo/src/main.con	main	validate	7425f4f6896095e113deb15243234c4e	-	-	-
