@@ -22,8 +22,11 @@ validation with `use of undefined value '@Holder_destroy'`). Bug 105's record is
 (`105_reference_valued_if_miscompiles.md`): a reference-valued `if` expression miscompiles (the
 binary segfaults while `--interp` prints 2); the branch CONTAINS it at the checker (E0238 refuses
 every reference-valued `if`/`match`, with permanent fixtures) while the lowering defect itself stays
-open. **Record pending** for 106, being filed on `land2-fix`: `--report model-diff` on `thesis_demo`
-never terminates and `check_model_diff.sh` swallows it with `|| true`.
+open. Bug 106's record is on `land2-fix` too (`106_model_diff_report_hangs.md`): `--report
+model-diff` on `thesis_demo` never terminated and `check_model_diff.sh` composed reports with
+`|| true`, so the gate stayed green; the branch budgets the report and makes the gate fail closed
+(`f950969f`), while on main it is still open, and the residual (recursion and calls are not budgeted;
+the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 ## Summary
 
@@ -39,7 +42,7 @@ never terminates and `check_model_diff.sh` swallows it with `|| true`.
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
-| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106 (pending) | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
+| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
 | 12. One fact kept in two places | 042, 057, 064, 070 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092 | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
@@ -245,8 +248,9 @@ activation) and 062 (slice 3).
 unmatched type), 058 (a missing fingerprint compared with itself), 063 (unknown capabilities read as
 none), 065 (recursive callees dropped, so unbounded stack read as bounded), 067 (a cap lost to
 attestation), 075 (policy gates that never saw a capability passed), 076 (proof admission treated
-unseen dependency effects, unresolved generic calls and foreign assumptions as effect-free), 103 (an unresolved `_destroy` filled with an empty body), 106 (pending: a
-non-terminating model-diff swallowed by `|| true`).
+unseen dependency effects, unresolved generic calls and foreign assumptions as effect-free), 103
+(an unresolved `_destroy` filled with an empty body), 106 (a non-terminating model-diff report
+swallowed by the gate's `|| true`).
 
 **Design cause.** An unknown, uncomputed or unresolved value defaults to empty, pure, fresh, bounded
 or successful, and nothing downstream can tell it from a measurement
@@ -256,7 +260,7 @@ or successful, and nothing downstream can tell it from a measurement
 verdict; gates count completed work and fail below a minimum.
 
 **Owner.** The absence rule and `check_absence_not_fact.sh`; R-0494 (S2) for verdicts; R-0513
-(exits 2d and 2e) for gates (075, 106); R-0510 (S8a) for synthesized definitions (052, 103); proof
+(exits 2d and 2e) for gates (075, 106); R-0460 for 106's unbudgeted evaluation residual; R-0510 (S8a) for synthesized definitions (052, 103); proof
 admission over complete dependency and foreign-assumption summaries (076) belongs to the evidence
 owners R-0494 (S2) and R-0495 (S9).
 
