@@ -7121,6 +7121,9 @@ run_ok "$TESTDIR/regress_050_indirect_call_shadow.con" 42
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
 run_ok "$TESTDIR/regress_088_const_fold_casts.con" "1048575"
 run_err "$TESTDIR/error_088_unhinted_literal_range.con" "out of range for type 'Int'"
+# Range-pattern endpoints take the scrutinee type (a u64 range to 2^64-1 was a
+# false E0227 once the defaulted Int became range-checked).
+run_ok "$TESTDIR/regress_088_range_pattern_u64.con" 42
 # Bug 090: a match guard moved a linear value; a false guard fell through to an
 # arm that moved it again (double free). Guards are read-only (E0300); reading
 # through a borrow in a guard stays legal.

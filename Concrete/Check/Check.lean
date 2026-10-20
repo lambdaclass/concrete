@@ -1002,8 +1002,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
             checkGuard guard
             pure body
           | .rangeArm _ lo hi _ guard body => do
-            let _ ← checkExpr lo
-            let _ ← checkExpr hi
+            -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
+            -- unhinted endpoint defaults to `Int` and is range-checked there).
+            let _ ← checkExpr lo (some innerTyR)
+            let _ ← checkExpr hi (some innerTyR)
             checkGuard guard
             pure body
           -- Function-exiting arms relax the consume-inside-loop rule (see
@@ -1126,8 +1128,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           checkGuard guard
           pure body
         | .rangeArm _ lo hi _ guard body => do
-          let _ ← checkExpr lo
-          let _ ← checkExpr hi
+          -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
+          -- unhinted endpoint defaults to `Int` and is range-checked there).
+          let _ ← checkExpr lo (some innerTyR)
+          let _ ← checkExpr hi (some innerTyR)
           checkGuard guard
           pure body
         | .mk _ _ _ _ guard body => do

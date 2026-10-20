@@ -1,0 +1,13 @@
+// Bug 088 follow-up: a range-pattern endpoint takes the scrutinee's type (as
+// Elab gives it), so a u64 range up to 2^64-1 is not range-checked as `Int`.
+fn classify(x: u64) -> Int {
+    match x {
+        0..=9 => { return 1; },
+        10..=18446744073709551615 => { return 41; },
+        _ => { return 0; },
+    }
+    return 0;
+}
+fn main() -> Int {
+    return classify(5) + classify(18446744073709551615);
+}
