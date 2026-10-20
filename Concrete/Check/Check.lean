@@ -2370,12 +2370,17 @@ def checkModule (m : Module) (summary : FileSummary)
   -- one (VALUE_MODEL.md, BYTE_VIEW.md). Rejected at the declaration so the type
   -- is not expressible; literals and bindings are checked as well (generic
   -- instantiations).
+  -- A declaration's own type parameters shadow module aliases of the same name
+  -- (`type T = &Int; struct Box<T> { value: T }` stores a `T`, not a `&Int`):
+  -- they are made type variables before the alias expansion below.
+  let ownParams (ps : List String) (ty : Ty) : Ty := substTy (ps.map fun n => (n, Ty.typeVar n)) ty
   let refFields : List (String × Ty × Span) :=
-    (m.structs.flatMap fun sd => sd.fields.map fun f => (s!"field '{f.name}' of struct '{sd.name}'", f.ty, sd.span))
+    (m.structs.flatMap fun sd => sd.fields.map fun f =>
+        (s!"field '{f.name}' of struct '{sd.name}'", ownParams sd.typeParams f.ty, sd.span))
     ++ (m.enums.flatMap fun ed => ed.variants.flatMap fun v =>
-          v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", f.ty, ed.span))
+          v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", ownParams ed.typeParams f.ty, ed.span))
     -- A newtype is a one-field wrapper: its inner type is a stored field too.
-    ++ (m.newtypes.map fun nt => (s!"inner type of newtype '{nt.name}'", nt.innerTy, nt.span))
+    ++ (m.newtypes.map fun nt => (s!"inner type of newtype '{nt.name}'", ownParams nt.typeParams nt.innerTy, nt.span))
   -- Through type aliases (`type Ref = &Int; newtype W = Ref;`).
   match refFields.find? (fun (_, ty, _) =>
       tyStoresRef (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty)) with

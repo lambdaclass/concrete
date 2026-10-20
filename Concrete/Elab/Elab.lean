@@ -2525,11 +2525,15 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- newtypes in field types so that layout, copy-checking, and lowering see the
   -- underlying type — a `Copy` struct field typed by an alias to a Copy type
   -- (`type Id = i32; struct Copy S { a: Id }`) must read as Copy, not opaque.
-  let eraseTy := fun (t : Ty) =>
-    eraseNewtypeTy m.newtypes (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) t)
+  -- `params`: the declaration's own type parameters, which shadow module
+  -- aliases of the same name (`type T = &Int; struct Box<T> { value: T }`
+  -- stores a `T`, not a `&Int`; expanding it made `Box<Int>`'s field `&Int`).
+  let eraseTy := fun (params : List String) (t : Ty) =>
+    let aliases := typeAliasMap.filter fun (n, _) => !params.contains n
+    eraseNewtypeTy m.newtypes (expandAliasDeep aliases (aliases.length + 64) t)
   let cStructs := m.structs.map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
-      fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
+      fields := sd.fields.map fun f => (f.name, eraseTy sd.typeParams f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
@@ -2538,7 +2542,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let cImportedStructs := (imports.structs.filter fun sd =>
       !(localStructNames.contains sd.name)).map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
-      fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
+      fields := sd.fields.map fun f => (f.name, eraseTy sd.typeParams f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
@@ -2692,7 +2696,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     enums := allEnums.map fun ed =>
       { name := ed.name, typeParams := ed.typeParams,
         variants := ed.variants.map fun v =>
-          (v.name, v.fields.map fun f => (f.name, eraseTy f.ty)),
+          (v.name, v.fields.map fun f => (f.name, eraseTy ed.typeParams f.ty)),
         isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId,
         declSpan := some ed.span : CEnumDef }
     functions := fns

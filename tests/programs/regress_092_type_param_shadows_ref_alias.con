@@ -1,0 +1,18 @@
+// Bug 092 follow-up positive control: a declaration's own type parameter
+// shadows a module alias of the same name, so `T` below is the parameter and
+// these declarations store no reference.
+type T = &Int;
+struct Box<T> { value: T }
+enum Maybe<T> { Some { value: T }, None }
+newtype Wrap<T> = T;
+fn main() -> Int {
+    let b: Box<Int> = Box::<Int> { value: 40 };
+    let m: Maybe<Int> = Maybe::<Int>::Some { value: 2 };
+    let Box { value } = b;
+    let mut out: Int = value;
+    match m {
+        Maybe::Some { value } => { out = out + value; },
+        Maybe::None => { },
+    }
+    return out;
+}

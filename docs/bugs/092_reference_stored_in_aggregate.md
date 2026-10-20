@@ -82,3 +82,9 @@ The declaration check read field and newtype types unexpanded, so `type Ref = &I
 was accepted (a struct field of type `Ref` was caught only post-mono). Declaration types are now
 expanded through the module's type aliases first. `error_092_alias_newtype_ref.con` and
 `error_092_alias_struct_field_ref.con` require the Check-stage E0239 (Codex round 2).
+
+A declaration's own type parameters shadow module aliases of the same name: in
+`type T = &Int; struct Box<T> { value: T }` the field stores a `T`. The alias expansion above, and
+Elab's expansion of struct and enum field types (pre-existing on origin/main, where `Box<Int>`'s
+Core field was `&Int`), ignored that; both now leave the declaration's own parameters unexpanded.
+`regress_092_type_param_shadows_ref_alias.con` must compile and return 42 (Codex round 3).

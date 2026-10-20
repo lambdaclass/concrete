@@ -7148,6 +7148,9 @@ run_err "$TESTDIR/error_092_newtype_ref.con" "E0239"
 # Through a type alias, at the declaration (the newtype one was accepted).
 run_err "$TESTDIR/error_092_alias_newtype_ref.con" "error[check]: (E0239)"
 run_err "$TESTDIR/error_092_alias_struct_field_ref.con" "error[check]: (E0239)"
+# A declaration's own type parameter shadows a same-named reference alias (Check
+# and Elab both expanded it: Box<Int>'s field became &Int).
+run_ok "$TESTDIR/regress_092_type_param_shadows_ref_alias.con" 42
 run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an
