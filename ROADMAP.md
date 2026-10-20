@@ -140,6 +140,14 @@ deliverable on it, naming that deliverable: today RocksDB slice 1 for the usable
 V1a for the proof track ([feature prerequisites](#feature-prerequisites)). Everything else goes to the
 [backlog](docs/project/ROADMAP_BACKLOG.md) with a pull trigger.
 
+**Example rule.** Every example has a gate: besides its entry in `scripts/tests/example_manifest.txt`, a
+new example has a gate leg that asserts its behaviour (expected output and exit status, an expected
+rejection with its diagnostic code, or its claims' statuses); a compile-only manifest entry does not
+count, and there are no ungated demos. New examples are workload-driven and targeted: each serves a bug
+class (R-0491's [adversarial example suite](#task-r-0491)), an upcoming deliverable (the
+[RocksDB slice 1 companions](#task-r-0285), [V1a's target programs](#task-r-0511)) or an application
+workload (R-0490). Other example work follows R-0135's example policy.
+
 | order | work | exit before advancing |
 |---|---|---|
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration. Closes through exits 0a, 0b and 0c ([Phase 1 exits](#phase-1-exits)) |
@@ -186,7 +194,7 @@ agree with the classes.
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
 | 2b | R-0491 | permanent reproducer controls for 080 – 101: each bug has a checked-in record, reproducer, expected outcome and pre-fix/fixed SHA pair | each assigned control fails at its pre-fix SHA and passes at its fix; `check_bug_filing_complete.sh` and `audit_bug_corpus.sh` fail on a missing inventory entry | continues alongside | the reproducers already block as gate legs under 0a and 0b; this exit proves each one load-bearing |
-| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`) | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance |
+| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples target classes whose known defects are repaired under 0a and 0b, and a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
 | 2d | R-0513 | checked inventories replace incidental count pins: every expected claim and comparison is accounted for, exclusions carry reasons, and missing entries, skipped work or unexpected eligibility shrinkage fail | adding a legitimate proved example needs no incidental count edit; controls with a deleted inventory entry, a disabled generator, an empty suite and altered eligibility each fail | continues alongside | gate affordability; no reproduced soundness defect |
 | 2e | R-0513, R-0491 | minimum completed comparisons by semantic feature, with permanent positive and negative controls | every generated feature has a pinned minimum completed-comparison count, and a run below it fails | continues alongside | prevention; no reproduced defect |
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
@@ -222,12 +230,17 @@ at least one *blocked by* list and no *continues alongside* exit appears in any.
   front end, which 0b's defects broke; 2i states the reference and scoping rules its handles and
   borrows are checked under. Evidence, proof-surface and gate-infrastructure exits do not affect it.
   It is the first acceptance point of R-0285's
-  [first executable slice](#task-r-0285); the four-adapter checkpoint follows.
+  [first executable slice](#task-r-0285); the four-adapter checkpoint follows. R-0285's four
+  companion FFI and resource examples (a file-handle wrapper, a C library holding a callback and its
+  context, a resource pool, multi-step error paths that release everything) are accepted with or after
+  this slice; they do not block it.
 - **V1a** (R-0511). Must compile, from checked Core to executable BIR, every program of the V1a subset:
   `i64`, `u64`, `bool`, locals and assignment, conditionals, a general loop with structured exits,
   non-recursive direct calls, comparisons, checked addition, subtraction and multiplication, and one
   capability-authorized `print_int` event, with terminating, trapping and divergent behaviours. Other
-  widths, casts, division, shifts, recursion and further loop forms are later V1 increments.
+  widths, casts, division, shifts, recursion and further loop forms are later V1 increments. R-0511's
+  [V1a target programs](#task-r-0511) are the named instances of this subset and V1a's regression set;
+  they do not widen it.
   **Independently checked artifact:** the Lean proof of checked Core → BIR refinement for that subset
   and its retained artifacts with a minimal canonical task identity, replayed by the independent
   retained-artifact consumer
@@ -2447,7 +2460,49 @@ pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084
 name-binding controls detect 081 – 082; evidence and cross-surface controls detect 083 and 089;
 checker mutants detect 090 – 094; the binary leg detects 095. Each assigned control fails at its
 pre-fix SHA and passes at its fix; generated features have pinned minimum completed-comparison
-counts; missing inventory entries fail.
+counts; missing inventory entries fail. The adversarial example suite below passes every leg (exit 2c).
+
+**Adversarial example suite (exit 2c; 2026-10-20; planned).** Phase 7's workloads (`base64_cli`,
+`png_chunks`, `wordfreq`, `httpget`, `tcpserve`) and interpreter-vs-compiled probing found many of the
+compiler's wrong-code bugs; generated programs are bounded by their grammar. This suite writes small
+hand-targeted programs for each current bug class, under `examples/adversarial/`:
+
+| example | exercises | classes |
+|---|---|---|
+| `linear_flow` | linear handles moved, consumed and destroyed across `if`/`else` and `match` arms, early `return` from inside loops and branches, `break`/`continue` with a live handle, consume-then-exit; rejection legs for a handle leaked on one arm and one moved by a match guard | 078, 087, 090, 093, 101 |
+| `generic_destroy` | generic `Destroy` through trait bounds and impls, collections of arrays and of generic structs, nested composition; a rejection leg for an impl's capability hidden behind generic dispatch | 052, 091, 099, 100 |
+| `nested_names` | same-named types, functions and methods in nested and sibling modules and against generated specialization names, type-argument arity, relative calls into a nested submodule (its leg asserts today's refusal until 077 is fixed) | 054, 073, 077, 096 – 098 |
+| `import_aliases` | function, type, method and sibling-module aliases, an alias against a same-named local definition, alias order, colliding aliases rejected | 039, 055, 069, 082, the E0264 aliased-method case |
+| `casts_widths` | every cast width pair (narrowing, widening, sign change) at boundary values, literals at each type's minimum and maximum, checked negation; claims on cast functions | 053, 080, 088 |
+| `mut_receivers` | `&mut self` methods called through `&mut` parameters, struct fields and array elements and in both arms of a branch, with the mutation observed afterwards | 018, 019, 031, 034 |
+| `match_and_fnptrs` | match guards with effects, renamed and positional binders, function pointers reassigned across branches and read from struct fields, with their capabilities | 056, 063, 066, 084, 090 |
+| `statement_sequencing` | discarded `expr;`, `let` after assignment, loop-step sequencing, branch-local `let`, `if` without `else` falling through; claims on each shape | 085, 086, 101 |
+
+Each example has its own leg in `scripts/tests/check_adversarial_examples.sh` (new, in the full gate
+set): the interpreter's output and exit status, the native binary's and a checked-in expected result
+must agree; a rejection leg asserts its diagnostic code; where the example carries claims, its leg also
+runs `--report model-diff` on the claimed functions and asserts each claim's status. The gate fails on a
+missing example or leg, and a perturbed expected result must fail its leg (positive control). The
+evidence and report bugs of 052 – 101 (058 – 062, 064, 065, 067, 068, 070, 075, 076, 079, 081, 083, 089)
+and the process and package bugs (071, 072, 074) keep their own controls under 2b and the detection map
+above; 057 and 092 keep theirs in the collection and 2i gates. A defect an example newly reproduces is a
+reproducer: it enters the queue under the [entry rule](#the-current-execution-queue), as a new row-0
+exit when it is an authority or safety defect, and the example keeps its leg as that defect's gate.
+
+**Scaled differential campaigns (2026-10-20; planned).** The nightly `fuzz-campaign` job in
+`.github/workflows/lean_action_ci.yml` runs `fuzz_differential.py` at 2,000 depth-3 and 500 depth-4
+programs and `fuzz_linearity.py` at 400 per date-derived seed (R-0272's seed rotation, merged here).
+Once the third side exists, the same generators compare interpreter, native binary and proof model
+(model-diff on generated claimed functions) at campaign scale: at least a hundred times the nightly
+counts per campaign, sharded by seed range. This CPU-bound work runs first on short-lived remote build
+servers once they are available (R-0513 owns the remote runner infrastructure); no provider
+credentials live in the repository, and the GitHub nightly keeps its current counts meanwhile. Each
+campaign records its commit SHA, toolchain, seed ranges, outcome classification and per-feature
+completed comparisons against exit 2e's minima; failures are minimized automatically and checked in as
+reproducers, which enter the queue under the entry rule. This campaign is not part of exit 2c's
+acceptance and no deliverable waits for it; it is accepted when one campaign at that scale completes
+with every outcome classified and every per-feature minimum met, and recurs before each release
+candidate with the hunts above.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -3088,6 +3143,29 @@ to its binary; the closure re-checked by con-leche and nanoda and bound to the e
 V1 is described as source-to-native only once its frontend correspondence is proved; until then the
 published theorem states that it starts at `CheckedCore`. An outside expert's review of Core's V1
 semantics and the design examples is recorded.
+
+**V1a target programs (2026-10-20; planned).** Small programs inside V1a's scalar subset as the
+[plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) defines it, each with
+`#[proof_by]` claims proved through today's evidence pipeline, under `examples/v1a/`:
+
+- `sum_to`: an `i64` loop with a structured exit accumulating with checked `+` and printing its result
+  through `print_int`; a claim relates the result to a Lean reference function.
+- `max3`: `bool` conditions, comparisons and non-recursive direct calls; a claim that the result is one
+  of the arguments and no smaller than any.
+- `checked_trap`: checked `*` and `-` on `i64` and `u64` reaching overflow and underflow; the trapping
+  behaviour is asserted, with a claim on the non-trapping inputs.
+- `counter_u64`: `u64` locals and assignment in a loop with comparisons; a claim on the final value.
+- `diverge`: a loop with no exit after a `print_int` prefix; the divergent behaviour is asserted as that
+  prefix with no termination within a fixed bound, and it carries no claim.
+
+`scripts/tests/check_v1a_targets.sh` (new, in the full gate set) gives each program a leg: interpreter
+and native output and exit status agree with a checked-in expected result; `--report model-diff`
+agrees on every claimed function and each claim reads proved; and a subset check fails when a program
+steps outside V1a's subset (another width, a cast, division, a shift, recursion, another loop form, an
+aggregate or a reference). Once V1a's pipeline exists these programs are its acceptance programs and its
+regression set: each compiles from checked Core to BIR and its BIR behaviour matches the recorded one.
+They add nothing to V1a's theorem: its scope stays the subset the plan defines, and their claims are
+candidates for this task's one transported claim, not new theorem statements.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -10430,6 +10508,32 @@ as applicable. R-0352/R-0354 reuse this consumer for distribution acceptance.
 Report the scope as each slice becomes usable. The first consumer supplies
 engineering feedback; it does not close the four-adapter checkpoint or prove
 foreign behavior. Broader package work grows from the observed requirements.
+
+**Companion FFI and resource examples (2026-10-20; planned).** Four examples exercise linear handles
+and exit 2i's rules (no reference stored in an aggregate, no block `let` shadowing a visible name) at
+the foreign boundary, each with its own leg in `scripts/tests/check_ffi_companions.sh` (new, in the full
+gate set):
+
+- `examples/ffi_file_handle`: a linear file handle wrapping the C `open`/`read`/`write`/`close` calls,
+  consumed by a `close` that returns its `Result`; a written file is read back, and a missing path
+  returns a typed error.
+- `examples/ffi_callback_context`: a small vendored C library that stores a callback and its context
+  pointer and calls them later; the registration is a linear handle whose release unregisters it, and
+  the context outlives the registration (the binding contract's callback retention).
+- `examples/ffi_resource_pool`: a fixed-capacity pool of foreign handles checked out and returned as
+  linear values; exhaustion returns a typed error, and shutdown releases every handle exactly once.
+- `examples/ffi_error_release`: a multi-step acquisition (two foreign handles and a foreign buffer)
+  in which every step can fail on request; every failure path releases exactly what was acquired.
+
+Each leg compares the native output with a checked-in expected result, and the interpreter's where it
+supports the foreign calls (otherwise the leg records that it is native-only); the foreign side counts
+acquisitions and releases, and the leg asserts one release per handle on every path. Compile-fail
+fixtures per example stay rejected: a handle not released on one error path, a handle used after
+release, a reference stored in a handle aggregate, a block `let` shadowing a live handle, and a
+registration released while its context is still borrowed. The examples use today's explicit foreign
+declarations and move to generated bindings when this task's workflow covers them. They are
+companions accepted with or after RocksDB slice 1, not prerequisites of it; their 2i rejection
+fixtures join when exit 2i lands.
 
 **Failure and resource contract (2026-10-18; planned):** for each selected
 fallible operation, state what success and each recoverable error mean for
