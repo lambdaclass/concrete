@@ -8,8 +8,9 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            token. A longer name (<dir>.backup, main.con.disabled,
                            another file under <dir>) or a top-level directory plus a
                            common word does not count.
-  runs <owner> <workflow>  some INLINE `run:` command of the workflow INVOKES the
-                           owner (block scalars are not read; see run_commands): after shell comments are stripped and
+  runs <owner> <workflow>  some INLINE `run:` value of the workflow is exactly one
+                           simple command invoking the owner (block scalars are not
+                           read; see run_commands and invoked_scripts): after shell comments are stripped and
                            the command is split on UNQUOTED ; && || | ( ), the owner
                            is the executable of a simple command, or the script
                            operand of bash/sh/python3, after optional VAR=value
@@ -49,20 +50,29 @@ def strip_shell_comment(line):
 def run_commands(path):
     """The shell text of every INLINE `run:` value (`run: <command>` on one line).
 
-    Block scalars (`run: |`) are deliberately ignored: their lines share quote,
-    heredoc and continuation state across newlines, and reading them line by line
-    took printed text (a heredoc body, a multi-line echo) for commands. An owner
-    must therefore be invoked by an inline `run:` -- fail-closed, and every CI
-    owner today is spelled that way."""
-    cmds = []
-    for line in open(path).read().split("\n"):
+    Block scalars of ANY key (`run: |`, `script: >-`, ...) are skipped together with
+    their bodies, so a heredoc or quoted text that happens to contain "run: ..."
+    is never read as a key. Block-style `run:` values are not read at all: their
+    lines share quote, heredoc and continuation state, and reading them line by
+    line took printed text for commands. An owner must therefore be invoked by an
+    inline `run:` -- fail-closed, and every CI owner today is spelled that way."""
+    lines = open(path).read().split("\n")
+    cmds, i = [], 0
+    block = re.compile(r"^(\s*(?:-\s+)?)[^\s#:][^:]*:\s*[|>][-+0-9]*\s*(#.*)?$")
+    while i < len(lines):
+        line = lines[i]
+        b = block.match(line)
+        if b:
+            col = len(b.group(1))
+            i += 1
+            while i < len(lines) and (not lines[i].strip()
+                                      or len(lines[i]) - len(lines[i].lstrip()) > col):
+                i += 1
+            continue
         m = re.match(r"^\s*(?:-\s+)?run:\s*(.*)$", line)
-        if not m:
-            continue
-        rest = m.group(1)
-        if rest.strip()[:1] in ("|", ">", ""):
-            continue
-        cmds.append(strip_shell_comment(rest))
+        if m and m.group(1).strip():
+            cmds.append(strip_shell_comment(m.group(1)))
+        i += 1
     return cmds
 
 
@@ -130,29 +140,55 @@ def interpreter_script(name, args):
 
 
 def invoked_scripts(command):
-    found = []
-    for words in simple_commands(command):
-        k = 0
-        while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
+    """The script an inline run: value invokes, when the WHOLE value is one simple
+    command: [VAR=value ...] [env [VAR=value ...]] [timeout N] <script> [args...]
+    or the same with bash/sh/python3 [options] <script> [args...]. Any unquoted
+    operator (; & | ( ) -- a list, a pipeline, a subshell, a function, a
+    redirection like 2>&1) makes it not count: execution context such as
+    `true || <owner>` is not modelled, so it is refused."""
+    pieces = list(simple_commands(command))
+    if len(pieces) != 1 or re.search(r"[;&|()]", unquoted_text(command)):
+        return []
+    words = pieces[0]
+    k = 0
+    while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
+        k += 1
+    while k < len(words):
+        if words[k] == "env":
             k += 1
-        while k < len(words):
-            if words[k] == "env":
+            while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
                 k += 1
-                while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
-                    k += 1
-            elif words[k] == "timeout" and k + 1 < len(words):
-                k += 2
-            else:
-                break
-        if k >= len(words):
-            continue
-        if words[k] in ("bash", "sh", "python3"):
-            script = interpreter_script(words[k], words[k + 1:])
-            if script is not None:
-                found.append(norm(script))
+        elif words[k] == "timeout" and k + 1 < len(words):
+            k += 2
         else:
-            found.append(norm(words[k]))
-    return found
+            break
+    if k >= len(words):
+        return []
+    if words[k] in ("bash", "sh", "python3"):
+        script = interpreter_script(words[k], words[k + 1:])
+        return [norm(script)] if script is not None else []
+    return [norm(words[k])]
+
+
+def unquoted_text(command):
+    """The command with quoted and escaped characters removed."""
+    out, quote, i = [], None, 0
+    while i < len(command):
+        c = command[i]
+        if quote == "'":
+            if c == "'":
+                quote = None
+        elif c == "\\":
+            i += 1
+        elif quote == '"':
+            if c == '"':
+                quote = None
+        elif c in "'\"":
+            quote = c
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def main(argv):

@@ -405,8 +405,15 @@ PY
   unit_control runs_quoted_standalone_separator 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: echo \\; bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_escaped_standalone_separator 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  # Compound commands are refused outright: their execution context is not modelled.
   printf 'jobs:\n  a:\n    steps:\n      - run: echo start; bash %s\n' "$real_owner" > "$fwf"
-  unit_control runs_unquoted_separator 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  unit_control runs_list_refused 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: true || bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_short_circuit_refused 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: unused() (bash %s)\n' "$real_owner" > "$fwf"
+  unit_control runs_function_body_refused 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: |\n          cat <<EOF\n          run: bash %s\n          EOF\n' "$real_owner" > "$fwf"
+  unit_control runs_key_inside_block 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash -n %s\n' "$real_owner" > "$fwf"
   unit_control runs_syntax_check 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash -en %s\n' "$real_owner" > "$fwf"
@@ -415,7 +422,7 @@ PY
   unit_control runs_o_noexec 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash -c true %s\n' "$real_owner" > "$fwf"
   unit_control runs_command_string 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
-  printf 'jobs:\n  a:\n    steps:\n      - run: X=1 timeout 60 bash -e ./%s 2>&1 | tee log\n' "$real_owner" > "$fwf"
+  printf 'jobs:\n  a:\n    steps:\n      - run: X=1 timeout 60 bash -e ./%s arg\n' "$real_owner" > "$fwf"
   unit_control runs_prefixed_invocation 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
 
   # The owner is mentioned in the workflow only inside a comment: it runs nothing.
