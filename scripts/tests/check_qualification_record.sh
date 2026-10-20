@@ -56,6 +56,56 @@ _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/wf_nocount.yml" >/dev/
 sed 's/^    name: SSA test suite$/    name: SSA test suite ${{ matrix.x }}/' "$WF" > "$TMP/wf_matrix.yml"
 _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/wf_matrix.yml" >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] && ok "a matrix job without a known size refuses (exit 2)" || no "an unknown matrix job: exit $_rc"
+# Valid YAML the line parser could misread must refuse, never drop a step.
+python3 -I - "$WF" "$TMP" <<'PY'
+import re, sys
+wf, tmp = sys.argv[1], sys.argv[2]
+s = open(wf, encoding="utf-8").read()
+lines = s.split("\n")
+# ssa-tests' steps reindented two spaces deeper (same YAML meaning).
+out, inside, insteps = [], False, False
+for ln in lines:
+    if re.match(r"^  [A-Za-z0-9_-]+:", ln):
+        inside = ln.startswith("  ssa-tests:"); insteps = False
+    elif inside and ln.startswith("    steps:"):
+        insteps = True; out.append(ln); continue
+    elif inside and re.match(r"^    \S", ln):
+        insteps = False
+    out.append(("  " + ln) if (inside and insteps and ln.strip()) else ln)
+open(tmp + "/wf_reindent.yml", "w").write("\n".join(out))
+def one(old, new, name):
+    assert s.count(old) >= 1, name
+    open(tmp + "/" + name, "w").write(s.replace(old, new, 1))
+one("      - name: Run SSA test suite", '      - "name": Run SSA test suite', "wf_quoted.yml")
+one("      - name: Run SSA test suite", "      - name: &ssa Run SSA test suite", "wf_anchor.yml")
+one("      - name: Run SSA test suite\n", "      - run: echo unnamed\n\n      - name: Run SSA test suite\n", "wf_unnamed.yml")
+one("      - name: Run SSA test suite\n", "      - name: Install clang\n        run: true\n\n      - name: Run SSA test suite\n", "wf_dupstep.yml")
+PY
+for c in wf_reindent wf_quoted wf_anchor wf_unnamed wf_dupstep; do
+  _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" >/dev/null 2>&1 || _rc=$?
+  [ "$_rc" = 2 ] && ok "$c refuses (exit 2)" || no "$c: exit $_rc, expected a refusal"
+done
+# Cross-check against a structural YAML parse where PyYAML exists (it does on developer machines;
+# the strict refusals above are the guarantee where it does not).
+if python3 -I -c 'import yaml' 2>/dev/null; then
+  python3 -I - "$WF" > "$TMP/req_yaml" <<'PY'
+import sys, yaml
+w = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+for jid, j in w["jobs"].items():
+    for st in j.get("steps", []):
+        if "if" in st or str(st.get("continue-on-error", "false")).lower() not in ("false",):
+            if not (jid == "multi-kernel" and str(st.get("name", "")).startswith("Multi-kernel mutation coverage")):
+                continue
+        name = st.get("name") or ("Run " + st["uses"] if "uses" in st else None)
+        print(f"{jid}\t{name}")
+PY
+  awk -F'\t' '$1=="step"{print $2"\t"$3}' "$TMP/req" | sort > "$TMP/req_steps"
+  sort "$TMP/req_yaml" > "$TMP/req_yaml_sorted"
+  cmp -s "$TMP/req_steps" "$TMP/req_yaml_sorted" && ok "required steps equal a structural YAML parse ($(grep -c . "$TMP/req_steps") steps)" \
+    || no "required steps differ from a structural YAML parse"
+else
+  echo "  note PyYAML absent: the structural cross-check did not run (not counted as a pass)"
+fi
 printf 'jobs:\n  a:\n    name: A\n' > "$TMP/tiny.yml"
 _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/tiny.yml" >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] && ok "a vacuous workflow parse refuses (exit 2)" || no "a vacuous workflow parse: exit $_rc"
@@ -77,7 +127,7 @@ for kind, jid, name in rows:
     jobs.append({"name": name, "status": "completed", "conclusion": "success", "_id": jid,
                  "steps": [{"name": "Set up job", "status": "completed", "conclusion": "success"}]
                           + [{"name": s, "status": "completed", "conclusion": "success"} for s in steps.get(jid, [])]})
-run = {"databaseId": 42, "headSha": sha, "event": "workflow_dispatch", "status": "completed",
+run = {"attempt": 1, "databaseId": 42, "headSha": sha, "event": "workflow_dispatch", "status": "completed",
        "conclusion": "success", "jobs": jobs}
 def job(jid):
     return [j for j in jobs if j["_id"] == jid]
@@ -124,6 +174,24 @@ elif v == "gate-step-skipped":
     step("ssa-tests", "Run SSA test suite")["conclusion"] = "skipped"
 elif v == "gate-step-failed":
     step("ssa-tests", "Run SSA test suite")["conclusion"] = "failure"
+elif v == "push-event":
+    run["event"] = "push"
+elif v == "rerun-attempt":
+    run["attempt"] = 2
+elif v == "duplicate-step":
+    j = job("ssa-tests")[0]; j["steps"].append(dict(step("ssa-tests", "Run SSA test suite")))
+elif v == "step-status-absent":
+    for j in jobs:
+        for st in j["steps"]:
+            st.pop("status", None)
+elif v == "step-status-null":
+    step("ssa-tests", "Run SSA test suite")["status"] = None
+elif v == "step-status-empty":
+    step("ssa-tests", "Run SSA test suite")["status"] = ""
+elif v == "split-first-half":
+    run["jobs"] = jobs[: len(jobs) // 2]
+elif v == "split-second-half":
+    run["jobs"] = jobs[len(jobs) // 2 :]
 elif v == "no-steps":
     for j in jobs:
         j["steps"] = []
@@ -163,7 +231,8 @@ grep -q '^component=mutation-aggregate qualified=1' "$TMP/out" && ok "the mutati
 echo "=== negative controls: each must not qualify ==="
 for v in cancelled failed-fuzz skipped missing no-shards one-shard-missing only-first-shard duplicate-shard \
          unexpected-shard shard-failed other-sha in-progress run-cancelled job-in-progress step-skipped \
-         gate-step-omitted gate-step-skipped gate-step-failed no-steps only-mutation; do
+         gate-step-omitted gate-step-skipped gate-step-failed no-steps only-mutation push-event rerun-attempt \
+         duplicate-step step-status-absent step-status-null step-status-empty split-first-half split-second-half; do
   mk "$v" "$TMP/$v.json"
   verdict 1 "$v: not qualified" "$TMP/$v.json"
 done
@@ -171,10 +240,13 @@ done
 python3 -I "$REC" --candidate "$SHA" --workflow "$WF" --run-json "$TMP/only-mutation.json" > "$TMP/out" 2>&1 || true
 grep -q '^component=mutation-aggregate qualified=1' "$TMP/out" && grep -q '^verdict=not-qualified$' "$TMP/out" \
   && ok "mutation qualified=1 alone does not qualify" || no "mutation qualified=1 alone decided the verdict"
-# A failure at the candidate is not hidden by a successful rerun supplied alongside it.
-verdict 1 "a cancelled job plus a successful run at the same SHA: not qualified" "$TMP/cancelled.json" "$TMP/honest.json"
-# Combining runs never imports a run at another SHA.
-verdict 1 "an honest run plus a run at another SHA: not qualified" "$TMP/honest.json" "$TMP/other-sha.json"
+# Partial runs are never combined: two records, even two halves of one complete run, refuse.
+_rc=0; python3 -I "$REC" --candidate "$SHA" --workflow "$WF" --run-json "$TMP/split-first-half.json" \
+  --run-json "$TMP/split-second-half.json" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 2 ] && ok "two partial runs that together cover every job: refused (exit 2)" || no "two partial runs: exit $_rc"
+_rc=0; python3 -I "$REC" --candidate "$SHA" --workflow "$WF" --run-json "$TMP/cancelled.json" \
+  --run-json "$TMP/honest.json" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 2 ] && ok "a failed run plus a successful rerun: refused (exit 2)" || no "a failed run plus a rerun: exit $_rc"
 
 echo "=== input errors are refusals (exit 2), never a verdict ==="
 _rc=0; python3 -I "$REC" --candidate "$SHA" --workflow "$WF" >/dev/null 2>&1 || _rc=$?

@@ -15,13 +15,13 @@ size comes from the workflow (MATRIX_SIZES names where), every instance 1..N mus
 once per run and succeed, and an unexpected instance refuses. The parser refuses any job header or
 matrix it does not understand rather than dropping it.
 
-Inputs: GitHub run records, fetched (`--run ID`, via `gh run view`) or read (`--run-json FILE`, the
-same JSON: databaseId, headSha, event, status, conclusion, jobs[].name/status/conclusion,
-jobs[].steps[].name/status/conclusion). THE SUPPORTED PATH IS ONE DISPATCHED RUN (`workflow_dispatch`
-starts every job). Several runs may be supplied, but each must be completed, successful and at the
-candidate SHA, and every instance of a required job in any of them must succeed, so a failure at the
-candidate is never hidden behind a successful rerun; scheduled runs, which skip each other's jobs,
-therefore cannot be combined into a qualification.
+Input: exactly ONE GitHub run record, fetched (`--run ID`, via `gh run view`) or read (`--run-json
+FILE`, the same JSON: attempt, databaseId, headSha, event, status, conclusion,
+jobs[].name/status/conclusion, jobs[].steps[].name/status/conclusion). It must be the first attempt of
+a `workflow_dispatch` run (the only event that starts every job; scheduled runs skip each other's
+jobs, and a rerun can hide a failure at the candidate), completed and successful at the candidate
+SHA, with every required job instance exactly once and every required step exactly once, completed
+and successful. Partial runs are never combined.
 
 A local closure-mode summary (run_ci_gates_local.sh) cannot qualify: it excludes the CI-only jobs,
 so it is not accepted here.
@@ -53,8 +53,11 @@ def die(msg):
 
 
 def scalar(v):
-    """A YAML plain or quoted scalar on one line, without a trailing comment."""
+    """A YAML plain or quoted scalar on one line, without a trailing comment. Anchors, aliases and
+    block scalars are refused: the parser does not resolve them."""
     v = v.strip()
+    if v[:1] in ("&", "*", "|", ">", "{", "["):
+        die(f"unsupported YAML value (anchor, alias, block or flow scalar): {v}")
     if v[:1] in ("'", '"'):
         q = v[0]
         end = v.find(q, 1)
@@ -64,12 +67,19 @@ def scalar(v):
     return re.sub(r"\s+#.*$", "", v).strip()
 
 
+KEY = r"[A-Za-z_][A-Za-z0-9_-]*"
+
+
 def parse_workflow(path):
+    """Jobs of the workflow in its canonical layout: job ids at indent 2, job keys at 4, steps as a
+    list at indent 6 with step keys at 8. Anything else under `jobs:` that could change the meaning
+    (a job or step key at another indentation, a quoted or merge key, an anchor or alias in a name,
+    an unnamed `run:` step) REFUSES with exit 2 rather than being read as fewer jobs or steps."""
     try:
         lines = open(path, encoding="utf-8").read().splitlines()
     except OSError as e:
         die(f"cannot read workflow {path}: {e}")
-    jobs, in_jobs, job, step = [], False, None, None
+    jobs, in_jobs, job, step, in_steps = [], False, None, None, False
     for ln in lines:
         if re.match(r"^jobs:\s*(#.*)?$", ln):
             in_jobs = True
@@ -80,47 +90,81 @@ def parse_workflow(path):
             in_jobs = False
             continue
         indent = len(ln) - len(ln.lstrip(" "))
+        if "\t" in ln[:indent + 1]:
+            die(f"tab indentation under jobs: {ln.strip()}")
         if indent == 2:
-            m = re.match(r"^  ([A-Za-z0-9_-]+):\s*(#.*)?$", ln)
+            m = re.match(r"^  (" + KEY + r"):\s*(#.*)?$", ln)
             if not m:
                 die(f"unsupported job header (not 'id:' on its own line): {ln.strip()}")
-            job = {"id": m.group(1), "name": None, "env": {}, "steps": []}
+            job = {"id": m.group(1), "name": None, "env": {}, "steps": [], "has_steps": False}
             jobs.append(job)
-            step = None
+            step, in_steps = None, False
             continue
-        if job is None:
+        if job is None or indent < 2:
             die(f"content under jobs: before any job header: {ln.strip()}")
+        if indent == 3:
+            die(f"unsupported indentation under job {job['id']}: {ln.strip()}")
         if indent == 4:
-            step = None
-            m = re.match(r"^    name:\s*(.+)$", ln)
-            if m:
-                job["name"] = scalar(m.group(1))
+            m = re.match(r"^    (" + KEY + r"):\s*(.*)$", ln)
+            if not m or m.group(1) == "<<":
+                die(f"unsupported key in job {job['id']}: {ln.strip()}")
+            step, in_steps = None, (m.group(1) == "steps")
+            if in_steps:
+                job["has_steps"] = True
+                if m.group(2).strip() and not m.group(2).strip().startswith("#"):
+                    die(f"job {job['id']}: steps must be a block list")
+            if m.group(1) == "name":
+                job["name"] = scalar(m.group(2))
             continue
-        m = re.match(r"^      ([A-Z_][A-Z0-9_]*):\s*(.+)$", ln)
-        if m and step is None:
-            job["env"][m.group(1)] = scalar(m.group(2))
+        if not in_steps:
+            m = re.match(r"^      (" + KEY + r"):\s*(.+)$", ln)
+            if m and re.fullmatch(r"[A-Z_][A-Z0-9_]*", m.group(1)):
+                job["env"][m.group(1)] = scalar(m.group(2))
             continue
-        m = re.match(r"^      - (.*)$", ln)
-        if m:
-            step = {"name": None, "optional": False}
+        # inside steps:
+        if indent < 6 or indent == 7:
+            die(f"job {job['id']}: step content at unsupported indentation: {ln.strip()}")
+        if indent == 6:
+            m = re.match(r"^      - (" + KEY + r"):\s*(.*)$", ln)
+            if not m:
+                die(f"job {job['id']}: a step must start '- key:' at indent 6: {ln.strip()}")
+            step = {"name": None, "optional": False, "uses": None, "run": False}
             job["steps"].append(step)
-            rest = m.group(1)
-            m2 = re.match(r"^name:\s*(.+)$", rest)
-            if m2:
-                step["name"] = scalar(m2.group(1))
-            elif re.match(r"^(if|continue-on-error):", rest):
-                step["optional"] = True
-            continue
-        if step is not None and indent == 8:
-            m = re.match(r"^        (name|if|continue-on-error):\s*(.+)$", ln)
-            if m and m.group(1) == "name":
-                step["name"] = scalar(m.group(2))
-            elif m and m.group(1) == "if":
-                step["optional"] = True
-            elif m and m.group(1) == "continue-on-error" and scalar(m.group(2)) != "false":
-                step["optional"] = True
+            key, val = m.group(1), m.group(2)
+        elif indent == 8:
+            if step is None:
+                die(f"job {job['id']}: step key outside a step: {ln.strip()}")
+            m = re.match(r"^        (" + KEY + r"):\s*(.*)$", ln)
+            if not m:
+                die(f"job {job['id']}: unsupported step line at indent 8: {ln.strip()}")
+            key, val = m.group(1), m.group(2)
+        else:
+            continue  # a value's own content (with:, env:, a run: block)
+        if key == "name":
+            step["name"] = scalar(val)
+        elif key == "if":
+            step["optional"] = True
+        elif key == "continue-on-error" and scalar(val) != "false":
+            step["optional"] = True
+        elif key == "uses":
+            step["uses"] = scalar(val)
+        elif key == "run":
+            step["run"] = True
     if len(jobs) < MIN_JOBS:
         die(f"workflow parse found {len(jobs)} jobs (< {MIN_JOBS}); refusing a vacuous requirement set")
+    for jb in jobs:
+        if not jb["has_steps"] or not jb["steps"]:
+            die(f"job {jb['id']} has no steps list the parser understands")
+        for st in jb["steps"]:
+            if st["name"] is None:
+                if st["uses"]:
+                    st["name"] = "Run " + st["uses"]  # GitHub's display name for an unnamed action
+                elif not st["optional"]:
+                    die(f"job {jb['id']}: an unconditional unnamed run step has no derivable name")
+        names = [st["name"] for st in jb["steps"] if st["name"]]
+        dup = sorted({n for n in names if names.count(n) > 1})
+        if dup:
+            die(f"job {jb['id']}: duplicate step names {dup}; a step result could not be told apart")
     return jobs
 
 
@@ -168,7 +212,7 @@ def load_runs(args):
         try:
             raw = subprocess.run(
                 ["gh", "run", "view", str(rid), "--json",
-                 "databaseId,headSha,event,status,conclusion,jobs"],
+                 "attempt,databaseId,headSha,event,status,conclusion,jobs"],
                 check=True, capture_output=True, text=True).stdout
         except (OSError, subprocess.CalledProcessError) as e:
             die(f"gh run view {rid} failed: {e}")
@@ -178,8 +222,9 @@ def load_runs(args):
             runs.append((f, open(f, encoding="utf-8").read()))
         except OSError as e:
             die(f"cannot read {f}: {e}")
-    if not runs:
-        die("no run given (--run ID or --run-json FILE)")
+    if len(runs) != 1:
+        die(f"exactly one run record is required, got {len(runs)}: qualification is one complete "
+            "dispatched run, never a combination of partial runs")
     parsed = []
     for src, raw in runs:
         try:
@@ -226,6 +271,12 @@ def main():
             reasons.append(f"run {rid} is not completed (status={r.get('status')})")
         if r.get("conclusion") != "success":
             reasons.append(f"run {rid} concluded {r.get('conclusion') or 'nothing'}, not success")
+        if r.get("event") != "workflow_dispatch":
+            reasons.append(f"run {rid} is a {r.get('event') or 'unknown'} run; only a workflow_dispatch "
+                           "run starts every required job")
+        if r.get("attempt") != 1:
+            reasons.append(f"run {rid} is attempt {r.get('attempt')}; a rerun can hide a failure at the "
+                           "candidate, so only a first attempt qualifies")
 
     for jid, names, steps in req:
         prefix = names[0][:-1] if jid in MATRIX_SIZES else None
@@ -258,14 +309,14 @@ def main():
                     got.setdefault(s.get("name"), []).append(s)
                 for sname in steps:
                     ss = got.get(sname, [])
-                    if not ss:
-                        reasons.append(f"required step '{sname}' of '{name}' in run {rid}: missing")
+                    if len(ss) != 1:
+                        reasons.append(f"required step '{sname}' of '{name}' in run {rid}: "
+                                       f"{len(ss)} results, expected exactly one")
                         continue
-                    for s in ss:
-                        sst, sc = s.get("status") or "completed", s.get("conclusion") or "none"
-                        if sst != "completed" or sc != "success":
-                            reasons.append(f"required step '{sname}' of '{name}' in run {rid}: "
-                                           f"status={sst} conclusion={sc}")
+                    sst, sc = ss[0].get("status"), ss[0].get("conclusion")
+                    if sst != "completed" or sc != "success":
+                        reasons.append(f"required step '{sname}' of '{name}' in run {rid}: "
+                                       f"status={sst} conclusion={sc}")
                 if jid in REQUIRED_STEPS:
                     for sname in REQUIRED_STEPS[jid]:
                         ss = got.get(sname, [])
