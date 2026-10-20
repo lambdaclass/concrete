@@ -396,8 +396,8 @@ loops, if-without-else fall-through, discarded `expr;`, shadowing, renamed match
 at 2^63/2^64, every cast width pair). Outcomes classified (value, trap, rejection, unsupported,
 exhaustion, crash), never skipped. model-diff for zero-argument, `bool` and aggregate signatures
 plus a binary leg, with a pinned claimed-function inventory. The four 2026-10-18 hunts and the
-checker hunt run before every release candidate. A hand-written adversarial example suite, one gate
-leg per current bug class, and scaled interpreter/native/model campaigns are scheduled under R-0491 in
+checker hunt run before every release candidate. A hand-written adversarial suite of eight named examples,
+each with its own gate leg, and scaled interpreter/native/model campaigns are scheduled under R-0491 in
 the [roadmap](../../ROADMAP.md#task-r-0491).
 **Exit:** each of 080 – 095 has a checked-in bug record, reproducer, expected outcome and
 pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084 – 088;

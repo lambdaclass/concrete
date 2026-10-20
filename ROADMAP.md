@@ -146,7 +146,9 @@ rejection with its diagnostic code, or its claims' statuses); a compile-only man
 count, and there are no ungated demos. New examples are workload-driven and targeted: each serves a bug
 class (R-0491's [adversarial example suite](#task-r-0491)), an upcoming deliverable (the
 [RocksDB slice 1 companions](#task-r-0285), [V1a's target programs](#task-r-0511)) or an application
-workload (R-0490). Other example work follows R-0135's example policy.
+workload (R-0490). All example work follows R-0135's lifecycle and owner policy: user-facing examples
+record their lifecycle and owner, while pure regression and rejection fixtures live in the owning
+test or bug corpus and are invoked by the example's gate.
 
 | order | work | exit before advancing |
 |---|---|---|
@@ -194,7 +196,7 @@ agree with the classes.
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
 | 2b | R-0491 | permanent reproducer controls for 080 – 101: each bug has a checked-in record, reproducer, expected outcome and pre-fix/fixed SHA pair | each assigned control fails at its pre-fix SHA and passes at its fix; `check_bug_filing_complete.sh` and `audit_bug_corpus.sh` fail on a missing inventory entry | continues alongside | the reproducers already block as gate legs under 0a and 0b; this exit proves each one load-bearing |
-| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples target classes whose known defects are repaired under 0a and 0b, and a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
+| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims | continues alongside | prevention without a new reproduced defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
 | 2d | R-0513 | checked inventories replace incidental count pins: every expected claim and comparison is accounted for, exclusions carry reasons, and missing entries, skipped work or unexpected eligibility shrinkage fail | adding a legitimate proved example needs no incidental count edit; controls with a deleted inventory entry, a disabled generator, an empty suite and altered eligibility each fail | continues alongside | gate affordability; no reproduced soundness defect |
 | 2e | R-0513, R-0491 | minimum completed comparisons by semantic feature, with permanent positive and negative controls | every generated feature has a pinned minimum completed-comparison count, and a run below it fails | continues alongside | prevention; no reproduced defect |
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
@@ -2469,23 +2471,33 @@ hand-targeted programs for each current bug class, under `examples/adversarial/`
 
 | example | exercises | classes |
 |---|---|---|
-| `linear_flow` | linear handles moved, consumed and destroyed across `if`/`else` and `match` arms, early `return` from inside loops and branches, `break`/`continue` with a live handle, consume-then-exit; rejection legs for a handle leaked on one arm and one moved by a match guard | 078, 087, 090, 093, 101 |
+| `linear_flow` | linear handles moved, consumed and destroyed across `if`/`else` and `match` arms, early `return` from inside loops and branches, `break`/`continue` with a live handle, consume-then-exit; rejection legs for a handle leaked on one arm and one moved by a match guard | 078, 087, 090, 093 |
 | `generic_destroy` | generic `Destroy` through trait bounds and impls, collections of arrays and of generic structs, nested composition; a rejection leg for an impl's capability hidden behind generic dispatch | 052, 091, 099, 100 |
-| `nested_names` | same-named types, functions and methods in nested and sibling modules and against generated specialization names, type-argument arity, relative calls into a nested submodule (its leg asserts today's refusal until 077 is fixed) | 054, 073, 077, 096 – 098 |
+| `nested_names` | same-named types, functions and methods in nested and sibling modules and against generated specialization names, type-argument arity, relative calls into a nested submodule (its leg asserts today's refusal until 077 is fixed); builtin versus local and imported user-defined `Result` | 054, 070, 073, 077, 096 – 098 |
 | `import_aliases` | function, type, method and sibling-module aliases, an alias against a same-named local definition, alias order, colliding aliases rejected | 039, 055, 069, 082, the E0264 aliased-method case |
 | `casts_widths` | every cast width pair (narrowing, widening, sign change) at boundary values, literals at each type's minimum and maximum, checked negation; claims on cast functions | 053, 080, 088 |
-| `mut_receivers` | `&mut self` methods called through `&mut` parameters, struct fields and array elements and in both arms of a branch, with the mutation observed afterwards | 018, 019, 031, 034 |
+| `mut_receivers` | `&mut self` methods called through `&mut` parameters, struct fields and array elements and in both arms of a branch; stack-array storage mutated through a borrowed raw pointer (018), mutation of an array extracted from a struct field (019), and receiver borrowing on the right of `&&`/`||` (034), with mutations observed afterwards | 018, 019, 031, 034 |
 | `match_and_fnptrs` | match guards with effects, renamed and positional binders, function pointers reassigned across branches and read from struct fields, with their capabilities | 056, 063, 066, 084, 090 |
 | `statement_sequencing` | discarded `expr;`, `let` after assignment, loop-step sequencing, branch-local `let`, `if` without `else` falling through; claims on each shape | 085, 086, 101 |
+
+For cases still unresolved (054, 055, 063, 077 and the E0264 aliased-method case), separate fixtures pin
+the documented collision diagnostic, rejection or containment result until the owning repair lands;
+runnable cases still require interpreter, native and expected agreement. The suite does not make those
+repairs prerequisites of any deliverable. The number-to-shape mappings for 082, 087, 088 and 090 – 100
+are provisional until their checked-in records and reproducers land under 2b, and are reconciled
+against those records before the suite is accepted.
 
 Each example has its own leg in `scripts/tests/check_adversarial_examples.sh` (new, in the full gate
 set): the interpreter's output and exit status, the native binary's and a checked-in expected result
 must agree; a rejection leg asserts its diagnostic code; where the example carries claims, its leg also
 runs `--report model-diff` on the claimed functions and asserts each claim's status. The gate fails on a
 missing example or leg, and a perturbed expected result must fail its leg (positive control). The
-evidence and report bugs of 052 – 101 (058 – 062, 064, 065, 067, 068, 070, 075, 076, 079, 081, 083, 089)
-and the process and package bugs (071, 072, 074) keep their own controls under 2b and the detection map
-above; 057 and 092 keep theirs in the collection and 2i gates. A defect an example newly reproduces is a
+evidence and report cases 058 – 062, 064, 065, 067, 068, 075, 076, 079, 081, 083 and 089 keep their
+existing controls (exit 2b covers only 080 – 101). Capability case 071 keeps
+`check_cross_package_caps.sh` and `check_cap_sibling_module.sh`; runtime case 072 keeps
+`check_spawn_exit.sh`; package-name collision 074 keeps its rejection controls; collection case 057
+keeps its collection controls; 092 keeps the 2i controls; 094 and 095 keep the checker and binary
+controls of the detection map above. A defect an example newly reproduces is a
 reproducer: it enters the queue under the [entry rule](#the-current-execution-queue), as a new row-0
 exit when it is an authority or safety defect, and the example keeps its leg as that defect's gate.
 
@@ -3145,8 +3157,9 @@ published theorem states that it starts at `CheckedCore`. An outside expert's re
 semantics and the design examples is recorded.
 
 **V1a target programs (2026-10-20; planned).** Small programs inside V1a's scalar subset as the
-[plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) defines it, each with
-`#[proof_by]` claims proved through today's evidence pipeline, under `examples/v1a/`:
+[plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) defines it, under
+`examples/v1a/`, with `#[proof_by]` claims proved through today's evidence pipeline on the four
+non-divergent targets:
 
 - `sum_to`: an `i64` loop with a structured exit accumulating with checked `+` and printing its result
   through `print_int`; a claim relates the result to a Lean reference function.
@@ -3155,11 +3168,13 @@ semantics and the design examples is recorded.
 - `checked_trap`: checked `*` and `-` on `i64` and `u64` reaching overflow and underflow; the trapping
   behaviour is asserted, with a claim on the non-trapping inputs.
 - `counter_u64`: `u64` locals and assignment in a loop with comparisons; a claim on the final value.
-- `diverge`: a loop with no exit after a `print_int` prefix; the divergent behaviour is asserted as that
-  prefix with no termination within a fixed bound, and it carries no claim.
+- `diverge`: a loop with no exit after a `print_int` prefix; its regression leg checks the prefix and
+  nontermination within a fixed bound, recording exhaustion rather than claiming that this finite
+  observation proves divergence; it carries no claim.
 
-`scripts/tests/check_v1a_targets.sh` (new, in the full gate set) gives each program a leg: interpreter
-and native output and exit status agree with a checked-in expected result; `--report model-diff`
+`scripts/tests/check_v1a_targets.sh` (new, in the full gate set) gives each program a leg: terminating
+and trapping runs compare interpreter and native output and normalized outcomes with a checked-in
+expected result, and `diverge` uses the bounded prefix and exhaustion check above; `--report model-diff`
 agrees on every claimed function and each claim reads proved; and a subset check fails when a program
 steps outside V1a's subset (another width, a cast, division, a shift, recursion, another loop form, an
 aggregate or a reference). Once V1a's pipeline exists these programs are its acceptance programs and its
@@ -10530,7 +10545,7 @@ supports the foreign calls (otherwise the leg records that it is native-only); t
 acquisitions and releases, and the leg asserts one release per handle on every path. Compile-fail
 fixtures per example stay rejected: a handle not released on one error path, a handle used after
 release, a reference stored in a handle aggregate, a block `let` shadowing a live handle, and a
-registration released while its context is still borrowed. The examples use today's explicit foreign
+context destroyed while its callback registration remains active. The examples use today's explicit foreign
 declarations and move to generated bindings when this task's workflow covers them. They are
 companions accepted with or after RocksDB slice 1, not prerequisites of it; their 2i rejection
 fixtures join when exit 2i lands.
