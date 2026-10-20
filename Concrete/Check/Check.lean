@@ -114,20 +114,24 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
   match ty with
   | .ref _ | .refMut _ =>
     let subject := s!"what reference '{name}' borrows"
-    let (src?, parent?) : Option String × Option String ← match ← normRef value with
-      | .place p => pure (p.root, p.viaRef)
-      | .temp => pure (none, none)
+    let (src?, parent?, path, exact) : Option String × Option String × List String × Bool ←
+      match ← normRef value with
+      | .place p => pure (p.root, p.viaRef, p.steps, p.exact)
+      | .temp => pure (none, none, [], false)
       | .reject why => throwCheck (.untraceablePlace subject why) span
     let current := ((← getEnv).vars.lookup name).bind (·.borrowedFrom)
     let newSrc : Option String := match src? with
       | some s => if s != name then some s else current
       | none => none
-    if reassign && newSrc != current then
+    let curPath := ((← getEnv).vars.lookup name).map (fun i => (i.borrowedPath, i.borrowedExact))
+    if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
       throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span
     let parent := match parent? with | some q => if q != name then some q else none | none => none
     modify fun env =>
       { env with vars := env.vars.map fun (n, info) =>
-          if n == name then (n, { info with borrowedFrom := newSrc, refParent := parent }) else (n, info) }
+          if n == name then (n, { info with borrowedFrom := newSrc, refParent := parent,
+                                            borrowedPath := path, borrowedExact := exact })
+          else (n, info) }
   | _ => pure ()
 
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
@@ -2273,7 +2277,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- The scoped reference's conflict key is its source binding.
       setEnv { envWithRef with borrowRefs := ref :: envWithRef.borrowRefs,
                                vars := envWithRef.vars.map fun (n, vi) =>
-                                 if n == ref then (n, { vi with borrowedFrom := some var }) else (n, vi) }
+                                 if n == ref then (n, { vi with borrowedFrom := some var, borrowedExact := true }) else (n, vi) }
       -- Check body
       checkStmts body env.currentRetTy
       -- Clean up: remove ref from borrowRefs and unfreeze original variable
@@ -2471,7 +2475,61 @@ private def resolveTypeParams (ty : Ty) (typeParams : List String) : Ty :=
   | .generic name args caps => .generic name (args.map fun a => resolveTypeParams a typeParams) caps
   | _ => ty
 
+mutual
+/-- Parentheses removed from an expression tree. Part of the normalized place rule (bug 091
+    round 3): Check runs on a body with no `.paren` nodes, so every decision that inspects a
+    binding (`.ident`) — consumption of a call argument, a self-assignment, a borrow-block
+    escape, a heap load — sees `(x)` exactly as `x`. Grouping is already fixed by the parser. -/
+partial def unparenDeep : Expr → Expr
+  | .paren _ inner => unparenDeep inner
+  | .binOp sp op l r => .binOp sp op (unparenDeep l) (unparenDeep r)
+  | .unaryOp sp op e => .unaryOp sp op (unparenDeep e)
+  | .call sp fn ta args => .call sp fn ta (args.map unparenDeep)
+  | .structLit sp n ta fs b => .structLit sp n ta (fs.map fun (k, v) => (k, unparenDeep v)) (b.map unparenDeep)
+  | .fieldAccess sp o f => .fieldAccess sp (unparenDeep o) f
+  | .enumLit sp en v ta fs => .enumLit sp en v ta (fs.map fun (k, x) => (k, unparenDeep x))
+  | .match_ sp sc arms => .match_ sp (unparenDeep sc) (arms.map unparenArm)
+  | .borrow sp i => .borrow sp (unparenDeep i)
+  | .borrowMut sp i => .borrowMut sp (unparenDeep i)
+  | .deref sp i => .deref sp (unparenDeep i)
+  | .arrayLit sp es => .arrayLit sp (es.map unparenDeep)
+  | .arrayIndex sp a i => .arrayIndex sp (unparenDeep a) (unparenDeep i)
+  | .cast sp i t => .cast sp (unparenDeep i) t
+  | .methodCall sp o m ta args => .methodCall sp (unparenDeep o) m ta (args.map unparenDeep)
+  | .staticMethodCall sp tn m ta args => .staticMethodCall sp tn m ta (args.map unparenDeep)
+  | .allocCall sp i a => .allocCall sp (unparenDeep i) (unparenDeep a)
+  | .ifExpr sp c t e => .ifExpr sp (unparenDeep c) (t.map unparenStmt) (e.map unparenStmt)
+  | e => e
+
+partial def unparenArm : MatchArm → MatchArm
+  | .mk sp en v bs g b => .mk sp en v bs (g.map unparenDeep) (b.map unparenStmt)
+  | .litArm sp v g b => .litArm sp (unparenDeep v) (g.map unparenDeep) (b.map unparenStmt)
+  | .varArm sp v g b => .varArm sp v (g.map unparenDeep) (b.map unparenStmt)
+  | .rangeArm sp lo hi inc g b => .rangeArm sp (unparenDeep lo) (unparenDeep hi) inc (g.map unparenDeep) (b.map unparenStmt)
+
+partial def unparenStmt : Stmt → Stmt
+  | .letDecl sp n m t v g => .letDecl sp n m t (unparenDeep v) g
+  | .assign sp n v => .assign sp n (unparenDeep v)
+  | .return_ sp v => .return_ sp (v.map unparenDeep)
+  | .expr sp e iv => .expr sp (unparenDeep e) iv
+  | .ifElse sp c t e => .ifElse sp (unparenDeep c) (t.map unparenStmt) (e.map (·.map unparenStmt))
+  | .while_ sp c b l => .while_ sp (unparenDeep c) (b.map unparenStmt) l
+  | .forLoop sp i c st b l => .forLoop sp (i.map unparenStmt) (unparenDeep c) (st.map unparenStmt) (b.map unparenStmt) l
+  | .fieldAssign sp o f v => .fieldAssign sp (unparenDeep o) f (unparenDeep v)
+  | .derefAssign sp t v => .derefAssign sp (unparenDeep t) (unparenDeep v)
+  | .arrayIndexAssign sp a i v => .arrayIndexAssign sp (unparenDeep a) (unparenDeep i) (unparenDeep v)
+  | .break_ sp v l => .break_ sp (v.map unparenDeep) l
+  | .defer sp b => .defer sp (unparenDeep b)
+  | .assert_ sp c => .assert_ sp (unparenDeep c)
+  | .assume_ sp c => .assume_ sp (unparenDeep c)
+  | .borrowIn sp v r rg m b => .borrowIn sp v r rg m (b.map unparenStmt)
+  | .letDestructure sp en v bs val e => .letDestructure sp en v bs (unparenDeep val) (e.map (·.map unparenStmt))
+  | .letStructDestructure sp sn bs val => .letStructDestructure sp sn bs (unparenDeep val)
+  | s => s
+end
+
 def checkFn (f : FnDef) : CheckM Unit := do
+  let f := { f with body := f.body.map unparenStmt }
   -- Validate #[test] constraints
   if f.isTest then
     if !f.params.isEmpty then

@@ -1130,13 +1130,14 @@ partial def normRef (e : Expr) : CheckM Norm := do
     match ← lookupVarInfo n with
     | some info =>
       let src := info.borrowedFrom.getD n
-      let exact := info.borrowedFrom.isNone
+      -- the recorded source PATH makes `*r` key exactly like the place it borrows
+      let (steps, exact) := if info.borrowedFrom.isSome then (info.borrowedPath, info.borrowedExact) else ([], true)
       match info.ty with
       | .ref _ =>
-        return .place { root := some src, exact := exact, viaRef := some n,
+        return .place { root := some src, steps := steps, exact := exact, viaRef := some n,
                         reach := .shared s!"'{n}' is a `&` reference" }
       | .refMut _ =>
-        return .place { root := some src, exact := exact, viaRef := some n, reach := .exclusive }
+        return .place { root := some src, steps := steps, exact := exact, viaRef := some n, reach := .exclusive }
       | .ptrMut _ | .ptrConst _ => return .place { root := some n, reach := .raw }
       | .heap _ | .heapArray _ => return .place { root := some n, heapLoad := true }
       | _ => return .reject s!"'{n}' is not a reference"

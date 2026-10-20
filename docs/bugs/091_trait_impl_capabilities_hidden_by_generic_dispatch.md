@@ -399,3 +399,11 @@ the scrutinee's provenance and ancestry); and `*w.h` loaded and freed a heap its
 (only a bare owned `Heap` binding is loaded; E0290). Fixtures
 `error_091_norm_{assign_under_shared_ref,heap_field_load}.con`.
 
+Fourth (static) pass: the remaining syntactic decisions were all `.ident` tests — consumption of
+call arguments, self-assignment, borrow-block escape checks, array-write mutability — that a
+parenthesized spelling evaded. Check now runs on each body with every `.paren` node removed
+(`unparenDeep`), so a binding is spelled one way for every decision. And keys are exact: a
+reference records the PATH it borrows (`VarInfo.borrowedPath`), so after `let r = &w.f`, `*r` keys
+as `(w, [f])` exactly as `w.f` does; a reassignment that changes the path is refused like one
+that changes the root. Fixture `error_091_norm_paren_array_write.con`.
+

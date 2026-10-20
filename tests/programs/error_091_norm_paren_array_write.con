@@ -1,0 +1,9 @@
+// Normalized place rule (Codex static review): Check runs on a body with parentheses removed,
+// so `(arr)[0] = 5` obeys the immutable-array rule exactly as `arr[0] = 5`. E0217.
+mod m {
+    fn main() -> Int {
+        let arr: [i32; 2] = [1, 2];
+        (arr)[0] = 5;
+        return arr[0] as Int;
+    }
+}

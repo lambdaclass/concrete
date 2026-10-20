@@ -1604,6 +1604,7 @@ error_091_norm_borrow_block_under_live_ref:E0232
 error_091_norm_paren_heap_load:E0205
 error_091_norm_assign_under_shared_ref:E0232
 error_091_norm_heap_field_load:E0290
+error_091_norm_paren_array_write:E0217
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
 trait_generic_receiver_forms:ok

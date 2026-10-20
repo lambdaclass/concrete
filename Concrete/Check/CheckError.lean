@@ -48,6 +48,11 @@ structure VarInfo where
   -- or a copy `let t = r`), so the aliasing checks can tell a reference's ancestors from its
   -- live siblings and children.
   refParent : Option String := none
+  -- The projection path inside `borrowedFrom` that this reference points to (`&w.f` → ["f"]),
+  -- exact unless a dereference crossed a reference whose path was unknown: `*r` then keys as
+  -- the same place `w.f` does (normalized place rule).
+  borrowedPath : List String := []
+  borrowedExact : Bool := false
   mutable : Bool := true  -- whether the variable was declared with mut
   movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
   declSpan : Option Span := none  -- where it was declared (locates unconsumed-linear E0208)
