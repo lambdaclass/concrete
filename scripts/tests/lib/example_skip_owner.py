@@ -10,12 +10,13 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            common word does not count.
   runs <owner> <workflow>  some `run:` command of the workflow (inline or block)
                            INVOKES the owner: after shell comments are stripped and
-                           the command is split on ; && || | ( ), the owner is the
-                           executable of a simple command, or the script operand of
-                           bash/sh/python3, after optional VAR=value assignments and
-                           `env`/`timeout N` prefixes. A step name, a comment, or the
-                           path as an ordinary argument (echo, printf, an assignment)
-                           does not count.
+                           the command is split on UNQUOTED ; && || | ( ), the owner
+                           is the executable of a simple command, or the script
+                           operand of bash/sh/python3, after optional VAR=value
+                           assignments and `env`/`timeout N` prefixes. A step name, a
+                           comment, quoted text, the path as an ordinary argument
+                           (echo, printf, an assignment), a syntax check (bash -n,
+                           -o noexec) or a command string (-c) does not count.
 
 Exit status: 0 holds, 1 does not, 2 usage error.
 """
@@ -73,13 +74,51 @@ def norm(p):
     return p[2:] if p.startswith("./") else p
 
 
+OPERATORS = {";", "&&", "||", "|", "&", "(", ")", ";;", "|&"}
+
+
+def simple_commands(command):
+    """Split on UNQUOTED shell operators (quotes and escapes respected)."""
+    lex = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+    lex.whitespace_split = True
+    cur = []
+    try:
+        for tok in lex:
+            if tok in OPERATORS or set(tok) <= set(";&|()"):
+                if cur:
+                    yield cur
+                cur = []
+            else:
+                cur.append(tok)
+    except ValueError:      # unbalanced quotes: nothing in it counts
+        return
+    if cur:
+        yield cur
+
+
+def interpreter_script(name, args):
+    """The script a bash/sh/python3 invocation runs, or None when it runs none
+    (a syntax check -n / -o noexec, a command string -c, a module -m)."""
+    k = 0
+    while k < len(args) and args[k].startswith("-") and args[k] != "-":
+        opt = args[k]
+        if opt in ("-c", "-m") or opt.startswith("--"):
+            return None
+        if name in ("bash", "sh"):
+            if opt in ("-o", "+o"):
+                if k + 1 < len(args) and args[k + 1] == "noexec":
+                    return None
+                k += 2
+                continue
+            if "n" in opt[1:] or "c" in opt[1:]:
+                return None
+        k += 1
+    return args[k] if k < len(args) else None
+
+
 def invoked_scripts(command):
     found = []
-    for simple in re.split(r"&&|\|\||[;|()]", command):
-        try:
-            words = shlex.split(simple, posix=True)
-        except ValueError:
-            continue
+    for words in simple_commands(command):
         k = 0
         while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
             k += 1
@@ -95,11 +134,9 @@ def invoked_scripts(command):
         if k >= len(words):
             continue
         if words[k] in ("bash", "sh", "python3"):
-            k += 1
-            while k < len(words) and words[k].startswith("-"):
-                k += 1
-            if k < len(words):
-                found.append(norm(words[k]))
+            script = interpreter_script(words[k], words[k + 1:])
+            if script is not None:
+                found.append(norm(script))
         else:
             found.append(norm(words[k]))
     return found
