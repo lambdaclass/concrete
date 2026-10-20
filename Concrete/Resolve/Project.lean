@@ -298,18 +298,34 @@ private def normTomlName (s : String) : String :=
     or array table (`[native.x]`, `[[native]]`), a top-level `native = {...}` inline table or
     dotted key (`native.libs = [...]`) — is REFUSED rather than ignored, as are a second `[native]`
     section and a repeated key: this line reader is not a full TOML parser, so anything it cannot
-    read exactly must stop the build instead of silently declaring nothing. -/
+    read exactly must stop the build instead of silently declaring nothing. For the same reason a
+    table header or top-level key written with a backslash escape (`["\u006eative"]`) is refused:
+    escapes are not decoded, so such a name cannot be shown not to be `native`.
+
+    Lines inside a multi-line string (`"""` or `'''`) are text, not structure, and are skipped, so
+    a description that mentions `[native]` declares nothing and refuses nothing. -/
+private def countSub (s d : String) : Nat := (s.splitOn d).length - 1
+
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
   let mut seenNative := false
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
+  let mut multi : Option String := none  -- the delimiter of the multi-line string we are inside
   for l in content.splitOn "\n" do
+    if let some d := multi then
+      if countSub l d % 2 == 1 then multi := none
+      continue
+    -- A line with an odd number of delimiters opens a multi-line string that later lines continue.
+    multi := if countSub l "\"\"\"" % 2 == 1 then some "\"\"\""
+      else if countSub l "'''" % 2 == 1 then some "'''" else none
     let t := l.trimAscii.toString
     if t.startsWith "[" then
       atTop := false
       let header := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile (· != ']'))
+      if header.contains '\\' then
+        throw s!"table header '{t}' uses a backslash escape, which Concrete.toml does not decode"
       let name := normTomlName header
       if name == "native" || name.startsWith "native." then
         let afterHeader := (t.drop "[native]".length).trimAscii.toString
@@ -324,6 +340,8 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
     else if !t.isEmpty && !t.startsWith "#" then
       let rawKey := ((t.splitOn "=").headD "").trimAscii.toString
       if atTop then
+        if rawKey.contains '\\' then
+          throw s!"top-level key '{rawKey}' uses a backslash escape, which Concrete.toml does not decode"
         let k := normTomlName rawKey
         if k == "native" || k.startsWith "native." then
           throw s!"unsupported top-level key '{rawKey}': native libraries are declared in a plain [native] section"

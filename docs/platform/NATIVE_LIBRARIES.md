@@ -49,6 +49,7 @@ what G1 recorded.
 |---|---|
 | unknown or repeated key, malformed or multi-line array, escape sequence, a second `[native]` | load (every command) |
 | any other spelling of the table: `["native"]`, `[ native ]`, `[native.x]`, `[[native]]`, a top-level `native = {...}` or `native.libs = [...]` (the line reader reads only the plain form, so it refuses the rest instead of skipping them) | load |
+| a table header or top-level key written with a backslash escape (escapes are not decoded, so it could spell `native`) | load |
 | a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
 | a `lib-dirs` entry that is empty, starts with `-`, or contains `,` or a control character | load |
@@ -56,6 +57,9 @@ what G1 recorded.
 | a pkg-config package pkg-config cannot find (its own `--print-errors` text is included) | link |
 | a pkg-config `--libs` token other than `-L<dir>`, `-l<name>`, `-pthread`, `-framework <name>` | link |
 | a library directory that does not exist or is not a directory | link |
+
+Lines inside a multi-line string (`"""` or `'''`) are text, not structure: a description that
+quotes a `[native]` section declares and refuses nothing.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 

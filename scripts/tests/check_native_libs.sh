@@ -149,7 +149,7 @@ build_run "$TMP/app2" app2
 if [ -x "$TMP/app2.bin" ]; then
   mv "$DEP/native" "$DEP/native.away"
   # In a subshell so the loader's abort is not reported on the gate's own stderr.
-  ( env -u DYLD_LIBRARY_PATH -u LD_LIBRARY_PATH "$TMP/app2.bin" ) > /dev/null 2>&1; rca=$?
+  rca="$( { env -u DYLD_LIBRARY_PATH -u LD_LIBRARY_PATH "$TMP/app2.bin" > /dev/null 2>&1; echo $?; } 2>/dev/null )"
   mv "$DEP/native.away" "$DEP/native"
   [ "$rca" != "42" ] && ok "CONTROL: with the declared lib-dir moved away the same binary fails (rc=$rca): the library is loaded from it" \
     || no "CONTROL: the binary still ran with the library moved away — the rpath leg proves nothing"
@@ -267,6 +267,42 @@ version = "0.1.0"
 EOF
 mkapp "$TMP/topinline" ''; cp "$TMP/topinline.toml" "$TMP/topinline/Concrete.toml"
 refused "$TMP/topinline" topinline "unsupported top-level key 'native'" "a top-level inline table native = {...} is refused"
+bad escapedhdr "
+[\"${BS}u006eative\"]
+libs = [\"nladd\"]" "uses a backslash escape" "an escaped table header (which could spell native) is refused"
+cat > "$TMP/topesc.toml" <<EOF
+"${BS}u006eative".libs = ["nladd"]
+[package]
+name = "nlapp"
+version = "0.1.0"
+EOF
+mkapp "$TMP/topesc" ''; cp "$TMP/topesc.toml" "$TMP/topesc/Concrete.toml"
+refused "$TMP/topesc" topesc "uses a backslash escape" "an escaped top-level key is refused"
+# Text inside a multi-line string is not structure: a description quoting a [native] section
+# declares nothing (no -lnosuchlib reaches the link) and is not a second section.
+mkapp "$TMP/multistr" ''
+cat > "$TMP/multistr/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+description = """
+An example manifest:
+[native]
+libs = ["nosuchlib"]
+"""
+notes = '''
+[native.x]
+'''
+
+[native]
+libs = ["nladd"]
+lib-dirs = ["lib"]
+EOF
+mkdir -p "$TMP/multistr/lib" && cp "$TMP/static/libnladd.a" "$TMP/multistr/lib/"
+build_run "$TMP/multistr" multistr
+[ "$(cat "$TMP/multistr.brc")" = "0" ] && [ "$(cat "$TMP/multistr.rrc")" = "42" ] \
+  && ok "[native] text inside multi-line strings is ignored; the real section still links" \
+  || no "multi-line string manifest: brc=$(cat "$TMP/multistr.brc") rrc=$(cat "$TMP/multistr.rrc"): $(head -3 "$TMP/multistr.build" | tr '\n' ' ')"
 bad dupsection '
 [native]
 libs = ["nladd"]
