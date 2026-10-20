@@ -43,11 +43,42 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== C/V: the corpus ==="
 : > "$TMP/rows"; : > "$TMP/elig"
+# Bug 106: this loop used `|| true`, so a report that hung (thesis_demo ran for hours: an
+# unbudgeted interpreter loop at len = i64::MAX) or crashed was invisible and the gate still
+# printed PASS. Every report now runs under a watchdog; a timeout is a FAIL, and a nonzero exit
+# is a FAIL unless the file is one of the deliberately ill-formed examples below (which must
+# keep failing by refusing the program, never by timing out).
+command -v timeout >/dev/null 2>&1 || { echo "error: 'timeout' is required (a hung report must fail, bug 106)" >&2; exit 2; }
+EXPECT_REFUSED=" examples/contract_negatives/duplicate_links/src/main.con examples/contract_negatives/invalid_attribute/src/main.con examples/contract_negatives/invalid_contract_expression/src/main.con examples/contract_negatives/spec_ghost_totality/src/main.con examples/known_holes/returned_ref_provenance_map/src/main.con examples/known_holes/returned_ref_provenance_vec/src/main.con "
+#   contract_negatives/*  are negative fixtures: the program is refused before any report;
+#   known_holes/returned_ref_provenance_*  are refused by the returned-reference rule (H1).
+HUNG=""; CRASHED=""; UNREFUSED=""
 for f in $(ls examples/*/src/main.con examples/*/*/src/main.con 2>/dev/null) std/src/lib.con; do
-  "$BIN" "$f" --report model-diff > "$TMP/one" 2>/dev/null || true
+  timeout 300 "$BIN" "$f" --report model-diff > "$TMP/one" 2>"$TMP/one.err"; rc=$?
+  if [ "$rc" -eq 124 ]; then HUNG="$HUNG $f"
+  elif [ "$rc" -ne 0 ]; then
+    case "$EXPECT_REFUSED" in *" $f "*) ;; *) CRASHED="$CRASHED $f(rc=$rc)";; esac
+  else
+    case "$EXPECT_REFUSED" in *" $f "*) UNREFUSED="$UNREFUSED $f";; esac
+  fi
   grep -vE '^MODEL-DIFF|^$' "$TMP/one" >> "$TMP/rows" || true
   grep '^MODEL-DIFF-ELIGIBLE' "$TMP/one" | cut -f2 >> "$TMP/elig" || true
 done
+[ -z "$HUNG" ] && ok "C: no report timed out (300s watchdog per file)" \
+  || no "C: --report model-diff timed out on:$HUNG (bug 106 class)"
+[ -z "$CRASHED" ] && ok "C: every report exited 0, except the named ill-formed examples" \
+  || no "C: --report model-diff failed on:$CRASHED"
+[ -z "$UNREFUSED" ] && ok "C: every named ill-formed example is still refused" \
+  || no "C: expected-refused examples now succeed (update EXPECT_REFUSED):$UNREFUSED"
+# Bug 106 fixture: thesis_demo's `validate(data, len)` loops `len` times; sampled at len = i64::MAX
+# the runtime ran for hours. Under the report's loop budget that input is `exhausted` (compared
+# nothing), and the small inputs still agree.
+grep -qP '^exhausted\tmain\.validate\tunclaimed\t\(1, 9223372036854775807\)\tmodel=—\truntime=exhausted$' "$TMP/rows" \
+  && ok "C: thesis_demo validate(1, i64::MAX) ends as 'exhausted' under the loop budget (bug 106)" \
+  || no "C: thesis_demo validate(1, i64::MAX) is not an 'exhausted' row: $(grep -P 'validate\t.*9223372036854775807\)' "$TMP/rows" | head -1 | tr '\t' ' ')"
+grep -qP '^agree\tmain\.validate\t' "$TMP/rows" \
+  && ok "C: thesis_demo validate still agrees on small inputs" \
+  || no "C: thesis_demo validate has no agreeing row"
 N="$(grep -c . "$TMP/rows" || true)"
 FNS="$(cut -f2 "$TMP/rows" | sort -u | grep -c . || true)"
 CLAIMED="$(awk -F'\t' '$3 == "claimed"' "$TMP/rows" | cut -f2 | sort -u | grep -c . || true)"
@@ -95,7 +126,7 @@ MM="$(grep -c '^MISMATCH' "$TMP/rows" || true)"
 [ "$MM" -eq 0 ] && ok "C: no input where the model and the runtime produce different values" \
   || no "C: $MM model/runtime value mismatches: $(grep -m3 '^MISMATCH' "$TMP/rows" | tr '\t' ' ' | tr '\n' '|')"
 BAD="$(awk -F'\t' '{m=$5; r=$6; sub(/^model=/,"",m); sub(/^runtime=/,"",r);
-  want = (m!="—" && r!="trap") ? (m==r ? "agree" : "MISMATCH") : (m!="—" ? "partial" : (r!="trap" ? "model_stuck" : "ERROR"));
+  want = (r=="exhausted") ? "exhausted" : ((m!="—" && r!="trap") ? (m==r ? "agree" : "MISMATCH") : (m!="—" ? "partial" : (r!="trap" ? "model_stuck" : "ERROR")));
   if (want != $1) print}' "$TMP/rows" | head -3)"
 [ -z "$BAD" ] && ok "V: every verdict re-derives from its model and runtime columns" \
   || no "V: verdicts disagree with their own columns: $(echo "$BAD" | tr '\t' ' ' | tr '\n' '|')"

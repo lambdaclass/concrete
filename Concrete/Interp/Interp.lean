@@ -111,6 +111,19 @@ partial def envSet (env : Env) (name : String) (val : IVal) : Env :=
     printing programs differential-testable instead of PENDING. -/
 def stdoutVar : String := "__interp_stdout__"
 
+/-- Reserved env key of a harness-chosen LOOP BUDGET (iterations per loop). The default run has
+    none and uses `defaultLoopFuel`; `--report model-diff` seeds a small one, so a function sampled
+    at a huge input (`validate(len = i64::MAX)`, bug 106) ends with the explicit
+    `loopBudgetExhausted` outcome instead of running for hours. -/
+def loopFuelVar : String := "__interp_loop_fuel__"
+def defaultLoopFuel : Nat := 10000000
+def loopBudgetExhausted : String := "interp: loop budget exhausted"
+
+def loopFuelOf (env : Env) : Nat :=
+  match envGet env loopFuelVar with
+  | some (.int n _) => n.toNat
+  | _ => defaultLoopFuel
+
 /-- Append to the interpreter's stdout buffer. If no buffer was seeded (a
     harness driving eval functions directly), output is dropped, not an error. -/
 def emitOut (env : Env) (s : String) : Env :=
@@ -1143,7 +1156,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     | .cont l => return (env, .cont l)
 
   | .while_ cond body label step =>
-    evalWhile fns enums env cond body step 10000000 label
+    evalWhile fns enums env cond body step (loopFuelOf env) label
 
   | .fieldAssign obj field value => do
     let (env, newVal) ← evalExprVal fns enums env value
@@ -1263,7 +1276,7 @@ partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
   evalStmtsD fns enums env [] stmts
 
 partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : Except String (Env × Flow) := do
-  if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
+  if fuel == 0 then .error s!"{loopBudgetExhausted} (iteration limit reached)"
   else
     let (env, cv) ← evalExprVal fns enums env cond
     match cv with
@@ -1298,7 +1311,7 @@ partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (c
     (no value) yields unit. `baseLen` is the env length at loop entry; each return
     restores the env to it so body-local bindings don't leak past the loop. -/
 partial def evalWhileExpr (fns : List CFnDef) (enums : List CEnumDef) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
-  if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
+  if fuel == 0 then .error s!"{loopBudgetExhausted} (iteration limit reached)"
   else
     let (env, cv) ← evalExprVal fns enums env cond
     let restore := fun (e : Env) => e.drop (e.length - baseLen)

@@ -82,6 +82,10 @@ def modelDiffTable (pc : ProofCore) : Proof.FnTable :=
 def modelDiffEligible (e : ProofCoreEntry) : Bool :=
   e.extracted.isSome && e.fn.params.all (isScalar ·.2) && isScalar e.fn.retTy
 
+/-- The runtime value of one sampled input: a value, a trap, or `exhausted` — the interpreter's
+    loop budget ran out (bug 106), so the input compared nothing. -/
+def modelDiffRuntimeBudget : Nat := 10000
+
 /-- A verdict from the two sides' values. The ONE comparator: every row is judged here. -/
 def modelDiffVerdict (model runtime : Option String) : String :=
   match model, runtime with
@@ -121,14 +125,23 @@ def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
         | (.int v, ty) => .intLit v ty
         | (.bool b, _) => .boolLit b
       let call : CExpr := .call (.direct e.fn.name) [] argEs e.fn.retTy
+      -- The runtime side runs under a loop budget (bug 106): a sampled boundary input can make
+      -- a loop run 2^63 times, which hung the report. Running out is its own outcome,
+      -- `exhausted` — compared nothing, never a trap and never agreement.
+      let runEnv : Interp.Env := [(Interp.stdoutVar, .string ""),
+        (Interp.loopFuelVar, .int (Int.ofNat modelDiffRuntimeBudget) .int)]
+      let result := Interp.evalExprVal fns enums runEnv call
+      let exhausted := match result with
+        | .error msg => msg.startsWith Interp.loopBudgetExhausted
+        | _ => false
       let runtime : Option String :=
-        match Interp.evalExprVal fns enums [(Interp.stdoutVar, .string "")] call with
+        match result with
         | .ok (_, .int n _) => some (toString n)
         | .ok (_, .bool b) => some (toString b)
         | _ => none
       { fn := e.qualName, claimed := e.spec.isSome, inputs := args
-      , model := model.getD "—", runtime := runtime.getD "trap"
-      , verdict := modelDiffVerdict model runtime }
+      , model := model.getD "—", runtime := if exhausted then "exhausted" else runtime.getD "trap"
+      , verdict := if exhausted then "exhausted" else modelDiffVerdict model runtime }
 
 def modelDiffRows (pc : ProofCore) (modules : List CModule) (perturb : Option String := none) :
     List ModelDiffRow :=
@@ -148,6 +161,6 @@ def modelDiffReport (pc : ProofCore) (modules : List CModule) (perturb : Option 
   let fnsChecked := (rows.map (·.fn)).eraseDups.length
   String.intercalate "\n" (rows.map line) ++
     String.join (eligible.map fun f => s!"\nMODEL-DIFF-ELIGIBLE\t{f}") ++
-    s!"\nMODEL-DIFF: functions={fnsChecked} eligible={eligible.length} inputs={rows.length} agree={count "agree"} mismatch={count "MISMATCH"} partial={count "partial"} model_stuck={count "model_stuck"} error={count "ERROR"}\n"
+    s!"\nMODEL-DIFF: functions={fnsChecked} eligible={eligible.length} inputs={rows.length} agree={count "agree"} mismatch={count "MISMATCH"} partial={count "partial"} model_stuck={count "model_stuck"} error={count "ERROR"} exhausted={count "exhausted"}\n"
 
 end Concrete
