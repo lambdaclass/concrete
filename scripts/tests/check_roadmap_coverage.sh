@@ -372,7 +372,9 @@ for cells in irows:
     for n in bugs:
         if n in seen_bug: no(f'bug {n} is listed in more than one implemented-bug row'); ibad2 += 1
         seen_bug[n] = cells[0]
-        fixed = re.search(r'\(' + n + r'_', fixed_list) is not None
+        # an entry under "Fixed Bugs" counts as fixed unless it says OPEN itself (077 sits there, open)
+        fixed = any(re.search(r'\(' + n + r'_', l) and not re.search(r'\bOPEN\b', l)
+                    for l in fixed_list.splitlines())
         for f in glob.glob(os.path.join(ledger_dir, n + '_*.md')):
             # both ledger spellings: `**Status:** Fixed ...` and `Status: fixed`
             st = re.search(r'^(?:\*\*Status:\*\*|Status:)\s*(\S+)', open(f, encoding='utf-8').read(), re.M | re.I)
@@ -754,6 +756,25 @@ PY
   bugneg ledger_fixed_plain_status \
     "import re; s,n=re.subn(r'^\*\*Status:\*\* Open', 'Status: fixed', s, flags=re.M); assert n==1" \
     065_stack_depth_unboundedness_not_propagated.md "bug 065 is listed as not yet accepted but the bug ledger records it fixed"
+  # Positive control: a bug whose README entry sits under "Fixed Bugs" but says OPEN (077) is open.
+  cp "$TARGET" "$TMPD/open_entry.md"
+  if python3 - "$TMPD/open_entry.md" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding='utf-8').read()
+old = '| 088 (batch 4) |'
+assert s.count(old) == 1
+s = s.replace(old, '| 077, 088 (batch 4) |')
+open(p, 'w', encoding='utf-8').write(s)
+PY
+  then
+    if run_on "$TMPD/open_entry.md"; then
+      ok "positive control open_readme_entry passes (077 says OPEN under Fixed Bugs)"
+    else
+      no "positive control open_readme_entry: an explicitly OPEN ledger entry was read as fixed"
+    fi
+  else
+    no "positive control open_readme_entry: could not build its copy"
+  fi
   # The wrapper itself must not read a crashed or silent checker as a pass.
   if ( check_file() { return 17; }; run_on "$TARGET" ); then
     no "control checker_exit_failure: a nonzero checker exit passed"
