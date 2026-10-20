@@ -1,0 +1,18 @@
+// Bug 091 round 3 (Codex review, third pass): `let r = &w.p;` recorded no borrow of
+// `w`, so `w.p.bump()` mutated the place `r` still referenced. E0232.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        let mut w: W = W { p: P { n: 0 } };
+        let r: &P = &w.p;
+        w.p.bump();
+        print_int(r.n);
+        let W { p } = w;
+        let P { n } = p;
+        return 0;
+    }
+}

@@ -1,0 +1,16 @@
+// Bug 091 round 3 (Codex review, third pass): `let r = (&p);` lost the borrow's
+// provenance (only `&(p)` had been fixed), so `p.bump()` ran under a live `r`. E0232.
+mod m {
+    struct P { n: i64 }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        let mut p: P = P { n: 0 };
+        let r: &P = (&p);
+        p.bump();
+        print_int(r.n);
+        let P { n } = p;
+        return 0;
+    }
+}

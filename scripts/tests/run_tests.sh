@@ -1483,6 +1483,15 @@ run_err "$TESTDIR/error_091_mut_borrow_explicit_through_ref.con"           "(E02
 run_err "$TESTDIR/error_091_mut_borrow_explicit_paren_immutable.con"       "(E0233)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_projection_through_ref.con" "(E0237)"
 run_ok  "$TESTDIR/trait_mut_receiver_temporaries.con" "7" 0
+# Codex review of round 3 (third pass): by-value `*r`, parenthesized call arguments, provenance
+# of `(&p)` and `&w.p`, and an owned `if` under a projection.
+run_err "$TESTDIR/error_091_destroy_defname_deref_arg.con"          "(E0290)"
+run_err "$TESTDIR/error_091_destroy_defname_paren_arg.con"          "(E0205)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0232)"
+run_err "$TESTDIR/error_091_deref_ref_by_value.con"                 "(E0290)"
+run_err "$TESTDIR/error_091_paren_call_arg_not_consumed.con"        "(E0205)"
+run_ok  "$TESTDIR/trait_mut_receiver_if_projection.con" "7" 0
 r091t_got=$($COMPILER "$TESTDIR/trait_mut_receiver_temporaries.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r091t_got" = "7" ]; then
     echo "  ok  bug 091: trait_mut_receiver_temporaries — interp == binary (7)"

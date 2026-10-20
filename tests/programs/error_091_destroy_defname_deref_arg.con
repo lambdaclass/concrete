@@ -1,0 +1,16 @@
+// Bug 091 round 3 (Codex review, third pass): `P_destroy(*r)` read the pointee of
+// `r: &P` BY VALUE into a by-value destructor while the owner stayed live (destroyed
+// twice). A by-value read of a non-Copy pointee through a reference: E0290.
+mod m {
+    struct P { n: i64 }
+    impl Destroy for P {
+        fn destroy(self) { let P { n } = self; }
+    }
+    fn kill(r: &P) { P_destroy(*r); }
+    fn main() -> Int {
+        let p: P = P { n: 0 };
+        kill(&p);
+        destroy(p);
+        return 0;
+    }
+}

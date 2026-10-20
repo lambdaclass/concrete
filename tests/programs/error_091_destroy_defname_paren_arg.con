@@ -1,0 +1,14 @@
+// Bug 091 round 3 (Codex review, third pass): a parenthesized call argument `(p)` was
+// not consumed, so `P_destroy((p)); destroy(p);` destroyed `p` twice. Expected: E0205.
+mod m {
+    struct P { n: i64 }
+    impl Destroy for P {
+        fn destroy(self) { let P { n } = self; }
+    }
+    fn main() -> Int {
+        let p: P = P { n: 0 };
+        P_destroy((p));
+        destroy(p);
+        return 0;
+    }
+}

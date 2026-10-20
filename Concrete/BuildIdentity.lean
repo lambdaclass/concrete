@@ -23,7 +23,36 @@ namespace Concrete
 
 /-- 128-bit digest over the compiler's own sources at build time. -/
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
->>>>>>> 94770f5d (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
+>>>>>>> 932afdfa (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+=======
+def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
+||||||| parent of d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
+>>>>>>> 3396afcf (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+=======
+def buildIdentity : String := "60bb29dc8b6e66c9427b2ad0064f2626"
+||||||| parent of c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+||||||| parent of de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+def buildIdentity : String := "2191e45042f2de34824c0084897f1896"
+=======
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+>>>>>>> de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+=======
+||||||| parent of de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+def buildIdentity : String := "2191e45042f2de34824c0084897f1896"
+=======
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+>>>>>>> de110046 (fix: bug 091 Codex round 3 review — one place rule for explicit and implicit borrows)
+||||||| parent of 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+def buildIdentity : String := "d1addc41cade4a9efad3828b8a716848"
+=======
+def buildIdentity : String := "dedd8cefb7a556960714c9693144a00a"
+>>>>>>> 60b36a02 (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+>>>>>>> c33f5d2b (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+>>>>>>> d8c7870e (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
+>>>>>>> 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 
 /-- How many source files the identity above was computed over.
 

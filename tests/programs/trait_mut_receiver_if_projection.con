@@ -1,0 +1,20 @@
+// Bug 091 round 3 (Codex review, third pass): an `if` yielding OWNED values under a
+// projection (`(if c { W {..} } else { W {..} }).p.bump()`) is an owned temporary, not a
+// possible reference (was a false E0237). Expected (compiled AND --interp): 7.
+mod m {
+    struct P { n: i64 }
+    struct W { p: P }
+    impl P {
+        fn bump(&mut self) { self.n = self.n + 1; }
+    }
+    fn main() with(Std) -> Int {
+        (if true {
+            W { p: P { n: 0 } }
+        } else {
+            W { p: P { n: 1 } }
+        }).p.bump();
+        print_int(7);
+        print_char(10);
+        return 0;
+    }
+}

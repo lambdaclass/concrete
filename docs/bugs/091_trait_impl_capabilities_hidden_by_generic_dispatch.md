@@ -257,4 +257,15 @@ Both now declare `with(Alloc)`. So does `OrderedSet::remove`, which calls `Order
   `error_091_mut_borrow_explicit_paren_immutable.con` (E0233),
   `error_091_mut_receiver_paren_borrow_live.con` (E0232), `trait_mut_receiver_temporaries.con`
   (7, compiled and --interp).
+* **Codex review of round 3, third pass.** `P_destroy(*r)` / `let q = *r` read a non-Copy pointee
+  of `r: &P` by value (now E0290 outside place uses; `match *r` still inspects in place);
+  `take((p))` did not consume `p` (every call-argument rule strips parentheses); `let r = (&p)`
+  and `let r = &w.p` recorded no borrow of the root (provenance now strips parentheses and
+  records a projection's owned root); and an `if`/`match` under a projection is classified by
+  its branch values (`tailVia`), so `(if c { W {..} } else { W {..} }).p.bump()` is an owned
+  temporary while a branch yielding `&r` (or an unseen binder) still fails closed. Fixtures
+  `error_091_destroy_defname_deref_arg.con`, `error_091_deref_ref_by_value.con` (E0290),
+  `error_091_destroy_defname_paren_arg.con`, `error_091_paren_call_arg_not_consumed.con` (E0205),
+  `error_091_mut_receiver_paren_borrow_outer.con`,
+  `error_091_mut_receiver_projection_borrow_live.con` (E0232), `trait_mut_receiver_if_projection.con` (7).
 

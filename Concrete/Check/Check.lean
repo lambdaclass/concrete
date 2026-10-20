@@ -101,6 +101,32 @@ inductive PlaceVia where
   | rawPtr
   | temp
 
+/-- Two branches' classifications joined: a branch reached through `&` makes the whole
+    possibly shared; then `&mut`, then a raw pointer; otherwise an owned temporary. -/
+def joinVia : PlaceVia → PlaceVia → PlaceVia
+  | .shared d, _ | _, .shared d => .shared d
+  | .exclusiveRef, _ | _, .exclusiveRef => .exclusiveRef
+  | .rawPtr, _ | _, .rawPtr => .rawPtr
+  | _, _ => .temp
+
+mutual
+/-- The classification of the VALUE a block yields: its trailing value expression, where a
+    moved owned binding is an owned temporary. A block without a value tail diverges (or
+    yields `()`), contributing nothing; one this walk cannot read fails closed. -/
+partial def tailVia (stmts : List Stmt) : CheckM PlaceVia := do
+  match stmts.getLast? with
+  | some (.expr _ e true) =>
+    match ← placeVia e with
+    | .owned _ => return .temp
+    | v => return v
+  | some (.return_ ..) | some (.break_ ..) | some (.continue_ ..) => return .temp
+  | some (.expr _ e false) =>
+    match e with
+    | .call _ fn _ _ => if resolveIntrinsic fn == some .abort then return .temp
+                        else return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
+    | _ => return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
+  | _ => return .shared "the place is reached through a block the checker does not classify; bind it to a name first"
+
 partial def placeVia (e : Expr) : CheckM PlaceVia := do
   match e with
   | .paren _ inner => placeVia inner
@@ -112,7 +138,9 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
       | .refMut _ => return .exclusiveRef
       | .ptrMut _ | .ptrConst _ => return .rawPtr
       | _ => return .owned n
-    | none => return .temp
+    -- A name the walk cannot see here (a match-arm binder or a block-local `let` in a
+    -- branch tail) may be a reference: fail closed.
+    | none => return .shared s!"'{n}' is bound inside the expression; bind the value to a name first"
   | .fieldAccess _ obj _ => placeVia obj
   | .arrayIndex _ arr _ => placeVia arr
   | .deref _ inner => placeVia inner
@@ -127,7 +155,18 @@ partial def placeVia (e : Expr) : CheckM PlaceVia := do
   | .call .. | .methodCall .. | .staticMethodCall .. | .structLit .. | .enumLit ..
   | .arrayLit .. | .intLit .. | .floatLit .. | .boolLit .. | .strLit .. | .charLit .. =>
     return .temp
+  -- A conditional is whatever its branches yield: `if c { W {..} } else { W {..} }` is an
+  -- owned temporary, `*(if c { &r } else { &r })` is reached through `&` (Codex review).
+  | .ifExpr _ _ t el => return joinVia (← tailVia t) (← tailVia el)
+  | .match_ _ _ arms =>
+    let mut acc : PlaceVia := .temp
+    for arm in arms do
+      let body := match arm with
+        | .mk _ _ _ _ _ b | .litArm _ _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ _ b => b
+      acc := joinVia acc (← tailVia body)
+    return acc
   | _ => return .shared "the place is reached through an expression that may be a `&` reference; bind it to a name first"
+end
 
 /-- A RECEIVER's place. At the top level an unclassified expression (`if`/`match`) whose
     checked type is a value (the callers handle `&T`/`&mut T` receivers first) is an owned
@@ -829,7 +868,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       for (arg, pTy) in args.zip paramTys do
         let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
-        match arg with
+        match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
       -- Function pointers are Copy, no need to consume
@@ -912,7 +951,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
                     match argTy with
                     | .fn_ _ cs _ => pure (some cs)
                     | _ =>
-                      match arg with
+                      match stripParens arg with
                       | .ident _ varName =>
                         match ← lookupFn varName with
                         | some argSig => pure (some argSig.capSet)
@@ -980,7 +1019,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         -- Exception: borrow-block exclusive refs (&mut T) must be consumed on call,
         -- since they are scoped linear views into an alloca.
         -- Function parameter &mut T refs are reborrowable and not consumed.
-        match arg with
+        match stripParens arg with
         | .ident _ varName =>
           match pTy with
           | .ref _ => pure ()  -- shared reference: Copy, no consume needed
@@ -1175,7 +1214,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
     | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
   | .match_ _ scrutinee arms =>
-    let scrTy ← checkExpr scrutinee
+    -- `match *r { .. }` inspects the pointee in place (arms auto-deref), as before.
+    let scrTy ← match stripParens scrutinee with
+      | .deref .. => checkExpr scrutinee none .place
+      | _ => checkExpr scrutinee
     -- Auto-deref through references for match
     let innerTy := match scrTy with
       | .ref t => t
@@ -1470,9 +1512,16 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     -- Reading THROUGH a ref/ptr does not consume the binding (place read);
     -- only the Heap load-and-free below consumes.
     let innerTy ← checkExpr inner none .place
+    -- H11 (bug 091 round 3): `*r` read BY VALUE through a reference duplicates a non-Copy
+    -- pointee its owner still holds (`P_destroy(*r)`, `let q = *r`). Place uses
+    -- (`(*r).f`, `&*r`, a receiver) and Copy pointees are unaffected; raw pointers stay the
+    -- trusted collection idiom.
+    let refusedDeref (t : Ty) : CheckM Unit := do
+      if mode != .place && !(← isCopyType t) then
+        throwCheck (.nonCopyProjection (tyToString t) "a dereference of a reference") (some e.getSpan)
     match innerTy with
-    | .ref t => return t
-    | .refMut t => return t
+    | .ref t => refusedDeref t; return t
+    | .refMut t => refusedDeref t; return t
     | .ptrMut t =>
       return t
     | .ptrConst t =>
@@ -1597,7 +1646,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
           for (arg, p) in args.zip params do
             let argTy ← checkExpr arg (some p.ty) .callArg
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
-            match arg with
+            match stripParens arg with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
             | _ => pure ()
           if foundBuiltin == some .destroy && methodName == destroyMethodName then
@@ -1634,7 +1683,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       for (arg, (pName, pTy)) in args.zip methodParams do
         let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
-        match arg with
+        match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
       -- A concrete call of a type's Destroy impl is the same public destruction as the
@@ -1664,7 +1713,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       for (arg, (pName, pTy)) in args.zip paramTypes do
         let argTy ← checkExpr arg (some pTy) .callArg
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
-        match arg with
+        match stripParens arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
       return retTy
@@ -1731,22 +1780,27 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- (`let s = transform(s);` is fine: the RHS consumed the old `s`).
       checkNoLiveShadow name (some stmt.getSpan)
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      -- Record the borrow source on the binding just added (the head entry),
-      -- not on every entry sharing its name (bug 094).
-      let setSource (sourceName : String) : CheckM Unit :=
-        modify fun env =>
-          match env.vars with
-          | (n, info) :: rest => { env with vars := (n, { info with borrowedFrom := some sourceName }) :: rest }
-          | [] => env
-      -- `&(x)` records the same provenance as `&x` (bug 091 round 3).
-      let value := match value with
-        | .borrow sp inner => Expr.borrow sp (stripParens inner)
-        | .borrowMut sp inner => Expr.borrowMut sp (stripParens inner)
-        | v => v
-      match value with
-      | .borrow _ (.ident _ sourceName) => setSource sourceName
-      | .borrowMut _ (.ident _ sourceName) => setSource sourceName
-      | _ => pure ()
+      -- A `&place` / `&mut place` binding is a live borrow of the place's ROOT binding:
+      -- `(&p)`, `&(p)` and `&w.p` record provenance as `&p` does (bug 091 round 3), so a
+      -- later `&mut` of the root — explicit or an implicit receiver — sees it.
+      let source? : Option (String × Bool) := match stripParens value with
+        | .borrow _ inner | .borrowMut _ inner =>
+          (borrowPathOf inner).map fun (root, steps) => (root, steps.isEmpty)
+        | _ => none
+      match source? with
+      | some (sourceName, whole) =>
+        -- A projection records only an OWNED root: `&r.f` through a reference borrows the
+        -- pointee, which `r`'s own provenance already tracks.
+        match ← lookupVarInfo sourceName with
+        | some srcInfo =>
+          match whole, srcInfo.ty with
+          | false, .ref _ | false, .refMut _ | false, .ptrMut _ | false, .ptrConst _ => pure ()
+          | _, _ =>
+            modify fun env =>
+              { env with vars := env.vars.map fun (n, info) =>
+                  if n == name then (n, { info with borrowedFrom := some sourceName }) else (n, info) }
+        | none => pure ()
+      | none => pure ()
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
@@ -2066,7 +2120,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     match body with
     | .call _ _fname _ args =>
       for arg in args do
-        match arg with
+        match stripParens arg with
         | .ident _ varName =>
           let env ← getEnv
           match env.vars.lookup varName with

@@ -1,0 +1,7 @@
+// Bug 091 round 3: `take((p))` did not consume `p` (the call-argument rule matched only a
+// bare identifier), so `take(p)` used it again. Expected: E0205.
+mod m {
+    struct P { n: i64 }
+    fn take(p: P) -> i64 { let P { n } = p; return n; }
+    fn main() -> Int { let p: P = P { n: 1 }; let a: i64 = take((p)); return a + take(p); }
+}
