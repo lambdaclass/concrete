@@ -52,6 +52,31 @@ def indent(line):
     return len(line) - len(line.lstrip())
 
 
+EXECUTING_SHELLS = {"bash", "sh"}
+
+
+def shell_values(block_lines):
+    """Values of every `shell:` key in these lines."""
+    return [m.group(1).strip().strip("\"'") for m in
+            (re.match(r"^\s*(?:-\s+)?shell:\s*(.*?)\s*(#.*)?$", l) for l in block_lines) if m]
+
+
+def defaults_shells(lines, key_indent):
+    """`shell:` values under a `defaults:` key at this indentation."""
+    out, i = [], 0
+    while i < len(lines):
+        if re.match(r"^" + " " * key_indent + r"defaults:\s*$", lines[i]):
+            i += 1
+            body = []
+            while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > key_indent):
+                body.append(lines[i])
+                i += 1
+            out += shell_values(body)
+        else:
+            i += 1
+    return out
+
+
 def run_commands(path):
     """The shell text of every INLINE `run:` value (`run: <command>` on one line)
     of an UNCONDITIONAL step in an UNCONDITIONAL job.
@@ -61,7 +86,10 @@ def run_commands(path):
     is never read as a key. Block-style `run:` values are not read at all: their
     lines share quote, heredoc and continuation state, and reading them line by
     line took printed text for commands. A step or job carrying any `if:` is
-    excluded (`if: false` disables it; no condition is evaluated here). An owner
+    excluded (`if: false` disables it; no condition is evaluated here), and so is
+    any run whose effective shell -- step `shell:`, job or workflow
+    `defaults.run.shell` -- is not plain bash/sh (a custom template such as
+    `bash -n {0}` would only syntax-check it). An owner
     must therefore be invoked by an inline `run:` of an unconditional step --
     fail-closed, and every CI owner today is spelled that way."""
     lines = open(path).read().split("\n")
@@ -76,6 +104,8 @@ def run_commands(path):
             while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > col):
                 visible[i] = ""
                 i += 1
+    if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible, 0)):
+        return []           # a workflow-wide custom shell: nothing qualifies
     cmds = []
     for n, line in enumerate(visible):
         m = re.match(r"^(\s*)(-\s+)?run:\s*(.*)$", line)
@@ -95,6 +125,8 @@ def run_commands(path):
         step = [visible[start][dash + 2:]] + [l for l in visible[start + 1:end]]
         if any(re.match(r"^\s*if:", l) for l in step):
             continue
+        if any(v not in EXECUTING_SHELLS for v in shell_values(step)):
+            continue
         # The job: the nearest `jobs.<id>:` header (indent 2) above the step.
         j = start
         while j > 0 and not re.match(r"^  [A-Za-z0-9_-]+:\s*$", visible[j]):
@@ -106,6 +138,8 @@ def run_commands(path):
                 job_conditional = True
             k += 1
         if job_conditional:
+            continue
+        if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible[j + 1:k], 4)):
             continue
         cmds.append(strip_shell_comment(m.group(3)))
     return cmds
