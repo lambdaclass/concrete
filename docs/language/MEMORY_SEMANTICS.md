@@ -564,8 +564,10 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   are one place, and `&*r` names `r`'s source (`normPlace` / `normRef`, `land2-fix`, bug 091
   round 3). A field or index projection through an owned `Heap` or heap-array binding
   (`h.v`, auto-dereferenced) is a canonical place rooted at that owner binding. An explicit `*h`
-  of an owned heap is not a place: it loads the value and consumes `h` (so `&*h` moves the heap,
-  and a later `free(h)` is E0213 on `main` and E0230 on `land2-fix`). The **root** of a canonical
+  of an owned heap is not a place: it loads the value and consumes `h`. On `main` the borrow
+  `&*h` is accepted and moves the heap, so a later use of `h` fails (E0213 in the probe, an
+  `if` without `else` that freed it); on `land2-fix` the borrow itself is E0230, because the
+  dereference consumes `h` before the shared-access check sees the consumed root. The **root** of a canonical
   place is its binding.
 - A **reference binding** is a local (parameter, `let`, pattern binder or borrow-block binder)
   whose type is a reference type. Its **source** is the canonical place it was made from, recorded
@@ -1034,7 +1036,10 @@ The implementer adds a manifest `tests/rules/exit_2i.tsv` (new) with one row per
 columns: `rule`; `fixture`; `expected`, either `reject:<code>:<rule@version>` or
 `run:<exit code>`; `pair`, an identifier shared by a reject row and the run row of its rewritten
 program (`-` when none); and `modes`, a comma list from `binary`, `interp`, `model:<id>` and
-`fmt` (formatter round-trip). `binary` and `interp` compare the exit code with `expected`.
+`fmt` (formatter round-trip). For `run:<n>`, `binary` requires the built program's exit status
+to be `n`, and `interp` requires `--interp` to exit 0 and print `n` as its result (the convention
+of `run_ok` in `scripts/tests/run_tests.sh`); a project fixture runs its own build and uses the
+binary's exit status only.
 `model:<id>` names a row of a sidecar `tests/rules/exit_2i_model.tsv` (new) that gives the
 function to extract (`--report extraction`) and a structural assertion on its extracted body
 (for bug 087, the leg on `land2-fix` today: the extracted `shadow_if` is
