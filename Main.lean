@@ -1575,7 +1575,8 @@ def compileAndReport (inputPath : String) (reportType : String)
   let frontendResult : Except UInt32
       (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
        Except Proof.IdentityRefusal Proof.ResolvedIdentity × List CModule ×
-       List (String × String × String) × List (String × Nat) × Option ProofCore) ←
+       List (String × String × String) × List (String × Nat) × Option ProofCore ×
+       List NativeLibDecl) ←
     match ← findProjectRoot inputDir with
     | some root =>
       match ← loadProject root with
@@ -1592,7 +1593,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- The WHOLE program's per-scope tally (dependencies and std included), from the ProofCore
         -- `loadProject` already extracted; the report path's own ProofCore holds user modules only.
         pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages,
-          ctx.pc.definitionsByScope, some (ctx.pc.scopeToUser depNames)))
+          ctx.pc.definitionsByScope, some (ctx.pc.scopeToUser depNames), ctx.nativeLibs))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
       | .error ds =>
@@ -1604,10 +1605,11 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- the same package, which is the collision content-binding exists to prevent.
         pure (Except.ok (parsed, validCore, validCore, srcMap,
           Proof.ResolvedIdentity.standalone inputPath srcMap,
-          ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat)), none))
+          ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat)), none,
+          ([] : List NativeLibDecl)))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally, programPc?) =>
+  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally, programPc?, nativeLibs) =>
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
@@ -2728,7 +2730,10 @@ def compileAndReport (inputPath : String) (reportType : String)
     if reportType == "unsafe" then
       -- R-0484 R10: one assumption summary over the program AND its loaded dependencies.
       let assumptions := mkAssumptions ()
-      IO.println (Report.unsafeReport validCore.coreModules pc assumptions (depsLoaded := !depModules.isEmpty))
+      -- Declared native libraries are trusted foreign dependencies too (G1): listed after the
+      -- foreign bindings that rely on them.
+      IO.println (Report.unsafeReport validCore.coreModules pc assumptions (depsLoaded := !depModules.isEmpty)
+        ++ nativeTrustSection nativeLibs)
       return 0
     if reportType == "assumptions" then
       -- R-0484 R10: the machine-readable view of the assumption summary the text reports render.
@@ -3477,6 +3482,21 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
       IO.println report
       return if pass then 0 else 1
 
+/-- The link flags for a project's declared native libraries (`[native]`, G1), or `none` after
+    printing the refusal. A declaration that cannot be resolved stops the build: it is never dropped. -/
+def nativeLinkFlags (ctx : ProjectContext) : IO (Option (Array String)) := do
+  match ← resolveNativeLinkFlags ctx.nativeLibs with
+  | .ok flags => return some flags
+  | .error e => IO.eprintln e; return none
+
+/-- After a failed link: name the native libraries that were on the link line, or say none was
+    declared, so an unresolved foreign symbol points at the manifest that should declare its library. -/
+def nativeLinkFailureNote (ctx : ProjectContext) : IO Unit := do
+  if ctx.nativeLibs.isEmpty then
+    IO.eprintln "note: no native library is declared; a package whose extern fns live in a C library declares it in Concrete.toml [native] (docs/platform/NATIVE_LIBRARIES.md)"
+  else
+    IO.eprintln s!"note: declared native libraries: {", ".intercalate (ctx.nativeLibs.map fun d => s!"{d.package}: {d.describe}")}"
+
 /-- Compile a project from Concrete.toml. -/
 def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM : Bool) (quiet : Bool := false) : IO UInt32 := do
   match ← loadProject projectRoot (stripTestFns := true) with
@@ -3530,10 +3550,13 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
             | _ :: n :: _ => n
             | _ => "a.out"
           | _ => "a.out"
-      let args ← clangArgs llPath outPath
+      let some native ← nativeLinkFlags ctx
+        | IO.FS.removeFile ⟨llPath⟩; return 1
+      let args ← clangArgs llPath outPath native
       let exitCode ← runCmd "clang" args
       if exitCode != 0 then
         IO.eprintln "clang compilation failed"
+        nativeLinkFailureNote ctx
         return exitCode
       IO.FS.removeFile ⟨llPath⟩
       if !quiet then
@@ -3579,10 +3602,13 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       -- Validate LLVM IR (if llvm-as available)
       let llValid ← validateLLVMIR llPath
       if !llValid then return 1
-      let args ← clangArgs llPath outPath
+      let some native ← nativeLinkFlags ctx
+        | return 1
+      let args ← clangArgs llPath outPath native
       let exitCode ← runCmd "clang" args
       if exitCode != 0 then
         IO.eprintln "clang compilation failed"
+        nativeLinkFailureNote ctx
         IO.eprintln s!"LLVM IR left at: {llPath}"
         return exitCode
       let child ← IO.Process.spawn {

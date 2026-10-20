@@ -1,3 +1,8 @@
 [package]
 name = "rocksdb"
 version = "0.1.0"
+
+# The RocksDB C library this binding's extern fns resolve against. The build resolves it with
+# pkg-config and links it into every program that depends on this package (docs/platform/NATIVE_LIBRARIES.md).
+[native]
+pkg-config = ["rocksdb"]

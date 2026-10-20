@@ -181,13 +181,231 @@ def validateToml (content : String) : List String :=
     if !inPkg.2 then ["warning: Concrete.toml [package] missing 'name' field"]
     else []
   -- Warn about unknown top-level sections
-  let knownSections := ["[package]", "[dependencies]", "[policy]", "[profile]"]
+  let knownSections := ["[package]", "[dependencies]", "[policy]", "[profile]", "[native]"]
   let sectionWarns := trimmedLines.filterMap fun l =>
     if l.startsWith "[" && !l.startsWith "#" then
       if knownSections.any (l.startsWith ·) then none
       else some s!"warning: Concrete.toml has unrecognized section '{l}'"
     else none
   pkgWarns ++ sectionWarns
+
+/-! ## Native libraries — the `[native]` section (gap G1; docs/platform/NATIVE_LIBRARIES.md)
+
+A package declares the native libraries its `extern fn`s resolve against:
+
+```toml
+[native]
+pkg-config = ["rocksdb"]     # resolved with `pkg-config --libs` at link time
+libs       = ["m"]           # passed as -l<name>
+lib-dirs   = ["native/lib"]  # relative to the package root; -L<dir> and an rpath
+```
+
+The declarations of the root package and of every dependency package are collected by
+`loadProject` and turned into link flags by `resolveNativeLinkFlags`, for the final link only.
+
+FAIL CLOSED, everywhere. An unknown key, a malformed array, a name that is not a plain library
+name, a `[native.*]` table, a missing pkg-config, an unknown pkg-config package, a pkg-config flag
+outside the accepted set and a library directory that does not exist are each refused with a
+diagnostic naming the package. Nothing is silently dropped, because a dropped library reappears
+as an unresolved symbol far from its cause — the failure G1 recorded.
+
+NO FLAG INJECTION. Every value reaches clang as one argv element, never through a shell. Names are
+restricted to `[A-Za-z0-9_][A-Za-z0-9_.+-]*`, so a name cannot begin with `-` and become a flag.
+Directories are canonicalised, must exist, and must not contain `,` (which `-Wl,-rpath,<dir>` would
+split into further linker arguments). pkg-config output is parsed against an allow-list (`-L`, `-l`,
+`-pthread`, `-framework <name>`); anything else in a `.pc` file is refused, not forwarded. -/
+
+inductive NativeKind where
+  | pkgConfig | lib | libDir
+  deriving BEq, Repr, Inhabited
+
+def NativeKind.key : NativeKind → String
+  | .pkgConfig => "pkg-config"
+  | .lib => "libs"
+  | .libDir => "lib-dirs"
+
+/-- One declaration from one package's `[native]` section. -/
+structure NativeLibDecl where
+  /-- The declaring package: its dependency binding, or the root package's name. -/
+  package : String
+  /-- The declaring package's root directory; `lib-dirs` resolve against it. -/
+  packageRoot : String
+  kind : NativeKind
+  /-- As written in the manifest. -/
+  value : String
+  deriving BEq, Repr, Inhabited
+
+def NativeLibDecl.describe (d : NativeLibDecl) : String :=
+  match d.kind with
+  | .pkgConfig => s!"pkg-config package '{d.value}'"
+  | .lib => s!"library '{d.value}' (-l{d.value})"
+  | .libDir => s!"library directory '{d.value}'"
+
+/-- A library or pkg-config package name: `[A-Za-z0-9_][A-Za-z0-9_.+-]*`, at most 128 characters.
+    Never begins with `-`, so it can never be read as a flag. -/
+def isValidNativeName (s : String) : Bool :=
+  let cs := s.toList
+  let ok (c : Char) := c.isAlphanum || c == '_' || c == '.' || c == '+' || c == '-'
+  match cs with
+  | [] => false
+  | c :: _ => cs.length ≤ 128 && (c.isAlphanum || c == '_') && cs.all ok
+
+/-- A library directory as written: non-empty, not flag-shaped, no `,` (it is spliced into
+    `-Wl,-rpath,<dir>`), no control characters. -/
+def isValidNativeDir (s : String) : Bool :=
+  !s.isEmpty && s.length ≤ 4096 && !s.startsWith "-" &&
+    s.toList.all fun c => c != ',' && c.toNat ≥ 0x20 && c.toNat != 0x7f
+
+/-- Parse a one-line TOML array of plain strings: `["a", "b"]`, optionally followed by a comment.
+    Escapes are refused rather than interpreted. -/
+partial def parseNativeStrArray (s : String) : Except String (List String) :=
+  let ws (c : Char) := c == ' ' || c == '\t' || c == '\r'
+  let rec finish (cs : List Char) (acc : List String) : Except String (List String) :=
+    match cs.dropWhile ws with
+    | [] => .ok acc
+    | '#' :: _ => .ok acc
+    | _ => .error "unexpected text after ']'"
+  let rec elems (cs : List Char) (acc : List String) : Except String (List String) :=
+    match cs.dropWhile ws with
+    | ']' :: tail => finish tail acc
+    | '"' :: tail =>
+      let (str, rest) := tail.span (· != '"')
+      match rest with
+      | '"' :: rest' =>
+        if str.contains '\\' then .error "escape sequences are not accepted in [native] strings"
+        else
+          match rest'.dropWhile ws with
+          | ',' :: t => elems t (acc ++ [String.ofList str])
+          | ']' :: t => finish t (acc ++ [String.ofList str])
+          | _ => .error "expected ',' or ']' after a string"
+      | _ => .error "unterminated string (arrays must be on one line)"
+    | [] => .error "unterminated array (arrays must be on one line)"
+    | _ => .error "expected a quoted string"
+  match (s.trimAscii.toString).toList with
+  | '[' :: rest => elems rest []
+  | _ => .error "expected an array of strings, like [\"name\"]"
+
+/-- The `[native]` declarations of one manifest, in order, or the reason they are refused. -/
+def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
+  let mut inNative := false
+  let mut out : List (NativeKind × String) := []
+  for l in content.splitOn "\n" do
+    let t := l.trimAscii.toString
+    if t.startsWith "[" then
+      -- The table name, without brackets: `[native]`, `[native.x]` and `[[native]]` all name it.
+      let name := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile fun c => c != ']' && c != '.')
+      let afterHeader := (t.drop "[native]".length).trimAscii.toString
+      if name.trimAscii.toString == "native" then
+        if t.startsWith "[native]" && (afterHeader.isEmpty || afterHeader.startsWith "#") then
+          inNative := true
+        else
+          throw s!"unsupported table '{t}': native libraries are declared in one [native] section"
+      else
+        inNative := false
+    else if inNative && !t.isEmpty && !t.startsWith "#" then
+      match t.splitOn "=" with
+      | key :: valParts =>
+        let key := key.trimAscii.toString
+        let kind ← match key with
+          | "pkg-config" => pure NativeKind.pkgConfig
+          | "libs" => pure NativeKind.lib
+          | "lib-dirs" => pure NativeKind.libDir
+          | _ => throw s!"unknown key '{key}' (accepted: pkg-config, libs, lib-dirs)"
+        let vals ← match parseNativeStrArray ("=".intercalate valParts) with
+          | .ok v => pure v
+          | .error e => throw s!"'{key}': {e}"
+        for v in vals do
+          let valid := if kind == .libDir then isValidNativeDir v else isValidNativeName v
+          if !valid then
+            throw (if kind == .libDir then
+              s!"'{key}': '{v}' is not an accepted library directory (non-empty, not starting with '-', no ',' or control characters)"
+            else
+              s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
+          out := out ++ [(kind, v)]
+      | [] => throw s!"could not parse line '{t}'"
+  return out
+
+/-- The section for the trust reports: every declared native library, by package. Empty when none
+    is declared. Native code is linked into the binary and is not checked by Concrete, so each one
+    is a trusted dependency of the program. -/
+def nativeTrustSection (decls : List NativeLibDecl) : String :=
+  if decls.isEmpty then ""
+  else
+    "\nNative libraries (trusted foreign dependencies: linked into the binary, not checked by Concrete):\n" ++
+      "\n".intercalate (decls.map fun d => s!"  package '{d.package}': {d.describe}") ++ "\n"
+
+/-- Canonical existing directory or a refusal. -/
+private def canonicalNativeDir (d : NativeLibDecl) (path : String) (origin : String) : IO (Except String String) := do
+  let canon ← try pure (some (← IO.FS.realPath ⟨path⟩).toString) catch _ => pure none
+  match canon with
+  | none => return .error s!"error: package '{d.package}' [native] {origin}: library directory '{path}' does not exist"
+  | some c =>
+    if !(← System.FilePath.isDir ⟨c⟩) then
+      return .error s!"error: package '{d.package}' [native] {origin}: '{c}' is not a directory"
+    if !isValidNativeDir c then
+      return .error s!"error: package '{d.package}' [native] {origin}: library directory '{c}' contains a character the link line cannot carry (',' or a control character)"
+    return .ok c
+
+/-- The link flags for the declared native libraries, in declaration order (the root package's
+    first, then each dependency's — a library before the libraries it uses), or a refusal. -/
+def resolveNativeLinkFlags (decls : List NativeLibDecl) : IO (Except String (Array String)) := do
+  let mut flags : Array String := #[]
+  let mut pkgConfigChecked := false
+  let addDir (fs : Array String) (dir : String) : Array String :=
+    if fs.contains s!"-L{dir}" then fs else fs ++ #[s!"-L{dir}", s!"-Wl,-rpath,{dir}"]
+  for d in decls do
+    match d.kind with
+    | .libDir =>
+      let path := if d.value.startsWith "/" then d.value else d.packageRoot ++ "/" ++ d.value
+      match ← canonicalNativeDir d path "lib-dirs" with
+      | .error e => return .error e
+      | .ok c => flags := addDir flags c
+    | .lib => flags := flags.push s!"-l{d.value}"
+    | .pkgConfig =>
+      if !isValidNativeName d.value then
+        return .error s!"error: package '{d.package}' [native] pkg-config: '{d.value}' is not a package name"
+      if !pkgConfigChecked then
+        let found ← try
+            let r ← IO.Process.output { cmd := "pkg-config", args := #["--version"] }
+            pure (r.exitCode == 0)
+          catch _ => pure false
+        if !found then
+          return .error s!"error: package '{d.package}' declares [native] pkg-config = [\"{d.value}\"], but pkg-config was not found\nhint: install pkg-config (the repo devshell provides it: nix develop)"
+        pkgConfigChecked := true
+      let ex ← IO.Process.output { cmd := "pkg-config", args := #["--print-errors", "--exists", d.value] }
+      if ex.exitCode != 0 then
+        let why := ex.stderr.trimAscii.toString
+        return .error s!"error: package '{d.package}' declares [native] pkg-config = [\"{d.value}\"], but pkg-config cannot find '{d.value}'{if why.isEmpty then "" else "\n" ++ why}\nhint: install the library with its {d.value}.pc, or add its directory to PKG_CONFIG_PATH"
+      let r ← IO.Process.output { cmd := "pkg-config", args := #["--libs", d.value] }
+      if r.exitCode != 0 then
+        return .error s!"error: package '{d.package}': pkg-config --libs {d.value} failed: {r.stderr.trimAscii}"
+      let toks := (r.stdout.split (fun c => c == ' ' || c == '\t' || c == '\n' || c == '\r')).toList.map (·.toString)
+        |>.filter (!·.isEmpty)
+      let refuse (tok : String) : Except String (Array String) :=
+        .error s!"error: package '{d.package}': pkg-config --libs {d.value} emitted '{tok}', which is not an accepted link flag (accepted: -L<dir>, -l<name>, -pthread, -framework <name>); refusing rather than forwarding it"
+      let mut rest := toks
+      while !rest.isEmpty do
+        match rest with
+        | [] => pure ()
+        | tok :: more =>
+          rest := more
+          if tok.startsWith "-L" then
+            match ← canonicalNativeDir d (tok.drop 2).toString s!"pkg-config '{d.value}'" with
+            | .error e => return .error e
+            | .ok c => flags := addDir flags c
+          else if tok.startsWith "-l" && isValidNativeName (tok.drop 2).toString then
+            flags := flags.push tok
+          else if tok == "-pthread" then
+            flags := flags.push tok
+          else if tok == "-framework" then
+            match more with
+            | fw :: more' =>
+              if isValidNativeName fw then
+                flags := flags ++ #["-framework", fw]; rest := more'
+              else return refuse s!"-framework {fw}"
+            | [] => return refuse tok
+          else return refuse tok
+  return .ok flags
 
 /-- Find Concrete.toml by walking up from a directory. -/
 partial def findProjectRoot (startDir : String) : IO (Option String) := do
@@ -316,6 +534,10 @@ structure ProjectContext where
       names cannot scope a declaration: two packages may each define a module `util` (R-0484 R10
       assumption identity). -/
   filePackages  : List (String × String × String) := []
+  /-- Every `[native]` declaration in the resolved graph, root package first, then each dependency
+      in declaration order. Linked into the final binary by `resolveNativeLinkFlags`, and listed by
+      the trust reports: native code is a trusted dependency. -/
+  nativeLibs    : List NativeLibDecl := []
   -- the non-proof compiler fact store (Phase 4 #2), built once from this load and
   -- linked to the ObligationCore (proof) ledger.
   ledger        : Concrete.CompilerLedger.CompilerLedger
@@ -329,6 +551,12 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
   for w in tomlWarnings do IO.eprintln w
   let (userDeps, depWarnings) := parseDependencies tomlContent
   for w in depWarnings do IO.eprintln w
+  -- The root package's [native] declarations (G1). Refused, never skipped, when malformed.
+  let rootNative ← match parseNativeSection tomlContent with
+    | .ok v => pure v
+    | .error e =>
+      IO.eprintln s!"error: Concrete.toml [native]: {e}\nhint: see docs/platform/NATIVE_LIBRARIES.md"
+      return Except.error 1
 
   -- Inject builtin std if user didn't declare it explicitly.
   --
@@ -371,6 +599,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
   let mut depSrcMap : SourceMap := []
   let mut filePackages : List (String × String × String) := []
   let mut moduleOwners : List (String × String × String) := []  -- (module, package, file)
+  let mut depNative : List NativeLibDecl := []
   for (depName, depPath) in deps do
     let resolvedPath := if depPath.startsWith "/" then depPath
       else resolveDependencyPath projectRoot depPath
@@ -382,6 +611,14 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
       let depToml ← try pure (some (← readFile (resolvedPath ++ "/Concrete.toml"))) catch _ => pure none
+      -- The dependency's [native] declarations propagate to this build's link (G1).
+      if let some t := depToml then
+        match parseNativeSection t with
+        | .ok v => depNative := depNative ++ v.map fun (kind, value) =>
+            { package := depName, packageRoot := resolvedPath, kind, value }
+        | .error e =>
+          IO.eprintln s!"error: dependency '{depName}': Concrete.toml [native]: {e}\nhint: see docs/platform/NATIVE_LIBRARIES.md"
+          return Except.error 1
       -- R-0482: the dependency's OWN artifact (its paired inventory, never its dependencies) and its
       -- scope — the bundled std's reserved toolchain scope, its manifest's name and origin, or the
       -- `standalone` scope over its own artifact when it has no manifest. An unidentifiable
@@ -565,6 +802,12 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     let mut ledger := (({} : Concrete.CompilerLedger.CompilerLedger).linkObligations
       "ObligationCore ledger — `concrete --report obligation-ledger`")
     for (n, p) in deps do ledger := ledger.recordDependency n p
+    let rootLabel := if selfName.isEmpty then "the project" else selfName
+    let nativeLibs : List NativeLibDecl :=
+      rootNative.map (fun (kind, value) => { package := rootLabel, packageRoot := projectRoot, kind, value })
+        ++ depNative
+    for d in nativeLibs do
+      ledger := ledger.recordFact "native-library" d.package s!"{d.kind.key}:{d.value} (trusted foreign dependency)"
     for m in merged.modules do ledger := ledger.recordFact "module" m.name (if depNames.contains m.name then "dependency" else "project")
     for (file, _) in allSrcMap do ledger := ledger.recordSourceMap file []
     -- The frontend pass chain as named artifacts (Phase 4 #3): every pass that ran
@@ -598,6 +841,6 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       ledger := ledger.recordDiagnostic d
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
                        mainPath, depNames, identity, policy, policyWarnings, policyLocMap,
-                       registry, pc, ledger, filePackages := allFilePackages }
+                       registry, pc, ledger, filePackages := allFilePackages, nativeLibs }
 
 end Concrete
