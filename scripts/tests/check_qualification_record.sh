@@ -45,6 +45,8 @@ grep -q '^step	ssa-tests	Run SSA test suite$' "$TMP/req" \
   && ok "an ordinary gate step (Run SSA test suite) is required" || no "ordinary gate steps are not required"
 grep -q '^step	ssa-tests	Run actions/checkout@v4$' "$TMP/req" \
   && ok "an unnamed action step is required as 'Run <action>'" || no "unnamed action steps are not required"
+grep -q '^step	mutation-shard	Upload shard record$' "$TMP/req" \
+  && ok "an always() evidence-upload step is required" || no "always() steps are not required"
 grep -q '^step	build	Wait before retrying the Lean install$' "$TMP/req" \
   && no "a conditional retry step is required" || ok "conditional retry steps are optional"
 
@@ -77,6 +79,10 @@ open(tmp + "/same_reindent.yml", "w").write("\n".join(out))
 one(STEP, STEP + "        continue-on-error: False\n", "keep_coe_false")
 one(STEP, STEP + "        if: true\n", "keep_if_true")
 one(STEP, STEP + "        if: # nothing\n", "refuse_if_null")
+one(STEP, STEP + "        if: ${{ true }}\n", "keep_if_expr_true")
+one(STEP, STEP + "        continue-on-error: ${{ false }}\n", "keep_coe_expr_false")
+one(STEP, STEP + "        if: github.ref == 'refs/heads/main'\n", "refuse_if_unknown")
+one(STEP, STEP + "        continue-on-error: ${{ matrix.flaky }}\n", "refuse_coe_expr")
 one(STEP, '      - name: ""\n', "refuse_empty_name")
 one(STEP, "      - run: echo unnamed\n\n" + STEP, "refuse_unnamed_run")
 one(STEP, "      - name: Install clang\n        run: true\n\n" + STEP, "refuse_dup_step")
@@ -97,12 +103,12 @@ for c in same_comment same_quoted same_anchor same_reindent; do
     ok "$c keeps the required set"
   else no "$c changed or broke the required set"; fi
 done
-for c in keep_coe_false keep_if_true; do
+for c in keep_coe_false keep_if_true keep_if_expr_true keep_coe_expr_false; do
   if python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" 2>/dev/null | grep -q '^step	ssa-tests	Run SSA test suite$'; then
     ok "$c keeps the SSA gate step required"
   else no "$c made the SSA gate step optional"; fi
 done
-for c in refuse_if_null refuse_empty_name refuse_unnamed_run refuse_dup_step refuse_coe_string refuse_matrix_dim \
+for c in refuse_if_null refuse_if_unknown refuse_coe_expr refuse_empty_name refuse_unnamed_run refuse_dup_step refuse_coe_string refuse_matrix_dim \
          refuse_matrix_include refuse_matrix_size refuse_unknown_matrix refuse_dup_display refuse_tiny; do
   _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" >/dev/null 2>&1 || _rc=$?
   [ "$_rc" = 2 ] && ok "$c refuses (exit 2)" || no "$c: exit $_rc, expected a refusal"

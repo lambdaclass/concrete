@@ -10,12 +10,14 @@ THE REQUIREMENTS ARE THE CANDIDATE'S OWN WORKFLOW. The workflow is read from the
 verdict only when its bytes equal that blob. It is parsed structurally (PyYAML; absent PyYAML is a
 refusal, never a fallback). Every job is required (the push/pull-request jobs are stage (b), the
 schedule/dispatch jobs complete stage (c)), so a job added to the workflow is required without
-editing this file. Within each job every step without an `if:` or a true `continue-on-error:` is
-required, under its `name:` or, for an unnamed action, GitHub's `Run <action>`; REQUIRED_STEPS adds
-conditional steps qualification needs (the scheduled multi-kernel mutation coverage). A matrix job is
+editing this file. Within each job every step is required unless its `if:` is a condition
+STEP_CONDITIONS marks optional for a dispatched run, or its `continue-on-error:` is true; an
+unrecognized condition or expression refuses. A required step is named by its `name:` or, for an
+unnamed action, GitHub's `Run <action>`; REQUIRED_STEPS pins conditional steps qualification needs
+(the scheduled multi-kernel mutation coverage) even if their condition were reclassified. A matrix job is
 required instance by instance; only the matrix shapes in MATRIX_SIZES are understood, and any other
 matrix, a computed job name without one, an unnamed unconditional `run:` step, an empty name, a
-non-boolean `continue-on-error`, an empty `if:`, duplicate step names or two jobs with one display
+`continue-on-error` that is not a constant boolean, an `if:` not in STEP_CONDITIONS, duplicate step names or two jobs with one display
 name REFUSE (exit 2) rather than shrinking the requirement set.
 
 Input: exactly ONE GitHub run record, fetched (`--run ID`, via `gh run view`) or read (`--run-json
@@ -50,6 +52,31 @@ MATRIX_SIZES = {
     "mutation-shard": ("mutation-plan", "MUTATION_SHARDS", "shard"),
 }
 MIN_JOBS = 10  # vacuity floor on the workflow parse
+# Step `if:` conditions this tool understands, normalized (the `${{ }}` wrapper and extra whitespace
+# removed), and whether the step must run in a successful first-attempt workflow_dispatch run. An
+# unlisted condition REFUSES: a condition cannot silently make a gate step optional.
+STEP_CONDITIONS = {
+    "true": "required",
+    "success()": "required",
+    "always()": "required",
+    "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'": "required",
+    "false": "optional",
+    "failure()": "optional",
+    "steps.lean_install.outcome == 'failure'": "optional",
+}
+
+
+def norm_expr(v):
+    """A constant or condition expression, normalized; None when it is not a supported form."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if not isinstance(v, str):
+        return None
+    t = v.strip()
+    m = re.fullmatch(r"\$\{\{(.*)\}\}", t, re.S)
+    if m:
+        t = m.group(1).strip()
+    return re.sub(r"\s+", " ", t) or None
 
 
 def die(msg):
@@ -111,21 +138,16 @@ def parse_workflow(text):
                 die(f"job {jid} step {k} is not a mapping")
             optional = False
             if "if" in st:
-                cond = st["if"]
-                if isinstance(cond, bool):
-                    optional = not cond
-                elif isinstance(cond, str) and cond.strip():
-                    optional = True
-                else:
-                    die(f"job {jid} step {k}: empty or non-string if: {cond!r}")
+                cond = norm_expr(st["if"])
+                if cond not in STEP_CONDITIONS:
+                    die(f"job {jid} step {k}: unsupported if: {st['if']!r} (add it to STEP_CONDITIONS "
+                        "with whether a dispatched run must run it)")
+                optional = STEP_CONDITIONS[cond] == "optional"
             if "continue-on-error" in st:
-                coe = st["continue-on-error"]
-                if isinstance(coe, bool):
-                    optional = optional or coe
-                elif isinstance(coe, str) and coe.strip().startswith("${{"):
-                    optional = True
-                else:
-                    die(f"job {jid} step {k}: unsupported continue-on-error {coe!r}")
+                coe = norm_expr(st["continue-on-error"])
+                if coe not in ("true", "false"):
+                    die(f"job {jid} step {k}: unsupported continue-on-error {st['continue-on-error']!r}")
+                optional = optional or coe == "true"
             sname = None
             if "name" in st:
                 sname = st["name"]
