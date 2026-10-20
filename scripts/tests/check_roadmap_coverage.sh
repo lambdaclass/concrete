@@ -898,15 +898,17 @@ PY
       no "control $1 failed for an unexpected reason"
     fi
   }
+  # The controls use bugs of a row still in the table (type-identity 096, generic-destroy 099/100);
+  # those bugs have no record file on main, so the Status controls create one in the copied ledger.
   bugneg ledger_fixed_in_readme_only \
-    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [052_array_element_destroy_noop.md](052_array_element_destroy_noop.md)\n')" \
-    README.md "bug 052 is listed as not yet accepted but the bug ledger records it fixed"
+    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [096_control.md](096_control.md)\n')" \
+    README.md "bug 096 is listed as not yet accepted but the bug ledger records it fixed"
   bugneg ledger_fixed_bold_status \
-    "import re; s,n=re.subn(r'^\*\*Status:\*\* Open', '**Status:** FIXED 2026-10-20', s, flags=re.M); assert n==1" \
-    052_array_element_destroy_noop.md "bug 052 is listed as not yet accepted but the bug ledger records it fixed"
+    "import os; open(os.path.join(os.path.dirname(p), '099_control.md'), 'w').write('# Bug 099\n\n**Status:** FIXED 2026-10-20\n')" \
+    README.md "bug 099 is listed as not yet accepted but the bug ledger records it fixed"
   bugneg ledger_fixed_plain_status \
-    "import re; s,n=re.subn(r'^\*\*Status:\*\* Open', 'Status: fixed', s, flags=re.M); assert n==1" \
-    065_stack_depth_unboundedness_not_propagated.md "bug 065 is listed as not yet accepted but the bug ledger records it fixed"
+    "import os; open(os.path.join(os.path.dirname(p), '100_control.md'), 'w').write('# Bug 100\n\nStatus: fixed\n')" \
+    README.md "bug 100 is listed as not yet accepted but the bug ledger records it fixed"
   # Positive control: a bug whose README entry sits under "Fixed Bugs" but says OPEN (077) is open.
   cp "$TARGET" "$TMPD/open_entry.md"
   if python3 - "$TMPD/open_entry.md" <<'PY'
