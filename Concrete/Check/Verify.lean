@@ -365,6 +365,55 @@ partial def verifyLiteralRanges (modules : List CModule) : Diagnostics :=
     code := "E0227"
   }
 
+/-- Bug 092 (post-mono): does a value of this type store a reference inside an
+    aggregate (array, `Heap`, generic argument)? A bare `&T` is a reference, not
+    an aggregate; raw pointers and function types are not looked through. Same
+    rule as Check's `tyStoresRef` / `tyHoldsRefInAggregate`. -/
+private partial def tyStoresRefV : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | .heap inner | .heapArray inner => tyStoresRefV inner
+  | .array elem _ => tyStoresRefV elem
+  | .generic _ args _ => args.any tyStoresRefV
+  | _ => false
+
+private partial def tyHoldsRefInAggregateV : Ty → Bool
+  | .ref inner | .refMut inner => tyHoldsRefInAggregateV inner
+  | .heap inner | .heapArray inner => tyStoresRefV inner
+  | .array elem _ => tyStoresRefV elem
+  | .generic _ args _ => args.any tyStoresRefV
+  | _ => false
+
+/-- **Stored-reference verifier** (bug 092, post-mono). Check rejects a
+    reference stored in an aggregate wherever the type is written, but a generic
+    body instantiated at `T = &U` (`Box<T>`, `[T; 2]`, `Heap<T>`) only shows the
+    reference after monomorphization. Every instantiated struct/enum field, and
+    every parameter, binding and expression type of an instantiated function, is
+    checked here. Extern (FFI) signatures are not: they are raw by contract. -/
+partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
+  let rec goModule (m : CModule) : List VerifyViolation :=
+    let label := "a reference stored in an aggregate after monomorphization"
+    let fnVs := m.functions.foldl (fun acc fn =>
+      acc ++ verifyFnTypes tyHoldsRefInAggregateV label fn (skipGenerics := true)) []
+    let structVs := m.structs.foldl (fun acc sd =>
+      if !sd.typeParams.isEmpty then acc else
+      sd.fields.foldl (fun acc2 (fname, t) =>
+        acc2 ++ if tyStoresRefV t then [{ fnName := sd.name, message := s!"{label}: struct field '{fname}' type {tyToStr t}" }] else []) acc) []
+    let enumVs := m.enums.foldl (fun acc ed =>
+      if !ed.typeParams.isEmpty then acc else
+      ed.variants.foldl (fun acc2 (vname, fields) =>
+        fields.foldl (fun acc3 (fname, t) =>
+          acc3 ++ if tyStoresRefV t then [{ fnName := s!"{ed.name}::{vname}", message := s!"{label}: enum field '{fname}' type {tyToStr t}" }] else []) acc2) acc) []
+    fnVs ++ structVs ++ enumVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+  let violations := modules.foldl (fun acc m => acc ++ goModule m) []
+  violations.map fun v => {
+    severity := .error
+    message := s!"{v.fnName}: {v.message}"
+    pass := "post-mono"
+    span := none
+    hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/language/VALUE_MODEL.md)"
+    code := "E0239"
+  }
+
 /-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
     fields validate after instantiation, and no SAFE function exposes a
     reference-return type (references are second-class), and every integer
@@ -373,7 +422,7 @@ partial def verifyLiteralRanges (modules : List CModule) : Diagnostics :=
     docs/compiler/COMPILER_BOUNDARY.md. -/
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
-    ++ verifyLiteralRanges modules
+    ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
 
 -- ============================================================
 -- Rendering

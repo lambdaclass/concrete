@@ -2369,6 +2369,8 @@ def checkModule (m : Module) (summary : FileSummary)
     (m.structs.flatMap fun sd => sd.fields.map fun f => (s!"field '{f.name}' of struct '{sd.name}'", f.ty, sd.span))
     ++ (m.enums.flatMap fun ed => ed.variants.flatMap fun v =>
           v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", f.ty, ed.span))
+    -- A newtype is a one-field wrapper: its inner type is a stored field too.
+    ++ (m.newtypes.map fun nt => (s!"inner type of newtype '{nt.name}'", nt.innerTy, nt.span))
   match refFields.find? (fun (_, ty, _) => tyStoresRef ty) with
   | some (desc, ty, sp) =>
     .error [{ severity := .error, message := CheckError.message (.refStoredInAggregate desc (tyToString ty)),

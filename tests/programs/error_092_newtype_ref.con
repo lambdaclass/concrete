@@ -1,0 +1,11 @@
+// Bug 092 follow-up: a newtype is a one-field wrapper; its inner type may
+// not hold a reference either. E0239 at the declaration.
+struct B { v: Int }
+newtype Wrapped = &Heap<B>;
+fn read(h: &Heap<B>) -> Int { return h.v; }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 5 });
+    let w: Wrapped = Wrapped(&h);
+    free(h);
+    return read(unwrap(w));
+}

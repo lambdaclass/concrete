@@ -1,0 +1,14 @@
+// Bug 092 follow-up: a generic struct instantiated at T = &Int stores the
+// reference in an aggregate only after monomorphization (the binary
+// segfaulted). Post-mono E0239.
+struct Box<T> { value: T }
+fn parked<T>(x: T, f: fn(T) -> Int) -> Int {
+    let b: Box<T> = Box::<T> { value: x };
+    let Box { value } = b;
+    return f(value);
+}
+fn read(x: &Int) -> Int { return *x; }
+fn main() -> Int {
+    let x: Int = 42;
+    return parked::<&Int>(&x, read);
+}

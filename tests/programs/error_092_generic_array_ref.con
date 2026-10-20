@@ -1,0 +1,11 @@
+// Bug 092 follow-up: an array of T inside a generic body, instantiated at
+// T = &Int, is an array of references after monomorphization. E0239.
+fn pair<T: Copy>(x: T, f: fn(T) -> Int) -> Int {
+    let a: [T; 2] = [x, x];
+    return f(a[0]) + f(a[1]);
+}
+fn read(x: &Int) -> Int { return *x; }
+fn main() -> Int {
+    let x: Int = 21;
+    return pair::<&Int>(&x, read);
+}

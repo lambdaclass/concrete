@@ -7140,6 +7140,11 @@ run_err "$TESTDIR/error_090_guard_move_then_reassign.con" "E0300"
 run_err "$TESTDIR/error_092_ref_struct_field.con" "E0239"
 run_err "$TESTDIR/error_092_ref_in_option.con" "E0239"
 run_err "$TESTDIR/error_092_ref_in_array.con" "E0239"
+# The same rule after monomorphization (T = &Int in a generic aggregate; the
+# Box case segfaulted) and for a newtype's inner type.
+run_err "$TESTDIR/error_092_generic_box_ref.con" "E0239"
+run_err "$TESTDIR/error_092_generic_array_ref.con" "E0239"
+run_err "$TESTDIR/error_092_newtype_ref.con" "E0239"
 run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an

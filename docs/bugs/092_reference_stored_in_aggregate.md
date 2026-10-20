@@ -67,3 +67,13 @@ so.
 fn pointer with a reference parameter) must still compile and return 42. Every other
 `tests/programs` fixture keeps its previous check outcome, and `check_examples.sh` passes
 (142/0/79).
+
+## Follow-up (Codex review of the landing batch)
+
+Two shapes still stored a reference. A generic body instantiated at `T = &Int` (`Box<T> { value: x }`,
+`let a: [T; 2] = [x, x]`) only shows the reference after monomorphization; the `Box` case compiled and
+the binary segfaulted. `verifyNoStoredRefs` (post-mono, run by `verifyPostMono` and so by `--interp`
+as well) now rejects every instantiated struct/enum field, parameter, binding and expression type that
+stores a reference (E0239). A newtype's inner type is checked with struct and enum fields at the
+declaration (`newtype W = &Heap<B>` was refused only later, by Core-check's cast rule E0553).
+Fixtures `error_092_generic_box_ref.con`, `error_092_generic_array_ref.con`, `error_092_newtype_ref.con`.

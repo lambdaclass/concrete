@@ -60,7 +60,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 094: name-keyed state updates let a binder consume the live binding it shadowed (E0209/E0208/E0292).
   [094]="error_094_arm_binder_shadows_live.con error_094_destructure_shadows_live.con error_094_value_binder_shadows_live.con regress_094_shadowing_binders.con regress_094_shadow_state_by_identity.con error_094_borrow_block_shadow_leak.con"
   # Bug 092: a reference stored in an aggregate outlived its source (E0239).
-  [092]="error_092_ref_struct_field.con error_092_ref_in_option.con error_092_ref_in_array.con regress_092_refs_flow_down.con"
+  [092]="error_092_ref_struct_field.con error_092_ref_in_option.con error_092_ref_in_array.con error_092_generic_box_ref.con error_092_generic_array_ref.con error_092_newtype_ref.con regress_092_refs_flow_down.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
 )
 
