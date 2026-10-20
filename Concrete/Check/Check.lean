@@ -2123,7 +2123,9 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- reference itself is exclusive (non-Copy, can't be duplicated) but carries
   -- no consume obligation — dropping a borrow releases it. Only OWNED params
   -- take the obligation. (`&T` params are Copy and never tracked.)
-  let mut borrowedParams : List String := []
+  -- By binding identity (bug 094): a local that shadows a `&mut` parameter
+  -- is not exempt from the consume obligation.
+  let mut borrowedParams : List Nat := []
   for p in f.params do
     let paramTyRaw := resolveTypeParams p.ty f.typeParams
     let paramTy ← resolveType paramTyRaw
@@ -2132,14 +2134,17 @@ def checkFn (f : FnDef) : CheckM Unit := do
       throwCheck (.refStoredInAggregate s!"parameter '{p.name}'" (tyToString paramTy)) (some f.span)
     addVar p.name paramTy true  -- params are always mutable for now
     match paramTy with
-    | .refMut _ => borrowedParams := borrowedParams ++ [p.name]
+    | .refMut _ =>
+      match (← getEnv).vars.head? with
+      | some (_, vi) => borrowedParams := borrowedParams ++ [vi.uid]
+      | none => pure ()
     | _ => pure ()
   -- Check body
   checkStmts f.body retTy
   -- Check local bindings AND owned params for the consume obligation.
   let envAfter ← getEnv
-  let localVars := envAfter.vars.filter fun (name, vi) =>
-    !hasUid envBefore.vars vi.uid && !borrowedParams.contains name
+  let localVars := envAfter.vars.filter fun (_, vi) =>
+    !hasUid envBefore.vars vi.uid && !borrowedParams.contains vi.uid
   -- H9: if the body never terminates (a server's `while true {…}` accept loop, an
   -- unconditional abort), its textual end is unreachable, so a still-live linear
   -- local there is not a leak. `return`/`break` do NOT exempt — those exit the

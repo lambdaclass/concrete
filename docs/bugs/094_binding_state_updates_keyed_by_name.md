@@ -69,3 +69,8 @@ The borrow block `borrow x as r in R { .. }` removed its ref at exit by NAME, so
 shadowed the (Copy) ref, `let r: Heap<Int> = alloc(5);`, was deleted with it and leaked with no
 E0208. The block now checks its body's locals like any other block (H9) and drops the ref and the
 body's locals by identity. `error_094_borrow_block_shadow_leak.con` (E0208) compiled before.
+
+The function scope-exit check exempted `&mut` parameters by NAME, so an owned local that shadowed a
+consumed `&mut` parameter (`let p: Heap<Int> = alloc(n);`) was exempt too and leaked. The exemption
+now names the parameter bindings by identity. `error_094_mut_ref_param_shadow_leak.con` (E0208)
+compiled before (Codex round 2).

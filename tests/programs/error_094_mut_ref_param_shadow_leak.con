@@ -1,0 +1,14 @@
+// Bug 094 follow-up: the function-exit check exempted every binding named like
+// a `&mut` parameter, so an owned local shadowing the (consumed) parameter
+// leaked its Heap<Int> with no E0208.
+fn inspect(p: &mut Int) -> Int { return *p; }
+fn leak(p: &mut Int) with(Alloc) {
+    let f: fn(&mut Int) -> Int = inspect;
+    let n: Int = f(p);
+    let p: Heap<Int> = alloc(n);
+}
+fn main() with(Std) -> Int {
+    let mut x: Int = 1;
+    leak(&mut x);
+    return 0;
+}
