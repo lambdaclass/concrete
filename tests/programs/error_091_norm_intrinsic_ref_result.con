@@ -1,0 +1,13 @@
+// Normalized place rule (Codex static review): `free(h)` of a `Heap<&P>` yielded a reference
+// from an intrinsic call, which the rule classifies as an owned temporary. No call may yield a
+// reference: E0238.
+mod m {
+    struct P { f: i64 }
+    fn main() with(Alloc) -> Int {
+        let p: P = P { f: 1 };
+        let h: Heap<&P> = alloc(&p);
+        let x: i64 = free(h).f;
+        let P { f } = p;
+        return x;
+    }
+}

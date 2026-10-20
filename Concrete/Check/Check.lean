@@ -420,7 +420,23 @@ def checkDirectDestroyImplUse (fnName : String) (span : Option Span) : CheckM Un
 set_option backward.do.legacy true in
 mutual
 
+/-- Every expression is checked through this one entry. The normalized place rule (bug 091
+    round 3) classifies a call result as an owned temporary, which is sound only because no
+    call yields a reference: user functions cannot declare or instantiate one (VALUE_MODEL,
+    E0236), and this guard extends it to every call form — intrinsics included (`free(h)` of a
+    `Heap<&P>`, `vec_get`) — so a reference can never surface from a call (E0238). -/
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
+  let t ← checkExprCore e hint mode
+  match e with
+  | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>
+    match ← resolvedOr t with
+    | .ref _ | .refMut _ =>
+      throwCheck (.untraceablePlace "the reference produced by this call"
+        "no call may yield a reference (a reference stored in a heap cell or collection is not traced); borrow a named place instead") (some e.getSpan)
+    | _ => return t
+  | _ => return t
+
+partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
     -- One shared decision (TypeJudgment): the adopted type + the range

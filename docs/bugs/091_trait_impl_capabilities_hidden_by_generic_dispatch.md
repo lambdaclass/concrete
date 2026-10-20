@@ -448,3 +448,9 @@ Tenth (static) pass: a cast's type is returned with aliases resolved, and proven
 arguments and the overlap check resolve the types they test, so a reference spelled through an
 alias is one reference everywhere. Fixtures `error_091_norm_{alias_cast_overlap,alias_cast_let}.con`.
 
+Eleventh (static) pass: the rule treats a call result as an owned temporary because no call
+yields a reference (VALUE_MODEL; declared and generic returns are refused, E0236 re-checks after
+monomorphization). Intrinsics were outside that invariant (`free(h)` of a `Heap<&P>`), so every
+expression is now checked through one entry (`checkExpr` over `checkExprCore`) that refuses any
+call form whose type is a reference (E0238). Fixture `error_091_norm_intrinsic_ref_result.con`.
+
