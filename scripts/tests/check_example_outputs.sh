@@ -281,7 +281,7 @@ while IFS= read -r line; do
 done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
-# Bugs the examples exposed (docs/bugs/107-120), pinned the way check_bug077_contained.sh
+# Bugs the examples exposed (docs/bugs/108-120), pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
@@ -322,17 +322,16 @@ open_bug_reproducers() {
       *) no "$label: unknown mode '$mode'" ;;
     esac
   done <<'TABLE'
-107|bug107_bool_cast_trunc/repro.con|compile-fails|invalid cast opcode for cast from 'i1' to 'i32'
-108|bug108_f32_literal_invalid_ir/repro.con|compile-fails|floating point constant invalid for type
-109|bug109_array_value_store/repro.con|compile-fails|defined with type 'ptr' but expected '[2 x i64]'
-109|bug109_array_value_store/repro_cast.con|compile-fails|defined with type 'ptr' but expected '[3 x i8]'
-110|bug110_main_params_accepted/repro.con|compiles|
-111|bug111_user_intrinsic_e0116/repro.con|compile-fails|(E0116) foreign binding 'sizeof' does not declare its effects
-112|bug112_submodule_extern_effects_unchecked/repro.con|compiles|
-113|bug113_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference
-114|bug114_vec_get_duplicates_linear/repro.con|compiles|
-115|bug115_vec_push_first_field_through_ref/repro.con|compile-fails|use of undefined value '@vec_push'
-116|bug116_if_expr_literal_borrow_dangles/repro.con|interp-fails|not in env
+108|bug108_bool_cast_trunc/repro.con|compile-fails|invalid cast opcode for cast from 'i1' to 'i32'
+109|bug109_f32_literal_invalid_ir/repro.con|compile-fails|floating point constant invalid for type
+110|bug110_array_value_store/repro.con|compile-fails|defined with type 'ptr' but expected '[2 x i64]'
+110|bug110_array_value_store/repro_cast.con|compile-fails|defined with type 'ptr' but expected '[3 x i8]'
+111|bug111_main_params_accepted/repro.con|compiles|
+112|bug112_user_intrinsic_e0116/repro.con|compile-fails|(E0116) foreign binding 'sizeof' does not declare its effects
+113|bug113_submodule_extern_effects_unchecked/repro.con|compiles|
+114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference
+115|bug115_vec_get_duplicates_linear/repro.con|compiles|
+116|bug116_vec_push_first_field_through_ref/repro.con|compile-fails|use of undefined value '@vec_push'
 117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 119|bug119_interp_generic_trait_method/repro.con|interp-fails|undefined function 'U_v'

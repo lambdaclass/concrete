@@ -1,4 +1,4 @@
-# Bug 114 — the builtin `vec_get` returns a non-Copy element by value, duplicating a linear value
+# Bug 115 — the builtin `vec_get` returns a non-Copy element by value, duplicating a linear value
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug114_vec_get_duplicates_linear/repro.con`:
+`tests/regressions/bug115_vec_get_duplicates_linear/repro.con`:
 
 ```concrete
-// Bug 114: the builtin vec_get returns the element BY VALUE with no Copy
+// Bug 115: the builtin vec_get returns the element BY VALUE with no Copy
 // requirement, so a linear String can be taken out of a Vec twice. Both
 // copies own the same buffer: the binary double-frees (abort, exit 133/134
 // on macOS) while the interpreter prints "AB" and exits 0.
@@ -41,6 +41,14 @@ Require `T: Copy` for `vec_get` (non-Copy elements go through a borrowing or mov
 ## Where it showed up
 
 examples/json kept a `Vec<String>` string pool read with `vec_get`; the port replaced it with one owned buffer of spans.
+
+## Structural cause
+
+Builtin collection operations are typed by intercepts in Check that return the element type with no ownership requirement, outside the linearity rules every ordinary function signature goes through ([structural classes](STRUCTURAL_CLASSES.md) 13 and 15: a rule, use-once for non-Copy values, with no enforcing site on this path).
+
+## Structural owner
+
+R-0499 (S8 use-once and conservation on Core, row 4); repair owner: queue exit 0b (memory safety in safe code) -- `vec_get` requires `T: Copy`.
 
 ## Containment while open
 

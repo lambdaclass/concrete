@@ -1,4 +1,4 @@
-// Bug 111: the declaration std.mem uses for `sizeof` is rejected outside std
+// Bug 112: the declaration std.mem uses for `sizeof` is rejected outside std
 // with E0116 at 0:0 ("foreign binding 'sizeof' does not declare its effects"),
 // whether or not it is `trusted` and even when it is written `with()` --
 // a body-less fn declaration drops its `with(...)` clause and its span.

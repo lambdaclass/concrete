@@ -37,6 +37,14 @@ Resolve imported nested-module functions in the interpreter as Elab does for the
 
 examples/snippets/import.con and examples/project/src/main.con, recorded `interp=fails:` in the manifest.
 
+## Structural cause
+
+The interpreter resolves a call by the name it sees in Core and keeps its own table of callable names; an import from a nested module is spelled differently there than in the backend's tables. Declaration identity by spelled name ([structural class](STRUCTURAL_CLASSES.md) 1) in a second semantics (class 7).
+
+## Structural owner
+
+R-0492 (S5 `DefId`) and R-0496 (S7 Core semantics).
+
 ## Containment while open
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.

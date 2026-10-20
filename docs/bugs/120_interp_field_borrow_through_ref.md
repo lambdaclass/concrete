@@ -12,7 +12,7 @@
 // Bug 120: the interpreter cannot borrow a field through a reference
 // parameter (`&mut p.v` where p: &mut P): "interp: ref step .field on
 // non-struct"; the binary exits 1. (`v` is the second field here so the
-// native side is not also hit by bug 115.)
+// native side is not also hit by bug 116.)
 struct P {
     n: Int,
     v: Vec<i32>,
@@ -41,6 +41,14 @@ Follow the reference before applying the field step.
 ## Where it showed up
 
 examples/json (`StringPool.store`), recorded `interp=fails:` in the manifest.
+
+## Structural cause
+
+The interpreter models references as paths and applies a field step to the value at the path's base without following a reference stored there. Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7); places are not a shared model (class 5).
+
+## Structural owner
+
+R-0496 (S7 Core semantics) over R-0501's places (S10).
 
 ## Containment while open
 

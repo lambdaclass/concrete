@@ -1,4 +1,4 @@
-# Bug 112 — R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules
+# Bug 113 — R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug112_submodule_extern_effects_unchecked/repro.con`:
+`tests/regressions/bug113_submodule_extern_effects_unchecked/repro.con`:
 
 ```concrete
-// Bug 112: R-0484 R3 (every foreign binding declares its effects, E0116) is
+// Bug 113: R-0484 R3 (every foreign binding declares its effects, E0116) is
 // enforced only for top-level modules. The same `extern fn` with no `with(...)`
 // inside a nested submodule is accepted (and charged Unsafe at the call).
 // Expected: E0116 on `abs`. Actual: compiles and exits 3.
@@ -34,6 +34,14 @@ Apply the extern-effects check to every module, nested ones included.
 ## Where it showed up
 
 found while porting examples/snippets/direct_module_use.con.
+
+## Structural cause
+
+The R-0484 R3 rule is enforced by a walk over the module it is handed, and nested submodules are not visited for it: a rule whose enforcing site does not cover every module ([structural class](STRUCTURAL_CLASSES.md) 13; 077 shows the same nesting gap in lowering).
+
+## Structural owner
+
+R-0498 (S3, exit 2l: every rule has an enforcing site, with a nested-module case); proposed: run the extern-effects check from the same traversal that checks submodule bodies (H12).
 
 ## Containment while open
 

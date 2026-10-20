@@ -1,7 +1,7 @@
 // Bug 120: the interpreter cannot borrow a field through a reference
 // parameter (`&mut p.v` where p: &mut P): "interp: ref step .field on
 // non-struct"; the binary exits 1. (`v` is the second field here so the
-// native side is not also hit by bug 115.)
+// native side is not also hit by bug 116.)
 struct P {
     n: Int,
     v: Vec<i32>,

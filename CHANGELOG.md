@@ -22,9 +22,9 @@ gate that CI runs and that references the file (two remain), library-shaped proo
 objects (`compile-lib`), and a program blocked by an open compiler bug is `known-bug NNN` with its
 failure text. The new `check_example_outputs.sh` runs every runnable example on fixed inputs and
 compares exact stdout and exit code natively and under `--interp`; network servers are `@norun` with
-reasons. Fourteen compiler and interpreter bugs found on the way are filed as
-[107](docs/bugs/107_bool_cast_trunc.md)–[120](docs/bugs/120_interp_field_borrow_through_ref.md), each
-with a reproducer the gate keeps pinned.
+reasons. Thirteen compiler and interpreter bugs found on the way are filed as
+[108](docs/bugs/108_bool_cast_trunc.md)–[120](docs/bugs/120_interp_field_borrow_through_ref.md), each
+with a reproducer the gate keeps pinned; policy_engine also hit bug 105 (a reference-valued `if`).
 
 ### Phase 1 Closes Through Classed Exits; Features Start On Their Own Prerequisites (2026-10-20, roadmap only)
 

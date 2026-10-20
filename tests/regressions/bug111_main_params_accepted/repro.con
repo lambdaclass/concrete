@@ -1,4 +1,4 @@
-// Bug 110: `main` may declare parameters. The generated wrapper calls
+// Bug 111: `main` may declare parameters. The generated wrapper calls
 // `user_main()` with no arguments, so `argc` reads an undefined register
 // (it happens to be 0 on arm64). Expected: a diagnostic rejecting the
 // signature. Actual: compiles; the interpreter fails "undefined variable 'argc'".

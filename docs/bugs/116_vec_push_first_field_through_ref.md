@@ -1,4 +1,4 @@
-# Bug 115 — `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push`
+# Bug 116 — `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push`
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug115_vec_push_first_field_through_ref/repro.con`:
+`tests/regressions/bug116_vec_push_first_field_through_ref/repro.con`:
 
 ```concrete
-// Bug 115: vec_push on `&mut p.v`, where p is a `&mut P` parameter and v is
+// Bug 116: vec_push on `&mut p.v`, where p is a `&mut P` parameter and v is
 // P's FIRST field, lowers to a call to the generic, undefined `@vec_push`
 // (llvm-as: "use of undefined value '@vec_push'"). Moving `v` to a later
 // field compiles. Expected: exit 1.
@@ -40,6 +40,14 @@ Specialize the intrinsic call regardless of whether the field projection folds t
 ## Where it showed up
 
 found while porting examples/json (its pool struct puts the Vec second).
+
+## Structural cause
+
+Intrinsic specialization (`vec_push` -> `vec_push_4`) depends on the shape of the lowered argument: when the field projection folds to the base pointer (first field), the element type is not recovered and the generic name is emitted. Storage and places decided ad hoc in Lower ([structural class](STRUCTURAL_CLASSES.md) 8) combined with dispatch by synthesized names (class 3).
+
+## Structural owner
+
+R-0501 (S10 Place MIR) with R-0510 (S8a checked specialization: an intrinsic's instance is chosen from the checked type, not the lowered operand).
 
 ## Containment while open
 

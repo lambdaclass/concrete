@@ -1,4 +1,4 @@
-// Bug 113: a `#[intrinsic = "sizeof"]` declared in a nested submodule and
+// Bug 114: a `#[intrinsic = "sizeof"]` declared in a nested submodule and
 // called by path (`intrinsics::sizeof`) is not intercepted: it lowers to a C
 // call and the link fails ("_sizeof" undefined). Expected: exit 4.
 mod t {

@@ -1,4 +1,4 @@
-// Bug 114: the builtin vec_get returns the element BY VALUE with no Copy
+// Bug 115: the builtin vec_get returns the element BY VALUE with no Copy
 // requirement, so a linear String can be taken out of a Vec twice. Both
 // copies own the same buffer: the binary double-frees (abort, exit 133/134
 // on macOS) while the interpreter prints "AB" and exits 0.

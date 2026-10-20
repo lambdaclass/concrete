@@ -1,4 +1,4 @@
-# Bug 109 — an array value is stored as an aggregate where the SSA value is a pointer
+# Bug 110 — an array value is stored as an aggregate where the SSA value is a pointer
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug109_array_value_store/repro.con` (the cast shape is `repro_cast.con` beside it):
+`tests/regressions/bug110_array_value_store/repro.con` (the cast shape is `repro_cast.con` beside it):
 
 ```concrete
-// Bug 109 (witness 1): assigning an array value to an array element stores the
+// Bug 110 (witness 1): assigning an array value to an array element stores the
 // SSA pointer as if it were the aggregate. Expected: exit 3 (interp prints 3).
 // Actual: "'%tN' defined with type 'ptr' but expected '[2 x i64]'".
 fn main() -> i32 {
@@ -29,7 +29,15 @@ Store the aggregate (load it first, or memcpy from the pointer).
 
 ## Where it showed up
 
-examples/snippets/arrays.con and examples/snippets/hello_world_array.con, manifest `known-bug 109`.
+examples/snippets/arrays.con and examples/snippets/hello_world_array.con, manifest `known-bug 110`.
+
+## Structural cause
+
+Lower decides ad hoc whether an array value is an SSA aggregate or a pointer to storage, and the store it emits assumes the other one. This is storage and places decided per construct in Lower ([structural class](STRUCTURAL_CLASSES.md) 8, with 078, 095, 102, 105).
+
+## Structural owner
+
+R-0501 (S10 Place MIR: every aggregate has one storage representation and stores go through places), with R-0504 (S12 validators).
 
 ## Containment while open
 

@@ -171,7 +171,7 @@ examples/smt/teaching/path_feasibility.con compile-lib
 examples/smt/teaching/range_block_count.con compile-lib
 examples/smt/teaching/unsupported_theory.con compile-lib
 examples/snippets/arithmetic.con compile
-examples/snippets/arrays.con known-bug 109 defined with type 'ptr' but expected '[2 x i64]'
+examples/snippets/arrays.con known-bug 110 defined with type 'ptr' but expected '[2 x i64]'
 examples/snippets/assoc_method.con compile
 examples/snippets/borrow.con compile
 examples/snippets/casts.con compile
@@ -179,7 +179,7 @@ examples/snippets/chars.con compile
 examples/snippets/check_errors.con expected-error
 examples/snippets/collatz.con compile
 examples/snippets/constants.con compile
-examples/snippets/direct_module_use.con known-bug 113 Undefined symbols || undefined reference
+examples/snippets/direct_module_use.con known-bug 114 Undefined symbols || undefined reference
 examples/snippets/enum_match.con compile
 examples/snippets/error_flow.con compile
 examples/snippets/fact.con compile
@@ -188,17 +188,17 @@ examples/snippets/factorial_if.con compile
 examples/snippets/fib.con compile
 examples/snippets/fib_generic.con compile
 examples/snippets/fib_if.con compile
-examples/snippets/floats.con known-bug 108 floating point constant invalid for type
+examples/snippets/floats.con known-bug 109 floating point constant invalid for type
 examples/snippets/for.con compile
 examples/snippets/for_loop.con compile
 examples/snippets/for_loop_var.con compile
 examples/snippets/for_while.con compile
 examples/snippets/gcd.con compile
-examples/snippets/generic_enum_impl.con known-bug 107 invalid cast opcode for cast from 'i1' to 'i32'
+examples/snippets/generic_enum_impl.con known-bug 108 invalid cast opcode for cast from 'i1' to 'i32'
 examples/snippets/generic_struct.con compile
 examples/snippets/generics_basic.con compile
 examples/snippets/hello_world.con compile
-examples/snippets/hello_world_array.con known-bug 109 defined with type 'ptr' but expected '[13 x i8]'
+examples/snippets/hello_world_array.con known-bug 110 defined with type 'ptr' but expected '[13 x i8]'
 examples/snippets/hello_world_hacky.con compile
 examples/snippets/if_else.con compile
 examples/snippets/if_if_false.con compile
@@ -221,14 +221,14 @@ examples/snippets/opaque_vec.con compile
 examples/snippets/refs.con compile
 examples/snippets/simple.con compile
 examples/snippets/simple_trait.con compile
-examples/snippets/sizeof_intrinsic.con known-bug 111 (E0116) foreign binding 'sizeof' does not declare its effects
+examples/snippets/sizeof_intrinsic.con known-bug 112 (E0116) foreign binding 'sizeof' does not declare its effects
 examples/snippets/string_processing.con compile
 examples/snippets/structs.con compile
 examples/snippets/trait_dispatch.con compile
 examples/snippets/type_alias.con compile
 examples/snippets/union.con compile
 examples/snippets/variable_inside_if.con compile
-examples/snippets/vec.con known-bug 111 (E0116) foreign binding 'sizeof' does not declare its effects
+examples/snippets/vec.con known-bug 112 (E0116) foreign binding 'sizeof' does not declare its effects
 examples/snippets/while.con compile
 examples/snippets/while_if_false.con compile
 examples/snippets/while_loop.con compile

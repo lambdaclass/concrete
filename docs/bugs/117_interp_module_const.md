@@ -31,6 +31,14 @@ Bind module constants in the interpreter environment.
 
 examples/snippets/constants.con, recorded `interp=fails:` in the manifest.
 
+## Structural cause
+
+The interpreter has its own environment construction and binds only functions and locals, not module constants, which Elab inlines for the backend. Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7, with 066, 084, 085).
+
+## Structural owner
+
+R-0496 (S7 one Core semantics the interpreter executes) with the differential harness R-0491 (exit 2c); proposed: a module-constant case in `check_codegen_differential.sh`.
+
 ## Containment while open
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.

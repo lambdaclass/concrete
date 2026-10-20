@@ -1,4 +1,4 @@
-# Bug 110 — `main` may declare parameters, and the wrapper calls it with none
+# Bug 111 — `main` may declare parameters, and the wrapper calls it with none
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug110_main_params_accepted/repro.con`:
+`tests/regressions/bug111_main_params_accepted/repro.con`:
 
 ```concrete
-// Bug 110: `main` may declare parameters. The generated wrapper calls
+// Bug 111: `main` may declare parameters. The generated wrapper calls
 // `user_main()` with no arguments, so `argc` reads an undefined register
 // (it happens to be 0 on arm64). Expected: a diagnostic rejecting the
 // signature. Actual: compiles; the interpreter fails "undefined variable 'argc'".
@@ -29,6 +29,14 @@ Reject parameters on `main` with a diagnostic (arguments are read through std.ar
 ## Where it showed up
 
 examples/snippets/borrow.con used `main(argc: i64)`; it was ported to a local.
+
+## Structural cause
+
+The entry-point contract is documented (EXECUTION_MODEL.md: `fn main() -> Int`) but has no enforcing site: Check accepts any signature for `main` and the backend's wrapper assumes none ([structural class](STRUCTURAL_CLASSES.md) 13, documented rules with no enforcing site).
+
+## Structural owner
+
+R-0498 (S3, exit 2l: every documented rule has an enforcing site); proposed: a Check rule rejecting parameters on `main`.
 
 ## Containment while open
 

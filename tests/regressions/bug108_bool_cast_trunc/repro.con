@@ -1,4 +1,4 @@
-// Bug 107: `bool as i32` is emitted as `trunc i1 to i32` (invalid IR).
+// Bug 108: `bool as i32` is emitted as `trunc i1 to i32` (invalid IR).
 // Expected: exit 1 (interp prints 1). Actual: LLVM IR validation fails.
 fn main() -> i32 {
     let b: bool = true;

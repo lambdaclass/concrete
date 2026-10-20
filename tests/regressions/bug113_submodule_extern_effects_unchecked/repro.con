@@ -1,4 +1,4 @@
-// Bug 112: R-0484 R3 (every foreign binding declares its effects, E0116) is
+// Bug 113: R-0484 R3 (every foreign binding declares its effects, E0116) is
 // enforced only for top-level modules. The same `extern fn` with no `with(...)`
 // inside a nested submodule is accepted (and charged Unsafe at the call).
 // Expected: E0116 on `abs`. Actual: compiles and exits 3.

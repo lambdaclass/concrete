@@ -1,4 +1,4 @@
-// Bug 109 (witness 1): assigning an array value to an array element stores the
+// Bug 110 (witness 1): assigning an array value to an array element stores the
 // SSA pointer as if it were the aggregate. Expected: exit 3 (interp prints 3).
 // Actual: "'%tN' defined with type 'ptr' but expected '[2 x i64]'".
 fn main() -> i32 {

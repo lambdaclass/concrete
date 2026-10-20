@@ -40,6 +40,14 @@ Dispatch on the runtime value's type in the interpreter (or interpret monomorphi
 
 examples/snippets/trait_dispatch.con, recorded `interp=fails:` in the manifest.
 
+## Structural cause
+
+The interpreter executes pre-monomorphization Core, where a trait method called on a type parameter is spelled `U_v`; only Mono resolves it. Semantics implemented twice, at different pipeline stages ([structural class](STRUCTURAL_CLASSES.md) 7).
+
+## Structural owner
+
+R-0496 (S7: the interpreter runs the same Core the backend lowers) with R-0510 (S8a checked specialization).
+
 ## Containment while open
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.

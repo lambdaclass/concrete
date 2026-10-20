@@ -1,4 +1,4 @@
-# Bug 108 — an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant
+# Bug 109 — an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant
 
 **Status:** OPEN
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
@@ -6,10 +6,10 @@
 
 ## Reproducer
 
-`tests/regressions/bug108_f32_literal_invalid_ir/repro.con`:
+`tests/regressions/bug109_f32_literal_invalid_ir/repro.con`:
 
 ```concrete
-// Bug 108: an f32 literal that is not exactly representable (0.1) is emitted
+// Bug 109: an f32 literal that is not exactly representable (0.1) is emitted
 // as a decimal LLVM `float` constant, which llvm-as rejects.
 // Expected: exit 1. Actual: "floating point constant invalid for type".
 fn main() -> i32 {
@@ -29,7 +29,15 @@ Emit `f32` constants in LLVM hex form (the f32 value widened to double). `f64` l
 
 ## Where it showed up
 
-examples/snippets/floats.con, manifest `known-bug 108`.
+examples/snippets/floats.con, manifest `known-bug 109`.
+
+## Structural cause
+
+Floating-point literals are rendered to LLVM text with a decimal formatter that assumes every constant is exactly representable; the literal's value is never converted to the target width before it is printed. The emitter decides a numeric encoding locally, unchecked against the type (classes 7 and 8 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)).
+
+## Structural owner
+
+R-0502 (S11 one `Layout`/scalar encoding for the backend) with R-0504 (S12 validators); f32 is outside ProvableV1, so the proposed interim owner is the float-cast gate (`check_float_cast.sh`) extended to f32 literals.
 
 ## Containment while open
 

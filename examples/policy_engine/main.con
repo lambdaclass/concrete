@@ -144,8 +144,8 @@ mod Gate {
         let v: i32 = evaluate(rules, req);
 
         // Print: [ALLOW] admin read source_code
-        // (Borrowing a literal inside an if-expression arm dangles once the arm
-        // ends -- bug 116 -- so each arm appends its own label.)
+        // (An if-expression yielding a reference -- here a borrowed literal per
+        // arm -- miscompiles: bug 105, so each arm appends its own label.)
         let mut out: String = "[";
         if v == 1 { string_append(&mut out, &"ALLOW"); } else { string_append(&mut out, &"DENY"); }
         string_append(&mut out, &"] ");

@@ -1,4 +1,4 @@
-// Bug 108: an f32 literal that is not exactly representable (0.1) is emitted
+// Bug 109: an f32 literal that is not exactly representable (0.1) is emitted
 // as a decimal LLVM `float` constant, which llvm-as rejects.
 // Expected: exit 1. Actual: "floating point constant invalid for type".
 fn main() -> i32 {
