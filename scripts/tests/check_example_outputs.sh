@@ -44,6 +44,10 @@
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
+# EXAMPLE_VALGRIND=1 runs every native binary under valgrind memcheck (Linux CI):
+# a memory error fails the run deterministically, where the bare binary may only
+# crash sometimes (bug 121: conlog freed a corrupted pointer, SIGSEGV on one CI
+# run in several, never on macOS; valgrind reported it on every run).
 
 set -uo pipefail
 
@@ -55,6 +59,13 @@ MANIFEST="${EXAMPLE_MANIFEST:-scripts/tests/example_manifest.txt}"
 ONLY="${EXAMPLE_OUTPUTS_ONLY:-}"
 RUN_TIMEOUT=30
 INTERP_TIMEOUT=120
+VG=()
+if [ "${EXAMPLE_VALGRIND:-0}" = 1 ]; then
+  command -v valgrind >/dev/null 2>&1 || { echo "error: EXAMPLE_VALGRIND=1 but valgrind is not installed" >&2; exit 2; }
+  # 98: a status no example expects, so a memory error can never pass as the program's exit.
+  VG=(valgrind -q --error-exitcode=98 --leak-check=no)
+  RUN_TIMEOUT=300
+fi
 
 [ -x "$COMPILER" ] || { echo "error: compiler not found at $COMPILER. Run 'lake build' first." >&2; exit 2; }
 [ -f "$MANIFEST" ] || { echo "error: manifest not found at $MANIFEST" >&2; exit 2; }
@@ -225,10 +236,14 @@ while IFS= read -r line; do
   in="/dev/null"; [ -n "$stdin_rel" ] && in="$work/$stdin_rel"
   # shellcheck disable=SC2086
   # A clean environment: examples that read it (envcfg) must not see the caller's.
-  (cd "$work" && env -i PATH="$PATH" LC_ALL=C timeout "$RUN_TIMEOUT" "$bin" $args < "$in" > "$TMP/nat_$n.out" 2> "$TMP/nat_$n.err")
+  (cd "$work" && env -i PATH="$PATH" LC_ALL=C timeout "$RUN_TIMEOUT" ${VG[@]+"${VG[@]}"} "$bin" $args < "$in" > "$TMP/nat_$n.out" 2> "$TMP/nat_$n.err")
   rc=$?
   native_ok=1
-  if [ "$rc" -ne "$exit_want" ]; then
+  if [ "${#VG[@]}" -gt 0 ] && [ "$rc" -eq 98 ] && [ "$exit_want" -ne 98 ]; then
+    no "$label: valgrind reports a memory error in the native run"
+    grep '^==' "$TMP/nat_$n.err" | awk 'NR<=12'
+    native_ok=0
+  elif [ "$rc" -ne "$exit_want" ]; then
     no "$label: native exit $rc, expected $exit_want"
     awk 'NR<=3' "$TMP/nat_$n.err"
     native_ok=0
