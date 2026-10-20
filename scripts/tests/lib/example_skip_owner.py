@@ -65,22 +65,6 @@ def shell_values(block_lines):
     return out
 
 
-def defaults_shells(lines, key_indent):
-    """`shell:` values under a `defaults:` key at this indentation."""
-    out, i = [], 0
-    while i < len(lines):
-        if re.match(r"^" + " " * key_indent + r"defaults:\s*$", lines[i]):
-            i += 1
-            body = []
-            while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > key_indent):
-                body.append(lines[i])
-                i += 1
-            out += shell_values(body)
-        else:
-            i += 1
-    return out
-
-
 def run_commands(path):
     """The shell text of every INLINE `run:` value (`run: <command>` on one line)
     of an UNCONDITIONAL step in an UNCONDITIONAL job.
@@ -91,10 +75,10 @@ def run_commands(path):
     lines share quote, heredoc and continuation state, and reading them line by
     line took printed text for commands. A step or job carrying any `if:` is
     excluded (`if: false` disables it; no condition is evaluated here), and so is
-    any run whose effective shell -- step `shell:`, job or workflow
-    `defaults.run.shell` -- is not plain bash/sh (a custom template such as
-    `bash -n {0}` would only syntax-check it). Any `env:` at workflow, job or step
-    scope also disqualifies (SHELLOPTS: noexec, BASH_ENV, PATH ... can keep the
+    any run whose step `shell:` is not plain bash/sh (a custom template such as
+    `bash -n {0}` would only syntax-check it) or that sets working-directory. Any
+    `defaults:` (in any form) at workflow or job scope, any `env:` at workflow, job
+    or step scope, and a `run:` value continued on a deeper line also disqualify (SHELLOPTS: noexec, BASH_ENV, PATH ... can keep the
     script from running; rather than vet values, environments are refused). An owner
     must therefore be invoked by an inline `run:` of an unconditional step --
     fail-closed, and every CI owner today is spelled that way."""
@@ -113,10 +97,10 @@ def run_commands(path):
             while i < len(lines) and (not lines[i].strip() or indent(lines[i]) > col):
                 visible[i] = ""
                 i += 1
-    if any(v not in EXECUTING_SHELLS for v in defaults_shells(visible, 0)):
-        return []           # a workflow-wide custom shell: nothing qualifies
-    if any(re.match(r"^env:", l) for l in visible):
-        return []           # a workflow-wide environment: nothing qualifies
+    # Workflow-wide `defaults:` (any form: block, flow, commented) or `env:`: nothing
+    # qualifies. Their contents are not vetted; their presence is refused.
+    if any(re.match(r"^(defaults|env)\s*:", l) for l in visible):
+        return []
     jobs_at = next((n for n, l in enumerate(visible) if re.match(r"^jobs:\s*$", l)), None)
     jcol = None
     if jobs_at is not None:
@@ -129,6 +113,11 @@ def run_commands(path):
         if not m or not m.group(3).strip() or block.match(line):
             continue
         key_col = len(m.group(1)) + len(m.group(2) or "")
+        # A plain scalar continues on deeper-indented lines (YAML folds them into the
+        # value): only a value that ends on its own line is read.
+        nxt = next((l for l in visible[n + 1:] if l.strip()), None)
+        if nxt is not None and indent(nxt) > key_col:
+            continue
         # The step: from its `- ` line down to the next line at or left of the dash.
         start = n
         if not m.group(2):
@@ -166,9 +155,7 @@ def run_commands(path):
         if not props:
             continue
         pcol = indent(props[0])
-        if any(indent(l) == pcol and re.match(r"^\s*(if|env):", l) for l in props):
-            continue
-        if any(v not in EXECUTING_SHELLS for v in defaults_shells(body, pcol)):
+        if any(indent(l) == pcol and re.match(r"^\s*(if|env|defaults)\s*:", l) for l in props):
             continue
         cmds.append(strip_shell_comment(m.group(3)))
     return cmds
