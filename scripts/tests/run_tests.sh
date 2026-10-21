@@ -1571,6 +1571,10 @@ run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
 # inside it (E0602 at Lower), and no capture of a local shadowing a constant it names.
 run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
+run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0602)"
+# Constants are flattened by bare name: two modules defining one name are refused at the use.
+run_err "$TESTDIR/error_123_const_name_collision.con" "(E0602)"
+run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"

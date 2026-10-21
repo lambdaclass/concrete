@@ -501,11 +501,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
   | .strLit _ _ => return .string
   | .charLit _ _ => return .char
   | .ident _ name =>
-    -- First check if it's a constant
+    -- A local shadows a module constant of the same name (Elab resolves in the same order).
     let env ← getEnv
-    match env.constants.lookup name with
-    | some ty => return ty
-    | none =>
     match ← lookupVarInfo name with
     | some info =>
       -- Any use of a reference binding while a live EXCLUSIVE alias of its storage that is not
@@ -535,6 +532,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         useVar name (some e.getSpan)
       return info.ty
     | none =>
+      match env.constants.lookup name with
+      | some ty => return ty
+      | none =>
       -- Check if it's a function name (first-class function reference)
       match ← lookupFn name with
       | some sig =>

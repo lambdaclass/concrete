@@ -1,0 +1,18 @@
+// Bug 123 review: constants reach Lower flattened by bare name, so a submodule reading its own
+// `A` got the top-level `A` (7 for 42, on main too). Two modules defining one constant name are
+// refused at the use (E0602) until constants carry their module.
+const A: Int = 7;
+
+mod m {
+    const A: Int = 42;
+
+    pub fn get() -> Int {
+        return A;
+    }
+}
+
+import m.{get};
+
+fn main() -> Int {
+    return get();
+}

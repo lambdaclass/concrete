@@ -1,0 +1,15 @@
+// Bug 123 review: a local shadows a module constant of the same name in Check too, with its own
+// type (Check typed `X` as the constant's Int and refused `&X` as `&bool`).
+const X: Int = 42;
+
+fn main() with(Std) -> Int {
+    let X: bool = true;
+    let r: &bool = &X;
+    if *r {
+        print_int(1);
+    } else {
+        print_int(0);
+    }
+    print_char(10);
+    return 0;
+}

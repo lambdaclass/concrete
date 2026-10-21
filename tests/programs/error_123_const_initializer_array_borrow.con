@@ -1,0 +1,8 @@
+// Bug 123 review: `&A[0]` in a constant's initializer borrows an array constant, which has no
+// storage either; the array case skipped the guard and read another module's `A`. Refused (E0602).
+const A: [Int; 1] = [42];
+const Y: Int = *&A[0];
+
+fn main() -> Int {
+    return Y - 42;
+}

@@ -180,13 +180,6 @@ def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 =======
 >>>>>>> 56440bd9 (fix: a constant's initializer is lowered with the caller's locals hidden (bug 123 review))
 =======
-||||||| parent of 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
-||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
-def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
-=======
-def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
->>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
-=======
 >>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
 ||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
@@ -1048,7 +1041,14 @@ def buildIdentity : String := "5b6797bbdc614a6b68d26d692600da2e"
 =======
 def buildIdentity : String := "d35c5d6abd184f71254db0e3647c0264"
 >>>>>>> a14d75dc (fix: a constant's initializer is lowered with the caller's locals hidden (bug 123 review))
->>>>>>> 56440bd9 (fix: a constant's initializer is lowered with the caller's locals hidden (bug 123 review))
+||||||| parent of 5a2ea5b2 (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
+=======
+||||||| parent of ea90eb7e (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
+def buildIdentity : String := "d35c5d6abd184f71254db0e3647c0264"
+=======
+def buildIdentity : String := "f78a1e70d939b91e52afce6cc7420882"
+>>>>>>> ea90eb7e (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
+>>>>>>> 5a2ea5b2 (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
 
 /-- How many source files the identity above was computed over.
 

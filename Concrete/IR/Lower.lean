@@ -481,6 +481,10 @@ private def snapshotVars : LowerM (List (String × SVal)) := do
 private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
   match inner with
   | .ident name varTy =>
+    -- Bug 123: a module constant has no storage, whatever its type (an array constant's
+    -- element borrow `&A[0]` reaches here too). Refused unless a local of that name shadows it.
+    if (← lookupVar name).isNone && ((← getState).constants.any fun (n, _, _) => n == name) then
+      throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
     -- arrays are already stack-allocated; refs/ptrs/heap are already pointers
     | .array _ _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => return none
@@ -489,10 +493,6 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
       | some (reg, _) => return some (.reg reg refTy)
       | none =>
         let cur ← lookupVar name
-        -- Bug 123 (defense in depth behind Check's E0238): a module constant has no storage.
-        -- Taking its address gave a fresh slot that nothing initialized; refuse it here too.
-        if cur.isNone && ((← getState).constants.any fun (n, _, _) => n == name) then
-          throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
         let slot ← freshReg "addr."
         emitEntryAlloca (.alloca slot varTy)
         match cur with
@@ -760,6 +760,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     | none =>
       -- Check module-level constants and inline their value
       let s ← getState
+      -- Constants reach Lower flattened by bare name (Core carries no module path), so two
+      -- modules defining one name are indistinguishable here: a submodule's `A` read the
+      -- top-level `A`. Refused at the use rather than guessed (as Mono does for type names).
+      if (s.constants.filter fun (n, _, _) => n == name).length > 1 then
+        throwLower s!"module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names; rename one of them"
       match s.constants.find? fun (n, _, _) => n == name with
       | some (_, _, constExpr) =>
         -- Hygiene (bug 123 review): the initializer is module-scope code. Inlined in the
