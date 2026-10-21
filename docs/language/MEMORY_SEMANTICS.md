@@ -53,7 +53,8 @@ Locked by `scripts/tests/check_memory_model.sh`.
 
 ### Copy types (non-linear)
 
-These types can be used any number of times and reassigned freely:
+These types can be used any number of times and, when bound `mut`, reassigned freely, except that
+a reference binding is never assigned (§15 REF-6, adopted 2026-10-21; `main` still accepts it):
 
 - All integer types: `Int`, `Uint`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`
 - `Bool`, `Float64`, `Float32`, `Char`, `()`
@@ -374,7 +375,9 @@ the element/key/value destructors in the drop path.
 
 ### Copy variables
 
-Copy variables can be reassigned freely if declared `mut`:
+Copy variables can be reassigned freely if declared `mut`, except reference bindings: since the
+2026-10-21 decision no reference binding is ever assigned (§15 REF-6; not yet enforced on `main`,
+which accepts the assignment):
 
 ```concrete pseudocode
 let mut x: Int = 1;
@@ -911,7 +914,10 @@ Two syntactic rules:
 - (b) **No reference binding is assigned.** No reference binding (a parameter, a borrow-block
   binder or an arm-scoped pattern binder) is the target of an assignment `r = e`, whatever `e` is.
   Writing *through* a reference (`*r = v`, `r.f = v` with `r: &mut S`) assigns the referenced
-  place, not the binding, and is governed by REF-7 and the adjacent E0291 rule.
+  place, not the binding, and is governed by REF-7 and the adjacent E0291 rule. After
+  monomorphization the same holds for an assignment whose target's type became a reference by
+  instantiating a type parameter (`x = y;` in `fn f<T: Copy>(x: T, y: T)` called at `T := &Int`,
+  which `main` accepts today); it is refused at the instantiation.
 
 Together they make a reference binding's source fixed at its introduction, and every introduction
 form (a parameter, a borrow block, an arm) is lexically enclosed by its source's scope. They
@@ -943,7 +949,8 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   reference"), at the `let`, destructuring and `for` cases of `checkStmt` (or once in `addVar`) and,
   for instantiated binder types, after monomorphization next to `verifyNoStoredRefs`; (b) **E0303,
   proposed** (`assignsReferenceBinding`, "a reference binding is never assigned"), at the
-  assignment case of `checkStmt`. Both numbers are unused on `main`, `land2-fix` and `bug126` at
+  assignment case of `checkStmt` and, for an assignment target whose type became a reference by
+  instantiation, after monomorphization with (a)'s post-mono check. Both numbers are unused on `main`, `land2-fix` and `bug126` at
   this writing; confirm when they are allocated. E0234 (`referenceEscapesBorrowBlock`, **main**)
   and `land2-fix`'s E0238 re-pointing check (`recordRefProvenance (reassign := true)`) stay as
   defense in depth and carry the `REF-6@1` rule tag.
@@ -958,7 +965,8 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   status quo. Parameters are added to the environment as assignable bindings: a `&T` parameter is
   assignable (`f` above returns 41 in both consumers; `g` builds a binary that reads the dead slot, and the
   interpreter fails "ref path base 'local' not in env"), and a `&mut T` parameter is refused only
-  as E0219, because it is linear. `land2-fix` refuses re-pointing at a different source (E0238:
+  as E0219, because it is linear ([bug 131](../bugs/131_reference_parameter_repointed.md) is the
+  dead-slot read). `land2-fix` refuses re-pointing at a different source (E0238:
   bug 104's reproducers, a parameter re-pointed at a local) but accepts a same-source reassignment
   and every `let`-bound reference. Borrow-block and arm binders are assignable on `main` too
   (probed at `5b63cd87`, binary and `--interp` agree): `borrow x as r in R { r = &y; }` compiles,
@@ -1273,7 +1281,8 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-5 | `regress_2i_ref5_canonical_places.con` (new; `f(&w.p)`, `f(&a[i])`, and `f(&*r)`, `f(&r.p)` with `r` a parameter) | run 42 |
 | REF-6 | `error_104_assigned_ref_heap_block.con` †, `error_104_assigned_ref_stack_block.con` †, `error_091_ref_repointed_in_branch.con` †, `error_091_mut_receiver_reassigned_ref.con` † | reject E0302 REF-6@1 (E0238 on `land2-fix` today) |
 | REF-6 | `error_2i_ref6_let_shared_ref.con` (new; `let r: &P = &w.p;`), `error_2i_ref6_let_inferred_alias.con` (new; `let s = r;` with `r` a parameter), `error_2i_ref6_let_mut_ref.con` (new; `let r: &mut Int = &mut x;`), `error_2i_ref6_let_ref_to_ref.con` (new; `let rr: & &Int = &r;`), `error_2i_ref6_generic_let_at_ref.con` (new; `let y: T = x;` in a generic called at `T := &Int`) | reject E0302 REF-6@1 |
-| REF-6 | `error_2i_ref6_param_repointed.con` (new; `r = q` with `&T` parameters, and the dead-slot `g`), `error_2i_ref6_mut_param_repointed.con` (new; a `&mut T` parameter re-pointed at a local, E0219 today), `error_2i_ref6_borrow_binder_assigned.con` (new; `r = &y` inside `borrow x as r`), `error_2i_ref6_arm_binder_assigned.con` (new; an arm binder assigned in its arm) | reject E0303 REF-6@1 |
+| REF-6 | `error_2i_ref6_param_repointed.con` (new; `r = q` with `&T` parameters, and the dead-slot `g`), `error_2i_ref6_mut_param_repointed.con` (new; a `&mut T` parameter re-pointed at a local, E0219 today), `error_2i_ref6_borrow_binder_assigned.con` (new; `r = &y` inside `borrow x as r`), `error_2i_ref6_arm_binder_assigned.con` (new; an arm binder assigned in its arm), `error_2i_ref6_generic_assign_at_ref.con` (new; `x = y` in a generic called at `T := &Int`) | reject E0303 REF-6@1 |
+| REF-6 | `regress_2i_ref6_generic_assign_at_value.con` (new; the same generic called at `T := Int`) | run 42 |
 | REF-6 | `error_borrow_escape.con` † | reject E0302 REF-6@1 at its outer `let mut leaked: &Point` (E0234 today) |
 | REF-6 | `regress_2i_ref6_place_each_use.con` (new; `f(&w.p); g(&w.p);`, the twin of `let_shared_ref`), `regress_2i_ref6_index_once.con` (new; `let i = index(); f(&a[i]); g(&a[i]);`), `regress_2i_ref6_borrow_block_projection.con` (new; `borrow w as rw in R { f(&rw.p); g(&rw.p); }`), `regress_2i_ref6_arm_binder_through_ref.con` (new; the `match o` shape of REF-5) | run 42 |
 | REF-7 | `error_091_norm_ref_write_through_ref.con` † | reject E0238 REF-7@1 |
@@ -1368,5 +1377,5 @@ manifest row:
 | G16 | REF-2: a reference-returning function type is accepted as a type alias target and as a struct or enum field type (no value of it can be made) | R-0500: validate function types after alias expansion and in declarations |
 | G11 | ROADMAP exit 2i's deliverable read "none stored in an aggregate"; "strictly second-class" also covers REF-6 (design example G8) | closed 2026-10-21: exit 2i's text now names where references may exist, REF-6 and the constants rule |
 | G17 | REF-8: an arm binder through a borrow-expression scrutinee does not freeze the scrutinee's root on `main`: `match &o { Option::Some { value } => { consume(o); … take_ref(value) … } }` compiles and reads through `value` after `o` was moved (a use after move in safe code; §15.3 REF-8). Matches on other reference parameters were not inventoried | exit 0b as a reproduced memory-safety defect (to be filed in the bug ledger); the rule under R-0500 (exit 2i) |
-| G18 | REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole: exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
+| G18 | REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
 | G19 | reference questions the 2026-10-21 decision leaves open besides G9 and G10: no pass may exploit `&mut` exclusivity (for example LLVM `noalias`) before an aliasing model covering raw pointers exists (design example B4); a Core reborrow form that makes the implicit call-argument reborrows explicit after elaboration, with surface syntax waiting for a workload (B5) | B4: a policy sentence owned by [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md) and R-0505; B5: R-0496 (Core) with R-0500 |

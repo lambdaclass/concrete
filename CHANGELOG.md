@@ -31,10 +31,12 @@ discarded) is stated exactly. Every Concrete function gets a mangled symbol disj
 (LAYOUT_CONTRACT). Consuming fallible APIs state what they do with the resource on failure
 (ERROR_CONVENTIONS), and recoverable versus terminal failure is restated (FAILURE_STRATEGY). `main`
 keeps `-> Int` and loses parameters (bug 111). Narrowing its return type is recorded as an open
-decision. The probes found new silent defects, assigned to exit 0b: struct-literal order, the
-interpreter's int → float identity, a safe `fn malloc` capturing the allocator, reference-parameter
-re-pointing, and a move under a live arm binder. They also found a loud one, `as bool`, assigned to
-exit 2c. Stale text was corrected: NUMERIC_MODEL's wrapping-overflow section, ARITHMETIC_POLICY's
+decision. The probes found new defects, filed as bugs 127 – 131: struct-literal order (127), the
+interpreter's int → float identity (128), a safe `fn malloc` capturing the allocator (129) and
+reference-parameter re-pointing (131) in exit 0b, and the loud `as bool` failure (130) in exit 2c.
+Writing the rules found three more silent ones, recorded for exit 0b and not yet filed: a move
+under a live arm binder, dereference-assignment order and functional-update evaluation, each of
+which differs between the binary and the interpreter or reads a moved value. Stale text was corrected: NUMERIC_MODEL's wrapping-overflow section, ARITHMETIC_POLICY's
 shift and §14 contradictions, the removed `->` heap syntax, and `--report profile`'s wrap-gap line.
 `check_build_profiles.sh` now pins the corrected report text.
 

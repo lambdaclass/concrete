@@ -183,10 +183,14 @@ the next begins, and an operation is performed only after all its operands are e
    `g`.
 5. **Projections:** an index expression `a[i]` evaluates the base, then the index; a field access
    evaluates its base.
-6. **Assignment, the one exception:** `place = e` evaluates the right-hand side `e` first, then
-   the subexpressions of the destination (its index expressions) left to right, then stores.
-   `arr[i()] = j()` calls `j` before `i`. This is also Rust's order for simple assignment.
-   Concrete has no compound assignment operators.
+6. **Functional update:** `S { f: e1, g: e2, ..base }` evaluates the explicit initializers in
+   source order (rule 4), then `base` **exactly once**, and takes every omitted field from that one
+   value. The base is written last, so it is evaluated last.
+7. **Assignment, the one exception:** `place = e` evaluates the right-hand side `e` first, then
+   the subexpressions of the destination left to right (its index expressions, and the operand of
+   a dereference destination `*p = e`, such as `*(&mut a[i()]) = j()`), then stores. `arr[i()] = j()`
+   and `*(&mut a[i()]) = j()` both call `j` before `i`. This is also Rust's order for simple
+   assignment. Concrete has no compound assignment operators.
 
 A trap ends evaluation: no later operand is evaluated and the operation is not performed (traps
 are terminal, [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)). An arithmetic trap is checked after both
@@ -200,22 +204,27 @@ operands are evaluated (ARITHMETIC_POLICY §1).
 | 1. receiver, then arguments left to right | yes | yes | enforced (not yet gated) |
 | 2. operands left to right; `&&` / `||` short-circuit | yes | yes | enforced; short-circuit in `Lower.lean` (`.binOp .and_ / .or_`) and `Interp.lean`, exercised by `regress_034_shortcircuit_borrow_promotion.con` and the differential fuzzer |
 | 3. array-literal elements | yes | yes | enforced (not yet gated) |
-| 4. struct-literal fields in source order | **no**: declaration order | yes | **violated**: a silent interpreter / native disagreement (`P { b: tick(5), a: tick(6) }` evaluates 6 then 5 natively and 5 then 6 in `--interp`), a probe defect for exit 0b |
+| 4. struct-literal fields in source order | **no**: declaration order | yes | **violated**: a silent interpreter / native disagreement (`P { b: tick(5), a: tick(6) }` evaluates 6 then 5 natively and 5 then 6 in `--interp`), [bug 127](../bugs/127_struct_literal_field_order.md), exit 0b |
 | 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other) |
 | 5. base before index | yes | yes | enforced (not yet gated) |
-| 6. assignment: right-hand side, then the destination's index | yes | yes | enforced (not yet gated) |
+| 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both, and they disagree: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call); natively the reads interleave with the explicit initializers in declaration order, in `--interp` the explicit initializers run first. A silent interpreter / native disagreement, not yet filed (exit 0b) |
+| 7. assignment to an indexed place: right-hand side, then the index | yes | yes | enforced (not yet gated) |
+| 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, not yet filed (exit 0b) |
 
 Changing struct and enum literals to source order changes Elab / Lower (the binary uses
 declaration order for both), the interpreter for enum literals, and the extracted model and Core
-semantics so that all agree. No source migration is expected: no corpus program was observed to
+semantics so that all agree. Functional update needs Elab to bind the base once to a fresh local
+before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](PATTERN_ERGONOMICS.md)
+to use a simple place as the base describes today's behaviour, which this rule replaces), and the
+dereference assignment needs Lower to evaluate the right-hand side first. No source migration is expected: no corpus program was observed to
 depend on declaration-order evaluation of field initializers with effects (a scan of literals
 with call initializers is part of the change).
 
-**Prevents.** The struct-literal order disagreement; it also discharges V1a's evaluation-order
+**Prevents.** Bug 127, the functional-update and dereference-assignment disagreements; it also discharges V1a's evaluation-order
 obligation, since the verified pipeline may not model a looser order than the compiler implements.
 
 **Owners.** The rule and its gate: exit 2j (R-0500), with permanent differential coverage of
-literal-field order in exit 2c (R-0491). The struct-literal disagreement is silent wrong code
-between consumers, so its repair or containment is exit 0b (R-0482) under the defect disposition
-rule.
+literal-field order, functional update and assignment order in exit 2c (R-0491). Bug 127 and the
+functional-update and dereference-assignment disagreements are silent wrong code between
+consumers, so their repair or containment is exit 0b (R-0482) under the defect disposition rule.
 

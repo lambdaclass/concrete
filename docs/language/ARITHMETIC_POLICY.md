@@ -432,8 +432,8 @@ rewriting sites that are in fact safe.
 | widening | exact, in both consumers |
 | integer narrowing, sign change | **silent truncation / reinterpretation**: `300 as u8` is 44, `-1 as u32` is 4294967295, `-1 as u64` is 2^64 − 1, in both consumers |
 | float → integer | truncates toward zero (`3.9 as i32` is 3, `-3.9 as i32` is -3) and **traps** when the value is out of the target's range (`1e20 as i32` aborts); the interpreter rejects float literals ("float literals not yet supported"), so only integer-origin floats can be compared |
-| integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement (a probe defect, exit 0b) |
-| integer → `bool` | `x as bool` with `x: Int` passes the checker and fails in `llvm-as` (`bitcast i64 to i1`); the interpreter refuses it (a probe defect, exit 2c) |
+| integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement ([bug 128](../bugs/128_interp_int_to_float_identity.md), exit 0b) |
+| integer → `bool` | `x as bool` with `x: Int` passes the checker and fails in `llvm-as` (`bitcast i64 to i1`); the interpreter refuses it ([bug 130](../bugs/130_int_as_bool_invalid_ir.md), exit 2c) |
 | `bool` → integer | invalid IR (bug 108, exit 2c) |
 | `--report arithmetic` | lists checked float → integer casts but **no integer narrowing cast** (`fn n(x: Int) -> u8 { return x as u8; }` is absent), so silent truncation is invisible in the report meant to classify arithmetic sites |
 
@@ -444,8 +444,8 @@ So the rule is **not enforced**: every row marked "no" in §8.1 is accepted by `
 1. **Named operations first.** Add the three families of §8.2 to the arithmetic authority and
    `std`, with the interpreter, the folder, the backend and the models agreeing; classify every
    cast in `--report arithmetic` (lossless `as`, lossy `as`, named operation); refuse `Int as bool`
-   and repair `bool as` integer (defects, exit 2c); repair the interpreter's integer → float
-   identity (exit 0b).
+   and repair `bool as` integer (bugs 130 and 108, exit 2c); repair the interpreter's integer → float
+   identity (bug 128, exit 0b).
 2. **Rejection with versioned migration diagnostics.** The check lands with its diagnostic in the
    form of [MEMORY_SEMANTICS.md §15.5](MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
    stable code, the rule tag (`CAST-1@1`), the conversion class, and the mechanical rewrite
@@ -469,14 +469,14 @@ casts included. It centralizes the *current* cast semantics faithfully and does 
 decision; stage 3 then changes that one authority and its consumers together.
 
 **Prevents.** The bug 080 class (a narrowing cast modelled as identity: a false-proof surface),
-bug 108, the interpreter's integer → float identity, the `as bool` failure, and the report gap.
+bug 108, the interpreter's integer → float identity (bug 128), the `as bool` failure (bug 130),
+and the report gap.
 Each is a consumer disagreeing about a lossy cast; a lossless-only `as` removes the lossy cases
 from what every consumer must model.
 
 **Owners.** The rule and its class table: ROADMAP exit 2k (R-0500), "cast semantics per width
-pair". The authority that implements it: exit 2h (R-0493). The defects: the integer → float
-identity in exit 0b (R-0482); `as bool`, bug 108 and the permanent differential legs in exit 2c
-(R-0491). [NUMERIC_MODEL.md](NUMERIC_MODEL.md) points here for casts.
+pair". The authority that implements it: exit 2h (R-0493). The defects: bug 128 in exit 0b (R-0482); bugs 130 and 108
+and the permanent differential legs in exit 2c (R-0491). [NUMERIC_MODEL.md](NUMERIC_MODEL.md) points here for casts.
 
 ---
 

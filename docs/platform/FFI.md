@@ -81,7 +81,8 @@ unspecified): user functions are emitted under their bare names (`define i64 @ab
 `@malloc`), the program's `main` becomes `user_main` behind a generated C `main`, and the runtime
 helpers share the same flat namespace. Bug 028's reserved-name list (`user_main`, `__*`) is the
 only protection. So a safe function `fn malloc(n: Int) -> Int` replaces the allocator for the
-whole program, and every `alloc` calls it (the binary aborts, exit 134; probed at `5b63cd87`); on
+whole program, and every `alloc` calls it (the binary aborts, exit 134; probed at `5b63cd87`; bug
+129); on
 ELF, symbol interposition would also redirect libc's internal calls. No `extern`, no `trusted`.
 Separately, Mono synthesizes an empty body for any unresolved `*_destroy`, silently replacing a
 foreign destructor (bug 103). `#[link_name]` does not exist (0 uses; it is a new, opt-in
@@ -89,14 +90,14 @@ attribute); extern declarations (std 58 lines in 4 files, examples 41 in 13, tes
 unchanged unless they want a different C name.
 
 **Prevents.** Bug 103's silent replacement (made loud), bug 028's class, and the user-function
-capture of a C symbol (a probe defect of 2026-10-21: a safe function named like a libc symbol
-replaces it program-wide).
+capture of a C symbol ([bug 129](../bugs/129_user_fn_captures_libc_symbol.md): a safe function
+named like a libc symbol replaces it program-wide).
 
 **Migration.** No source change. Mangling changes what tools see: the `user_main` wrapper, the
 `clash_*` cases of `check_error_leaks.sh`, profiler and debugger tooling, and tests that assert
 `@name` in `--emit-llvm` output.
 
-**Owners.** Bug 103 and the user-function capture: ROADMAP exit 0b (R-0482), as wrong code and a
+**Owners.** Bugs 103 and 129: ROADMAP exit 0b (R-0482), as wrong code and a
 memory-safety defect in safe code. Mangling and the namespace: R-0285 / R-0283 (the foreign
 boundary), with R-0510 for generated symbols; the export attribute: R-0286.
 
