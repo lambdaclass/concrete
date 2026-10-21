@@ -53,6 +53,12 @@ mod process {
 
         // Consuming: a process is waited on exactly once — the Child handle
         // IS the obligation, and wait() discharges it (linear process API).
+        // CONSUMED ON FAILURE: `Err(WaitFailed)` carries no Child. A blocking
+        // waitpid fails only when the pid is not a waitable child of this
+        // process (ECHILD; EINVAL cannot arise with options 0) or on EINTR,
+        // which needs a signal handler installed without SA_RESTART, and std
+        // installs none. Neither is helped by retrying with the same handle.
+        // (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
         pub trusted fn wait(self) with(Process) -> Result<ExitStatus, ProcessError> {
             // Destructure = consume the handle up front (it owns only the pid).
             let Child { pid } = self;

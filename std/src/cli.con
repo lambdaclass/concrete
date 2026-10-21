@@ -138,7 +138,9 @@ mod cli {
         /// the conventional stdin name is not interpreted here). Positional
         /// count must land in [min_pos, max_pos]. On success the result owns
         /// the positional Strings, in command-line order. A repeated value
-        /// flag: last occurrence wins.
+        /// flag: last occurrence wins. CONSUMED ON FAILURE: on `Err` the flag
+        /// declarations are released and nothing comes back; the arguments
+        /// are fixed for the process, so a retry would fail the same way.
         pub fn parse(self, min_pos: u64, max_pos: u64) with(Alloc, Env) -> CliResult {
             let nflags: u64 = self.offs.len();
             let mut vals: Vec<u64> = Vec::<u64>::new();

@@ -1077,4 +1077,43 @@ mod map {
         m.drop();
         return 0;
     }
+
+    // Ownership on a same-key insert: the displaced LINEAR value comes back
+    // exactly once (Some(old)), the new one is stored, nothing is dropped.
+    #[test]
+    fn test_insert_linear_value_returns_displaced_once() with(Alloc) -> i32 {
+        let mut m: HashMap<i32, String> = HashMap::<i32, String>::new(hash_i32, eq_i32);
+        let first: String = "first";
+        let r1: Option<String> = m.insert(1, first);
+        match r1 {
+            Option::Some { value } => { value.drop(); m.drop(); return 1; },
+            Option::None => {}
+        }
+        let second: String = "second";
+        let r2: Option<String> = m.insert(1, second);
+        let want_old: String = "first";
+        let mut rc: i32 = 0;
+        match r2 {
+            Option::Some { value } => {
+                if !value.eq(&want_old) { rc = 2; }
+                value.drop();
+            },
+            Option::None => { rc = 3; }
+        }
+        want_old.drop();
+        let k: i32 = 1;
+        let r3: Option<String> = m.remove(&k);
+        let want_new: String = "second";
+        match r3 {
+            Option::Some { value } => {
+                if !value.eq(&want_new) { rc = 4; }
+                value.drop();
+            },
+            Option::None => { rc = 5; }
+        }
+        want_new.drop();
+        if m.len() != 0 { rc = 6; }
+        m.drop();
+        return rc;
+    }
 }
