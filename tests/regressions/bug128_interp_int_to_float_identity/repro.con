@@ -1,0 +1,14 @@
+// Bug 128: the interpreter models an integer-to-float cast as the identity.
+// 2^53 + 1 is not representable in f64, so (2^53 + 1 as f64) as Int is 2^53
+// under IEEE round-to-nearest-even; the binary computes 2^53 and returns 2
+// (the last decimal digit), while --interp keeps 2^53 + 1 and returns 3.
+// Silent wrong value in the interpreter, so the differential gates compare
+// the binary against a wrong reference.
+fn to_f(x: u64) -> f64 { return x as f64; }
+fn back(x: f64) -> Int { return x as Int; }
+
+fn main() -> Int {
+    let f: f64 = to_f(9007199254740993);
+    let b: Int = back(f);
+    return b % 10;
+}

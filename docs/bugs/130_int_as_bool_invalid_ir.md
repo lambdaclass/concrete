@@ -1,0 +1,73 @@
+# Bug 130 — `x as bool` with an integer `x` passes the checker and fails in `llvm-as`
+
+**Status:** OPEN
+**Found:** 2026-10-21, by the semantics probes (finding N4, `cast_bool.con`).
+**Severity:** loud failure on an accepted program: the checker accepts the cast, LLVM validation
+rejects the emitted IR, and the interpreter refuses the program at run time. The reverse direction of
+bug 108 (`bool as <int>`).
+
+## Reproducer
+
+`tests/regressions/bug130_int_as_bool_invalid_ir/repro.con`:
+
+```con
+fn t(x: Int) -> bool {
+    return x as bool;
+}
+
+fn main() -> Int {
+    if t(2) {
+        return 1;
+    }
+    return 0;
+}
+```
+
+On main (`5b63cd87`):
+
+```
+LLVM IR validation failed for .../repro.con.ll:
+llvm-as: .../repro.con.ll:838:17: error: invalid cast opcode for cast from 'i64' to 'i1'
+  %t0 = bitcast i64 %x to i1
+                ^
+```
+
+`--interp` fails `interp: if condition is not a boolean` (its cast produces an integer tagged
+`bool`). Expected: a checker diagnostic, since no implementation gives `<int> as bool` a meaning.
+
+## Cause
+
+CoreCheck's cast-validity table in `Concrete/Check/CoreCheck.lean` (`ccCheckExpr`, `.cast`) admits
+`isInteger innerTy && targetTy == .bool`. The backend then picks an opcode from the two widths
+(`bitcast` for `Int`, a `zext`/`sext`/`trunc` for the narrower widths), none valid to `i1`, and the
+interpreter's `evalCast` wraps the integer and tags it `bool`.
+
+**Unlanded repair.** Branch `backend-108-116` (`ba09598a`; the CoreCheck change is `ee9a16cb`,
+"fix bug 108") removes that row, so `<int> as bool` is refused with E0553. It covers this exact shape:
+the branch's compiler (built from that branch after `ee9a16cb`) rejects this reproducer with
+`error[core-check]: (E0553) [main] cannot cast Concrete.Ty.int to Concrete.Ty.bool`, and
+`isInteger` includes `Int`. That branch's permanent fixture, `error_108_int_as_bool.con`, uses `i32`
+only, so landing it should add this `Int` reproducer as a second rejection fixture; this bug closes
+when the branch lands on main.
+
+## Structural cause
+
+Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7): the checker, the
+interpreter and the backend each decide what a cast means, and here the checker admits a cast that
+neither consumer defines. It is a documented-rule gap as well (class 13): no rule gives
+`<int> as bool` a meaning, yet the checker's table had a row for it. The emitted IR is first checked
+by `llvm-as` rather than by a validator of Concrete's own (class 8).
+
+## Structural owner
+
+R-0493 (S6 `IntArith`: one definition of every cast, `bool` included) with R-0504 (S12 validators);
+the per-width-pair cast rule is decided under exit 2k (R-0500). The repair is queued under exit 2c
+(loud failures that keep valid programs out of the interpreter/native comparison) and is already
+written on `backend-108-116`; no safety or authority defect is demonstrated.
+
+## Containment while open
+
+`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode
+`compile-fails:invalid cast opcode for cast from 'i64' to 'i1'`) requires the recorded `llvm-as`
+failure. When the checker rejects the program, that leg fails until this document, the corpus entry
+and the leg are updated together.

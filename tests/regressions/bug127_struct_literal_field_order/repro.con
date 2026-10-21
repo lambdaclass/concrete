@@ -1,0 +1,18 @@
+// Bug 127: a struct literal's field initializers are evaluated in source
+// order by the interpreter and in declaration order by the binary. Each
+// tick appends its digit to c, so the literal P { b: tick(5), a: tick(6) }
+// leaves c = 56 under source order (--interp) and c = 65 under declaration
+// order (the binary). Silent interpreter/native disagreement on the
+// observable effects of an accepted program.
+struct Copy P { a: Int, b: Int }
+
+fn tick(c: &mut Int, v: Int) -> Int {
+    *c = *c * 10 + v;
+    return v;
+}
+
+fn main() -> Int {
+    let mut c: Int = 0;
+    let p: P = P { b: tick(&mut c, 5), a: tick(&mut c, 6) };
+    return c + p.a * 0 + p.b * 0;
+}

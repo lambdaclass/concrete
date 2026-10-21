@@ -1,0 +1,13 @@
+// Bug 130: x as bool with x: Int passes the checker and the emitted IR is
+// rejected by llvm-as (an invalid bitcast from i64 to i1); the interpreter
+// refuses the cast. The reverse direction of bug 108.
+fn t(x: Int) -> bool {
+    return x as bool;
+}
+
+fn main() -> Int {
+    if t(2) {
+        return 1;
+    }
+    return 0;
+}

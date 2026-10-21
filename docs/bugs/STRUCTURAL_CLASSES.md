@@ -1,7 +1,7 @@
 # Structural Classes of Bugs 039 – 107
 
-Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) and 123 – 124 (the exit 2i
-specification, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
+Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
+specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
@@ -37,19 +37,19 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 | class | bugs | structural owner |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol is its spelling) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
-| 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment) | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
-| 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
+| 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
+| 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107, 108, 109, 110, 116 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107, 108, 109, 110, 116, 127, 130 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
-| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
-| 12. One fact kept in two places | 042, 057, 064, 070, 112, 121, 122 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
-| 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 111, 113, 115, 123, 124 | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
+| 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
+| 12. One fact kept in two places | 042, 057, 064, 070, 112, 121, 122, 129 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
+| 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 111, 113, 115, 123, 124, 130 | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 

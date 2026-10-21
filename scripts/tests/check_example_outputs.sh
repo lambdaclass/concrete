@@ -296,8 +296,8 @@ while IFS= read -r line; do
 done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
-# Bugs the examples exposed (docs/bugs/108-120, 122) and the exit 2i specification found
-# (123-124), pinned the way check_bug077_contained.sh
+# Bugs the examples exposed (docs/bugs/108-120, 122), the exit 2i specification found
+# (123-124) and the semantics probes found (127-131), pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
@@ -305,7 +305,13 @@ done < <(awk '$1 == "@run"' "$RULES")
 # accepted), interp-fails:<text> (the binary runs; the interpreter rejects it),
 # runs-exit:<status> (wrong code: the binary builds and exits with this wrong status),
 # wrong-exit:<code> (silent wrong code: the binary builds and runs, and its exit is NOT the
-# correct <code>; the wrong value itself is not pinned, since it may be an uninitialized read).
+# correct <code>; the wrong value itself is not pinned, since it may be an uninitialized read),
+# interp-prints:<text> (silent wrong value in the interpreter: the binary builds, and --interp
+# runs to completion and prints exactly this wrong <text>),
+# signals (memory corruption: the binary builds and is killed by a signal; which signal is
+# not pinned, since the C allocator's response to a corrupted pointer differs by platform;
+# a status above 128 is read as a signal, so a signals reproducer must exit below 128
+# whenever it runs to completion).
 open_bug_reproducers() {
   local R="tests/regressions" num rel mode text out rc alt found
   while IFS='|' read -r num rel mode text; do
@@ -346,6 +352,24 @@ open_bug_reproducers() {
         if [ "$rc" = "$text" ]; then ok "$label still exits $text (wrong code)"
         else no "$label exits $rc, not the recorded wrong $text — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
         ;;
+      signals)
+        if [ "$rc" -ne 0 ]; then no "$label is now rejected — fixed? update docs/bugs/$num, the corpus entry and this table"; continue; fi
+        timeout "$RUN_TIMEOUT" "$TMP/bugrepro_$num" > /dev/null 2>&1 < /dev/null; rc=$?
+        # timeout(1) reports 124 for a timeout and 125 - 127 for a launch failure; a
+        # child killed by signal N is reported as 128 + N. A normal exit above 128 would
+        # read the same, which is why a signals reproducer must exit below 128 when it
+        # completes.
+        if [ "$rc" -gt 128 ]; then ok "$label is still killed by a signal (status $rc)"
+        elif [ "$rc" -ge 124 ]; then no "$label did not run to completion or a signal (status $rc: timeout or launch failure)"
+        else no "$label now exits $rc without a signal — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
+        ;;
+      interp-prints)
+        if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
+        out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
+        if [ "$rc" -ne 0 ]; then no "$label: the interpreter now fails (status $rc) instead of printing the recorded wrong '$text':"; printf '%s\n' "$out" | awk 'NR<=3'
+        elif [ "$out" = "$text" ]; then ok "$label: the interpreter still prints the wrong '$text'"
+        else no "$label: the interpreter prints '$out', not the recorded wrong '$text' — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
+        ;;
       interp-fails)
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
         out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
@@ -373,6 +397,11 @@ open_bug_reproducers() {
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 123|bug123_const_borrow_uninitialized_slot/repro.con|wrong-exit|42
 124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
+127|bug127_struct_literal_field_order/repro.con|runs-exit|65
+128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
+129|bug129_user_fn_captures_libc_symbol/repro.con|signals|
+130|bug130_int_as_bool_invalid_ir/repro.con|compile-fails|invalid cast opcode for cast from 'i64' to 'i1'
+131|bug131_reference_parameter_repointed/repro.con|interp-fails|ref path base 'local' not in env
 TABLE
 }
 if [ -z "$ONLY" ]; then

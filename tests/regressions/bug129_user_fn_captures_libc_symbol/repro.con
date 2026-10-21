@@ -1,0 +1,17 @@
+// Bug 129: user functions are emitted under their bare source names, so a
+// safe function named malloc becomes the program's malloc symbol and the
+// allocation behind alloc calls it. alloc(B { v: 42 }) gets the integer 8
+// back as its pointer and the program dies on it. No extern, no trusted,
+// no capability: safe code replaces the allocator. Expected: exit 42.
+struct Copy B { v: Int }
+
+fn malloc(n: Int) -> Int {
+    return n;
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<B> = alloc(B { v: 42 });
+    let out: Int = h.v;
+    free(h);
+    return out + malloc(0);
+}
