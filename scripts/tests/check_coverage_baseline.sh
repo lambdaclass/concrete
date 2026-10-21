@@ -82,10 +82,14 @@ fi
 # proof); `thesis_demo/src/main_drifted.con` check_length (proved) and parse_byte (stale, its drift);
 # `crypto_verify_drifted` compute_tag + check_nonce (stale, its drift) and verify_tag (deps not
 # current). No existing member moved.
-if [ "$PROVED" = "35" ] && [ "$ELIGIBLE" = "99" ]; then
-  ok "BASELINE: 35 of 99 eligible claims are proved (2026-10-18, exact)"
+# 35 of 99 -> 42 of 115 on 2026-10-21 (workload proofs): toml, hexdump and png_chunks joined the
+# population with 16 eligible functions — the 7 claimed ones are proved (is_ws, is_newline, is_digit,
+# is_bare_key_char, gutter_byte, line_len, png_sig_ok) and the 9 unclaimed helpers in the same files
+# are no-proof. No existing member moved.
+if [ "$PROVED" = "42" ] && [ "$ELIGIBLE" = "115" ]; then
+  ok "BASELINE: 42 of 115 eligible claims are proved (2026-10-21, exact)"
 else
-  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 35 of 99) — say which claims changed and why"
+  no "coverage moved to $PROVED of $ELIGIBLE eligible (baseline 42 of 115) — say which claims changed and why"
 fi
 # 31/15 -> 32/14 on 2026-08-18: ONE claim moved from `unbound` to `no-proof`, and the sum is
 # unchanged. `proof_pressure.validate_header` had its misattributed `#[proof_by]` deleted, leaving
@@ -97,9 +101,10 @@ fi
 # checkable: any other movement changes the sum, and this one provably does not.
 # 32/14/5/4 -> 33/14/8/5 on 2026-10-18 (bug 083): the five unproved entrants named above — +1 no-proof,
 # +3 stale, +1 deps-not-current.
+# 33 -> 42 no-proof on 2026-10-21: the 9 unclaimed helpers of the workload-proof files above.
 if [ "$STALE" = "8" ] && [ "$UNBOUND" = "14" ] && [ "$DEPSNC" = "5" ] && [ "$UNJUST" = "0" ] \
-   && [ "$NOPROOF" = "33" ] && [ "$BLOCKED" = "1" ]; then
-  ok "the unproved dispositions are exactly 33 no-proof / 14 unbound / 8 stale / 5 deps-not-current / 1 blocked / 0 unjustified"
+   && [ "$NOPROOF" = "42" ] && [ "$BLOCKED" = "1" ]; then
+  ok "the unproved dispositions are exactly 42 no-proof / 14 unbound / 8 stale / 5 deps-not-current / 1 blocked / 0 unjustified"
 else
   no "unproved dispositions moved: no-proof=$NOPROOF unbound=$UNBOUND stale=$STALE deps=$DEPSNC blocked=$BLOCKED unjustified=$UNJUST"
 fi
