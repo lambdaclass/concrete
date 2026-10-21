@@ -1,0 +1,13 @@
+// Bug 098 (Codex round 14): a top-level s_g and submodule s's g are both Core s_g in ONE
+// module tree (main: 11, expected 12). Refused (E0299).
+mod m {
+    fn s_g<T: Copy>(x: T) -> Int { return 1; }
+    mod s {
+        fn g<T: Copy>(x: T) -> Int { return 2; }
+        pub fn run() -> Int { return g::<Int>(0); }
+    }
+    fn main() with(Std) -> Int {
+        print_int(s_g::<Int>(0) * 10 + s::run()); print_char(10);
+        return 0;
+    }
+}

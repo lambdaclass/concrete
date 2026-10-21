@@ -3268,7 +3268,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     (resolveContractCall n).map (n, ·)
   let fns := if respell then fns.map rn.fnDef else fns
   let cNewtypes := if !respell then m.newtypes ++ imports.newtypes else
-    (m.newtypes.map fun nt => { rn.newtypeDef nt with
+    (m.newtypes.map fun nt => { rn.newtypeDef { nt with innerTy := nominalTy nt.typeParams nt.innerTy } with
         name := match localNewtypes.find? (·.name == nt.name) with
           | some snt => canonTypeName snt.definedIn snt.name
           | none => nt.name })
@@ -3297,7 +3297,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     enums := cEnums
     functions := fns
     externFns := if !respell then cExterns else
-      cExterns.map fun (n, ps, rt, tr) => (n, ps.map (fun (p, t) => (p, rn.ty t)), rn.ty rt, tr)
+      -- annotations alias-expanded, as the arguments' types are
+      cExterns.map fun (n, ps, rt, tr) =>
+        (n, ps.map (fun (p, t) => (p, rn.ty (nominalTy [] t))), rn.ty (nominalTy [] rt), tr)
     externFnCaps := cExternCaps
     intrinsicDecls := m.externFns.filterMap fun ef => ef.intrinsic.map (ef.name, ·)
     constants := if !respell then cConstants else
@@ -3569,7 +3571,19 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
     | some sd => (((structFieldsNominal sd).lookup f).map fun ft => [(ft, t, s!"field '{f}'", sd.typeParams)]).getD []
     | none => []
   | .binOp _ l r _ => tyAgreeExpr c l ++ tyAgreeExpr c r
-  | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => tyAgreeExpr c e
+  | .cast e t =>
+    -- a newtype constructor (inner → newtype) or unwrap (newtype → inner): the inner side
+    -- must be the newtype's declared inner type
+    let ntOf : Ty → Option (NewtypeDef × List Ty) := fun ty => match ty with
+      | .named n => (c.newtypeOf n).map (·, [])
+      | .generic n args _ => (c.newtypeOf n).map (·, args)
+      | _ => none
+    tyAgreeExpr c e ++
+    match ntOf e.ty, ntOf t with
+    | some (nt, _), _ => [(nt.innerTy, t, s!"the inner value of newtype '{nt.name}'", nt.typeParams)]
+    | none, some (nt, _) => [(nt.innerTy, e.ty, s!"the value wrapped by newtype '{nt.name}'", nt.typeParams)]
+    | none, none => []
+  | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ => tyAgreeExpr c e
   | .match_ sc arms _ => tyAgreeExpr c sc ++ arms.flatMap (tyAgreeArm c sc.ty)
   | .arrayLit es _ => es.flatMap (tyAgreeExpr c)
   | .arrayIndex a i _ | .allocCall a i _ => tyAgreeExpr c a ++ tyAgreeExpr c i
@@ -3624,12 +3638,13 @@ partial def tyAgreeStmt (c : TyAgreeCtx) : CStmt → List TyAgreePair
 end
 
 /-- Every function of a module tree with its module's struct and enum copies. -/
-partial def coreFnsWithTypesDeep (cm : CModule) : List (List CStructDef × List CEnumDef × CFnDef) :=
-  cm.functions.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreFnsWithTypesDeep
+partial def coreFnsWithTypesDeep (cm : CModule) :
+    List ((List CStructDef × List CEnumDef × List NewtypeDef) × CFnDef) :=
+  cm.functions.map ((cm.structs, cm.enums, cm.newtypes), ·) ++ cm.submodules.flatMap coreFnsWithTypesDeep
 /-- Every constant of a module tree with its module's struct and enum copies. -/
 partial def coreConstsWithTypesDeep (cm : CModule) :
-    List (List CStructDef × List CEnumDef × (String × Ty × CExpr)) :=
-  cm.constants.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreConstsWithTypesDeep
+    List ((List CStructDef × List CEnumDef × List NewtypeDef) × (String × Ty × CExpr)) :=
+  cm.constants.map ((cm.structs, cm.enums, cm.newtypes), ·) ++ cm.submodules.flatMap coreConstsWithTypesDeep
 /-- Every function definition of a module tree. -/
 partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
 /-- Every extern of a module tree as a bodiless definition (its declared signature). -/
@@ -3645,21 +3660,23 @@ partial def coreStructsDeep (cm : CModule) : List (String × CStructDef) :=
 partial def coreEnumsDeep (cm : CModule) : List (String × CEnumDef) :=
   cm.enums.map (cm.name, ·) ++ cm.submodules.flatMap coreEnumsDeep
 
-/-- Bugs 097/098: a Core function name defined in two TOP-LEVEL module trees by a nested
-    definition (`a.s.g` and `c.s.g` are both `s_g`: `prefixModuleFnNames` omits the top-level
-    module) is one callee to Mono's first-definition map and the interpreter. Top-level
+/-- Bugs 097/098: a Core function name given to several definitions, a nested one among them
+    (`a.s.g` and `c.s.g` are both `s_g`: `prefixModuleFnNames` omits the top-level module; so is
+    a top-level `s_g` beside a submodule `s`'s `g`), is one callee to Mono's first-definition
+    map and the interpreter. Top-level
     collisions are respelled (`qualifyCollidingTopLevelFns`); nested ones are refused (E0299)
     until definitions carry their full path (R-0492). -/
 def checkNestedFnCollisions (cms : List CModule) : Except Diagnostics (List CModule) :=
   let owners : List (String × String × Bool) := cms.flatMap fun cm =>
     (cm.functions.filter (!·.isEntryPoint)).map (fun f => (f.name, cm.name, false))
     ++ (cm.submodules.flatMap coreFnsDeep).map (fun f => (f.name, cm.name, true))
-  let clashes := ((owners.filter fun (n, top, nested) => nested &&
-      owners.any fun (n2, top2, _) => n2 == n && top2 != top).map (·.1)).eraseDups
+  -- two DEFINITIONS of one Core name, either of them nested, in one tree or two
+  let clashes := ((owners.filter fun (n, _, nested) => nested &&
+      (owners.filter fun (n2, _, _) => n2 == n).length > 1).map (·.1)).eraseDups
   if clashes.isEmpty then .ok cms else
   .error (clashes.map fun n =>
     { severity := .error, pass := "elab", span := none, code := "E0299"
-      message := s!"function '{n}' is the Core name of definitions in several top-level modules (a nested module's functions are named without their top-level module); Core cannot tell them apart (bugs 097, 098)"
+      message := s!"function '{n}' is the Core name of several definitions, a nested module's among them (a nested module's functions are named without their top-level module); Core cannot tell them apart (bugs 097, 098)"
       hint := some "rename one of the functions or submodules. Tracking: docs/bugs/098_same_named_generic_fns_one_specialization.md" })
 
 /-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
@@ -3694,11 +3711,12 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     ({ severity := .error, pass := "elab", span := none, code := "E0299"
        message := msg
        hint := some "import the type from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" } : Diagnostic)
-  let callDiags : Diagnostics := (cms.flatMap coreFnsWithTypesDeep).flatMap fun (sds, eds, f) =>
+  let callDiags : Diagnostics := (cms.flatMap coreFnsWithTypesDeep).flatMap fun ((sds, eds, nts), f) =>
     let ctx : TyAgreeCtx := {
       fns := fns
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
+      newtypeOf := fun n => nts.find? (·.name == n)
       locals := f.params.map (·.1)
       retTy := some f.retTy
       tps := f.typeParams }
@@ -3706,11 +3724,12 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       if famAgree family wild exp act then none else
       some (diag s!"in '{f.sourceName}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
   -- a constant's initializer is inlined at every use (Lower), so it is checked like a body
-  let constDiags : Diagnostics := (cms.flatMap coreConstsWithTypesDeep).flatMap fun (sds, eds, (n, t, e)) =>
+  let constDiags : Diagnostics := (cms.flatMap coreConstsWithTypesDeep).flatMap fun ((sds, eds, nts), (n, t, e)) =>
     let ctx : TyAgreeCtx := {
       fns := fns
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
+      newtypeOf := fun n => nts.find? (·.name == n)
       retTy := none }
     let pairs : List TyAgreePair := tyAgreeExpr ctx e ++ [(t, e.ty, s!"the initializer of constant '{n}'", [])]
     pairs.filterMap fun ((exp, act, whr, wild) : TyAgreePair) =>

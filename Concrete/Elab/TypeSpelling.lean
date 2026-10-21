@@ -207,6 +207,8 @@ structure TyAgreeCtx where
   /-- This module's copy of a struct / enum. -/
   structOf : String → Option CStructDef
   enumOf : String → Option CEnumDef
+  /-- This module's newtypes (a constructor or `.0` is a cast between a newtype and its inner type). -/
+  newtypeOf : String → Option NewtypeDef := fun _ => none
   /-- Names bound at this point (a `.ident` of one is the local, never a global function). -/
   locals : List String := []
   retTy : Option Ty := none

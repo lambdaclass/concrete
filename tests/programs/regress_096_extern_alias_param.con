@@ -1,0 +1,16 @@
+// Bug 096 (Codex round 14): an extern's alias-typed parameters (*const Q, Q = P) are expanded
+// like its arguments, so a program with another module's P is not refused.
+// Expected (compiled): 0. --interp cannot call a C function, so the leg is native only.
+mod a {
+    pub struct Copy P { pub x: i64 }
+    type Q = P;
+    trusted extern fn memcmp(x: *const Q, y: *const Q, n: u64) with() -> i32;
+    fn main() with(Std, Unsafe) -> Int {
+        let p: P = P { x: 3 };
+        let q: P = P { x: 3 };
+        print_int(memcmp(&p as *const P, &q as *const P, 8) as Int);
+        print_char(10);
+        return 0;
+    }
+}
+mod b { pub struct Copy P { pub y: i64 } }

@@ -35,7 +35,8 @@ The same as bug 097's: `qualifyCollidingTopLevelFns` spells each colliding top-l
 Nested definitions collide the same way across top-level modules (`a.s.g` and `c.s.g` are both
 `s_g`: submodule prefixing omits the top-level module; main printed 11 from both engines); until
 a definition carries its full path (R-0492), such a collision is refused (E0299,
-`checkNestedFnCollisions`, `error_098_nested_generic_collision.con`).
+`checkNestedFnCollisions`, `error_098_nested_generic_collision.con`; within one tree too, a
+top-level `s_g` beside submodule `s`'s `g`: `error_098_nested_collision_same_tree.con`).
 
 ## Structural cause
 
