@@ -118,6 +118,10 @@ does not check constant initializers, so Lower refuses every borrow form (`&`, `
 call argument, a borrow block) while an initializer is inlined (`inConstInit`, E0602;
 `error_123_const_initializer_mut_arg.con`).
 
+A fifth pass found that Elab replaced a constant initializer that failed to elaborate with a
+silent `0` (on main too): a borrow block on a constant inside an initializer made `Y` read 0. The
+elaboration error is now reported (`error_123_const_initializer_elab_error.con`, E0405).
+
 The open-bug reproducer row in `check_example_outputs.sh` is dropped, and `run_tests.sh` runs the
 fixtures.
 

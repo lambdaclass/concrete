@@ -25,8 +25,6 @@ namespace Concrete
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-=======
->>>>>>> 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 ||||||| parent of 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 =======
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
@@ -191,6 +189,17 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 =======
 def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of 458f0c3e (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
+||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+=======
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+>>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> 458f0c3e (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
 ||||||| parent of c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 ||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
@@ -1057,7 +1066,14 @@ def buildIdentity : String := "f78a1e70d939b91e52afce6cc7420882"
 =======
 def buildIdentity : String := "6be2996ba461d2e46f1025fe102d9fd9"
 >>>>>>> 296cad6e (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
->>>>>>> 64f42cca (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
+||||||| parent of 458f0c3e (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
+=======
+||||||| parent of ce4632b5 (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
+def buildIdentity : String := "6be2996ba461d2e46f1025fe102d9fd9"
+=======
+def buildIdentity : String := "7e9c5276427d6e9846c63aa9a7d2ecce"
+>>>>>>> ce4632b5 (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
+>>>>>>> 458f0c3e (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
 
 /-- How many source files the identity above was computed over.
 

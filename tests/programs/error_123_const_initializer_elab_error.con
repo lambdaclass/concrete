@@ -1,0 +1,14 @@
+// Bug 123 review: Elab replaced a constant initializer that failed to elaborate with a silent 0
+// (on main too). A borrow block on a constant inside an initializer made Y read 0; the
+// elaboration error is now reported (E0405).
+const X: Int = 42;
+const Y: Int = if true {
+    borrow X as r in R {
+        let n: Int = *r;
+    }
+    42
+} else { 42 };
+
+fn main() -> Int {
+    return Y;
+}

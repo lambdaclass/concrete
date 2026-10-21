@@ -2836,15 +2836,22 @@ partial def elabModule (m : Module) (summary : FileSummary)
     (ef.name, ef.params.map fun p => (p.name, p.ty), ef.retTy, ef.isTrusted)
   let cExternCaps := m.externFns.map fun ef => (ef.name, ef.capSet.getD .empty)
   -- Build constants
-  let cConstants := m.constants.map fun c =>
+  let constResults := m.constants.map fun c =>
     -- Uses elabExprEv, the single producer. Its EVIDENCE is dropped here only because
     -- constant dependency binding does not exist yet: the constant's initializer digest
     -- is what a `constRef` must eventually resolve to, so this is the site that will
     -- feed it. Recorded rather than silent.
     let constResult := ((·.core) <$> elabExprEv c.value (some c.ty)).run initEnv |>.run
     match constResult with
-    | ((.ok cExpr), _) => (c.name, c.ty, cExpr)
-    | ((.error _), _) => (c.name, c.ty, CExpr.intLit 0 c.ty)
+    | ((.ok cExpr), _) => Except.ok (c.name, c.ty, cExpr)
+    -- An initializer that does not elaborate is an error, never a silent 0 (bug 123 review: a
+    -- borrow block on a constant made `Y` read 0).
+    | ((.error ds), _) => Except.error (ds.addContext s!"while elaborating constant '{c.name}'")
+  let constErrors : Diagnostics := constResults.foldl (fun acc r =>
+    match r with | .error ds => acc ++ ds | .ok _ => acc) []
+  if !constErrors.isEmpty then .error constErrors
+  else
+  let cConstants := constResults.filterMap fun r => match r with | .ok c => some c | .error _ => none
   -- Elaborate submodules recursively
   -- Collect sibling submodule type definitions so each submodule can reference sibling types.
   -- Only inject struct/enum definitions and method SIGNATURES (not full impl blocks with bodies).
