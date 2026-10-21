@@ -165,13 +165,14 @@ cat > "$STUB/pkg-config" <<EOF
 # Stub pkg-config: knows 'nlstub' (links libnladd) and 'nlevil' (emits a flag outside the allow-list).
 case "\$*" in
   --version) echo 0.29.2 ;;
-  "--print-errors --exists nlstub"|"--print-errors --exists nlevil"|"--print-errors --exists nlopt"|"--print-errors --exists nld64") exit 0 ;;
+  "--print-errors --exists nlstub"|"--print-errors --exists nlevil"|"--print-errors --exists nlopt"|"--print-errors --exists nld64"|"--print-errors --exists nlesc") exit 0 ;;
   "--print-errors --exists "*) echo "Package \${3} was not found in the pkg-config search path." >&2
                                echo "No package '\${3}' found" >&2; exit 1 ;;
   "--libs nlstub") echo "-L$TMP/pc_static -lnladd" ;;
   "--libs nlevil") echo "-L$TMP/pc_static -lnladd -Wl,-undefined,dynamic_lookup" ;;
   "--libs nlopt") echo "-L$TMP/pc_static -lnladd -ld_classic" ;;
   "--libs nld64") echo "-L$TMP/pc_static -lnladd -ld64" ;;
+  "--libs nlesc") echo "-L$TMP/pc_esc\\ -lnladd" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -209,6 +210,14 @@ mkapp "$TMP/app3d64" '
 pkg-config = ["nld64"]'
 refused "$TMP/app3d64" app3d64 "emitted '-ld64', which is not an accepted link flag" \
   "a pkg-config -ld64 token (ld64's classic-linker switch) is refused" PATH="$STUB:$PATH"
+# pkg-config escapes a space in a path as a backslash: "-L<dir>\ -lx" is ONE argument. The
+# backslash-ending directory EXISTS here, so an existence check cannot be what refuses it.
+mkdir -p "$TMP/pc_esc\\" && cp "$TMP/static/libnladd.a" "$TMP/pc_esc\\/"
+mkapp "$TMP/app3esc" '
+[native]
+pkg-config = ["nlesc"]'
+refused "$TMP/app3esc" app3esc "emitted quoting or escaping" \
+  "pkg-config output with shell escaping is refused rather than split into extra arguments" PATH="$STUB:$PATH"
 
 echo "=== 4: malformed declarations fail closed; names cannot inject flags ==="
 bad(){ local tag="$1" native="$2" frag="$3" label="$4"

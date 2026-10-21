@@ -61,6 +61,7 @@ what G1 recorded.
 | a `lib-dirs` entry (or canonical, or pkg-config `-L`, directory) that is empty, starts with `-`, or contains `,` (splits `-Wl,`), `:` (an ELF rpath separator), `$` (an rpath token such as `$ORIGIN`) or a control character | load (pkg-config: link) |
 | pkg-config not on `PATH` | link |
 | a pkg-config package pkg-config cannot find (its own `--print-errors` text is included) | link |
+| pkg-config `--libs` output containing a backslash or a quote (its shell escaping is refused, not decoded, so an escaped space cannot become an extra argument) | link |
 | a pkg-config `--libs` token other than `-L<dir>`, `-l<name>`, `-pthread`, `-framework <name>` | link |
 | a library directory that does not exist or is not a directory | link |
 

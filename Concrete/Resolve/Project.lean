@@ -664,6 +664,11 @@ def resolveNativeLinkFlags (decls : List NativeLibDecl) : IO (Except String (Arr
       let r ← IO.Process.output { cmd := "pkg-config", args := #["--libs", d.value] }
       if r.exitCode != 0 then
         return .error s!"error: package '{d.package}': pkg-config --libs {d.value} failed: {r.stderr.trimAscii}"
+      -- pkg-config shell-escapes its output (`-L/a\ b` is ONE argument). Splitting on whitespace
+      -- would turn an escaped suffix into a separate argument, so quoting and escaping are refused
+      -- rather than decoded: a declared library's flags are plain tokens or nothing.
+      if r.stdout.any (fun c => c == '\\' || c == '"' || c == '\'') then
+        return .error s!"error: package '{d.package}': pkg-config --libs {d.value} emitted quoting or escaping ({r.stdout.trimAscii}), which is refused rather than decoded"
       let toks := (r.stdout.split (fun c => c == ' ' || c == '\t' || c == '\n' || c == '\r')).toList.map (·.toString)
         |>.filter (!·.isEmpty)
       let refuse (tok : String) : Except String (Array String) :=
