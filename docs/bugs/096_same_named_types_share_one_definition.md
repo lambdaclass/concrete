@@ -96,6 +96,18 @@ respelled; a collision on one stays under bug 052's refusals. `CFnDef.declName` 
 respelled method's declaration name, so ProofCore's `CallableId`s and the reports' qualified
 names are unchanged.
 
+Every copy of a declaration written in another module (imported, transported by the import
+closure, or injected from a sibling) is renamed by its own identity and its defining module's
+bindings, so every copy agrees with its definition. Because Check compares types by spelling, the
+front-end checks above are not the last word: `checkCoreTypeAgreement` reads the finished Core and
+refuses (E0299) any type position where two same-named types meet: a call argument against the
+callee's parameter (callees resolved through linker aliases too, so `c::read` is checked:
+`error_096_qualified_call_other_type.con`), a call result against the return type, a `let` or
+`return` against its declared type, a field read against the struct's field, and any two copies of
+one struct or enum that disagree (`error_096_alias_signature_other_type.con`). Strict front-end
+refusals fire only when both bindings are known; what the summaries cannot reconstruct is left to
+this backstop rather than refused (`regress_096_sibling_injected_binding.con`).
+
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of
 [bug 118](118_interp_nested_module_import.md), so that leg is native only.

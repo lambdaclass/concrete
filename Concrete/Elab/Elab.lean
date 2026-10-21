@@ -3190,7 +3190,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     | _ => none
   let typeSpellings := ownSpellings ++ inherited
   let spellingConflicts : Diagnostics := foreignReqs.filterMap fun (n, c?, what, strict) =>
-    if !strict || (c?.isSome && c? == typeSpellings.lookup n) then none else
+    -- refused only when both bindings are KNOWN and differ; anything the summaries cannot
+    -- reconstruct is left to `checkCoreTypeAgreement`, which reads the Core itself
+    if !strict || c?.isNone || (typeSpellings.lookup n).isNone || c? == typeSpellings.lookup n then none else
     some { severity := .error, pass := "elab", span := none, code := "E0299"
            message := s!"{what} names type '{n}', which several modules declare, and that module and this one do not bind '{n}' to the same declaration; Core cannot tell which type it means (bug 096)"
            hint := some s!"import '{n}' from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
@@ -3237,13 +3239,25 @@ partial def elabModule (m : Module) (summary : FileSummary)
     match summary.structs.find? (·.name == name) with
     | some sd => structCanon sd
     | none => name
+  -- A copy of a declaration written in ANOTHER module (an imported or sibling-injected
+  -- struct, enum or newtype) names types as THAT module binds them, so each copy is renamed
+  -- by its own declaration's identity and its defining module's bindings: every copy of a
+  -- type then agrees with its definition (`checkCoreTypeAgreement` verifies it).
+  let isOwnDef := fun (defIn : String) =>
+    summary.structs.any (·.definedIn == defIn) || summary.enums.any (·.definedIn == defIn)
+      || summary.newtypes.any (·.definedIn == defIn)
+  let definerRn : String → CoreRename := fun defIn =>
+    if defIn.isEmpty || isOwnDef defIn then rn else
+    { rn with tyName := fun n =>
+        if !ambiguousTypes.contains n then rn.tyName n else
+        match (defSummary defIn).bind (summaryTypeBinding typeDecls · n summaryTable) with
+        | some (di, dn) => canonTypeName di dn
+        | none => rn.tyName n }
+  let importedStructSrc := imports.structs.filter fun sd => !(localStructNames.contains sd.name)
   let cStructs := if !respell then cStructs ++ cImportedStructs else
     (cStructs.map fun sd => { rn.structDef sd with name := localStructCanon sd.name })
-    ++ (cImportedStructs.map fun sd =>
-      let canon := match imports.structs.find? (·.name == sd.name) with
-        | some isd => structCanon isd
-        | none => rn.tyName sd.name
-      { rn.structDef sd with name := canon })
+    ++ ((importedStructSrc.zip cImportedStructs).map fun (isd, sd) =>
+      { (definerRn isd.definedIn).structDef sd with name := structCanon isd })
   let cEnums : List CEnumDef := allEnums.map fun ed =>
     let ced : CEnumDef :=
       { name := ed.name, typeParams := ed.typeParams,
@@ -3251,7 +3265,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           (v.name, v.fields.map fun f => (f.name, eraseTy ed.typeParams f.ty)),
         isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId,
         declSpan := some ed.span }
-    if respell then { rn.enumDef ced with name := enumCanon ed } else ced
+    if respell then { (definerRn ed.definedIn).enumDef ced with name := enumCanon ed } else ced
   let preRenameCallTargets := (fns.flatMap fun cfn => collectCallsStmts cfn.body).eraseDups.filterMap fun n =>
     (resolveContractCall n).map (n, ·)
   let fns := if respell then fns.map rn.fnDef else fns
@@ -3260,7 +3274,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
         name := match localNewtypes.find? (·.name == nt.name) with
           | some snt => canonTypeName snt.definedIn snt.name
           | none => nt.name })
-    ++ (imports.newtypes.map fun nt => { rn.newtypeDef nt with name := canonTypeName nt.definedIn nt.name })
+    ++ (imports.newtypes.map fun nt =>
+      { (definerRn nt.definedIn).newtypeDef nt with name := canonTypeName nt.definedIn nt.name })
   let ownTypeNames := (summary.structs.map structCanon) ++ (summary.enums.map enumCanon)
   .ok {
     name := m.name
@@ -3503,6 +3518,138 @@ def checkRespelledFnNames (cms : List CModule) : Except Diagnostics (List CModul
       message := s!"the module-qualified Core spelling '{n}' of a function or method is already the name of another function; Core cannot tell them apart (bugs 096, 097)"
       hint := some "rename one of the functions or types. Tracking: docs/bugs/097_same_named_private_fns_interp.md" })
 
+mutual
+/-- Bug 096: the (expected, actual, where) type pairs a Core body asserts: each argument of a
+    direct call against the callee's parameter, the call's type against its return type, a
+    `let`'s declared type against its initializer, a `return` against the function's return
+    type. `fns` resolves a callee's definition; generic callees are Mono's business. -/
+partial def coreTyPairsExpr (fns : String → Option CFnDef)
+    (field : Ty → String → Option Ty := fun _ _ => none) : CExpr → List (Ty × Ty × String)
+  | .call callee targs args t =>
+    let inner := args.flatMap (coreTyPairsExpr fns field)
+    match callee with
+    | .direct n =>
+      match fns n with
+      | some f =>
+        if f.typeParams.isEmpty && targs.isEmpty && f.params.length == args.length then
+          inner ++ (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'"))
+            ++ [(f.retTy, t, s!"the result of '{n}'")]
+        else inner
+      | none => inner
+    | .indirect _ => inner
+  | .binOp _ l r _ => coreTyPairsExpr fns field l ++ coreTyPairsExpr fns field r
+  | .fieldAccess e f t =>
+    coreTyPairsExpr fns field e ++ ((field e.ty f).map (fun ft => [(ft, t, s!"field '{f}'")])).getD []
+  | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _
+  | .cast e _ => coreTyPairsExpr fns field e
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (coreTyPairsExpr fns field ·.2)
+  | .match_ sc arms _ => coreTyPairsExpr fns field sc ++ arms.flatMap (coreTyPairsArm fns field)
+  | .arrayLit es _ => es.flatMap (coreTyPairsExpr fns field)
+  | .arrayIndex a i _ | .allocCall a i _ => coreTyPairsExpr fns field a ++ coreTyPairsExpr fns field i
+  | .ifExpr c t e _ => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field none t ++ coreTyPairsStmts fns field none e
+  | _ => []
+
+partial def coreTyPairsArm (fns : String → Option CFnDef) (field : Ty → String → Option Ty) :
+    CMatchArm → List (Ty × Ty × String)
+  | .enumArm _ _ _ g b | .varArm _ _ g b =>
+    ((g.map (coreTyPairsExpr fns field)).getD []) ++ coreTyPairsStmts fns field none b
+  | .litArm v g b => coreTyPairsExpr fns field v ++ ((g.map (coreTyPairsExpr fns field)).getD []) ++ coreTyPairsStmts fns field none b
+  | .rangeArm lo hi _ g b =>
+    coreTyPairsExpr fns field lo ++ coreTyPairsExpr fns field hi ++ ((g.map (coreTyPairsExpr fns field)).getD [])
+      ++ coreTyPairsStmts fns field none b
+
+partial def coreTyPairsStmts (fns : String → Option CFnDef) (field : Ty → String → Option Ty)
+    (retTy : Option Ty) (ss : List CStmt) :
+    List (Ty × Ty × String) :=
+  ss.flatMap fun st => match st with
+    | .letDecl n _ t v => coreTyPairsExpr fns field v ++ [(t, v.ty, s!"the initializer of '{n}'")]
+    | .assign _ v => coreTyPairsExpr fns field v
+    | .return_ (some v) _ =>
+      coreTyPairsExpr fns field v ++ ((retTy.map fun rt => [(rt, v.ty, "a returned value")]).getD [])
+    | .expr e _ => coreTyPairsExpr fns field e
+    | .ifElse c t el => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field retTy t
+        ++ ((el.map (coreTyPairsStmts fns field retTy)).getD [])
+    | .while_ c b _ step => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field retTy b ++ coreTyPairsStmts fns field retTy step
+    | .fieldAssign o _ v => coreTyPairsExpr fns field o ++ coreTyPairsExpr fns field v
+    | .derefAssign t v => coreTyPairsExpr fns field t ++ coreTyPairsExpr fns field v
+    | .arrayIndexAssign a i v => coreTyPairsExpr fns field a ++ coreTyPairsExpr fns field i ++ coreTyPairsExpr fns field v
+    | .break_ (some v) _ => coreTyPairsExpr fns field v
+    | .defer e => coreTyPairsExpr fns field e
+    | .borrowIn _ _ _ _ _ b => coreTyPairsStmts fns field retTy b
+    | _ => []
+end
+
+/-- Every function definition of a module tree. -/
+partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
+/-- Every function of a module tree with its module's struct copies. -/
+partial def coreFnsWithStructsDeep (cm : CModule) : List (List CStructDef × CFnDef) :=
+  cm.functions.map (cm.structs, ·) ++ cm.submodules.flatMap coreFnsWithStructsDeep
+/-- Every linker alias of a module tree. -/
+partial def coreAliasesDeep (cm : CModule) : List (String × String) :=
+  cm.linkerAliases ++ cm.submodules.flatMap coreAliasesDeep
+/-- Every struct / enum definition (local and imported copies) of a module tree, with its module. -/
+partial def coreStructsDeep (cm : CModule) : List (String × CStructDef) :=
+  cm.structs.map (cm.name, ·) ++ cm.submodules.flatMap coreStructsDeep
+partial def coreEnumsDeep (cm : CModule) : List (String × CEnumDef) :=
+  cm.enums.map (cm.name, ·) ++ cm.submodules.flatMap coreEnumsDeep
+
+/-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
+    types by spelling, so a program can pass one module's `P` where another module's `P` is
+    meant; after respelling, Core carries the two declarations' different names. Whenever a
+    Core type position names a respelled (or still-bare ambiguous) type, the names it carries
+    must agree: call arguments with the callee's parameters, call results with its return type,
+    `let`s and `return`s with their declared types, and every copy of a struct or enum (a
+    module's imported copy and its definition) with every other. A disagreement is refused
+    (E0299) rather than laid out twice. `family` is every ambiguous name and its respellings. -/
+def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
+    Except Diagnostics (List CModule) :=
+  if family.isEmpty then .ok cms else
+  let fam := fun (t : Ty) => (tyNamesIn t).filter family.contains
+  let allFns := cms.flatMap coreFnsDeep
+  let aliases := cms.flatMap coreAliasesDeep
+  -- a callee by its Core name, else through the linker aliases (`c::read` is `c_read`)
+  let fns : String → Option CFnDef := fun n =>
+    match allFns.filter (·.name == n) with
+    | [f] => some f
+    | _ :: _ :: _ => none
+    | [] =>
+      match ((aliases.filter (·.1 == n)).map (·.2)).eraseDups.filterMap
+          (fun t => match allFns.filter (·.name == t) with | [f] => some f | _ => none) with
+      | [f] => some f
+      | _ => none
+  let diag := fun (msg : String) =>
+    ({ severity := .error, pass := "elab", span := none, code := "E0299"
+       message := msg
+       hint := some "import the type from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" } : Diagnostic)
+  -- a field's declared type, read off the module's own copy of a non-generic struct
+  let fieldIn : List CStructDef → Ty → String → Option Ty := fun sds objTy f =>
+    let sn := match objTy with
+      | .named n | .ref (.named n) | .refMut (.named n) | .heap (.named n) => n
+      | _ => ""
+    if sn.isEmpty then none else
+    match sds.find? (·.name == sn) with
+    | some sd => if sd.typeParams.isEmpty then sd.fields.lookup f else none
+    | none => none
+  let fnsWithStructs := cms.flatMap coreFnsWithStructsDeep
+  let callDiags : Diagnostics := fnsWithStructs.flatMap fun (sds, f) =>
+    (coreTyPairsStmts fns (fieldIn sds) (some f.retTy) f.body).filterMap fun (exp, act, whr) =>
+      if fam exp == fam act then none else
+      some (diag s!"in '{f.sourceName}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
+  let structs := cms.flatMap coreStructsDeep
+  let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDups.filterMap fun n =>
+    let copies := (structs.filter (·.2.name == n)).map fun (p : String × CStructDef) =>
+      p.2.fields.map fun (f : String × Ty) => fam f.2
+    if copies.eraseDups.length ≤ 1 then none else
+    some (diag s!"struct '{n}' reaches modules with fields naming different same-named types; Core would lay it out twice (bug 096)")
+  let enums := cms.flatMap coreEnumsDeep
+  let enumDiags : Diagnostics := (enums.map (·.2.name)).eraseDups.filterMap fun n =>
+    let copies := (enums.filter (·.2.name == n)).map fun (p : String × CEnumDef) =>
+      p.2.variants.map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
+    if copies.eraseDups.length ≤ 1 then none else
+    some (diag s!"enum '{n}' reaches modules with payloads naming different same-named types; Core would lay it out twice (bug 096)")
+  let all := callDiags ++ structDiags ++ enumDiags
+  if all.isEmpty then .ok cms else .error (all.eraseDupsBy (·.message == ·.message))
+
 def elabProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics (List CModule) :=
   -- Build sibling module summaries for inline modules (mod A {} mod B {}).
@@ -3564,6 +3711,9 @@ def elabProgram (resolved : List ResolvedModule)
   ) (([] : List CModule), ([] : Diagnostics))
   if allErrors.isEmpty then
     qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames
+      >>= checkCoreTypeAgreement
+        (if ambiguousTypes.isEmpty then [] else
+          (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups)
   else .error allErrors
 
 end Concrete

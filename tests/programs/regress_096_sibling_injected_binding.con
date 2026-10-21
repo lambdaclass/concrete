@@ -1,0 +1,19 @@
+// Bug 096 (Codex round 6): b binds P through sibling injection (a's P, the first sibling)
+// and d imports a's P and b's relay; both mean a's P. Expected (compiled AND --interp): 7.
+mod main {
+    mod a { pub struct Copy P { pub x: i64 } }
+    mod c { pub struct Copy P { pub unused: i64 } }
+    mod b {
+        pub fn relay(p: P) -> P { return p; }
+    }
+    mod d {
+        import a.{ P };
+        import b.{ relay };
+        pub fn probe() -> i64 {
+            let p: P = relay(P { x: 7 });
+            return p.x;
+        }
+    }
+    import d.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

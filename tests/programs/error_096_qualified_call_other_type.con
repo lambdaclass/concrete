@@ -1,0 +1,17 @@
+// Bug 096 (Codex round 6): main passes a's P to c::read, which takes c's P; Check compares
+// the two by spelling. The Core type-agreement backstop refuses it (E0299); before it the
+// binary read `pad` (99) and --interp `x` (7).
+mod a { pub struct Copy P { pub x: i64, pub pad: i64 } }
+mod c {
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub fn read(p: &P) -> i64 { return p.x; }
+}
+mod main {
+    import a.{ P };
+    fn main() with(Std) -> Int {
+        let p: P = P { x: 7, pad: 99 };
+        print_int(c::read(&p));
+        print_char(10);
+        return 0;
+    }
+}
