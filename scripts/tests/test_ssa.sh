@@ -64,6 +64,9 @@ for spec in "$RESDIR"/test_*.spec; do
             exit 1
         fi
         actual=$(perl -e 'alarm 5; exec @ARGV' "$out" 2>&1) && actual_rc=0 || actual_rc=$?
+        # A 5-second alarm (142) under machine load is not an observed wrong result: record it as a
+        # TIMEOUT and let the sequential pass below decide (pass / FAIL / INCOMPLETE).
+        if [ "$actual_rc" = "142" ]; then echo "TIMEOUT $name $spec_id"; exit 0; fi
         # Mirror run_ok's MAIN_EXIT_MODEL semantics (stage 2): explicit rc arg
         # = printed stdout + that exit code; numeric 0-255 = exit code (or
         # self-printing + rc 0); anything else = printed stdout + rc 0.
@@ -99,17 +102,56 @@ done
 
 wait
 
+# TIMEOUTS ARE RE-RUN ALONE, NOT COUNTED AS FAILURES. Under load the first run of a freshly
+# linked binary can exceed the 5-second alarm (a macOS first-launch scan alone took 2-3 s), and
+# hundreds of such alarms were reported as test failures. Each timed-out test now re-runs
+# sequentially with a 30-second alarm and the same comparison: a pass is recorded as recovered, a
+# wrong result is a FAIL, and a second timeout is INCOMPLETE. Only all-pass exits 0, so a real hang
+# still fails the gate — it is just labelled for what it is.
+INCOMPLETE=0; RECOVERED=0
+for f in "$RESDIR"/*.out; do
+    [ -f "$f" ] || continue
+    result=$(cat "$f")
+    case "$result" in TIMEOUT*) ;; *) continue ;; esac
+    set -- $result; tname=$2; tspec="$RESDIR/$3.spec"
+    expected_rc_raw=$(sed -n '2p' "$tspec"); expected=$(tail -n +3 "$tspec")
+    out="$OUTDIR/$3"
+    actual=$(perl -e 'alarm 30; exec @ARGV' "$out" 2>&1) && actual_rc=0 || actual_rc=$?
+    pass=0
+    if [ "$actual_rc" = "142" ]; then
+        echo "INCOMPLETE $tname: timed out twice (5 s in parallel, 30 s alone)" > "$f"; continue
+    fi
+    if [ -n "$expected_rc_raw" ]; then
+        [ "$actual" = "$expected" ] && [ "$actual_rc" = "$expected_rc_raw" ] && pass=1
+    else
+        case "$expected" in
+            ''|*[!0-9]*) [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ] && pass=1 ;;
+            *)
+                if [ "$expected" -le 255 ]; then
+                    { [ "$actual_rc" = "$expected" ] && [ -z "$actual" ]; } && pass=1
+                    { [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ]; } && pass=1
+                else
+                    [ "$actual" = "$expected" ] && [ "$actual_rc" = "0" ] && pass=1
+                fi ;;
+        esac
+    fi
+    if [ "$pass" = "1" ]; then echo "ok $tname (recovered: timed out under load, passed alone)" > "$f"
+    else echo "FAIL $tname: expected='$expected' rc='${expected_rc_raw:-auto}' got rc=$actual_rc '$actual' (re-run alone)" > "$f"; fi
+done
+
 # Collect results
 for f in "$RESDIR"/*.out; do
     [ -f "$f" ] || continue
     result=$(cat "$f")
     echo "$result"
     case "$result" in
+        ok*"(recovered"*) PASS=$((PASS + 1)); RECOVERED=$((RECOVERED + 1)) ;;
         ok*) PASS=$((PASS + 1)) ;;
+        INCOMPLETE*) INCOMPLETE=$((INCOMPLETE + 1)) ;;
         *) FAIL=$((FAIL + 1)) ;;
     esac
 done
 
 echo ""
-echo "PASS: $PASS  FAIL: $FAIL  SKIP: $SKIP  TOTAL: $((PASS + FAIL))"
-[ "$FAIL" -eq 0 ]
+echo "PASS: $PASS  FAIL: $FAIL  INCOMPLETE: $INCOMPLETE  RECOVERED: $RECOVERED  SKIP: $SKIP  TOTAL: $((PASS + FAIL + INCOMPLETE))"
+[ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]
