@@ -127,8 +127,9 @@ esac
 
 echo "=== B2: every foreign declaration stays foreign in the emitted IR ==="
 # A binding's `extern fn` must reach LLVM as a `declare`. A `define` of the same symbol means the
-# compiler substituted its own body for the C function — gap G3: Mono's drop-glue synthesizes an
-# empty body for any unresolved call whose name ends in `_destroy`, so rocksdb_*_destroy never runs.
+# compiler substituted its own body for the C function — gap G3 (bug 103, fixed by 0c507fb9): Mono's
+# drop-glue synthesized an empty body for any unresolved call whose name ended in `_destroy`, so
+# rocksdb_*_destroy never ran. This leg keeps that from coming back.
 ( cd "$EX" && $TO "$C" build --emit-llvm ) > "$TMP/ir.ll" 2> "$TMP/ir.err" \
   || { no "concrete build --emit-llvm failed: $(head -3 "$TMP/ir.err" | tr '\n' ' ')"; finish; }
 EXTERNS="$(sed -nE 's/^[[:space:]]*extern fn ([A-Za-z_][A-Za-z0-9_]*)\(.*/\1/p' "$EX/rocksdb/src/lib.con")"

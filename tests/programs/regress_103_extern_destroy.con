@@ -1,0 +1,16 @@
+// Bug 103 (fixed by the typed destructor dispatch, 0c507fb9): an `extern fn` whose name ends in
+// `_destroy` must reach the C library. Before, Mono synthesized an empty body for any unresolved
+// callee ending in `_destroy`, so `widget_destroy` was a `define` with no body and the C function
+// never ran. Linked with regress_103_extern_destroy.c, which counts the calls: exit 42 needs both
+// destroys to reach C (40 + 2).
+extern fn widget_create() with(Alloc) -> *mut u8;
+extern fn widget_destroy(w: *mut u8) with(Alloc);
+extern fn widget_destroyed() with() -> i32;
+
+trusted fn main() with(Alloc) -> i32 {
+    let a: *mut u8 = widget_create();
+    let b: *mut u8 = widget_create();
+    widget_destroy(a);
+    widget_destroy(b);
+    return 40 + widget_destroyed();
+}

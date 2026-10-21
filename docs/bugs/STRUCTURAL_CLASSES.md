@@ -103,10 +103,12 @@ checker's environments onto it.
 
 **Bugs.** 052 (`T_destroy` for an array element type resolved to a no-op), 091's nested-module
 case (the H18 fence looked up `Type_destroy` but the destructor had been renamed
+103 (any unresolved callee ending in `_destroy` replaced by an empty body, swallowing externs;
+fixed by `0c507fb9`: dispatch keys on the reserved `$destroy` callee and the argument type, glue is
+named `$destroy$<type>`, and since 2026-10-21 every Concrete-defined symbol is mangled apart from C).
 `sub_Type_destroy`), 099 (Check and Elab inferred a generic call's type arguments from two
 argument-type peeks, so Core instantiated `Placeholder` where Check had typed the argument), 100 (a
 generic impl's `&self` destructor reached by its unspecialized name),
-103 (any unresolved callee ending in `_destroy` replaced by an empty body, swallowing externs).
 
 **Design cause.** Drop glue spells a destructor as `<Type>_destroy` and resolves the spelling late;
 an unresolved spelling is filled in rather than refused (class 11), and an extern is

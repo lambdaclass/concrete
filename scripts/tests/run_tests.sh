@@ -7414,6 +7414,40 @@ if filter_match "$TESTDIR/phase3_abi_interop.con"; then
     fi
 fi
 
+# Bug 103 (fixed): an extern whose name ends in `_destroy` stays a declaration and reaches C.
+# The C stub counts the destroy calls; exit 42 needs both to arrive (an empty synthesized body,
+# the bug, exits 40). The IR leg pins the extern as exactly one `declare` and no `define`.
+r103_ll="$TMPDIR/regress_103_extern_destroy.ll"
+r103_bin="$TMPDIR/regress_103_extern_destroy"
+if filter_match "$TESTDIR/regress_103_extern_destroy.con"; then
+    if $COMPILER "$TESTDIR/regress_103_extern_destroy.con" --emit-llvm > "$r103_ll" 2>/dev/null; then
+        if [ "$(grep -cE '^declare void @widget_destroy\(' "$r103_ll")" = "1" ] \
+           && ! grep -qE '^define [^@]*@widget_destroy\(' "$r103_ll"; then
+            echo "  ok  regress_103_extern_destroy.con: widget_destroy stays a declaration"
+            PASS=$((PASS + 1))
+        else
+            echo "FAIL  regress_103_extern_destroy.con: widget_destroy is not exactly one declaration (bug 103)"
+            FAIL=$((FAIL + 1))
+        fi
+        if clang "$r103_ll" "$TESTDIR/regress_103_extern_destroy.c" -o "$r103_bin" -Wno-override-module 2>/dev/null; then
+            r103_rc=0; "$r103_bin" >/dev/null 2>&1 || r103_rc=$?
+            if [ "$r103_rc" = "42" ]; then
+                echo "  ok  regress_103_extern_destroy.con: both destroys reached C (rc 42)"
+                PASS=$((PASS + 1))
+            else
+                echo "FAIL  regress_103_extern_destroy.con: expected rc 42, got $r103_rc (bug 103)"
+                FAIL=$((FAIL + 1))
+            fi
+        else
+            echo "FAIL  regress_103_extern_destroy.con: clang link with the C stub failed"
+            FAIL=$((FAIL + 1))
+        fi
+    else
+        echo "FAIL  regress_103_extern_destroy.con: compilation failed"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+
 fi # end section: codegen
 
 # --- Category 2b: Optimized-build (-O2) regression for aggregate lowering ---

@@ -101,6 +101,9 @@ declare -A BUG_TEST_MAP=(
   [121]="regress_bug121_enum_field_layout.con"
   # Bug 113: R-0484 R3 skipped nested submodules (E0116 and E0117 now hold there too).
   [113]="error_113_submodule_extern_undeclared.con error_113_submodule_extern_effectful_pure.con"
+  # Bug 103: an extern ending in _destroy was replaced by an empty synthesized body
+  # (run_tests.sh codegen section links it with regress_103_extern_destroy.c, rc 42).
+  [103]="regress_103_extern_destroy.con"
   # Bug 112: an #[intrinsic] declaration was refused as an undeclared foreign binding (E0116).
   [112]="regress_112_user_intrinsic.con"
 )
@@ -160,6 +163,7 @@ declare -A SKIP_BUGS=(
   [086]="FIXED 2026-10-18 -- a discarded expression statement was modeled as its block's value (if x > 0 { id(x); } return 7; modeled as x) and a return nested in a non-tail expression as a value; only isValue trailing expressions are values and non-tail sites must not escape. Regression vehicle is a gate: check_model_diff.sh leg T pins tests/regressions/bug086_discarded_tail/repro.con; see docs/bugs/086"
   [101]="FIXED 2026-10-19 -- a branch- or body-local let was nested over the code after its scope in the proof model (scoped(1): model 10, runtime 1); branches composing with a continuation refuse when their locals reach it. Regression vehicle: tests/regressions/bug085_loop_step/repro.con scoped/reloop + check_model_diff.sh leg S"
   [103]="OPEN -- Mono drop glue synthesizes an empty definition for any unresolved callee ending in _destroy, so an extern fn foo_destroy never reaches the C library (silent leak). Found by the RocksDB slice 1 groundwork. Regression vehicle lands with the fix under queue exit 0b: the docs/bugs/103 program checked by --emit-llvm (extern stays a declare) and a linked C stub counting the call; check_rocksdb_slice1.sh also fails on it"
+  [102]="OPEN -- &mut x as *mut *mut T on a pointer-typed local passes x's value, not its address (silent wrong code; the interpreter refuses the cast). Found by the RocksDB slice 1 groundwork. Regression vehicle lands with the fix under queue exit 0b: the docs/bugs/102 program as a permanent fixture, plus interpreter support for the cast so differential gates cover it"
   [114]="OPEN -- an intrinsic declared in a nested submodule and called by path lowers to a C call; reproducer tests/regressions/bug114_submodule_intrinsic_links_c_symbol/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [117]="OPEN -- the interpreter does not resolve module-level constants; reproducer tests/regressions/bug117_interp_module_const/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [118]="OPEN -- the interpreter cannot call a function imported from a nested module; reproducer tests/regressions/bug118_interp_nested_module_import/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"

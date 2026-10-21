@@ -72,8 +72,9 @@ and the CI job will need that install step.
 
 Gate result when the groundwork landed (macOS arm64, devshell): 28 legs pass, 5 fail, exactly
 G1 (the no-flags build) and G3. Since G1 closed (2026-10-21, `[native]`), measured on a branch
-based on main 9d17ccc5 at commit 82c6cd15: 33 pass, 0 fail — the G3 legs pass on that base as well,
-although bug 103 is still recorded OPEN, so G3's status belongs to its owner to confirm. Measured
+based on main 9d17ccc5 at commit 82c6cd15: 33 pass, 0 fail — the G3 legs pass on that base as well:
+bug 103 was fixed on main by `0c507fb9` (2026-10-18) before it was filed from the groundwork's older
+base, and is recorded FIXED (verified 2026-10-21, 33 pass, 0 fail on branch `symbols`). Measured
 first on the older base: 29 pass, 4 fail. Leg A,
 plain `concrete build` in the fresh clone, now produces the binary, so leg B's manual link is not
 used and every behaviour leg runs the normally built binary. On the older base the four failures
@@ -147,7 +148,9 @@ Filed as [bug 102](../bugs/102_pointer_local_address_cast_miscompiled.md), FIXED
 `&mut err` on a pointer-typed local is now the local's slot, so the out-slot can live on the stack.
 The heap workaround stays in the binding until it is rebuilt and run against a RocksDB install.
 
-### G3. Externs ending in `_destroy` are replaced by an empty body (silent leak)
+### G3. Externs ending in `_destroy` are replaced by an empty body (silent leak) — closed
+
+**Closed:** fixed on main by `0c507fb9` (typed destructor dispatch; [bug 103](../bugs/103_extern_destroy_replaced_by_empty_body.md)); the text below records the defect as observed on the groundwork's older base.
 
 `Concrete/IR/Mono.lean` (H18 drop-glue) synthesizes an empty no-op definition for any call it
 cannot resolve whose name ends in `_destroy`, on the stated assumption that "no extern or builtin
@@ -210,8 +213,8 @@ roadmap allows.
 | import it with a normal Concrete import | done (`import rocksdb.{...}`) |
 | open a database, write a key and read it back | done (behaviour legs pass, leg-B binary) |
 | invalid path returns a typed error, not an abort | done (`DbError { kind: Open }` with RocksDB's message naming the path) |
-| each linear handle destroyed exactly once | `Db`, value buffer and error message: observed once each; the three options objects: never released (G3) |
-| builds and runs from a clean checkout, normal commands, no manual flags | builds and runs with plain `concrete build` in the devshell (leg A, G1 closed); the run still leaks the three options objects (G3) |
+| each linear handle destroyed exactly once | done: `Db`, value buffer, error message and the three options objects observed released once each (G3 closed, bug 103) |
+| builds and runs from a clean checkout, normal commands, no manual flags | builds and runs with plain `concrete build` in the devshell (leg A, G1 closed); no leak since G3 closed |
 | compile-fail: handle never destroyed | rejected, E0208 naming `db`; compiles once repaired |
 | compile-fail: handle used after close | rejected, E0205 naming `db`; compiles once repaired |
 | gate in the full gate set | not wired; declared skip in `check_gate_registration.sh` until 0b and 2i hold |
