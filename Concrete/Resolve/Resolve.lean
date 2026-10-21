@@ -573,6 +573,21 @@ private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : 
                    then [mkResolveDiag (.recursiveTypeAlias ta.name) (some ta.span)] else []
     acc ++ tErrs ++ recErrs) []
 
+/-- R-0484 R3 over a module and every nested submodule (bug 113). A `#[intrinsic]`
+    declaration is not a foreign binding (the compiler implements it, no C code stands behind
+    it), so R3 does not apply to it; std.mem's `sizeof`/`alignof` are the instances, and they
+    reach this walk because std's modules are submodules in a project build. -/
+private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+  let ctx := m.externFns.foldl (fun ctx ef =>
+    if ef.intrinsic.isSome then ctx else
+    match ef.capSet with
+    | none => addError ctx (.externEffectsUndeclared ef.name) (some ef.span)
+    | some cs =>
+      if cs.isEmpty && Capabilities.knownEffectfulForeignSymbols.contains ef.name
+      then addError ctx (.effectfulSymbolDeclaredPure ef.name) (some ef.span)
+      else ctx) ctx
+  m.submodules.foldl (fun ctx sub => externEffectsCheck sub ctx) ctx
+
 /-- Resolve all names in a module's function bodies. -/
 private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
     (traitMethods : List (String × List String))
@@ -591,16 +606,12 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     acc ++ ti.methods.foldl (fun acc method =>
       acc ++ resolveFnBody globalScope (knownTypes ++ ti.typeParams) method (some ti.typeName) traitMethods traitImpls_) []) []
   -- R-0484 R3: every foreign binding declares its effects, and a known-effectful
-  -- symbol may not be declared effect-free.
+  -- symbol may not be declared effect-free. The rule covers EVERY module: the walk
+  -- descends into nested submodules (bug 113: it read only `m.externFns`, so an
+  -- undeclared `extern fn` inside `mod t { mod ffi { .. } }` was accepted).
   let externCtx0 : ResolveCtx :=
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
-  let externErrors := (m.externFns.foldl (fun ctx ef =>
-    match ef.capSet with
-    | none => addError ctx (.externEffectsUndeclared ef.name) (some ef.span)
-    | some cs =>
-      if cs.isEmpty && Capabilities.knownEffectfulForeignSymbols.contains ef.name
-      then addError ctx (.effectfulSymbolDeclaredPure ef.name) (some ef.span)
-      else ctx) externCtx0).errors
+  let externErrors := (externEffectsCheck m externCtx0).errors
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 

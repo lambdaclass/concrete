@@ -258,7 +258,9 @@ none), 065 (recursive callees dropped, so unbounded stack read as bounded), 067 
 attestation), 075 (policy gates that never saw a capability passed), 076 (proof admission treated
 unseen dependency effects, unresolved generic calls and foreign assumptions as effect-free), 103
 (an unresolved `_destroy` filled with an empty body), 106 (a non-terminating model-diff report
-swallowed by the gate's `|| true`).
+swallowed by the gate's `|| true`), 112 (a body-less declaration's missing effect clause read as an
+undeclared foreign binding, an `#[intrinsic]` included; the intrinsic case fixed with 113 on
+2026-10-21, since an intrinsic is not a foreign binding).
 
 **Design cause.** An unknown, uncomputed or unresolved value defaults to empty, pure, fresh, bounded
 or successful, and nothing downstream can tell it from a measurement
@@ -294,7 +296,9 @@ emitted struct and enum type with the compiler's (121, 122).
 
 **Bugs.** 073 (generic type-argument arity unchecked), 075 (authority checks that could not see a
 capability), 091 (trait impl conformance compared only return types), 092 (references are
-second-class and "never stored in an aggregate", but nothing enforced it).
+second-class and "never stored in an aggregate", but nothing enforced it), 113 (R-0484 R3 was
+checked over the module Resolve was handed and not its nested submodules; fixed 2026-10-21: the
+check walks every submodule).
 
 **Design cause.** Language and verification documents state rules that no check performs, and
 nothing ties a stated rule to a gate leg that would fail without it.

@@ -380,8 +380,6 @@ open_bug_reproducers() {
       *) no "$label: unknown mode '$mode'" ;;
     esac
   done <<'TABLE'
-112|bug112_user_intrinsic_e0116/repro.con|compile-fails|(E0116) foreign binding 'sizeof' does not declare its effects
-113|bug113_submodule_extern_effects_unchecked/repro.con|compiles|
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference
 117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'

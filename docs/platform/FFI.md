@@ -53,7 +53,7 @@ Rules:
 - callers do not need `with(Unsafe)`
 - parameter and return types must still be FFI-safe
 - the declaration itself is the audit boundary — it asserts the foreign function is safe to call with any valid arguments of the declared types
-- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117). The declared effects bind every caller, trusted bodies included (R-0484)
+- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117), in every module, nested submodules included (enforced; bug 113). An `#[intrinsic]` declaration is implemented by the compiler, is not a foreign binding, and needs no effect declaration (bug 112). The declared effects bind every caller, trusted bodies included (R-0484)
 - `--report unsafe` shows trusted extern declarations in a separate "Trusted extern functions" section
 
 Keep the category narrow. `trusted extern fn` means "safe for every argument its types permit, with no undeclared effects" — not a general "safe FFI" escape hatch. A foreign function whose safety depends on pointer validity, or that can invalidate a resource another handle owns (`close`), stays a regular `extern fn`; its callers outside `trusted` code need `with(Unsafe)`. Effects are not what decides this: they are declared either way.

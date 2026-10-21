@@ -1,0 +1,10 @@
+// Bug 113 (fixed): R-0484 R3 (every foreign binding declares its effects, E0116) is enforced
+// in every module, nested submodules included. Before the fix this program compiled and exited 3.
+mod t {
+    mod ffi {
+        pub extern fn abs(x: i32) -> i32;
+    }
+    pub fn main() with(Unsafe) -> i32 {
+        return ffi::abs(0 - 3);
+    }
+}

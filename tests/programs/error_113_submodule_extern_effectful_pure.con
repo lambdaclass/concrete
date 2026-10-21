@@ -1,0 +1,12 @@
+// Bug 113 (fixed): the second half of R-0484 R3, a known effectful C symbol declared `with()`
+// (E0117), is enforced in a nested submodule too, two levels down.
+mod t {
+    mod io {
+        mod raw {
+            pub extern fn write(fd: i32, buf: *const u8, count: u64) with() -> i64;
+        }
+    }
+    pub fn main() -> i32 {
+        return 0;
+    }
+}

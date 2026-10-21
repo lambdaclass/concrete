@@ -2208,6 +2208,12 @@ run_err "$TESTDIR/error_trusted_not_viral.con" "requires capability"
 run_err "$TESTDIR/error_extern_needs_unsafe.con" "requires Unsafe"
 run_err "$TESTDIR/error_extern_undeclared.con" "E0116"   # R-0484 R3: an extern must declare its effects
 run_err "$TESTDIR/error_extern_effectful_declared_pure.con" "E0117"   # ...and a known-effectful one is not with()
+# Bug 113 (fixed): both halves of R3 hold in nested submodules, not only top-level modules.
+run_err "$TESTDIR/error_113_submodule_extern_undeclared.con" "E0116"
+run_err "$TESTDIR/error_113_submodule_extern_effectful_pure.con" "E0117"
+# Bug 112 (fixed with 113): an #[intrinsic] declaration is not a foreign binding, so R3 does not
+# refuse it; std.mem's sizeof form compiles outside std (exit 5).
+run_ok "$TESTDIR/regress_112_user_intrinsic.con" "5"
 
 # === Cross-module and parser tests ===
 run_ok "$TESTDIR/test_module_nested.con" 42

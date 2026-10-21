@@ -1,0 +1,13 @@
+// Bug 112 (fixed with bug 113): the declaration std.mem uses for `sizeof` was refused outside
+// std (E0116), because R-0484 R3 read an `#[intrinsic]` declaration as an undeclared foreign
+// binding. An intrinsic is implemented by the compiler, not by C, so R3 does not apply. Exit 5.
+mod foo {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+}
+mod bar {
+    import foo.{sizeof};
+    pub fn main() -> u64 {
+        return sizeof::<u8>() + sizeof::<u32>();
+    }
+}

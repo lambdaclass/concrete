@@ -1,6 +1,6 @@
 # Bug 112 — the declaration std.mem uses for `sizeof` is rejected (E0116 at 0:0) outside std
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (branch `symbols`, with bug 113)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** a valid program is rejected; the diagnostic has no location.
 
@@ -38,6 +38,22 @@ Carry the parsed `with(...)` (and span) onto the body-less declaration; decide s
 
 examples/snippets/sizeof_intrinsic.con and examples/snippets/vec.con, manifest `known-bug 112`.
 
+## Fix
+
+R-0484 R3 no longer applies to an `#[intrinsic]` declaration: the compiler implements it and no C
+code stands behind it, so it is not a foreign binding (R10), and Resolve's R3 walk
+(`externEffectsCheck`, the bug 113 fix) skips it. The reproducer compiles and exits 5; it is the
+permanent fixture `tests/programs/regress_112_user_intrinsic.con` (`run_ok` exit 5 in
+`run_tests.sh`), and `examples/snippets/sizeof_intrinsic.con` (exit 5) and
+`examples/snippets/vec.con` (exit 4) are promoted from `known-bug 112` to run rules (the
+interpreter still has no `sizeof`). std passed before only because bug 113 hid its submodules from
+R3; the 113 fix would otherwise have refused every project that imports std.mem.
+
+**Residual, not part of this record's reproducer:** `parseFnDefOrDecl` still drops the `with(...)`
+clause and the span of a body-less declaration, so a body-less non-intrinsic `fn f() with();` is
+refused with E0116 at `0:0`, and E0116 / E0117 carry no location for any extern (the extern record
+has no span). Both belong to R-0492/R-0514's single declaration record.
+
 ## Structural cause
 
 A body-less function declaration is parsed into the extern record without its `with(...)` clause or span, so a fact the author wrote is dropped and its absence is then read as "undeclared" ([structural classes](STRUCTURAL_CLASSES.md) 11, absence read as a fact, and 12, one fact kept in two places: the parsed signature and the extern record). std passes only because its declarations are handled on a different path.
@@ -48,4 +64,4 @@ R-0492/R-0514 (one resolver and declaration record for functions and externs); p
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.
+While open, `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") required the recorded failure; the row was removed with the fix.

@@ -36,6 +36,17 @@ one without returning it. Linear elements use `vec_pop` or `Vec`'s `pop`, `swap_
 `replace` and `with_at`. Two test programs that drained a `Vec<String>` with `vec_get` now use
 `vec_pop`.
 
+### Every Foreign Binding Declares Its Effects At Any Module Depth (2026-10-21)
+
+R-0484 R3 (every `extern fn` declares its effects, E0116; a known effectful C symbol is not
+`with()`, E0117) was enforced only over the module Resolve was handed, so an undeclared binding
+inside `mod t { mod ffi { .. } }` was accepted and charged `Unsafe` at the call (bug 113). The check
+now walks every nested submodule. That exposed bug 112: std's modules are submodules in a project
+build, so std.mem's `#[intrinsic]` `sizeof`/`alignof` reached R3 for the first time. An intrinsic is
+implemented by the compiler, not by C, so it is not a foreign binding and R3 skips it; the
+declaration std.mem uses now also compiles outside std (`examples/snippets/sizeof_intrinsic.con`,
+`examples/snippets/vec.con` promoted to run rules).
+
 ### Small Exit 0b Repairs: `main` Parameters, Struct-Literal Order, Lossless `fmt` Floats (2026-10-21)
 
 Bug 111 is fixed: `main` may no longer declare parameters. The entry wrapper calls it with no

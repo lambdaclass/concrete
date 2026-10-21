@@ -224,14 +224,14 @@ examples/snippets/opaque_vec.con compile
 examples/snippets/refs.con compile
 examples/snippets/simple.con compile
 examples/snippets/simple_trait.con compile
-examples/snippets/sizeof_intrinsic.con known-bug 112 (E0116) foreign binding 'sizeof' does not declare its effects
+examples/snippets/sizeof_intrinsic.con compile
 examples/snippets/string_processing.con compile
 examples/snippets/structs.con compile
 examples/snippets/trait_dispatch.con compile
 examples/snippets/type_alias.con compile
 examples/snippets/union.con compile
 examples/snippets/variable_inside_if.con compile
-examples/snippets/vec.con known-bug 112 (E0116) foreign binding 'sizeof' does not declare its effects
+examples/snippets/vec.con compile
 examples/snippets/while.con compile
 examples/snippets/while_if_false.con compile
 examples/snippets/while_loop.con compile
@@ -375,12 +375,14 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/refs.con refs exit=6 ret=6 interp=yes stdout=empty
 @run examples/snippets/simple.con simple exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/simple_trait.con simple_trait exit=2 ret=2 interp=yes stdout=empty
+@run examples/snippets/sizeof_intrinsic.con sizeof_intrinsic exit=5 interp=fails:undefined~function~'sizeof' stdout=empty
 @run examples/snippets/string_processing.con string_processing exit=100 interp=fails:undefined~function~'string_to_int'
 @run examples/snippets/structs.con structs exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/trait_dispatch.con trait_dispatch exit=26 ret=26 interp=yes stdout=empty
 @run examples/snippets/type_alias.con type_alias exit=4 ret=4 interp=yes stdout=empty
 @run examples/snippets/union.con union exit=1 interp=fails:field~'baz' stdout=empty
 @run examples/snippets/variable_inside_if.con variable_inside_if exit=16 ret=16 interp=yes stdout=empty
+@run examples/snippets/vec.con vec exit=4 interp=fails:undefined~function~'sizeof' stdout=empty
 @run examples/snippets/while.con while exit=16 ret=16 interp=yes stdout=empty
 @run examples/snippets/while_if_false.con while_if_false exit=7 ret=7 interp=yes stdout=empty
 @run examples/snippets/while_loop.con while_loop exit=186 ret=5050 interp=yes stdout=empty
