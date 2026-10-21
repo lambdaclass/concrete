@@ -67,6 +67,7 @@ The language feature is settled. What remains is the stable convention for **how
 |---|---|---|
 | Wrapper type | `PascalCase`, domain name | `UserId`, `Port`, `PacketLen`, `NonZeroU32`, `AsciiText` |
 | Smart constructor | `TypeName::try_new(inner) -> Option<Self>` | `Port::try_new(value)` |
+| Smart constructor, non-`Copy` inner | `TypeName::try_new(inner) -> Result<Self, Inner>`: a rejected input is returned, never dropped ([ownership on failure](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure)) | `AsciiText::try_new(s)` |
 | Total constructor (when validation is free/trivial) | `TypeName(inner)` (raw) | `UserId(42)` |
 | Inner access | `.0` | `port.0` |
 | Raw construction bypassing validation | `trusted` context, `TypeName(inner)` | only inside the module that owns the wrapper |

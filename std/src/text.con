@@ -13,19 +13,22 @@ mod text {
     pub newtype AsciiText = String;
 
     trusted impl AsciiText {
-        pub trusted fn try_new(s: String) with(Alloc) -> Option<AsciiText> {
+        /// Validate `s` as ASCII and wrap it. RETURNED ON FAILURE: a rejected
+        /// string comes back unchanged in `Err`, so the caller still owns it
+        /// (ownership-on-failure convention, docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md).
+        /// It used to be dropped behind a bare `None`.
+        pub trusted fn try_new(s: String) -> Result<AsciiText, String> {
             let n: u64 = s.len();
             let mut i: u64 = 0;
             while i < n {
                 let pb: *const u8 = s.raw_ptr() as *const u8 + i;
                 let b: u8 = *(pb as *mut u8);
                 if b > (127 as u8) {
-                    s.drop();
-                    return Option::<AsciiText>::None;
+                    return Result::<AsciiText, String>::Err { error: s };
                 }
                 i = i + 1;
             }
-            return Option::<AsciiText>::Some { value: AsciiText(s) };
+            return Result::<AsciiText, String>::Ok { value: AsciiText(s) };
         }
     }
 
@@ -271,7 +274,7 @@ mod text {
     fn test_ascii_text_try_new_happy() with(Alloc, Console) -> i32 {
         let s: String = "hello";
         match AsciiText::try_new(s) {
-            Option::Some { value } => {
+            Result::Ok { value } => {
                 // `.0` is a move-out (no partial moves): unwrap ONCE, then use.
                 let inner: String = value.0;
                 if !assert_eq::<u64>(inner.len(), 5, "AsciiText wraps String of len 5") {
@@ -281,7 +284,7 @@ mod text {
                 inner.drop();
                 return 0;
             }
-            Option::None => { return 2; }
+            Result::Err { error } => { error.drop(); return 2; }
         }
     }
 
@@ -289,8 +292,8 @@ mod text {
     fn test_ascii_text_try_new_empty_ok() with(Alloc) -> i32 {
         let s: String = String::new();
         match AsciiText::try_new(s) {
-            Option::Some { value } => { value.0.drop(); return 0; }
-            Option::None => { return 1; }
+            Result::Ok { value } => { value.0.drop(); return 0; }
+            Result::Err { error } => { error.drop(); return 1; }
         }
     }
 
@@ -300,9 +303,17 @@ mod text {
         s.push_char(72);
         s.push_char(200);
         s.push_char(105);
+        // The rejected string comes back exactly once, unchanged: same
+        // length, same bytes. The caller still owns it and must drop it.
         match AsciiText::try_new(s) {
-            Option::Some { value } => { value.0.drop(); return 1; }
-            Option::None => { return 0; }
+            Result::Ok { value } => { value.0.drop(); return 1; }
+            Result::Err { error } => {
+                let back: String = error;
+                let same: bool = back.len() == 3 && (back.get_unchecked(0) as u8) == 72 && (back.get_unchecked(1) as u8) == 200 && (back.get_unchecked(2) as u8) == 105;
+                back.drop();
+                if same { return 0; }
+                return 2;
+            }
         }
     }
 
