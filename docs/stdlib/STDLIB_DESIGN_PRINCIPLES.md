@@ -135,6 +135,71 @@ Every stdlib type has one clear ownership story. The story is visible from the t
 
 **The Concrete rule**: a reader should know from the function signature alone whether a value is consumed, borrowed, or copied. If the ownership story requires reading a doc comment to understand, the API is wrong.
 
+### Ownership on failure
+
+Ownership is linear, so a consuming API that can fail must also say who owns the
+resource after the failure. Every such API takes exactly one of these shapes, and
+its error type shows which:
+
+- **Returned.** The error carries the value back (`Result<T, Owned>`). The caller
+  still owns it and must consume it, so nothing is lost and nothing leaks. This is
+  the default for validation and insertion: an input that was rejected is
+  returned, not dropped.
+- **Consumed.** The error carries no handle (a `Copy` error enum). The resource
+  is gone whether or not the operation succeeded, and the doc comment says why a
+  retry is impossible or meaningless. `close` is the usual case: `fclose` releases
+  the stream even when it fails, and a failed `close(2)` must not be retried.
+- **Retained.** The operation borrows (`&self` / `&mut self`), so a failure
+  leaves the caller holding the resource unchanged. Most fallible handle
+  operations (`accept`, `read`, `write`, `flush`) are of this kind.
+
+A failure is never silent. A consuming operation whose underlying call can fail
+returns a `Result` and does not discard the OS result. Callers that do not care
+discard it explicitly (`discard(h.close())`), so the choice is visible.
+
+APIs that *replace* a stored value state what happens to the displaced one:
+returned to the caller, or destroyed (only under a `Destroy` bound, which the
+signature shows).
+
+The normative statement of the rule for the language and the FFI boundary
+belongs to [ERROR_CONVENTIONS.md](../language/ERROR_CONVENTIONS.md) and
+[FFI.md](../platform/FFI.md). This section records how the stdlib applies it.
+Every public stdlib API that consumes an owned non-`Copy` value and can fail or
+displace a value is listed here (audit 2026-10-21, from
+`STDLIB_SURFACE_MANIFEST.tsv`; breaking changes from that audit are marked).
+
+| API | Signature (abridged) | On failure / displacement |
+|---|---|---|
+| `numeric.BoundView::bind`, `::of_view` | `(owner: Bytes, ..) -> Result<BoundView, Bytes>` | **Returned**: the owner comes back in `Err`. |
+| `text.AsciiText::try_new` | `(s: String) -> Result<AsciiText, String>` | **Returned**: the rejected string comes back unchanged. *Changed 2026-10-21* (was `Option<AsciiText>`, which freed the string). |
+| `fs.File::close` | `(self) -> Result<u64, FsError>` | **Consumed**: `Err(CloseFailed)`; `fclose` releases the stream either way. *Changed 2026-10-21* (was `()`, failure ignored). |
+| `io.TextFile::close` | `(self) -> Result<u64, IoError>` | **Consumed**: `Err(CloseFailed)`, as above. *Changed 2026-10-21* (was `()`). |
+| `io.Writer<C>::close`, `io.Reader<C>::close` | `(self) -> Result<u64, IoError>` | **Consumed**: `Err(CloseFailed)` for a file sink/source (flush or `fclose` failed); console and fixed-buffer closes cannot fail. |
+| `net.TcpListener::close`, `net.TcpStream::close` | `(self) -> Result<u64, NetError>` | **Consumed**: `Err(CloseFailed)`; a failed `close(2)` must not be retried. *Changed 2026-10-21* (was `()`, failure ignored). |
+| `process.Child::wait` | `(self) -> Result<ExitStatus, ProcessError>` | **Consumed**: `Err(WaitFailed)` means the pid is not waitable (`ECHILD`); retrying cannot help. |
+| `bytes.Bytes::to_string` | `(self) -> Option<String>` | **Consumed**: invalid UTF-8 frees the buffer. A caller that needs the bytes afterwards validates without consuming first (`Bytes::range_to_text(&self, ..)`). |
+| `cli.Cli::parse` | `(self, ..) -> CliResult` | **Consumed**: on `Err` the flag declarations are released. The process arguments are fixed, so a retry would fail identically. |
+| `map.HashMap::insert`, `ordered_map.OrderedMap::insert` | `(&mut self, key: K, value: V) -> Option<V>` | **Displaced value returned** (`Some(old)`); the displaced old key is destroyed (`K: Destroy`), the incoming key is stored. |
+| `set.HashSet::insert`, `ordered_set.OrderedSet::insert` | `(&mut self, key: K) -> bool` | **Displaced key destroyed** (`K: Destroy`) and the incoming key stored; `false` reports that the key was already present. |
+| `vec.Vec::replace` | `(&mut self, at, value: T) -> T` | **Displaced value returned.** |
+| `vec.Vec::set`, `slice.MutSlice::set` | `(&mut self, at, value: T) -> bool` | Out of range returns `false`; `T: Copy`, so nothing owned is lost. |
+
+Outside the table, by construction: the `Option`/`Result` combinators
+(`map`, `and_then`, `map_err`, `ok_or`, `unwrap_or_else`) move every owned
+payload into their result, and the combinators that discard a payload
+(`unwrap_or`, `ok`, `err`, `test.ignore_*`) require `Copy`. The remaining
+consuming APIs cannot fail: `drop`, `Bytes::into_raw_parts`,
+`Bytes::to_string_unchecked`, `BoundView::release`, `writer_from_file`,
+`reader_from_file`, the `push` family (allocation failure traps, bucket 2), and
+the `test.assert_*` helpers, which consume their message on every path.
+
+Tests that exercise these failure paths: `net` closes an invalid descriptor and
+checks `Err(CloseFailed)`; `fs`, `io` and `fs.write_file` close a stream on
+`/dev/full`, whose flush at `fclose` fails (vacuous on hosts without
+`/dev/full`); `text` checks that the rejected string comes back byte for byte;
+`map` and `ordered_map` check that a same-key insert returns the displaced
+`String` exactly once.
+
 ---
 
 ## 4. Stable Data / Text / Byte Boundaries

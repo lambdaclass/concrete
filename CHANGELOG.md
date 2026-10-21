@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
+
+The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a
+consuming API that can fail either returns the resource in its error, consumes it with a documented
+reason, or only borrows it. Four `close` methods ignored the OS result, so a failed close was
+silent. `fs.File::close`, `io.TextFile::close`, `net.TcpListener::close` and
+`net.TcpStream::close` now return `Result<u64, FsError | IoError | NetError>`. The error carries
+no handle, because `fclose` releases the stream whether or not it fails and a failed `close(2)`
+must not be retried. `FsError` and `NetError` each gain a `CloseFailed` variant. `fs.write_file`
+and `fs.append_file` now report a failed final `fclose` instead of returning `Ok`.
+`text.AsciiText::try_new` returns the rejected string (`Result<AsciiText, String>`) instead of
+freeing it behind `None`. `Child::wait` and `Cli::parse` now document that they consume on failure.
+The audit table of every consuming fallible or replacing std API is in
+[STDLIB_DESIGN_PRINCIPLES.md](docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
+New tests cover closing an invalid descriptor, a flush-at-close failure on `/dev/full` (Linux), the
+rejected `AsciiText` input coming back byte for byte, and a same-key map insert returning the
+displaced linear value exactly once. **Breaking:** the four `close` signatures,
+`AsciiText::try_new`, and exhaustive matches on `FsError`/`NetError` (see `examples/http`).
+Found on the way and not fixed here (compiler): `==` between two values of a fieldless `Copy` enum
+passes the checker and emits ill-typed LLVM (`icmp eq i64` on the enum struct).
+
 ### Language Semantics Decisions Written Into The Normative Docs (2026-10-21)
 
 Ten language-semantics proposals and four items of external advice were evaluated against probes of
