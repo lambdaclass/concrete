@@ -320,7 +320,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/mal/main.con mal exit=0 ret=0 interp=yes
 @run examples/parse_validate/src/main.con parse_validate exit=0 ret=0 interp=yes stdout=empty
 @run examples/policy_engine/main.con policy_engine exit=0 ret=0 interp=yes
-@run examples/project/src/main.con project exit=18 interp=fails:undefined~function~'test' stdout=empty
+@run examples/project/src/main.con project exit=18 ret=18 interp=yes stdout=empty
 @run examples/proof_pressure/src/main.con proof_pressure exit=33 ret=33 interp=yes
 @run examples/service_errors/src/main.con service_errors exit=0 ret=0 interp=yes stdout=empty
 @run examples/smt/policy_allow/src/main.con policy_allow exit=6 ret=6 interp=yes stdout=empty
@@ -333,7 +333,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/casts.con casts exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/chars.con chars exit=117 ret=117 interp=yes stdout=empty
 @run examples/snippets/collatz.con collatz exit=111 ret=111 interp=yes stdout=empty
-@run examples/snippets/constants.con constants exit=20 interp=fails:undefined~variable~'foo' stdout=empty
+@run examples/snippets/constants.con constants exit=20 ret=20 interp=yes stdout=empty
 @run examples/snippets/enum_match.con enum_match exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/error_flow.con error_flow exit=42 ret=42 interp=yes stdout=empty
 @run examples/snippets/fact.con fact exit=0 ret=479001600 interp=yes stdout=empty
@@ -342,7 +342,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/fib.con fib exit=55 ret=55 interp=yes stdout=empty
 @run examples/snippets/fib_generic.con fib_generic exit=55 ret=55 interp=yes stdout=empty
 @run examples/snippets/fib_if.con fib_if exit=55 ret=55 interp=yes stdout=empty
-@run examples/snippets/floats.con floats exit=1 interp=fails:float~literals~not~yet~supported stdout=empty
+@run examples/snippets/floats.con floats exit=1 ret=1 interp=yes stdout=empty
 @run examples/snippets/for.con for exit=10 ret=10 interp=yes stdout=empty
 @run examples/snippets/for_loop.con for_loop exit=10 ret=10 interp=yes stdout=empty
 @run examples/snippets/for_loop_var.con for_loop_var exit=0 ret=0 interp=yes stdout=empty
@@ -359,7 +359,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/if_with_literals.con if_with_literals exit=1 ret=1 interp=yes stdout=empty
 @run examples/snippets/impl_block.con impl_block exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/impl_block_mut.con impl_block_mut exit=4 ret=4 interp=yes stdout=empty
-@run examples/snippets/import.con import exit=12 interp=fails:undefined~function~'hello2' stdout=empty
+@run examples/snippets/import.con import exit=12 ret=12 interp=yes stdout=empty
 @run examples/snippets/import_struct.con import_struct exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/import_struct_impl.con import_struct_impl exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/is_prime.con is_prime exit=25 ret=25 interp=yes stdout=empty
@@ -439,7 +439,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/png_chunks/ tiny exit=0 interp=fails:E0110 -- testdata/tiny.png
 @run examples/png_chunks/ bad_crc exit=1 interp=fails:E0110 -- testdata/bad_crc.png
 @run examples/png_chunks/ bad_sig exit=1 interp=fails:E0110 stdout=empty -- testdata/bad_sig.png
-@run examples/project/ project exit=18 interp=fails:undefined~function~'test' stdout=empty
+@run examples/project/ project exit=18 ret=18 interp=yes stdout=empty
 @run examples/tar_list/ sample exit=0 interp=fails:E0110 -- testdata/sample.tar
 @run examples/tar_list/ truncated exit=1 interp=fails:E0110 -- testdata/truncated.tar
 @norun examples/tcpserve/ reason=network server (accepts on <port> until killed); check_tcpserve.sh drives it over loopback

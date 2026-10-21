@@ -17,7 +17,8 @@
 #   EXPECTED_TRAP — checked arithmetic (ROADMAP #10): overflow is a defined
 #     abort on BOTH sides, so neither produces a value. interp must exit nonzero
 #     AND the compiled binary must abort. (Pre-#10 these wrapped and were listed
-#     EXPECTED_DIVERGE; now they agree by both trapping.)
+#     EXPECTED_DIVERGE; now they agree by both trapping.) Both sides must also have
+#     printed the same bytes before the trap (D13, print_then_trap).
 #   INTERP_UNSUPPORTED — shapes the interpreter cannot run yet (e.g. function
 #     pointers). Tracked so coverage gaps are visible, not hidden.
 # The gate FAILS on any divergence or unsupported case OUTSIDE these lists.
@@ -38,7 +39,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # no documented divergences remain (casts agree since the evalCast fix).
 EXPECTED_DIVERGE=" "
 # checked-arithmetic overflow: both sides trap (no value on either side).
-EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap trap_elision_mul_zero "
+EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap trap_elision_mul_zero print_then_trap "
 # interpreter cannot execute these shapes yet.
 # (empty) — the interpreter now runs the former entries (fn_pointer: function
 # pointers are supported as of the fn-ptr oracle slice; it is now a full
@@ -57,8 +58,14 @@ for f in tests/codegen/*.con; do
     cc="$("$TMP/d" 2>/dev/null)"; ce=$?; [ -z "$cc" ] && cc="$ce"
   else cc="CFAIL"; ce=99; fi
   if in_list "$name" "$EXPECTED_TRAP"; then
-    if [ "$ie" -ne 0 ] && [ "$ce" -ne 0 ]; then
-      ok "$name traps on both sides as documented (interp exit=$ie, compiled exit=$ce — checked-arith overflow)"
+    # What a trapping run printed before the trap is part of its outcome (D13): the binary
+    # prints it and then aborts, and the interpreter must print the same bytes first.
+    "$COMPILER" "$f" --interp > "$TMP/trap.int" 2>/dev/null
+    ( "$TMP/d" > "$TMP/trap.nat" ) 2>/dev/null
+    if [ "$ie" -ne 0 ] && [ "$ce" -ne 0 ] && ! cmp -s "$TMP/trap.int" "$TMP/trap.nat"; then
+      no "$name traps on both sides but the output before the trap differs (interp '$(head -c 80 "$TMP/trap.int")', compiled '$(head -c 80 "$TMP/trap.nat")')"
+    elif [ "$ie" -ne 0 ] && [ "$ce" -ne 0 ]; then
+      ok "$name traps on both sides as documented, after the same output (interp exit=$ie, compiled exit=$ce)"
     else
       no "$name listed EXPECTED_TRAP but interp exit=$ie compiled exit=$ce — overflow no longer traps on both sides; investigate"
     fi

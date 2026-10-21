@@ -528,11 +528,14 @@ private def foldBinOpAlgebraic (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option 
   else if op == .or_ && isBoolFalse lhs then some rhs
   else if op == .or_ && isBoolTrue rhs then some (.boolConst true)
   else if op == .or_ && isBoolTrue lhs then some (.boolConst true)
-  -- Self-comparison (not valid for floats: NaN == NaN is false, NaN != NaN is true)
-  else if op == .eq && sameReg lhs rhs && isNonFloatTy ty then some (.boolConst true)
-  else if op == .neq && sameReg lhs rhs && isNonFloatTy ty then some (.boolConst false)
-  else if (op == .leq || op == .geq) && sameReg lhs rhs && isNonFloatTy ty then some (.boolConst true)
-  else if (op == .lt || op == .gt) && sameReg lhs rhs && isNonFloatTy ty then some (.boolConst false)
+  -- Self-comparison (not valid for floats: NaN == NaN is false, NaN != NaN is true).
+  -- Bug 139: the guard is the OPERAND type. `ty` is a comparison's result type, always
+  -- `bool`, so testing it let `x != x` fold to false (and `x == x` to true) for a float `x`,
+  -- while LLVM's `fcmp une`/`fcmp oeq` give true/false on NaN.
+  else if op == .eq && sameReg lhs rhs && isNonFloatTy lhs.ty then some (.boolConst true)
+  else if op == .neq && sameReg lhs rhs && isNonFloatTy lhs.ty then some (.boolConst false)
+  else if (op == .leq || op == .geq) && sameReg lhs rhs && isNonFloatTy lhs.ty then some (.boolConst true)
+  else if (op == .lt || op == .gt) && sameReg lhs rhs && isNonFloatTy lhs.ty then some (.boolConst false)
   else none
 
 /-- Combined binary op folding: try constant folding first, then algebraic. -/

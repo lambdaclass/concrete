@@ -1592,9 +1592,11 @@ done
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
-# Bugs 119 and 120 (fixed by batch 2's interpreter changes): the interpreter agrees with the
-# binary on both examples-health reproducers.
-for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref; do
+# Bugs 119 and 120 (fixed by batch 2's interpreter changes) and 117, 118, 128 and 139 (the
+# interpreter-coverage pass): the interpreter agrees with the binary on each reproducer.
+for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref \
+            bug117_interp_module_const bug118_interp_nested_module_import \
+            bug128_interp_int_to_float_identity bug139_float_self_compare_fold; do
     r119_src="tests/regressions/$r119/repro.con"
     r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
     r119_n=""
@@ -1685,8 +1687,7 @@ for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported
 done
 # Bug 123: a module constant of reference type is refused at the declaration (E0239), and a
 # borrow rooted at a module constant (explicit, field, index or implicit `&self`) is refused
-# (E0238) until constants have storage; a copy into a local is the working spelling (native
-# only: the interpreter does not bind module constants, bug 117).
+# (E0238) until constants have storage; a copy into a local is the working spelling.
 run_err "$TESTDIR/error_123_const_ref_type.con"          "(E0239)"
 run_err "$TESTDIR/error_123_const_borrow_in_body.con"    "(E0238)"
 run_err "$TESTDIR/error_123_const_field_borrow.con"      "(E0238)"
@@ -7826,6 +7827,8 @@ run_ok "$TESTDIR/regress_116_vec_push_first_field.con" 42
 # Bug 133 (silent): `&mut (*p).n` borrowed the field of a copy of `*p`, so the
 # write was lost (binary 39, interpreter 42).
 run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
+# Bug 139: a float self-comparison is not folded (x != x is true for NaN).
+run_ok "$TESTDIR/regress_139_float_self_compare.con" 1
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

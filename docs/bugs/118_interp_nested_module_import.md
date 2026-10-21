@@ -1,6 +1,6 @@
 # Bug 118 — the interpreter cannot call a function imported from a nested module
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement.
 
@@ -33,6 +33,20 @@ mod a {
 
 Resolve imported nested-module functions in the interpreter as Elab does for the backend.
 
+## Fix
+
+The interpreter resolves a direct call's spelling the way the backend does, per calling module,
+in `resolveCall`: a function defined under the spelling (several: the one in the calling module's
+tree, else refused); then a top-level module's own function under its sibling spelling
+`<module>_<fn>` (bug 082; the backend's qualified symbol when two modules define `fn`); then the
+calling module's import aliases (`hello2 ↦ Deep_hello2`); then any module's aliases when they
+agree. Every ambiguity is refused rather than settled by list
+order, which the old flat first-match lookup did silently. Each function runs with its own
+top-level module as the scope for the calls it makes, and a function pointer records the
+definition it was resolved to. The reproducer, `examples/snippets/import.con` and
+`examples/project` agree with the binary (5, 12, 18); permanent legs: `run_tests.sh`'s
+interp-vs-native loop over fixed reproducers, and `interp=yes` for the three examples.
+
 ## Where it showed up
 
 examples/snippets/import.con and examples/project/src/main.con, recorded `interp=fails:` in the manifest.
@@ -47,4 +61,5 @@ R-0492 (S5 `DefId`) and R-0496 (S7 Core semantics).
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.
+While open, `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") required the
+recorded failure; the row was removed with the fix.

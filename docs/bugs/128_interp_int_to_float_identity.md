@@ -1,6 +1,6 @@
 # Bug 128 — the interpreter models an integer-to-float cast as the identity
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)
 **Found:** 2026-10-21, by the semantics probes (finding N2, `cast_misc.con`).
 **Severity:** silent wrong value in the interpreter. The binary rounds an integer to the nearest
 `f64` and back; `--interp` keeps the integer exact, so a round trip through `f64` differs between
@@ -37,6 +37,20 @@ unchanged integer tagged `f64`. The later `f64 as Int` takes the same path, so t
 identity (`wrapToType` returns its argument unchanged at a type with no integer width). The binary
 emits `uitofp i64 ... to double` (IEEE rounding) and a range-checked `fptosi` (`__cc_f64_to_i64`).
 
+## Fix
+
+The interpreter has float values (`IVal.float`, binary64; an `f32` holds exactly a binary32
+value). `evalCast` converts an integer to the nearest representable float, ties to even, computed
+exactly on the integer (`intToFloatRounded`, 53 or 24 significant bits), as `sitofp`/`uitofp` do;
+a float to an integer is the checked conversion the backend's `__cc_f*_to_*` helpers perform
+(`lo <= f < hi` or the program aborts, then truncation toward zero); float to float widens exactly
+or rounds. Float literals, `+ - * / %` (`%` is C `fmod`, computed exactly), negation and the
+comparisons (ordered, except unordered `!=`) are modelled too, so `examples/snippets/floats.con`
+runs. The reproducer prints 2, as the binary exits 2. Permanent legs: `run_tests.sh`'s
+interp-vs-native loop over fixed reproducers and `tests/codegen/float_semantics.con` in
+`check_codegen_differential.sh`. The first float probe found bug 139 (the binary folded `x != x`
+to false for a NaN `x`).
+
 ## Structural cause
 
 Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7), the sibling of
@@ -56,6 +70,5 @@ fail-closed.
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `interp-prints:3`)
-requires the interpreter to print the recorded wrong value 3. When it prints 2 or refuses the cast,
-that leg fails until this document, the corpus entry and the leg are updated together.
+While open, `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode
+`interp-prints:3`) required the recorded wrong value; the row was removed with the fix.

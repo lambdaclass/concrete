@@ -63,7 +63,9 @@ inductive IVal where
   -- A function pointer: the name of the function it points to. Produced by a
   -- `fnRef` or by naming a function in value position; a call through a variable
   -- holding one dispatches to that function.
-  | fnPtr (name : String)
+  | fnPtr (name : String) (scope : Option Nat := none)
+  /-- A floating-point value of type `f64` or `f32` (an `f32` holds exactly a binary32 value). -/
+  | float (val : Float) (ty : Ty)
   deriving Repr, Inhabited
 
 -- ============================================================
@@ -104,32 +106,105 @@ partial def envSet (env : Env) (name : String) (val : IVal) : Env :=
     if n == name then (n, val) :: rest
     else (n, v) :: envSet rest name val
 
-/-- Reserved OUTERMOST binding accumulating interpreter stdout. Seeded by
-    `interpret` at the bottom of the env (so call-frame drops never remove it),
-    appended by the print_* intrinsics, and read back at the end — the pure
-    interpreter's stand-in for the compiled binary's stdout, which makes
-    printing programs differential-testable instead of PENDING. -/
-def stdoutVar : String := "__interp_stdout__"
+/-- Reserved binding pushed at the start of every function frame (`$` cannot occur in a source
+    identifier). The environment is one list shared by all frames, so that borrows of a
+    caller's bindings resolve; a NAME, though, is looked up in its own frame only. Without the
+    boundary a callee reading a module constant `K` found a caller's local `K` first. -/
+def frameMarker : String := "$frame"
 
-/-- Reserved env key of a harness-chosen LOOP BUDGET (iterations per loop). The default run has
-    none and uses `defaultLoopFuel`; `--report model-diff` seeds a small one, so a function sampled
-    at a huge input (`validate(len = i64::MAX)`, bug 106) ends with the explicit
-    `loopBudgetExhausted` outcome instead of running for hours. -/
-def loopFuelVar : String := "__interp_loop_fuel__"
+/-- Push a new function frame. -/
+def envEnterFrame (env : Env) : Env := envBind env frameMarker .unit
+
+/-- Look a name up in the current frame only (stops at the frame boundary). -/
+partial def envGetLocal (env : Env) (name : String) : Option IVal :=
+  match env with
+  | [] => none
+  | (n, v) :: rest =>
+    if n == name then some v
+    else if n == frameMarker then none
+    else envGetLocal rest name
+
+/-- Rebind a name of the current frame (stops at the frame boundary). -/
+partial def envSetLocal (env : Env) (name : String) (val : IVal) : Env :=
+  match env with
+  | [] => []
+  | (n, v) :: rest =>
+    if n == name then (n, val) :: rest
+    else if n == frameMarker then (n, v) :: rest
+    else (n, v) :: envSetLocal rest name val
+
 def defaultLoopFuel : Nat := 10000000
 def loopBudgetExhausted : String := "interp: loop budget exhausted"
 
-def loopFuelOf (env : Env) : Nat :=
-  match envGet env loopFuelVar with
-  | some (.int n _) => n.toNat
-  | _ => defaultLoopFuel
+-- ============================================================
+-- The evaluation monad
+-- ============================================================
 
-/-- Append to the interpreter's stdout buffer. If no buffer was seeded (a
-    harness driving eval functions directly), output is dropped, not an error. -/
-def emitOut (env : Env) (s : String) : Env :=
-  match envGet env stdoutVar with
-  | some (.string buf) => envSet env stdoutVar (.string (buf ++ s))
-  | _ => env
+/-- Why evaluation stopped early.
+
+    `fail`: the program trapped, or it reached something the interpreter does not model; the
+    message says which, and no value is ever made up in its place.
+
+    `escape`: a `return`/`break`/`continue` reached from VALUE position (`f(return 3)`,
+    `S { x: if c { return 1; } else { 2 } }`, D4 of the semantics evaluation). The native
+    pipeline accepts these and leaves the enclosing function or loop; the interpreter used to
+    refuse them ("unexpected return in value position"). The escape carries the environment
+    at the point it left (mutations through `&mut` arguments evaluated before it are kept,
+    as in the binary) and is turned back into ordinary control flow by the nearest enclosing
+    statement (`evalStmt`), which is where a `return` statement would have produced it. -/
+inductive IErr where
+  | fail (msg : String)
+  | escape (env : Env) (f : Flow)
+
+instance : Inhabited IErr := ⟨.fail "interp: internal error"⟩
+
+/-- State that outlives every frame and every failure.
+
+    `out` is the interpreter's stdout. It used to be a reserved binding at the bottom of the
+    environment, which was lost with the environment whenever evaluation stopped: a program
+    that printed and then trapped printed NOTHING under `--interp`, while the binary prints
+    its output and then aborts (D13). Kept in the monad's state, it survives a failure, so
+    the driver prints what was printed before the trap, exactly as the binary does. -/
+structure IState where
+  out : String := ""
+
+/-- `ExceptT` over `StateM`: a thrown failure keeps the state accumulated before it. -/
+abbrev IM := ExceptT IErr (StateM IState)
+
+/-- Read-only evaluation context: the program's tables and the run's budget. -/
+structure Ctx where
+  fns : List CFnDef
+  enums : List CEnumDef
+  /-- Every module's constants, by name (a name defined twice is refused at its use). -/
+  consts : List (String × CExpr) := []
+  /-- Every user function with the index of the top-level module whose tree defines it: the
+      unit within which the backend resolves a call spelling (bug 118). Empty for a report
+      harness's context, which then resolves by `fns` alone. -/
+  defs : List (CFnDef × Nat) := []
+  /-- Per top-level module: the linker aliases of its tree (an import spelling ↦ the definition
+      name it reaches, e.g. `hello2 ↦ Deep_hello2` for `import Other.Deep.{hello2}`). -/
+  scopes : Array (List (String × String)) := #[]
+  /-- Top-level module names, by index (a `<module>_<fn>` sibling spelling, bug 082). -/
+  topNames : Array String := #[]
+  /-- The scope of a reserved trait-impl / destructor key: its method's defining module. -/
+  keyScopes : List (String × Nat) := []
+  /-- The top-level module of the function being evaluated; `none` when unknown, and then only
+      a spelling that names exactly one definition program-wide resolves. -/
+  scope : Option Nat := none
+  /-- Iterations allowed per loop. `--report model-diff` chooses a small one, so a function
+      sampled at a huge input (`validate(len = i64::MAX)`, bug 106) ends with the explicit
+      `loopBudgetExhausted` outcome instead of running for hours. -/
+  loopFuel : Nat := defaultLoopFuel
+
+def fail {α : Type} (msg : String) : IM α := throw (.fail msg)
+
+def liftE {α : Type} : Except String α → IM α
+  | .ok v => pure v
+  | .error msg => throw (.fail msg)
+
+/-- Append to the interpreter's stdout. -/
+def emitOut (s : String) : IM Unit :=
+  modify fun st => { st with out := st.out ++ s }
 
 -- ============================================================
 -- Collect all function definitions from module tree
@@ -142,6 +217,14 @@ partial def collectFns : List CModule → List CFnDef
 partial def collectEnums : List CModule → List CEnumDef
   | [] => []
   | m :: ms => m.enums ++ collectEnums m.submodules ++ collectEnums ms
+
+partial def collectLinkerAliases : List CModule → List (String × String)
+  | [] => []
+  | m :: ms => m.linkerAliases ++ collectLinkerAliases m.submodules ++ collectLinkerAliases ms
+
+partial def collectConsts : List CModule → List (String × CExpr)
+  | [] => []
+  | m :: ms => m.constants.map (fun (n, _, e) => (n, e)) ++ collectConsts m.submodules ++ collectConsts ms
 
 def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
   fns.find? (fun f => f.name == name)
@@ -194,6 +277,59 @@ def implMethodFns (modules : List CModule) (fns : List CFnDef) : List CFnDef :=
     | some f, 1 => { f with name := k }
     | _, _ => marker k)
   ++ ambiguousTypes.map marker
+
+/-- Resolve a direct call's SPELLING to the user function it reaches, with that function's scope;
+    `none` when no user function is reached (a builtin or foreign function, decided by the caller).
+
+    Mirrors the backend's resolution (EmitSSA: a defined name first; then the calling module's
+    import aliases; then the program's aliases), with every ambiguity REFUSED rather than settled
+    by list order. The interpreter used to look the spelling up by bare name in one flat list, so
+    `import a.b.{f}` (Core spells the call `f`, the definition is `b_f`) was an undefined function
+    (bug 118), and two modules' same-named functions silently resolved to whichever came first.
+
+    1. A function DEFINED under the spelling: one → it; several → the one in the calling
+       module's tree (the backend qualifies colliding names per module); otherwise refused.
+    2. The sibling spelling `<module>_<fn>` of a top-level module's own function (bug 082; the
+       backend's qualified symbol for a colliding name).
+    3. The calling module's import aliases, whose target is a defined name.
+    4. Any module's aliases, when they agree. -/
+def resolveCall (cx : Ctx) (name : String) : Except String (Option (CFnDef × Option Nat)) := do
+  if cx.defs.isEmpty then
+    return (findFn cx.fns name).map (·, none)
+  let exact (n : String) := cx.defs.filter (·.1.name == n)
+  let pick (what : String) (cands : List (CFnDef × Nat)) :
+      Except String (Option (CFnDef × Option Nat)) :=
+    let distinct := cands.foldl (fun acc c =>
+      if acc.any (fun a => a.1.name == c.1.name && a.2 == c.2) then acc else acc ++ [c]) []
+    match distinct with
+    | [] => .ok none
+    | [(d, i)] => .ok (some (d, some i))
+    | _ =>
+      match cx.scope with
+      | some t =>
+        match distinct.filter (·.2 == t) with
+        | [(d, i)] => .ok (some (d, some i))
+        | _ => .error s!"interp: call '{name}' {what} reaches {distinct.length} definitions in different modules; the interpreter refuses to pick one"
+      | none => .error s!"interp: call '{name}' {what} reaches {distinct.length} definitions in different modules and the calling module is unknown; the interpreter refuses to pick one"
+  if let some r ← pick "by name" (exact name) then return some r
+  -- `<module>_<fn>` names that module's own function: the backend's qualified symbol for a
+  -- name two modules define (`c_f` when `a` and `c` both define `f`), so it comes before
+  -- any alias table, where `c_f ↦ f` alone would be ambiguous.
+  let sibling := (cx.topNames.toList.zipIdx).flatMap fun (top, i) =>
+    if name.startsWith (top ++ "_") then
+      (exact (name.drop (top.length + 1)).toString).filter (·.2 == i)
+    else []
+  if let some r ← pick "as a sibling module's function" sibling then return some r
+  let ownAliases : List (String × String) := match cx.scope with
+    | some t => (cx.scopes[t]?.getD []).filter (·.1 == name)
+    | none => []
+  if let some r ← pick "through its module's imports" (ownAliases.flatMap (exact ·.2)) then
+    return some r
+  let anyAliases := cx.scopes.toList.flatMap (·.filter (·.1 == name))
+  pick "through module aliases" (anyAliases.flatMap (exact ·.2))
+
+/-- The scope a callee found under a reserved key (trait impl / destructor) runs in. -/
+def keyScope (cx : Ctx) (key : String) : Option Nat := cx.keyScopes.lookup key
 
 def findEnum (enums : List CEnumDef) (name : String) : Option CEnumDef :=
   enums.find? (fun e => e.name == name)
@@ -260,6 +396,85 @@ theorem bounds_obligation_necessary (elems : Array IVal) {i : Int}
   simpa using Int.ofNat_le.mp this
 
 -- ============================================================
+-- Floating point (IEEE binary64 / binary32, as the backend's `double` / `float`)
+-- ============================================================
+
+/-- An `f32` value is carried as the `Float` (binary64) holding exactly the binary32 value. -/
+def roundToFloatTy (ty : Ty) (f : Float) : Float :=
+  if ty == .float32 then f.toFloat32.toFloat else f
+
+/-- The exact value of a finite double: `(negative, m, e)` with value `±m · 2^e`; `none` for an
+    infinity or a NaN. -/
+def floatParts (f : Float) : Option (Bool × Nat × Int) :=
+  let b : Nat := f.toBits.toNat
+  let neg : Bool := b / 2 ^ 63 == 1
+  let expBits : Nat := (b / 2 ^ 52) % 2048
+  let frac : Nat := b % 2 ^ 52
+  if expBits == 2047 then none
+  else if expBits == 0 then some (neg, frac, -1074)
+  else some (neg, frac + 2 ^ 52, (expBits : Int) - 1075)
+
+/-- The value `m · 2^e` as a `Float`, exact when it is representable (callers guarantee it). -/
+def floatOfParts (neg : Bool) (m : Nat) (e : Int) : Float :=
+  let mag := (Float.ofNat m).scaleB e
+  if neg then -mag else mag
+
+/-- The binary64 (`bits = 53`) or binary32 (`bits = 24`) value nearest the integer `n`, ties to
+    even: what `sitofp`/`uitofp` compute. Computed exactly on the integer (bug 128: the
+    interpreter used to keep the integer itself, so `(2^53 + 1) as f64` stayed 2^53 + 1). -/
+def intToFloatRounded (n : Int) (bits : Nat) : Float :=
+  let a := n.natAbs
+  let len := Nat.log2 a + 1
+  if a == 0 then 0.0
+  else if len ≤ bits then floatOfParts (n < 0) a 0
+  else
+    let k := len - bits
+    let q := a / 2 ^ k
+    let r := a % 2 ^ k
+    let half := 2 ^ (k - 1)
+    let q := if r > half || (r == half && q % 2 == 1) then q + 1 else q
+    floatOfParts (n < 0) q k
+
+/-- `f` truncated toward zero, with whether a fraction was dropped; `none` for inf/NaN. -/
+def floatTrunc (f : Float) : Option (Int × Bool) :=
+  match floatParts f with
+  | none => none
+  | some (neg, m, e) =>
+    let (t, frac) : Nat × Bool :=
+      if e ≥ 0 then (m * 2 ^ e.toNat, false)
+      else (m / 2 ^ (-e).toNat, m % 2 ^ (-e).toNat != 0)
+    some (if neg then -(t : Int) else t, frac)
+
+/-- The checked float → integer conversion (the backend's `__cc_f*_to_*` helpers): the value
+    must satisfy `lo ≤ f < hi` for the target's range, else the program aborts (NaN and ±inf
+    fail); otherwise it truncates toward zero. -/
+def floatToIntChecked (f : Float) (ty : Ty) : Except String Int :=
+  match IntArith.intBitWidth ty, floatTrunc f with
+  | none, _ => .error s!"interp: float to '{tyName ty}' conversion is not modelled"
+  | _, none => .error "interp: float-to-integer conversion of an infinity or NaN (the binary aborts)"
+  | some (w, signed), some (t, frac) =>
+    let lo : Int := if signed then -(2 ^ (w - 1) : Nat) else 0
+    let hi : Int := if signed then (2 ^ (w - 1) : Nat) else (2 ^ w : Nat)
+    -- f < hi  ⟺  floor(f) < hi; lo ≤ f  ⟺  lo ≤ floor(f). floor = trunc, minus one for a
+    -- negative value with a dropped fraction.
+    let floor := if t < 0 || (t == 0 && f < 0.0) then (if frac then t - 1 else t) else t
+    if lo ≤ floor && floor < hi then .ok t
+    else .error s!"interp: float-to-integer conversion out of range for '{tyName ty}' (the binary aborts)"
+
+/-- C `fmod` (LLVM `frem`), exactly: the result has the dividend's sign and is representable. -/
+def floatRem (x y : Float) : Float :=
+  if x.isNaN || y.isNaN || x.isInf || y == 0.0 then 0.0 / 0.0
+  else if y.isInf then x
+  else match floatParts x, floatParts y with
+    | some (xn, xm, xe), some (_, ym, ye) =>
+      let e := min xe ye
+      let X : Nat := xm * 2 ^ (xe - e).toNat
+      let Y : Nat := ym * 2 ^ (ye - e).toNat
+      let r := X % Y
+      if r == 0 then (if xn then -0.0 else 0.0) else floatOfParts xn r e
+    | _, _ => 0.0 / 0.0
+
+-- ============================================================
 -- Binary operations
 -- ============================================================
 
@@ -321,6 +536,19 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- wrapping, the `isIntTy` guard, and the trap message are all preserved exactly.
   | .shl, .int a ty, .int b _ => arithOut (IntArith.evalIntShift op a ty b)
   | .shr, .int a ty, .int b _ => arithOut (IntArith.evalIntShift op a ty b)
+  -- IEEE arithmetic (fadd/fsub/fmul/fdiv/frem), rounded to the operand type; comparisons
+  -- are LLVM's ordered predicates except `!=`, which is unordered (`une`): NaN != NaN.
+  | .add, .float a ty, .float b _ => .ok (.float (roundToFloatTy ty (a + b)) ty)
+  | .sub, .float a ty, .float b _ => .ok (.float (roundToFloatTy ty (a - b)) ty)
+  | .mul, .float a ty, .float b _ => .ok (.float (roundToFloatTy ty (a * b)) ty)
+  | .div, .float a ty, .float b _ => .ok (.float (roundToFloatTy ty (a / b)) ty)
+  | .mod, .float a ty, .float b _ => .ok (.float (roundToFloatTy ty (floatRem a b)) ty)
+  | .eq, .float a _, .float b _ => .ok (.bool (a == b))
+  | .neq, .float a _, .float b _ => .ok (.bool (!(a == b)))
+  | .lt, .float a _, .float b _ => .ok (.bool (a < b))
+  | .gt, .float a _, .float b _ => .ok (.bool (a > b))
+  | .leq, .float a _, .float b _ => .ok (.bool (a <= b))
+  | .geq, .float a _, .float b _ => .ok (.bool (a >= b))
   | _, _, _ => .error "interp: unsupported binop on given value types"
 
 -- ============================================================
@@ -340,6 +568,7 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
   | .neg, .int n ty => arithOut (IntArith.evalIntUnaryOp .neg n ty)
   | .bitnot, .int n ty => arithOut (IntArith.evalIntUnaryOp .bitnot n ty)
   | .not_, .bool b => .ok (.bool (!b))
+  | .neg, .float f ty => .ok (.float (-f) ty)
   | _, _ => .error "interp: unsupported unary op"
 
 -- ============================================================
@@ -354,10 +583,27 @@ def evalCast (v : IVal) (targetTy : Ty) (srcTy : Option Ty := none) : Except Str
   -- retagging the type kept e.g. `(-11) as u32` at -11, so later unsigned
   -- arithmetic computed on the wrong value (spurious checked-add traps,
   -- wrong `%` results) and diverged from the compiled binary.
-  | .int n _ => .ok (.int (IntArith.wrapToType targetTy n) targetTy)
+  -- An integer to a float rounds to the nearest representable value (`sitofp`/`uitofp`);
+  -- the integer value is already its type's mathematical value (bug 128).
+  | .int n _ =>
+    match targetTy with
+    | .float64 => .ok (.float (intToFloatRounded n 53) .float64)
+    | .float32 => .ok (.float (intToFloatRounded n 24) .float32)
+    | _ => .ok (.int (IntArith.wrapToType targetTy n) targetTy)
+  -- A float to an integer is the CHECKED conversion; float to float widens exactly or rounds.
+  | .float f _ =>
+    match targetTy with
+    | .float64 => .ok (.float f .float64)
+    | .float32 => .ok (.float (roundToFloatTy .float32 f) .float32)
+    | _ => do
+      let n ← floatToIntChecked f targetTy
+      .ok (.int n targetTy)
   -- `b as bool` is the identity (the compiled code aliases the i1). Converting it to `.int 1 bool`
   -- made `true as bool` an integer the proof model (`.bool true`) and a later condition disagreed on.
-  | .bool b => if targetTy == .bool then .ok (.bool b) else .ok (.int (if b then 1 else 0) targetTy)
+  | .bool b =>
+    if targetTy == .bool then .ok (.bool b)
+    else if targetTy == .float64 || targetTy == .float32 then .ok (.float (if b then 1.0 else 0.0) targetTy)
+    else .ok (.int (if b then 1 else 0) targetTy)
   -- A reference cast to a raw pointer (`&mut x as *mut T`) keeps its path:
   -- the heapless model has no addresses, and a deref through the pointer
   -- reads/writes the same place the reference names. Pointer arithmetic on
@@ -572,48 +818,48 @@ mutual
     reference's path, as `&(*r)` does. Extending the binding's own path walked a step into a
     `.ref` value ("ref step .field on non-struct"), so an implicit `&mut self` receiver
     `w.p.bump()` failed under --interp while the compiled binary ran (bug 091 round 3). -/
-partial def evalProjectionBase (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (obj : CExpr)
-    (isMut : Bool) : Except String (Env × RefPath) := do
+partial def evalProjectionBase (cx : Ctx) (env : Env) (obj : CExpr)
+    (isMut : Bool) : IM (Env × RefPath) := do
   match obj.ty with
   -- A raw pointer base auto-derefs the same way (`p[0]` with `p: *const [u8; 1]`): its
   -- path is the place it points at. Rooting the projection at the pointer's own binding
   -- gave `&p[0]` and `&a[0]` different paths for one address (Codex review of bug 102).
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ =>
-    let (env, v) ← evalExprVal fns enums env obj
+    let (env, v) ← evalExprVal cx env obj
     match v with
     | .ref p => return (env, { p with isMut := p.isMut || isMut })
     -- The heapless model may bind a `&T`-typed name to the value itself (a destructor's
     -- `self` when the destroyed owner was passed by value): its own path is the place.
-    | _ => evalBorrowTarget fns enums env obj isMut
-  | _ => evalBorrowTarget fns enums env obj isMut
+    | _ => evalBorrowTarget cx env obj isMut
+  | _ => evalBorrowTarget cx env obj isMut
 
 /-- Resolve a CExpr to a reference path.
     Acceptable shapes: idents, field accesses, array indices, and
     derefs of a ref (for `&*r` collapse). The borrow target's index
     expressions are evaluated against the current env so the path
     snapshot reflects the value at borrow time. -/
-partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) (isMut : Bool) :
-    Except String (Env × RefPath) := do
+partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
+    IM (Env × RefPath) := do
   match e with
   | .ident name _ =>
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .fieldAccess obj fld _ => do
-    let (env, p) ← evalProjectionBase fns enums env obj isMut
+    let (env, p) ← evalProjectionBase cx env obj isMut
     return (env, { p with steps := p.steps ++ [.field fld] })
   | .arrayIndex arr idx _ => do
-    let (env, p) ← evalProjectionBase fns enums env arr isMut
-    let (env, iv) ← evalExprVal fns enums env idx
+    let (env, p) ← evalProjectionBase cx env arr isMut
+    let (env, iv) ← evalExprVal cx env idx
     match iv with
     | .int i _ =>
-      if i < 0 then .error s!"interp: negative array index {i} in borrow target"
+      if i < 0 then fail s!"interp: negative array index {i} in borrow target"
       else return (env, { p with steps := p.steps ++ [.index i.toNat] })
-    | _ => .error "interp: array index in borrow target is not an integer"
+    | _ => fail "interp: array index in borrow target is not an integer"
   | .deref inner _ => do
     -- &(*r) and &mut (*r): forward to r's path, optionally widening mutability
-    let (env, v) ← evalExprVal fns enums env inner
+    let (env, v) ← evalExprVal cx env inner
     match v with
     | .ref p => return (env, { p with isMut := p.isMut || isMut })
-    | _ => .error "interp: deref of non-ref in borrow target"
+    | _ => fail "interp: deref of non-ref in borrow target"
   -- Borrowing a literal yields a ref to a temporary. The interpreter
   -- has no separate static-data area, so we materialize the literal
   -- under a synthetic env name and ref that. The synthetic name is
@@ -627,17 +873,16 @@ partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : 
     let name := s!"__interp_char_lit_{env.length}"
     let env := envBind env name (.int (Int.ofNat c.toNat) .char)
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
-  | .floatLit _ _ => .error "interp: float literals not yet supported"
   -- Any other borrow target is an owned TEMPORARY (a call result, a struct literal, an
   -- `if`): Check admits `make().bump()` / `(P { .. }).bump()` (the implicit receiver borrow
   -- of a value). Materialize it like a literal so the borrow has a place (bug 091 round 3).
   | other => do
-    let (env, v) ← evalExprVal fns enums env other
+    let (env, v) ← evalExprVal cx env other
     let name := s!"__interp_tmp_{env.length}"
     let env := envBind env name v
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
 
-partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × Flow) := do
+partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
   match e with
   | .intLit val ty => return (env, .val (.int val ty))
   | .boolLit val => return (env, .val (.bool val))
@@ -645,18 +890,34 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
   -- A char is its code point carried at type .char (exactly how the compiled
   -- path treats it: casts and print_char operate on the code).
   | .charLit c => return (env, .val (.int (Int.ofNat c.toNat) .char))
-  | .floatLit _ _ => .error "interp: float literals not yet supported"
+  -- The literal's double, rounded to `f32` when that is its type (as the backend emits it).
+  | .floatLit v ty => return (env, .val (.float (roundToFloatTy ty v) ty))
 
   | .ident name _ =>
-    match envGet env name with
+    match envGetLocal env name with
     | some v => return (env, .val v)
     | none =>
-      -- A bare function name in value position is a function pointer.
-      if (findFn fns name).isSome then return (env, .val (.fnPtr name))
-      else .error s!"interp: undefined variable '{name}'"
+      -- A module constant (bug 117): Core keeps the reference by name and Lower inlines the
+      -- initializer at each use, so the interpreter evaluates the initializer here, in a frame
+      -- of its own (module-scope code: a caller's local of the same name must not capture a
+      -- name the initializer reads, Lower's bug 123 hygiene). A name two modules define is
+      -- refused, as Lower refuses it (E0602, bug 132): Core cannot tell which one is meant.
+      match cx.consts.filter (·.1 == name) with
+      | [(_, init)] =>
+        let outerLen := env.length
+        let (env', v) ← evalExprVal cx (envEnterFrame env) init
+        return (env'.drop (env'.length - outerLen), .val v)
+      | _ :: _ :: _ =>
+        fail s!"interp: module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names (bug 132)"
+      | [] =>
+      -- A bare function name in value position is a function pointer, to the definition the
+      -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
+      match ← liftE (resolveCall cx name) with
+      | some (d, sc) => return (env, .val (.fnPtr d.name sc))
+      | none => fail s!"interp: undefined variable '{name}'"
 
   | .binOp op lhs rhs _ => do
-    let (env, lv) ← evalExprVal fns enums env lhs
+    let (env, lv) ← evalExprVal cx env lhs
     -- Short-circuit `&&`/`||` so the RHS is not evaluated when the result is
     -- already determined — matching compiled semantics (and avoiding spurious
     -- errors like `x != 0 && (10 / x) > 0` when x == 0).
@@ -664,42 +925,49 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
     | .and_, .bool false => return (env, .val (.bool false))
     | .or_, .bool true => return (env, .val (.bool true))
     | _, _ =>
-      let (env, rv) ← evalExprVal fns enums env rhs
+      let (env, rv) ← evalExprVal cx env rhs
       let result ← match evalPtrCompare env op lv rv with
-        | some r => r
-        | none => evalBinOp op lv rv
+        | some r => liftE r
+        | none => liftE <| evalBinOp op lv rv
       return (env, .val result)
 
   | .unaryOp op operand _ => do
-    let (env, v) ← evalExprVal fns enums env operand
-    let result ← evalUnaryOp op v
+    let (env, v) ← evalExprVal cx env operand
+    let result ← liftE <| evalUnaryOp op v
     return (env, .val result)
 
   | .call callee _ args _ => do
-    let (env, argVals) ← evalCallArgs fns enums env args
+    let (env, argVals) ← evalCallArgs cx env args
     -- The call form says which kind this is (bug 050), so the interpreter no
     -- longer guesses by probing the environment for every callee name. An
     -- indirect callee MUST resolve through the environment: its binding holds
     -- the function it points at. A direct callee names its own definition.
-    let fnName ← match callee with
-      | .direct name => .ok name
+    let (fnName, target) ← match callee with
+      | .direct name => do
+        let t ← liftE (resolveCall cx name)
+        pure (name, t)
       | .indirect binding =>
-        match envGet env binding with
-        | some (.fnPtr real) => .ok real
-        | some _ => .error s!"interp: '{binding}' is not a function pointer"
-        | none => .error s!"interp: unbound fn-pointer local '{binding}'"
-    match findFn fns fnName with
-    | some fdef =>
+        match envGetLocal env binding with
+        | some (.fnPtr real sc) =>
+          -- The pointer names the definition it was resolved to when it was formed.
+          let t := match sc with
+            | some i => (cx.defs.find? fun (d, j) => d.name == real && j == i).map fun (d, _) => (d, some i)
+            | none => (findFn cx.fns real).map (·, none)
+          pure (real, t)
+        | some _ => fail s!"interp: '{binding}' is not a function pointer"
+        | none => fail s!"interp: unbound fn-pointer local '{binding}'"
+    match target with
+    | some (fdef, calleeScope) =>
       if fdef.params.length != argVals.length then
-        .error s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
+        fail s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
       else
         -- Share env with callee so borrows resolve against caller bindings.
         -- After the call, drop the local frame; mutations to caller-visible
         -- bindings (through ref params or otherwise) survive in the lower
         -- portion of the env.
         let outerLen := env.length
-        let callEnv := bindParams env fdef.params argVals
-        let (postEnv, flow) ← evalStmts fns enums callEnv fdef.body
+        let callEnv := bindParams (envEnterFrame env) fdef.params argVals
+        let (postEnv, flow) ← evalStmts { cx with scope := calleeScope } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v => return (restored, .val v)
@@ -708,26 +976,26 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
     | none =>
       -- Builtins: a small allowlist of intrinsics whose semantics fit the
       -- value-passing model. The print_* intrinsics append to the reserved
-      -- stdout buffer (see `stdoutVar`), byte-matching the compiled
+      -- stdout (`IState.out`), byte-matching the compiled
       -- binary's output, so printing programs are differential-testable.
       match fnName, argVals with
       | "string_length", [arg] => do
         let s ← (match arg with
-          | .string s => .ok s
+          | .string s => pure s
           | .ref p => do
-            let v ← lookupPath env p
+            let v ← liftE <| lookupPath env p
             match v with
-            | .string s => .ok s
-            | _ => .error "interp: string_length: ref does not point to a string"
-          | _ => .error "interp: string_length: argument is not a string")
+            | .string s => pure s
+            | _ => fail "interp: string_length: ref does not point to a string"
+          | _ => fail "interp: string_length: argument is not a string")
         -- Byte length, matching the backend's len field (audit 2026-07-16:
         -- String.length is CODEPOINTS and drifted from compiled output on
         -- any non-ASCII string).
         return (env, .val (.int (Int.ofNat s.utf8ByteSize) .int))
       | "string_push_char", [sv, cv] => do
-        match sv, ← autoDeref env cv with
+        match sv, ← liftE <| autoDeref env cv with
         | .ref p, .int c _ =>
-          match ← lookupPath env p with
+          match ← liftE <| lookupPath env p with
           | .string s =>
             -- Backend truncates the code to ONE byte (EmitBuiltins): exact
             -- for ASCII. For c >= 128 the backend appends a lone byte that
@@ -735,31 +1003,31 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
             -- encodes it as the 2-byte UTF-8 of U+0080..U+00FF instead
             -- (named residual; the differential corpus stays in ASCII,
             -- where the model is exact).
-            let env' ← updatePath env p (.string (s.push (Char.ofNat (c.toNat % 256))))
+            let env' ← liftE <| updatePath env p (.string (s.push (Char.ofNat (c.toNat % 256))))
             return (env', .val .unit)
-          | _ => .error "interp: string_push_char: receiver is not a string"
-        | _, _ => .error "interp: string_push_char: bad arguments"
+          | _ => fail "interp: string_push_char: receiver is not a string"
+        | _, _ => fail "interp: string_push_char: bad arguments"
       | "string_append", [sv, ov] => do
-        match sv, ← autoDeref env ov with
+        match sv, ← liftE <| autoDeref env ov with
         | .ref p, .string o =>
-          match ← lookupPath env p with
+          match ← liftE <| lookupPath env p with
           | .string s =>
-            let env' ← updatePath env p (.string (s ++ o))
+            let env' ← liftE <| updatePath env p (.string (s ++ o))
             return (env', .val .unit)
-          | _ => .error "interp: string_append: receiver is not a string"
-        | _, _ => .error "interp: string_append: bad arguments"
+          | _ => fail "interp: string_append: receiver is not a string"
+        | _, _ => fail "interp: string_append: bad arguments"
       -- Pure string library (matches EmitBuiltins runtime; extends the oracle so
       -- string programs are differential-testable instead of PENDING).
       | "string_eq", [a, b] => do
-        match ← autoDeref env a, ← autoDeref env b with
+        match ← liftE <| autoDeref env a, ← liftE <| autoDeref env b with
         | .string sa, .string sb => return (env, .val (.bool (sa == sb)))
-        | _, _ => .error "interp: string_eq: arguments are not strings"
+        | _, _ => fail "interp: string_eq: arguments are not strings"
       | "string_concat", [a, b] => do
-        match ← autoDeref env a, ← autoDeref env b with
+        match ← liftE <| autoDeref env a, ← liftE <| autoDeref env b with
         | .string sa, .string sb => return (env, .val (.string (sa ++ sb)))
-        | _, _ => .error "interp: string_concat: arguments are not strings"
+        | _, _ => fail "interp: string_concat: arguments are not strings"
       | "string_char_at", [s, i] => do
-        match ← autoDeref env s, ← autoDeref env i with
+        match ← liftE <| autoDeref env s, ← liftE <| autoDeref env i with
         | .string str, .int idx _ =>
           -- Matches EmitBuiltins exactly: BYTE index into the UTF-8 data,
           -- -1 on negative or out-of-range (audit 2026-07-16: the interp
@@ -771,29 +1039,29 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
           else match bytes.data[idx.toNat]? with
             | some b => return (env, .val (.int (Int.ofNat b.toNat) .int))
             | none => return (env, .val (.int (-1) .int))
-        | _, _ => .error "interp: string_char_at: bad arguments"
+        | _, _ => fail "interp: string_char_at: bad arguments"
       | "string_contains", [h, n] => do
-        match ← autoDeref env h, ← autoDeref env n with
+        match ← liftE <| autoDeref env h, ← liftE <| autoDeref env n with
         | .string sh, .string sn =>
           return (env, .val (.bool (sn == "" || (sh.splitOn sn).length > 1)))
-        | _, _ => .error "interp: string_contains: bad arguments"
+        | _, _ => fail "interp: string_contains: bad arguments"
       | "int_to_string", [n] => do
-        match ← autoDeref env n with
+        match ← liftE <| autoDeref env n with
         | .int v _ => return (env, .val (.string (toString v)))
-        | _ => .error "interp: int_to_string: argument is not an integer"
+        | _ => fail "interp: int_to_string: argument is not an integer"
       | "string_slice", [s, st, en] => do
-        match ← autoDeref env s, ← autoDeref env st, ← autoDeref env en with
+        match ← liftE <| autoDeref env s, ← liftE <| autoDeref env st, ← liftE <| autoDeref env en with
         | .string str, .int a _, .int b _ =>
           let sub := (str.toList.drop a.toNat).take (b.toNat - a.toNat)
           return (env, .val (.string (String.ofList sub)))
-        | _, _, _ => .error "interp: string_slice: bad arguments"
+        | _, _, _ => fail "interp: string_slice: bad arguments"
       | "string_trim", [s] => do
-        match ← autoDeref env s with
+        match ← liftE <| autoDeref env s with
         | .string str =>
           let ws := fun (c : Char) => c == ' ' || c == '\t' || c == '\n' || c == '\r'
           let cs := ((str.toList.dropWhile ws).reverse.dropWhile ws).reverse
           return (env, .val (.string (String.ofList cs)))
-        | _ => .error "interp: string_trim: argument is not a string"
+        | _ => fail "interp: string_trim: argument is not a string"
       -- Vec: a growable container, modeled as the `.array` value (elemTy is
       -- cosmetic here — elements are stored as IVals). Mutating ops write back
       -- through the `&mut v` ref (`.ref path`) via updatePath, exactly like
@@ -804,35 +1072,35 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
       | "vec_push", [vref, x] =>
         match vref with
         | .ref path => do
-          match ← lookupPath env path with
+          match ← liftE <| lookupPath env path with
           | .array elems ety _ =>
             let elems' := elems.push x
-            let env' ← updatePath env path (.array elems' ety elems'.size)
+            let env' ← liftE <| updatePath env path (.array elems' ety elems'.size)
             return (env', .val .unit)
-          | _ => .error "interp: vec_push: receiver is not a vec"
-        | _ => .error "interp: vec_push: first argument is not a mutable ref"
+          | _ => fail "interp: vec_push: receiver is not a vec"
+        | _ => fail "interp: vec_push: first argument is not a mutable ref"
       | "vec_get", [v, i] => do
-        match ← autoDeref env v, ← autoDeref env i with
+        match ← liftE <| autoDeref env v, ← liftE <| autoDeref env i with
         | .array elems _ _, .int idx _ =>
           match elems[idx.toNat]? with
           | some e => return (env, .val e)
-          | none => .error s!"interp: vec_get: index {idx} out of bounds (len {elems.size})"
-        | _, _ => .error "interp: vec_get: bad arguments"
+          | none => fail s!"interp: vec_get: index {idx} out of bounds (len {elems.size})"
+        | _, _ => fail "interp: vec_get: bad arguments"
       | "vec_len", [v] => do
-        match ← autoDeref env v with
+        match ← liftE <| autoDeref env v with
         | .array elems _ _ => return (env, .val (.int (Int.ofNat elems.size) .int))
-        | _ => .error "interp: vec_len: receiver is not a vec"
+        | _ => fail "interp: vec_len: receiver is not a vec"
       | "vec_set", [vref, i, x] =>
-        match vref, (← autoDeref env i) with
+        match vref, (← liftE <| autoDeref env i) with
         | .ref path, .int idx _ => do
-          match ← lookupPath env path with
+          match ← liftE <| lookupPath env path with
           | .array elems ety sz =>
             if idx.toNat < elems.size then
-              let env' ← updatePath env path (.array (elems.set! idx.toNat x) ety sz)
+              let env' ← liftE <| updatePath env path (.array (elems.set! idx.toNat x) ety sz)
               return (env', .val .unit)
-            else .error s!"interp: vec_set: index {idx} out of bounds (len {elems.size})"
-          | _ => .error "interp: vec_set: receiver is not a vec"
-        | _, _ => .error "interp: vec_set: bad arguments"
+            else fail s!"interp: vec_set: index {idx} out of bounds (len {elems.size})"
+          | _ => fail "interp: vec_set: receiver is not a vec"
+        | _, _ => fail "interp: vec_set: bad arguments"
       | "vec_free", [_] => return (env, .val .unit)
       | "drop_string", [_] =>
         -- Linear-discipline no-op: ownership transfer + heap free in the
@@ -841,33 +1109,33 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         return (env, .val .unit)
       | "print_string", [arg] => do
         let s ← (match arg with
-          | .string s => .ok s
+          | .string s => pure s
           | .ref p => do
-            let v ← lookupPath env p
+            let v ← liftE <| lookupPath env p
             match v with
-            | .string s => .ok s
-            | _ => .error "interp: print_string: ref does not point to a string"
-          | _ => .error "interp: print_string: argument is not a string")
-        return (emitOut env s, .val .unit)
+            | .string s => pure s
+            | _ => fail "interp: print_string: ref does not point to a string"
+          | _ => fail "interp: print_string: argument is not a string")
+        emitOut s *> pure (env, .val .unit)
       | "print_int", [arg] => do
-        let v ← autoDeref env arg
+        let v ← liftE <| autoDeref env arg
         match v with
-        | .int n _ => return (emitOut env s!"{n}", .val .unit)
-        | _ => .error "interp: print_int: argument is not an integer"
+        | .int n _ => emitOut s!"{n}" *> pure (env, .val .unit)
+        | _ => fail "interp: print_int: argument is not an integer"
       | "print_char", [arg] => do
-        let v ← autoDeref env arg
+        let v ← liftE <| autoDeref env arg
         match v with
-        | .int n _ => return (emitOut env (String.singleton (Char.ofNat n.toNat)), .val .unit)
-        | _ => .error "interp: print_char: argument is not a char code"
+        | .int n _ => emitOut (String.singleton (Char.ofNat n.toNat)) *> pure (env, .val .unit)
+        | _ => fail "interp: print_char: argument is not a char code"
       | "print_bool", [arg] => do
-        let v ← autoDeref env arg
+        let v ← liftE <| autoDeref env arg
         match v with
-        | .bool b => return (emitOut env (if b then "true" else "false"), .val .unit)
-        | _ => .error "interp: print_bool: argument is not a bool"
+        | .bool b => emitOut (if b then "true" else "false") *> pure (env, .val .unit)
+        | _ => fail "interp: print_bool: argument is not a bool"
       | "print", _ | "println", _ =>
         -- Desugared to the print_* intrinsics by Elab; reaching Core means
         -- a desugar gap, so stay loud instead of guessing a format.
-        .error s!"interp: print/IO intrinsic '{fnName}' not yet supported"
+        fail s!"interp: print/IO intrinsic '{fnName}' not yet supported"
       | _, [arg] =>
         -- H18 drop-glue: a symbolic `T$destroy(&elem)` (Elab's trait-method
         -- call on a `Destroy`-bounded type param, `traitParamCallee`) reaches
@@ -878,98 +1146,101 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         -- `destroyValue`): user destructor side effects must match the
         -- compiled binary, including per-element glue for arrays (bug 052).
         if fnName == destroyDispatchCallee then
-          let env' ← destroyValue fns enums env arg
+          let env' ← destroyValue cx env arg
           return (env', .val .unit)
-        else evalTraitParamCall fns enums env fnName argVals
-      | _, _ => evalTraitParamCall fns enums env fnName argVals
+        else evalTraitParamCall cx env fnName argVals
+      | _, _ => evalTraitParamCall cx env fnName argVals
 
   | .structLit name _ fields _ => do
-    let (env, fieldVals) ← evalFields fns enums env fields
+    let (env, fieldVals) ← evalFields cx env fields
     return (env, .val (.struct_ name fieldVals))
 
   | .fieldAccess obj field _ => do
-    let (env, v) ← evalExprVal fns enums env obj
-    let target ← autoDeref env v
+    let (env, v) ← evalExprVal cx env obj
+    let target ← liftE <| autoDeref env v
     match target with
     | .struct_ _ fields =>
       match fields.find? (fun (n, _) => n == field) with
       | some (_, fv) => return (env, .val fv)
-      | none => .error s!"interp: field '{field}' not found in struct"
-    | _ => .error "interp: field access on non-struct value"
+      | none => fail s!"interp: field '{field}' not found in struct"
+    | _ => fail "interp: field access on non-struct value"
 
   | .enumLit enumName variant _ fields _ => do
-    let (env, fieldVals) ← evalFields fns enums env fields
+    let (env, fieldVals) ← evalFields cx env fields
     return (env, .val (.enum_ enumName variant fieldVals))
 
   | .match_ scrutinee arms _ => do
-    let (env, sv) ← evalExprVal fns enums env scrutinee
+    let (env, sv) ← evalExprVal cx env scrutinee
     -- Match on `&T`: match the pointee, not the reference. Lowering derefs a
     -- reference scrutinee once before matching (the E0715 fix); the interpreter
     -- must agree, or a var/guard arm binds the ref instead of the value (e.g.
     -- `match p { n if n > 5 => .. }` on `p : &Int` would compare a ref to an int).
-    let sv ← autoDeref env sv
-    evalMatch fns enums env sv arms
+    let sv ← liftE <| autoDeref env sv
+    evalMatch cx env sv arms
 
   | .arrayLit elems ty => do
-    let (env, vals) ← evalCallArgs fns enums env elems
+    let (env, vals) ← evalCallArgs cx env elems
     let elemTy := match ty with
       | .array t _ => t
       | _ => .unit
     return (env, .val (.array vals.toArray elemTy vals.length))
 
   | .arrayIndex arr idx _ => do
-    let (env, av) ← evalExprVal fns enums env arr
-    let arrayVal ← autoDeref env av
+    let (env, av) ← evalExprVal cx env arr
+    let arrayVal ← liftE <| autoDeref env av
     match arrayVal with
     | .array elems _ _ => do
-      let (env, iv) ← evalExprVal fns enums env idx
+      let (env, iv) ← evalExprVal cx env idx
       match iv with
       | .int i _ =>
-        if i < 0 then .error s!"interp: negative array index {i}"
+        if i < 0 then fail s!"interp: negative array index {i}"
         else
           let n := i.toNat
           match arrayGet elems n with
           | some v => return (env, .val v)
-          | none => .error s!"interp: array index {i} out of bounds (size {elems.size})"
-      | _ => .error "interp: array index is not an integer"
-    | _ => .error "interp: array index on non-array value"
+          | none => fail s!"interp: array index {i} out of bounds (size {elems.size})"
+      | _ => fail "interp: array index is not an integer"
+    | _ => fail "interp: array index on non-array value"
 
   | .cast inner targetTy => do
-    let (env, v) ← evalExprVal fns enums env inner
-    let result ← evalCast v targetTy (some inner.ty)
+    let (env, v) ← evalExprVal cx env inner
+    let result ← liftE <| evalCast v targetTy (some inner.ty)
     return (env, .val result)
 
   | .ifExpr cond thenStmts elseStmts _ => do
-    let (env, cv) ← evalExprVal fns enums env cond
+    let (env, cv) ← evalExprVal cx env cond
     match cv with
     | .bool true =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns enums env thenStmts
+      let (branchEnv, flow) ← evalStmts cx env thenStmts
       let restored := branchEnv.drop (branchEnv.length - outerLen)
       return (restored, flow)
     | .bool false =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns enums env elseStmts
+      let (branchEnv, flow) ← evalStmts cx env elseStmts
       let restored := branchEnv.drop (branchEnv.length - outerLen)
       return (restored, flow)
-    | _ => .error "interp: if condition is not a boolean"
+    | _ => fail "interp: if condition is not a boolean"
 
   | .borrow inner _ => do
-    let (env, p) ← evalBorrowTarget fns enums env inner false
+    let (env, p) ← evalBorrowTarget cx env inner false
     return (env, .val (.ref p))
   | .borrowMut inner _ => do
-    let (env, p) ← evalBorrowTarget fns enums env inner true
+    let (env, p) ← evalBorrowTarget cx env inner true
     return (env, .val (.ref p))
   | .deref inner _ => do
-    let (env, v) ← evalExprVal fns enums env inner
+    let (env, v) ← evalExprVal cx env inner
     match v with
     | .ref p => do
-      let target ← lookupPath env p
+      let target ← liftE <| lookupPath env p
       return (env, .val target)
-    | _ => .error "interp: deref of non-ref value"
+    | _ => fail "interp: deref of non-ref value"
 
-  | .fnRef name _ => return (env, .val (.fnPtr name))
-  | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
+  | .fnRef name _ =>
+    match ← liftE (resolveCall cx name) with
+    | some (d, sc) => return (env, .val (.fnPtr d.name sc))
+    | none => fail s!"interp: function reference '{name}' names no function the interpreter can call"
+  | .allocCall _ _ _ => fail "interp: alloc expressions not yet supported"
 
 /-- H18 drop-glue for the pre-mono interpreter, mirroring Mono's synthesized
     glue: an array destroys each element once, in index order (bug 052 — the
@@ -979,9 +1250,9 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
     memory-only destructors in the heapless model) is a no-op. `arg` is the
     destroy call's argument: a reference (element refs extend its path) or a
     value. -/
-partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (arg : IVal) :
-    Except String Env := do
-  let target ← autoDeref env arg
+partial def destroyValue (cx : Ctx) (env : Env) (arg : IVal) :
+    IM Env := do
+  let target ← liftE <| autoDeref env arg
   match target with
   | .array elems _ _ =>
     let mut env := env
@@ -989,16 +1260,16 @@ partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
       let elemArg : IVal := match arg with
         | .ref p => .ref { p with steps := p.steps ++ [.index i] }
         | _ => elems[i]!
-      env ← destroyValue fns enums env elemArg
+      env ← destroyValue cx env elemArg
     return env
   | .struct_ n _ | .enum_ n _ _ =>
-    if (findFn fns (ambiguousKey n)).isSome || (findFn fns (ambiguousKey (destroyImplKey n))).isSome then
-      throw s!"interp: destructor call on '{n}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
-    match findFn fns (destroyImplKey n) with
+    if (findFn cx.fns (ambiguousKey n)).isSome || (findFn cx.fns (ambiguousKey (destroyImplKey n))).isSome then
+      fail s!"interp: destructor call on '{n}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
+    match findFn cx.fns (destroyImplKey n) with
     | some fdef =>
       let outerLen := env.length
-      let callEnv := bindParams env fdef.params [arg]
-      let (postEnv, _flow) ← evalStmts fns enums callEnv fdef.body
+      let callEnv := bindParams (envEnterFrame env) fdef.params [arg]
+      let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n) } callEnv fdef.body
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
   | _ => return env
@@ -1006,61 +1277,60 @@ partial def destroyValue (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
 /-- A `T$m` call on a type parameter that is not the builtin destructor (Elab spells that one
     `destroyDispatchCallee`): dispatched on the RUNTIME receiver's type through the trait-impl
     table, as Mono's per-instantiation rewrite does. Anything else is an undefined function. -/
-partial def evalTraitParamCall (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
-    (fnName : String) (argVals : List IVal) : Except String (Env × Flow) := do
+partial def evalTraitParamCall (cx : Ctx) (env : Env)
+    (fnName : String) (argVals : List IVal) : IM (Env × Flow) := do
   match splitTraitParamCallee fnName, argVals with
   | some (_, m), recv :: _ =>
-    let target ← autoDeref env recv
+    let target ← liftE <| autoDeref env recv
     let tn := match target with
       | .struct_ n _ | .enum_ n _ _ => n
       | _ => ""
-    if !tn.isEmpty && ((findFn fns (ambiguousKey tn)).isSome
-        || (findFn fns (ambiguousKey (traitImplKey tn m))).isSome) then
-      throw s!"interp: trait method call '{m}' on '{tn}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
-    match (if tn.isEmpty then none else findFn fns (traitImplKey tn m)) with
+    if !tn.isEmpty && ((findFn cx.fns (ambiguousKey tn)).isSome
+        || (findFn cx.fns (ambiguousKey (traitImplKey tn m))).isSome) then
+      fail s!"interp: trait method call '{m}' on '{tn}': several types of that name are defined and the runtime value cannot tell which one this is (bug 052); rename one of the types"
+    match (if tn.isEmpty then none else findFn cx.fns (traitImplKey tn m)) with
     | some fdef =>
       if fdef.params.length != argVals.length then
-        .error s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
+        fail s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
       else
         let outerLen := env.length
-        let callEnv := bindParams env fdef.params argVals
-        let (postEnv, flow) ← evalStmts fns enums callEnv fdef.body
+        let callEnv := bindParams (envEnterFrame env) fdef.params argVals
+        let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m) } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v | .val v => return (restored, .val v)
         | _ => return (restored, .val .unit)
-    | none => .error s!"interp: undefined function '{fnName}'"
-  | _, _ => .error s!"interp: undefined function '{fnName}'"
+    | none => fail s!"interp: undefined function '{fnName}'"
+  | _, _ => fail s!"interp: undefined function '{fnName}'"
 
-partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
-  let (env, f) ← evalExpr fns enums env e
+partial def evalExprVal (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × IVal) := do
+  let (env, f) ← evalExpr cx env e
   match f with
   | .val v => return (env, v)
-  | .ret _ => .error "interp: unexpected return in value position"
-  | .brk _ _ => .error "interp: unexpected break in value position"
-  | .cont _ => .error "interp: unexpected continue in value position"
+  -- D4: control flow leaving from value position escapes to the enclosing statement.
+  | other => throw (.escape env other)
 
-partial def evalCallArgs (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
+partial def evalCallArgs (cx : Ctx) (env : Env) (args : List CExpr) : IM (Env × List IVal) :=
   match args with
-  | [] => .ok (env, [])
+  | [] => pure (env, [])
   | e :: rest => do
-    let (env, v) ← evalExprVal fns enums env e
-    let (env, vs) ← evalCallArgs fns enums env rest
+    let (env, v) ← evalExprVal cx env e
+    let (env, vs) ← evalCallArgs cx env rest
     return (env, v :: vs)
 
-partial def evalFields (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (fields : List (String × CExpr)) :
-    Except String (Env × List (String × IVal)) :=
+partial def evalFields (cx : Ctx) (env : Env) (fields : List (String × CExpr)) :
+    IM (Env × List (String × IVal)) :=
   match fields with
-  | [] => .ok (env, [])
+  | [] => pure (env, [])
   | (name, expr) :: rest => do
-    let (env, v) ← evalExprVal fns enums env expr
-    let (env, vs) ← evalFields fns enums env rest
+    let (env, v) ← evalExprVal cx env expr
+    let (env, vs) ← evalFields cx env rest
     return (env, (name, v) :: vs)
 
-partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
-    Except String (Env × Flow) :=
+partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
+    IM (Env × Flow) :=
   match arms with
-  | [] => .error "interp: no matching arm in match expression"
+  | [] => fail "interp: no matching arm in match expression"
   | arm :: rest =>
     -- A guard (if present) is evaluated in the arm's bound env; a false guard
     -- falls through to the next arm.
@@ -1071,12 +1341,12 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
     -- which performed the effects.
     let guardOk := fun (armEnv : Env) (guard : Option CExpr) =>
       match guard with
-      | none => Except.ok (armEnv, true)
+      | none => pure (armEnv, true)
       | some g => do
-        let (gEnv, gv) ← evalExprVal fns enums armEnv g
+        let (gEnv, gv) ← evalExprVal cx armEnv g
         match gv with
-        | .bool b => Except.ok (gEnv, b)
-        | _ => Except.error "interp: match guard is not a bool"
+        | .bool b => pure (gEnv, b)
+        | _ => fail "interp: match guard is not a bool"
     -- Falling through after a FAILED guard must keep its effects: drop only the arm's
     -- own bindings and carry the rest forward. Threading the env on the success path
     -- alone would silently keep discarding every failed guard — the subtle half.
@@ -1091,40 +1361,40 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
           let armEnv := bindEnumFields env bindings sFields
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
-            let (bodyEnv, flow) ← evalStmts fns enums gEnv body
+            let (bodyEnv, flow) ← evalStmts cx gEnv body
             let restored := bodyEnv.drop (bodyEnv.length - outerLen)
             return (restored, flow)
           else
-            evalMatch fns enums (fallThrough gEnv outerLen) scrutinee rest
+            evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
         else
-          evalMatch fns enums env scrutinee rest
-      | _ => evalMatch fns enums env scrutinee rest
+          evalMatch cx env scrutinee rest
+      | _ => evalMatch cx env scrutinee rest
     | .litArm value guard body => do
-      let (env, litVal) ← evalExprVal fns enums env value
+      let (env, litVal) ← evalExprVal cx env value
       if matchLit scrutinee litVal then do
         let outerLen := env.length
         let (gEnv, ok) ← guardOk env guard
         if ok then
-          let (bodyEnv, flow) ← evalStmts fns enums gEnv body
+          let (bodyEnv, flow) ← evalStmts cx gEnv body
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch fns enums (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
       else
-        evalMatch fns enums env scrutinee rest
+        evalMatch cx env scrutinee rest
     | .varArm binding _ guard body => do
       let outerLen := env.length
       let armEnv := if binding == "_" then env else envBind env binding scrutinee
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
-        let (bodyEnv, flow) ← evalStmts fns enums gEnv body
+        let (bodyEnv, flow) ← evalStmts cx gEnv body
         let restored := bodyEnv.drop (bodyEnv.length - outerLen)
         return (restored, flow)
       else
-        evalMatch fns enums (fallThrough gEnv outerLen) scrutinee rest
+        evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
     | .rangeArm lo hi inclusive guard body => do
-      let (env, loVal) ← evalExprVal fns enums env lo
-      let (env, hiVal) ← evalExprVal fns enums env hi
+      let (env, loVal) ← evalExprVal cx env lo
+      let (env, hiVal) ← evalExprVal cx env hi
       let inRange := match scrutinee, loVal, hiVal with
         | .int s _, .int l _, .int h _ => l <= s && (if inclusive then s <= h else s < h)
         | _, _, _ => false
@@ -1132,39 +1402,46 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
         let outerLen := env.length
         let (gEnv, ok) ← guardOk env guard
         if ok then
-          let (bodyEnv, flow) ← evalStmts fns enums gEnv body
+          let (bodyEnv, flow) ← evalStmts cx gEnv body
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch fns enums (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
       else
-        evalMatch fns enums env scrutinee rest
+        evalMatch cx env scrutinee rest
 
 /-- Resolve a place expression to its root variable and the `RefStep` path
     reaching it, evaluating any array-index subexpressions. Mirrors the
     compiler's `storeToPlace` so the interpreter handles nested assignment
     targets (`o.i.v`, `a[i].x`, `m[i][j]`) instead of only single-level ones. -/
-partial def resolvePlaceSteps (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (place : CExpr)
-    : Except String (Env × String × List RefStep) := do
+partial def resolvePlaceSteps (cx : Ctx) (env : Env) (place : CExpr)
+    : IM (Env × String × List RefStep) := do
   match place with
   | .ident name _ => return (env, name, [])
   | .fieldAccess obj field _ =>
-    let (env, root, steps) ← resolvePlaceSteps fns enums env obj
+    let (env, root, steps) ← resolvePlaceSteps cx env obj
     return (env, root, steps ++ [.field field])
   | .arrayIndex arr idx _ =>
-    let (env, root, steps) ← resolvePlaceSteps fns enums env arr
-    let (env, iv) ← evalExprVal fns enums env idx
+    let (env, root, steps) ← resolvePlaceSteps cx env arr
+    let (env, iv) ← evalExprVal cx env idx
     match iv with
     | .int i _ =>
-      if i < 0 then .error s!"interp: negative array index {i} in place"
+      if i < 0 then fail s!"interp: negative array index {i} in place"
       else return (env, root, steps ++ [.index i.toNat])
-    | _ => .error "interp: array index is not an integer (place)"
-  | _ => .error "interp: unsupported place expression"
+    | _ => fail "interp: array index is not an integer (place)"
+  | _ => fail "interp: unsupported place expression"
 
-partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s : CStmt) : Except String (Env × Flow) := do
+/-- A statement, with any control escape from value position inside it (D4) turned back into
+    ordinary control flow here — the statement is where a `return` would have produced it. -/
+partial def evalStmt (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :=
+  tryCatch (evalStmtCore cx env s) fun
+    | .escape env' f => pure (env', f)
+    | e => throw e
+
+partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) := do
   match s with
   | .letDecl name _ _ value => do
-    let (env, f) ← evalExpr fns enums env value
+    let (env, f) ← evalExpr cx env value
     match f with
     | .val v => return (envBind env name v, .val .unit)
     | .ret v => return (env, .ret v)
@@ -1172,15 +1449,15 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     | .cont l => return (env, .cont l)
 
   | .assign name value => do
-    let (env, f) ← evalExpr fns enums env value
+    let (env, f) ← evalExpr cx env value
     match f with
-    | .val v => return (envSet env name v, .val .unit)
+    | .val v => return (envSetLocal env name v, .val .unit)
     | .ret v => return (env, .ret v)
     | .brk v l => return (env, .brk v l)
     | .cont l => return (env, .cont l)
 
   | .return_ (some expr) _ => do
-    let (env, f) ← evalExpr fns enums env expr
+    let (env, f) ← evalExpr cx env expr
     match f with
     | .val v => return (env, .ret v)
     | other => return (env, other)
@@ -1189,7 +1466,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     return (env, .ret .unit)
 
   | .expr e isValue => do
-    let (env, f) ← evalExpr fns enums env e
+    let (env, f) ← evalExpr cx env e
     match f with
     -- `isValue` (Phase 5 #42 / #36): a trailing value expression (no `;`) is the
     -- block's value, so propagate it; a `;`-terminated statement discards it.
@@ -1200,78 +1477,78 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     | .cont l => return (env, .cont l)
 
   | .ifElse cond thenBody elseBody => do
-    let (env, cf) ← evalExpr fns enums env cond
+    let (env, cf) ← evalExpr cx env cond
     match cf with
     | .val (.bool true) =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns enums env thenBody
+      let (branchEnv, flow) ← evalStmts cx env thenBody
       let restoredEnv := branchEnv.drop (branchEnv.length - outerLen)
       return (restoredEnv, flow)
     | .val (.bool false) =>
       match elseBody with
       | some body =>
         let outerLen := env.length
-        let (branchEnv, flow) ← evalStmts fns enums env body
+        let (branchEnv, flow) ← evalStmts cx env body
         let restoredEnv := branchEnv.drop (branchEnv.length - outerLen)
         return (restoredEnv, flow)
       | none => return (env, .val .unit)
-    | .val _ => .error "interp: if condition is not a boolean"
+    | .val _ => fail "interp: if condition is not a boolean"
     | .ret v => return (env, .ret v)
     | .brk v l => return (env, .brk v l)
     | .cont l => return (env, .cont l)
 
   | .while_ cond body label step =>
-    evalWhile fns enums env cond body step (loopFuelOf env) label
+    evalWhile cx env cond body step cx.loopFuel label
 
   | .fieldAssign obj field value => do
-    let (env, newVal) ← evalExprVal fns enums env value
+    let (env, newVal) ← evalExprVal cx env value
     -- Resolve the (possibly nested) place `obj`, append the final field, and
     -- write in place — handles `o.i.v`, `a[i].x`, etc., not just `o.f`.
-    let (env, root, steps) ← resolvePlaceSteps fns enums env obj
+    let (env, root, steps) ← resolvePlaceSteps cx env obj
     let finalSteps := steps ++ [.field field]
-    match envGet env root with
+    match envGetLocal env root with
     | some (.ref p) =>
-      let env' ← updatePath env { p with steps := p.steps ++ finalSteps } newVal
+      let env' ← liftE <| updatePath env { p with steps := p.steps ++ finalSteps } newVal
       return (env', .val .unit)
     | some baseVal =>
-      let newBase ← updateAt baseVal finalSteps newVal
-      return (envSet env root newBase, .val .unit)
-    | none => .error s!"interp: field-assign place root '{root}' not in env"
+      let newBase ← liftE <| updateAt baseVal finalSteps newVal
+      return (envSetLocal env root newBase, .val .unit)
+    | none => fail s!"interp: field-assign place root '{root}' not in env"
 
   | .arrayIndexAssign arr idx value => do
-    let (env, newVal) ← evalExprVal fns enums env value
-    let (env, root, steps) ← resolvePlaceSteps fns enums env arr
-    let (env, idxVal) ← evalExprVal fns enums env idx
+    let (env, newVal) ← evalExprVal cx env value
+    let (env, root, steps) ← resolvePlaceSteps cx env arr
+    let (env, idxVal) ← evalExprVal cx env idx
     match idxVal with
     | .int i _ =>
-      if i < 0 then .error s!"interp: negative array index {i} on assignment"
+      if i < 0 then fail s!"interp: negative array index {i} on assignment"
       else
         let finalSteps := steps ++ [.index i.toNat]
-        match envGet env root with
+        match envGetLocal env root with
         | some (.ref p) =>
-          let env' ← updatePath env { p with steps := p.steps ++ finalSteps } newVal
+          let env' ← liftE <| updatePath env { p with steps := p.steps ++ finalSteps } newVal
           return (env', .val .unit)
         | some baseVal =>
-          let newBase ← updateAt baseVal finalSteps newVal
-          return (envSet env root newBase, .val .unit)
-        | none => .error s!"interp: array-assign place root '{root}' not in env"
-    | _ => .error "interp: array index is not an integer"
+          let newBase ← liftE <| updateAt baseVal finalSteps newVal
+          return (envSetLocal env root newBase, .val .unit)
+        | none => fail s!"interp: array-assign place root '{root}' not in env"
+    | _ => fail "interp: array index is not an integer"
 
   | .derefAssign target value => do
-    let (env, newVal) ← evalExprVal fns enums env value
-    let (env, refVal) ← evalExprVal fns enums env target
+    let (env, newVal) ← evalExprVal cx env value
+    let (env, refVal) ← evalExprVal cx env target
     match refVal with
     | .ref p =>
-      if !p.isMut then .error "interp: deref-assign through immutable ref"
+      if !p.isMut then fail "interp: deref-assign through immutable ref"
       else do
-        let env' ← updatePath env p newVal
+        let env' ← liftE <| updatePath env p newVal
         return (env', .val .unit)
-    | _ => .error "interp: deref-assign on non-ref value"
+    | _ => fail "interp: deref-assign on non-ref value"
 
   | .break_ value label => do
     match value with
     | some e =>
-      let (env, v) ← evalExprVal fns enums env e
+      let (env, v) ← evalExprVal cx env e
       return (env, .brk (some v) label)
     | none => return (env, .brk none label)
   | .continue_ label => return (env, .cont label)
@@ -1285,7 +1562,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
     let path : RefPath := { base := var, frame := env.length, steps := [], isMut := isMut }
     let outerLen := env.length
     let inner := envBind env ref (.ref path)
-    let (postEnv, flow) ← evalStmts fns enums inner body
+    let (postEnv, flow) ← evalStmts cx inner body
     let restored := postEnv.drop (postEnv.length - outerLen)
     match flow with
     | .ret v => return (restored, .ret v)
@@ -1296,12 +1573,12 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
 /-- Run deferred bodies for effect in the given order (kept newest-first = LIFO),
     threading env. Each body is a `CExpr` evaluated for its side effects; the value
     is discarded. -/
-partial def runDeferred (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
-    : List CExpr → Except String Env
-  | [] => .ok env
+partial def runDeferred (cx : Ctx) (env : Env)
+    : List CExpr → IM Env
+  | [] => pure env
   | body :: rest => do
-    let (env', _) ← evalExprVal fns enums env body
-    runDeferred fns enums env' rest
+    let (env', _) ← evalExprVal cx env body
+    runDeferred cx env' rest
 
 /-- Evaluate a block, tracking `defer`red bodies. On ANY exit — fall-through,
     `return`, `break`, `continue` — the deferrals collected so far run LIFO before
@@ -1311,16 +1588,16 @@ partial def runDeferred (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
     every enclosing scope's defers, `break`/`continue` run only those up to the
     loop. This mirrors Lower's `emitAllDeferredCalls` vs `emitDeferredUntilLoop`.
     `deferred` is newest-first (LIFO). -/
-partial def evalStmtsD (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
-    (deferred : List CExpr) : List CStmt → Except String (Env × Flow)
+partial def evalStmtsD (cx : Ctx) (env : Env)
+    (deferred : List CExpr) : List CStmt → IM (Env × Flow)
   | [] => do
-    let env ← runDeferred fns enums env deferred
+    let env ← runDeferred cx env deferred
     return (env, .val .unit)
   | s :: rest => do
     match s with
-    | .defer body => evalStmtsD fns enums env (body :: deferred) rest
+    | .defer body => evalStmtsD cx env (body :: deferred) rest
     | _ =>
-      let (env', flow) ← evalStmt fns enums env s
+      let (env', flow) ← evalStmt cx env s
       match flow with
       | .val v =>
         -- Propagate the LAST statement's value as the block's value (so a
@@ -1329,25 +1606,25 @@ partial def evalStmtsD (fns : List CFnDef) (enums : List CEnumDef) (env : Env)
         -- `isValue` handling in `evalStmt .expr`.
         match rest with
         | [] => do
-          let env'' ← runDeferred fns enums env' deferred
+          let env'' ← runDeferred cx env' deferred
           return (env'', .val v)
-        | _  => evalStmtsD fns enums env' deferred rest
+        | _  => evalStmtsD cx env' deferred rest
       | _ => do
         -- return / break / continue: run this scope's defers, then propagate.
-        let env'' ← runDeferred fns enums env' deferred
+        let env'' ← runDeferred cx env' deferred
         return (env'', flow)
 
-partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
-  evalStmtsD fns enums env [] stmts
+partial def evalStmts (cx : Ctx) (env : Env) (stmts : List CStmt) : IM (Env × Flow) :=
+  evalStmtsD cx env [] stmts
 
-partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : Except String (Env × Flow) := do
-  if fuel == 0 then .error s!"{loopBudgetExhausted} (iteration limit reached)"
+partial def evalWhile (cx : Ctx) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : IM (Env × Flow) := do
+  if fuel == 0 then fail s!"{loopBudgetExhausted} (iteration limit reached)"
   else
-    let (env, cv) ← evalExprVal fns enums env cond
+    let (env, cv) ← evalExprVal cx env cond
     match cv with
     | .bool false => return (env, .val .unit)
     | .bool true =>
-      let (bodyEnv, flow) ← evalStmts fns enums env body
+      let (bodyEnv, flow) ← evalStmts cx env body
       match flow with
       | .ret v => return (bodyEnv, .ret v)
       | .brk bv brkLabel =>
@@ -1358,35 +1635,35 @@ partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (c
       | .val _ =>
         -- Step is already included in body (for-loop desugaring appends it).
         -- Only run step explicitly on continue (where body was cut short).
-        evalWhile fns enums bodyEnv cond body step (fuel - 1) loopLabel
+        evalWhile cx bodyEnv cond body step (fuel - 1) loopLabel
       | .cont contLabel =>
         if contLabel == none || contLabel == loopLabel then
           -- Continue skips the rest of body, so run step before looping.
-          let (stepEnv, _) ← evalStmts fns enums bodyEnv step
-          evalWhile fns enums stepEnv cond body step (fuel - 1) loopLabel
+          let (stepEnv, _) ← evalStmts cx bodyEnv step
+          evalWhile cx stepEnv cond body step (fuel - 1) loopLabel
         else
           -- Continue targets an OUTER loop: this loop terminates and the signal
           -- propagates up (the outer loop runs its own next iteration).
           return (bodyEnv, .cont contLabel)
-    | _ => .error "interp: while condition is not a boolean"
+    | _ => fail "interp: while condition is not a boolean"
 
 /-- `while cond { body } else { elseBody }` as a value-producing expression
     (loop-control #4). The value is `break v` when the loop breaks with a value,
     or the `else` block's value when the condition becomes false. A bare `break`
     (no value) yields unit. `baseLen` is the env length at loop entry; each return
     restores the env to it so body-local bindings don't leak past the loop. -/
-partial def evalWhileExpr (fns : List CFnDef) (enums : List CEnumDef) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
-  if fuel == 0 then .error s!"{loopBudgetExhausted} (iteration limit reached)"
+partial def evalWhileExpr (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (fuel : Nat) : IM (Env × Flow) := do
+  if fuel == 0 then fail s!"{loopBudgetExhausted} (iteration limit reached)"
   else
-    let (env, cv) ← evalExprVal fns enums env cond
+    let (env, cv) ← evalExprVal cx env cond
     let restore := fun (e : Env) => e.drop (e.length - baseLen)
     match cv with
     | .bool false =>
       -- Loop finished without break: the value is the else block's value.
-      let (branchEnv, flow) ← evalStmts fns enums env elseBody
+      let (branchEnv, flow) ← evalStmts cx env elseBody
       return (restore branchEnv, flow)
     | .bool true =>
-      let (bodyEnv, flow) ← evalStmts fns enums env body
+      let (bodyEnv, flow) ← evalStmts cx env body
       match flow with
       | .ret v        => return (restore bodyEnv, .ret v)
       -- A while-EXPRESSION has no label; a bare break/continue is handled here, a
@@ -1394,11 +1671,11 @@ partial def evalWhileExpr (fns : List CFnDef) (enums : List CEnumDef) (baseLen :
       | .brk bv brkLabel =>
         if brkLabel == none then return (restore bodyEnv, .val (bv.getD .unit))
         else return (restore bodyEnv, .brk bv brkLabel)
-      | .val _        => evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
+      | .val _        => evalWhileExpr cx baseLen bodyEnv cond body elseBody (fuel - 1)
       | .cont contLabel =>
-        if contLabel == none then evalWhileExpr fns enums baseLen bodyEnv cond body elseBody (fuel - 1)
+        if contLabel == none then evalWhileExpr cx baseLen bodyEnv cond body elseBody (fuel - 1)
         else return (restore bodyEnv, .cont contLabel)
-    | _ => .error "interp: while condition is not a boolean"
+    | _ => fail "interp: while condition is not a boolean"
 
 end -- mutual
 
@@ -1416,30 +1693,64 @@ end -- mutual
 def qualifiedTopLevelFns (modules : List CModule) : List CFnDef :=
   modules.flatMap fun m => m.functions.map fun f => { f with name := m.name ++ "_" ++ f.name }
 
-/-- Interpret a program from its validated Core modules.
-    Finds and runs `main`, returns exit code. -/
-def interpret (modules : List CModule) : Except String (Option Int × String) := do
+/-- The evaluation context of a program: every function (top-level ones also under their
+    qualified spelling, bug 082), the trait-impl dispatch table, and the enums. -/
+def mkCtx (modules : List CModule) (loopFuel : Nat := defaultLoopFuel) : Ctx :=
   let fns0 := collectFns modules ++ qualifiedTopLevelFns modules
-  let fns := fns0 ++ implMethodFns modules fns0
-  let enums := collectEnums modules
-  match fns.find? (fun f => f.name == "main") with
-  | none => .error "interp: no 'main' function found"
-  | some mainFn =>
-    -- Seed the stdout buffer at the BOTTOM of the env so call-frame drops
-    -- (which keep the last outerLen entries) never remove it.
-    let initEnv : Env := [(stdoutVar, .string "")]
-    let (finalEnv, flow) ← evalStmts fns enums initEnv mainFn.body
-    let out := match envGet finalEnv stdoutVar with
-      | some (.string buf) => buf
-      | _ => ""
+  let tops := modules.zipIdx
+  let defs := tops.flatMap fun (m, i) => (collectFns [m]).map (·, i)
+  -- A trait-impl key runs in the scope of the method's definition, when that is one module.
+  let keyScopes := tops.flatMap fun (m, i) =>
+    (collectTraitImpls [m]).flatMap fun ti => ti.methodSigs.filterMap fun ms =>
+      let orig := ti.implMethodFnName ms.name
+      match (defs.filter (·.1.name == orig)).map (·.2) |>.eraseDups with
+      | [j] => if j == i then some (if ti.traitName == destroyTraitName && ms.name == destroyMethodName
+                 then destroyImplKey ti.typeName else traitImplKey ti.typeName ms.name, i) else none
+      | _ => none
+  { fns := fns0 ++ implMethodFns modules fns0, enums := collectEnums modules,
+    consts := collectConsts modules, loopFuel, defs,
+    scopes := (tops.map fun (m, _) => collectLinkerAliases [m]).toArray,
+    topNames := (modules.map (·.name)).toArray,
+    -- A key two impls produce is ambiguous (`implMethodFns` marks it); it gets no scope.
+    keyScopes := keyScopes.filter fun (k, _) => (keyScopes.filter (·.1 == k)).length == 1 }
+
+/-- Run one computation from an empty environment and state. -/
+def runIM {α : Type} (m : IM α) : Except String α × String :=
+  let (r, st) := (m.run).run {}
+  match r with
+  | .ok v => (.ok v, st.out)
+  | .error (.fail msg) => (.error msg, st.out)
+  | .error (.escape _ _) => (.error "interp: control flow escaped every enclosing statement", st.out)
+
+/-- Evaluate one Core expression (a report harness's sampled call) to its value. -/
+def evalClosed (cx : Ctx) (e : CExpr) : Except String IVal :=
+  (runIM (do let (_, v) ← evalExprVal cx [] e; pure v)).1
+
+/-- The outcome of running a program: everything it printed, and how it ended. -/
+structure RunResult where
+  /-- Bytes printed before the program ended, INCLUDING when it then trapped (D13). -/
+  out : String
+  /-- `ok (some n)`: `main` returned `n`; `ok none`: a Unit `main` finished; `error`: a trap
+      or an unmodelled construct, with the reason. -/
+  result : Except String (Option Int)
+
+/-- Interpret a program from its validated Core modules: run `main`. -/
+def interpret (modules : List CModule) : RunResult :=
+  let cx := mkCtx modules
+  match cx.defs.find? (fun (f, _) => f.name == "main") with
+  | none => { out := "", result := .error "interp: no 'main' function found" }
+  | some (mainFn, mainScope) =>
+    let (r, out) := runIM (evalStmts { cx with scope := some mainScope } [] mainFn.body)
     -- `some n`: `main` returned a value (printed on its own line, matching the
     -- compiled binary). `none`: a Unit `main` fell off the end — the compiled
     -- binary prints NO value line, so neither does the interpreter.
-    match flow with
-    | .ret (.int n _) => return (some n, out)
-    | .ret _ => return (none, out)
-    | .val _ => return (none, out)
-    | _ => .error "interp: main did not return normally"
+    let result : Except String (Option Int) := match r with
+      | .error msg => .error msg
+      | .ok (_, .ret (.int n _)) => .ok (some n)
+      | .ok (_, .ret _) => .ok none
+      | .ok (_, .val _) => .ok none
+      | .ok _ => .error "interp: main did not return normally"
+    { out, result }
 
 -- ============================================================
 -- Display
@@ -1467,7 +1778,8 @@ partial def IVal.toString : IVal → String
       | .index i => s!"[{i}]"
     let pfx := if p.isMut then "&mut " else "&"
     pfx ++ p.base ++ String.join (p.steps.map stepStr)
-  | .fnPtr name => "fn " ++ name
+  | .fnPtr name _ => "fn " ++ name
+  | .float f _ => Float.toString f
 
 instance : ToString IVal := ⟨IVal.toString⟩
 

@@ -1,0 +1,12 @@
+// Bug 139: SSA cleanup folded a float self-comparison as if it were an integer one, so
+// `x != x` was false and `x == x` true for a NaN `x` (the guard tested the comparison's
+// result type, bool, not the operand type). Expected 1 (only `nan != nan` holds); the binary
+// exited 10 and `--interp` printed 1.
+fn mk(z: f64) -> f64 { return z / z; }
+fn main() -> Int {
+    let nan: f64 = mk(0.0);
+    let mut r: Int = 0;
+    if nan != nan { r = r + 1; }
+    if nan == nan { r = r + 10; }
+    return r;
+}

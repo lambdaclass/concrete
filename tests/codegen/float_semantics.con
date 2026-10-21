@@ -1,0 +1,37 @@
+// Floating point, interpreter == binary (the interpreter-coverage pass, 2026-10-21).
+// Bug 128: an integer → float conversion rounds to the nearest representable value
+// (2^53 + 1 → 2^53 as f64; 2^24 + 1 → 2^24 as f32). Bug 139: `x != x` is true and `x == x`
+// false for a NaN `x` (the SSA cleanup folded both for floats). Also: the checked float →
+// integer conversion truncates toward zero, `%` is C fmod (the dividend's sign), an f32
+// literal is the binary32 value nearest the decimal, and the ordered comparisons are false
+// on NaN. Prints one line.
+fn to_f64(x: u64) -> f64 { return x as f64; }
+fn to_f32(x: Int) -> f32 { return x as f32; }
+fn quotient(a: f64, b: f64) -> f64 { return a / b; }
+
+fn show(n: Int) with(Console) {
+    print_int(n);
+    print_char(32);
+}
+
+fn flag(b: bool) with(Console) {
+    if b { print_int(1); } else { print_int(0); }
+}
+
+fn main() with(Console) {
+    show((to_f64(9007199254740993) as Int) % 1000);   // 992 (2^53), not 993
+    show(to_f32(16777217) as Int);                     // 16777216
+    show(((7.5 % 2.0) * 10.0) as Int);                 // 15
+    show(((-7.5 % 2.0) * 10.0) as Int);                // -15
+    let g: f32 = 0.1;
+    show(((g as f64) * 1000000000000.0) as Int);       // 100000001490
+    show((quotient(1.0, 3.0) * 1000000000000000.0) as Int);
+    show((-3.9 as i8) as Int);                         // -3
+    show((255.9 as u8) as Int);                        // 255
+    let nan: f64 = quotient(0.0, 0.0);
+    flag(nan != nan);                                  // 1
+    flag(nan == nan);                                  // 0
+    flag(nan < 1.0);                                   // 0
+    flag(nan >= nan);                                  // 0
+    print_char(10);
+}

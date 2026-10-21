@@ -129,6 +129,25 @@ out of reach, and `Bytes` reads that
 extract to calls no proof table models), are recorded with their exact refusals in
 [PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
 
+### The Interpreter Runs More Real Programs, And Found A NaN Miscompile (2026-10-21)
+
+`--interp` is the independent oracle for exit 2c, and it could not run much of the example corpus.
+This pass closes interpreter gaps so the interpreter and the binary are compared on more programs.
+Module constants work (bug 117): the initializer is evaluated at the use, in its own frame, and a
+name two modules define is refused, as Lower refuses it. A function imported from a nested module
+can be called (bug 118). A call spelling now resolves per calling module the way the backend
+resolves it, and any ambiguity is refused instead of being settled by list order. Floats are
+modelled in IEEE `f64`/`f32` (bug 128). An integer-to-float cast rounds to nearest-even, a
+float-to-integer cast is the checked conversion, and `%` is C `fmod`. `return` from a call argument
+or a struct-literal field now leaves the function, as it does natively (D4). Output printed before
+a trap is kept, so a trapping run's stdout can be compared too (D13). The first float programs
+exposed bug 139, silent wrong code in the binary: SSA cleanup folded `x != x` to false and
+`x == x` to true for a float `x`, because its float guard read the comparison's `bool` result type
+instead of the operand type. That fold is fixed. New differential legs in
+`check_codegen_differential.sh` (`float_semantics`, `return_in_value_position`, and
+`print_then_trap`, which compares the output before the trap). Four examples move to
+`interp=yes`: `constants`, `floats`, `import` and `project`.
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a

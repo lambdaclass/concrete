@@ -381,16 +381,18 @@ def interpProgram (inputPath : String) : IO UInt32 := do
       IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
       return 1
     | .ok _ =>
-    match Interp.interpret validCore.coreModules with
+    let run := Interp.interpret validCore.coreModules
+    -- Program output first, whatever happened next: a program that prints and then traps
+    -- printed that output, natively and here (D13).
+    IO.print run.out
+    match run.result with
     | .error msg =>
       IO.eprintln msg
       return 1
-    | .ok (retVal, out) =>
-      -- Match compiled binary contract byte-for-byte: program output first (the
-      -- print_* buffer), then the return value on its own line — but ONLY when
-      -- `main` returns a value. A Unit `main` prints no value line, exactly like
-      -- the compiled binary (which used to diverge: interp printed a stray `0`).
-      IO.print out
+    | .ok retVal =>
+      -- Match compiled binary contract byte-for-byte: the return value on its own line
+      -- after the output — but ONLY when `main` returns a value. A Unit `main` prints no
+      -- value line, exactly like the compiled binary.
       match retVal with
       | some n => IO.println s!"{n}"
       | none => pure ()
@@ -2396,6 +2398,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- value. A mismatch is a real bridge-level defect.
       let fns := Concrete.Interp.collectFns validCore.coreModules
       let enums := Concrete.Interp.collectEnums validCore.coreModules
+      let interpCx : Concrete.Interp.Ctx := { fns, enums }
       let extractable := Concrete.CoreExtract.extractableFns fns
       let missed := Concrete.CoreExtract.unextractableFns fns
       let allDefs := "\n".intercalate (extractable.map (·.2))
@@ -2433,9 +2436,9 @@ def compileAndReport (inputPath : String) (reportType : String)
             let argExprs := (args.zip f.params).map
               (fun (v, (_, t)) => Concrete.CExpr.intLit v t)
             let callExpr := Concrete.CExpr.call (.direct f.name) [] argExprs f.retTy
-            match Concrete.Interp.evalExprVal fns enums [] callExpr with
+            match Concrete.Interp.evalClosed interpCx callExpr with
             | .error _ => skipped := skipped + 1   -- trap or unsupported: never counted
-            | .ok (_, v) =>
+            | .ok v =>
               let expected : Option String := match v with
                 | .int n _ => some (if n < 0 then s!"({n})" else s!"{n}")
                 | .bool b => some (if b then "true" else "false")
