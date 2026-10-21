@@ -756,6 +756,14 @@ end
 def collectFreeVars (stmts : List Stmt) (paramNames : List String) : List String :=
   (collectFreeVarsStmts stmts paramNames).eraseDups
 
+/-- Does a desugared continuation end with the block's value (a trailing expression, no `;`)?
+    Then the match a destructuring `let` becomes is that value (exit 2i review: it was always a
+    discarded statement, so a destructure in a value block lost the block's value). -/
+def endsWithValue (stmts : List Stmt) : Bool :=
+  match stmts.getLast? with
+  | some (.expr _ _ true) => true
+  | _ => false
+
 mutual
 /-- Desugar destructuring let statements into match/field-access.
     Must be applied before Check and Elab, since both pattern-match on Stmt.
@@ -769,11 +777,11 @@ partial def desugarStmts : List Stmt → List Stmt
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
     let wildcardArm := MatchArm.varArm sp "_" none (desugarStmts elseBody)
-    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm, wildcardArm]) false]
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm, wildcardArm]) (endsWithValue continuation)]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
-    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm]) false]
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm]) (endsWithValue continuation)]
   -- NOTE: `letStructDestructure` is intentionally NOT desugared here. Desugaring it
   -- to `let __destr = value; let a = __destr.a; …` is unsound for a LINEAR struct —
   -- field access does not move, so `__destr` is left unconsumed (E0208) and the
@@ -799,6 +807,8 @@ partial def desugarStmt : Stmt → Stmt
   | .defer sp b => .defer sp (desugarExpr b)
   | .borrowIn sp v r rg m b => .borrowIn sp v r rg m (desugarStmts b)
   | .letStructDestructure sp sn bs v => .letStructDestructure sp sn bs (desugarExpr v)
+  | .assert_ sp c => .assert_ sp (desugarExpr c)
+  | .assume_ sp c => .assume_ sp (desugarExpr c)
   | s => s
 
 partial def desugarExpr : Expr → Expr

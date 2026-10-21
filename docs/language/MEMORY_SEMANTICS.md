@@ -740,7 +740,7 @@ reference).
 - Rejected: `fn id(x: &i64) -> &i64`, `fn f() -> &i64 { return &local; }`,
   `fn f(x: &i64) -> Option<&i64>`, `fn f() -> fn(&i64) -> i64`, `fn f(x: *const &i64) -> *const &i64`.
 - Diagnostic: front end, `checkFn` in `Concrete/Check/Check.lean` (`tyContainsRef` on the return
-  type, "function '…' may not return a reference", **no code**); after monomorphization,
+  type, "function '…' may not return a reference", E0236 since exit 2i, before it no code); after monomorphization,
   `verifyNoReturnedRefs` in `Concrete/Check/Verify.lean` (E0236, `tyExposesRef`).
 - Fixtures: `error_escape_return.con` (matched by message text in `run_tests.sh`);
   `scripts/tests/check_returned_ref_provenance.sh` legs `bare_ref_return`, `ref_to_local`,
@@ -753,9 +753,8 @@ reference).
   (`non-FFI-safe return type`, CoreCheck) on both revisions, but a raw pointer to a reference
   (`extern fn f() with() -> *const &Int;`) is accepted, since the FFI predicate does not inspect
   pointees (gap G15; on `land2-fix` reading the inner reference out of it is E0238 under REF-5).
-  Gap G2: the front-end
-  rejection has no code, E0236 is missing from the
-  `--report diagnostic-codes` ledger, and the post-mono predicate `tyExposesRef` is weaker than the
+  Gap G2 (front-end half closed by exit 2i: the rejection carries E0236 and the ledger lists it):
+  the post-mono predicate `tyExposesRef` is weaker than the
   front end's `tyContainsRef` (it does not look into function or raw-pointer types). The normative
   rule is the front end's: it is conservative and no program needs the other form. A returned
   function pointer whose parameters are references is rejected today; admitting it would be a
@@ -770,7 +769,7 @@ allowed.
 - Accepted: `fn apply(x: &i64, f: fn(&i64) -> i64) -> i64`.
 - Rejected: `fn apply(x: &i64, f: fn(&i64) -> &i64) -> i64`.
 - Diagnostic: `resolveType` (`.fn_` case) in `Concrete/Check/CheckHelpers.lean`, "function type may
-  not return a reference", **no code**.
+  not return a reference", E0236 since exit 2i (no code before).
 - Fixture: `check_returned_ref_provenance.sh` leg `ref_returning_fn_type`.
 - Status: **main** where the function type is written in a parameter, binding or return type
   that Check resolves. Two spellings escape it on both revisions (gap G16): a type alias whose
@@ -861,7 +860,7 @@ Three separate conditions, each refusing an instantiation `T := A`:
   `forward::<&P>(w: &W<T>, ..)`; a generic passing its own opaque `T` on to a `&mut U` parameter
   (`relay` calling `update::<T>`).
 - Diagnostic and site: (a) the call cases of `checkExpr` and `inferMethodParamAndRetTys`
-  (`tyParamOccursIn` on the return type; "instantiated to a reference", **no code**), and E0236
+  (`tyParamOccursIn` on the return type; "instantiated to a reference", E0236 since exit 2i, no code before), and E0236
   after monomorphization; (b) E0239, `verifyNoStoredRefs`; (c) E0238,
   `refuseNestedRefInstantiation` (`Concrete/Check/CheckHelpers.lean`) at every call form and
   `refuseNestedRefSpecialization` (`Concrete/IR/Mono.lean`) at every specialization.
@@ -872,7 +871,7 @@ Three separate conditions, each refusing an instantiation `T := A`:
   were written for (c) but report E0239, because the `W<&P>` they build is refused as storage
   first; (c) has no fixture for a plain `r: &T` parameter (G7). The
   `r091_table` in *`run_tests.sh`* records the code each bug-091 fixture reports.
-- Status: (a) and (b) **main**, (a) without a front-end code (G2); (c) **land2**.
+- Status: (a), (b) and (c) **enforced** (batch 2 is on `main`; (a)'s front-end code E0236 since exit 2i).
 
 #### REF-5. A reference originates only from a canonical place
 
@@ -975,8 +974,10 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   `fn f(r: &mut Int) { let mut x = 1; r = &mut x; }`; `borrow x as r in R { r = &y; }`; an arm
   binder assigned inside its arm.
 - Diagnostic: (a) E0302 (`letBindsReference`, "a `let` binding may not hold a reference"; and
-  `ghostLetAtTypeParam` for a `ghost let` whose type mentions a type parameter, since a ghost
-  binding is erased before monomorphization re-checks it), (b) E0303 (`assignsReferenceBinding`,
+  `ghostLetAtTypeParam` for a `ghost let`, or any `let` inside an expression Elab erases (a ghost
+  initializer, an `assert` / `assume` condition), whose type could become a reference once a type
+  parameter is instantiated (`tyMayHoldRefAt`: not behind a raw pointer or in a function type),
+  since erased code never reaches the post-mono re-check; an assignment there is E0303 likewise), (b) E0303 (`assignsReferenceBinding`,
   "a reference binding is never assigned"); sites under Status below. E0234
   (`referenceEscapesBorrowBlock`) and the E0238 re-pointing check (`recordRefProvenance (reassign :=
   true)`) stay as defense in depth and carry the `REF-6@1` rule tag.
@@ -1314,7 +1315,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 134 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 139 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a

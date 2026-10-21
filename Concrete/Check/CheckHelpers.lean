@@ -135,6 +135,20 @@ partial def tyHoldsRefInAggregate : Ty → Bool
   | .generic _ args _ => args.any tyStoresRef
   | _ => false
 
+/-- Could `ty` hold a reference once the type parameters `tps` are instantiated (one of them to a
+    reference)? A bare type parameter can become one; so can an aggregate or generic argument
+    holding one (REF-3). A raw pointer or a function type stays what it is under substitution, so a
+    type parameter behind one does not count (exit 2i review). -/
+partial def tyMayHoldRefAt (tps : List String) : Ty → Bool
+  | .typeVar n => tps.contains n
+  | .named n => tps.contains n
+  | .ref _ | .refMut _ => true
+  | .ptrMut _ | .ptrConst _ | .fn_ _ _ _ => false
+  | .heap inner | .heapArray inner => tyMayHoldRefAt tps inner
+  | .array inner _ => tyMayHoldRefAt tps inner
+  | .generic _ args _ => args.any (tyMayHoldRefAt tps)
+  | _ => false
+
 /-- Does the named type parameter occur anywhere in this type? -/
 partial def tyParamOccursIn (name : String) : Ty → Bool
   | .typeVar n => n == name

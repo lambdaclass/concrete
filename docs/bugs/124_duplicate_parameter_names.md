@@ -33,7 +33,7 @@ at that revision): the same `llvm-as` error and the same interpreter result, so 
 close it.
 
 Expected: a checker diagnostic naming both parameters. Exit 2i's SCOPE-1 rejects `fn f(a: Int, a:
-Int)` with the proposed E0301 (`shadowsVisibleBinding`).
+Int)` with E0301 (`shadowsVisibleBinding`), as the fix below records.
 
 ## Cause
 

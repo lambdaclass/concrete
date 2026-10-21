@@ -88,6 +88,11 @@ structure TypeEnv where
   -- loop (a loop nested INSIDE the exiting branch iterates before the return,
   -- so it needs its own exiting branch).
   inFnExitingBranch : Bool := false
+  -- Exit 2i REF-6@1: > 0 while checking an expression Elab erases before monomorphization (a
+  -- `ghost let` initializer, an `assert` / `assume` condition). Post-mono re-checks runtime
+  -- bindings at `T := &Int`; erased ones never reach it, so inside them a `let` or assignment
+  -- whose type could become a reference by instantiation is refused here.
+  erasedDepth : Nat := 0
   -- Set to `some name` while checking the RHS of `name = RHS`: consuming
   -- `name` there is a REBIND (`acc = f(acc, x)` in a fold loop) — the
   -- assignment restores the binding before the next iteration, so the

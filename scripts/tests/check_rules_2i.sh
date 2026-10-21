@@ -216,9 +216,15 @@ check_run() {
         ext="$($TO "$CC" "$f" --report extraction 2>&1)" || { why="$why --report extraction failed;"; continue; }
         while IFS= read -r need; do
           [ -z "$need" ] && continue
+          # grep: 0 match, 1 no match, 2 a malformed pattern — which must fail, not read as absence
+          local grc
           case "$need" in
-            '!'*) grep -qE -- "${need#!}" <<<"$ext" && why="$why model:$id shows forbidden /${need#!}/;" ;;
-            *) grep -qE -- "$need" <<<"$ext" || why="$why model:$id lacks /$need/;" ;;
+            '!'*) grep -qE -- "${need#!}" <<<"$ext"; grc=$?
+                  [ "$grc" -eq 0 ] && why="$why model:$id shows forbidden /${need#!}/;"
+                  [ "$grc" -gt 1 ] && why="$why model:$id: malformed pattern /${need#!}/;" ;;
+            *) grep -qE -- "$need" <<<"$ext"; grc=$?
+               [ "$grc" -eq 1 ] && why="$why model:$id lacks /$need/;"
+               [ "$grc" -gt 1 ] && why="$why model:$id: malformed pattern /$need/;" ;;
           esac
         done < <(printf '%s\n' "$row" | cut -f3- | tr '\t' '\n') ;;
       interp-exempt:*|json-exempt:*) : ;;
@@ -295,6 +301,12 @@ done
 validate_manifest "$TMP/n4c.tsv" > /dev/null && no "N4c: a REF-5 fixture filed as REF-7 went unnoticed" || ok "N4c: a row whose tag names another rule than its rule column is refused"
 { cat "$MANIFEST"; printf 'REF-5\ttests/programs/error_escape_return.con\treject:E0236:REF-5@1\tref5\t-\n'; } > "$TMP/n4d.tsv"
 validate_manifest "$TMP/n4d.tsv" > /dev/null && no "N4d: a tag §15.5 does not assign to the code went unnoticed" || ok "N4d: a tag §15.5 does not assign to the code is refused"
+# N4e: a malformed negative model assertion must fail the row, not read as "absent".
+printf '087-bad\ttests/programs/regress_2i_scope1_087_renamed.con\t![\n' > "$TMP/badside.tsv"
+SIDECAR_SAVE="$SIDECAR"; SIDECAR="$TMP/badside.tsv"
+check_run SCOPE-3 tests/programs/regress_2i_scope1_087_renamed.con 42 model:087-bad > /dev/null \
+  && no "N4e: a malformed negative model pattern passed" || ok "N4e: a malformed negative model pattern fails the row"
+SIDECAR="$SIDECAR_SAVE"
 # N5-N8: execution. Wrong expectations on real fixtures must fail the row checks.
 check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@1 - > /dev/null \
   && no "N5: a wrong rule tag was accepted" || ok "N5: a reject row expecting the wrong rule tag fails"

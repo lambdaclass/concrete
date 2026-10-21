@@ -2011,6 +2011,10 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with
   | .letDecl _ name mutable ty value _isGhost =>
+    -- `__destr_*` names Elab's struct-destructuring temporary, which the post-mono REF-6 check
+    -- exempts; a source `let` may not take that spelling (exit 2i review).
+    if name.startsWith "__destr_" then
+      throwCheck (.reservedName name) (some stmt.getSpan)
     -- REF-6@1 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
     -- is refused before the initializer is checked; an inferred one right after.
     match ty with
@@ -2021,7 +2025,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | _ => pure ()
     | none => pure ()
     let env ← getEnv
+    -- a ghost initializer is erased before monomorphization: see TypeEnv.erasedDepth (on an
+    -- error, checkStmts restores the environment, so the depth cannot leak)
+    if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let valTy ← checkExpr value ty
+    if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
     match ty with
     | some declTy => expectTy declTy valTy s!"let binding '{name}'" (some stmt.getSpan)
     | none => pure ()
@@ -2032,7 +2040,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | .ref _ | .refMut _ =>
       throwCheck (.letBindsReference name (tyToString finalTy)) (some stmt.getSpan)
     | _ => pure ()
-    if _isGhost && env.currentTypeParams.any (fun p => tyParamOccursIn p finalTy) then
+    if (_isGhost || env.erasedDepth > 0) && tyMayHoldRefAt env.currentTypeParams finalTy then
       throwCheck (.ghostLetAtTypeParam name (tyToString finalTy)) (some stmt.getSpan)
     -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
     match value with
@@ -2070,6 +2078,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | .ref _ | .refMut _ =>
         throwCheck (.assignsReferenceBinding name (tyToString info.ty)) (some stmt.getSpan)
       | _ => pure ()
+      -- inside an erased expression post-mono never sees this assignment (TypeEnv.erasedDepth)
+      let envE ← getEnv
+      if envE.erasedDepth > 0 && tyMayHoldRefAt envE.currentTypeParams info.ty then
+        throwCheck (.assignsReferenceBinding name (tyToString info.ty)) (some stmt.getSpan)
     | none => pure ()
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
@@ -2534,10 +2546,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
   -- surfaced by the contracts report.
   | .assert_ _ cond | .assume_ _ cond =>
+    -- erased before monomorphization: see TypeEnv.erasedDepth
+    modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let t ← checkExpr cond none
+    modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
     expectTy .bool t "assert/assume condition" (some stmt.getSpan)
-  -- These are desugared before reaching Check; should never appear
-  | .letDestructure _ _ _ _ _ _ => pure ()
+  -- Desugared before Check everywhere a block can hold one; what survives is a destructuring `let`
+  -- in a `for` header, which has no match form to become (exit 2i review: it was skipped silently)
+  | .letDestructure sp _ _ _ _ _ =>
+    throwCheckMsg "a destructuring `let` is not supported in a `for` header; destructure before the loop" (some sp)
   | .letStructDestructure _ structName bindings value =>
     -- Linear move-destructure: `let Struct { a, b } = value` CONSUMES `value` and
     -- moves each named field out into an owned binding. Checked natively (not via

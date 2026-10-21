@@ -3042,7 +3042,7 @@ paragraph to its semantic clause.
 
 **Semantics decisions (2026-10-21):** the rules this task enforces are now written in their
 canonical homes ([Decisions](#decisions)): references and scoping in MEMORY_SEMANTICS §15 (REF-6
-rewritten: no `let`-bound reference, no assignment to a reference binding, proposed E0302 / E0303;
+rewritten: no `let`-bound reference, no assignment to a reference binding, E0302 / E0303, enforced since 2026-10-21;
 constants are values; SCOPE-1 staged behind the renamed pattern binder), evaluation order and
 assignment in STATEMENT_EXPRESSION_MODEL and MEMORY_SEMANTICS §10 (exit 2j), and casts in
 ARITHMETIC_POLICY §8 (exit 2k: the lossless class table, the three named-operation families and the
