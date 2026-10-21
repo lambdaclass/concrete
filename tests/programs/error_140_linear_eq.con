@@ -1,0 +1,15 @@
+// Bug 140: a comparison of two linear structs consumed both operands. Refused (E0229).
+struct L { x: Int }
+
+fn take(l: L) -> Int {
+    let L { x } = l;
+    return x;
+}
+
+fn main() -> Int {
+    let a: L = L { x: 1 };
+    let b: L = L { x: 2 };
+    let same: bool = a == b;
+    if same { return take(a) + take(b); }
+    return take(a) - take(b);
+}

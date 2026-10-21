@@ -1737,6 +1737,33 @@ done
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
 run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
 run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"
+# Bugs 134 and 140: comparison operators are defined on integers, floats, bool and char (raw
+# pointers in trusted/Unsafe code), never consume an operand, and refuse references (E0229);
+# a Copy-bounded generic comparison is re-checked per instantiation after Mono.
+run_err "$TESTDIR/error_134_enum_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_134_struct_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_heap_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_140_linear_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_ref_eq.con"                    "(E0229)"
+run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
+run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
+run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+# Both engines refuse the bug 140 reproducers at the checker (the interpreter used to fail at
+# run time on references, and the binary compared addresses).
+for r140 in tests/regressions/bug140_comparison_consumes_linear/repro.con tests/regressions/bug140_comparison_consumes_linear/repro_ref.con; do
+    r140_i=$($COMPILER "$r140" --interp 2>&1 || true)
+    r140_n=$($COMPILER "$r140" -o "$TESTDIR/.r140_bin" 2>&1 || true)
+    if [[ "$r140_i" == *"(E0229)"* && "$r140_n" == *"(E0229)"* ]]; then
+        echo "  ok  $r140: refused with E0229 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r140: not refused with E0229 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r140_bin"
+done
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"

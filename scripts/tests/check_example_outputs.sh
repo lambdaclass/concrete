@@ -297,7 +297,7 @@ done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
 # Bugs the examples exposed (docs/bugs/108-120, 122), the exit 2i specification found
-# (123-124) the semantics probes found (127-131), bug 134 and bugs 136-137, pinned the way check_bug077_contained.sh
+# (123-124) the semantics probes found (127-131) and bugs 136-137, pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
@@ -386,8 +386,6 @@ open_bug_reproducers() {
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
 128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
-134|bug134_aggregate_eq_invalid_ir/repro.con|compile-fails|but expected 'i64'
-134|bug134_aggregate_eq_invalid_ir/repro_struct.con|compile-fails|but expected 'i64'
 136|bug136_functional_update_base_reevaluated/repro.con|runs-exit|87
 137|bug137_enum_literal_field_order/repro.con|runs-exit|65
 165|bug165_generated_helper_call_binds_by_spelling/repro.con|signals|

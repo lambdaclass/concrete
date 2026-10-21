@@ -586,7 +586,38 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- call-syntax intrinsics, type-checked in the call path. Defensive.
       return lTy
     | .eq | .neq | .lt | .gt | .leq | .geq =>
-      return .bool  -- CoreCheck validates operand type compatibility
+      -- The comparison rule (bugs 134, 140; EVALUATION2 D8/D10/D11): a comparison operator
+      -- is defined on integers, floats, `bool` and `char`, and on raw pointers in trusted
+      -- or `Unsafe` code. Nothing else has a built-in comparison: an aggregate (struct,
+      -- enum, array, `String`, `Heap<T>`, fn pointer) reached `llvm-as` as an ill-typed
+      -- `icmp`, a linear operand was consumed and leaked, and a reference compared
+      -- addresses. A type parameter compares only when it is `Copy`-bounded (so the
+      -- comparison cannot consume a linear operand); each instantiation is then held to
+      -- the same scalar rule after monomorphization (`verifyComparisonTypes`, E0229), so a
+      -- `max<T: Copy>` instantiated at a struct is refused before LLVM sees it.
+      -- The comparable types are all Copy, so a comparison never consumes an operand.
+      -- CoreCheck still validates that the two operand types agree.
+      let env ← getEnv
+      let unsafeOk := Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet
+      for t in [lTyR, rTyR] do
+        let why? : Option String ← match t with
+          | .placeholder | .never => pure none
+          | .bool | .char => pure none
+          | .ptrMut _ | .ptrConst _ =>
+            if unsafeOk then pure none
+            else pure (some "raw pointers compare only in trusted code or a function declaring `with(Unsafe)`")
+          | .ref _ | .refMut _ =>
+            pure (some "a reference has no built-in comparison (neither by address nor by content)")
+          | .typeVar _ =>
+            if ← isCopyType t then pure none
+            else pure (some "a type parameter compares only when it is bounded by `Copy` (a comparison never consumes its operands), and each instantiation must be an integer, float, `bool` or `char`")
+          | t =>
+            if isInteger t || isFloatType t then pure none
+            else pure (some "comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)")
+        match why? with
+        | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString t) why) (some e.getSpan)
+        | none => pure ()
+      return .bool
     | .and_ | .or_ =>
       return .bool  -- CoreCheck validates logical operator types
     | .bitand | .bitor | .bitxor | .shl | .shr =>

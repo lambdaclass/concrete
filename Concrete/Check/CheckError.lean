@@ -164,6 +164,10 @@ inductive CheckError where
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
   | binOpOperandMismatch (op : String) (lhsTy : String) (rhsTy : String)
+  -- A comparison operator (`==`, `!=`, `<`, ...) on a type with no built-in comparison:
+  -- comparisons are defined on integers, floats, `bool`, `char` and (in trusted or
+  -- `Unsafe` code) raw pointers, and never consume an operand (bugs 134, 140).
+  | comparisonNotDefined (op : String) (ty : String) (why : String)
   -- arrayLiteralEmpty, cannotAssignThroughNonMutRef moved to CoreCheck
   -- Slice 3: Borrow/escape/freeze
   | cannotBorrowMoved (name : String)
@@ -327,6 +331,7 @@ def CheckError.message : CheckError → String
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
   | .binOpOperandMismatch op lhsTy rhsTy => s!"operands of '{op}' have different numeric types '{lhsTy}' and '{rhsTy}'"
+  | .comparisonNotDefined op ty why => s!"comparison '{op}' is not defined on '{ty}': {why}"
   -- cannotAssignThroughNonMutRef, arrayLiteralEmpty moved to CoreCheck
   -- Slice 3
   | .cannotBorrowMoved name => s!"cannot borrow '{name}': already moved"
@@ -427,6 +432,7 @@ def CheckError.hint : CheckError → Option String
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
+  | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
   | .ifBranchTypeMismatch thenTy elseTy =>
     if thenTy == "()" || elseTy == "()" then
       some "a branch whose last item is a statement or `expr;` has value `()`; end the branch with a trailing expression (no `;`) to give it a value"
@@ -478,6 +484,7 @@ def CheckError.code : CheckError → String
   | .breakTypeMismatch _ _ => "E0226"
   | .intLiteralOutOfRange _ _ _ _ => "E0227"
   | .binOpOperandMismatch _ _ _ => "E0228"
+  | .comparisonNotDefined _ _ _ => "E0229"
   -- Slice 3: Borrow/escape (E0230–E0239)
   | .cannotBorrowMoved _ => "E0230"
   | .cannotBorrowMutablyBorrowed _ => "E0231"

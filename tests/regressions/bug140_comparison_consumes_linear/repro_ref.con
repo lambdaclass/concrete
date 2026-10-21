@@ -1,0 +1,10 @@
+// Bug 140: `==` on references compared addresses natively (equal values in two places compared
+// unequal) while the interpreter refused it. A reference has no built-in comparison (E0229).
+fn b2i(b: bool) -> Int { if b { return 1; } return 0; }
+fn eqr(a: &Int, b: &Int) -> bool { return a == b; }
+
+fn main() -> Int {
+    let x: Int = 5;
+    let y: Int = 5;
+    return b2i(eqr(&x, &y)) * 10 + b2i(eqr(&x, &x));
+}

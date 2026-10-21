@@ -5,6 +5,7 @@ import Concrete.Check.Layout
 import Concrete.Semantics.IntArith
 import Concrete.Proof.CallCollect
 import Concrete.Semantics.Capabilities
+import Concrete.Resolve.Shared
 
 namespace Concrete
 
@@ -368,6 +369,48 @@ partial def verifyLiteralRanges (modules : List CModule) : Diagnostics :=
     code := "E0227"
   }
 
+/-- The comparison rule after monomorphization (bugs 134, 140): every comparison operator
+    in an instance compares integers, floats, `bool`, `char` or raw pointers. Check accepts a
+    comparison at a `Copy`-bounded type parameter (it cannot consume an operand); this
+    re-asserts the scalar rule on each monomorphized copy, where the operand type is
+    concrete, so `max<T: Copy>` at a struct is a user error (E0229) instead of an ill-typed
+    `icmp` that only `llvm-as` rejected. `none` = not a refused comparison, keep walking. -/
+private def comparisonTypeHook (fnName : String) (e : CExpr) : Option (List VerifyViolation) :=
+  match e with
+  | .binOp op lhs _ _ =>
+    let isCmp := match op with
+      | .eq | .neq | .lt | .gt | .leq | .geq => true
+      | _ => false
+    if !isCmp then none
+    else
+      let t := lhs.ty
+      let ok := match t with
+        | .bool | .char | .ptrMut _ | .ptrConst _ | .never | .placeholder => true
+        | t => isNumeric t
+      if ok then none
+      else some [{ fnName, message := s!"comparison is not defined on '{tyToStr t}' after monomorphization: comparison operators are defined on integers, floats, `bool` and `char`" }]
+  | _ => none
+
+/-- **Post-Mono comparison verifier** (bugs 134, 140): see `comparisonTypeHook`. Generic
+    definitions are skipped; only their instances are checked. -/
+partial def verifyComparisonTypes (modules : List CModule) : Diagnostics :=
+  let rec goModule (m : CModule) : List VerifyViolation :=
+    let noTy : Ty → Bool := fun _ => false
+    let fnVs := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc
+      else fn.body.foldl (fun acc2 st =>
+        acc2 ++ collectStmtViolations fn.name noTy "" st (hook := comparisonTypeHook fn.name)) acc) []
+    fnVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+  let violations := modules.foldl (fun acc m => acc ++ goModule m) []
+  violations.map fun v => {
+    severity := .error
+    message := s!"{v.fnName}: {v.message}"
+    pass := "post-mono"
+    span := none
+    hint := some "a generic comparison instantiated at an aggregate: compare through a named function over references, or instantiate at a scalar type"
+    code := "E0229"
+  }
+
 /-- Bug 092 (post-mono): does a value of this type store a reference inside an
     aggregate (array, `Heap`, generic argument)? A bare `&T` is a reference, not
     an aggregate; raw pointers and function types are not looked through. Same
@@ -498,6 +541,7 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
+    ++ verifyComparisonTypes modules
     ++ verifyCapsPostMono modules
 
 -- ============================================================

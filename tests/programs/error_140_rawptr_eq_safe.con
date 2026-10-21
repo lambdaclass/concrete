@@ -1,0 +1,4 @@
+// Bug 140: raw pointers compare only in trusted code or a function declaring with(Unsafe) (E0229).
+fn f(p: *const Int, q: *const Int) -> bool { return p == q; }
+
+fn main() -> Int { return 0; }

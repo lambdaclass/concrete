@@ -1,0 +1,10 @@
+// Bug 140: `==` on references compared addresses natively (the interpreter refused it). A
+// reference has no built-in comparison (E0229); compare the referents, `*a == *b`.
+fn eqr(a: &Int, b: &Int) -> bool { return a == b; }
+
+fn main() -> Int {
+    let x: Int = 5;
+    let y: Int = 5;
+    if eqr(&x, &y) { return 1; }
+    return 0;
+}

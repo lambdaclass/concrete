@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Silent Safety Defects From The Second Semantics Evaluation Closed (2026-10-21)
+
+The second semantics evaluation (EVALUATION2) found safe programs the checker accepted and the
+binary then ran wrongly. Fixed here, each with a rejection fixture and a positive control:
+
+- **Comparisons (bugs 134 and 140).** `==`, `!=`, `<`, `<=`, `>`, `>=` are defined on integers,
+  floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code; everything else is
+  E0229. A comparison never consumes an operand (it used to move linear operands: `Heap == Heap`
+  compared addresses and leaked both cells), references have no comparison (the binary compared
+  addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
+  `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
+  is [ARITHMETIC_POLICY §8a](docs/language/ARITHMETIC_POLICY.md#8a-comparison-operators).
+  Migration: 0 sites.
+
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
 A borrow of a local is the address of its slot whatever the local's type. A local holding a raw
