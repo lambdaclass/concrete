@@ -1,0 +1,18 @@
+// Bug 096 (Codex round 3): a method's own type parameter named P does not hide the concrete
+// P of W's field from the binding check. Refused (E0299): b's P is a's, W.p means c's.
+mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub struct Copy W { pub p: P, pub k: i64 }
+    impl W { pub fn id<P>(&self, v: P) -> P { return v; } }
+    pub fn mkw(v: i64) -> W { return W { p: P { x: v }, k: 3 }; }
+}
+mod b {
+    import a.{ P };
+    import c.{ W, mkw };
+    pub fn probe() -> i64 { let w: W = mkw(7); return w.k; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

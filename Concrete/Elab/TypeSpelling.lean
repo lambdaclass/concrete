@@ -43,45 +43,12 @@ partial def renameTyNames (tn : String → String) : Ty → Ty
   | .fn_ ps cs ret => .fn_ (ps.map (renameTyNames tn)) cs (renameTyNames tn ret)
   | t => t
 
-/-- Every name a function body BINDS: parameters, `let`s, match binders and borrow-block
-    binders. Core spells a function value as `.ident` with a function type, the same
-    constructor a local of function type uses; a name bound here is the local. -/
-partial def cfnLocalNames (f : CFnDef) : List String :=
-  f.params.map (·.1) ++ stmtsBinders f.body
-where
-  stmtsBinders (ss : List CStmt) : List String := ss.flatMap stmtBinders
-  stmtBinders : CStmt → List String
-    | .letDecl n _ _ v => n :: exprBinders v
-    | .assign _ v => exprBinders v
-    | .return_ (some v) _ => exprBinders v
-    | .expr e _ => exprBinders e
-    | .ifElse c t el => exprBinders c ++ stmtsBinders t ++ (el.map stmtsBinders).getD []
-    | .while_ c b _ st => exprBinders c ++ stmtsBinders b ++ stmtsBinders st
-    | .fieldAssign o _ v => exprBinders o ++ exprBinders v
-    | .derefAssign t v => exprBinders t ++ exprBinders v
-    | .arrayIndexAssign a i v => exprBinders a ++ exprBinders i ++ exprBinders v
-    | .break_ (some v) _ => exprBinders v
-    | .defer e => exprBinders e
-    | .borrowIn v rf _ _ _ b => v :: rf :: stmtsBinders b
-    | _ => []
-  exprBinders : CExpr → List String
-    | .match_ s arms _ => exprBinders s ++ arms.flatMap armBinders
-    | .ifExpr c t el _ => exprBinders c ++ stmtsBinders t ++ stmtsBinders el
-    | .binOp _ l rh _ => exprBinders l ++ exprBinders rh
-    | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _
-    | .cast e _ => exprBinders e
-    | .call _ _ args _ | .arrayLit args _ => args.flatMap exprBinders
-    | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (exprBinders ·.2)
-    | .arrayIndex a i _ | .allocCall a i _ => exprBinders a ++ exprBinders i
-    | _ => []
-  armBinders : CMatchArm → List String
-    | .enumArm _ _ bs g b => bs.map (·.1) ++ ((g.map exprBinders).getD []) ++ stmtsBinders b
-    | .litArm _ g b | .rangeArm _ _ _ g b => ((g.map exprBinders).getD []) ++ stmtsBinders b
-    | .varArm n _ g b => n :: ((g.map exprBinders).getD []) ++ stmtsBinders b
-
 /-- What a Core rename changes: type names, and the names of global functions (direct
-    callees, function references, and function values not bound in the body — `locals`)
-    that are renamed (`P_get` → `a_P_get`, bugs 096 - 098). -/
+    callees, function references, and function values) that are renamed (`P_get` →
+    `a_P_get`, bugs 096 - 098). Core spells a function value as `.ident` with a function
+    type, as it spells a local of function type; `locals` are the names bound at the point
+    being renamed (parameters, earlier `let`s of the enclosing blocks, match and borrow
+    binders), which are never renamed. -/
 structure CoreRename where
   tyName : String → String
   fnName : String → String
@@ -96,6 +63,9 @@ def shadow (r : CoreRename) (params : List String) : CoreRename :=
   else { r with tyName := fun n => if params.contains n then n else r.tyName n }
 
 def ty (r : CoreRename) : Ty → Ty := renameTyNames r.tyName
+
+/-- The same rename with `names` bound as locals. -/
+def bind (r : CoreRename) (names : List String) : CoreRename := { r with locals := names ++ r.locals }
 
 mutual
 partial def expr (r : CoreRename) : CExpr → CExpr
@@ -135,9 +105,13 @@ partial def expr (r : CoreRename) : CExpr → CExpr
 
 partial def arm (r : CoreRename) : CMatchArm → CMatchArm
   | .enumArm en v binds g body =>
-    .enumArm (r.tyName en) v (binds.map fun (n, t) => (n, r.ty t)) (g.map (expr r)) (stmts r body)
+    -- the arm's binders are in scope in its guard and body
+    let r' := r.bind (binds.map (·.1))
+    .enumArm (r.tyName en) v (binds.map fun (n, t) => (n, r.ty t)) (g.map (expr r')) (stmts r' body)
   | .litArm v g body => .litArm (expr r v) (g.map (expr r)) (stmts r body)
-  | .varArm b t g body => .varArm b (r.ty t) (g.map (expr r)) (stmts r body)
+  | .varArm b t g body =>
+    let r' := r.bind [b]
+    .varArm b (r.ty t) (g.map (expr r')) (stmts r' body)
   | .rangeArm lo hi incl g body =>
     .rangeArm (expr r lo) (expr r hi) incl (g.map (expr r)) (stmts r body)
 
@@ -154,13 +128,20 @@ partial def stmt (r : CoreRename) : CStmt → CStmt
   | .break_ v lbl => .break_ (v.map (expr r)) lbl
   | .continue_ lbl => .continue_ lbl
   | .defer e => .defer (expr r e)
-  | .borrowIn v rf reg isMut t body => .borrowIn v rf reg isMut (r.ty t) (stmts r body)
+  | .borrowIn v rf reg isMut t body => .borrowIn v rf reg isMut (r.ty t) (stmts (r.bind [v, rf]) body)
 
-partial def stmts (r : CoreRename) (ss : List CStmt) : List CStmt := ss.map (stmt r)
+/-- A block, scoped: a `let`'s binder is in scope AFTER its initializer, to the end of the
+    block (`let h = h` reads the global `h`, then binds the local). -/
+partial def stmts (r : CoreRename) (ss : List CStmt) : List CStmt :=
+  (ss.foldl (fun (acc, r) st =>
+    let st' := stmt r st
+    match st with
+    | .letDecl n .. => (st' :: acc, r.bind [n])
+    | _ => (st' :: acc, r)) ([], r)).1.reverse
 end
 
 def fnDef (r : CoreRename) (f : CFnDef) : CFnDef :=
-  let r' := { r.shadow f.typeParams with locals := cfnLocalNames f }
+  let r' := (r.shadow f.typeParams).bind (f.params.map (·.1))
   let name' := r.fnName f.name
   { f with
     name := name'

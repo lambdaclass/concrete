@@ -1,0 +1,10 @@
+// Bug 096 (Codex round 3): a's P.get is respelled a_P_get (b declares P too), which is also
+// c's free function. Refused (E0299) rather than joined.
+mod a {
+    pub struct Copy P { pub x: i64 }
+    impl P { pub fn get(&self) -> i64 { return self.x; } }
+    pub fn fa() -> i64 { let p: P = P { x: 1 }; return p.get(); }
+}
+mod b { pub struct Copy P { pub y: i64 } pub fn fb() -> i64 { let p: P = P { y: 2 }; return p.y; } }
+mod c { pub fn a_P_get() -> i64 { return 3; } }
+mod m { import a.{fa}; import b.{fb}; import c.{a_P_get}; fn main() with(Std) -> Int { print_int(fa() * 100 + fb() * 10 + a_P_get()); print_char(10); return 0; } }

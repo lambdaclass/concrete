@@ -1,0 +1,11 @@
+// Bug 097 (Codex round 3): `let h: fn() -> Int = h;` reads the GLOBAL h (respelled a_h)
+// before binding the local h. Expected (compiled AND --interp): 1112.
+mod a {
+    fn h() -> Int { return 11; }
+    pub fn fa() -> Int { let h: fn() -> Int = h; return h(); }
+}
+mod c {
+    fn h() -> Int { return 12; }
+    pub fn fc() -> Int { return h(); }
+}
+mod m { import a.{fa}; import c.{fc}; fn main() with(Std) -> Int { print_int(fa() * 100 + fc()); print_char(10); return 0; } }

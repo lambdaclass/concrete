@@ -1,0 +1,19 @@
+// Bug 096 (Codex round 3): c's W has a PRIVATE method mentioning c's P; import resolution
+// does not transport it, so importing a's P and c's W is not refused.
+// Expected (compiled AND --interp): 71.
+mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub struct Copy W { pub k: i64 }
+    impl W { fn use_p(&self, v: P) -> i64 { return v.x; } }
+    pub fn mkw(v: i64) -> W { return W { k: v }; }
+}
+mod b {
+    import a.{ P };
+    import c.{ W, mkw };
+    pub fn probe() -> i64 { let w: W = mkw(7); let p: P = P { pad: 0, pad2: 0, x: 1 }; return w.k * 10 + p.x; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

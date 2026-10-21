@@ -66,14 +66,21 @@ Types written in another module (an imported or sibling declaration's fields, pa
 signature, a submodule function's signature) are spelled as their module binds them: each such
 mention of a respelled name must mean, there, the declaration this module's spelling means, and a
 name this module does not bind takes the binding those modules agree on
-(`regress_096_imported_struct_field_binding.con`). For an explicitly imported declaration that
-disagrees, Elab refuses (E0299); a submodule's or sibling's declarations, visible without an
-import, only supply a binding the module lacks. Example of the refusal: b binding `P`
+(`regress_096_imported_struct_field_binding.con`). The declarations checked strictly are the ones
+the module imports by name and the whole import closure resolution transports (types reached
+through fields and signatures, their public methods), each in its own type-parameter scope; one
+that disagrees is refused (E0299: `error_096_import_closure_binds_other_type.con`,
+`error_096_generic_method_param_named_like_type.con`), and a private method resolution does not
+transport is not consulted (`regress_096_private_method_not_transported.con`). A submodule's or
+sibling's declarations, visible without an import, only supply a binding the module lacks.
+Example of the refusal: b binding `P`
 to a's while calling c's `mk`, which returns c's `P`, was accepted by Check (it compares types by
 spelling) and read the wrong layout (`error_096_imported_sig_binds_other_type.con`). A canonical
 spelling that is already another type's (`a.b`'s `P` and `a_b`'s `P`) is refused the same way
-(`error_096_canonical_type_spelling_clash.con`). A function value of a respelled method
-(`P_get`) is respelled; a local of function type never is (`CoreRename.locals`). Names the
+(`error_096_canonical_type_spelling_clash.con`), and so is a respelled method name that is
+already another function's (`error_096_method_spelling_clash.con`, `checkRespelledFnNames`). A function value of a respelled method
+(`P_get`) is respelled; a local of function type never is (`CoreRename.locals`, scoped: a `let` binds after
+its initializer, `regress_097_let_shadows_colliding_fn.con`). Names the
 compiler itself special-cases (`builtinTypeNames`, `HashMap`, `HashSet`, `BinaryHeap`) are never
 respelled; a collision on one stays under bug 052's refusals. `CFnDef.declName` keeps a
 respelled method's declaration name, so ProofCore's `CallableId`s and the reports' qualified

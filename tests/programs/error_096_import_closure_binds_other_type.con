@@ -1,0 +1,17 @@
+// Bug 096 (Codex round 3): b imports a's P and c's mkw; import resolution transports c's W
+// (mkw's return type), whose field means c's P. Refused (E0299): b's P is a's.
+mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub struct Copy W { pub p: P, pub k: i64 }
+    pub fn mkw(v: i64) -> W { return W { p: P { x: v }, k: 3 }; }
+}
+mod b {
+    import a.{ P };
+    import c.{ mkw };
+    pub fn probe() -> i64 { let p: P = P { pad: 0, pad2: 0, x: 1 }; return mkw(7).k + p.x; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}
