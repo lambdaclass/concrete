@@ -131,10 +131,11 @@ mod toml_parser {
     // These four are the lexer's character classes, written as early-return
     // chains rather than `&&`/`||` expressions: the proof extractor does not
     // model boolean `&&`/`||` (docs/verification/PROOF_EXTRACTION_GAPS.md),
-    // and in this shape each carries a Lean theorem that it accepts exactly
-    // its TOML v1.0.0 ABNF class (Examples.Toml.Proofs).
+    // and in this shape each carries a Lean theorem stating exactly which
+    // characters it accepts (Examples.Toml.Proofs): its TOML v1.0.0 ABNF
+    // class for is_ws, is_digit and is_bare_key_char.
 
-    // ws = %x20 / %x09
+    // wschar = %x20 / %x09
     #[spec(Examples.Toml.Proofs.isWsExpr)]
     #[proof_by(Examples.Toml.Proofs.is_ws_correct)]
     #[proof_coverage(iff)]
@@ -144,8 +145,9 @@ mod toml_parser {
         return ch == 9;
     }
 
-    // newline = %x0A / %x0D.0A; the lexer classifies the CR of a CRLF pair
-    // on its own, so the class is { LF, CR }.
+    // LF or CR, each on its own. This is NOT the ABNF rule
+    // newline = %x0A / %x0D.0A: a lone CR is accepted and no CRLF
+    // sequencing is checked, and the proof says nothing about sequencing.
     #[spec(Examples.Toml.Proofs.isNewlineExpr)]
     #[proof_by(Examples.Toml.Proofs.is_newline_correct)]
     #[proof_coverage(iff)]

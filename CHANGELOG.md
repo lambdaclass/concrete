@@ -47,8 +47,9 @@ move identities; floats carry no proof claims today, and the v2 identity bytes w
 ### Workload Programs Carry Minted Proofs (2026-10-21)
 
 Three Phase 7 workloads, written for users rather than for the prover, now carry seven
-source-linked claims that reach `minted` receipts: toml's four lexer character classes
-(`is_ws`, `is_newline`, `is_digit`, `is_bare_key_char`) each accept exactly their TOML ABNF class;
+source-linked claims that reach `minted` receipts: toml's lexer character classes `is_ws`,
+`is_digit` and `is_bare_key_char` accept exactly their TOML ABNF classes, and `is_newline` exactly
+LF or CR (per character; CRLF sequencing is not covered);
 hexdump's `gutter_byte` and `line_len` implement xxd's printable-or-`.` and 16-bytes-per-line
 rules; png_chunks' `png_sig_ok` accepts exactly the PNG signature. Each theorem evaluates the
 function's extracted body and holds for every `Int` input; proofs use standard axioms only
@@ -56,7 +57,8 @@ function's extracted body and holds for every `Int` input; proofs use standard a
 [Hexdump](proofs/Examples/Hexdump/Proofs.lean),
 [PngChunks](proofs/Examples/PngChunks/Proofs.lean)). The claim inventory grows by seven
 rows. Getting there needed source rewrites, because the extractor refuses boolean `&&`/`||`. That
-gap, and two more (`u64` arithmetic, which keeps std's CRC32 out of reach, and `Bytes` reads that
+gap, and two more (`u64` division, remainder and bitwise operators, which keep std's CRC32 step
+out of reach, and `Bytes` reads that
 extract to calls no proof table models), are recorded with their exact refusals in
 [PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
 

@@ -5,15 +5,16 @@ import Concrete.Proof.Proof
 
 The TOML workload (`examples/toml`) lexes with four pure character-class predicates. Each
 specification below is the EXTRACTED body of that predicate (as `--report lean-stubs` emits it),
-and each theorem says the predicate accepts EXACTLY the code points of its TOML v1.0.0 ABNF rule,
-stated independently of how the body tests them:
+and each theorem says EXACTLY which code points the predicate accepts, stated independently of how
+the body tests them. Three of those sets are TOML v1.0.0 ABNF character classes; the fourth,
+`is_newline`, is the lexer's per-character newline test, which is NOT the ABNF `newline` rule:
 
-| predicate          | ABNF rule (toml.abnf, v1.0.0)                         |
-|--------------------|-------------------------------------------------------|
-| `is_ws`            | `wschar = %x20 / %x09`                                |
-| `is_newline`       | `newline = %x0A / %x0D.0A` (the lexer tests LF and CR per character) |
-| `is_digit`         | `DIGIT = %x30-39`                                     |
-| `is_bare_key_char` | `unquoted-key = 1*( ALPHA / DIGIT / %x2D / %x5F )`, `ALPHA = %x41-5A / %x61-7A` |
+| predicate          | accepts exactly                                        |
+|--------------------|--------------------------------------------------------|
+| `is_ws`            | ABNF `wschar = %x20 / %x09`                            |
+| `is_newline`       | LF (0x0A) or CR (0x0D), each on its own. ABNF `newline = %x0A / %x0D.0A` is a two-character sequence for CRLF; this predicate accepts a lone CR and checks no sequencing, so the theorem establishes nothing about CRLF handling |
+| `is_digit`         | ABNF `DIGIT = %x30-39`                                 |
+| `is_bare_key_char` | one character of ABNF `unquoted-key = 1*( ALPHA / DIGIT / %x2D / %x5F )`, `ALPHA = %x41-5A / %x61-7A` |
 
 The theorems quantify over every `Int`, not only over code points: the model's `ch` is the
 mathematical integer the source's `Int` parameter denotes, and the claim holds for all of them.

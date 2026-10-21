@@ -15,7 +15,7 @@ What this does NOT cover: `is_png_sig`, which reads the bytes out of a `Bytes` b
 check. It extracts, but only as calls to `Bytes_len` / `Bytes_get_unchecked`, which no proof
 `FnTable` models, so no theorem can evaluate it: the claim is about the decision, not about which
 bytes reach it. The per-chunk CRC32 is std's `crc32`, which is refused outright (a data-dependent
-loop, and `u64` arithmetic the extractor does not model; see
+loop, and `u64` remainder, division and bitwise operators the extractor does not model; see
 docs/verification/PROOF_EXTRACTION_GAPS.md). And `PExpr` semantics are the proof model, not the
 compiled code (H19).
 -/

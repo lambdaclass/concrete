@@ -33,10 +33,10 @@ unchanged), but it is a rewrite done for the prover, not for the reader.
 `ifThenElse a true b` at `Ty.bool`. That is exactly the short-circuit semantics Concrete's `&&`/`||`
 have, so the extraction would be faithful.
 
-## 2. `u64` (`Ty.uint`) arithmetic and bitwise operators are not extracted
+## 2. `u64` (`Ty.uint`) division, remainder and bitwise operators are not extracted
 
 ```
-probe.crc_step64(c)            -- one step of std.checksum.crc32, as std writes it
+probe.crc_step64(c)   -- a scratch probe (not in the repo): one step of std.checksum.crc32, as std writes it
   status: eligible (extraction failed)
   unsupported: unsupported operator: Concrete.BinOp.mod at Concrete.Ty.uint,
                unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.uint,
@@ -46,7 +46,8 @@ probe.crc_step64(c)            -- one step of std.checksum.crc32, as std writes 
 
 The same step written at `u32` (`if c % 2 == 1 { return (c / 2) ^ 3988292384; } return c / 2;`)
 extracts, as does an eight-iteration byte update at `u32` (as a `while_step` loop). std's `crc32`
-does its arithmetic in `u64` under an explicit 32-bit mask, so none of it extracts. And the function
+does its arithmetic in `u64` under an explicit 32-bit mask, so its `%`, `/`, `^` and `&` do not
+extract (`u64` `+`, `-` and `*` do: `binOpToPBinOp` maps them width-agnostically). And the function
 as a whole is refused before operators are considered:
 
 ```
