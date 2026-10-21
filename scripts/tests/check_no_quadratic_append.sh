@@ -54,7 +54,7 @@ check Concrete/Check/CheckHelpers.lean   8
 # 57->58 (2026-08-06): +1 one-shot `initEv ++ [loop ...]` building the desugared
 # for-loop's evidence block. `initEv` holds at most one statement and the append runs
 # once per for-loop, not once per element of anything.
-check Concrete/Elab/Elab.lean            58
+check Concrete/Elab/Elab.lean            56
 # 6->7 (2026-10-19, bug 052): destroyValue extends an element reference's path by one
 # `.index i` step per array element. The path is as long as the access nesting, not the
 # array, so each append is O(depth) and the loop stays linear in the elements.

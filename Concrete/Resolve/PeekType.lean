@@ -61,7 +61,7 @@ structure PeekCtx (m : Type → Type) where
 def recordInferred (inferred : List (String × Ty)) (name : String) (ty : Ty) :
     List (String × Ty) :=
   match inferred.lookup name with
-  | none => inferred ++ [(name, ty)]
+  | none => (name, ty) :: inferred  -- order immaterial: read back by name
   | some .placeholder =>
     if ty == .placeholder then inferred
     else inferred.map fun (n, t) => if n == name then (n, ty) else (n, t)

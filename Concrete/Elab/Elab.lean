@@ -2520,7 +2520,8 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
     (`sym_*`) when `withTypes`. -/
 def summaryEntityTypes (d : FileSummary) (sym : String) (withTypes : Bool := true) :
     List (String × List Ty × List String) :=
-  let sigTys := fun (fs : FnSummary) => (fs.params.map (·.2)) ++ [fs.retTy]
+  -- the types a signature names (order immaterial: only the names they mention are read)
+  let sigTys := fun (fs : FnSummary) => fs.retTy :: fs.params.map (·.2)
   (d.functions.filter (·.1 == sym)).map (fun (n, fs) => (s!"function '{n}'", sigTys fs, fs.typeParams))
   ++ (d.externFnSigs.filter (·.1 == sym)).map (fun (n, fs) => (s!"function '{n}'", sigTys fs, fs.typeParams))
   ++ (d.typeAliases.filter (·.name == sym)).map (fun ta => (s!"type alias '{ta.name}'", [ta.targetTy], []))
@@ -3119,7 +3120,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- `ElabEnv.structs`/`enums` lookups use); a transported signature means a type of the import
   -- closure.
   let localOwners : List (String × String × String) :=
-    ownerCands.foldl (fun acc c => if acc.any (·.1 == c.1) then acc else acc ++ [c]) []
+    -- first binding wins: prepended, reversed once
+    (ownerCands.foldl (fun acc c => if acc.any (·.1 == c.1) then acc else c :: acc) []).reverse
   let closureOwners : List (String × String × String) :=
     closure.structs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
     ++ closure.enums.map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
@@ -3151,7 +3153,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           let transported : List (String × List Ty × List String) :=
             (closure.functions.filter (fun (p : String × FnSummary) => p.1 == sym.effectiveName)).map
               fun (p : String × FnSummary) =>
-                (s!"function '{p.1}'", (p.2.params.map (·.2)) ++ [p.2.retTy], p.2.typeParams)
+                (s!"function '{p.1}'", p.2.retTy :: p.2.params.map (·.2), p.2.typeParams)
           let aliasTys : List (String × List Ty × List String) :=
             (closure.typeAliases.filter (fun (p : String × Ty) => p.1 == sym.effectiveName)).map
               fun (p : String × Ty) => (s!"type alias '{p.1}'", [p.2], ([] : List String))
@@ -3171,7 +3173,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           -- whose owner cannot be identified exactly is refused, never guessed.
           let owner := methodOwner mn false
           (s!"imported method '{mn}'", owner.bind fun (_, _, di, _) => defSummary di,
-           (fs.params.map (·.2)) ++ [fs.retTy], fs.typeParams, true))
+           fs.retTy :: fs.params.map (·.2), fs.typeParams, true))
     ++ ((summary.submoduleSummaries ++ siblingSubs).flatMap fun (_, d) =>
       (d.functions.map (·.1) ++ d.externFnSigs.map (·.1) ++ d.structs.map (·.name)
         ++ d.enums.map (·.name) ++ d.newtypes.map (·.name)).eraseDups.flatMap fun sym =>
@@ -3453,7 +3455,7 @@ partial def collectTypeDecls (s : FileSummary) : List (String × String) :=
     the interpreter special-case by spelling) is never respelled: those consumers would no
     longer recognize it. A collision on such a name stays under bug 052's refusals. -/
 def ambiguousTypeNames (tops : List (String × FileSummary)) : List String :=
-  let compilerKnown := builtinTypeNames ++ ["HashMap", "HashSet", "BinaryHeap"]
+  let compilerKnown := "HashMap" :: "HashSet" :: "BinaryHeap" :: builtinTypeNames
   let decls := (tops.flatMap fun (_, s) => collectTypeDecls s).eraseDups
   let names := (decls.map (·.1)).eraseDups
   names.filter fun n => !compilerKnown.contains n && (decls.filter (·.1 == n)).length ≥ 2
@@ -3534,8 +3536,9 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
       match c.fns n with
       | some f =>
         if f.params.length != args.length then inner else
-        inner ++ (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'", f.typeParams))
-          ++ [(f.retTy, t, s!"the result of '{n}'", f.typeParams)]
+        (f.retTy, t, s!"the result of '{n}'", f.typeParams) ::
+          (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'", f.typeParams))
+          ++ inner
       | none => inner
     | .indirect _ => inner
   | .fnRef n t =>
@@ -3626,12 +3629,14 @@ partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAg
 
 /-- A block, lexically: a `let`'s binder is a local only AFTER its initializer. -/
 partial def tyAgreeStmts (c : TyAgreeCtx) (ss : List CStmt) : List TyAgreePair :=
-  (ss.foldl (fun (acc, c) st =>
+  -- per-statement chunks prepended and flattened once (no accumulator append in the fold)
+  let (chunks, _) := ss.foldl (fun (acc, c) st =>
     match st with
     | .letDecl n _ t v =>
-      (acc ++ tyAgreeExpr c v ++ [(t, v.ty, s!"the initializer of '{n}'", c.tps)],
+      (((t, v.ty, s!"the initializer of '{n}'", c.tps) :: tyAgreeExpr c v) :: acc,
        { c with locals := n :: c.locals })
-    | _ => (acc ++ tyAgreeStmt c st, c)) ([], c)).1
+    | _ => (tyAgreeStmt c st :: acc, c)) (([] : List (List TyAgreePair)), c)
+  chunks.reverse.flatten
 
 partial def tyAgreeStmt (c : TyAgreeCtx) : CStmt → List TyAgreePair
   | .assign _ v | .expr v _ | .defer v => tyAgreeExpr c v
@@ -3747,7 +3752,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       newtypeOf := fun n => nts.find? (·.name == n)
       family := family
       retTy := none }
-    let pairs : List TyAgreePair := tyAgreeExpr ctx e ++ [(t, e.ty, s!"the initializer of constant '{n}'", [])]
+    let pairs : List TyAgreePair := (t, e.ty, s!"the initializer of constant '{n}'", []) :: tyAgreeExpr ctx e
     pairs.filterMap fun ((exp, act, whr, wild) : TyAgreePair) =>
         if famAgree family wild exp act then none else
         some (diag s!"in constant '{n}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
