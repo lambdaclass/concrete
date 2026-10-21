@@ -427,10 +427,10 @@ refused "$TMP/afterinl" afterinl "unexpected text in or after a value" 'a ["nati
 # A header spanning lines or holding a comment, and a header hidden in a multi-line inline table.
 mkapp "$TMP/hdrlines" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n[\nnative\n]\nlibs = ["m"]\n' > "$TMP/hdrlines/Concrete.toml"
-refused "$TMP/hdrlines" hdrlines "a table header spanning lines" "a header split across lines is refused"
+refused "$TMP/hdrlines" hdrlines "unexpected text in or after a table header" "a header split across lines is refused"
 mkapp "$TMP/hdrcomment" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n[ # comment\nnative]\nlibs = ["m"]\n' > "$TMP/hdrcomment/Concrete.toml"
-refused "$TMP/hdrcomment" hdrcomment "a table header spanning lines or holding a comment" "a header holding a comment is refused"
+refused "$TMP/hdrcomment" hdrcomment "unexpected text in or after a table header" "a header holding a comment is refused"
 mkapp "$TMP/inltable" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nmetadata = {\n["native"]\nlibs = ["lost"]\n}\n' > "$TMP/inltable/Concrete.toml"
 refused "$TMP/inltable" inltable "unexpected text in or after a value" "a quoted header hidden in a multi-line inline table is refused"
@@ -457,6 +457,13 @@ refused "$TMP/trailhdr" trailhdr "unexpected text in or after a table header" "a
 mkapp "$TMP/trailval" ''
 printf '[package]\nname = "nlapp" [native]\nlibs = ["lost"]\n' > "$TMP/trailval/Concrete.toml"
 refused "$TMP/trailval" trailval "unexpected text in or after a value" "a [native] header trailing a value is refused"
+# The name inside a header's brackets must be a key.
+bad hdrcomma '
+[native,]
+libs = ["m"]' "unexpected text in or after a table header" "a header [native,] is refused"
+bad hdreq '
+[native = foo]
+libs = ["m"]' "unexpected text in or after a table header" "a header [native = foo] is refused"
 # The text before '=' must be a key: a header embedded there is refused.
 mkapp "$TMP/keyhdr" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nfoo [native] = ["lost"]\n' > "$TMP/keyhdr/Concrete.toml"

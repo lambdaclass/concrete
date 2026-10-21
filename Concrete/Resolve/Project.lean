@@ -474,7 +474,7 @@ private def tomlValueShapeOk (v : List Char) : Bool :=
       | none => false
     else !((c :: r).any fun x => x == '[' || x == '{' || x == tomlStrMark)
 
-/-- A table header's bare text is exactly `[name]` or `[[name]]` and nothing after it. -/
+/-- A table header's bare text is exactly `[key]` or `[[key]]` (a TOML key) and nothing after it. -/
 private def tomlHeaderShapeOk (h : List Char) : Bool :=
   let h := h.dropWhile tomlWs
   let (opens, rest) := (h.takeWhile (· == '['), h.dropWhile (· == '['))
@@ -483,7 +483,8 @@ private def tomlHeaderShapeOk (h : List Char) : Bool :=
     let inner := rest.takeWhile (· != ']')
     let after := rest.dropWhile (· != ']')
     let closes := after.takeWhile (· == ']')
-    !inner.any (fun x => x == '[') && closes.length == opens.length
+    -- The name between the brackets must itself be a key: `[native,]` or `[native = x]` is not.
+    tomlIsKey inner && closes.length == opens.length
       && (after.drop closes.length).all tomlWs
 
 /-- Whether a manifest ENTRY exists at `path`, judged by `lstat`: only a genuine "no such file or
