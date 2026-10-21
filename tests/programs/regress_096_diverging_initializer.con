@@ -1,0 +1,13 @@
+// Bug 096 (Codex round 16): `let p: P = abort();` with a respelled P: a diverging value has every
+// type, as Check admits it, so the backstop does not refuse it. Expected (compiled AND --interp): 5.
+mod a {
+    struct Copy P { x: Int }
+    fn probe() with(Process) -> Int {
+        let p: P = abort();
+        return 0;
+    }
+    fn main() with(Std) -> Int { print_int(5); print_char(10); return 0; }
+}
+mod c {
+    struct Copy P { x: Int }
+}

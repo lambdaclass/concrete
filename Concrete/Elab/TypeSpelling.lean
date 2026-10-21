@@ -245,7 +245,8 @@ partial def famAgree (fam wild : List String) (exp act : Ty) : Bool :=
   let hasWild : Ty → Bool := fun t => tyHasTypeVar t || (tyNamesIn t).any wild.contains
   let famNames : Ty → List String := fun t => (tyNamesIn t).filter fam.contains
   let nameOk := fun (n m : String) => !(fam.contains n || fam.contains m) || n == m
-  if isWild exp then true else
+  -- a diverging value (`abort()`) has every type, as Check admits it
+  if isWild exp || act == .never then true else
   match exp, act with
   | .named n, .named m => nameOk n m
   | .generic n as _, .generic m bs _ =>
