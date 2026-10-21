@@ -6,6 +6,9 @@
 //  2. `x as *mut u8` on an array local: the cast stored the pointer as the array.
 //  3. (found with the fix) a newtype wrap of an array, `Buf(x)`: the same-LLVM-type
 //     cast spilled the array pointer into a slot typed as the array.
+//  4. (Codex review of the fix) a newtype over an array arriving at a match merge or
+//     a loop header was phi-transported as an aggregate (E0714): Lower's promotion
+//     test did not see through the newtype.
 // The interpreter refuses the pointer and newtype casts, so this is native-only.
 newtype Buf = [i32; 3];
 
@@ -15,6 +18,25 @@ fn buf_sum(b: Buf) -> i32 {
 }
 fn set_row(m: &mut [[i32; 2]; 2]) {
     m[0] = [7, 8];
+}
+
+fn choose(k: i32) -> Buf {
+    let b: Buf = match k {
+        0 => Buf([1, 2, 3]),
+        _ => Buf([4, 5, 6]),
+    };
+    return b;
+}
+
+fn last_of_loop() -> i32 {
+    let mut acc: Buf = Buf([0, 0, 0]);
+    let mut i: i32 = 0;
+    while i < 3 {
+        acc = Buf([i, i + 10, i + 20]);
+        i = i + 1;
+    }
+    let l: [i32; 3] = acc.0;
+    return l[0] + l[1] + l[2];
 }
 
 fn first_byte(x: [u8; 3]) with(Unsafe) -> u8 {
@@ -40,5 +62,11 @@ fn main() with(Unsafe) -> i32 {
     if *q != 104 { return 8; }
     let raw: [i32; 3] = [10, 20, 12];
     if buf_sum(Buf(raw)) != 42 { return 9; }
+    let c1: [i32; 3] = choose(1).0;
+    if c1[0] != 4 { return 10; }
+    if c1[2] != 6 { return 11; }
+    let c0: [i32; 3] = choose(0).0;
+    if c0[1] != 2 { return 12; }
+    if last_of_loop() != 36 { return 13; }
     return a[1][0] + a[1][1] + a[0][0] + a[0][1] + 20;
 }

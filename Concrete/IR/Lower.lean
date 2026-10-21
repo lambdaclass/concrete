@@ -330,6 +330,10 @@ private def computeTySize (ty : Ty) : LowerM Nat := do
     Only true value-typed aggregates (structs, enums, strings, vecs, arrays)
     should be promoted. References and pointers are 8-byte scalars — use phi. -/
 private def isAggregateForPromotion (ty : Ty) : LowerM Bool := do
+  -- A newtype has its inner type's representation (bug 110 follow-up: `Buf([..])`
+  -- for `newtype Buf = [i32; 3]` arriving at a match merge or loop header was
+  -- phi-transported, which SSA verification refuses, E0714).
+  let ty := Layout.resolveNewtype (← getLayoutCtx) ty
   match ty with
   -- References/pointers are 8-byte scalars — NOT aggregates for promotion
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => return false

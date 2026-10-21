@@ -53,11 +53,16 @@ The two shapes have different roots, and the fix found a third shape of the seco
 for `.arrayIndex` reads, so no whole-array cast is generated for the assignment. In EmitSSA's
 `.cast`, an aggregate operand that is a known pointer is not stored as an aggregate: a cast to a
 pointer yields the storage address, and a same-LLVM-type rebrand copies the storage (`memcpy`)
-into a fresh slot, keeping the copy semantics of the old path. Probed alongside: returns, call
+into a fresh slot, keeping the copy semantics of the old path. The Codex review found a fourth
+shape: a newtype over an array arriving at a `match` merge or a loop header was phi-transported as
+an aggregate (SSA verification refuses it, E0714), because `Lower.isAggregateForPromotion` did not
+see through newtypes; it now resolves the newtype first, so such values go through a stable slot
+like the array itself. Probed alongside: returns, call
 arguments, struct literal fields, whole-array assignment, `if`-expression arms and `*r = [..]` are
 all hinted already. Permanent leg: `tests/programs/regress_110_array_value_store.con` in
 `run_tests.sh` (run_ok 42: both elements of the assigned row, the same through `&mut`, a `u8`
-row, a pointer read through `x as *mut u8` in main and in a callee, and a newtype wrap). The
+row, a pointer read through `x as *mut u8` in main and in a callee, a newtype wrap, and the
+newtype at a `match` merge and through a loop header, each element read back). The
 reproducer `repro.con` exits 3 natively and under `--interp`; the cast shapes are native-only (the
 interpreter refuses them: "unsupported cast"). examples/snippets/arrays.con and
 hello_world_array.con are promoted to `compile` with `@run` rules.
