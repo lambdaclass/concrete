@@ -161,7 +161,8 @@ partial def allFunctions (m : Module) : List (String × FnDef) :=
     proof links (the registry fingerprint is computed, not stored in source). -/
 partial def coreFnFingerprints (m : CModule) : List (String × String) :=
   let pfx := if m.name.isEmpty then "" else m.name ++ "."
-  m.functions.map (fun f => (pfx ++ f.name, bodyFingerprint f.body))
+  -- the DECLARATION name (bugs 096 - 097: a respelled function keeps its source link)
+  m.functions.map (fun f => (pfx ++ f.sourceName, bodyFingerprint f.body))
     ++ m.submodules.flatMap coreFnFingerprints
 
 /-- Synthesize `ProofRegistry` entries from in-source `#[proof_by]`/`#[spec]`/

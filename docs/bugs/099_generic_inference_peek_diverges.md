@@ -51,8 +51,10 @@ receiver's type and capability arguments, read off the receiver as Check's `reso
 them; `regress_099_generic_infer_cap_method.con`). A generic callee's return type stays unanswered, bug 063's rule, so an
 uninferable capability variable still reports E0242 (`check_cap_inference.sh`). `recordInferred` lets a
 `.placeholder` binding yield to a later determining argument. Check and Elab both call it, so they
-infer the same type arguments by construction. The two reproducers run in `run_tests.sh` natively
-and under `--interp`.
+infer the same type arguments by construction. The reproducers run in `run_tests.sh` natively
+and under `--interp`. Bug 052's containment fixture `tests/regressions/bug052_vec_array_destroy/refuse_unresolved.con`
+(`kill(&self.items)`, refused with E0814 while Elab inferred `Placeholder`) now compiles and destroys
+every element; `check_collections_copy_only.sh` pins its output (2, 8, 9) in both engines.
 
 ## Structural cause
 

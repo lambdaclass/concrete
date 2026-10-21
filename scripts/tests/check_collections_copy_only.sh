@@ -262,13 +262,17 @@ else
     && ok "Vec<[non-Destroy; N]>.drop() rejected (E0241 naming [Res; 2])" \
     || no "Vec<[non-Destroy; N]> rejected without E0241 naming the array type"
 fi
-# negative control 2: a destroy whose element type is unresolved is refused,
-# not guessed away (Elab infers T = Placeholder through a field access)
+# control 2 (bug 099): `kill(&self.items)` used to infer T = Placeholder in Elab and was
+# refused (E0814); Check and Elab now share one argument-type peek, so T is the array type
+# and every element is destroyed exactly once, natively and under --interp.
 if "$C" "$B52/refuse_unresolved.con" -o "$TMP/b52u" >"$TMP/b52u.out" 2>&1; then
-  no "destroy of an unresolved (Placeholder) type compiled — the silent no-op is back"
+  ugot="$( { "$TMP/b52u" 2>&1; echo "$?"; } | tr '\n' ' ')"
+  uigot="$("$C" "$B52/refuse_unresolved.con" --interp 2>&1 | tr '\n' ' ')"
+  [ "$ugot" = "2 8 9 0 " ] && ok "field-access destroy inferred and run (2 8 9)" \
+    || no "field-access destroy compiled output '$ugot', want '2 8 9 0 '"
+  [ "$uigot" = "2 8 9 0 " ] && ok "--interp agrees (2 8 9)" || no "--interp output '$uigot', want '2 8 9 0 '"
 else
-  grep -q "E0814" "$TMP/b52u.out" && ok "destroy of an unresolved element type refused (E0814)" \
-    || no "unresolved-type destroy rejected without E0814"
+  no "field-access destroy no longer compiles"; sed 's/^/        /' "$TMP/b52u.out" | head -5
 fi
 
 # (f) ownership on failure (B2, 2026-10-21): an overwrite that neither returns nor

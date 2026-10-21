@@ -1,7 +1,8 @@
-// Bug 052 containment: without a turbofish, Elab infers `kill(&self.items)`
-// as T = Placeholder (its argument-type peek cannot see through a field
-// access). The destructor of an unresolved type cannot be determined, so the
-// build must REFUSE with E0814 instead of synthesizing a no-op.
+// Bug 052 containment, lifted by bug 099: without a turbofish, Elab inferred
+// `kill(&self.items)` as T = Placeholder (its argument-type peek could not see
+// through a field access), and the build was refused with E0814 rather than
+// synthesizing a no-op. Check and Elab now share one peek, so T is the array
+// type and every element is destroyed. Expected (compiled AND --interp): 2, 8, 9.
 mod single {
     struct Tracked { cell: *mut u64 }
     trusted impl Destroy for Tracked {
