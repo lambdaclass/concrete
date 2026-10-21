@@ -911,7 +911,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let mut typedBindings : List (String × Ty) := []
             for (binding, sf) in bindings.zip ev.fields do
-              let bty := substTy typeMapping sf.ty
+              -- aliases expanded (the enum's own type parameters shadow them), as the
+              -- enum's Core payload types are (bug 096's agreement checker compares the two)
+              let payloadAliases := (← getEnv).typeAliases.filter fun (n, _) => !ed.typeParams.contains n
+              let bty := substTy typeMapping
+                (expandAliasDeep payloadAliases (payloadAliases.length + 64) sf.ty)
               -- Keep `_` in the binding list (positional field mapping) but do not
               -- bind it in scope — it is a wildcard, not a readable variable.
               -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
@@ -2586,7 +2590,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let localTypeAliases := m.typeAliases.map fun ta => (ta.name, ta.targetTy)
   -- Transitively close alias chains (see closeAliasMap); cycles rejected upstream.
   let typeAliasMap := closeAliasMap (imports.typeAliases ++ localTypeAliases)
-  let constantsMap := m.constants.map fun c => (c.name, c.ty)
+  -- a constant's type with aliases expanded, as its initializer's type is (bug 096)
+  let constantsMap := m.constants.map fun c =>
+    (c.name, expandAliasDeep typeAliasMap (typeAliasMap.length + 64) c.ty)
   let builtinDestroyTrait : TraitDef := {
     name := destroyTraitName
     methods := [{ name := destroyMethodName, params := [], retTy := .unit, selfKind := some .ref }]
@@ -3295,7 +3301,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
     externFnCaps := cExternCaps
     intrinsicDecls := m.externFns.filterMap fun ef => ef.intrinsic.map (ef.name, ·)
     constants := if !respell then cConstants else
-      cConstants.map fun (n, t, e) => (n, rn.ty t, rn.expr e)
+      -- the annotation with aliases expanded, as the initializer's type is
+      cConstants.map fun (n, t, e) => (n, rn.ty (nominalTy [] t), rn.expr e)
     submodules := subs
     newtypes := cNewtypes
     traitDefs := (if respell then (·.map rn.traitDef) else id) <| m.traits.map fun td =>
@@ -3638,6 +3645,23 @@ partial def coreStructsDeep (cm : CModule) : List (String × CStructDef) :=
 partial def coreEnumsDeep (cm : CModule) : List (String × CEnumDef) :=
   cm.enums.map (cm.name, ·) ++ cm.submodules.flatMap coreEnumsDeep
 
+/-- Bugs 097/098: a Core function name defined in two TOP-LEVEL module trees by a nested
+    definition (`a.s.g` and `c.s.g` are both `s_g`: `prefixModuleFnNames` omits the top-level
+    module) is one callee to Mono's first-definition map and the interpreter. Top-level
+    collisions are respelled (`qualifyCollidingTopLevelFns`); nested ones are refused (E0299)
+    until definitions carry their full path (R-0492). -/
+def checkNestedFnCollisions (cms : List CModule) : Except Diagnostics (List CModule) :=
+  let owners : List (String × String × Bool) := cms.flatMap fun cm =>
+    (cm.functions.filter (!·.isEntryPoint)).map (fun f => (f.name, cm.name, false))
+    ++ (cm.submodules.flatMap coreFnsDeep).map (fun f => (f.name, cm.name, true))
+  let clashes := ((owners.filter fun (n, top, nested) => nested &&
+      owners.any fun (n2, top2, _) => n2 == n && top2 != top).map (·.1)).eraseDups
+  if clashes.isEmpty then .ok cms else
+  .error (clashes.map fun n =>
+    { severity := .error, pass := "elab", span := none, code := "E0299"
+      message := s!"function '{n}' is the Core name of definitions in several top-level modules (a nested module's functions are named without their top-level module); Core cannot tell them apart (bugs 097, 098)"
+      hint := some "rename one of the functions or submodules. Tracking: docs/bugs/098_same_named_generic_fns_one_specialization.md" })
+
 /-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
     types by spelling, so a program can pass one module's `P` where another module's `P` is
     meant; after respelling, Core carries the two declarations' different names. Every type
@@ -3773,7 +3797,7 @@ def elabProgram (resolved : List ResolvedModule)
   if allErrors.isEmpty then
     let family := if ambiguousTypes.isEmpty then [] else
       (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups
-    (qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames
+    (qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames >>= checkNestedFnCollisions
       >>= checkCoreTypeAgreement family).map fun ms => ms.map fun cm => { cm with respelledTypes := family }
   else .error allErrors
 

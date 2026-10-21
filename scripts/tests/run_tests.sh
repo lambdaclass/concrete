@@ -1604,6 +1604,8 @@ run_err "$TESTDIR/error_096_trait_dispatch_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_extern_signature_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_generic_trait_impl_dispatch_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_newtype_field_nominal.con" "7" 0
+run_err "$TESTDIR/error_098_nested_generic_collision.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_alias_typed_const.con" "7" 0
 run_ok "$TESTDIR/regress_097_colliding_fn_in_const.con" "1112" 0
 run_ok "$TESTDIR/regress_096_alias_copy_unused.con" "4" 0
 run_ok "$TESTDIR/regress_097_let_shadows_colliding_fn.con" "1112" 0

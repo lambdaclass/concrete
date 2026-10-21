@@ -113,7 +113,8 @@ disagreement (E0299, `error_096_trait_dispatch_other_type.con`,
 `error_096_generic_trait_impl_dispatch_other_type.con`); `--interp` runs the same Mono validation.
 Fields and payloads are compared by their nominal types (`CStructDef.nominalFields`,
 `CEnumDef.nominalVariants`; `fields` erases newtypes to their representation):
-`regress_096_newtype_field_nominal.con`.
+`regress_096_newtype_field_nominal.con`. Constant annotations and enum-arm binder types are
+alias-expanded like the values they are compared with (`regress_096_alias_typed_const.con`).
 
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of

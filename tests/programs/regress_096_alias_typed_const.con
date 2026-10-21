@@ -1,0 +1,10 @@
+// Bug 096 (Codex round 13): a constant annotated with an alias (Q = P) of a respelled type;
+// its annotation and its uses are alias-expanded like its initializer. Expected (compiled): 7.
+// --interp cannot read the module constant (bug 117, open), so the leg is native only.
+mod a {
+    pub struct Copy P { pub x: Int }
+    type Q = P;
+    const C: Q = P { x: 7 };
+    fn main() with(Std) -> Int { let p: P = C; print_int(p.x); print_char(10); return 0; }
+}
+mod b { pub struct Copy P { pub x: Int } }

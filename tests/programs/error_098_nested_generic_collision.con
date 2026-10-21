@@ -1,0 +1,18 @@
+// Bug 098 (Codex round 13): a.s.g and c.s.g are both Core `s_g` (submodule prefixing omits
+// the top-level module), so Mono specialized both calls from one body (main: 11, both engines;
+// expected 12). Refused (E0299) until definitions carry their full path.
+mod a {
+    mod s {
+        fn g<T: Copy>(x: T) -> Int { return 1; }
+        pub fn first() -> Int { return g::<Int>(0); }
+    }
+    pub fn fa() -> Int { return s::first(); }
+}
+mod c {
+    mod s {
+        fn g<T: Copy>(x: T) -> Int { return 2; }
+        pub fn second() -> Int { return g::<Int>(0); }
+    }
+    pub fn fc() -> Int { return s::second(); }
+}
+mod m { import a.{fa}; import c.{fc}; fn main() with(Std) -> Int { print_int(fa() * 10 + fc()); print_char(10); return 0; } }
