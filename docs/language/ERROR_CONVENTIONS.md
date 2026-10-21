@@ -133,15 +133,16 @@ require `K: Destroy`, destroy the displaced old key, keep the incoming key and r
 (`std/src/map.con`); `OrderedSet.insert` delegates to it; `Vec.replace(at, v) -> T` returns the
 displaced element. Of the six `close(self)` methods, two return `Result<u64, IoError>` and consume
 the handle on failure (`io.Writer.close`, documented "Consume the handle; flushes/releases the
-sink", and `io.Reader.close`), the consumption on failure stated only implicitly; **four discard
-the OS result**, so a failed close is silent: `fs.File.close` (`fclose`), `io.TextFile.close`
-(`fclose`) and the two `net` closes (`TcpListener.close`, `TcpStream.close`: `close(fd)`). No bug
-record covers them (bug 072, spawn/exec failure flushing parent buffers, is the nearest filed
-failure-path defect). The classification column does not exist yet.
+sink", and `io.Reader.close`), now documented as consumed. The four closes that discarded the
+OS result (`fs.File.close`, `io.TextFile.close`, `TcpListener.close`, `TcpStream.close`) now
+return a `Result` and consume the handle on failure (2026-10-21). The stdlib audit of every
+consuming fallible or replacing API, with each one's class, is
+[STDLIB_DESIGN_PRINCIPLES.md, "Ownership on failure"](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure);
+it also fixed `AsciiText::try_new` (now returns the rejected input) and `set_unchecked` (now
+`Copy`-only). The classification column does not exist yet.
 
-**Work.** Add the column to the `std` fact manifest; document the two `Result` closes as
-"consumed"; change the four silent closes to return a `Result` (an API change that ripples to
-their callers, not yet counted); classify every RocksDB slice-1 handle as it is designed.
+**Work.** Add the column to the `std` fact manifest; classify every RocksDB slice-1 handle as it
+is designed.
 
 **Owners.** R-0285 (RocksDB slice 1 handles), R-0283 (the foreign boundary), the `std` fact
 manifest for the column.

@@ -138,8 +138,10 @@ Every stdlib type has one clear ownership story. The story is visible from the t
 ### Ownership on failure
 
 Ownership is linear, so a consuming API that can fail must also say who owns the
-resource after the failure. Every such API takes exactly one of these shapes, and
-its error type shows which:
+resource after the failure. The normative rule, with its three classes, is
+[ERROR_CONVENTIONS.md, "Ownership on failure in consuming APIs"](../language/ERROR_CONVENTIONS.md#ownership-on-failure-in-consuming-apis-normative-convention-decided-2026-10-21); this
+section is the stdlib's application of it and uses the same class names. Every
+such API takes exactly one of these shapes, and its error type shows which:
 
 - **Returned.** The error carries the value back (`Result<T, Owned>`). The caller
   still owns it and must consume it, so nothing is lost and nothing leaks. This is
@@ -161,14 +163,15 @@ A failure is never silent. A consuming operation whose underlying call can fail
 returns a `Result` and does not discard the OS result. Callers that do not care
 discard it explicitly (`discard(h.close())`), so the choice is visible.
 
-APIs that *replace* a stored value state what happens to the displaced one:
-returned to the caller, handed to a caller-supplied function that owns it from
-then on, or destroyed (only under a `Destroy` bound, which the signature shows).
+APIs that *replace* a stored value state what happens to the displaced one, as
+the normative rule requires: returned to the caller, destroyed (only under a
+`Destroy` bound, which the signature shows), or kept. std has one refinement of
+"returned": `update` hands the displaced value to the caller-supplied function,
+which owns it from then on.
 
-The normative statement of the rule for the language and the FFI boundary
-belongs to [ERROR_CONVENTIONS.md](../language/ERROR_CONVENTIONS.md) and
-[FFI.md](../platform/FFI.md). This section records how the stdlib applies it.
-Every public stdlib API that consumes an owned non-`Copy` value and can fail or
+The rule covers foreign-boundary APIs as well (same
+[normative section](../language/ERROR_CONVENTIONS.md#ownership-on-failure-in-consuming-apis-normative-convention-decided-2026-10-21)); the classification
+column it calls for in the fact manifest does not exist yet. Every public stdlib API that consumes an owned non-`Copy` value and can fail or
 displace a value is listed here (audit 2026-10-21, from
 `STDLIB_SURFACE_MANIFEST.tsv`; breaking changes from that audit are marked).
 
