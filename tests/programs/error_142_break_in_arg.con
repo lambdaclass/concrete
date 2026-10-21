@@ -1,0 +1,14 @@
+// Bug 142 / D15: a `break` that leaves a call argument is refused by the same rule (E0278),
+// whatever type a `{ break; }` branch is given, so typing it as diverging later cannot reopen
+// the hole.
+fn id(x: Int) -> Int { return x; }
+
+fn main() -> Int {
+    let mut i: Int = 0;
+    let mut s: Int = 0;
+    while i < 3 {
+        s = s + id(if i == 1 { break; } else { i });
+        i = i + 1;
+    }
+    return s;
+}

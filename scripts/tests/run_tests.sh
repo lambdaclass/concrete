@@ -1750,6 +1750,36 @@ run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
 run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+# Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
+# operator operand (E0278); exits in statement position, tails and let initializers stay legal.
+run_err "$TESTDIR/error_142_struct_field_return.con"   "(E0278)"
+run_err "$TESTDIR/error_142_call_arg_return.con"       "(E0278)"
+run_err "$TESTDIR/error_142_array_elem_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_enum_field_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_operand_return.con"        "(E0278)"
+run_err "$TESTDIR/error_142_method_arg_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_break_in_arg.con"          "(E0278)"
+run_ok  "$TESTDIR/regress_142_exits_allowed.con" "1 4 5 2 0" 0
+r142_i=$($COMPILER "$TESTDIR/regress_142_exits_allowed.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r142_i" = "1 4 5 2 00" ]; then
+    echo "  ok  regress_142_exits_allowed.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_142_exits_allowed.con: --interp printed '$r142_i'"
+    FAIL=$((FAIL + 1))
+fi
+for r142 in tests/regressions/bug142_exit_in_operand/repro.con tests/regressions/bug142_exit_in_operand/repro_arg.con; do
+    r142_i=$($COMPILER "$r142" --interp 2>&1 || true)
+    r142_n=$($COMPILER "$r142" -o "$TESTDIR/.r142_bin" 2>&1 || true)
+    if [[ "$r142_i" == *"(E0278)"* && "$r142_n" == *"(E0278)"* ]]; then
+        echo "  ok  $r142: refused with E0278 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r142: not refused with E0278 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r142_bin"
+done
 # Both engines refuse the bug 140 reproducers at the checker (the interpreter used to fail at
 # run time on references, and the binary compared addresses).
 for r140 in tests/regressions/bug140_comparison_consumes_linear/repro.con tests/regressions/bug140_comparison_consumes_linear/repro_ref.con; do

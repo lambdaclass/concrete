@@ -221,6 +221,10 @@ inductive CheckError where
   | breakOutsideLoop
   | continueOutsideLoop
   | deferBodyNotCall
+  -- Rule (d) (bug 142): a `return`/`break`/`continue` inside a call argument, a literal
+  -- element or an operator operand would leave a construct whose evaluated operands were
+  -- already moved into it, and those values were never destroyed.
+  | exitInOperand (kw : String) (ctx : String)
   | reservedName (name : String)
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
@@ -374,6 +378,7 @@ def CheckError.message : CheckError → String
   | .breakOutsideLoop => "break outside of loop"
   | .continueOutsideLoop => "continue outside of loop"
   | .deferBodyNotCall => "defer body must be a function call"
+  | .exitInOperand kw ctx => s!"`{kw}` may not occur inside {ctx}: an exit there leaves a call or literal whose earlier operands were already evaluated and moved into it"
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
@@ -431,6 +436,7 @@ def CheckError.hint : CheckError → Option String
   | .importBindingCollision name _ => some s!"a name has one binding per module: rename the import (`import m.\{{name} as other_name}`) or the local definition, or call it qualified as `module::{name}`"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
+  | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
   | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
   | .ifBranchTypeMismatch thenTy elseTy =>
@@ -523,6 +529,7 @@ def CheckError.code : CheckError → String
   | .breakOutsideLoop => "E0280"
   | .continueOutsideLoop => "E0281"
   | .deferBodyNotCall => "E0282"
+  | .exitInOperand _ _ => "E0278"
   | .reservedName _ => "E0283"
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"

@@ -16,10 +16,8 @@ mod main {
         let y: i32 = if x > 0 { return 1; } else { 2 };
         return y + 10;
     }
-    // A `return` inside a call argument exits too: argret(1) = 3, not id(3) + 1. Not extracted.
-    fn argret(x: i32) -> i32 {
-        return id(if x > 0 { return 3; } else { 4 }) + 1;
-    }
+    // (`argret`, a `return` inside a call argument, was here; the language refuses that shape since
+    // bug 142, E0278, so it is a rejection fixture: tests/regressions/bug142_exit_in_operand.)
     // A statement-position match whose every arm returns IS the function's exit: extracted, and it
     // agrees (tailmatch(0) = 5, otherwise 6).
     fn tailmatch(x: i32) -> i32 {

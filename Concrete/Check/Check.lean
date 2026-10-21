@@ -454,6 +454,11 @@ mutual
     E0236), and this guard extends it to every call form — intrinsics included (`free(h)` of a
     `Heap<&P>`, `vec_get`) — so a reference can never surface from a call (E0238). -/
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
+  -- Rule (d) (bug 142): no `return`/`break`/`continue` inside a protected operand. Checked
+  -- here, before any operand is checked, so the exit is reported rather than a consequence.
+  if let some (ctx, ops) := protectedOperands e then
+    if let some (kw, sp) := firstOperandEscape? 0 [] ops then
+      throwCheck (.exitInOperand kw ctx) (some sp)
   let t ← checkExprCore e hint mode
   match e with
   | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>

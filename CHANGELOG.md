@@ -22,7 +22,14 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
   `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
   is [ARITHMETIC_POLICY §8a](docs/language/ARITHMETIC_POLICY.md#8a-comparison-operators).
-  Migration: 0 sites.
+  Migration: 2 sites (`examples/hexdump`, `examples/png_chunks` discarded a Copy error through
+  `error == error`).
+- **No exit inside an operand (bug 142).** `return`, `break` and `continue` may not occur inside a
+  call argument, a struct/enum/array literal element or an operator operand (E0278): a `return` in
+  a later field after an owned value was moved into the literal leaked that value. Exits stay legal
+  in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
+  [STATEMENT_EXPRESSION_MODEL](docs/language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
+  Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 

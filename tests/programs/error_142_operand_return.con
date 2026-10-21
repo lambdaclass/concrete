@@ -1,0 +1,9 @@
+// Bug 142: an exit inside an operator operand is refused too (E0278): rule (d) is syntactic, so
+// it does not depend on whether an earlier operand happened to own anything.
+fn g(x: Int) -> Int { return x; }
+
+fn f(n: Int) -> Int {
+    return g(1) + (if n > 0 { return 7; } else { 1 });
+}
+
+fn main() -> Int { return f(1); }

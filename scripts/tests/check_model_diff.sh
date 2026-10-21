@@ -265,9 +265,10 @@ echo ""
 echo "=== T: bug 086 — a discarded statement is not the value; a nested return exits ==="
 T="tests/regressions/bug086_discarded_tail/repro.con"
 "$BIN" "$T" --report model-diff > "$TMP/t" 2>&1
-# Not modelable exactly (a call the model cannot see; a return out of a non-tail expression):
-# they must not be extracted at all, so no row can claim a value.
-for fn in g letret argret; do
+# Not modelable exactly (a call the model cannot see; a return out of a let initializer):
+# they must not be extracted at all, so no row can claim a value. (A return inside a call
+# argument, `argret`, is refused by the language since bug 142 and left the fixture.)
+for fn in g letret; do
   grep -qP "\tmain\.$fn\t" "$TMP/t" && no "T: $fn is extracted: $(grep -m1 -P "\tmain\.$fn\t" "$TMP/t" | tr '\t' ' ')" \
     || ok "T: $fn is not extracted"
 done

@@ -1,0 +1,24 @@
+// Bug 142: a `return` inside a struct-literal field, after an owned value was moved into the
+// literal. On main the binary exits 7: `a` was never destroyed (a destroyed `a` logs 1, so the
+// exit would be 107). Now E0278: no exit inside a call argument, literal element or operand.
+struct R { id: Int, log: *mut Int }
+trusted fn bump(p: *mut Int, id: Int) { *p = *p * 10 + id; }
+impl Destroy for R { fn destroy(&self) { bump(self.log, self.id); } }
+fn mk(id: Int, log: *mut Int) -> R { return R { id: id, log: log }; }
+struct W2 { a: R, b: R }
+impl Destroy for W2 { fn destroy(&self) { bump(self.a.log, self.a.id); bump(self.b.log, self.b.id); } }
+fn flag(n: Int) -> bool { return n > 0; }
+
+fn f(p: *mut Int, n: Int) -> Int {
+    let a: R = mk(1, p);
+    let w: W2 = W2 { a: a, b: if flag(n) { return 7; } else { mk(2, p) } };
+    destroy(w);
+    return 0;
+}
+
+fn main() with(Unsafe) -> Int {
+    let mut cnt: Int = 0;
+    let p: *mut Int = &mut cnt as *mut Int;
+    let r: Int = f(p, 1);
+    return cnt * 100 + r;
+}

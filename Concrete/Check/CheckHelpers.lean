@@ -574,6 +574,97 @@ partial def armNonTerminating : MatchArm → Bool
   | .rangeArm _ _ _ _ _ body => blockNonTerminating body
 end
 
+-- Rule (d), the operand-escape rule (bug 142; EVALUATION2 D3/D15): a `return`, `break` or
+-- `continue` may not occur inside a call argument (receivers included), a struct, enum or
+-- array literal element, a functional-update base, or an operator operand (binary, unary,
+-- cast, index). Such an exit leaves a construct whose earlier operands were already
+-- evaluated and handed to it, so the values moved into it were never destroyed. An exit
+-- stays legal in statement position, in a tail, and in a let or assignment initializer's
+-- branch chain (`let v = match o { Some { value } => value, None => { return 1; } };`).
+-- `operandEscape? depth labels e` is the first exit in `e` that leaves `e`: a `return`, or a
+-- `break`/`continue` that is not bound by a loop entered inside `e` (`depth` such loops,
+-- `labels` their labels). The rule covers `break`/`continue` even while a `{ break; }`
+-- branch types as `()` (D15), so typing them as diverging later cannot reopen the hole.
+mutual
+partial def operandEscape? (depth : Nat) (labels : List String) : Expr → Option (String × Span)
+  | .binOp _ _ l r => firstOperandEscape? depth labels [l, r]
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => operandEscape? depth labels x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => firstOperandEscape? depth labels args
+  | .methodCall _ obj _ _ args => firstOperandEscape? depth labels (obj :: args)
+  | .structLit _ _ _ fields base => firstOperandEscape? depth labels (fields.map (·.2) ++ base.toList)
+  | .enumLit _ _ _ _ fields => firstOperandEscape? depth labels (fields.map (·.2))
+  | .arrayLit _ elems => firstOperandEscape? depth labels elems
+  | .arrayIndex _ a i => firstOperandEscape? depth labels [a, i]
+  | .allocCall _ inner a => firstOperandEscape? depth labels [inner, a]
+  | .ifExpr _ c t e =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      (stmtsEscape? depth labels t).orElse fun _ => stmtsEscape? depth labels e
+  | .match_ _ scr arms =>
+    (operandEscape? depth labels scr).orElse fun _ => armsEscape? depth labels arms
+  | _ => none
+partial def firstOperandEscape? (depth : Nat) (labels : List String) : List Expr → Option (String × Span)
+  | [] => none
+  | e :: es => (operandEscape? depth labels e).orElse fun _ => firstOperandEscape? depth labels es
+partial def armsEscape? (depth : Nat) (labels : List String) : List MatchArm → Option (String × Span)
+  | [] => none
+  | arm :: arms =>
+    let (guard, body) := match arm with
+      | .mk _ _ _ _ g b | .litArm _ _ g b | .varArm _ _ g b | .rangeArm _ _ _ _ g b => (g, b)
+    ((guard.bind (operandEscape? depth labels)).orElse fun _ => stmtsEscape? depth labels body).orElse
+      fun _ => armsEscape? depth labels arms
+partial def stmtsEscape? (depth : Nat) (labels : List String) : List Stmt → Option (String × Span)
+  | [] => none
+  | st :: sts => (stmtEscape? depth labels st).orElse fun _ => stmtsEscape? depth labels sts
+partial def stmtEscape? (depth : Nat) (labels : List String) : Stmt → Option (String × Span)
+  | .return_ sp _ => some ("return", sp)
+  | .break_ sp v lbl =>
+    let leaves := match lbl with
+      | none => depth == 0
+      | some l => !labels.contains l
+    if leaves then some ("break", sp) else v.bind (operandEscape? depth labels)
+  | .continue_ sp lbl =>
+    let leaves := match lbl with
+      | none => depth == 0
+      | some l => !labels.contains l
+    if leaves then some ("continue", sp) else none
+  | .while_ _ c body lbl =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      stmtsEscape? (depth + 1) (lbl.toList ++ labels) body
+  | .forLoop _ init c step body lbl =>
+    let labels' := lbl.toList ++ labels
+    ((init.bind (stmtEscape? depth labels)).orElse fun _ => operandEscape? (depth + 1) labels' c).orElse fun _ =>
+      ((step.bind (stmtEscape? (depth + 1) labels')).orElse fun _ => stmtsEscape? (depth + 1) labels' body)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => operandEscape? depth labels v
+  | .ifElse _ c t e =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      (stmtsEscape? depth labels t).orElse fun _ => e.bind (stmtsEscape? depth labels)
+  | .fieldAssign _ o _ v => firstOperandEscape? depth labels [o, v]
+  | .derefAssign _ t v => firstOperandEscape? depth labels [t, v]
+  | .arrayIndexAssign _ a i v => firstOperandEscape? depth labels [a, i, v]
+  | .borrowIn _ _ _ _ _ body => stmtsEscape? depth labels body
+  | .letDestructure _ _ _ _ v elseBody =>
+    (operandEscape? depth labels v).orElse fun _ => elseBody.bind (stmtsEscape? depth labels)
+end
+
+/-- The operands of `e` that rule (d) protects, with a description of the construct. An
+    expression form not listed has no operand position (a match scrutinee, an `if`
+    condition and branch, and a block are statement-like). -/
+def protectedOperands : Expr → Option (String × List Expr)
+  | .call _ fn _ args => some (s!"an argument of '{fn}'", args)
+  | .staticMethodCall _ ty m _ args => some (s!"an argument of '{ty}::{m}'", args)
+  | .methodCall _ obj m _ args => some (s!"the receiver or an argument of '.{m}'", obj :: args)
+  | .structLit _ n _ fields base => some (s!"a field of the '{n}' literal", fields.map (·.2) ++ base.toList)
+  | .enumLit _ en v _ fields => some (s!"a field of the '{en}::{v}' literal", fields.map (·.2))
+  | .arrayLit _ elems => some ("an array literal element", elems)
+  | .binOp _ _ l r => some ("an operand of a binary operator", [l, r])
+  | .unaryOp _ _ x => some ("the operand of a unary operator", [x])
+  | .cast _ x _ => some ("the operand of a cast", [x])
+  | .arrayIndex _ a i => some ("an index expression", [a, i])
+  | .allocCall _ _ a => some ("an allocator argument", [a])
+  | _ => none
+
 -- Control leaves this block by EXITING THE FUNCTION: a `return` on every path
 -- (directly, or through an if/else or match whose arms all return). A
 -- returning path is a function exit — every linear value still owned there
