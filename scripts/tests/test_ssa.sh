@@ -91,7 +91,9 @@ for spec in "$RESDIR"/test_*.spec; do
         else
             echo "FAIL $name: expected='$expected' rc='${expected_rc_raw:-auto}' got rc=$actual_rc '$actual'"
         fi
-    ) > "$RESDIR/$name.out" 2>&1 &
+    # Keyed by spec id, not basename: ten tests are named main.con, and a basename key let one
+    # test's result overwrite another's (a passing main could hide a failing main).
+    ) > "$RESDIR/$spec_id.out" 2>&1 &
 
     # Limit to 8 parallel jobs
     TOTAL=$((TOTAL + 1))
