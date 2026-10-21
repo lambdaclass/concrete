@@ -2389,6 +2389,33 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     match body with
     | .call _ _ _ _ => pure ()
     | _ => throwCheck .deferBodyNotCall (some stmt.getSpan)
+    -- Defer rule (a) (bug 143): each argument is a local name, a borrow of a local name, or
+    -- a constant. A projection (`t.id`, `&t.f`) or a computed argument (`f(x)`) would be
+    -- evaluated at the exit (effects and traps moved there, and a projection of a place
+    -- whose owner nothing reserves or pins).
+    match body with
+    | .call _ _ _ args =>
+      for arg in args do
+        let ok := match stripParens arg with
+          | .ident _ _ | .fnRef _ _ => true
+          | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .charLit _ _ => true
+          | .unaryOp _ .neg x => match stripParens x with
+            | .intLit _ _ | .floatLit _ _ => true
+            | _ => false
+          | .borrow _ x | .borrowMut _ x => match stripParens x with
+            | .ident _ _ => true
+            | _ => false
+          | _ => false
+        if !ok then
+          let what := match stripParens arg with
+            | .fieldAccess _ _ f => s!"the field projection '.{f}'"
+            | .borrow _ _ | .borrowMut _ _ => "a borrow of a projection"
+            | .call _ fn _ _ => s!"the call '{fn}(..)'"
+            | .methodCall _ _ m _ _ => s!"the method call '.{m}(..)'"
+            | .strLit _ _ => "a string literal (it allocates when the call runs)"
+            | _ => "a computed expression"
+          throwCheck (.deferArgNotPlace what) (some arg.getSpan)
+    | _ => pure ()
     let bodyTy ← checkExpr body
     -- H6: a deferred call's return value is discarded at scope exit, exactly like
     -- a bare statement expression — a non-Copy result leaks. (`free()` is exempt,
@@ -2407,11 +2434,25 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | none =>
           if !(← isCopyType bodyTy) then
             throwCheck (.discardedLinear (tyToString bodyTy)) (some stmt.getSpan)
-    -- Any variable consumed by the deferred call should be reserved, not consumed.
-    -- The actual consumption happens at scope exit.
+    -- Defer rule (a), "reserve by place" (bug 143): a local passed BY VALUE is reserved
+    -- (pending consumption: the deferred call discharges it at the block's exit, nothing
+    -- moves it before). A local passed BY BORROW is pinned: the borrow discharges nothing,
+    -- so the local must still be consumed, and nothing may move or consume it before the
+    -- deferred call runs. Ownership is not taken at registration: a reserved or pinned
+    -- local may still be read, borrowed and mutated in place. The call reads its
+    -- argument places at the exit (a Copy argument sees its value then), bound by the
+    -- binding's identity (Elab gives a shadowing binder a fresh Core name, bug 087).
+    -- The reservation becomes a consumption, and the pin ends, when the registering
+    -- block ends (`checkStmts`).
     match body with
     | .call _ _fname _ args =>
       for arg in args do
+        let pinned? : Option String := match stripParens arg with
+          | .borrow _ inner | .borrowMut _ inner =>
+            match stripParens inner with
+            | .ident _ n => some n
+            | _ => none
+          | _ => none
         match stripParens arg with
         | .ident _ varName =>
           let env ← getEnv
@@ -2423,7 +2464,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
                 else (n, vi)
               setEnv { env with vars := vars' }
           | none => pure ()
-        | _ => pure ()
+        | _ =>
+          match pinned? with
+          | some varName =>
+            let env ← getEnv
+            match env.vars.lookup varName with
+            | some info =>
+              let vars' := env.vars.map fun (n, vi) =>
+                if vi.uid == info.uid then (n, { vi with pinnedByDefer := true })
+                else (n, vi)
+              setEnv { env with vars := vars' }
+            | none => pure ()
+          | none => pure ()
     | _ => pure ()
   | .borrowIn _ var ref region isMut body =>
     -- Check that var exists
@@ -2581,6 +2633,19 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
+  -- Defer rule (a) (bug 143): the deferred calls this block registers run when it ends.
+  -- A binding reserved here is consumed then, and a pin taken here ends then.
+  let entry ← getEnv
+  let reservedAtEntry := entry.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none
+  let pinnedAtEntry := entry.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none
+  checkStmtsCore stmts retTy
+  let env ← getEnv
+  setEnv { env with vars := env.vars.map fun (n, vi) =>
+    let vi := if vi.state == .reserved && !reservedAtEntry.contains vi.uid then { vi with state := .consumed } else vi
+    let vi := if vi.pinnedByDefer && !pinnedAtEntry.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    (n, vi) }
+
+partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []
   for stmt in stmts do
     let envBefore ← getEnv

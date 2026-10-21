@@ -1,0 +1,14 @@
+// Bug 143: a deferred call that BORROWS a local reserved nothing, so the local could be freed
+// before the deferred call read it. On main the binary prints the freed cell's bytes (a use after
+// free; with the free removed it prints 77). Now E0206: the pending defer pins `h`.
+struct B { v: Int }
+fn pb(b: &Heap<B>) with(Console) { print_int(b.v); print_char(10); }
+
+fn main() with(Console, Alloc) -> Int {
+    let h: Heap<B> = alloc(B { v: 77 });
+    defer pb(&h);
+    free(h);
+    let g: Heap<B> = alloc(B { v: 99 });
+    free(g);
+    return 0;
+}

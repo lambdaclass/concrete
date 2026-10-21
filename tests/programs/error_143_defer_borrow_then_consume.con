@@ -1,0 +1,11 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143: consuming a local after a defer that borrows it (d04).
+fn main() with(Console) -> Int {
+    let t: T = T { id: 1 };
+    defer peek(&t);
+    kill(t);
+    return 0;
+}

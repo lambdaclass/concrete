@@ -61,6 +61,12 @@ structure VarInfo where
   -- env snapshots by this id, never by name. Assigned by `addVar` from
   -- `TypeEnv.nextVarUid`.
   uid : Nat := 0
+  -- Defer rule (a) (bug 143): a pending deferred call BORROWS this binding (`defer
+  -- peek(&t);`). The borrow discharges nothing, so the binding must still be consumed,
+  -- but nothing may move or consume it before the deferred call runs at the exit of the
+  -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
+  -- the only way left). Lifted when that block ends (`checkStmts`).
+  pinnedByDefer : Bool := false
   deriving Repr
 
 structure TypeEnv where
@@ -136,6 +142,11 @@ inductive CheckError where
   | cannotMoveLinearBorrowed (name : String)
   | variableUsedAfterMove (name : String)
   | variableReservedByDefer (name : String)
+  -- Defer rule (a) (bug 143): consuming a binding a pending deferred call borrows.
+  | variablePinnedByDefer (name : String)
+  -- Defer rule (a) (bug 143): a deferred call's argument is a local name, a borrow of a
+  -- local name, or a constant; anything else would be evaluated at the exit.
+  | deferArgNotPlace (arg : String)
   | cannotConsumeLinearInLoop (name : String)
   | linearVariableNeverConsumed (name : String)
   | matchConsumptionDisagreement (name : String)
@@ -310,6 +321,8 @@ def CheckError.message : CheckError → String
   | .cannotMoveLinearBorrowed name => s!"cannot move linear variable '{name}': variable is borrowed"
   | .variableUsedAfterMove name => s!"linear variable '{name}' used after move"
   | .variableReservedByDefer name => s!"variable '{name}' is reserved by defer"
+  | .variablePinnedByDefer name => s!"variable '{name}' is borrowed by a pending defer: it may not be moved or consumed before the deferred call runs at the end of the block"
+  | .deferArgNotPlace arg => s!"a deferred call's argument must be a local name, a borrow of a local name (`&x`, `&mut x`) or a constant, not {arg}"
   | .cannotConsumeLinearInLoop name => s!"cannot consume linear variable '{name}' inside a loop (declared outside the loop)"
   | .linearVariableNeverConsumed name => s!"linear variable '{name}' was never consumed"
   | .matchConsumptionDisagreement name => s!"match arms disagree on consumption of '{name}'"
@@ -437,6 +450,8 @@ def CheckError.hint : CheckError → Option String
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
   | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
+  | .variablePinnedByDefer name => some s!"register the consuming `defer` BEFORE the one that borrows '{name}' (deferred calls run in reverse order), or consume '{name}' after the block that holds the borrowing `defer`"
+  | .deferArgNotPlace _ => some "the arguments are bound when the `defer` registers and read when it runs; compute a value in a `let` first, or move the computation into a named cleanup function that takes the local (or a borrow of it)"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
   | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
   | .ifBranchTypeMismatch thenTy elseTy =>
@@ -465,6 +480,8 @@ def CheckError.code : CheckError → String
   | .cannotMoveLinearBorrowed _ => "E0204"
   | .variableUsedAfterMove _ => "E0205"
   | .variableReservedByDefer _ => "E0206"
+  | .variablePinnedByDefer _ => "E0206"
+  | .deferArgNotPlace _ => "E0279"
   | .cannotConsumeLinearInLoop _ => "E0207"
   | .linearVariableNeverConsumed _ => "E0208"
   | .matchConsumptionDisagreement _ => "E0209"

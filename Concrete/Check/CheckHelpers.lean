@@ -443,6 +443,9 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
     let activeRefs := activeBorrowRefs env name
     if activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
       throwCheck (.cannotMoveLinearBorrowed name) span
+    -- Defer rule (a) (bug 143): a pending deferred call borrows this binding.
+    if info.pinnedByDefer then
+      throwCheck (.variablePinnedByDefer name) span
     match info.state with
     | .consumed =>
       -- point the secondary span at where the value was moved (Phase 4 #11).

@@ -30,6 +30,13 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
   [STATEMENT_EXPRESSION_MODEL](docs/language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
   Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
+- **`defer` reserves by place (bug 143).** A deferred call's arguments are locals, borrows of
+  locals or constants (E0279). A local passed by value is reserved, a local passed by borrow is
+  pinned: neither may be moved or consumed before the deferred call runs (E0206), a later `defer`
+  included. `defer pb(&h); free(h);` was a use after free. Ownership is not taken at registration,
+  so `let f = open(); defer close(f); read(&f);` is unchanged. Arguments bind by binding identity
+  (a later shadowing `let` is a different binding, already true since bug 087). DEFER.md states the
+  rule, and no longer claims `defer obj.method();` is accepted (it is E0282). Migration: 0 sites.
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 

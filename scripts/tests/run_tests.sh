@@ -1768,6 +1768,36 @@ else
     echo "FAIL  regress_142_exits_allowed.con: --interp printed '$r142_i'"
     FAIL=$((FAIL + 1))
 fi
+# Bug 143, defer rule (a), reserve by place: deferred arguments are locals, borrows of locals or
+# constants (E0279); a borrowed local is pinned until the deferred call runs (E0206).
+run_err "$TESTDIR/error_143_defer_borrow_then_free.con"          "(E0206)"
+run_err "$TESTDIR/error_143_defer_borrow_then_consume.con"       "(E0206)"
+run_err "$TESTDIR/error_143_defer_observer_before_consumer.con"  "(E0206)"
+run_err "$TESTDIR/error_143_defer_field_arg.con"                 "(E0279)"
+run_err "$TESTDIR/error_143_defer_call_arg.con"                  "(E0279)"
+run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
+run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
+run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5" 0
+r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then
+    echo "  ok  regress_143_defer_reserve_by_place.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_143_defer_reserve_by_place.con: --interp printed '$r143_i'"
+    FAIL=$((FAIL + 1))
+fi
+for r143 in tests/regressions/bug143_defer_borrow_unpinned/repro.con tests/regressions/bug143_defer_borrow_unpinned/repro_order.con; do
+    r143_i=$($COMPILER "$r143" --interp 2>&1 || true)
+    r143_n=$($COMPILER "$r143" -o "$TESTDIR/.r143_bin" 2>&1 || true)
+    if [[ "$r143_i" == *"(E0206)"* && "$r143_n" == *"(E0206)"* ]]; then
+        echo "  ok  $r143: refused with E0206 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r143: not refused with E0206 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r143_bin"
+done
 for r142 in tests/regressions/bug142_exit_in_operand/repro.con tests/regressions/bug142_exit_in_operand/repro_arg.con; do
     r142_i=$($COMPILER "$r142" --interp 2>&1 || true)
     r142_n=$($COMPILER "$r142" -o "$TESTDIR/.r142_bin" 2>&1 || true)

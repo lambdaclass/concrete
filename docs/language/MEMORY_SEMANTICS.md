@@ -344,11 +344,20 @@ Concrete does **not** have implicit destructors (no RAII drop). Cleanup is expli
 defer destroy(resource);
 ```
 
-1. The body of `defer` must be a single function call expression.
-2. Variables consumed by the deferred call are marked `reserved` instead of `consumed`.
-3. A `reserved` variable can still be read but cannot be moved.
-4. At scope exit, `reserved` variables are accepted (the deferred call will handle cleanup).
-5. Defers execute in LIFO (reverse declaration) order at scope exit.
+1. The body of `defer` must be a single function call expression (not a method call, E0282).
+2. Its arguments are local names, borrows of local names (`&x`, `&mut x`) or constants; anything
+   else is E0279 (decided 2026-10-21, "reserve by place"; [DEFER.md](DEFER.md)).
+3. Variables passed by value are marked `reserved` instead of `consumed`; variables passed by
+   borrow are **pinned**. Neither may be moved or consumed before the deferred call runs (E0206),
+   by a later `defer` included; both may still be read, borrowed and mutated in place.
+4. At scope exit, `reserved` variables are accepted (the deferred call will handle cleanup); a pin
+   discharges nothing (a borrow-only `defer` leaves its local to be consumed, E0208). When the
+   registering block ends, its reservations become consumptions and its pins end.
+5. Defers execute in LIFO (reverse declaration) order at scope exit, reading their argument places
+   then (a `Copy` argument sees its value at the exit), bound by binding identity.
+
+Status: enforced on main ([bug 143](../bugs/143_defer_borrow_argument_unpinned.md) closed the
+unpinned-borrow use after free).
 
 ### Destroy
 
@@ -369,6 +378,7 @@ the element/key/value destructors in the drop path.
 |-----------|----------------------|--------|
 | Read (field access, pass to `&T` borrow) | Allowed | State stays `reserved` |
 | Move (pass by value) | **Error** | `variableReservedByDefer` |
+| Consume a **pinned** variable (a pending `defer` borrows it) | **Error** | `variablePinnedByDefer` (E0206) |
 | Borrow block owner | Allowed | Freezes as normal |
 | Scope exit | Accepted | Deferred call runs |
 
