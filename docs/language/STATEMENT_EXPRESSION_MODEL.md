@@ -197,17 +197,18 @@ are terminal, [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)). An arithmetic trap is
 operands are evaluated (ARITHMETIC_POLICY §1).
 
 **Status on main** (`5b63cd87`; probed with the binary and `--interp` at `b9b3cca9` and
-`5b63cd87`, and no evaluation, lowering or interpreter source changed between them):
+`5b63cd87`, and no evaluation, lowering or interpreter source changed between them; rows 4 and 6
+updated by the bug 127 fix, 2026-10-21):
 
 | rule | binary | interpreter | status |
 |---|---|---|---|
 | 1. receiver, then arguments left to right | yes | yes | enforced (not yet gated) |
 | 2. operands left to right; `&&` / `||` short-circuit | yes | yes | enforced; short-circuit in `Lower.lean` (`.binOp .and_ / .or_`) and `Interp.lean`, exercised by `regress_034_shortcircuit_borrow_promotion.con` and the differential fuzzer |
 | 3. array-literal elements | yes | yes | enforced (not yet gated) |
-| 4. struct-literal fields in source order | **no**: declaration order | yes | **violated**: a silent interpreter / native disagreement (`P { b: tick(5), a: tick(6) }` evaluates 6 then 5 natively and 5 then 6 in `--interp`), [bug 127](../bugs/127_struct_literal_field_order.md), exit 0b |
-| 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other) |
+| 4. struct-literal fields in source order | yes | yes | enforced since the [bug 127](../bugs/127_struct_literal_field_order.md) fix (the binary used declaration order: `Lower` reordered the fields); gated in both consumers by `check_evidence_build.sh` (order gate) and `regress_127_struct_literal_source_order.con` |
+| 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other), [bug 137](../bugs/137_enum_literal_field_order.md), exit 0b |
 | 5. base before index | yes | yes | enforced (not yet gated) |
-| 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both, and they disagree: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call); natively the reads interleave with the explicit initializers in declaration order, in `--interp` the explicit initializers run first. A silent interpreter / native disagreement, not yet filed (exit 0b) |
+| 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call), [bug 136](../bugs/136_functional_update_base_reevaluated.md), exit 0b. The explicit initializers run first in both consumers since the bug 127 fix (before it, the binary interleaved the base reads with them in declaration order) |
 | 7. assignment to an indexed place: right-hand side, then the index | yes | yes | enforced (not yet gated) |
 | 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, not yet filed (exit 0b) |
 
@@ -220,11 +221,11 @@ dereference assignment needs Lower to evaluate the right-hand side first. No sou
 depend on declaration-order evaluation of field initializers with effects (a scan of literals
 with call initializers is part of the change).
 
-**Prevents.** Bug 127, the functional-update and dereference-assignment disagreements; it also discharges V1a's evaluation-order
+**Prevents.** Bugs 127, 136 and 137, and the dereference-assignment disagreement; it also discharges V1a's evaluation-order
 obligation, since the verified pipeline may not model a looser order than the compiler implements.
 
 **Owners.** The rule and its gate: exit 2j (R-0500), with permanent differential coverage of
-literal-field order, functional update and assignment order in exit 2c (R-0491). Bug 127 and the
-functional-update and dereference-assignment disagreements are silent wrong code between
-consumers, so their repair or containment is exit 0b (R-0482) under the defect disposition rule.
+literal-field order, functional update and assignment order in exit 2c (R-0491). Bugs 127
+(fixed), 136 and 137 and the dereference-assignment disagreement are silent wrong code, so their
+repair or containment is exit 0b (R-0482) under the defect disposition rule.
 

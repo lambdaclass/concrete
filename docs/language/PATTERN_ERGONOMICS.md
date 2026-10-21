@@ -175,7 +175,7 @@ let copy = State { ..state };                  // every field from state
   complex base expression is re-read once per copied field. This is today's behaviour, not the
   rule: since 2026-10-21 the base is evaluated exactly once, after the explicit initializers
   ([STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
-  rule 6; exit 2j).
+  rule 6; exit 2j). The violation is [bug 136](../bugs/136_functional_update_base_reevaluated.md).
 - Cleanest for `Copy` structs (the typical state-update case); a non-`Copy` base
   follows the usual linearity/borrow rules through the generated field reads.
 

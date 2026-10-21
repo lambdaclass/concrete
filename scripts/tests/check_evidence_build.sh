@@ -140,19 +140,34 @@ mod ord {
 EOF
   }
   gen fwd 'x: f(), y: g()'; gen rev 'y: g(), x: f()'
-  o1="$("$CC" "$OT/fwd.con" --interp 2>/dev/null | tr -d '\n' | head -c 4)"
-  o2="$("$CC" "$OT/rev.con" --interp 2>/dev/null | tr -d '\n' | head -c 4)"
+  # Both consumers: the interpreter, and (bug 127) the binary, whose Lower used to reorder the
+  # initializers into declaration order while the interpreter followed the source.
+  ord_native() {
+    if "$CC" "$OT/$1.con" -o "$OT/$1.bin" >/dev/null 2>&1; then
+      # main returns p.x (1), so the binary exits 1: its status is not the probe's verdict.
+      { "$OT/$1.bin" 2>/dev/null || true; } | tr -d '\n' | head -c 4
+    fi
+    return 0
+  }
+  for engine in interp native; do
+    if [ "$engine" = interp ]; then
+      o1="$("$CC" "$OT/fwd.con" --interp 2>/dev/null | tr -d '\n' | head -c 4)"
+      o2="$("$CC" "$OT/rev.con" --interp 2>/dev/null | tr -d '\n' | head -c 4)"
+    else
+      o1="$(ord_native fwd)"; o2="$(ord_native rev)"
+    fi
+    if [ -z "$o1" ] || [ -z "$o2" ]; then
+      no "$engine: order probe produced no output — inconclusive, not agreement"
+    elif [ "$o1" = "$o2" ]; then
+      no "$engine: struct fields evaluate in DECLARATION order — the language ratified SOURCE order on 2026-08-08; written order must decide which initializer runs first"
+    elif [ "${o1#fg}" != "$o1" ] && [ "${o2#gf}" != "$o2" ]; then
+      # prefix match: the interpreter's text also carries main's return value after the prints
+      ok "$engine: struct fields evaluate in SOURCE order — written order decides (ratified 2026-08-08)"
+    else
+      no "$engine: struct-literal order probe gave an unexpected pair (fwd=$o1 rev=$o2); expected fwd to start 'fg' and rev 'gf' under source order"
+    fi
+  done
   rm -rf "$OT"
-  if [ -z "$o1" ] || [ -z "$o2" ]; then
-    no "order probe produced no output — inconclusive, not agreement"
-  elif [ "$o1" = "$o2" ]; then
-    no "struct fields evaluate in DECLARATION order — the language ratified SOURCE order on 2026-08-08; written order must decide which initializer runs first"
-  elif [ "${o1#fg}" != "$o1" ] && [ "${o2#gf}" != "$o2" ]; then
-    # prefix match: the captured text also carries main's return value after the two prints
-    ok "struct fields evaluate in SOURCE order — written order decides (ratified 2026-08-08)"
-  else
-    no "struct-literal order probe gave an unexpected pair (fwd=$o1 rev=$o2); expected fwd to start 'fg' and rev 'gf' under source order"
-  fi
 else
   no "compiler not built — the order tripwire could not run"
 fi

@@ -1001,12 +1001,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .reg dst ty
 
   | .structLit name _typeArgs fields ty =>
-    -- Bug #7 fix: reorder fields to match struct definition's canonical order
-    let defFields ← lookupStructFields name
-    let orderedFields := if defFields.isEmpty then fields
-      else defFields.filterMap fun (defName, _) =>
-        fields.find? fun (fname, _) => fname == defName
-    let actualFields := if orderedFields.length == fields.length then orderedFields else fields
+    -- Bug 127: initializers are evaluated in SOURCE order (STATEMENT_EXPRESSION_MODEL,
+    -- evaluation order rule 4), the order of `fields` as Elab built it and as
+    -- `Interp.evalFields` folds it. Each value is stored at its field's DECLARED offset,
+    -- looked up by name, so evaluation order and layout are independent. (This loop used
+    -- to reorder `fields` into declaration order first — the "Bug #7" fix from when
+    -- offsets were accumulated positionally — which made the binary run `P { b: f(), a: g() }`
+    -- as `g()` then `f()`.)
     let dst ← freshReg
     emit (.alloca dst ty)
     let baseVal := SVal.reg dst ty
@@ -1017,7 +1018,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- `{a: u8, b: i64}` stored `b` at offset 1 but read it from offset 8,
     -- a silent miscompile (ROADMAP Phase 4 #44e).
     let structTyArgs := typeArgsFromTy ty
-    for (fname, fieldExpr) in actualFields do
+    for (fname, fieldExpr) in fields do
       let fVal ← lowerExpr fieldExpr
       let byteOffset ← fieldByteOffset name fname structTyArgs
       let gepDst ← freshReg

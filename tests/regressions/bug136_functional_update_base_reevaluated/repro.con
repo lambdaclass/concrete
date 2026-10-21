@@ -1,0 +1,22 @@
+// Bug 136: functional update `S { f: e, ..base }` evaluates `base` once per
+// omitted field (Elab desugars each omitted field to `base.field`), where the
+// rule (STATEMENT_EXPRESSION_MODEL, evaluation order rule 6) evaluates it exactly
+// once, after the explicit initializers. Here `mk` runs twice: 599, so the binary
+// exits 87 (599 mod 256) and --interp prints 599. Expected: 59 from both.
+struct Copy P { a: Int, b: Int, c: Int }
+
+fn tick(t: &mut Int, v: Int) -> Int {
+    *t = *t * 10 + v;
+    return v;
+}
+
+fn mk(t: &mut Int) -> P {
+    *t = *t * 10 + 9;
+    return P { a: 1, b: 2, c: 3 };
+}
+
+fn main() -> Int {
+    let mut t: Int = 0;
+    let p: P = P { b: tick(&mut t, 5), ..mk(&mut t) };
+    return t + p.a * 0 + p.b * 0 + p.c * 0;
+}

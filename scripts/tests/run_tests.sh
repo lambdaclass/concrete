@@ -1668,6 +1668,26 @@ run_err "$TESTDIR/error_111_main_params.con"            "(E0310)"
 run_err "$TESTDIR/error_111_main_params_unit.con"       "(E0310)"
 run_err "$TESTDIR/error_111_submodule_main_params.con"  "(E0310)"
 run_err "tests/regressions/bug111_main_params_accepted/repro.con" "(E0310)"
+# Bug 127: struct-literal initializers run in source order and land at their declared offsets,
+# natively and under --interp (the binary used to run them in declaration order).
+run_ok  "$TESTDIR/regress_127_struct_literal_source_order.con" "42"
+for r127_src in "$TESTDIR/regress_127_struct_literal_source_order.con" \
+                tests/regressions/bug127_struct_literal_field_order/repro.con; do
+    if ! filter_match "$r127_src"; then SKIP=$((SKIP + 1)); continue; fi
+    r127_i=$($COMPILER "$r127_src" --interp 2>&1 | awk "NR<=1" || true)
+    r127_n=""
+    if $COMPILER "$r127_src" -o "$TESTDIR/.r127_bin" >/dev/null 2>&1; then
+        "$TESTDIR/.r127_bin" >/dev/null 2>&1 && r127_n=0 || r127_n=$?
+    fi
+    rm -f "$TESTDIR/.r127_bin"
+    if [ -n "$r127_n" ] && [ "$r127_i" = "$r127_n" ]; then
+        echo "  ok  bug127 $r127_src: --interp == binary ($r127_n)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug127 $r127_src: --interp gave '$r127_i', binary exit '$r127_n'"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
 run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
 run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"

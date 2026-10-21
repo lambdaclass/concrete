@@ -1,0 +1,58 @@
+// Bug 127: struct-literal initializers are evaluated in SOURCE order
+// (STATEMENT_EXPRESSION_MODEL, evaluation order rule 4) and stored at their
+// declared offsets. The binary used to evaluate them in declaration order
+// (Lower reordered the fields), so `P { b: tick(5), a: tick(6) }` left 65
+// natively and 56 in the interpreter. Each check below records the order the
+// initializers ran in as decimal digits and checks every field's value too, so
+// a fix that evaluated in source order but stored by position would also fail.
+// Exits 42 when every check holds, natively and under --interp.
+struct Copy P { a: Int, b: Int }
+struct Copy Q { a: Int, b: Int, c: Int }
+struct Copy G<T> { x: T, y: T }
+struct Copy M { a: u8, b: Int, c: u8 }
+
+fn tick(t: &mut Int, v: Int) -> Int {
+    *t = *t * 10 + v;
+    return v;
+}
+
+fn tick8(t: &mut Int, v: u8) -> u8 {
+    *t = *t * 10 + (v as Int);
+    return v;
+}
+
+fn main() -> Int {
+    // Two fields, written in reverse declaration order.
+    let mut t1: Int = 0;
+    let p: P = P { b: tick(&mut t1, 5), a: tick(&mut t1, 6) };
+    if t1 != 56 { return 1; }
+    if p.a != 6 || p.b != 5 { return 2; }
+
+    // Three fields, written in a rotated order.
+    let mut t2: Int = 0;
+    let q: Q = Q { c: tick(&mut t2, 3), a: tick(&mut t2, 1), b: tick(&mut t2, 2) };
+    if t2 != 312 { return 3; }
+    if q.a != 1 || q.b != 2 || q.c != 3 { return 4; }
+
+    // A generic struct.
+    let mut t3: Int = 0;
+    let g: G<Int> = G::<Int> { y: tick(&mut t3, 7), x: tick(&mut t3, 8) };
+    if t3 != 78 { return 5; }
+    if g.x != 8 || g.y != 7 { return 6; }
+
+    // Mixed widths: the stores land at the aligned declared offsets.
+    let mut t4: Int = 0;
+    let m: M = M { c: tick8(&mut t4, 4), b: tick(&mut t4, 9), a: tick8(&mut t4, 2) };
+    if t4 != 492 { return 7; }
+    if m.a != 2 || m.b != 9 || m.c != 4 { return 8; }
+
+    // Functional update with a variable base: the explicit initializers run in
+    // source order, and the omitted field comes from the base.
+    let base: Q = Q { a: 10, b: 20, c: 30 };
+    let mut t5: Int = 0;
+    let r: Q = Q { c: tick(&mut t5, 1), a: tick(&mut t5, 2), ..base };
+    if t5 != 12 { return 9; }
+    if r.a != 2 || r.b != 20 || r.c != 1 { return 10; }
+
+    return 42;
+}

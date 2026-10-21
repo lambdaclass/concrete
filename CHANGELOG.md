@@ -19,6 +19,17 @@ interpreter. Any module-level `main` with parameters is now E0310, whose hint na
 `std.args`). No program in the corpus declared one apart from the reproducer and one invalid
 fixture.
 
+Bug 127 is fixed: struct-literal initializers run in source order in the binary too. `Lower`
+reordered them into the struct's declaration order before evaluating them, so
+`P { b: tick(5), a: tick(6) }` ran `tick(6)` first natively and `tick(5)` first under `--interp`.
+Each initializer is now evaluated in the order written and stored at its declared offset. The
+order gate in `check_evidence_build.sh` gains the native leg it lacked, and
+`regress_127_struct_literal_source_order.con` checks two-field, rotated, generic, mixed-width and
+functional-update literals in both consumers. Checking the neighbouring forms filed two more
+defects, contained by open-bug reproducers for exit 0b: functional update evaluates its base once
+per omitted field (bug 136), and enum-variant literal fields run in declaration order in both
+consumers (bug 137).
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a
