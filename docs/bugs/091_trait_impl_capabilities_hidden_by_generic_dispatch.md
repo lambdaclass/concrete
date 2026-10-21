@@ -366,6 +366,8 @@ programs rejected today with E0238:
 - instantiating a type parameter with a reference type where the parameter occurs behind a
   reference or pointer in a parameter type of the generic function or method
   (`forward::<&P>(w: &W<T>, ..)`), since the generic body is checked once at its opaque `T`;
+- borrowing a module constant or a projection of one (`&X`, `&K.v`, `&A[i]`, the implicit
+  `&self` of `K.get()`), since a constant has no storage (bug 123; copy it into a local first);
 - writing a reference through a reference (`*slot = &local` with `slot: &mut &Int`), since the
   borrow lands in storage the writer does not own and its source is no longer traced;
 - shadowing a name that a live reference records as its source or parent
@@ -496,4 +498,41 @@ nested `T`) passing its own opaque `T` to `update::<T>(&mut x, ..)` reached `upd
 `U = &Int` only after substitution. Mono now re-asks the question at every specialization
 (`refuseNestedRefSpecialization`, E0238 in the mono pass;
 `error_091_norm_generic_transitive_ref.con`).
+
+* **Consequences on main of the unrecorded projected borrow (exit 2i, G5).** Besides the receiver
+  conflict fixed in the third pass, main (`61ca25d1`) accepts two memory-safety shapes the same
+  repair rejects on `land2-fix` (`74f7284a`), and batch 2 had no fixture for either until then:
+
+  ```con
+  struct Copy B { v: Int }
+  fn main() with(Alloc) -> Int {
+      let h: Heap<B> = alloc(B { v: 42 });
+      let r: &Int = &h.v;
+      free(h);
+      let h2: Heap<B> = alloc(B { v: 99 });
+      let out: Int = *r;
+      free(h2);
+      return out;
+  }
+  ```
+
+  (a use after free by the language's semantics; main's binary exits 42 only because Lower takes
+  `&h.v` from a stack copy of the heap value; `land2-fix`: E0204 at `free(h)`), and
+
+  ```con
+  struct Copy B { v: Int, w: Int }
+  fn main() -> Int {
+      let mut p: B = B { v: 42, w: 5 };
+      let r: &Int = &p.v;
+      p.v = 9;
+      return *r;
+  }
+  ```
+
+  (binary and interpreter return 9 on main; `land2-fix`: E0232 at `p.v = 9`). On main the write is
+  accepted for two reasons: the `let` case records no source for `&p.v`, and the `.fieldAssign`
+  case of `checkStmt` checks no active borrow at all (the direct form `let r = &p; p.v = 9;` is
+  accepted too), which the second pass's `checkWriteAccess` repairs. Both programs should land as
+  rejection fixtures with batch 2: they do, as `error_091_norm_free_under_projected_borrow.con`
+  (E0204) and `error_091_norm_field_write_under_projected_borrow.con` (E0232).
 

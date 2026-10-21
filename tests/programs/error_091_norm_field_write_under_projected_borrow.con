@@ -1,0 +1,11 @@
+// Bug 091 round 3 (exit 2i G5): a field write under a live projected shared borrow is refused
+// (E0232). On main the binary and the interpreter returned 9: the `let` case recorded no
+// source for `&p.v`, and `.fieldAssign` checked no active borrow at all.
+struct Copy B { v: Int, w: Int }
+
+fn main() -> Int {
+    let mut p: B = B { v: 42, w: 5 };
+    let r: &Int = &p.v;
+    p.v = 9;
+    return *r;
+}

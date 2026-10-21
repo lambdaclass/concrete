@@ -1,0 +1,15 @@
+// Bug 091 round 3, third pass (exit 2i G5): `let r = &h.v` records a borrow of the root `h`, so
+// freeing the owner under the live projected borrow is refused (E0204). On main it was
+// accepted, a use after free by the language's semantics (main's binary exits 42 only because
+// Lower took `&h.v` from a stack copy of the heap value).
+struct Copy B { v: Int }
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<B> = alloc(B { v: 42 });
+    let r: &Int = &h.v;
+    free(h);
+    let h2: Heap<B> = alloc(B { v: 99 });
+    let out: Int = *r;
+    free(h2);
+    return out;
+}
