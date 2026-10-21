@@ -378,6 +378,32 @@ private partial def tomlBareText (cs : List Char) (acc : List Char := []) : List
     | .error _ => acc.reverse
   | c :: r => tomlBareText r (c :: acc)
 
+/-- The rest of a line after the multi-line string it began inside closes (`kind` 1 = basic,
+    2 = literal), or `none` if the string does not close on this line. -/
+private partial def tomlAfterClose (kind : Nat) (cs : List Char) : Option (List Char) :=
+  match kind, cs with
+  | 1, '\\' :: _ :: r => tomlAfterClose 1 r
+  | 1, '"' :: '"' :: '"' :: '"' :: '"' :: r => some r
+  | 1, '"' :: '"' :: '"' :: '"' :: r => some r
+  | 1, '"' :: '"' :: '"' :: r => some r
+  | 2, '\'' :: '\'' :: '\'' :: '\'' :: '\'' :: r => some r
+  | 2, '\'' :: '\'' :: '\'' :: '\'' :: r => some r
+  | 2, '\'' :: '\'' :: '\'' :: r => some r
+  | k, _ :: r => tomlAfterClose k r
+  | _, [] => none
+
+/-- Whether bare text (strings and comments removed) continuing a value assigns a key at ARRAY
+    level: an `=` whose innermost open delimiter is not an inline table's `{`. Arrays hold values,
+    never assignments, so such a line is malformed. -/
+private partial def tomlAssignInArray (cs : List Char) (stack : List Char) : Bool :=
+  match cs with
+  | [] => false
+  | '[' :: r => tomlAssignInArray r (']' :: stack)
+  | '{' :: r => tomlAssignInArray r ('}' :: stack)
+  | ']' :: r | '}' :: r => tomlAssignInArray r stack.tail
+  | '=' :: r => if stack.head? == some '}' then tomlAssignInArray r stack else true
+  | _ :: r => tomlAssignInArray r stack
+
 /-- Whether a manifest ENTRY exists at `path`, judged by `lstat`: only a genuine "no such file or
     directory" is absence. Any other failure — a directory without search permission, a symlink
     into one — counts as present, so the read that follows reports it instead of the manifest's
@@ -405,8 +431,18 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
       | .error e => throw s!"{e} in line '{l.trimAscii}'"
     -- A line that BEGINS inside a multi-line string, array or inline table is part of a value,
     -- not structure: it is neither a table header nor a key.
-    if startState.1 != 0 then continue
+    if startState.1 != 0 then
+      -- After the closing delimiter, only the value's own punctuation may follow; anything else
+      -- (a header, a key) would be structure hidden on a line this reader skips.
+      if let some rest := tomlAfterClose startState.1 l.toList then
+        let bare := tomlBareText rest
+        if !(bare.all fun c => c == ' ' || c == '\t' || c == '\r' || c == ',' || c == ']' || c == '}') then
+          throw s!"unexpected text after a multi-line string closes: '{l.trimAscii}'"
+      continue
     if !startState.2.isEmpty then
+      if tomlAssignInArray (tomlBareText l.toList) startState.2 then
+        throw s!"an assignment inside a multi-line array: '{l.trimAscii}'"
+
       -- A line continuing an array or inline table holds values, and no TOML value is the bare word
       -- `native`; text that looks like a native section or key here is malformed (or an attempt to
       -- hide one), so it is refused rather than skipped.
@@ -440,7 +476,9 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
           throw s!"unsupported top-level key '{rawKey}': native libraries are declared in a plain [native] section"
       else if inNative then
         let valParts := (t.splitOn "=").drop 1
-        let key := normTomlName rawKey
+        -- EXACT spellings only: normalising `"lib s"` to `libs` would accept a key the manifest
+        -- did not write.
+        let key := rawKey
         let kind ← match key with
           | "pkg-config" => pure NativeKind.pkgConfig
           | "libs" => pure NativeKind.lib

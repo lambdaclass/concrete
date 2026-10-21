@@ -47,12 +47,13 @@ what G1 recorded.
 
 | condition | refused at |
 |---|---|
-| unknown or repeated key, malformed or multi-line array, escape sequence, a second `[native]` | load (every command) |
+| a key not spelled exactly `pkg-config`, `libs` or `lib-dirs` (quoted keys are not read), unknown or repeated key, malformed or multi-line array, escape sequence, a second `[native]` | load (every command) |
 | any other spelling of the table: `["native"]`, `[ native ]`, `[native.x]`, `[[native]]`, a top-level `native = {...}` or `native.libs = [...]` (the line reader reads only the plain form, so it refuses the rest instead of skipping them) | load |
 | a table header or top-level key written with a backslash escape (escapes are not decoded, so it could spell `native`) | load |
 | a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
 | an enclosing or dependency manifest that exists but cannot be read is never treated as absent (project discovery decides by `lstat`, so only a genuine missing entry is absence; it no longer walks past an unreadable manifest to an ancestor's) | discovery / load |
 | a bracket or brace closed by the other delimiter | load |
+| an assignment at array level on a line continuing a multi-line array; any text but `,` `]` `}` after a multi-line string closes on its line | load |
 | the bare word `native` (outside a string) on a line continuing a multi-line array or inline table: no TOML value is that word, so it is refused rather than skipped | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
 | a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |

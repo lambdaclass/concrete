@@ -384,6 +384,37 @@ libs = ["nosuchlib"]
 ]
 EOF
 refused "$TMP/inarray" inarray "'native' outside a string inside a multi-line value" "a [native] section hidden inside a balanced multi-line array is refused"
+# Its string-quoted variant: the header is a valid string element, but the key line after it is an
+# assignment inside an array, which no TOML array holds.
+mkapp "$TMP/inarrayq" ''
+cat > "$TMP/inarrayq/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+metadata = [
+["native"]
+libs = ["lost"]
+]
+EOF
+refused "$TMP/inarrayq" inarrayq "an assignment inside a multi-line array" "a quoted [\"native\"] plus key hidden inside a multi-line array is refused"
+# Structure after a multi-line string closes, on the closing line, is refused rather than skipped.
+mkapp "$TMP/afterclose" ''
+cat > "$TMP/afterclose/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+description = """text
+""" [native]
+libs = ["lost"]
+EOF
+refused "$TMP/afterclose" afterclose "unexpected text after a multi-line string closes" "a [native] header after a multi-line string's closing delimiter is refused"
+# Keys are matched exactly: "lib s" is not libs.
+bad spacedkey '
+[native]
+"lib s" = ["nladd"]' "unknown key" 'a key spelled "lib s" is refused, not normalised to libs'
+bad quotedkey '
+[native]
+"libs" = ["nladd"]' "unknown key" 'a quoted key "libs" is refused (only the plain spelling is read)'
 # Control: an array whose STRING elements say native is ordinary data and builds.
 mkapp "$TMP/inarrayok" '
 [native]
