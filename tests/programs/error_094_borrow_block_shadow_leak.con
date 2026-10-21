@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0208). The check below it stays as defense in depth.
 // Bug 094 follow-up: a borrow-block body local named like the (Copy) ref was
 // deleted with the ref at block exit (cleanup filtered by name), so its
 // Heap<Int> leaked with no E0208.

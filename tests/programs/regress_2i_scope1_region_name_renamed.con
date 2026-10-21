@@ -1,0 +1,14 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_region_name.con: a borrow-block region name reuses an outer `let` (E0215 had no fixture), with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let R: Int = 0;
+    borrow x as rx in Rx {
+        if read(rx) != 42 { return 0; }
+    }
+    return x + R;
+}

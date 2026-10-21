@@ -201,7 +201,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then
-      throwCheckMsg s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)."
+      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@1")
     return .fn_ params' capSet retTy'
   | _ => return ty
 
@@ -232,10 +232,10 @@ def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
     -- aliases resolved: `f::<R>` with `type R = &P` is a reference instantiation
     let pTy ← tryCatch (resolveType pTy0) (fun _ => pure pTy0)
     if tyContainsRef pTy && tyParamOccursIn pName retTy then
-      throwCheckMsg s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
     if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then
       throwCheck (.untraceablePlace s!"what the reference instantiating '{pName}' of {what} borrows"
-        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none
+        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none (rule := some "REF-4@1")
 
 /-- Type-variable substitution over surface types. Delegates to the one shared
     definition (`Layout.substTyVars`); the two were byte-for-byte equivalent
@@ -859,7 +859,7 @@ partial def inferMethodParamAndRetTys
   -- a generic backdoor to returning a reference). VALUE_MODEL.md.
   for (pName, pTy) in fullMapping do
     if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
-      throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
   refuseNestedRefInstantiation s!"method '{callName}'" fullMapping (sig.params.map (·.2)) sig.retTy
   -- 2. Infer capability-variable bindings: from the RECEIVER first (R-0484 — on
   --    `impl<cap C> Sink<C>`, `s.run(..)` with `s: &Sink<Console>` binds C := Console),

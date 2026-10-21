@@ -1,0 +1,19 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): assignment, which introduces no binding (`acc = f(acc)` over a consumed linear value) is not a collision. Run 42, binary =
+// --interp.
+struct Acc { n: Int }
+
+fn add(a: Acc, k: Int) -> Acc {
+    let Acc { n } = a;
+    return Acc { n: n + k };
+}
+
+fn main() -> Int {
+    let mut acc: Acc = Acc { n: 0 };
+    let mut i: Int = 0;
+    while i < 6 {
+        acc = add(acc, 7);
+        i = i + 1;
+    }
+    let Acc { n } = acc;
+    return n;
+}

@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0208). The check below it stays as defense in depth.
 // Bug 093: a match payload binder named like a consumed outer binding escaped
 // the never-consumed check; the payload `Heap<Int>` leaked. E0208.
 struct R { v: Int }

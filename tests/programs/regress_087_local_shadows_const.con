@@ -1,14 +1,19 @@
-// Bug 087 / 123 review: a local shadows a module constant of the same name, and a second `let`
-// of that name shadows the first. Elab resolved the constant before the locals and emitted the
-// bare name, which bug 087's alpha-renaming no longer gives the second local, so `X` and `&X`
-// read the FIRST local (1, binary and interpreter). Locals now resolve before constants.
+// Bug 087 / 123 review: a local shadows a module constant of the same name (SCOPE-4: a local may
+// reuse a constant's name; constants are values, not local bindings). Elab once resolved the
+// constant before the locals, so `X` and `&X` read the constant or a stale local. Locals now
+// resolve before constants. Exit 2i: the second `let X` of the original became an assignment
+// (SCOPE-1@1), and `let r: &Int = &X` a borrow passed to a call (REF-6@1); `X + read(&X)` must
+// read the local both times (2 + 2).
 const X: Int = 42;
 
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
 fn main() with(Std) -> Int {
-    let X: Int = 1;
-    let X: Int = 2;
-    let r: &Int = &X;
-    print_int(X + *r);
+    let mut X: Int = 1;
+    X = 2;
+    print_int(X + read(&X));
     print_char(10);
     return 0;
 }

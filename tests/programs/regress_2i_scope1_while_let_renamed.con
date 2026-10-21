@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_while_let.con: a `while let` binder reuses an outer `let`, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn main() -> Int {
+    let step: Int = 0;
+    let mut total: Int = 0;
+    let mut cur: Option<Int> = Option::Some { value: 42 };
+    while let Option::Some { value: got } = cur {
+        total = total + got;
+        cur = Option::None;
+    }
+    return total + step;
+}

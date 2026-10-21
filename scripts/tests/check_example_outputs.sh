@@ -384,7 +384,6 @@ open_bug_reproducers() {
 117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
-124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
 128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
 134|bug134_aggregate_eq_invalid_ir/repro.con|compile-fails|but expected 'i64'
 134|bug134_aggregate_eq_invalid_ir/repro_struct.con|compile-fails|but expected 'i64'

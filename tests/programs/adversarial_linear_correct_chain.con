@@ -27,9 +27,9 @@ fn finish(r: Resource) -> Int {
 }
 
 pub fn main() with(Std) {
-    let r: Resource = make(5);
-    let r: Resource = add_ten(r);
-    let r: Resource = double(r);
+    let mut r: Resource = make(5);
+    r = add_ten(r);
+    r = double(r);
     let result: Int = finish(r);
     println(result);
 }

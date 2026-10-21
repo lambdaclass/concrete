@@ -1,0 +1,14 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a borrow-block reference name reuses an outer `let`. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_borrow_ref_renamed.con.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let r: Int = 0;
+    borrow x as r in R {
+        if read(r) != 42 { return 0; }
+    }
+    return x + r;
+}

@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: run 42; its renamed twin is regress_2i_scope1_087_renamed.con). The check below it stays as defense in depth.
 // Bug 087 regression: a block-scoped `let` that SHADOWS an outer binding
 // (an outer `let`, a parameter, or a binding visible in a loop body) must be
 // invisible once its block closes — lexical scoping. Pre-fix Elab gave the

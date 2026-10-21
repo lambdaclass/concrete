@@ -98,8 +98,8 @@ mod httpget {
                         let m: String = "httpget: malformed response (no header terminator)";
                         return fail(m);
                     },
-                    Option::Some { value } => {
-                        let mut i: u64 = value;
+                    Option::Some { value: inner } => {
+                        let mut i: u64 = inner;
                         let total: u64 = resp.len();
                         while i < total {
                             print_char(resp.get_unchecked(i) as Int);

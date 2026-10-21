@@ -178,7 +178,7 @@ mod packet {
                 let mut src: ByteCursor = value;
                 for (let mut i: u64 = 0; i < copy_len; i = i + 1) {
                     match src.read_u8(buf) {
-                        Result::Ok { value } => { let w: bool = out.set(i, value); },
+                        Result::Ok { value: inner } => { let w: bool = out.set(i, inner); },
                         Result::Err { error } => {},
                     }
                 }

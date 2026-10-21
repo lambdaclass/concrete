@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0292). The check below it stays as defense in depth.
 // Bug 094: a destructure binder shadowing a LIVE linear binding. Consuming
 // the binder marked the outer `value` consumed too; the outer R leaked. E0292.
 struct R { v: Int }

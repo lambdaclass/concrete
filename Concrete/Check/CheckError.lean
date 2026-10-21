@@ -259,6 +259,21 @@ inductive CheckError where
   -- Exit 2i G4: a labeled pattern field list (`Variant { value: inner }`) names an unknown
   -- field, names one twice, or omits one.
   | patternFieldMismatch (pattern : String) (why : String)
+  -- Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a binder may not reuse the spelling of a
+  -- local value binding visible at its declaration (parameters, `let`, destructuring,
+  -- match/`if let`/`while let` binders, `for` header binders, borrow-block reference and
+  -- region names). `kind` names the new binder's form.
+  | shadowsVisibleBinding (name : String) (kind : String)
+  -- Exit 2i REF-6@1 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
+  -- reference, whether written, through an alias or inferred.
+  | letBindsReference (name : String) (tyName : String)
+  -- Exit 2i REF-6@1 (b): no reference binding (parameter, borrow-block binder, arm binder)
+  -- is the target of an assignment.
+  | assignsReferenceBinding (name : String) (tyName : String)
+  -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
+  -- function, function type or reference instantiation would return a reference. The
+  -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
+  | returnsReference (msg : String) (rule : String)
   -- #18 container-not-in-context enforcement: within ONE call's arguments
   -- (including the auto-borrowed method receiver), a variable may be borrowed
   -- at most once when any of its borrows is `&mut` — `f(&mut x, &mut x)` and
@@ -389,6 +404,13 @@ def CheckError.message : CheckError → String
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
   | .patternFieldMismatch pat why => s!"pattern {pat}: {why}"
+  | .shadowsVisibleBinding name kind =>
+    s!"'{name}' is already bound in this scope or an enclosing one; a new binding ({kind}) may not reuse a visible name"
+  | .letBindsReference name ty =>
+    s!"a `let` binding may not hold a reference: '{name}' has type '{ty}'"
+  | .assignsReferenceBinding name ty =>
+    s!"a reference binding is never assigned: '{name}' has type '{ty}'"
+  | .returnsReference msg _ => msg
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
@@ -539,13 +561,61 @@ def CheckError.code : CheckError → String
   | .guardMovesLinear _ => "E0300"
   | .mainHasParams _ => "E0310"
   | .patternFieldMismatch _ _ => "E0304"
+  | .shadowsVisibleBinding _ _ => "E0301"
+  | .letBindsReference _ _ => "E0302"
+  | .assignsReferenceBinding _ _ => "E0303"
+  | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 
+/-- The normative statement every rule tag points at (MEMORY_SEMANTICS §15.5). -/
+def ruleSpecRef : String := "docs/language/MEMORY_SEMANTICS.md §15"
+
+/-- The exit 2i rule (with its version) a diagnostic enforces, MEMORY_SEMANTICS §15.5 item 2.
+    A code that serves several rules (E0238) has a default here and is overridden at the sites
+    that enforce another rule (`throwCheck (rule := ...)`). `none`: not a §15 rule. -/
+def CheckError.rule : CheckError → Option String
+  | .shadowsVisibleBinding _ _ => some "SCOPE-1@1"
+  | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
+  | .shadowsLiveLinear _ => some "SCOPE-1@1"
+  | .letBindsReference _ _ | .assignsReferenceBinding _ _ => some "REF-6@1"
+  | .referenceEscapesBorrowBlock _ => some "REF-6@1"
+  | .returnsReference _ r => some r
+  | .refStoredInAggregate _ _ => some "REF-3@1"
+  | .untraceablePlace _ _ => some "REF-5@1"
+  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
+  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
+  | .conflictingCallBorrows _ => some "REF-8@1"
+  | _ => none
+
+/-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
+    rendered as `next:` / `next_action`. Keyed by the rule tag so a site override gets the
+    rewrite of the rule it enforces. -/
+def ruleNextAction (rule : String) : Option String :=
+  match rule with
+  | "SCOPE-1@1" => some "give the new binding its own name; for a pattern field write `Variant { value: inner }`; to replace the value of a `mut` binding, assign instead (`value = ...`)"
+  | "REF-1@1" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
+  | "REF-2@1" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
+  | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
+  | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
+  | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
+  | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
+  | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
+  | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | _ => none
+
+/-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
+def ruleEvidence (rule : Option String) : List (String × String) :=
+  match rule with
+  | some r => [("rule", r), ("spec", ruleSpecRef)]
+  | none => []
+
 def throwCheck (e : CheckError) (span : Option Span := none)
-    (related : List (Span × String) := []) : CheckM α :=
+    (related : List (Span × String) := []) (rule : Option String := none) : CheckM α :=
+  let r := rule.orElse (fun _ => e.rule)
   throw [{ severity := .error, message := e.message, pass := "check", span := span,
            hint := e.hint, code := e.code, expected := e.expected, actual := e.actual,
-           related := related }]
+           related := related, evidence := ruleEvidence r,
+           nextAction := r.bind ruleNextAction }]
 
 end Concrete

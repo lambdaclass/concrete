@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: run 42). The check below it stays as defense in depth.
 // Bug 094 positive control, part 2: a binding that shadows a CONSUMED one may
 // be read, consumed, reassigned and consumed again without resurrecting the
 // outer binding (marking every same-named entry live or used revived it).

@@ -7,7 +7,8 @@ chain of value-flow constructs, where the generator knows the ground truth:
   - consume-exactly-once  -> the program MUST compile
   - zero consumes (leak)  -> the checker MUST reject (E0208 family)
   - double consume (dup)  -> the checker MUST reject (E0205 family)
-  - live-shadow (leak)    -> the checker MUST reject (E0292)
+  - live-shadow (leak)    -> the checker MUST reject (E0301: SCOPE-1@1 refuses the
+                             shadow first; E0292 stays as defense in depth)
   - param sink (leak)     -> the checker MUST reject (E0208; H17 — params are
                              owned locals)
 
@@ -28,7 +29,7 @@ import argparse, os, random, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")
 
-LINEARITY_CODES = ["E0205", "E0206", "E0207", "E0208", "E0209", "E0210",
+LINEARITY_CODES = ["E0301", "E0205", "E0206", "E0207", "E0208", "E0209", "E0210",
                    "E0211", "E0212", "E0213", "E0219", "E0287", "E0288",
                    "E0290", "E0291", "E0292"]
 
@@ -74,10 +75,12 @@ class Chain:
         elif kind == 2:  # wrap + whole-owner destructure
             old, w, inner, new = self.live, self.fresh(), f"f{self.n}", None
             self.lines.append(f"    let {w}: Wrap = Wrap {{ f: {old} }};")
-            self.lines.append(f"    let Wrap {{ f }} = {w};")
+            # a renamed binder (exit 2i G4): two destructures in one chain may not both
+            # bind `f` (SCOPE-1@1)
+            self.lines.append(f"    let Wrap {{ f: {inner} }} = {w};")
             new = self.fresh()
-            self.lines.append(f"    let {new}: Res = f;")
-            self.consumed += [old, w, "f"]
+            self.lines.append(f"    let {new}: Res = {inner};")
+            self.consumed += [old, w, inner]
             self.live = new
         elif kind == 3:  # if-merge: both arms move the same var (agreement)
             c = self.fresh()
@@ -127,7 +130,8 @@ def gen_cases(rng, steps):
                        f"    let b: Int = use_res({victim});",
                        "    return a + b;"])
         yield ("dup", program(dup), False)
-    # 4. live-shadow leak (H16): re-let the live name before consuming -> E0292
+    # 4. live-shadow leak (H16): re-let the live name before consuming -> E0301 (exit 2i
+    #    SCOPE-1@1 reports the shadow before E0292 sees the leak)
     shadow = ch.body([f"    let {live}: Res = mk(9);",
                       f"    return use_res({live});"])
     yield ("live-shadow", program(shadow), False)

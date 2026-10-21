@@ -11,7 +11,7 @@ fn main() -> Int {
     let Box { value } = b;
     let mut out: Int = value;
     match m {
-        Maybe::Some { value } => { out = out + value; },
+        Maybe::Some { value: extra } => { out = out + extra; },
         Maybe::None => { },
     }
     return out;

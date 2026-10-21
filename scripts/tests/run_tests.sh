@@ -1739,8 +1739,8 @@ run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
 run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
-run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
-run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0238)"
+run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0301)"
+run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0301)"
 run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
 run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"
@@ -1971,7 +1971,7 @@ run_err "$TESTDIR/error_alloc_reserved.con"      "is a reserved identifier"
 # Phase 6: Borrow region errors
 run_err "$TESTDIR/error_borrow_escape.con"     "cannot escape its borrow block"
 run_err "$TESTDIR/error_borrow_frozen.con"     "is frozen by borrow block"
-run_err "$TESTDIR/error_borrow_shadow.con"     "shadows existing name"
+run_err "$TESTDIR/error_borrow_shadow.con"     "(E0301)"
 run_err "$TESTDIR/error_borrow_mut_conflict.con" "is frozen by borrow block"
 run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
 # Additional escape analysis errors
@@ -7756,12 +7756,17 @@ run_ok "$TESTDIR/regress_041_match_binder_states.con" 42
 run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
+# Exit 2i: the nested binder is now renamed (`Option::Some { value: inner }`,
+# SCOPE-1@1 refuses the shadow); the outer `value` must still read 5.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # Bug 087: a block-scoped `let` shadowing an outer let/param (if, else,
 # value-if, while, for bodies) must vanish when its block closes. Pre-fix the
 # interpreter and binary disagreed (1 vs 100, 3 vs 7) and both leaked a loop
 # body's shadow; Elab now alpha-renames shadowing lets (x -> x.bN).
-run_ok "$TESTDIR/regress_087_let_block_shadow.con" 42
+# Exit 2i: the shadowing itself is refused (SCOPE-1@1, E0301); the renamed twin
+# keeps the lexical answers pinned on the binary, the interpreter and the model.
+run_err "$TESTDIR/regress_087_let_block_shadow.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_087_renamed.con" 42
 # Codex review: sibling branches reusing a DEAD name for a promoted aggregate
 # (`let mut x: [i32; 1]` in both arms) must each read their own storage; Lower's
 # promoted table appended, so the else arm read the then arm's (pre-fix 41).
@@ -7786,17 +7791,18 @@ else
     echo "FAIL  bug 087: unpromoted re-declaration — interp gave '$r087u_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
-# Same fixture, the other two consumers: the interpreter must agree with the
+# The renamed twin, the other two consumers: the interpreter must agree with the
 # binary (pre-fix it returned 2), and the extracted proof model must be the
 # lexical one — no branch `let` leaking into the continuation (pre-fix
-# `then let x = 100; x`), and the loop body's `let k` kept, not dead-let
-# eliminated into a read of the outer `k` (the alpha-strip capture).
-r087_interp=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --interp 2>&1 || true)
-r087_ext=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --report extraction 2>&1 || true)
+# `then let x = 100; x`), and the loop body's `let inner_k` kept under its own
+# name (no `.bN` suffix: nothing is alpha-renamed once nothing shadows).
+r087_interp=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --interp 2>&1 || true)
+r087_ext=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --report extraction 2>&1 || true)
 if [ "$r087_interp" = "42" ] \
    && grep -qF 'ProofCore: let x = 1; if (a > 0) then x else x' <<<"$r087_ext" \
    && grep -qF 'ProofCore: if (a > 0) then a else a' <<<"$r087_ext" \
-   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let k\.b[0-9]+ = 1000; [^}]*\(k\.b[0-9]+ \+ s\)' <<<"$r087_ext"; then
+   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let inner_k = 1000; [^}]*\(inner_k \+ s\).*\(k \+ s\)' <<<"$r087_ext" \
+   && ! grep -qE 'ProofCore: .*\.b[0-9]+' <<<"$r087_ext"; then
     echo "  ok  bug 087: interp == binary == lexical model (shadow_if/param/loop)"
     PASS=$((PASS + 1))
 else
@@ -7869,23 +7875,61 @@ run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an
 # identity; the shadowing local must itself be consumed.
-run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "E0208"
-run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "E0208"
-run_ok "$TESTDIR/regress_093_shadowing_locals_consumed.con" 42
+# Exit 2i: every shape of bugs 093/094 shadows, so SCOPE-1@1 refuses it first
+# (E0301); the identity-keyed checks stay as defense in depth (MEMORY_SEMANTICS
+# §15.6: their mutation rows move to a leg that disables E0301, R-0498).
+run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "(E0301)"
+run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "(E0301)"
+run_err "$TESTDIR/regress_093_shadowing_locals_consumed.con" "(E0301)"
 # Bug 094: per-binding state updates (consume, use, reassign, borrow freeze,
 # defer) marked EVERY entry sharing the name, so a binder that shadowed a live
 # linear binding consumed it too (the outer value leaked). State updates now
 # match the binding by identity (arm binders stay arm-scoped and may shadow),
 # and a destructure binder refuses to shadow a live non-Copy binding (E0292).
-run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "E0209"
-run_err "$TESTDIR/error_094_destructure_shadows_live.con" "E0292"
-run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "E0208"
-run_ok "$TESTDIR/regress_094_shadowing_binders.con" 42
-run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
+run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_destructure_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadowing_binders.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadow_state_by_identity.con" "(E0301)"
 # A borrow-block body local named like the ref was dropped with it by name.
-run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "(E0301)"
 # A local shadowing a `&mut` parameter was exempt from the exit check by name.
-run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "(E0301)"
+# Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): one lexical name, one binding. Each binder kind
+# that reuses a visible name is E0301 (bug 124: duplicate parameters reached llvm-as); each
+# rejected shape has a renamed migration twin. SCOPE-2: sibling scopes, loop bodies and
+# assignment are not collisions. The full manifest is tests/rules/exit_2i.tsv
+# (scripts/tests/check_rules_2i.sh).
+run_err "$TESTDIR/error_2i_scope1_same_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_same_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_param_in_block.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_param_in_block_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_consuming_rebind.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_consuming_rebind_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_for_header.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_for_header_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_arm_binder.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_arm_binder_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_if_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_if_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_while_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_while_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_destructure.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_destructure_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_duplicate_params_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_borrow_ref.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_borrow_ref_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_region_name.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_region_name_renamed.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_branches.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_arms.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_consecutive_loops.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_loop_body_let.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_assign_rebind.con" 42
+run_ok "$TESTDIR/regress_2i_renamed_pattern_binder.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).
@@ -11844,6 +11888,22 @@ for projdir in "$TESTDIR"/*/; do
         projname=$(basename "$projdir")
         # Skip adversarial policy projects — they are tested in the policy section
         case "$projname" in adversarial_policy_*) continue ;; esac
+        # Exit 2i: bug 087's borrow-block shadow is now refused at the source (SCOPE-1@1,
+        # E0301); its renamed twin regress_2i_scope1_087_borrow_renamed/ runs here instead.
+        if [ "$projname" = "regress_087_borrow_shadow_uaf" ]; then
+            if output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_proj_"$projname" 2>&1 ); then
+                echo "  FAIL $projname — now a SCOPE-1 rejection, but it COMPILED"
+                FAIL=$((FAIL + 1))
+            elif grep -qF "(E0301)" <<<"$output"; then
+                echo "  ok  $projname (rejected: E0301, SCOPE-1@1)"
+                PASS=$((PASS + 1))
+            else
+                echo "  FAIL $projname — rejected, but not with E0301"
+                FAIL=$((FAIL + 1))
+            fi
+            rm -f /tmp/test_proj_"$projname"
+            continue
+        fi
         # error_* projects are NEGATIVE fixtures: they must FAIL to build.
         case "$projname" in
         error_*)

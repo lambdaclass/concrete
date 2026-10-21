@@ -319,7 +319,9 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
                    pass := "post-mono"
                    span := fn.declSpan
                    hint := some "see docs/language/VALUE_MODEL.md — references are second-class"
-                   code := "E0236" } : Diagnostic)]
+                   code := "E0236"
+                   evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+                   nextAction := some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code" } : Diagnostic)]
       else acc) ([] : Diagnostics)
     here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
 
@@ -422,6 +424,10 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
     span := none
     hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/language/VALUE_MODEL.md)"
     code := "E0239"
+    -- exit 2i §15.5: an instantiation storing a reference is REF-4@1 (b); a constant is REF-3@1
+    evidence := [("rule", if v.message.startsWith "a reference stored in an aggregate after monomorphization in constant" then "REF-3@1" else "REF-4@1"),
+                 ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+    nextAction := some "instantiate the generic at a value type, or pass the reference directly as an argument"
   }
 
 /-- **Post-mono capability verifier** (bug 091, defense in depth). Capability

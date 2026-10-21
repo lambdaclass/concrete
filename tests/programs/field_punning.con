@@ -29,21 +29,21 @@ mod field_punning {
         let radius: i32 = 42;
         let s: Shape = Shape::Circle { radius };
         match s {
-            Shape::Circle { radius } => {
-                if radius != 42 { return 5; }
+            Shape::Circle { radius: rad } => {
+                if rad != 42 { return 5; }
             },
-            Shape::Rect { w, h } => { return 6; },
+            Shape::Rect { w: _, h: _ } => { return 6; },
         }
 
         // Enum with multiple punned fields
-        let w: i32 = 3;
+        let w2: i32 = 3;
         let h: i32 = 4;
-        let r: Shape = Shape::Rect { w, h };
+        let r: Shape = Shape::Rect { w: w2, h };
         match r {
-            Shape::Circle { radius } => { return 7; },
-            Shape::Rect { w, h } => {
-                if w != 3 { return 8; }
-                if h != 4 { return 9; }
+            Shape::Circle { radius: _ } => { return 7; },
+            Shape::Rect { w: rw, h: rh } => {
+                if rw != 3 { return 8; }
+                if rh != 4 { return 9; }
             },
         }
 

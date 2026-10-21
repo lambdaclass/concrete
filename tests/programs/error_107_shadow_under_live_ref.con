@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0238). The check below it stays as defense in depth.
 // Bug 107: shadowing `x` while `r = &x` is live made the binary read the shadowing binding's slot
 // (interp 1, compiled 2). Shadowing a name a live reference borrows is refused (normalized place
 // rule, provenance is recorded by name): E0238.

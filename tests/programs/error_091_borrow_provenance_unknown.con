@@ -11,7 +11,7 @@ mod m {
         a.bump();
         print_int(r.n);
         let P { n } = a;
-        let P { n } = b;
+        let P { n: nb } = b;
         return 0;
     }
 }

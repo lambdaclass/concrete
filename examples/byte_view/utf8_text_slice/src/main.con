@@ -57,8 +57,8 @@ mod utf8_text_slice {
                 // 0xC3 with no continuation). Must NOT validate as UTF-8.
                 let split: Option<ByteView> = ByteView::new(0, 4, &buf);
                 match split {
-                    Option::Some { value } => {
-                        let sv: ByteView = value;
+                    Option::Some { value: inner } => {
+                        let sv: ByteView = inner;
                         let bad_rejected: bool = text_is_none(sv.to_text(&buf));
                         if glen == 5 && bad_rejected {
                             println("byte_view utf8: 'cafe\\u{e9}' validates (5 bytes); split-codepoint rejected");

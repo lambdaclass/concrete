@@ -1,0 +1,3 @@
+[package]
+name = "regress_2i_scope1_087_borrow_renamed"
+version = "0.1.0"

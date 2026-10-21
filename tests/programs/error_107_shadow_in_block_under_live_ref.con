@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0238). The check below it stays as defense in depth.
 // Bug 107, nested-block variant (interp 15, compiled 55): the shadowing `let x` in the block is
 // refused while `r = &x` is live: E0238.
 fn get(r: &Int) -> Int { return *r; }

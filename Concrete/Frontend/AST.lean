@@ -185,6 +185,10 @@ structure Param where
 structure PatBind where
   field : Option String := none
   name : String
+  -- Set by `desugarStmts` on the binders of a destructuring `let` (which becomes a match
+  -- arm): it is a `let` binder, so REF-6@1 (a) refuses it a reference type even though the
+  -- arm form would allow one (exit 2i).
+  letBound : Bool := false
   deriving Repr, BEq, Inhabited
 
 /-- The binder names of a pattern's field list, in source order. -/
@@ -758,12 +762,12 @@ partial def desugarStmts : List Stmt → List Stmt
   | [] => []
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings none continuation
+    let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
     let wildcardArm := MatchArm.varArm sp "_" none elseBody
     [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm]) false]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings none continuation
+    let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
     [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
   -- NOTE: `letStructDestructure` is intentionally NOT desugared here. Desugaring it
   -- to `let __destr = value; let a = __destr.a; …` is unsound for a LINEAR struct —

@@ -11,7 +11,7 @@ mod m {
     fn main() -> Int {
         let e: E = E::V { p: P { n: 1 } };
         let n: i64 = f(&e);
-        match e { E::V { p } => { let P { n } = p; } }
+        match e { E::V { p } => { let P { n: m } = p; } }
         return n;
     }
 }

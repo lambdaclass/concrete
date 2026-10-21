@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0208). The check below it stays as defense in depth.
 // Bug 094: a value-pattern binder shadowing a LIVE linear binding; freeing the
 // binder marked the outer `a` freed too, so `a` leaked. Now the outer `a` is
 // still owed after the match (E0208).

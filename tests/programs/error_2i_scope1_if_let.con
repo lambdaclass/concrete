@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): an `if let` binder reuses a parameter. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_if_let_renamed.con.
+fn f(v: Int, o: Option<Int>) -> Int {
+    if let Option::Some { value: v } = o {
+        return v;
+    }
+    return v;
+}
+
+fn main() -> Int {
+    return f(0, Option::Some { value: 42 });
+}

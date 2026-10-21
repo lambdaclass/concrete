@@ -10,7 +10,7 @@ mod bound_of_cursor {
         let v: ByteView = ByteView::of_cursor(2, &cur);
         match BoundView::of_view(a, &v) {
             Result::Ok { value } => {
-                let got: Int = match value.byte(0) { Option::Some { value } => value as Int, Option::None => 0 };
+                let got: Int = match value.byte(0) { Option::Some { value: inner } => inner as Int, Option::None => 0 };
                 destroy(value.release());
                 return got;                    // 3 (a[2])
             },
