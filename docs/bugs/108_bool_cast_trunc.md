@@ -1,6 +1,6 @@
 # Bug 108 — a `bool` cast to a wider integer is emitted as `trunc i1`
 
-**Status:** FIXED (branch `backend-108-116`)
+**Status:** FIXED (branch `backend-108-116`, commit ee9a16cb)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation (a valid program is rejected after checking passed).
 
