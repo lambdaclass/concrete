@@ -147,7 +147,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
-EXPECTED_GATE_COMMANDS=255
+# 255 -> 256: check_rules_2i.sh (exit 2i acceptance manifest tests/rules/exit_2i.tsv: REF-1..REF-8,
+#   SCOPE-1..SCOPE-3 and G4, with negative controls), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=256
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

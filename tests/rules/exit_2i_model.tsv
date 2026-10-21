@@ -1,0 +1,3 @@
+# Model sidecar for tests/rules/exit_2i.tsv (MEMORY_SEMANTICS §15.6): id, fixture, then one
+# extended regex per column that `--report extraction` must match (a leading `!` must NOT match).
+087-renamed	tests/programs/regress_2i_scope1_087_renamed.con	ProofCore: let x = 1; if \(a > 0\) then x else x	ProofCore: if \(a > 0\) then a else a	ProofCore: let s = 0; let k = 5;.*\{ let inner_k = 1000; [^}]*\(inner_k \+ s\).*\(k \+ s\)	!ProofCore: .*\.b[0-9]+

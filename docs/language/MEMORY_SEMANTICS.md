@@ -597,7 +597,22 @@ Every rule has a stable identifier and a version (`REF-3@1`). Its status is one 
 - **main**: enforced on `main` at `d967b4f2`;
 - **land2**: enforced only on branch `land2-fix` at `74f7284a` (batch 2: the bug 091 normalized
   place rule and the bug 087 repair), which lands under exit 0b;
-- **gap**: enforced on neither. §15.7 gives each gap an owner.
+- **gap**: enforced on neither. §15.7 gives each gap an owner;
+- **enforced**: enforced on `main` once the exit 2i implementation lands (branch `exit-2i-impl`,
+  2026-10-21), with a versioned migration diagnostic (§15.5) and rows in the acceptance manifest
+  `tests/rules/exit_2i.tsv`, checked by `scripts/tests/check_rules_2i.sh` (§15.6). Batch 2 (the
+  **land2** rules) is on `main` by then, so **land2** below reads as enforced on `main` too.
+
+**Implementation status (exit 2i, 2026-10-21).** Enforced: G4 (the renamed pattern binder),
+SCOPE-1@1 (E0301, closes G3 and bug 124), SCOPE-2 and SCOPE-3 (run rows), REF-6@1 (a) E0302 and (b)
+E0303, at Check and after monomorphization (closes G18 and, by subtraction, G14), and the versioned
+diagnostics of every rule (G6): each REF/SCOPE code carries `rule` and `spec` evidence and a
+rewrite, and the `--report diagnostic-codes` ledger names each code's rules. The front-end REF-1,
+REF-2 and REF-4(a) rejections now carry E0236 (the front-end half of G2). Every rejection rule
+REF-1 – REF-8 and SCOPE-1 has reject and run rows in the manifest. Still open, each with its owner in
+§15.7: G2's post-mono predicate alignment, G7's plain `r: &T` REF-4(c) fixture, G8 (generator
+minima), G9/G10/G19 (design decisions), G12, G13, G15, G16, G17, and the mutation rows of §15.6
+(R-0498).
 
 Statuses were read from the source at those SHAs and checked by compiling every rejected and
 accepted example below with binaries built from them (2026-10-21). Text added for the semantics
@@ -972,7 +987,26 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   `error_borrow_escape.con` (E0234 today), *`error_104_assigned_ref_heap_block.con`*,
   *`error_104_assigned_ref_stack_block.con`*, *`error_091_ref_repointed_in_branch.con`*,
   *`error_091_mut_receiver_reassigned_ref.con`* (E0238 today); §15.6 lists the rest.
-- Status: **gap** for both rules (G18). On `main` a `let` of shared reference type is accepted
+- Status: **enforced** (exit 2i). (a) is E0302 (`letBindsReference`) at the `let` case of
+  `checkStmt` for a written, aliased or inferred reference type, and at the success arm a
+  destructuring `let` desugars to (`PatBind.letBound`); (b) is E0303 (`assignsReferenceBinding`) at
+  the assignment case, for every binding whose type is a reference (parameters, borrow-block binders,
+  arm binders). After monomorphization `verifyNoRefBindingsPostMono` (`Concrete/Check/Verify.lean`,
+  in `verifyPostMono`, which `--interp` runs too) re-asks both on every specialized function: E0302
+  / E0303 with pass `post-mono` (fixtures `error_2i_ref6_generic_let_at_ref.con`,
+  `error_2i_ref6_generic_assign_at_ref.con`; the same generic at `T := Int` runs,
+  `regress_2i_ref6_generic_assign_at_value.con`). The fixtures named in §15.6 are rows of
+  `tests/rules/exit_2i.tsv`. Corpus migration: `examples/snippets/borrow.con` and five test programs
+  (`regress_092_refs_flow_down.con`, `regress_123_local_shadows_const_other_type.con`,
+  `trait_mut_receiver_nested_reborrow.con`, `adversarial_proof_blocked_pressure.con`,
+  `regress_087_local_shadows_const.con`) borrow at each use or through a borrow block; four
+  rejection fixtures were rewritten to keep reaching their own rule (`error_091_norm_ref_write_through_ref.con`,
+  `error_091_norm_double_deref_read.con`, `error_091_norm_nested_ref_binder.con`,
+  `error_123_const_borrow_in_body.con`); 27 rejection fixtures whose shape needs a named reference
+  across statements now report E0302 (E0303 for bug 131's two) at that `let` or assignment, with
+  their earlier codes kept as defense in depth. A shared borrow-block binder over a `Heap` passed to
+  a `&Heap<T>` parameter reads through the slot (bug 126's third form, recorded there). Before exit
+  2i: **gap** for both rules (G18). On `main` a `let` of shared reference type was accepted
   (`let r: &P = &w.p;`, `let s = r;`); a `let`-bound `&mut` is accepted but unusable, since every
   discharging use (writing through it, passing it, reborrowing it, moving it into another `let`)
   ends in E0208 "linear variable 'r' was never consumed", so for `&mut` rule (a) writes down the
@@ -1108,11 +1142,27 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   leg of `scripts/tests/check_linear_discard.sh`); E0214 and E0215 reject a borrow-block reference
   or region name that is already bound (`.borrowIn` in `checkStmt`; `error_borrow_shadow.con`; E0215
   has no fixture). `land2-fix` adds E0238 for a name a live reference borrows (REF-8).
-- Status: **gap** (G3). Every other rejected shape above is accepted on both revisions. Duplicate
+- Status: **enforced** (exit 2i). `checkFn` runs `scope1Diagnostics` (`Concrete/Check/Check.lean`)
+  before the body: an explicit lexical scope chain over every binder kind (parameters in order, `let`,
+  destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
+  and region names), so E0301 reports before E0292, E0214, E0215 and E0238, which stay as defense in
+  depth. Every collision of a function is reported, each with the earlier binding as the related span.
+  The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
+  Fixtures: the twelve `error_2i_scope1_*.con` with their `_renamed` twins, and the 087 / 093 / 094
+  / 107 shadowing fixtures and `error_borrow_shadow.con`, all rows of `tests/rules/exit_2i.tsv`
+  (the two 107 fixtures report E0301, not E0302: the SCOPE-1 walk runs before any statement is
+  checked). Corpus migration: std 16 binders in 6 files, examples 16 in 12 files (projects
+  included), tests about 33 sites in positive programs and project fixtures; the fuzz generators produce renamed binders. Before exit 2i:
+  **gap** (G3). Every other rejected shape above was accepted on both revisions. Duplicate
   parameter names pass the checker on both and then fail in `llvm-as` ("redefinition of
   argument", bug 124), a loud failure that also breaks LANGUAGE_INVARIANTS §19.
-- Prerequisite (G4): the renamed pattern binder `Variant { value: inner }`, in `match`, `if let`,
-  `while let` and destructuring `let`. It does not parse today ("expected identifier, got :").
+- Prerequisite (G4, **enforced**): the renamed pattern binder `Variant { value: inner }`, in `match`, `if let`,
+  `while let` and destructuring `let` (enum and struct). `PatBind` carries the optional label; an
+  enum pattern without labels stays positional, and with any label every entry names its field (a
+  shorthand `value` names field `value`), each field once and all fields listed (`field: _`
+  ignores a Copy one), else E0304. The formatter keeps the label. Fixture
+  `regress_2i_renamed_pattern_binder.con` (run 42, binary = `--interp`, formatter round-trip).
+  Before exit 2i it did not parse ("expected identifier, got :").
   Without it a nested `Option` / `Result` match cannot be written under SCOPE-1, because both
   payload fields are named `value`.
 - Adopted again by the 2026-10-21 decision, as specified here: one binding per **visible scope
@@ -1135,7 +1185,10 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   is consumed (`acc = f(acc, x)`); assigning over a live linear value stays E0219.
 - Names in other namespaces: field labels, type names, traits and modules.
 
-Status: the checker accepts all of these on **main**. Correct execution of sibling reuse is
+Status: **enforced** (exit 2i): run rows `regress_2i_scope2_*.con` and the two bug 087 sibling
+fixtures, binary = `--interp`; SCOPE-1's walk opens a scope per branch, arm, block, loop body and
+`for` header, and assignment introduces no binder. Before exit 2i: the checker accepts all of these
+on **main**. Correct execution of sibling reuse is
 **main** for scalars, but **land2** where the name has promoted storage (an aggregate such as
 `let mut x: [i32; 1]` in both branches): on `main` Lower appends promoted entries and never drops
 a dead one at a new declaration, so the else branch read the then branch's storage (41 for 42)
@@ -1150,7 +1203,11 @@ interpreter, Lower, extraction, evidence frames) resolves a name to the innermos
 Once SCOPE-1 lands only sibling reuse reaches the renaming path; until then programs that shadow
 must at least mean the lexical thing.
 
-- Status: **land2** (the bug 087 repair: `bindLocal`, `enterBlock` / `exitBlock` in
+- Status: **enforced** (exit 2i): batch 2 is on `main`; the shadowing fixture is now rejected by
+  SCOPE-1, and its renamed twin `regress_2i_scope1_087_renamed.con` runs 42 in modes
+  `binary,interp,model:087-renamed` (sidecar `tests/rules/exit_2i_model.tsv`: the renamed inner
+  binders extract under their own names, no `.bN` suffix), with the project twin
+  `regress_2i_scope1_087_borrow_renamed/`. Before exit 2i: **land2** (the bug 087 repair: `bindLocal`, `enterBlock` / `exitBlock` in
   `Concrete/Elab/Elab.lean`; fixtures *`regress_087_let_block_shadow.con`*,
   *`regress_087_sibling_promoted.con`*, *`regress_087_unpromoted_sibling.con`*,
   *`regress_087_borrow_shadow_uaf/`*). On `main`, shadowing inside a block, a loop body or a
@@ -1202,15 +1259,15 @@ accepted fixtures, with the diagnostic text updated.
 
 | rule | version | code | since |
 |---|---|---|---|
-| REF-1 | 1 | E0236 (to be attached at the front end, G2); E0575 for an `extern fn` signature (FFI safety, which then also carries the `rule` evidence and a rewrite) | H1 closure, 2026-06-13; post-mono re-assertion, class 6 |
-| REF-2 | 1 | E0236 (proposed; no code today) | H1 closure, 2026-06-13 |
+| REF-1 | 1 | E0236, at the front end (`returnsReference`, exit 2i) and after monomorphization; E0575 for an `extern fn` signature (FFI safety; its `rule` evidence is not attached yet, G15) | H1 closure, 2026-06-13; post-mono re-assertion, class 6; front-end code exit 2i |
+| REF-2 | 1 | E0236 (front end, exit 2i) | H1 closure, 2026-06-13; code exit 2i |
 | REF-3 | 1 | E0239 | bug 092 (`df0215f0`; batch 4 follow-ups `fc34504e` to `7f4ae423`); bare-reference constants with batch 2 (bug 123) |
 | REF-4 | 1 | E0236 (a), E0239 (b), E0238 (c) | (a) 2026-06-13; (b) batch 4; (c) batch 2 |
 | REF-5 | 1 | E0238 | batch 2, landing under exit 0b |
-| REF-6 | 1 | E0302 for (a) and E0303 for (b), both proposed; E0234 and E0238 kept as defense in depth | the 2026-10-21 decision, which replaced the draft's same-source comparison before any version of it landed; E0234 earlier; E0238 batch 2 |
+| REF-6 | 1 | E0302 for (a) and E0303 for (b), at Check and after monomorphization; E0234 and E0238 kept as defense in depth | the 2026-10-21 decision, which replaced the draft's same-source comparison before any version of it landed; E0302/E0303 exit 2i; E0234 earlier; E0238 batch 2 |
 | REF-7 | 1 | E0238 | batch 2 (`a4ceab04`) |
 | REF-8 | 1 | E0204, E0203, E0231, E0232, E0293; E0238 | E0238 case batch 2 |
-| SCOPE-1 | 1 | E0301 (proposed) | the change that closes G3 |
+| SCOPE-1 | 1 | E0301; E0214, E0215 and E0292 kept as defense in depth | exit 2i (closes G3) |
 | SCOPE-3 | 1 | none: a semantics rule, pinned by fixtures comparing `--interp`, the binary and the extracted model | bug 087, batch 2 |
 
 **Diagnostic text.** For SCOPE-1:
@@ -1265,6 +1322,19 @@ the table below has a `pair` whose run row is its rewritten program; existing fi
 when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
+
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 127 rows and
+`scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `test-full`) checks them as stated
+above, plus negative controls that feed corrupted manifests and wrong expectations through the same
+checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
+`pair` names the rewrite, not a one-to-one twin); a diagnostic produced by or after monomorphization
+(E0239 at an instantiation, REF-4(c) at a specialization, REF-6 at `T := &Int`) is not in the
+front-end JSON stream, so its row carries `json-exempt:mono` / `json-exempt:post-mono` and the gate
+requires the diagnostic to come from that pass; the two 107 fixtures report E0301, because the
+SCOPE-1 walk runs before any statement; rows for the open gaps (G12, G13, G15, G16, G17) are left
+out until the rules are enforced; the `087-lexical` model assertion and the 093 / 094 identity
+checks are unreachable from source and move to the E0301-disabled mutation leg of R-0498, which is
+not built yet; the run rows of a heap fixture carry `interp-exempt:no-heap-allocation-in-the-interpreter`.
 
 **Rows affected by the 2026-10-21 decision.** A fixture marked † contains a `let`-bound reference
 (a syntactic scan of the fixture at `5b63cd87` or `land2-fix`); once REF-6@1 lands it reports
@@ -1377,21 +1447,21 @@ manifest row:
 | gap | what is missing | proposed owner |
 |---|---|---|
 | G1 | REF-3: a constant of bare reference type is accepted on `main`; its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), fixed on `land2-fix`: the declaration is E0239 and every borrow rooted at a module constant is E0238 | exit 0b (batch 2 landing) |
-| G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
-| G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
-| G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
+| G2 | front-end half closed by exit 2i (E0236 `returnsReference` at `checkFn`, `resolveType` and the instantiation checks; the ledger lists E0236). Still open: the post-mono `tyExposesRef` / front-end `tyContainsRef` alignment and the completeness gate's scan of `Verify.lean`. Was: REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
+| G3 | closed by exit 2i (SCOPE-1@1, E0301). Was: SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
+| G4 | closed by exit 2i (`PatBind`, every pattern position). Was: the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
 | G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 rejects the free and the field write under a projected borrow with E0204 and E0232, fixtures `error_091_norm_free_under_projected_borrow.con` and `error_091_norm_field_write_under_projected_borrow.con`), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
-| G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
-| G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
+| G6 | closed by exit 2i (`CheckError.rule`, `ruleEvidence`, `ruleNextAction`, the ledger's `rules` field, the manifest's diagnostic checks). Was: no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
+| G7 | the manifest and gate exist (exit 2i); E0215 is now reached only as defense in depth (E0301 fires first, fixture `error_2i_scope1_region_name.con`); still open: a REF-4(c) fixture for a plain `r: &T` parameter. Was: no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
 | G9 | `&mut` usage modes are inconsistent and partly unspecified: a borrow-block `&mut` is consumed when passed to a call (MUT_REF_SEMANTICS §3) yet may lapse unused; a parameter `&mut` is reborrowed at every call (and may also lapse unused); a `let`-bound `&mut` (`let r: &mut Int = &mut x;`) is linear with no discharging use, since writing through it, passing it to a call, reborrowing it or moving it into another `let` all end in E0208. The 2026-10-21 decision settles the `let`-bound half by refusing it (REF-6 (a)); what remains is design example B1 (one rule for `&mut` arguments; recommended: implicit reborrow for every `&mut` argument) and B2 (an exclusive reference that may lapse unused is not implicit destruction, since it owns nothing, so it is compatible with the no-implicit-destruction stance) | an R-0500 decision under exit 2i with R-0511 (design examples B1, B2 and G1), with the coordinated change to OWNERSHIP_MODEL, this document, MUT_REF_SEMANTICS and VALUE_MODEL; the V1 model may not model a looser rule than the compiler enforces |
 | G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule. Under the 2026-10-21 stance B7 is a relaxation and waits for a workload that needs owner reads under a named shared borrow |
 | G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)`, temporary `&mut self` receivers and, the constant half, a borrow rooted at a module constant are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
-| G14 | REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; closed by subtraction when REF-6@1 lands (no `let` can receive the copy and no binding can be assigned it), so E0234 needs no cast-aware extension (R-0500) |
+| G14 | closed by subtraction with REF-6@1 (exit 2i; fixtures `error_2i_ref6_borrow_block_{copy,paren_copy,cast_copy,reborrow_escape}.con`). Was: REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; closed by subtraction when REF-6@1 lands (no `let` can receive the copy and no binding can be assigned it), so E0234 needs no cast-aware extension (R-0500) |
 | G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
 | G16 | REF-2: a reference-returning function type is accepted as a type alias target and as a struct or enum field type (no value of it can be made) | R-0500: validate function types after alias expansion and in declarations |
 | G11 | ROADMAP exit 2i's deliverable read "none stored in an aggregate"; "strictly second-class" also covers REF-6 (design example G8) | closed 2026-10-21: exit 2i's text now names where references may exist, REF-6 and the constants rule |
 | G17 | REF-8: an arm binder through a borrow-expression scrutinee does not freeze the scrutinee's root on `main`: `match &o { Option::Some { value } => { consume(o); … take_ref(value) … } }` compiles and reads through `value` after `o` was moved (a use after move in safe code; §15.3 REF-8). Matches on other reference parameters were not inventoried | exit 0b as a reproduced memory-safety defect (to be filed in the bug ledger); the rule under R-0500 (exit 2i) |
-| G18 | REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
+| G18 | closed by exit 2i (E0302 / E0303 at Check and post-mono). Was: REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
 | G19 | reference questions the 2026-10-21 decision leaves open besides G9 and G10: no pass may exploit `&mut` exclusivity (for example LLVM `noalias`) before an aliasing model covering raw pointers exists (design example B4); a Core reborrow form that makes the implicit call-argument reborrows explicit after elaboration, with surface syntax waiting for a workload (B5) | B4: a policy sentence owned by [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md) and R-0505; B5: R-0496 (Core) with R-0500 |
