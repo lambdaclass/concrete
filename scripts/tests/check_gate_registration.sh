@@ -162,5 +162,55 @@ else
   ok "CONTROL: a gate absent from CI is correctly reported unreachable"
 fi
 
+echo "=== a CI gate the host cannot run is a named skip in run_ci_gates_local.sh, never a pass ==="
+# The Examples job runs check_example_outputs.sh under EXAMPLE_VALGRIND=1; macOS has no valgrind.
+# run_ci_gates_local.sh classifies such commands with scripts/tests/lib/host_tools.sh, lists them
+# as SKIP, and keeps the run PARTIAL with completed=0 (host_tool_missing). These legs check the
+# classifier on controlled PATHs, that the table matches the workflow, and that the runner wires it.
+HT_LIB="scripts/tests/lib/host_tools.sh"
+if ! source "$HT_LIB" 2>/dev/null || ! command -v host_tool_missing >/dev/null 2>&1; then
+  no "$HT_LIB does not load — the runner would refuse every run"
+else
+  vg_cmd="EXAMPLE_VALGRIND=1 bash ./scripts/tests/check_example_outputs.sh"
+  ht_empty="$(mktemp -d)"; ht_stub="$(mktemp -d)"
+  printf '#!/bin/sh\nexit 0\n' > "$ht_stub/valgrind"; chmod +x "$ht_stub/valgrind"
+  got="$(PATH="$ht_empty" host_tool_missing "$vg_cmd")"; rc=$?
+  { [ "$rc" = 0 ] && [ "$got" = "valgrind" ]; } \
+    && ok "CONTROL: without valgrind on PATH the valgrind run is classified host-skipped (valgrind)" \
+    || no "CONTROL: without valgrind the valgrind run was not classified missing (rc=$rc, got '$got') — the runner would run it and report a misleading FAIL"
+  PATH="$ht_stub" host_tool_missing "$vg_cmd" >/dev/null \
+    && no "CONTROL: with valgrind on PATH the command was still skipped — CI-capable hosts would never run it" \
+    || ok "CONTROL: with valgrind on PATH the valgrind run is runnable"
+  PATH="$ht_empty" host_tool_missing "bash ./scripts/tests/check_example_outputs.sh" >/dev/null \
+    && no "CONTROL: a command needing no host tool was classified missing" \
+    || ok "CONTROL: the plain command needs no host tool"
+  rm -rf "$ht_empty" "$ht_stub"
+  # The table must match the workflow: every row names something CI actually runs (a dead row is a
+  # stale exemption), and the valgrind spelling CI uses is covered.
+  plan="$(bash scripts/tests/run_ci_gates_local.sh --plan 2>/dev/null)"
+  for row in "${HOST_TOOL_TABLE[@]}"; do
+    pat="${row%%|*}"
+    case "$plan" in
+      *"$pat"*) ok "host-tool row '${row}' matches a workflow command" ;;
+      *) no "host-tool row '${row}' matches no workflow command — remove it or fix the spelling" ;;
+    esac
+  done
+  if grep -q 'EXAMPLE_VALGRIND=1' <<<"$plan"; then
+    vg_plan="$(grep 'EXAMPLE_VALGRIND=1' <<<"$plan" | head -1)"
+    [ "$(host_tool_required "$vg_plan")" = "valgrind" ] \
+      && ok "the workflow's valgrind command requires valgrind per the table" \
+      || no "the workflow's valgrind command ($vg_plan) is not covered by $HT_LIB"
+  else
+    no "no EXAMPLE_VALGRIND=1 command in the workflow plan — update $HT_LIB and these legs together"
+  fi
+  # The runner must use the classifier and let the skip block completion (comments stripped, so a
+  # mention in prose does not count).
+  runner_code="$(sed -E 's/(^|[[:space:]])#.*$/\1/' scripts/tests/run_ci_gates_local.sh)"
+  case "$runner_code" in *'lib/host_tools.sh'*host_tool_missing*) ok "run_ci_gates_local.sh classifies commands with the shared host-tool table" ;;
+    *) no "run_ci_gates_local.sh does not use $HT_LIB" ;; esac
+  case "$runner_code" in *'ALL_REFUSALS="$REFUSALS$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"'*) ok "a host skip is part of the completion-blocking notes (PARTIAL, completed=0)" ;;
+    *) no "HOST_NOTES is not in ALL_REFUSALS — a host-skipped run could be recorded completed=1" ;; esac
+fi
+
 echo "GATE-REGISTRATION: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

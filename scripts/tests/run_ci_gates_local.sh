@@ -327,6 +327,7 @@ ci_write_summary() { # completed refusals ; atomic — a truncate-in-place write
          echo "untracked_sha=${START_UNTRACKED:-unknown}"
          # Stated in the record, so completed=1 cannot be read as covering what this runner cannot run.
          echo "excludes=check_gate_mutation_coverage.sh${EXCLUSIONS:-}"
+         echo "host_skipped=${HOST_SKIPPED_N:-0}"
          [ -n "$2" ] && echo "refusals=$2"
          true
        } > "$tmp" 2>/dev/null; then
@@ -498,6 +499,33 @@ RUN_INTERRUPTED=0
 REACHED_END=0
 trap 'RUN_INTERRUPTED=1' INT TERM HUP
 
+# HOST TOOLS. A workflow command can need a tool only the CI image has (the Examples job runs
+# check_example_outputs.sh under EXAMPLE_VALGRIND=1, and macOS has no valgrind). The gate refuses to
+# run without it, which is right for CI; here that refusal would read as a red tree. Such a command is
+# NOT run and NOT passed: it is listed by name as host-skipped, and the skip is a completion-blocking
+# note (host_tool_missing below), so the run reports PARTIAL and can never write completed=1 — the
+# same standing as a deliberate subset. The table is scripts/tests/lib/host_tools.sh.
+source "$ROOT_DIR/scripts/tests/lib/host_tools.sh" 2>/dev/null \
+  && command -v host_tool_missing >/dev/null 2>&1 \
+  || { echo "error: could not load scripts/tests/lib/host_tools.sh" >&2
+       ci_write_summary 0 " host_tools_library_unavailable"; _gate_lock_release; exit 2; }
+HOST_SKIPPED=(); HOST_SKIP_TOOLS=""
+RUN_LIST=(); RUN_FIRST_N=0
+for (( _i=0; _i<${#SELECTED[@]}; _i++ )); do
+  _c="${SELECTED[$_i]}"
+  if _miss="$(host_tool_missing "$_c")"; then
+    HOST_SKIPPED+=("$_c")
+    echo "  SKIP $_c (host lacks: $_miss — CI runs it; this run cannot be a full pass)"
+    for _t in $_miss; do
+      case ",$HOST_SKIP_TOOLS," in *",$_t,"*) ;; *) HOST_SKIP_TOOLS="$HOST_SKIP_TOOLS${HOST_SKIP_TOOLS:+,}$_t" ;; esac
+    done
+  else
+    RUN_LIST+=("$_c")
+    [ "$_i" -lt "$FIRST_N" ] && RUN_FIRST_N=$((RUN_FIRST_N+1))
+  fi
+done
+HOST_SKIPPED_N="${#HOST_SKIPPED[@]}"
+
 PASS=0; FAIL=0; FAILED=""
 
 # A FAILING GATE'S OUTPUT IS KEPT. Discarding it means a failure in a 40-minute pass leaves nothing
@@ -523,10 +551,10 @@ run_seq() { # cmd -> 0 pass / 1 fail; output kept only on failure
 # stops the run: the hook's fast surface checklist used to run first and fail the push in seconds,
 # and folding it into one pool must not turn that into a failure reported after minutes of other gates.
 STOPPED_EARLY=0
-for (( _i=0; _i<FIRST_N; _i++ )); do
-  run_seq "${SELECTED[$_i]}" || { STOPPED_EARLY=1; break; }
+for (( _i=0; _i<RUN_FIRST_N; _i++ )); do
+  run_seq "${RUN_LIST[$_i]}" || { STOPPED_EARLY=1; break; }
 done
-REST=("${SELECTED[@]:$FIRST_N}")
+REST=("${RUN_LIST[@]:$RUN_FIRST_N}")
 [ "$STOPPED_EARLY" = "1" ] && REST=()
 
 if [ "$JOBS" -le 1 ]; then
@@ -686,22 +714,27 @@ if [ "$SELECTING" = "1" ]; then
   # skipped all 208 commands and the run printed `PARTIAL PASS=0 FAIL=0` and exited ZERO — a vacuous
   # success with no positive control that the filter selected even one live gate. (Each selector is
   # now also checked on its own in resolve_selection.)
-  if [ "$EXECUTED" -eq 0 ]; then
+  # A host-skipped command was selected and is accounted for by name, so it is not "nothing".
+  if [ $(( EXECUTED + HOST_SKIPPED_N )) -eq 0 ]; then
     REFUSALS="$REFUSALS filter_selected_nothing(${JOBSEL[*]:-}${FILTERS[*]:-})"
   fi
   # EVERY SELECTED COMMAND RAN, OR THE RUN SAYS WHY NOT. A selection is a promise about what was
   # executed; the full-run check below makes the same promise for the whole inventory.
   if [ "$STOPPED_EARLY" = "1" ]; then
-    REFUSALS="$REFUSALS stopped_after_first_stage_failure($((SELECTED_N - EXECUTED)) not run)"
-  elif [ "$EXECUTED" != "$SELECTED_N" ]; then
-    REFUSALS="$REFUSALS selected_not_executed($SELECTED_N selected, $EXECUTED executed)"
+    REFUSALS="$REFUSALS stopped_after_first_stage_failure($((SELECTED_N - EXECUTED - HOST_SKIPPED_N)) not run)"
+  elif [ $(( EXECUTED + HOST_SKIPPED_N )) != "$SELECTED_N" ]; then
+    REFUSALS="$REFUSALS selected_not_executed($SELECTED_N selected, $EXECUTED executed, $HOST_SKIPPED_N host-skipped)"
   fi
   SCOPE_NOTES=" deliberate_subset($EXECUTED of $DISCOVERED)"
   [ "${OUTSIDE:-0}" -eq 0 ] || SCOPE_NOTES="$SCOPE_NOTES outside_inventory($OUTSIDE)"
-elif [ "$DISCOVERED" != "$EXECUTED" ]; then
-  REFUSALS="$REFUSALS discovered_not_executed($DISCOVERED discovered, $EXECUTED executed)"
+elif [ "$DISCOVERED" != $(( EXECUTED + HOST_SKIPPED_N )) ]; then
+  REFUSALS="$REFUSALS discovered_not_executed($DISCOVERED discovered, $EXECUTED executed, $HOST_SKIPPED_N host-skipped)"
 fi
-ALL_REFUSALS="$REFUSALS$SCOPE_NOTES$MODE_NOTES"
+# Host-skipped commands are named, not run: like a deliberate subset they keep the run PARTIAL and
+# block completed=1 in every mode, closure included; unlike a refusal they say nothing about the tree.
+HOST_NOTES=""
+[ "$HOST_SKIPPED_N" -eq 0 ] || HOST_NOTES=" host_tool_missing($HOST_SKIP_TOOLS: $HOST_SKIPPED_N not run)"
+ALL_REFUSALS="$REFUSALS$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
 
 COMPLETED=0
 # FAILURES BLOCK COMPLETION. This tested only refusals and closure mode, so a run with red gates
@@ -726,14 +759,18 @@ RUN_OK=1
 [ "$CI_ARTIFACT_OK" = "1" ] || RUN_OK=0
 
 echo
-if [ "$RUN_OK" = "1" ] && [ -z "$SCOPE_NOTES$MODE_NOTES" ]; then
+if [ "$RUN_OK" = "1" ] && [ -z "$SCOPE_NOTES$MODE_NOTES$HOST_NOTES" ]; then
   echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 elif [ "$RUN_OK" = "1" ]; then
-  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES"
+  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
 else
   echo "CI-GATES-LOCAL: REFUSED PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 fi
 [ -n "$FAILED" ] && echo -e "Failures:$FAILED"
+if [ "$HOST_SKIPPED_N" -gt 0 ]; then
+  echo "Not run — this host lacks a tool CI has ($HOST_SKIP_TOOLS); they did NOT pass here:"
+  printf '  SKIP %s\n' "${HOST_SKIPPED[@]}"
+fi
 
 if [ -n "$REFUSALS" ]; then
   echo
@@ -743,6 +780,9 @@ if [ -n "$REFUSALS" ]; then
 elif [ "$CLOSURE" != "1" ]; then
   echo
   echo "NOT A CLOSURE RUN (mode=ordinary). Set CONCRETE_CLOSURE_RUN=1 to produce completed=1."
+elif [ -n "$HOST_NOTES" ]; then
+  echo
+  echo "CLOSURE NOT REACHED:$HOST_NOTES — run on a host that has the tool (CI does) for completed=1."
 fi
 if [ "$CI_ARTIFACT_OK" = "1" ]; then
   echo "summary written to $ROOT_DIR/.ci-gates-summary (completed=$COMPLETED)"
