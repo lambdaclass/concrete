@@ -93,6 +93,14 @@ name and emitted the bare name; with bug 087's alpha-renaming a second shadowing
 `land2-fix`, 2 on main). Elab now resolves locals before constants, as Check does
 (`regress_087_local_shadows_const.con`).
 
+A second review pass found that Lower inlined a constant's initializer in the CALLER's
+environment, so a local shadowing a constant the initializer names captured it:
+`const Y: Int = X + 1;` read under `let X: Int = 7;` gave 8 for 43, on main as well (silent wrong
+code), and `const Y: Int = *&X;` borrowed the local (7 for 42). The initializer is now lowered with
+the caller's locals and promoted slots hidden (`lowerExpr`, `.ident` constant case), so a name in it
+is the constant and `&X` there reaches `addrOfLocal`'s refusal (E0602,
+`error_123_const_initializer_borrow.con`; `regress_123_const_initializer_hygiene.con` prints 43).
+
 The open-bug reproducer row in `check_example_outputs.sh` is dropped, and `run_tests.sh` runs the
 fixtures.
 

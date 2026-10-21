@@ -1,0 +1,13 @@
+// Bug 123 review: a constant's initializer is module-scope code. Lower inlined it in the
+// caller's environment, so a local shadowing a constant it names captured it: Y = X + 1 read
+// the local X (8 for 43, on main too). The initializer is now lowered with the caller's locals
+// hidden.
+const X: Int = 42;
+const Y: Int = X + 1;
+
+fn main() with(Std) -> Int {
+    let X: Int = 7;
+    print_int(Y + X - 7);
+    print_char(10);
+    return 0;
+}

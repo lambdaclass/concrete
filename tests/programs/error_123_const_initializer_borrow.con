@@ -1,0 +1,11 @@
+// Bug 123 review: a borrow inside a module constant's initializer. Inlined in the caller, `&X`
+// borrowed a local that shadows the constant (7 for 42). A constant has no storage, so the
+// initializer's `&X` is refused (Lower, E0602; the initializer is lowered with the caller's
+// locals hidden).
+const X: Int = 42;
+const Y: Int = *&X;
+
+fn main() -> Int {
+    let X: Int = 7;
+    return Y;
+}

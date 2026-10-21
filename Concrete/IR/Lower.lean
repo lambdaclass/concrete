@@ -761,7 +761,17 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- Check module-level constants and inline their value
       let s ← getState
       match s.constants.find? fun (n, _, _) => n == name with
-      | some (_, _, constExpr) => lowerExpr constExpr
+      | some (_, _, constExpr) =>
+        -- Hygiene (bug 123 review): the initializer is module-scope code. Inlined in the
+        -- caller's environment, a local shadowing a constant it names captured it
+        -- (`const Y = X + 1` read a local `X`; `const Y = *&X` borrowed one). The caller's
+        -- locals and promoted slots are hidden while it lowers, so a name in it is a constant
+        -- (and `&X` there reaches addrOfLocal's refusal), then restored.
+        let saved ← getState
+        set { saved with vars := [], promotedAllocas := [] }
+        let v ← lowerExpr constExpr
+        modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas }
+        return v
       | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with

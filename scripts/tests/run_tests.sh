@@ -1567,6 +1567,10 @@ run_err "$TESTDIR/error_123_const_index_borrow.con"      "(E0238)"
 run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
 # A local shadows a module constant (and a second `let` shadows the first): locals resolve first.
 run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
+# A constant's initializer is lowered with the caller's locals hidden: no borrow of a constant
+# inside it (E0602 at Lower), and no capture of a local shadowing a constant it names.
+run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0602)"
+run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
