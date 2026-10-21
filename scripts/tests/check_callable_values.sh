@@ -183,7 +183,16 @@ reject_e0293 neg_receiver_ctx_alias 'mod m { pub struct C { pub n: i64 }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
 fn main() -> Int { let mut c: C = C { n: 1 }; c.scoped(&mut c, cb); let C { n } = c; return n as Int; }'
-reject_e0293 neg_alias_through_binding 'mod m { pub struct C { pub n: i64 }
+# Exit 2i REF-6@1: the alias through a `let`-bound `&mut` is now refused at that `let` (E0302),
+# before the call; the leg keeps the shape and pins the earlier refusal.
+reject_e0302() {
+  local name="$1" src="$2"
+  printf '%s' "$src" > "$TMP/$name.con"
+  local out; out="$("$COMPILER" "$TMP/$name.con" -o "$TMP/$name.bin" 2>&1)"
+  if grep <<<"$out" -q "(E0302)"; then ok "$name rejected (E0302, REF-6@1: the alias cannot be named)"
+  else no "$name: expected E0302, got '$(grep <<<"$out" -oE '\(E[0-9]+\)' | awk 'NR<=1')'"; fi
+}
+reject_e0302 neg_alias_through_binding 'mod m { pub struct C { pub n: i64 }
   trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }

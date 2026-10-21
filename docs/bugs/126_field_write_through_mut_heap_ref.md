@@ -74,6 +74,30 @@ reads 16 bytes from the caller's 8-byte `%mutref` slot, takes the heap pointer a
 back `{pointer + 1, the 8 bytes past the slot}`, so `free` receives the heap pointer plus one. A
 write to `w` instead of `v` would store the new value into the caller's stack past the slot.
 
+## A third form: a shared borrow-block binder (found 2026-10-21, exit 2i)
+
+Migrating `regress_092_refs_flow_down.con` off its `let r: &Heap<B> = &h` (refused by REF-6@1)
+to a borrow block found the same disagreement for a SHARED reference made by a borrow block:
+
+```con
+struct B { v: Int }
+fn read(h: &Heap<B>) -> Int { return h.v; }
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 20 });
+    let mut out: Int = 0;
+    borrow h as r in R { out = read(r); }
+    out = out + read(&h);
+    free(h);
+    return out;
+}
+```
+
+On main at `5a064e77` the binary exits 116 where 40 is correct (`read(&h)` is right, `read(r)`
+reads through the slot: the borrow-block binder denotes the slot holding the heap pointer, `&h`
+the heap pointer itself). Same cause and owner as below; it matters more once REF-6@1 makes the
+borrow block the only way to name a reference across statements. The migrated fixture borrows
+`&h` at each use instead.
+
 ## On `land2-fix` (`74f7284a`)
 
 Same behaviour. The `land2fix` worktree's compiler binary postdates that branch's last

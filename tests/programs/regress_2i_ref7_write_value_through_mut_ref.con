@@ -1,0 +1,10 @@
+// Exit 2i REF-7@1 (MEMORY_SEMANTICS §15.3): writing a value (no reference) through `&mut Int` is allowed. Run 42, binary = --interp.
+fn set(slot: &mut Int) {
+    *slot = 42;
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    set(&mut x);
+    return x;
+}

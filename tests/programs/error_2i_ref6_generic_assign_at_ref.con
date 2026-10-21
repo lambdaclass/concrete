@@ -1,0 +1,11 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a generic assigns one `T` parameter to another, called at `T := &Int`. Rejected after monomorphization: E0303 (pass post-mono).
+fn pick<T: Copy>(x: T, y: T, k: Int) -> Int {
+    x = y;
+    return k;
+}
+
+fn main() -> Int {
+    let a: Int = 1;
+    let b: Int = 2;
+    return pick::<&Int>(&a, &b, 42);
+}

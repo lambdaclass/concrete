@@ -1,0 +1,8 @@
+// Exit 2i REF-5@1 (MEMORY_SEMANTICS §15.3): a borrow of an operator temporary (`&(40 + 2)`). Rejected: E0238.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return read(&(40 + 2));
+}

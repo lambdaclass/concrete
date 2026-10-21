@@ -1,6 +1,8 @@
-// Bug 092 positive control: references still flow DOWN — a bare `let r = &h`
-// (it freezes `h` while in scope), reference arguments, and a struct holding a
-// fn pointer whose parameter is a reference (a fn pointer stores no reference).
+// Bug 092 positive control: references still flow DOWN — reference arguments (a
+// `let` may not bind a reference since exit 2i REF-6@1; the old `let r = &h` became
+// a borrow at each use), and a struct holding a fn pointer whose parameter is a
+// reference (a fn pointer stores no reference). A borrow-block binder over a Heap
+// passed to a `&Heap<B>` parameter is miscompiled (bug 126, borrow-block form).
 struct B { v: Int }
 struct Ops { f: fn(&Heap<B>) -> Int }
 fn read(h: &Heap<B>) -> Int { return h.v; }
@@ -11,8 +13,7 @@ fn main() with(Std) -> Int {
     let Ops { f } = ops;
     let mut out: Int = 0;
     if true {
-        let r: &Heap<B> = &h;
-        out = both(r, &h) + f(&h) - read(r);
+        out = both(&h, &h) + f(&h) - read(&h);
     }
     free(h);
     return out + 2;

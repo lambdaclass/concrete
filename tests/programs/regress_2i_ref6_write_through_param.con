@@ -1,0 +1,10 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): the twin of the exclusive-parameter re-pointing row: write through the parameter instead of re-pointing it. Run 42, binary = --interp.
+fn f(r: &mut Int) {
+    *r = *r + 41;
+}
+
+fn main() -> Int {
+    let mut v: Int = 1;
+    f(&mut v);
+    return v;
+}

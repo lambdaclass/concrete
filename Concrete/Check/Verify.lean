@@ -495,6 +495,86 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
           else acc ++ [{ fnName := f.name
                          message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
   violationsToDiagnostics "post-mono" violations
+/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@1, MEMORY_SEMANTICS §15.3)
+
+Check refuses every `let` of reference type (E0302) and every assignment to a reference binding
+(E0303) it can see. A generic body is checked once at its opaque `T`, so `let y: T = x;` and
+`x = y;` pass there and become a reference `let` / a reference re-pointing only when Mono
+instantiates `T := &Int`. This pass re-asks both questions on every specialized (non-generic)
+function after monomorphization, with the binding types Mono substituted. -/
+
+private def isRefTyPM : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | _ => false
+
+mutual
+private partial def refBindExpr (env : List (String × Ty)) : CExpr → List (String × String)
+  | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => refBindExpr env l ++ refBindExpr env r
+  | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
+    refBindExpr env x
+  | .call _ _ args _ | .arrayLit args _ => args.flatMap (refBindExpr env)
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (fun (_, e) => refBindExpr env e)
+  | .match_ s arms _ => refBindExpr env s ++ arms.flatMap (refBindArm env)
+  | .ifExpr c t e _ => refBindExpr env c ++ refBindStmts env t ++ refBindStmts env e
+  | _ => []
+
+private partial def refBindArm (env : List (String × Ty)) : CMatchArm → List (String × String)
+  | .enumArm _ _ bs g body =>
+    let env' := bs.reverse ++ env
+    (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
+  | .varArm b t g body =>
+    let env' := (b, t) :: env
+    (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
+  | .litArm v g body => refBindExpr env v ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
+  | .rangeArm lo hi _ g body =>
+    refBindExpr env lo ++ refBindExpr env hi ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
+
+private partial def refBindStmts (env : List (String × Ty)) : List CStmt → List (String × String)
+  | [] => []
+  | s :: rest =>
+    let (vs, env') := refBindStmt env s
+    vs ++ refBindStmts env' rest
+
+/-- One statement: its violations (code, message) and the bindings visible after it. -/
+private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (String × String) × List (String × Ty)
+  | .letDecl n _ ty v =>
+    (refBindExpr env v ++
+      (if isRefTyPM ty then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
+     (n, ty) :: env)
+  | .assign n v =>
+    (refBindExpr env v ++
+      (match env.lookup n with
+       | some t => if isRefTyPM t then [("E0303", s!"a reference binding is never assigned (after monomorphization): '{n}' has type '{tyToStr t}'")] else []
+       | none => []), env)
+  | .return_ v _ | .break_ v _ => ((v.map (refBindExpr env)).getD [], env)
+  | .expr e _ | .defer e => (refBindExpr env e, env)
+  | .ifElse c t e => (refBindExpr env c ++ refBindStmts env t ++ ((e.map (refBindStmts env)).getD []), env)
+  | .while_ c body _ step => (refBindExpr env c ++ refBindStmts env body ++ refBindStmts env step, env)
+  | .fieldAssign o _ v | .derefAssign o v => (refBindExpr env o ++ refBindExpr env v, env)
+  | .arrayIndexAssign a i v => (refBindExpr env a ++ refBindExpr env i ++ refBindExpr env v, env)
+  | .continue_ _ => ([], env)
+  | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref, refTy) :: env) body, env)
+end
+
+/-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
+    type became a reference by instantiating a type parameter. Generic originals are skipped
+    (their `T` is opaque; Check saw them). -/
+partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
+  | [] => []
+  | m :: ms =>
+    let here := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc else
+      acc ++ (refBindStmts fn.params.reverse fn.body).map fun (code, msg) =>
+        ({ severity := .error
+           message := s!"function '{fn.name}': {msg}"
+           pass := "post-mono"
+           span := fn.declSpan
+           hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/language/MEMORY_SEMANTICS.md §15, REF-6)"
+           code := code
+           evidence := [("rule", "REF-6@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+           nextAction := some "instantiate the generic at a value type, or restructure the generic so it passes its `T` argument on instead of binding or assigning it" } : Diagnostic)) ([] : Diagnostics)
+    here ++ verifyNoRefBindingsPostMono m.submodules ++ verifyNoRefBindingsPostMono ms
+
 /-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
     fields validate after instantiation, and no SAFE function exposes a
     reference-return type (references are second-class), and every integer
@@ -504,7 +584,7 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
-    ++ verifyCapsPostMono modules
+    ++ verifyCapsPostMono modules ++ verifyNoRefBindingsPostMono modules
 
 -- ============================================================
 -- Rendering

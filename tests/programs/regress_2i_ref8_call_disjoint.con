@@ -1,0 +1,21 @@
+// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): one call's borrows are disjoint: two locals, two fields of one struct. Run 42, binary = --interp.
+struct Copy W { a: Int, b: Int }
+
+fn mix(a: &Int, b: &mut Int) -> Int {
+    *b = 20;
+    return *a;
+}
+
+fn two(a: &mut Int, b: &mut Int) {
+    *a = 1;
+    *b = 1;
+}
+
+fn main() -> Int {
+    let x: Int = 20;
+    let mut y: Int = 0;
+    let mut w: W = W { a: 0, b: 0 };
+    let out: Int = mix(&x, &mut y);
+    two(&mut w.a, &mut w.b);
+    return out + y + w.a + w.b;
+}

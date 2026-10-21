@@ -1440,6 +1440,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
+            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
+            let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
             -- the scrutinee's normalization, taken before any binder can shadow its name
@@ -1461,6 +1463,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               let bindTy ← do
                 if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
                 else pure fieldTy
+              if fromLet && binding != "_" then
+                match ← resolvedOr bindTy with
+                | .ref _ | .refMut _ =>
+                  throwCheck (.letBindsReference binding (tyToString bindTy)) (some e.getSpan)
+                | _ => pure ()
               -- An arm binder may shadow a live binding: it is arm-scoped, so
               -- the outer binding is visible again (with its own obligation)
               -- after the match; state updates key on uid (bug 094).
@@ -2004,13 +2011,16 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with
   | .letDecl _ name mutable ty value _isGhost =>
-    -- Escape analysis: prevent storing a borrow ref into a new binding
+    -- REF-6@1 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
+    -- is refused before the initializer is checked; an inferred one right after.
+    match ty with
+    | some t =>
+      match ← resolvedOr t with
+      | .ref _ | .refMut _ =>
+        throwCheck (.letBindsReference name (tyToString (← resolvedOr t))) (some stmt.getSpan)
+      | _ => pure ()
+    | none => pure ()
     let env ← getEnv
-    match value with
-    | .ident _ vn =>
-      if env.borrowRefs.contains vn then
-        throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
-    | _ => pure ()
     let valTy ← checkExpr value ty
     match ty with
     | some declTy => expectTy declTy valTy s!"let binding '{name}'" (some stmt.getSpan)
@@ -2018,6 +2028,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let finalTy ← match ty with
       | some t => resolveType t
       | none => pure valTy
+    match ← resolvedOr finalTy with
+    | .ref _ | .refMut _ =>
+      throwCheck (.letBindsReference name (tyToString finalTy)) (some stmt.getSpan)
+    | _ => pure ()
+    -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
+    match value with
+    | .ident _ vn =>
+      if env.borrowRefs.contains vn then
+        throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
+    | _ => pure ()
     -- `let _ = expr;` is removed: `_` is a pattern wildcard, not a discard device
     -- that makes an owned value vanish. Ignore a non-resource value with
     -- `match e { _ => {} }` (gated so it can't silently drop a resource owner);
@@ -2040,6 +2060,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
+    -- REF-6@1 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
+    -- binder; a `let` never is one) is the target of an assignment, whatever the value.
+    match ← lookupVarInfo name with
+    | some info =>
+      match ← resolvedOr info.ty with
+      | .ref _ | .refMut _ =>
+        throwCheck (.assignsReferenceBinding name (tyToString info.ty)) (some stmt.getSpan)
+      | _ => pure ()
+    | none => pure ()
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
     match value with
@@ -3208,7 +3237,8 @@ def checkModule (m : Module) (summary : FileSummary)
   | some (desc, ty, sp) =>
     .error [{ severity := .error, message := CheckError.message (.refStoredInAggregate desc (tyToString ty)),
               pass := "check", span := some sp, hint := CheckError.hint (.refStoredInAggregate desc (tyToString ty)),
-              code := CheckError.code (.refStoredInAggregate desc (tyToString ty)) }]
+              code := CheckError.code (.refStoredInAggregate desc (tyToString ty)),
+              evidence := ruleEvidence (some "REF-3@1"), nextAction := ruleNextAction "REF-3@1" }]
   | none =>
   -- A `spec fn` with a DEFINITIONAL body must have that body checked. The body-less form has
   -- nothing to check, so nothing did -- and when bodies were added, a spec could reference an

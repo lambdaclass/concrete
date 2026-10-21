@@ -1,0 +1,13 @@
+// Exit 2i REF-3@1 (MEMORY_SEMANTICS §15.3): a struct field of function-pointer type whose parameter is a reference stores no reference. Run 42, binary = --interp.
+struct H { f: fn(&Int) -> Int }
+
+fn g(r: &Int) -> Int {
+    return *r + 1;
+}
+
+fn main() -> Int {
+    let h: H = H { f: g };
+    let H { f } = h;
+    let x: Int = 41;
+    return f(&x);
+}

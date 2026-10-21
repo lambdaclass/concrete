@@ -1,0 +1,14 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` binds a reference to a reference parameter's slot. Rejected: E0302.
+fn read2(rr: & &Int) -> Int {
+    return 0;
+}
+
+fn f(r: &Int) -> Int {
+    let rr: & &Int = &r;
+    return read2(rr) + *r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    return f(&x);
+}

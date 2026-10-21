@@ -11,9 +11,9 @@ mod Example {
         return *a;
     }
 
+    // A reference exists as a call argument or parameter, never as a `let` (exit 2i REF-6@1).
     fn references(a: i64) -> i64 {
         let x: i64 = a;
-        let y: &i64 = &x;
-        return *y;
+        return dereference(&x);
     }
 }

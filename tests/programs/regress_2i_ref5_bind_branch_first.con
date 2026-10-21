@@ -1,0 +1,9 @@
+// Exit 2i REF-5@1 (MEMORY_SEMANTICS §15.3): the rewrite of a projection of a branch value: bind the branch result first (`let w = if c { a } else { b }; w.f`). Run 42, binary = --interp.
+struct Copy P { n: Int }
+
+fn main() -> Int {
+    let a: P = P { n: 42 };
+    let b: P = P { n: 1 };
+    let w: P = if a.n > b.n { a } else { b };
+    return w.n;
+}
