@@ -1565,6 +1565,8 @@ run_err "$TESTDIR/error_123_const_field_borrow.con"      "(E0238)"
 run_err "$TESTDIR/error_123_const_receiver_borrow.con"   "(E0238)"
 run_err "$TESTDIR/error_123_const_index_borrow.con"      "(E0238)"
 run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
+# A local shadows a module constant (and a second `let` shadows the first): locals resolve first.
+run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"

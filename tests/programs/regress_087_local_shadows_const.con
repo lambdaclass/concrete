@@ -1,0 +1,14 @@
+// Bug 087 / 123 review: a local shadows a module constant of the same name, and a second `let`
+// of that name shadows the first. Elab resolved the constant before the locals and emitted the
+// bare name, which bug 087's alpha-renaming no longer gives the second local, so `X` and `&X`
+// read the FIRST local (1, binary and interpreter). Locals now resolve before constants.
+const X: Int = 42;
+
+fn main() with(Std) -> Int {
+    let X: Int = 1;
+    let X: Int = 2;
+    let r: &Int = &X;
+    print_int(X + *r);
+    print_char(10);
+    return 0;
+}

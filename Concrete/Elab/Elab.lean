@@ -535,10 +535,11 @@ private partial def peekExprType (e : Expr) : ElabM Ty := do
   | .charLit _ _ => return .char
   | .ident _ name =>
     let env ← getEnv
-    match env.constants.lookup name with
+    -- locals shadow module constants (the `.ident` case of `elabExprEv`)
+    match env.vars.lookup name with
     | some ty => return ty
     | none =>
-    match env.vars.lookup name with
+    match env.constants.lookup name with
     | some ty => return ty
     | none =>
       match ← lookupFnSig name with
@@ -626,20 +627,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
 
   | .ident _ name =>
     let env ← getEnv
-    match env.constants.lookup name with
-    | some ty => return ElaboratedExprV2.mk (CExpr.ident name ty) (Proof.evConstRef env.proofPath name)
-    | none =>
+    -- A local shadows a module constant of the same name (Check resolves locals first too).
+    -- Resolving the constant first emitted the bare name, which bug 087's alpha-renaming no
+    -- longer gives a shadowing local: `let X = 1; let X = 2; return X;` read the first `X`.
     match env.vars.lookup name with
-    | some ty => do
-      -- COVERAGE ONLY. The binder reference itself is emitted structurally by
-      -- `evBinderRef` on the next line; this arm no longer records a second copy of
-      -- it. If the frame stack cannot place the local, the body is uncovered rather
-      -- than encoded against a guessed position.
-      match env.bodyScope.resolve? name with
-      | some _ => pure ()
-      | none   => markBodyIdentityUncovered
-      return ElaboratedExprV2.mk (CExpr.ident (← coreNameOf name) ty) (Proof.evBinderRef env.bodyScope name)
     | none =>
+      match env.constants.lookup name with
+      | some ty => return ElaboratedExprV2.mk (CExpr.ident name ty) (Proof.evConstRef env.proofPath name)
+      | none =>
       match ← lookupFnSig name with
       | some sig =>
         let paramTys := sig.params.map Prod.snd
@@ -652,6 +647,15 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         if env.ghostVars.contains name then
           throwElab (.ghostInRuntime name) (some e.getSpan)
         throwElab (.undeclaredVariable name) (some e.getSpan)
+    | some ty => do
+      -- COVERAGE ONLY. The binder reference itself is emitted structurally by
+      -- `evBinderRef` on the next line; this arm no longer records a second copy of
+      -- it. If the frame stack cannot place the local, the body is uncovered rather
+      -- than encoded against a guessed position.
+      match env.bodyScope.resolve? name with
+      | some _ => pure ()
+      | none   => markBodyIdentityUncovered
+      return ElaboratedExprV2.mk (CExpr.ident (← coreNameOf name) ty) (Proof.evBinderRef env.bodyScope name)
 
   | .paren _ inner => elabExprEv inner hint
 

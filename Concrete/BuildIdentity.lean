@@ -25,9 +25,6 @@ namespace Concrete
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-=======
-=======
->>>>>>> f2a9285d (fix: bug 091 normalized place rule — Codex static review: no parentheses in Check, exact provenance paths)
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 ||||||| parent of 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 =======
@@ -172,6 +169,10 @@ def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> 90cd6db8 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 ||||||| parent of b6b40a8e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
+||||||| parent of f1e6acb9 (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
+>>>>>>> 90cd6db8 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> f1e6acb9 (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
 ||||||| parent of a2bb78a4 (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 >>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 =======
@@ -1029,7 +1030,14 @@ def buildIdentity : String := "5556bd2229e9b1a8107fb1a290fcf0dc"
 =======
 def buildIdentity : String := "493ce2e5c31398647f70141075e3ed8b"
 >>>>>>> 149b1767 (regenerate Concrete/BuildIdentity.lean for the bug 123 fix)
->>>>>>> 20ca1b5c (regenerate Concrete/BuildIdentity.lean for the bug 123 fix)
+||||||| parent of f1e6acb9 (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
+=======
+||||||| parent of 6183a05d (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
+def buildIdentity : String := "493ce2e5c31398647f70141075e3ed8b"
+=======
+def buildIdentity : String := "5b6797bbdc614a6b68d26d692600da2e"
+>>>>>>> 6183a05d (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
+>>>>>>> f1e6acb9 (fix: a local shadows a module constant in Elab (bug 087 x 123 review))
 
 /-- How many source files the identity above was computed over.
 

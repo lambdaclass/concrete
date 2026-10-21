@@ -87,6 +87,12 @@ Batch 2 (`land2-fix`, 2026-10-21), fail closed at both halves:
    half is bug 117). Lower's `addrOfLocal` refuses the address of a module constant too (E0602),
    defense in depth behind the check.
 
+The review of this fix found that Elab resolved a module constant before a local of the same
+name and emitted the bare name; with bug 087's alpha-renaming a second shadowing `let X` is
+`X.b0` in Core, so `X` and `&X` read the first local (`let X = 1; let X = 2; return X;` gave 1 on
+`land2-fix`, 2 on main). Elab now resolves locals before constants, as Check does
+(`regress_087_local_shadows_const.con`).
+
 The open-bug reproducer row in `check_example_outputs.sh` is dropped, and `run_tests.sh` runs the
 fixtures.
 
