@@ -37,9 +37,16 @@ fi
 # changes.
 changed=""
 pushed=""
+# WORK-IN-PROGRESS TIER. A push whose every target is refs/heads/wip/* is a backup of an
+# unfinished branch: it can never become main (main and ci/* candidates keep the full hook
+# below). Agents push WIP every few minutes so a usage limit or crash cannot lose work, and a
+# 15-minute gate run per backup would make that impossible. The WIP tier still refuses
+# conflict markers and whitespace errors in what it publishes.
+all_wip=1
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "$localsha" in *[!0]*) ;; *) continue ;; esac   # all-zero = branch deletion
+  case "${_remoteref:-}" in refs/heads/wip/*) ;; *) all_wip=0 ;; esac
   pushed="$pushed $localsha"
   case "${remotesha:-}" in
     ""|*[!0-9a-f]*) range="$localsha" ;;
@@ -65,6 +72,15 @@ if [ -z "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
 fi
 changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 [ -z "$changed" ] && { echo "pre-push: nothing to check"; exit 0; }
+if [ "$all_wip" = 1 ] && [ -n "$(printf '%s' "$pushed" | tr -d '[:space:]')" ]; then
+  bad=""
+  for sha in $pushed; do
+    if git grep -nE '^(<{7}|>{7})( |$)' "$sha" -- . ':!*.md' >/dev/null 2>&1; then bad="$bad $sha"; fi
+  done
+  [ -z "$bad" ] || { echo "pre-push (wip tier): conflict markers in$bad — refusing"; exit 1; }
+  echo "pre-push: wip/* backup push — conflict-marker check only; full gates run on ci/* and main"
+  exit 0
+fi
 echo "pre-push: $(printf '%s\n' "$changed" | wc -l | tr -d ' ') changed file(s) in this push"
 
 docs_only=1
