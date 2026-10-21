@@ -520,6 +520,11 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
+  -- CRLF line endings are normalised; a carriage return anywhere else is refused, because names
+  -- compared below would otherwise carry it invisibly (`[native\r]` is not `[native]`).
+  let content := content.replace "\r\n" "\n"
+  if content.contains '\r' then
+    throw "a carriage return outside a CRLF line ending"
   let stmts ← match tomlStatements content.toList [] [] [] #[] with
     | .ok s => pure s
     | .error e => throw e

@@ -72,7 +72,8 @@ after a closing delimiter, inside an array, or after another header is refused. 
 each bare or quoted). Values are validated
 recursively: array elements are values, inline-table entries are `key = value` on one line (TOML
 1.0), a scalar holds no brackets, strings or `=`. A header is one line with no comment inside its
-brackets. Unterminated strings and values and mismatched brackets are refused.
+brackets. Unterminated strings and values and mismatched brackets are refused. CRLF line endings are normalised; a bare
+carriage return is refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 

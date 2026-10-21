@@ -457,6 +457,17 @@ refused "$TMP/trailhdr" trailhdr "unexpected text in or after a table header" "a
 mkapp "$TMP/trailval" ''
 printf '[package]\nname = "nlapp" [native]\nlibs = ["lost"]\n' > "$TMP/trailval/Concrete.toml"
 refused "$TMP/trailval" trailval "unexpected text in or after a value" "a [native] header trailing a value is refused"
+# A bare carriage return is refused; CRLF line endings are ordinary and still load.
+mkapp "$TMP/barecr" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n[native\r]\nlibs = ["m"]\n' > "$TMP/barecr/Concrete.toml"
+refused "$TMP/barecr" barecr "a carriage return outside a CRLF line ending" "a header hiding a bare carriage return ([native<CR>]) is refused"
+mkapp "$TMP/crlf" ''
+printf '[package]\r\nname = "nlapp"\r\nversion = "0.1.0"\r\n\r\n[native]\r\nlibs = ["nladd"]\r\nlib-dirs = ["lib"]\r\n' > "$TMP/crlf/Concrete.toml"
+mkdir -p "$TMP/crlf/lib" && cp "$TMP/static/libnladd.a" "$TMP/crlf/lib/"
+build_run "$TMP/crlf" crlf
+[ "$(cat "$TMP/crlf.brc")" = "0" ] && [ "$(cat "$TMP/crlf.rrc")" = "42" ] \
+  && ok "CONTROL: a CRLF manifest loads and its [native] section links" \
+  || no "CONTROL: CRLF manifest: brc=$(cat "$TMP/crlf.brc"): $(head -3 "$TMP/crlf.build" | tr '\n' ' ')"
 # The name inside a header's brackets must be a key.
 bad hdrcomma '
 [native,]
