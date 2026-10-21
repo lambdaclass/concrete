@@ -74,6 +74,8 @@ declare -A BUG_TEST_MAP=(
   [109]="regress_109_float_literals.con"
   # Bug 110: an array SSA value (a pointer) stored as if it were the aggregate.
   [110]="regress_110_array_value_store.con"
+  # Bug 116: vec_push on a first field through &mut called the undefined @vec_push.
+  [116]="regress_116_vec_push_first_field.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
   # Bug 121: enum LLVM types disagreed with tySize/tyAlign, so an enum field moved the
   # fields after it on aggregate copies (conlog SIGSEGV). Class leg: check_enum_union_layout.sh leg 5.
@@ -142,7 +144,6 @@ declare -A SKIP_BUGS=(
   [113]="OPEN -- R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules; reproducer tests/regressions/bug113_submodule_extern_effects_unchecked/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [114]="OPEN -- an intrinsic declared in a nested submodule and called by path lowers to a C call; reproducer tests/regressions/bug114_submodule_intrinsic_links_c_symbol/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [115]="OPEN -- the builtin vec_get returns a non-Copy element by value, duplicating a linear value; reproducer tests/regressions/bug115_vec_get_duplicates_linear/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
-  [116]="OPEN -- vec_push on the first field of a struct reached through a &mut parameter calls an undefined @vec_push; reproducer tests/regressions/bug116_vec_push_first_field_through_ref/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [117]="OPEN -- the interpreter does not resolve module-level constants; reproducer tests/regressions/bug117_interp_module_const/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [118]="OPEN -- the interpreter cannot call a function imported from a nested module; reproducer tests/regressions/bug118_interp_nested_module_import/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [122]="OPEN -- the builtin Option/Result are emitted as one canonical LLVM union sized for the program's largest instantiation while the compiler lays out each instantiation (and a user enum named Option/Result) by its own size, so aggregate copies move or overrun fields (wrong code; a stack overflow in tests/programs/match_expr_linear.con); reproducer tests/regressions/bug122_builtin_enum_canonical_layout/repro.con, found by bug 121's layout probe 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit) and check_enum_union_layout.sh leg 5 (KNOWN_122)"

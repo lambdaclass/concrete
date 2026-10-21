@@ -7524,6 +7524,9 @@ run_ok "$TESTDIR/regress_109_float_literals.con" 42
 # aggregate (an unhinted `a[i] = [..]` literal coerced by a whole-array cast;
 # an array cast to a raw pointer; a newtype wrap of an array).
 run_ok "$TESTDIR/regress_110_array_value_store.con" 42
+# Bug 116: GEP-zero elimination gave `&mut p.v` (first field) the type of `p`,
+# so vec_push lost its element type and called the undefined @vec_push.
+run_ok "$TESTDIR/regress_116_vec_push_first_field.con" 42
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

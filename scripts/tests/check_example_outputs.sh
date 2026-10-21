@@ -385,7 +385,6 @@ open_bug_reproducers() {
 113|bug113_submodule_extern_effects_unchecked/repro.con|compiles|
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference
 115|bug115_vec_get_duplicates_linear/repro.con|compiles|
-116|bug116_vec_push_first_field_through_ref/repro.con|compile-fails|use of undefined value '@vec_push'
 117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
