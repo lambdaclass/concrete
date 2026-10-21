@@ -10,6 +10,34 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Language Semantics Decisions Written Into The Normative Docs (2026-10-21)
+
+Ten language-semantics proposals and four items of external advice were evaluated against probes of
+main, run natively and in the interpreter, and against corpus counts. Every recommendation was
+adopted, and each rule now sits in its canonical document with its status on main, its enforcing
+site (or "not yet"), the bugs it prevents and its owning roadmap exit. References exist only as
+parameters, call arguments, borrow-block binders and arm-scoped pattern binders. No `let` binds a
+reference, and no reference binding is ever assigned (MEMORY_SEMANTICS §15 REF-6; reference
+parameters are assignable today, which is how a dead slot was read). Constants are values. SCOPE-1
+is staged behind the renamed pattern binder, and the heap one-hop field rule is now a representation
+rule (exit 2i, bug 126). Evaluation is left to right in source order, literal fields included, and
+assignment evaluates its right-hand side first (STATEMENT_EXPRESSION_MODEL; exit 2j). Lossy numeric
+`as` casts become compile errors, staged: named checked, truncating, reinterpreting and rounding
+operations first, then rejection with versioned migration diagnostics, then migration
+(ARITHMETIC_POLICY §8; exit 2k). The shift rule (the count is checked, shifted-out bits are
+discarded) is stated exactly. Every Concrete function gets a mangled symbol disjoint from C, with
+`#[link_name]` and an export attribute (FFI.md). Layout is observed only through `sizeof` /
+`alignof`, through one `Layout`, and `Option` / `Result` get per-instantiation layout
+(LAYOUT_CONTRACT). Consuming fallible APIs state what they do with the resource on failure
+(ERROR_CONVENTIONS), and recoverable versus terminal failure is restated (FAILURE_STRATEGY). `main`
+keeps `-> Int` and loses parameters (bug 111). Narrowing its return type is recorded as an open
+decision. The probes found new silent defects, assigned to exit 0b: struct-literal order, the
+interpreter's int → float identity, a safe `fn malloc` capturing the allocator, reference-parameter
+re-pointing, and a move under a live arm binder. They also found a loud one, `as bool`, assigned to
+exit 2c. Stale text was corrected: NUMERIC_MODEL's wrapping-overflow section, ARITHMETIC_POLICY's
+shift and §14 contradictions, the removed `->` heap syntax, and `--report profile`'s wrap-gap line.
+`check_build_profiles.sh` now pins the corrected report text.
+
 ### The Verified Compiler Is The Primary Track, With A Gated Capacity Allocation (2026-10-21)
 
 The roadmap now protects the verified compiler by capacity, not only by queue order. A new
