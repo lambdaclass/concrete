@@ -1,0 +1,4 @@
+// Bug 111: a Unit `main` with two parameters, neither read, is refused too (E0310):
+// the rule is the signature, not whether a parameter is used.
+fn main(argc: i32, argv: *const u8) {
+}

@@ -1662,6 +1662,12 @@ run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0405)"
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
 run_ok  "$TESTDIR/regress_123_local_shadows_const_generic.con" "5" 0
+# Bug 111: `main` takes no parameters (the entry wrapper passes none; arguments come from
+# std.args), at the top level and in a module, used or not (E0310).
+run_err "$TESTDIR/error_111_main_params.con"            "(E0310)"
+run_err "$TESTDIR/error_111_main_params_unit.con"       "(E0310)"
+run_err "$TESTDIR/error_111_submodule_main_params.con"  "(E0310)"
+run_err "tests/regressions/bug111_main_params_accepted/repro.con" "(E0310)"
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
 run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
 run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"

@@ -1,5 +1,9 @@
 mod Simple {
-    fn main(a: invalid_type) -> i32 {
+    fn f(a: invalid_type) -> i32 {
+        return 0;
+    }
+
+    fn main() -> i32 {
         return 0;
     }
 }

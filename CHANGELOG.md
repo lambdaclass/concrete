@@ -10,6 +10,15 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Small Exit 0b Repairs: `main` Parameters, Struct-Literal Order, Lossless `fmt` Floats (2026-10-21)
+
+Bug 111 is fixed: `main` may no longer declare parameters. The entry wrapper calls it with no
+arguments, so `fn main(argc: i64)` read an undefined register natively and failed in the
+interpreter. Any module-level `main` with parameters is now E0310, whose hint names `std.args`
+(the decision of 2026-10-21 in MAIN_EXIT_MODEL: `fn main() -> Int`, arguments only from
+`std.args`). No program in the corpus declared one apart from the reproducer and one invalid
+fixture.
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a

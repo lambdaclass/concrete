@@ -6330,6 +6330,7 @@ def diagnosticCodesReport : String :=
     entry "E0298" "check" "error" "read/write of a struct field private to its defining module (0b)",
     entry "E0300" "check" "error" "a match guard moves a non-Copy value (guards are read-only; bug 090)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
+    entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

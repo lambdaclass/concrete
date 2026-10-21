@@ -1,0 +1,7 @@
+// Bug 111: every module-level `main` is tagged an entry point, so a `main` with a
+// parameter inside a module is refused as well (E0310).
+mod app {
+    fn main(n: Int) -> Int {
+        return n;
+    }
+}

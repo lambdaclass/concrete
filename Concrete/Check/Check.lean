@@ -2914,6 +2914,16 @@ def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
   if !collisions.isEmpty then .error collisions else
+  -- Bug 111: the entry wrapper calls `main` with no arguments, so `main` may not declare
+  -- parameters (MAIN_EXIT_MODEL.md, decision of 2026-10-21). Every module-level `main` is
+  -- checked, as Elab tags each one an entry point.
+  let mainParamErrs : Diagnostics := m.functions.filterMap fun f =>
+    if f.name == mainFnName && !f.params.isEmpty then
+      let e := CheckError.mainHasParams f.params.length
+      some { severity := .error, message := e.message, pass := "check", span := some f.span,
+             hint := e.hint, code := e.code }
+    else none
+  if !mainParamErrs.isEmpty then .error mainParamErrs else
   -- Use pre-built summaries from FileSummary
   let fnSigs : List FnSummary := summary.functions.map Prod.snd
   let externSigs : List FnSummary := summary.externFnSigs.map Prod.snd

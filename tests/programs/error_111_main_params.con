@@ -1,0 +1,7 @@
+// Bug 111: the entry wrapper calls `main` with no arguments, so `argc` read an
+// undefined register (0 on arm64 in practice) and the interpreter failed with
+// "undefined variable 'argc'". `main` takes no parameters; arguments come from
+// std.args. Refused (E0310).
+fn main(argc: i64) -> i64 {
+    return argc;
+}

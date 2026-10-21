@@ -287,6 +287,10 @@ inductive CheckError where
   -- `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory, since
   -- only a bare `let r = &s` froze `s`. The aggregate is now not expressible.
   | refStoredInAggregate (desc : String) (tyName : String)
+  -- Bug 111: the entry wrapper calls `main` with no arguments, so a parameter on
+  -- `main` read an undefined register. `fn main() -> Int` is the entry signature
+  -- (MAIN_EXIT_MODEL.md, 2026-10-21); arguments come from `std.args`.
+  | mainHasParams (count : Nat)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -383,6 +387,7 @@ def CheckError.message : CheckError → String
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
+  | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
   | .conflictingCallBorrows name => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
@@ -393,6 +398,7 @@ def CheckError.hint : CheckError → Option String
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
   | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/language/VALUE_MODEL.md)"
   | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
+  | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `fn main() -> Int`"
   | .conflictingCallBorrows _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
@@ -527,6 +533,7 @@ def CheckError.code : CheckError → String
   | .structLiteralPrivateField _ _ => "E0297"
   | .fieldAccessPrivate _ _ => "E0298"
   | .guardMovesLinear _ => "E0300"
+  | .mainHasParams _ => "E0310"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 

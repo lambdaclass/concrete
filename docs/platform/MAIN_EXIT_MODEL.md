@@ -10,10 +10,12 @@ signal failure to the shell (`&&` / `set -e` never saw errors).
 
 **Adopted (normative).** `main` takes **no parameters**. Command-line arguments are read only
 through `std.args` (`std/src/args.con`, `with(Env)`). A parameterized `main` is a compile error.
-Status on main: **not enforced** — `fn main(argc: i64)` compiles, and the parameter reads an
-undefined register (bug 111, silent wrong code). Enforcing site: one rule in Check's entry-point
-check (to be added). Cost: about two existing invalid fixtures. Owner: ROADMAP exit 0b (R-0482),
-where bug 111 is already listed.
+Status on main: **enforced** (bug 111, fixed 2026-10-21). Before the fix `fn main(argc: i64)`
+compiled and the parameter read an undefined register (silent wrong code). Enforcing site:
+`checkModule` in `Concrete/Check/Check.lean` refuses parameters on every module-level `main`
+(E0310, `CheckError.mainHasParams`, whose hint names `std.args`); fixtures
+`tests/programs/error_111_*.con`. One invalid fixture (`tests/invalid_programs/type.con`) moved its
+parameter to a helper.
 
 **Kept.** `fn main() -> Int` remains the entry signature, with the Stage 1 semantics below (the
 value masked to 0–255; Unit exits 0; the narrower integer widths accepted). The process-exit
