@@ -1,0 +1,13 @@
+// Bug 131: re-pointing one reference parameter at another is the same unchecked reassignment
+// (not a dangling read, since both sources outlive the call). Refused (E0238): a reference
+// binding, parameters included, is never re-pointed; use a new binding.
+fn f(r: &Int, q: &Int) -> Int {
+    r = q;
+    return *r;
+}
+
+fn main() -> Int {
+    let a: Int = 1;
+    let b: Int = 41;
+    return f(&a, &b);
+}

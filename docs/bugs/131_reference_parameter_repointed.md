@@ -1,6 +1,6 @@
 # Bug 131 — a reference parameter can be re-pointed at a block-local value that dies before it is read
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (batch 2, `land2-fix`)
 **Found:** 2026-10-21, by the semantics probes (`param_repoint.con`, while evaluating "references
 only as parameters and in borrow blocks").
 **Severity:** memory safety in safe code. A reference parameter is an assignable binding on main, so
@@ -50,6 +50,14 @@ cause: `borrowedFrom` is recorded only by `let x = &y`). The E0234 assignment ch
 borrow-block references. Nothing compares the scope of `local` with the scope of the binding the
 reference is stored in, and for a parameter that binding outlives every block of the body.
 
+## Fix
+
+Batch 2's normalized place rule (bug 091 round 3, the re-pointing rule `recordRefProvenance
+(reassign := true)` that also fixes bug 104): a reassignment may not re-point a reference at
+different storage, a parameter included. Both programs above are refused at the assignment
+(E0238): `error_131_param_repointed_block_local.con` (the reproducer) and
+`error_131_param_repointed_param.con` (`r = q`). The open-bug reproducer row is dropped.
+
 ## Structural cause
 
 No reference-provenance model in the source checker ([structural class](STRUCTURAL_CLASSES.md) 4,
@@ -66,7 +74,7 @@ REF-6: a reference binding, parameters included, is never re-pointed). Under exi
 batch 2's normalized place rule on `land2-fix`, which already refuses this reproducer; the bug closes
 when batch 2 lands with it as a permanent rejection fixture.
 
-## Containment while open
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode
 `interp-fails:ref path base 'local' not in env`) requires the program to compile natively and the

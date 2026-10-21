@@ -363,6 +363,10 @@ is refused at the declaration (E0239), and a borrow rooted at a module constant 
 `&A[i]`, the implicit `&self` of `K.get()`), which read a stack slot nothing initialized, is
 E0238; copy the constant into a local first. The review also refused writing a reference through
 a reference (`*slot = &local`), which left the caller a dangling reference on `main`.
+Bug 131 (a reference parameter re-pointed at a block-local value) is refused by the same
+re-pointing rule as 104. Bug 132, found by the 123 review: two modules' constants of one name were
+one constant to Lower (a submodule read another module's `A`, silent wrong code on `main`); a use
+of such a name is refused (E0602) until constants carry their module.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

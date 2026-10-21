@@ -1,0 +1,17 @@
+// Bug 132: two modules define a constant of one name; the submodule's own `A` read the
+// top-level `A` (exit 7 for 42 on main).
+const A: Int = 7;
+
+mod m {
+    const A: Int = 42;
+
+    pub fn get() -> Int {
+        return A;
+    }
+}
+
+import m.{get};
+
+fn main() -> Int {
+    return get();
+}

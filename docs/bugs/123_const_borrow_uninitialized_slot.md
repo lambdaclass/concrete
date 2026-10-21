@@ -103,14 +103,10 @@ is the constant and `&X` there reaches `addrOfLocal`'s refusal (E0602,
 
 A third pass found two more: Check (unlike Elab, now) still resolved a constant before a local
 of the same name, so a differently typed local `let X: bool` was typed as the constant's `Int`
-(`regress_123_local_shadows_const_other_type.con`); and constants reach Lower flattened by bare
-name (Core carries no module path), so a submodule reading its own `const A` read the top-level
-`A` (7 for 42, on main too: silent wrong code, with or without a borrow). Check now resolves
-locals first; Lower refuses a constant name defined by more than one module at its use (E0602,
-`error_123_const_name_collision.con`), the fail-closed answer until constants carry their module
-(the same shape as bug 052's type names), and `addrOfLocal` refuses an array constant too
-(`error_123_const_initializer_array_borrow.con`). The collision is a separate defect from this
-bug's and may deserve its own number; its containment is the E0602 refusal.
+(`regress_123_local_shadows_const_other_type.con`); Check now resolves locals first. It also found
+that two modules' constants of one name are one constant to Lower, filed separately as
+[bug 132](132_module_constant_name_collision.md); `addrOfLocal` refuses an array constant too
+(`error_123_const_initializer_array_borrow.con`).
 
 A fourth pass found `&mut X` as a call argument in an initializer, which took Lower's
 write-back path and fabricated a local named `X` (`const Y = change(&mut X) + X` read 7). Check

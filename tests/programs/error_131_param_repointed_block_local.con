@@ -1,0 +1,19 @@
+// Bug 131: a reference parameter re-pointed at a block-local value that dies before `*r` reads
+// it (main: exit 7 from a dead slot). Refused at the assignment (E0238, the normalized place rule).
+// Bug 131: a reference parameter is an assignable binding, so it can be
+// re-pointed at a block-local value that dies before the reference is read.
+// The checker accepts g; the binary reads local's dead stack slot, and the
+// interpreter fails "ref path base 'local' not in env". The parameter
+// variant of bug 104 (which covers a let-bound reference local).
+fn g(r: &Int) -> Int {
+    if true {
+        let local: Int = 7;
+        r = &local;
+    }
+    return *r;
+}
+
+fn main() -> Int {
+    let a: Int = 1;
+    return g(&a);
+}

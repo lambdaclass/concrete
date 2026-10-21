@@ -1,7 +1,7 @@
 # Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
-specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
+specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
@@ -37,7 +37,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 | class | bugs | structural owner |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol is its spelling) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol is its spelling), 132 (two modules' constants of one name) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
