@@ -25,7 +25,7 @@ fn main() -> i32 {
 
 ## Expected
 
-Emit `f32` constants in LLVM hex form (the f32 value widened to double). `f64` literals are unaffected.
+Emit `f32` constants in LLVM hex form (the f32 value widened to double). (As filed this read "`f64` literals are unaffected"; the fix showed they were silently truncated to six decimals, see Fix.)
 
 ## Where it showed up
 
@@ -51,13 +51,15 @@ not fixed. Permanent leg: `tests/programs/regress_109_float_literals.con` in `ru
 examples/snippets/floats.con is promoted to `compile` with a `@run` rule.
 
 Not repaired here (same lossy `toString` on `Float`, different consumers): the formatter
-(`Frontend/Format.lean`, so `concrete fmt` rewrites `0.0000000001` to `0.000000`) and the proof
-fingerprint/identity renderings (`ProofCore.fingerprintExpr`, `IdentityUseBytes`), where two distinct
-literals can render alike; floats are outside ProvableV1, so the identity sites carry no claim today.
+(`Frontend/Format.lean`, so `concrete fmt` rewrites `0.0000000001` to `0.000000`), the legacy proof
+fingerprint (`ProofCore.fingerprintExpr`, `(float {v})`, where two distinct literals can render
+alike; floats are outside ProvableV1, so it carries no claim today) and the SSA debug printer
+(`IR/SSA.lean`, `--emit-ssa` only). The v2 identity bytes are exact: `EvidenceBuild.evFloatLit`
+stores `Float.toBits` and `IdentityUseBytes` serializes those bits.
 
 ## Structural cause
 
-Floating-point literals are rendered to LLVM text with a decimal formatter that assumes every constant is exactly representable; the literal's value is never converted to the target width before it is printed. The emitter decides a numeric encoding locally, unchecked against the type: the lexer computes the literal's value correctly and the printer gives the binary a different one (class 7 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)). The rendering of a float is also kept in four places (LLVM emitter, formatter, proof fingerprint, identity bytes), all with the same lossy `toString` (class 12). Reclassified from class 8 on the fix: the defect is in the emitter, not in `Lower`'s storage decisions.
+Floating-point literals are rendered to LLVM text with a decimal formatter that assumes every constant is exactly representable; the literal's value is never converted to the target width before it is printed. The emitter decides a numeric encoding locally, unchecked against the type: the lexer computes the literal's value correctly and the printer gives the binary a different one (class 7 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)). The rendering of a float is also kept in several places (LLVM emitter, formatter, legacy proof fingerprint, SSA debug printer), all with the same lossy `toString` (class 12); the v2 identity bytes alone use the exact bits. Reclassified from class 8 on the fix: the defect is in the emitter, not in `Lower`'s storage decisions.
 
 ## Structural owner
 
