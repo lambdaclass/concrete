@@ -60,10 +60,22 @@ elimination; the Codex review showed that identity-cast elimination, which runs 
 be). A GEP can also be based on an aggregate VALUE register (the backend spills it to address
 it); there the base keeps its own type, which an earlier draft got wrong (elf_header then failed
 with `'%t19' defined with type '%struct.FixedSinkState' but expected 'ptr'`).
+
+The Codex round 2 review found the same symptom through an explicit dereference,
+`vec_push::<i32>(&mut (*p).v, x)`, with a worse sibling behind it. `Lower.placeAddr` had no case for
+a dereference place, so `&mut (*p).f` loaded `*p` into a temporary and took the field's address in
+the COPY: for a first-field `Vec` the GEP-zero base was then the loaded struct (aggregate-typed,
+correctly left alone by the substitution rule) and `@vec_push` came back; for any field a write
+through the borrow was silently lost. On main, `incr(&mut (*p).n)` leaves `p.n` unchanged in the
+binary while `--interp` increments it (measured: binary 0, interpreter 1 on the probe). `placeAddr`
+now treats `*r` (for `r` a reference, raw pointer or `Heap`) as the storage `r` points at, so the
+borrow is `r` itself, as the `&*r` reborrow already was.
 Permanent leg: `tests/programs/regress_116_vec_push_first_field.con` in `run_tests.sh` (run_ok 42:
 pushes to a first-field `Vec<i32>` through `&mut P` directly and through an identity-cast alias,
-`vec_set` on the first field (specialized from its first argument as well), a second-field
-`Vec<u8>`, each value read back).
+`vec_set` on the first field (specialized from its first argument as well), push and set through
+`&mut (*p).v`, a second-field `Vec<u8>`, each value read back) and
+`tests/programs/regress_116_deref_field_borrow.con` (run_ok 42, the interpreter agrees: increments
+through `&mut (*p).a` and `&mut (*p).n` must reach `p`; the pre-fix binary returns 39).
 The reproducer exits 1 natively; the interpreter cannot run it (bug 120, field borrow through a
 reference), so the differential half waits on 120.
 

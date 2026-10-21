@@ -7529,6 +7529,9 @@ run_ok "$TESTDIR/regress_110_array_value_store.con" 42
 # Bug 116: GEP-zero elimination gave `&mut p.v` (first field) the type of `p`,
 # so vec_push lost its element type and called the undefined @vec_push.
 run_ok "$TESTDIR/regress_116_vec_push_first_field.con" 42
+# Bug 116 sibling (silent): `&mut (*p).n` borrowed the field of a copy of `*p`,
+# so the write was lost (binary 39, interpreter 42).
+run_ok "$TESTDIR/regress_116_deref_field_borrow.con" 42
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

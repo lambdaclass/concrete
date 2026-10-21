@@ -4,8 +4,9 @@
 // undefined, unspecialized `@vec_push`. A later field (a nonzero GEP) worked.
 // Covered: push through the parameter, push through an identity-cast alias of
 // it (identity-cast elimination substitutes after GEP-zero elimination), and
-// `vec_set`, which is specialized from its first argument too; each value is
-// read back.
+// `vec_set`, which is specialized from its first argument too, and both through
+// an explicit dereference `&mut (*p).v` (Lower's placeAddr had no `*r` case and
+// borrowed the field of a loaded COPY, Codex round 2); each value is read back.
 struct P {
     v: Vec<i32>,
     w: Vec<u8>,
@@ -23,6 +24,14 @@ fn set_first(p: &mut P, x: i32) {
     vec_set::<i32>(&mut p.v, 0, x);
 }
 
+fn add_deref(p: &mut P, x: i32) with(Alloc) {
+    vec_push::<i32>(&mut (*p).v, x);
+}
+
+fn set_deref(p: &mut P, i: Int, x: i32) {
+    vec_set::<i32>(&mut (*p).v, i, x);
+}
+
 fn add_byte(p: &mut P, b: u8) with(Alloc) {
     vec_push::<u8>(&mut p.w, b);
 }
@@ -32,15 +41,19 @@ fn main() with(Alloc) -> Int {
     add(&mut p, 5);
     add(&mut p, 30);
     add_alias(&mut p, 100);
+    add_deref(&mut p, 50);
     add_byte(&mut p, 7);
     let n: Int = vec_len::<i32>(&mut p.v) as Int;
     let mut code: Int = 42;
-    if n != 3 { code = 1; }
+    if n != 4 { code = 1; }
     if vec_get::<i32>(&p.v, 1) != 30 { code = 2; }
     if vec_get::<i32>(&p.v, 2) != 100 { code = 3; }
     set_first(&mut p, 9);
     if vec_get::<i32>(&p.v, 0) != 9 { code = 4; }
     if vec_get::<u8>(&p.w, 0) != 7 { code = 5; }
+    if vec_get::<i32>(&p.v, 3) != 50 { code = 6; }
+    set_deref(&mut p, 3, 51);
+    if vec_get::<i32>(&p.v, 3) != 51 { code = 7; }
     let P { v, w } = p;
     vec_free::<i32>(v);
     vec_free::<u8>(w);

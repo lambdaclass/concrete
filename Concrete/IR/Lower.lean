@@ -1639,6 +1639,18 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
     let gepDst ← freshReg
     emit (.gep gepDst baseAddr [.intConst (Int.ofNat byteOff) .int] .i8)
     return some (.reg gepDst refTy)
+  -- `*r` as a place is the storage `r` points at: its address is `r` itself. Without
+  -- this, `&mut (*p).v` loaded `*p` into a temporary and took the field's address in
+  -- the COPY, so a write through the borrow was lost, and a first-field Vec reached
+  -- `vec_push` typed as the loaded struct (bug 116, Codex round 2).
+  | .deref inner _ =>
+    match inner.ty with
+    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ =>
+      let rVal ← lowerExpr inner
+      let dst ← freshReg
+      emit (.cast dst rVal refTy)
+      return some (.reg dst refTy)
+    | _ => addrOfLocal place refTy
   | _ => addrOfLocal place refTy
 
 /-- Store `newVal` into the location denoted by the place expression `place`.

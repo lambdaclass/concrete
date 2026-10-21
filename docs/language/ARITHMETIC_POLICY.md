@@ -437,15 +437,16 @@ rewriting sites that are in fact safe.
 | `bool` → integer | `false` 0, `true` 1 (zext) in both consumers; it was invalid IR ([bug 108](../bugs/108_bool_cast_trunc.md), fixed) |
 | `--report arithmetic` | lists checked float → integer casts but **no integer narrowing cast** (`fn n(x: Int) -> u8 { return x as u8; }` is absent), so silent truncation is invisible in the report meant to classify arithmetic sites |
 
-So the rule is **not enforced**: every row marked "no" in §8.1 is accepted by `as` today.
+So the rule is **mostly not enforced**: integer → `bool` is refused (E0553), and every other row
+marked "no" in §8.1 is accepted by `as` today.
 
 ### 8.4 Staging
 
 1. **Named operations first.** Add the three families of §8.2 to the arithmetic authority and
    `std`, with the interpreter, the folder, the backend and the models agreeing; classify every
    cast in `--report arithmetic` (lossless `as`, lossy `as`, named operation); refuse `Int as bool`
-   and repair `bool as` integer (bugs 130 and 108, exit 2c); repair the interpreter's integer → float
-   identity (bug 128, exit 0b).
+   and repair `bool as` integer (bugs 130 and 108, exit 2c: done, E0553 and zext); repair the
+   interpreter's integer → float identity (bug 128, exit 0b).
 2. **Rejection with versioned migration diagnostics.** The check lands with its diagnostic in the
    form of [MEMORY_SEMANTICS.md §15.5](MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
    stable code, the rule tag (`CAST-1@1`), the conversion class, and the mechanical rewrite

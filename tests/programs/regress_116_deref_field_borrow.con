@@ -1,0 +1,31 @@
+// Bug 116 (sibling found by the Codex round 2 review, silent wrong code on main):
+// `&mut (*p).n` with `p: &mut P` borrowed the field of a COPY of `*p` (Lower's
+// placeAddr had no case for a dereference place), so a write through the borrow
+// was lost: the binary returned 0 where the interpreter returns the written value.
+// `*r` as a place is now the storage `r` points at.
+struct P {
+    a: i32,
+    n: i32,
+}
+
+fn incr(r: &mut i32) {
+    *r = *r + 1;
+}
+
+fn bump_first(p: &mut P) {
+    incr(&mut (*p).a);
+}
+
+fn bump_second(p: &mut P) {
+    incr(&mut (*p).n);
+    incr(&mut (*p).n);
+}
+
+fn main() -> i32 {
+    let mut p: P = P { a: 10, n: 20 };
+    bump_first(&mut p);
+    bump_second(&mut p);
+    let P { a, n } = p;
+    // 11 + 22 + 9 = 42
+    return a + n + 9;
+}
