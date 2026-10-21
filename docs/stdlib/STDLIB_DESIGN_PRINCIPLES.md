@@ -190,10 +190,14 @@ displace a value is listed here (audit 2026-10-21, from
 | `vec.Vec::set_unchecked`, `slice.MutSlice::set_unchecked` | `(&mut self, at, value: T)` | Overwrites without returning or destroying the old element, so it is **`T: Copy` only**. *Changed 2026-10-21*: it accepted any `T` and silently lost a displaced linear element. Linear elements use `Vec::replace`. |
 | `test.assert_*`, `test.expect_sink` | `(.., message: String) -> bool` | **Consumed**: the diagnostic message is consumed on both outcomes; `false` reports a failed assertion, not a failed resource operation. |
 
-Outside the table, by construction: the `Option`/`Result` combinators
-(`map`, `and_then`, `map_err`, `ok_or`, `unwrap_or_else`) move every owned
-payload into their result, and the combinators that discard a payload
-(`unwrap_or`, `ok`, `err`, `test.ignore_*`) require `Copy`. The remaining
+Outside the table, because they report no failure of their own: the
+`Option`/`Result` combinators. `map`, `and_then` and `map_err` hand the payload
+to the caller's function (which then owns it) or move it into their result;
+`unwrap_or_else` returns the payload or calls the function. Every value a
+combinator can discard must be `Copy`: `ok_or`'s `err` (`E: Copy`, discarded on
+`Some`), `unwrap_or`'s default and payload, `ok`'s error, `err`'s value, and
+`test.ignore_*`. The compiler's linearity check enforces this for every body in
+std, so a combinator cannot silently drop a linear value. The remaining
 consuming APIs cannot fail: `drop`, `Bytes::into_raw_parts`,
 `Bytes::to_string_unchecked`, `BoundView::release`, `writer_from_file`,
 `reader_from_file`, `Cli::flag_*` and the `push` family (allocation failure
