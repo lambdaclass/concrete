@@ -78,6 +78,11 @@ mod net {
         BindFailed,
         ConnectFailed,
         AcceptFailed,
+        /// `close(2)` reported failure. The handle is CONSUMED all the same:
+        /// after `close` returns, POSIX leaves the descriptor's state
+        /// unspecified and Linux has always released it, so retrying could
+        /// close a descriptor another handle now owns.
+        CloseFailed,
     }
 
     pub struct TcpListener {
@@ -148,9 +153,16 @@ mod net {
             return Result::<TcpStream, NetError>::Ok { value: stream };
         }
 
-        pub fn close(self) with(Network) {
+        /// Close the socket. CONSUMED ON FAILURE: `Err(CloseFailed)` carries no
+        /// handle (see `NetError::CloseFailed`: a failed `close(2)` must not be
+        /// retried). (Ownership-on-failure convention:
+        /// docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
+        pub fn close(self) with(Network) -> Result<u64, NetError> {
             let TcpListener { fd } = self;
-            close(fd);
+            if close(fd) != 0 {
+                return Result::<u64, NetError>::Err { error: NetError::CloseFailed };
+            }
+            return Result::<u64, NetError>::Ok { value: 0 };
         }
     }
 
@@ -237,9 +249,16 @@ mod net {
             return total;
         }
 
-        pub fn close(self) with(Network) {
+        /// Close the socket. CONSUMED ON FAILURE: `Err(CloseFailed)` carries no
+        /// handle (see `NetError::CloseFailed`: a failed `close(2)` must not be
+        /// retried). (Ownership-on-failure convention:
+        /// docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
+        pub fn close(self) with(Network) -> Result<u64, NetError> {
             let TcpStream { fd } = self;
-            close(fd);
+            if close(fd) != 0 {
+                return Result::<u64, NetError>::Err { error: NetError::CloseFailed };
+            }
+            return Result::<u64, NetError>::Ok { value: 0 };
         }
     }
 
@@ -260,7 +279,8 @@ mod net {
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
-                    listener.close();
+                    let closed1: Result<u64, NetError> = listener.close();
+                    discard(closed1.is_ok());
                     return 1;
                 }
                 if pid == 0 {
@@ -268,7 +288,8 @@ mod net {
                     // the fd; also satisfies the return-path rule — libc_exit
                     // never returns but the checker cannot know that), then
                     // connect, write "Hi", close, exit.
-                    listener.close();
+                    let closed2: Result<u64, NetError> = listener.close();
+                    discard(closed2.is_ok());
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
@@ -276,7 +297,8 @@ mod net {
                             let msg: String = "Hi";
                             value.write(msg.raw_ptr() as *const u8, msg.len());
                             msg.drop();
-                            value.close();
+                            let closed3: Result<u64, NetError> = value.close();
+                            discard(closed3.is_ok());
                         },
                         Result::Err { error } => {}
                     }
@@ -285,13 +307,15 @@ mod net {
                 }
                 // Parent: accept, read, verify
                 let accept_result: Result<TcpStream, NetError> = listener.accept();
-                listener.close();
+                let closed4: Result<u64, NetError> = listener.close();
+                discard(closed4.is_ok());
                 addr.drop();
                 match accept_result {
                     Result::Ok { value } => {
                         let buf: [u8; 16] = [0; 16];
                         let n: i64 = value.read(&buf as *mut u8, 16);
-                        value.close();
+                        let closed5: Result<u64, NetError> = value.close();
+                        discard(closed5.is_ok());
                         // Wait for child
                         let status: i32 = 0;
                         libc_waitpid(pid, &status as *mut i32, 0);
@@ -338,20 +362,23 @@ mod net {
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
-                    listener.close();
+                    let closed6: Result<u64, NetError> = listener.close();
+                    discard(closed6.is_ok());
                     return 1;
                 }
                 if pid == 0 {
                     // Child: close the inherited listener fd (see above), then
                     // connect, write_all 10 bytes, close, exit.
-                    listener.close();
+                    let closed7: Result<u64, NetError> = listener.close();
+                    discard(closed7.is_ok());
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
                         Result::Ok { value } => {
                             let data: [u8; 10] = [65; 10]; // 10 'A' bytes
                             value.write_all(&data as *const u8, 10);
-                            value.close();
+                            let closed8: Result<u64, NetError> = value.close();
+                            discard(closed8.is_ok());
                         },
                         Result::Err { error } => {}
                     }
@@ -360,13 +387,15 @@ mod net {
                 }
                 // Parent: accept, read_all, verify
                 let accept_result: Result<TcpStream, NetError> = listener.accept();
-                listener.close();
+                let closed9: Result<u64, NetError> = listener.close();
+                discard(closed9.is_ok());
                 addr.drop();
                 match accept_result {
                     Result::Ok { value } => {
                         let mut buf: Bytes = Bytes::new();
                         let total: i64 = value.read_all(&mut buf);
-                        value.close();
+                        let closed10: Result<u64, NetError> = value.close();
+                        discard(closed10.is_ok());
                         // Wait for child
                         let status: i32 = 0;
                         libc_waitpid(pid, &status as *mut i32, 0);
@@ -407,7 +436,8 @@ mod net {
         addr.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let closed11: Result<u64, NetError> = value.close();
+                discard(closed11.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -423,7 +453,8 @@ mod net {
         addr.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let closed12: Result<u64, NetError> = value.close();
+                discard(closed12.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -439,7 +470,8 @@ mod net {
         addr.drop();
         match result {
             Result::<TcpListener, NetError>::Ok { value } => {
-                value.close();
+                let closed13: Result<u64, NetError> = value.close();
+                discard(closed13.is_ok());
                 return 1;
             },
             Result::<TcpListener, NetError>::Err { error } => {
@@ -456,7 +488,8 @@ mod net {
         addr.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let closed14: Result<u64, NetError> = value.close();
+                discard(closed14.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -473,7 +506,8 @@ mod net {
         addr.drop();
         match result {
             Result::<TcpListener, NetError>::Ok { value } => {
-                value.close();
+                let closed15: Result<u64, NetError> = value.close();
+                discard(closed15.is_ok());
                 return 1;
             },
             Result::<TcpListener, NetError>::Err { error } => {
@@ -532,11 +566,13 @@ mod net {
                 // Try to bind a second listener on the same port
                 let result2: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49321);
                 addr.drop();
-                value.close();
+                let closed16: Result<u64, NetError> = value.close();
+                discard(closed16.is_ok());
                 match result2 {
                     Result::<TcpListener, NetError>::Ok { value } => {
                         // SO_REUSEADDR may allow this on some OSes; close and accept either outcome
-                        value.close();
+                        let closed17: Result<u64, NetError> = value.close();
+                        discard(closed17.is_ok());
                         return 0;
                     },
                     Result::<TcpListener, NetError>::Err { error } => {
@@ -549,6 +585,66 @@ mod net {
                 addr.drop();
                 return 0;
             }
+        }
+    }
+
+    // Ownership on failure: close(2) on a descriptor that is not open fails
+    // with EBADF. The failure is REPORTED (it used to be ignored) and the
+    // handle is consumed: the error carries none, so it cannot be closed twice.
+    #[test]
+    fn test_stream_close_failure_reported() with(Network) -> i32 {
+        let s: TcpStream = TcpStream { fd: -1 };
+        let rc: Result<u64, NetError> = s.close();
+        match rc {
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => {
+                match error {
+                    NetError::SocketFailed => { return 1; },
+                    NetError::SetsockoptFailed => { return 1; },
+                    NetError::AddressFailed => { return 1; },
+                    NetError::BindFailed => { return 1; },
+                    NetError::ConnectFailed => { return 1; },
+                    NetError::AcceptFailed => { return 1; },
+                    NetError::CloseFailed => { return 0; },
+                }
+            },
+        }
+    }
+
+    #[test]
+    fn test_listener_close_failure_reported() with(Network) -> i32 {
+        let l: TcpListener = TcpListener { fd: -1 };
+        let rc: Result<u64, NetError> = l.close();
+        match rc {
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => {
+                match error {
+                    NetError::SocketFailed => { return 1; },
+                    NetError::SetsockoptFailed => { return 1; },
+                    NetError::AddressFailed => { return 1; },
+                    NetError::BindFailed => { return 1; },
+                    NetError::ConnectFailed => { return 1; },
+                    NetError::AcceptFailed => { return 1; },
+                    NetError::CloseFailed => { return 0; },
+                }
+            },
+        }
+    }
+
+    // The success path: closing a real socket reports Ok.
+    #[test]
+    fn test_listener_close_ok() with(Alloc, Network, Env) -> i32 {
+        let addr: String = "127.0.0.1";
+        let result: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49333);
+        addr.drop();
+        match result {
+            Result::Err { error } => { return 0; },
+            Result::Ok { value } => {
+                let l: TcpListener = value;
+                let rc: Result<u64, NetError> = l.close();
+                if rc.is_ok() { return 0; }
+                return 1;
+            },
         }
     }
 }

@@ -68,8 +68,9 @@ requires.
   design.
 - **Close:** `close(self)` calls `fclose` (`io.con:67`).
 - **Failure paths:** a null `fopen` returns `Err(OpenFailed)` with no handle created, and
-  `create` drops its `mode` string first. `write` ignores `fwrite`'s count and `close`
-  ignores `fclose`'s result (F7).
+  `create` drops its `mode` string first. `write` ignores `fwrite`'s count (F7). `close`
+  returns `Result<u64, IoError>` and reports a failed `fclose` as `CloseFailed`,
+  consuming the handle either way (F7 close half fixed 2026-10-21).
 
 ### 2.2 `fs.File` — owning, unique
 
@@ -80,7 +81,9 @@ requires.
   separate owning types over `FILE*`; neither can be converted into the other.
 - **Use today:** `seek`, `tell`, `close` require `File`; `write_bytes`, `read_bytes`
   require `File, Unsafe` (raw buffer pointers). Matches the design.
-- **Close:** `close(self)` calls `fclose` (`fs.con:62`), ignoring its result (F7).
+- **Close:** `close(self)` calls `fclose` and returns `Result<u64, FsError>`; a failed
+  `fclose` is `Err(CloseFailed)` and the handle is consumed either way (F7 fixed
+  2026-10-21). `write_file` and `append_file` likewise report a failed final `fclose`.
 - **Whole-file helpers without a handle:** `read_file`, `write_file`, `append_file`,
   `file_exists`, `read_to_string` (`fs.con:68-160`) open, use and close a local `FILE*`
   inside one call, all `with(File, Alloc)`. Every success path calls `fclose`; the
@@ -141,7 +144,8 @@ construction happens only in `io.con`.
 - **Failure paths:** every failure after `socket` succeeds calls `close(fd)`: `setsockopt`
   (`net.con:100`), address (`net.con:117`), `bind` (`net.con:124`), `listen`
   (`net.con:131`). The 16-byte `sockaddr` buffer is freed on every path that allocated
-  it. `close(self)` ignores `close`'s result (F7).
+  it. `close(self)` returns `Result<u64, NetError>`: a failed `close` is
+  `Err(CloseFailed)`, the handle consumed (F7 fixed 2026-10-21).
 
 ### 2.6 `net.TcpStream` — owning, unique
 
@@ -154,7 +158,8 @@ construction happens only in `io.con`.
 - **Use today:** `write`, `read`, `write_all` require `Unsafe, Network` (raw pointers);
   `read_all` and `close` require `Network`. Matches the design.
 - **Failure paths:** `connect` closes the descriptor on address and connect failure and
-  frees the `sockaddr` buffer on both. `close(self)` ignores `close`'s result (F7).
+  frees the `sockaddr` buffer on both. `close(self)` reports a failed `close` as
+  `Err(CloseFailed)`, the handle consumed (F7 fixed 2026-10-21).
 
 ### 2.7 `process.Child` — owning, uniqueness NOT established
 
@@ -330,8 +335,11 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
   `raise` is removed" was not true of the code.
 - **F7. Error results ignored (outside R-0484; recorded for the error-honesty work).**
   `console_err_write` ignores `write`'s result, while `console_write` checks it.
-  `TextFile::write` ignores `fwrite`'s count. `TextFile::close`, `fs.File::close`,
-  `TcpListener::close` and `TcpStream::close` ignore their close results.
+  `TextFile::write` ignores `fwrite`'s count. **Close half fixed 2026-10-21:**
+  `TextFile::close`, `fs.File::close`, `TcpListener::close` and `TcpStream::close` used to
+  ignore their close results; each now returns a `Result` whose error carries no handle
+  (consumed on failure), per the ownership-on-failure convention in
+  [STDLIB_DESIGN_PRINCIPLES.md](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
 - **F8. `ftell` failure is unchecked (outside R-0484).** In `fs.read_file` and
   `fs.read_to_string`, `ftell` returns `-1` for a stream that cannot seek (a pipe, a
   directory), and `size as u64` becomes an enormous capacity.

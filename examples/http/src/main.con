@@ -29,7 +29,8 @@ mod http_server {
             NetError::AddressFailed => {},
             NetError::BindFailed => {},
             NetError::ConnectFailed => {},
-            NetError::AcceptFailed => {}
+            NetError::AcceptFailed => {},
+            NetError::CloseFailed => {}
         }
     }
 
@@ -240,7 +241,7 @@ mod http_server {
         let n: i64 = stream.read(&buf as *mut u8, 4096);
 
         if n <= 0 {
-            stream.close();
+            discard(stream.close());
             return;
         }
 
@@ -255,7 +256,7 @@ mod http_server {
             send_string(&stream, &resp);
             resp.drop();
             raw.drop();
-            stream.close();
+            discard(stream.close());
             return;
         }
 
@@ -273,7 +274,7 @@ mod http_server {
             resp.drop();
             method.drop();
             path.drop();
-            stream.close();
+            discard(stream.close());
             return;
         }
         method.drop();
@@ -284,7 +285,7 @@ mod http_server {
             send_string(&stream, &resp);
             resp.drop();
             path.drop();
-            stream.close();
+            discard(stream.close());
             return;
         }
 
@@ -315,7 +316,7 @@ mod http_server {
         }
 
         file_path.drop();
-        stream.close();
+        discard(stream.close());
     }
 
     // --- Main: entry point ---
@@ -369,7 +370,7 @@ mod http_server {
                     }
                 }
 
-                listener.close();
+                discard(listener.close());
                 root.drop();
             },
             Result::Err { error } => {

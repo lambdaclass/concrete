@@ -77,13 +77,15 @@ mod httpget {
                 let sent: bool = value.write_all(raw.raw_ptr() as *const u8, raw.len());
                 raw.drop();
                 if !sent {
-                    value.close();
+                    discard(value.close());
                     let m: String = "httpget: send failed";
                     return fail(m);
                 }
                 let mut resp: Bytes = Bytes::new();
                 discard(value.read_all(&mut resp));
-                value.close();
+                // The whole response is already in `resp`: a failed close of the
+                // read side loses nothing, so it is discarded explicitly.
+                discard(value.close());
                 let code: u64 = status_code(&resp);
                 if code != 200 {
                     resp.drop();

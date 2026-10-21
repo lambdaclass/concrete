@@ -444,12 +444,16 @@ mod main {
         let addr: String = "127.0.0.1";
         match TcpListener::bind(&addr, 0) {
             Result::Err { error } => { discard(error); addr.drop(); return 1; },
-            Result::Ok { value } => { value.close(); },
+            Result::Ok { value } => {
+                // a real socket closes cleanly (close failure is reported, not dropped)
+                let rc: Result<u64, NetError> = value.close();
+                if rc.is_err() { addr.drop(); return 1; }
+            },
         }
         // connect to a port nothing listens on: must be a domain Err, not a trap
         match TcpStream::connect(&addr, 1) {
             Result::Err { error } => { discard(error); addr.drop(); return 0; },
-            Result::Ok { value } => { value.close(); addr.drop(); return 1; },
+            Result::Ok { value } => { discard(value.close()); addr.drop(); return 1; },
         }
     }
 }

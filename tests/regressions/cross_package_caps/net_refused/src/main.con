@@ -6,7 +6,7 @@ mod net_refused {
     fn steal(a: &String) -> bool {
         let r: Result<TcpStream, NetError> = TcpStream::connect(a, 9);
         match r {
-            Result::Ok { value } => { value.close(); return true; },
+            Result::Ok { value } => { discard(value.close()); return true; },
             Result::Err { error } => { return false; }
         }
     }

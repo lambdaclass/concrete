@@ -127,26 +127,33 @@ mod tcpserve {
                 match listener.accept() {
                     Result::Err { error } => {
                         discard(error);
-                        listener.close();
+                        discard(listener.close());
                         let m: String = "tcpserve: accept failed";
                         return fail(m);
                     },
                     Result::Ok { value } => {
                         let stream: TcpStream = value;
                         if !read_request(&stream) {
-                            stream.close();
-                            listener.close();
+                            discard(stream.close());
+                            discard(listener.close());
                             let m: String = "tcpserve: peer closed before request terminator";
                             return fail(m);
                         }
                         if !send_response(&stream) {
-                            stream.close();
-                            listener.close();
+                            discard(stream.close());
+                            discard(listener.close());
                             let m: String = "tcpserve: send failed";
                             return fail(m);
                         }
-                        stream.close();
-                        listener.close();
+                        // Success path: a failed close is reported, not ignored
+                        // (the handle is consumed either way; std.net closes
+                        // are consume-on-failure).
+                        let sc: Result<u64, NetError> = stream.close();
+                        let lc: Result<u64, NetError> = listener.close();
+                        if sc.is_err() || lc.is_err() {
+                            let m: String = "tcpserve: close failed";
+                            return fail(m);
+                        }
                         let d: String = "DONE";
                         println(&d);
                         d.drop();

@@ -5,6 +5,10 @@ mod fs {
 
     pub enum Copy FsError {
         OpenFailed,
+        /// `fclose` reported failure (typically the final flush of buffered
+        /// writes). The handle is CONSUMED all the same: C disassociates the
+        /// stream whether or not `fclose` succeeds, so there is nothing to retry.
+        CloseFailed,
     }
 
     pub struct File {
@@ -59,9 +63,17 @@ mod fs {
             return ftell(self.handle);
         }
 
-        pub fn close(self) with(File) {
+        /// Close the file. CONSUMED ON FAILURE: `Err(CloseFailed)` carries no
+        /// handle because C's `fclose` releases the stream whether or not it
+        /// succeeds; retrying would close a released stream. A failure here
+        /// usually means buffered writes did not reach the file, so check it.
+        /// (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
+        pub fn close(self) with(File) -> Result<u64, FsError> {
             let File { handle } = self;
-            fclose(handle);
+            if fclose(handle) != 0 {
+                return Result::<u64, FsError>::Err { error: FsError::CloseFailed };
+            }
+            return Result::<u64, FsError>::Ok { value: 0 };
         }
     }
 
@@ -101,7 +113,11 @@ mod fs {
         }
 
         let written: u64 = fwrite(data.raw_ptr() as *const u8, 1, data.len(), handle);
-        fclose(handle);
+        // fclose performs the final flush: its failure means the data may not
+        // have reached the file, so it is reported, never ignored.
+        if fclose(handle) != 0 {
+            return Result::<u64, FsError>::Err { error: FsError::CloseFailed };
+        }
         return Result::<u64, FsError>::Ok { value: written };
     }
 
@@ -115,7 +131,11 @@ mod fs {
         }
 
         let written: u64 = fwrite(data.raw_ptr() as *const u8, 1, data.len(), handle);
-        fclose(handle);
+        // fclose performs the final flush: its failure means the data may not
+        // have reached the file, so it is reported, never ignored.
+        if fclose(handle) != 0 {
+            return Result::<u64, FsError>::Err { error: FsError::CloseFailed };
+        }
         return Result::<u64, FsError>::Ok { value: written };
     }
 
@@ -243,7 +263,8 @@ mod fs {
         mode.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                discard(rc.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -259,7 +280,8 @@ mod fs {
         path.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                discard(rc.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -298,7 +320,8 @@ mod fs {
                 let data: String = "hello";
                 let n: u64 = value.write_bytes(data.raw_ptr() as *const u8, data.len());
                 data.drop();
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                discard(rc.is_ok());
                 if n == 0 {
                     return 0;
                 }
@@ -400,7 +423,8 @@ mod fs {
             Result::Ok { value } => {
                 value.seek(3, 0); // SEEK_SET = 0
                 let pos: i64 = value.tell();
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                if rc.is_err() { return 1; }
                 if pos != 3 { return 1; }
                 return 0;
             },
@@ -484,7 +508,8 @@ mod fs {
             Result::Ok { value } => {
                 let buf: [u8; 64] = [0; 64];
                 let n: u64 = value.read_bytes(&buf as *mut u8, 64);
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                if rc.is_err() { return 1; }
                 // fread should return exactly 3 (the file size)
                 // but we accept any value < 64 and > 0 as proof that
                 // reading past EOF is correctly bounded
@@ -521,7 +546,8 @@ mod fs {
                 // Read should return 0 bytes from beyond EOF
                 let buf: [u8; 16] = [0; 16];
                 let n: u64 = value.read_bytes(&buf as *mut u8, 16);
-                value.close();
+                let rc: Result<u64, FsError> = value.close();
+                if rc.is_err() { return 1; }
                 if pos != 100 { return 1; }
                 if n != 0 { return 1; }
                 return 0;
@@ -547,6 +573,60 @@ mod fs {
                 return 0;
             },
             Result::Err { error } => { return 1; }
+        }
+    }
+
+    // Ownership on failure: a failed close is REPORTED and the handle is
+    // consumed (no handle in the error). /dev/full accepts the open and the
+    // buffered write, then fails the flush inside fclose (ENOSPC). Hosts
+    // without /dev/full (macOS) cannot open it for writing: nothing to test.
+    #[test]
+    trusted fn test_close_failure_reported() with(File, Alloc) -> i32 {
+        let path: String = "/dev/full";
+        let result: Result<File, FsError> = File::create(&path);
+        path.drop();
+        match result {
+            Result::Err { error } => { return 0; },
+            Result::Ok { value } => {
+                let f: File = value;
+                let data: String = "buffered";
+                let n: u64 = f.write_bytes(data.raw_ptr() as *const u8, data.len());
+                data.drop();
+                let rc: Result<u64, FsError> = f.close();
+                match rc {
+                    Result::Ok { value } => { return 1; },
+                    Result::Err { error } => {
+                        match error {
+                            FsError::CloseFailed => { return 0; },
+                            FsError::OpenFailed => { return 1; },
+                        }
+                    },
+                }
+            },
+        }
+    }
+
+    // write_file reports a failed final flush instead of claiming success.
+    #[test]
+    fn test_write_file_close_failure_reported() with(File, Alloc) -> i32 {
+        let probe: String = "/dev/full";
+        let exists: bool = file_exists(&probe);
+        probe.drop();
+        if !exists { return 0; }
+        let path: String = "/dev/full";
+        let mut data: Bytes = Bytes::new();
+        data.push(1); data.push(2); data.push(3);
+        let r: Result<u64, FsError> = write_file(&path, &data);
+        path.drop();
+        data.drop();
+        match r {
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => {
+                match error {
+                    FsError::CloseFailed => { return 0; },
+                    FsError::OpenFailed => { return 1; },
+                }
+            },
         }
     }
 }

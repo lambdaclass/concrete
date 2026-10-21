@@ -5,7 +5,7 @@
 //
 // The gate runs this in a scratch directory and asserts exit code 0 (the child exited
 // 127, so the exec-failure path ran) and that `spawn_exit_out.txt` holds exactly one byte.
-import std.fs.{File};
+import std.fs.{File, FsError};
 import std.process.{spawn, Child, ExitStatus, ProcessError};
 import std.string.{String};
 import std.alloc.{dealloc};
@@ -38,9 +38,11 @@ fn main() with(File, Process, Alloc, Unsafe) -> i32 {
         Result::Err { error } => 4,
     };
     dealloc::<u8>(ccmd);
-    f.close();
+    // The close flushes the parent's byte: a failed close means it never landed.
+    let closed: Result<u64, FsError> = f.close();
     byte.drop();
     cmd.drop();
     path.drop();
+    if closed.is_err() { return 7; }
     return rc;
 }

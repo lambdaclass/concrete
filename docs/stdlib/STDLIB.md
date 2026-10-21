@@ -302,7 +302,8 @@ Handle-oriented file APIs:
 - `append_file` — open in append mode, returns `Result<u64, FsError>`
 - `file_exists` — probe via fopen, returns `bool`
 - `read_to_string` — read file into `String`, returns `Result<String, FsError>`
-- methods on an already-validated `File` handle (`write_bytes`, `read_bytes`, `seek`, `tell`, `close`) keep raw returns
+- methods on an already-validated `File` handle (`write_bytes`, `read_bytes`, `seek`, `tell`) keep raw returns
+- `File::close` returns `Result<u64, FsError>`: a failed `fclose` is `Err(CloseFailed)` and the handle is consumed either way ([ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure)); `write_file`/`append_file` report a failed final `fclose` the same way
 
 Still planned:
 
@@ -349,7 +350,8 @@ TCP networking layer:
 - `TcpStream::connect` returns `Result<TcpStream, NetError>` (checks socket/connect)
 - `TcpStream::write_all` — loop until all bytes sent, returns `bool`
 - `TcpStream::read_all` — read until EOF into `Bytes`, returns total bytes read
-- `write`, `read` keep `i64` returns (negative = error); `close` stays void
+- `write`, `read` keep `i64` returns (negative = error)
+- `TcpListener::close` / `TcpStream::close` return `Result<u64, NetError>`: a failed `close(2)` is `Err(CloseFailed)` and the handle is consumed (POSIX forbids a meaningful retry; [ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure))
 
 Near-term improvement goals:
 
@@ -428,6 +430,7 @@ Typed error handling using generic `Result`:
 
 - `IoError` enum (`OpenFailed`)
 - `File::create` and `File::open` return `Result<File, IoError>` with null-checked fopen
+- `TextFile::close` returns `Result<u64, IoError>` (`Err(CloseFailed)`, handle consumed), like `Writer::close` and `Reader::close` ([ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure))
 - `print`, `println`, `print_int`, `eprint` unchanged
 
 ### `std.parse`

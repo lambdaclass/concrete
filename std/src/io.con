@@ -64,9 +64,17 @@ mod io {
             fflush(self.ptr);
         }
 
-        pub fn close(self) with(File) {
+        /// Close the file. CONSUMED ON FAILURE: `Err(CloseFailed)` carries no
+        /// handle because C's `fclose` releases the stream whether or not it
+        /// succeeds; there is nothing to retry. A failure usually means
+        /// buffered writes were lost, so check it.
+        /// (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
+        pub fn close(self) with(File) -> Result<u64, IoError> {
             let TextFile { ptr } = self;
-            fclose(ptr);
+            if fclose(ptr) != 0 {
+                return Result::<u64, IoError>::Err { error: IoError::CloseFailed };
+            }
+            return Result::<u64, IoError>::Ok { value: 0 };
         }
     }
 
@@ -115,7 +123,9 @@ mod io {
         }
 
         /// Consume the handle; flushes/releases the sink. Closing requires C: it
-        /// acts on the resource (HANDLE_CAPABILITIES.md R6).
+        /// acts on the resource (HANDLE_CAPABILITIES.md R6). CONSUMED ON
+        /// FAILURE: an `Err` carries no handle (a file sink's `fclose` releases
+        /// the stream either way), so the writer cannot be closed twice.
         pub fn close(self) with(C) -> Result<u64, IoError> {
             let Writer { ctx, write_fn, flush_fn, close_fn } = self;
             let f: fn(*mut u8) with(C) -> Result<u64, IoError> = close_fn;
@@ -239,7 +249,9 @@ mod io {
             return f(self.ctx, buf, len);
         }
 
-        /// Consume the handle; releases the source.
+        /// Consume the handle; releases the source. CONSUMED ON FAILURE: an
+        /// `Err` carries no handle (a file source's `fclose` releases the
+        /// stream either way).
         pub fn close(self) with(C) -> Result<u64, IoError> {
             let Reader { ctx, read_fn, close_fn } = self;
             let f: fn(*mut u8) with(C) -> Result<u64, IoError> = close_fn;
@@ -449,7 +461,8 @@ mod io {
         mode.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let rc: Result<u64, IoError> = value.close();
+                discard(rc.is_ok());
                 return 1;
             },
             Result::Err { error } => {
@@ -465,12 +478,66 @@ mod io {
         path.drop();
         match result {
             Result::Ok { value } => {
-                value.close();
+                let rc: Result<u64, IoError> = value.close();
+                discard(rc.is_ok());
                 return 1;
             },
             Result::Err { error } => {
                 return 0;
             }
+        }
+    }
+
+    // Ownership on failure: TextFile::close reports a failed fclose and
+    // consumes the handle. /dev/full fails the flush inside fclose; hosts
+    // without it (macOS) cannot open it for writing, so the test is vacuous there.
+    #[test]
+    fn test_textfile_close_failure_reported() with(File, Alloc) -> i32 {
+        let path: String = "/dev/full";
+        let result: Result<TextFile, IoError> = TextFile::create(&path);
+        path.drop();
+        match result {
+            Result::Err { error } => { return 0; },
+            Result::Ok { value } => {
+                let f: TextFile = value;
+                let data: String = "buffered";
+                f.write(&data);
+                data.drop();
+                let rc: Result<u64, IoError> = f.close();
+                match rc {
+                    Result::Ok { value } => { return 1; },
+                    Result::Err { error } => {
+                        match error {
+                            IoError::OpenFailed => { return 1; },
+                            IoError::ReadFailed => { return 1; },
+                            IoError::WriteFailed => { return 1; },
+                            IoError::FlushFailed => { return 1; },
+                            IoError::CloseFailed => { return 0; },
+                            IoError::BufferFull => { return 1; },
+                        }
+                    },
+                }
+            },
+        }
+    }
+
+    // The success path of the same API: a close that works reports Ok.
+    #[test]
+    fn test_textfile_close_ok() with(File, Alloc) -> i32 {
+        let path: String = "/tmp/concrete_io_test_close_ok.txt";
+        let result: Result<TextFile, IoError> = TextFile::create(&path);
+        path.drop();
+        match result {
+            Result::Err { error } => { return 1; },
+            Result::Ok { value } => {
+                let f: TextFile = value;
+                let data: String = "ok";
+                f.write(&data);
+                data.drop();
+                let rc: Result<u64, IoError> = f.close();
+                if rc.is_ok() { return 0; }
+                return 1;
+            },
         }
     }
 }

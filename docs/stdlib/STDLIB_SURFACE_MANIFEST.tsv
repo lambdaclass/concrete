@@ -103,7 +103,7 @@ fs	write_bytes	no	borrows	infallible	File,Unsafe	trusted-boundary	gated	(&self, 
 fs	read_bytes	no	borrows	infallible	File,Unsafe	trusted-boundary	gated	(&self, buf: *mut u8, len: u64) with(File,Unsafe) -> u64	File
 fs	seek	no	borrows	infallible	File	trusted-boundary	gated	(&self, offset: i64, whence: i32) with(File) -> i32	File
 fs	tell	no	borrows	infallible	File	trusted-boundary	gated	(&self) with(File) -> i64	File
-fs	close	no	consumes	infallible	File	trusted-boundary	gated	(self) with(File)	File
+fs	close	no	consumes	result	File	trusted-boundary	gated	(self) with(File) -> Result<u64, FsError>	File
 fs	read_file	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String) with(File,Alloc) -> Result<Bytes, FsError>	-
 fs	write_file	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String, data: &Bytes) with(File,Alloc) -> Result<u64, FsError>	-
 fs	append_file	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String, data: &Bytes) with(File,Alloc) -> Result<u64, FsError>	-
@@ -137,7 +137,7 @@ io	open	yes	constructs	result	Alloc,File	trusted-boundary	gated	(path: &String, 
 io	write	no	borrows	infallible	File	trusted-boundary	gated	(&self, data: &String) with(File)	TextFile
 io	read_byte	no	borrows	infallible	File	trusted-boundary	gated	(&self) with(File) -> i32	TextFile
 io	flush	no	borrows	infallible	File	trusted-boundary	gated	(&self) with(File)	TextFile
-io	close	no	consumes	infallible	File	trusted-boundary	gated	(self) with(File)	TextFile
+io	close	no	consumes	result	File	trusted-boundary	gated	(self) with(File) -> Result<u64, IoError>	TextFile
 io	write_raw	no	borrows	result	C,Unsafe	trusted-boundary	gated	(&self, data: *const u8, len: u64) with(Unsafe,C) -> Result<u64, IoError>	Writer<C>
 io	write	no	borrows	result	C	trusted-boundary	gated	(&self, data: &Bytes) with(C) -> Result<u64, IoError>	Writer<C>
 io	write_str	no	borrows	result	C	trusted-boundary	gated	(&self, data: &String) with(C) -> Result<u64, IoError>	Writer<C>
@@ -200,13 +200,13 @@ mem	sizeof	no	constructs	infallible	none	trusted-boundary	gated	<T>() -> u64	-
 mem	alignof	no	constructs	infallible	none	trusted-boundary	gated	<T>() -> u64	-
 net	bind	yes	constructs	result	Alloc,Env,Network	trusted-boundary	gated	(addr: &String, port: u16) with(Alloc,Network,Env) -> Result<TcpListener, NetError>	TcpListener
 net	accept	no	borrows	result	Network	trusted-boundary	gated	(&self) with(Network) -> Result<TcpStream, NetError>	TcpListener
-net	close	no	consumes	infallible	Network	trusted-boundary	gated	(self) with(Network)	TcpListener
+net	close	no	consumes	result	Network	trusted-boundary	gated	(self) with(Network) -> Result<u64, NetError>	TcpListener
 net	connect	yes	constructs	result	Alloc,Env,Network	trusted-boundary	gated	(addr: &String, port: u16) with(Alloc,Network,Env) -> Result<TcpStream, NetError>	TcpStream
 net	write	no	borrows	infallible	Network,Unsafe	trusted-boundary	gated	(&self, data: *const u8, len: u64) with(Unsafe,Network) -> i64	TcpStream
 net	read	no	borrows	infallible	Network,Unsafe	trusted-boundary	gated	(&self, buf: *mut u8, len: u64) with(Unsafe,Network) -> i64	TcpStream
 net	write_all	no	borrows	infallible	Network,Unsafe	trusted-boundary	gated	(&self, data: *const u8, len: u64) with(Unsafe,Network) -> bool	TcpStream
 net	read_all	yes	borrows	infallible	Alloc,Network	trusted-boundary	gated	(&self, buf: &mut Bytes) with(Alloc,Network) -> i64	TcpStream
-net	close	no	consumes	infallible	Network	trusted-boundary	gated	(self) with(Network)	TcpStream
+net	close	no	consumes	result	Network	trusted-boundary	gated	(self) with(Network) -> Result<u64, NetError>	TcpStream
 numeric	try_new	no	constructs	option	none	pure-core	proved	(value: u32) -> Option<NonZeroU32>	NonZeroU32
 numeric	try_from_u64	no	constructs	option	none	pure-core	proved	(value: u64) -> Option<NonZeroU32>	NonZeroU32
 numeric	try_new	no	constructs	option	none	pure-core	proved	(value: u64) -> Option<NonZeroU64>	NonZeroU64
