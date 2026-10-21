@@ -781,6 +781,13 @@ partial def desugarStmts : List Stmt → List Stmt
 partial def desugarModule (m : Module) : Module :=
   { m with
     functions := m.functions.map fun f => { f with body := desugarStmts f.body }
+    -- Methods too (found by exit 2i's review): a `let ... else` / irrefutable enum destructure
+    -- in an impl or trait-impl method was left undesugared, so Check skipped it and the binders
+    -- were undeclared (E0201) — and REF-6@1's destructuring-let check never saw it.
+    implBlocks := m.implBlocks.map fun ib =>
+      { ib with methods := ib.methods.map fun f => { f with body := desugarStmts f.body } }
+    traitImpls := m.traitImpls.map fun tb =>
+      { tb with methods := tb.methods.map fun f => { f with body := desugarStmts f.body } }
     submodules := m.submodules.map desugarModule }
 
 /-- Apply desugaring to all modules. -/

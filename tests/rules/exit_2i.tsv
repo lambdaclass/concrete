@@ -72,6 +72,8 @@ REF-6	tests/programs/error_2i_ref6_arm_binder_assigned.con	reject:E0303:REF-6@1	
 REF-6	tests/programs/error_131_param_repointed_block_local.con	reject:E0303:REF-6@1	ref6-use	-
 REF-6	tests/programs/error_131_param_repointed_param.con	reject:E0303:REF-6@1	ref6-use	-
 REF-6	tests/programs/regress_2i_ref6_arm_binder_through_ref.con	run:42	ref6-use	binary,interp
+REF-6	tests/programs/error_2i_ref6_let_else_through_ref.con	reject:E0302:REF-6@1	ref6-let-else	-
+REF-6	tests/programs/regress_2i_ref6_method_let_else.con	run:42	ref6-let-else	binary,interp
 REF-6	tests/programs/error_2i_ref6_mut_param_repointed.con	reject:E0303:REF-6@1	ref6-write	-
 REF-6	tests/programs/regress_2i_ref6_write_through_param.con	run:42	ref6-write	binary,interp
 REF-7	tests/programs/error_091_norm_ref_write_through_ref.con	reject:E0238:REF-7@1	ref7	-

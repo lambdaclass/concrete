@@ -1,0 +1,19 @@
+// Exit 2i: a destructuring `let ... else` in an impl method over an owned Copy payload (the
+// arm match form a `let` binds through, now desugared in methods too). Run 42, binary = --interp.
+struct P { n: Int }
+struct S { k: Int }
+impl S {
+    fn get(&self, o: Option<Int>) -> Int {
+        let Option::Some { value } = o else {
+            return 0;
+        };
+        return value + self.k;
+    }
+}
+
+fn main() -> Int {
+    let s: S = S { k: 2 };
+    let out: Int = s.get(Option::Some { value: 40 });
+    let S { k } = s;
+    return out + k * 0;
+}

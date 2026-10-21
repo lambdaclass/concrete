@@ -7958,6 +7958,8 @@ run_ok "$TESTDIR/regress_2i_ref6_index_once.con" 42
 run_ok "$TESTDIR/regress_2i_ref6_borrow_block_projection.con" 42
 run_ok "$TESTDIR/regress_2i_ref6_arm_binder_through_ref.con" 42
 run_ok "$TESTDIR/regress_2i_ref6_write_through_param.con" 42
+run_err "$TESTDIR/error_2i_ref6_let_else_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_method_let_else.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).
