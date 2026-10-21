@@ -100,7 +100,7 @@ stored="$(fp_count)"
 # It was repaired by DELETING THE CLAIM rather than attaching a different theorem — no theorem proves
 # that body, and substituting the nearest plausible one is the defect being repaired, not a fix. So
 # the population is genuinely one smaller, and the pin says so.
-[ "$stored" = "$FP_EXPECTED_COUNT" ] && okk "$FP_EXPECTED_COUNT stored #[proof_fingerprint] values (44 before the retargeted link was deleted; 43 -> 50 when bug 083 moved the hardcoded table's claims into source)" \
+[ "$stored" = "$FP_EXPECTED_COUNT" ] && okk "$FP_EXPECTED_COUNT stored #[proof_fingerprint] values (44 before the retargeted link was deleted; 43 -> 50 when bug 083 moved the hardcoded table's claims into source; 50 -> 57 for the seven workload-proof links)" \
   || note "expected $FP_EXPECTED_COUNT stored fingerprints, found $stored"
 
 # (4) CROSS-VALIDATE the compiler's shortHash against the system SHA-256. Hashing

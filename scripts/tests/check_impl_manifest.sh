@@ -86,10 +86,12 @@ fi
 # 64/63/1 -> 72/71/1 on 2026-10-18 (bug 083): the deleted name-keyed `provedFunctions` table's claims
 # moved into source, so thesis_demo/src/main.con (3 subjects), main_drifted.con (2) and
 # crypto_verify_drifted (3) joined the stored-link population, each with an extracted body.
-if [ "$TOT_EXPECTED" = "72" ] && [ "$TOT_ROWS" = "71" ] && [ "$TOT_REFUSED" = "1" ]; then
-  ok "corpus accounting is exactly expected=72 rows=71 refused=1"
+# 72/71/1 -> 88/87/1 on 2026-10-21: toml, hexdump and png_chunks joined the stored-link population
+# with 16 extracted subjects (7 claimed, 9 unclaimed helpers in the same files); the refusal is unchanged.
+if [ "$TOT_EXPECTED" = "88" ] && [ "$TOT_ROWS" = "87" ] && [ "$TOT_REFUSED" = "1" ]; then
+  ok "corpus accounting is exactly expected=88 rows=87 refused=1"
 else
-  no "corpus accounting moved: expected=$TOT_EXPECTED rows=$TOT_ROWS refused=$TOT_REFUSED (was 72/71/1) — if rows rose because an entry gained an extracted body, update this and say so"
+  no "corpus accounting moved: expected=$TOT_EXPECTED rows=$TOT_ROWS refused=$TOT_REFUSED (was 88/87/1) — if rows rose because an entry gained an extracted body, update this and say so"
 fi
 
 # The refusal must be NAMED, not merely counted. An unnamed refusal is a smaller number wearing a
