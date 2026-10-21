@@ -1,0 +1,24 @@
+// Bug 096 (Codex round 11): c's generic read is bounded by c's Read; a's W implements a's
+// same-named Read, whose get returns a's P. Mono's dispatch selects W_get, whose result is
+// a_P while the call expects c_P. Refused (E0299) in Mono, which --interp also runs.
+mod a {
+    struct Copy P { x: i64, pad: i64 }
+    struct Copy W { dummy: Int }
+    trait Read { fn get(&self) -> P; }
+    impl Read for W {
+        fn get(&self) -> P { return P { x: 7, pad: 99 }; }
+    }
+    fn main() with(Std) -> Int {
+        print_int(c::read(W { dummy: 0 }));
+        print_char(10);
+        return 0;
+    }
+}
+mod c {
+    struct Copy P { pad: i64, x: i64 }
+    trait Read { fn get(&self) -> P; }
+    pub fn read<T: Read + Copy>(w: T) -> i64 {
+        let p: P = w.get();
+        return p.x;
+    }
+}

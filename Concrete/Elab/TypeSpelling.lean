@@ -182,4 +182,66 @@ def traitImpl (r : CoreRename) (ti : CTraitImpl) : CTraitImpl :=
 
 end CoreRename
 
+/-- Bug 096: every `.named`/`.generic` type name a type mentions. -/
+partial def tyNamesIn : Ty → List String
+  | .named n => [n]
+  | .generic n args _ => n :: args.flatMap tyNamesIn
+  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyNamesIn t
+  | .fn_ ps _ r => ps.flatMap tyNamesIn ++ tyNamesIn r
+  | _ => []
+
+/-- Does a type mention a type variable? -/
+partial def tyHasTypeVar : Ty → Bool
+  | .typeVar _ => true
+  | .generic _ args _ => args.any tyHasTypeVar
+  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyHasTypeVar t
+  | .fn_ ps _ r => ps.any tyHasTypeVar || tyHasTypeVar r
+  | _ => false
+
+/-- Bug 096: what the Core type-agreement walk reads at a point of a body. -/
+structure TyAgreeCtx where
+  /-- A global function by Core name (linker aliases resolved). -/
+  fns : String → Option CFnDef
+  /-- This module's copy of a struct / enum. -/
+  structOf : String → Option CStructDef
+  enumOf : String → Option CEnumDef
+  /-- Names bound at this point (a `.ident` of one is the local, never a global function). -/
+  locals : List String := []
+  retTy : Option Ty := none
+  /-- The enclosing function's type parameters. -/
+  tps : List String := []
+
+/-- A type position the body asserts: (declared, actual, where, wildcard type parameters). -/
+abbrev TyAgreePair := Ty × Ty × String × List String
+
+/-- The name of the struct a value of this type is (through one reference or heap layer). -/
+def tyStructName : Ty → String
+  | .named n | .generic n _ _ | .ref (.named n) | .refMut (.named n) | .heap (.named n)
+  | .ref (.generic n _ _) | .refMut (.generic n _ _) | .heap (.generic n _ _) => n
+  | _ => ""
+
+/-- Bug 096: do a declared type and an actual type agree on every respelled (`fam`) type they
+    name? Recursive: a type parameter (`wild`, or a type variable) on the declared side matches
+    anything, while the nominal constructors around it are still compared. Positions of
+    different shapes (an implicit borrow) compare the names they carry. -/
+partial def famAgree (fam wild : List String) (exp act : Ty) : Bool :=
+  let isWild : Ty → Bool := fun t => match t with
+    | .typeVar _ => true
+    | .named n => wild.contains n
+    | _ => false
+  let hasWild : Ty → Bool := fun t => tyHasTypeVar t || (tyNamesIn t).any wild.contains
+  let famNames : Ty → List String := fun t => (tyNamesIn t).filter fam.contains
+  let nameOk := fun (n m : String) => !(fam.contains n || fam.contains m) || n == m
+  if isWild exp then true else
+  match exp, act with
+  | .named n, .named m => nameOk n m
+  | .generic n as _, .generic m bs _ =>
+    nameOk n m && (as.length != bs.length || (as.zip bs).all fun (a, b) => famAgree fam wild a b)
+  | .ref a, .ref b | .refMut a, .refMut b | .heap a, .heap b | .heapArray a, .heapArray b
+  | .ptrMut a, .ptrMut b | .ptrConst a, .ptrConst b => famAgree fam wild a b
+  | .array a _, .array b _ => famAgree fam wild a b
+  | .fn_ ps _ r, .fn_ qs _ q =>
+    (ps.length != qs.length || (ps.zip qs).all fun (a, b) => famAgree fam wild a b) && famAgree fam wild r q
+  | _, _ => hasWild exp || famNames exp == famNames act
+
 end Concrete

@@ -1,0 +1,17 @@
+// Bug 096 (Codex round 11): c's extern read_p takes *const c's P; main passes a's P. The
+// backstop checks externs by their declared signature. Refused (E0299).
+mod a { pub struct Copy P { pub x: i64, pub pad: i64 } }
+mod c {
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub trusted extern fn read_p(p: *const P) with() -> i64;
+}
+mod main {
+    import a.{ P };
+    import c.{ read_p };
+    fn main() with(Std, Unsafe) -> Int {
+        let p: P = P { x: 7, pad: 99 };
+        print_int(read_p(&p as *const P));
+        print_char(10);
+        return 0;
+    }
+}

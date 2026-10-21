@@ -1600,6 +1600,8 @@ run_err "$TESTDIR/error_096_generic_qualified_call_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_fn_value_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_enum_payload_binding_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_const_initializer_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_trait_dispatch_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_extern_signature_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_097_colliding_fn_in_const.con" "1112" 0
 run_ok "$TESTDIR/regress_096_alias_copy_unused.con" "4" 0
 run_ok "$TESTDIR/regress_097_let_shadows_colliding_fn.con" "1112" 0

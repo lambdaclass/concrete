@@ -2469,14 +2469,6 @@ def importSpellingCollisions (m : Module) (spellings : List (String × String))
           some { severity := .error, message := e.message, pass := "elab", span := some imp.span,
                  hint := e.hint, code := e.code }
 
-/-- Bug 096: every `.named`/`.generic` type name a type mentions. -/
-partial def tyNamesIn : Ty → List String
-  | .named n => [n]
-  | .generic n args _ => n :: args.flatMap tyNamesIn
-  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyNamesIn t
-  | .fn_ ps _ r => ps.flatMap tyNamesIn ++ tyNamesIn r
-  | _ => []
-
 /-- Bug 096: the declaration (`definedIn`, name) the module summarized by `d` binds the type
     spelling `n` to, with the precedence Check's and Elab's lookups use (`allStructs` is
     imports, then the module's own): the declaration its import of `n` names, else its own
@@ -3512,36 +3504,6 @@ def checkRespelledFnNames (cms : List CModule) : Except Diagnostics (List CModul
       message := s!"the module-qualified Core spelling '{n}' of a function or method is already the name of another function; Core cannot tell them apart (bugs 096, 097)"
       hint := some "rename one of the functions or types. Tracking: docs/bugs/097_same_named_private_fns_interp.md" })
 
-/-- Does a type mention a type variable? -/
-partial def tyHasTypeVar : Ty → Bool
-  | .typeVar _ => true
-  | .generic _ args _ => args.any tyHasTypeVar
-  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyHasTypeVar t
-  | .fn_ ps _ r => ps.any tyHasTypeVar || tyHasTypeVar r
-  | _ => false
-
-/-- Bug 096: what the Core type-agreement walk reads at a point of a body. -/
-structure TyAgreeCtx where
-  /-- A global function by Core name (linker aliases resolved). -/
-  fns : String → Option CFnDef
-  /-- This module's copy of a struct / enum. -/
-  structOf : String → Option CStructDef
-  enumOf : String → Option CEnumDef
-  /-- Names bound at this point (a `.ident` of one is the local, never a global function). -/
-  locals : List String := []
-  retTy : Option Ty := none
-  /-- The enclosing function's type parameters. -/
-  tps : List String := []
-
-/-- A type position the body asserts: (declared, actual, where, wildcard type parameters). -/
-abbrev TyAgreePair := Ty × Ty × String × List String
-
-/-- The name of the struct a value of this type is (through one reference or heap layer). -/
-def tyStructName : Ty → String
-  | .named n | .generic n _ _ | .ref (.named n) | .refMut (.named n) | .heap (.named n)
-  | .ref (.generic n _ _) | .refMut (.generic n _ _) | .heap (.generic n _ _) => n
-  | _ => ""
-
 mutual
 /-- Bug 096: the type pairs a Core expression asserts: call arguments and results against the
     callee's signature (a generic callee's type parameters are wildcards), a global function
@@ -3655,6 +3617,10 @@ partial def coreConstsWithTypesDeep (cm : CModule) :
   cm.constants.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreConstsWithTypesDeep
 /-- Every function definition of a module tree. -/
 partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
+/-- Every extern of a module tree as a bodiless definition (its declared signature). -/
+partial def coreExternsDeep (cm : CModule) : List CFnDef :=
+  (cm.externFns.map fun (n, ps, rt, _) => ({ name := n, params := ps, retTy := rt, body := [] } : CFnDef))
+  ++ cm.submodules.flatMap coreExternsDeep
 /-- Every linker alias of a module tree. -/
 partial def coreAliasesDeep (cm : CModule) : List (String × String) :=
   cm.linkerAliases ++ cm.submodules.flatMap coreAliasesDeep
@@ -3663,30 +3629,6 @@ partial def coreStructsDeep (cm : CModule) : List (String × CStructDef) :=
   cm.structs.map (cm.name, ·) ++ cm.submodules.flatMap coreStructsDeep
 partial def coreEnumsDeep (cm : CModule) : List (String × CEnumDef) :=
   cm.enums.map (cm.name, ·) ++ cm.submodules.flatMap coreEnumsDeep
-
-/-- Bug 096: do a declared type and an actual type agree on every respelled (`fam`) type they
-    name? Recursive: a type parameter (`wild`, or a type variable) on the declared side matches
-    anything, while the nominal constructors around it are still compared. Positions of
-    different shapes (an implicit borrow) compare the names they carry. -/
-partial def famAgree (fam wild : List String) (exp act : Ty) : Bool :=
-  let isWild : Ty → Bool := fun t => match t with
-    | .typeVar _ => true
-    | .named n => wild.contains n
-    | _ => false
-  let hasWild : Ty → Bool := fun t => tyHasTypeVar t || (tyNamesIn t).any wild.contains
-  let famNames : Ty → List String := fun t => (tyNamesIn t).filter fam.contains
-  let nameOk := fun (n m : String) => !(fam.contains n || fam.contains m) || n == m
-  if isWild exp then true else
-  match exp, act with
-  | .named n, .named m => nameOk n m
-  | .generic n as _, .generic m bs _ =>
-    nameOk n m && (as.length != bs.length || (as.zip bs).all fun (a, b) => famAgree fam wild a b)
-  | .ref a, .ref b | .refMut a, .refMut b | .heap a, .heap b | .heapArray a, .heapArray b
-  | .ptrMut a, .ptrMut b | .ptrConst a, .ptrConst b => famAgree fam wild a b
-  | .array a _, .array b _ => famAgree fam wild a b
-  | .fn_ ps _ r, .fn_ qs _ q =>
-    (ps.length != qs.length || (ps.zip qs).all fun (a, b) => famAgree fam wild a b) && famAgree fam wild r q
-  | _, _ => hasWild exp || famNames exp == famNames act
 
 /-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
     types by spelling, so a program can pass one module's `P` where another module's `P` is
@@ -3699,7 +3641,12 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     Except Diagnostics (List CModule) :=
   if family.isEmpty then .ok cms else
   let fam := fun (t : Ty) => (tyNamesIn t).filter family.contains
+  -- an extern is checked by its declared signature; one foreign symbol declared by several
+  -- modules is one declaration only when their signatures agree (refused below otherwise)
+  let externs := cms.flatMap coreExternsDeep
+  let externNames := (externs.map (·.name)).eraseDups
   let allFns := cms.flatMap coreFnsDeep
+    ++ externNames.filterMap fun n => (externs.find? (·.name == n))
   let aliases := cms.flatMap coreAliasesDeep
   -- a callee by its Core name, else through the linker aliases (`c::read` is `c_read`)
   let fns : String → Option CFnDef := fun n =>
@@ -3749,7 +3696,11 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       p.2.variants.map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
     if copies.eraseDups.length ≤ 1 then none else
     some (diag s!"enum '{n}' reaches modules with payloads naming different same-named types; Core would lay it out twice (bug 096)")
-  let all := callDiags ++ constDiags ++ structDiags ++ enumDiags
+  let externDiags : Diagnostics := externNames.filterMap fun n =>
+    let sigs := (externs.filter (·.name == n)).map fun f => (f.params.map fun (_, t) => fam t, fam f.retTy)
+    if sigs.eraseDups.length ≤ 1 then none else
+    some (diag s!"extern '{n}' is declared by several modules with signatures naming different same-named types (bug 096)")
+  let all := callDiags ++ constDiags ++ structDiags ++ enumDiags ++ externDiags
   if all.isEmpty then .ok cms else .error (all.eraseDupsBy (·.message == ·.message))
 
 def elabProgram (resolved : List ResolvedModule)
@@ -3812,10 +3763,10 @@ def elabProgram (resolved : List ResolvedModule)
       | .error ds => (acc, errs ++ ds.addContext s!"while elaborating module '{m.name}'")
   ) (([] : List CModule), ([] : Diagnostics))
   if allErrors.isEmpty then
-    qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames
-      >>= checkCoreTypeAgreement
-        (if ambiguousTypes.isEmpty then [] else
-          (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups)
+    let family := if ambiguousTypes.isEmpty then [] else
+      (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups
+    (qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames
+      >>= checkCoreTypeAgreement family).map fun ms => ms.map fun cm => { cm with respelledTypes := family }
   else .error allErrors
 
 end Concrete

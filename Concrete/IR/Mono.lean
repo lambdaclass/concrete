@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import Concrete.Elab.Core
+import Concrete.Elab.TypeSpelling
 import Concrete.Resolve.Shared
 import Concrete.Check.Layout
 import Concrete.Report.Diagnostic
@@ -412,6 +413,8 @@ structure MonoState where
       name (Core and runtime values carry no module path).
       Trait dispatch on such a name is refused, never guessed (bug 052 round 3). -/
   ambiguousTypeNames : List String := []
+  /-- Bug 096: every type name two modules declare and its respellings (`CModule.respelledTypes`). -/
+  respelledTypes : List String := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
@@ -549,6 +552,18 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
       let resolved := match candidates with
         | [d] => d
         | _ => mangledMethodName c m
+      -- Bug 096: a bound names its trait by spelling, so a generic body written against one
+      -- module's trait can reach another module's same-named trait's impl. The selected
+      -- implementation's signature must agree with the call on every respelled type, or the
+      -- call's result is laid out as the other module's type.
+      if !st.respelledTypes.isEmpty then
+        if let some impl ← lookupFn resolved then
+          let argsOk := impl.params.length != args.length ||
+            (impl.params.zip args).all fun ((_, pt), a) => famAgree st.respelledTypes impl.typeParams pt a.ty
+          if !argsOk || !famAgree st.respelledTypes impl.typeParams impl.retTy ty then
+            throw [{ severity := .error, pass := "mono", span := none, code := "E0299"
+                     message := s!"trait method call '{m}' on '{c}' selects '{resolved}', whose signature names other same-named types than the call expects; two modules' same-named traits or types meet here (bug 096)"
+                     hint := some "rename one of the traits or types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }]
       return ← monoExpr (.call (.direct resolved) typeArgs args ty)
     let args' ← args.mapM monoExpr
     if typeArgs.isEmpty then
@@ -1421,7 +1436,8 @@ def monoProgram (modules : List CModule)
                                  structs := allStructs, enums := allEnums,
                                  newtypes := allNewtypes, destroyImpls := destroyImpls,
                                  traitImplMethods := traitImplMethods,
-                                 ambiguousTypeNames := ambiguousTypeNames }
+                                 ambiguousTypeNames := ambiguousTypeNames
+                                 respelledTypes := (modules.flatMap (·.respelledTypes)).eraseDups }
   let (result, _) := (modules.mapM monoModule).run initState |>.run
   match result with
   | .ok ms0 =>

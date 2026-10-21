@@ -275,6 +275,10 @@ structure CModule where
       and sibling types). Core names types by bare name, so a name defined by two modules
       is one Core type name for two types; trait dispatch on it is refused (bug 052 round 3). -/
   ownTypeNames : List String := []
+  /-- Bug 096: every type name two modules of the program declare, with its module-qualified
+      respellings (the same list on every module). Mono's trait dispatch compares a selected
+      implementation's signature with the call on these names. -/
+  respelledTypes : List String := []
   functions : List CFnDef
   externFns : List (String × List (String × Ty) × Ty × Bool)  -- (name, params, retTy, isTrusted)
   /-- Each foreign binding's DECLARED effects (R-0484), keyed by binding name. Resolve has

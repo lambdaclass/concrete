@@ -99,10 +99,17 @@ taken as a value against its definition, a local of that name excepted lexically
 enum literal and a field read or write against the declaration's field, a match arm's binders
 against the variant's payload or the scrutinee (`error_096_enum_payload_binding_other_type.con`),
 every constant initializer, which Lower inlines at each use (`error_096_const_initializer_other_type.con`),
+a call to an extern against its declared signature (and two modules' declarations of one foreign
+symbol against each other: `error_096_extern_signature_other_type.con`),
 and any two copies of one
 struct or enum that disagree (`error_096_alias_signature_other_type.con`). An unused declaration
 that mentions another module's type is never refused (`regress_096_private_method_not_transported.con`,
 `regress_096_generic_method_param_named_like_type.con`, `regress_096_sibling_types_unused.con`).
+Trait bounds name their trait by spelling, so a generic body written against one module's trait
+can dispatch to another module's same-named trait's impl, which only Mono resolves: Mono compares
+the selected implementation's signature with the call on the respelled types
+(`CModule.respelledTypes`) and refuses a disagreement (E0299,
+`error_096_trait_dispatch_other_type.con`); `--interp` runs the same Mono validation.
 
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of
