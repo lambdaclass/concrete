@@ -836,7 +836,9 @@ EXPECTED_ORDINARY_PROBES=247
 # Re-pinned again (land3, Codex round 4) for twelve tableEntryEvidence probe BODIES: each table now
 # dispatches from its own entries, since tableEntryEvidence refuses an entry its key does not dispatch to.
 # Labels and expectations unchanged.
-EXPECTED_ORDINARY_MANIFEST_SHA256="53a7f9f79bdfea9a624020c6f593b8ed8305443cad71a1082fc569ebbf98b06c"
+# Re-pinned 2026-10-21 (workload proofs) for exactly one probe: the corpus split's label and expectation,
+# 114/174 -> 114/181 (the seven new body theorems, named at the probe). Body unchanged.
+EXPECTED_ORDINARY_MANIFEST_SHA256="ef34ad1142222f885c8abbf704cf55d86a882cda198b1bf161e1e1c2a22d60e3"
 # The ordinary and mint populations are pinned, but roughly 43 assertions belong to NEITHER — the
 # hand-written checks scattered through this gate — and deleting one of those still shrank a green
 # total. One pinned grand total covers every assertion this gate makes, whatever its shape.
@@ -852,7 +854,11 @@ EXPECTED_TOTAL_ASSERTIONS=322
 # Re-pinned 2026-10-20 (bug 083, landed on the 114/174 base) for its relabelled corpus pins (proved
 # 32 -> 35, root refusals -> 3, scoped identities, correspondence 8/10, non-current edges -> 14) and
 # one added assertion (crypto_verify_drifted's verify_tag refusal, by name); the split is unchanged.
-EXPECTED_ASSERTION_LABELS_SHA256="40005619e5e8e20f6148ba18f08c04378fea45509f02fdc47fb10650c5440105"
+# Re-pinned 2026-10-21 (workload proofs) for its relabelled corpus pins only, each explained where it
+# is made: proved 35 -> 42, root refusals 14 -> 16, scoped identities 72 -> 88, correspondence +3 -> +5
+# no-claim, non-current edges 14 -> 16, fixture population 28 -> 31 (124 pairs), split 114/174 -> 114/181.
+# No assertion added or removed (total stays 322).
+EXPECTED_ASSERTION_LABELS_SHA256="fdbb0d3c6844ffa8416f3f8e780cc8464bc54f108bfc0326b775024536b5312f"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -1105,7 +1111,11 @@ echo "=== corpus split, pinned ==="
 # 114/173 -> 114/174 on 2026-10-19 (Codex land1 confirmation review): body +1,
 # `Examples.TestFixtures.Proofs.spec_inside_evaluated_term`, the negative fixture whose evaluated program
 # ignores the spec nested inside it; it evaluates over `FnTable.empty` and binds nothing.
-probe "the corpus splits 114 contract / 174 body" "114/174" \
+# 114/174 -> 114/181 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): body +7, the seven new theorems
+# `Examples.Toml.Proofs.{is_ws,is_newline,is_digit,is_bare_key_char}_correct`,
+# `Examples.Hexdump.Proofs.{gutter_byte,line_len}_correct` and `Examples.PngChunks.Proofs.png_sig_ok_correct`;
+# each evaluates its specification over `FnTable.empty`, so it classifies `body`.
+probe "the corpus splits 114 contract / 181 body" "114/181" \
 '#eval show MetaM Unit from do
    let env ← getEnv
    let mut nc := 0; let mut nb := 0
@@ -1336,10 +1346,13 @@ done
 # `main_drifted`'s unchanged `check_length`. They were proved before too, through the table, but the
 # files had no `#[proof_by]` so this loop never visited them. `crypto_verify_drifted` adds 0 (stale x2,
 # dependency-not-current x1).
-if [ "$CORPUS_PROVED" = "35" ] && [ "$CORPUS_UNJUST" = "0" ]; then
-  ok "corpus-wide: 35 proved, 0 unjustified closures (the fixture corpus is clean under the authority pass)"
+# 35 -> 42 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): the seven new claims, all proved —
+# `toml_parser.{is_ws,is_newline,is_digit,is_bare_key_char}`, `hexdump.{gutter_byte,line_len}`,
+# `png_chunks.png_sig_ok`. None is an unjustified closure (none has an outgoing edge).
+if [ "$CORPUS_PROVED" = "42" ] && [ "$CORPUS_UNJUST" = "0" ]; then
+  ok "corpus-wide: 42 proved, 0 unjustified closures (the fixture corpus is clean under the authority pass)"
 else
-  no "corpus-wide verdicts moved to $CORPUS_PROVED proved / $CORPUS_UNJUST unjustified (was 35/0) — say which subject changed and why"
+  no "corpus-wide verdicts moved to $CORPUS_PROVED proved / $CORPUS_UNJUST unjustified (was 42/0) — say which subject changed and why"
 fi
 # ...and the live case must stay live, or the pass has no corpus exercise at all.
 DH_UNJUST="$(cc tests/programs/proof_decode_header.con proof-status | grep -cE "^-- dependency closure unjustified" || true)"
@@ -1415,10 +1428,14 @@ for f in $(grep -rlE '#\[(proof_by|ensures_proof)\(' examples --include='*.con' 
 done
 # 13 -> 14 on 2026-10-18 (bug 083: the name-keyed `provedFunctions` table was deleted, so `thesis_demo/src/main.con`, `thesis_demo/src/main_drifted.con` and `crypto_verify_drifted` now carry in-source links and JOIN the `#[proof_by]` population): `thesis_demo`'s
 # `main.validate` makes no claim and its two edges are unclassified, so its root refuses.
-if [ "$ROOTREF" = "14" ]; then
-  ok "14 subject roots refuse (measured, exact)"
+# 14 -> 16 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): two subjects that make NO claim
+# and call a claimed helper, so their single edge is unclassified and their root refuses —
+# `png_chunks.is_png_sig` (edge to `png_sig_ok`) and `toml_parser.err_result` (edge to `mk_error_val`).
+# Neither is proved; no proved subject fails to root (asserted below).
+if [ "$ROOTREF" = "16" ]; then
+  ok "16 subject roots refuse (measured, exact)"
 else
-  no "root refusals moved to $ROOTREF (was 14) — if a proved subject now fails to root, the root dimension has become load-bearing and must be described as such"
+  no "root refusals moved to $ROOTREF (was 16) — if a proved subject now fails to root, the root dimension has become load-bearing and must be described as such"
 fi
 # THE OTHER HALF, ASSERTED WHERE THE PRODUCERS LIVE. "13 refuse, none of them proved" was one
 # assertion doing the work of two, and the first attempt at the second half was INERT: it paired
@@ -3550,10 +3567,12 @@ done
 D_TOT="$(printf '%s' "$DEFID" | grep -c 'defIdentity' || true)"
 D_SCOPED="$(printf '%s' "$DEFID" | grep -cE ': [0-9a-f]{32}' || true)"
 # 64 -> 72 on 2026-10-18 (bug 083: the name-keyed `provedFunctions` table was deleted, so `thesis_demo/src/main.con`, `thesis_demo/src/main_drifted.con` and `crypto_verify_drifted` now carry in-source links and JOIN the `#[proof_by]` population): 3 + 2 + 3 subjects.
-if [ "$D_TOT" = "72" ] && [ "$D_SCOPED" = "72" ]; then
-  ok "all 72 subjects carry a scoped definition identity (none refused)"
+# 72 -> 88 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): every extracted declaration of the three
+# fixtures becomes a subject — toml 12, png_chunks 2, hexdump 2 (16).
+if [ "$D_TOT" = "88" ] && [ "$D_SCOPED" = "88" ]; then
+  ok "all 88 subjects carry a scoped definition identity (none refused)"
 else
-  no "scoped identity coverage is $D_SCOPED/$D_TOT (was 72/72) — a subject lost its authoritative implementation digest"
+  no "scoped identity coverage is $D_SCOPED/$D_TOT (was 88/88) — a subject lost its authoritative implementation digest"
 fi
 # THE COLLISION IS ACTUALLY SEPARATED, measured rather than assumed from the type's unit tests:
 # one CallableId rendering, two distinct scoped identities.
@@ -3935,10 +3954,13 @@ C_NOCLAIM="$(printf '%s' "$CORR_LINES" | grep -c 'no claim' || true)"
 # `crypto_verify_drifted`'s `verify_tag`, a SECOND drift fixture refusing for the same permanent reason
 # as `main_drifted`: its one body edge reaches the DRIFTED `compute_tag`, which `cryptoFns` does not
 # attest (missing=1). The new no-claim subject is `thesis_demo`'s `validate`.
-if [ "$C_EDGED" = "10" ] && [ "$C_USABLE" = "8" ] && [ "$C_NOCLAIM" = "3" ]; then
-  ok "8 of 10 claiming subjects fully correspond, 2 correctly refuse (drift fixtures), 3 make no claim"
+# 8/10 +3 -> 8/10 +5 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): no new claiming subject
+# has an outgoing edge (all seven are leaves); the two new no-claim subjects are `png_chunks.is_png_sig`
+# and `toml_parser.err_result`, the same two whose roots refuse above.
+if [ "$C_EDGED" = "10" ] && [ "$C_USABLE" = "8" ] && [ "$C_NOCLAIM" = "5" ]; then
+  ok "8 of 10 claiming subjects fully correspond, 2 correctly refuse (drift fixtures), 5 make no claim"
 else
-  no "corpus correspondence moved to $C_USABLE/$C_EDGED claiming (+$C_NOCLAIM no-claim; was 8/10 +3) — say which subjects changed and why"
+  no "corpus correspondence moved to $C_USABLE/$C_EDGED claiming (+$C_NOCLAIM no-claim; was 8/10 +5) — say which subjects changed and why"
 fi
 
 # "NO CLAIM" MUST NOT BECOME A HIDING PLACE. A subject WITH a linked theorem whose classification is
@@ -4193,10 +4215,12 @@ done
 # edge is correctly not current — the subject makes no claim now, so nothing types its dependencies.
 # 12 -> 14 on 2026-10-18 (bug 083: the name-keyed `provedFunctions` table was deleted, so `thesis_demo/src/main.con`, `thesis_demo/src/main_drifted.con` and `crypto_verify_drifted` now carry in-source links and JOIN the `#[proof_by]` population): `thesis_demo`'s `main.validate` (no claim) has two
 # unclassified edges, to `parse_byte` and `check_length`.
-if [ "$NONCUR" = "14" ]; then
-  ok "the corpus contains exactly 14 non-current edges (14 unclassified, 0 missing) — the check above is non-vacuous"
+# 14 -> 16 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): `png_chunks.is_png_sig -> png_sig_ok`
+# and `toml_parser.err_result -> mk_error_val`, each unclassified because its subject makes no claim.
+if [ "$NONCUR" = "16" ]; then
+  ok "the corpus contains exactly 16 non-current edges (16 unclassified, 0 missing) — the check above is non-vacuous"
 else
-  no "non-current edge count moved to $NONCUR (was 14, all unclassified) — if the hand-back classified more, update this and say so"
+  no "non-current edge count moved to $NONCUR (was 16, all unclassified) — if the hand-back classified more, update this and say so"
 fi
 
 DR="$(cc examples/proof_patterns/composition/src/main.con subject-facts | grep 'shadow depRoot:' || true)"
@@ -4297,7 +4321,8 @@ launch_ordinary_probes
 # turns that into a failure, so this block asserts the matrix rather than asserting that someone
 # once checked it.
 # 25 -> 28 on 2026-10-18 (bug 083: the name-keyed `provedFunctions` table was deleted, so `thesis_demo/src/main.con`, `thesis_demo/src/main_drifted.con` and `crypto_verify_drifted` now carry in-source links and JOIN the `#[proof_by]` population).
-EXPECTED_MATRIX_FIXTURES=28
+# 28 -> 31 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population).
+EXPECTED_MATRIX_FIXTURES=31
 EXPECTED_MATRIX_REPORTS=4
 MATRIX_FILES="$(grep -rlE '#\[(proof_by|ensures_proof)\(' examples --include='*.con' | sort)"
 MATRIX_N="$(printf '%s\n' "$MATRIX_FILES" | grep -c .)"

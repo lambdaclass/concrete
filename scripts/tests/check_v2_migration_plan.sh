@@ -56,10 +56,13 @@ fi
 # different one going missing.
 # 44/43 -> 51/50 on 2026-10-18 (bug 083): the deleted name-keyed `provedFunctions` table's claims moved
 # into source as v2 pins — thesis_demo/src/main.con (2), main_drifted.con (2), crypto_verify_drifted (3).
-if [ "$CODE" = "51" ] && [ "$ROWS" = "50" ]; then
-  ok "51 stored fingerprints = 50 plan rows + 1 unreachable"
+# 51/50 -> 58/57 on 2026-10-21 (workload proofs): seven new v2 pins, each reached by its obligation —
+# examples/toml/src/main.con (4: is_ws, is_newline, is_digit, is_bare_key_char),
+# examples/hexdump/src/main.con (2: gutter_byte, line_len), examples/png_chunks/src/main.con (1: png_sig_ok).
+if [ "$CODE" = "58" ] && [ "$ROWS" = "57" ]; then
+  ok "58 stored fingerprints = 57 plan rows + 1 unreachable"
 else
-  no "population moved: $CODE stored / $ROWS planned (expected 51 / 50)"
+  no "population moved: $CODE stored / $ROWS planned (expected 58 / 57)"
 fi
 if [ "$(tr -s ' ' '\n' <<<"$UNREACHED" | grep -c . || true)" = "1" ] \
    && grep -q 'contract_negatives/invalid_attribute' <<<"$UNREACHED"; then
