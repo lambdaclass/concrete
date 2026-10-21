@@ -1,0 +1,11 @@
+// Bug 123: `&A[1]` borrows an element of a module constant array. Refused (E0238) with every
+// other constant-rooted borrow, one rule until constants have storage.
+const A: [Int; 2] = [40, 42];
+
+fn get(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return get(&A[1]) - 42;
+}

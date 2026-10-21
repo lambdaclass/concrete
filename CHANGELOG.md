@@ -358,7 +358,11 @@ H28, owned by R-0499) that rejects e.g. `if`-produced references and temporaries
 receivers. It fixes bug 104 (a reference re-pointed by assignment at block-local
 storage is refused) and bug 107 (shadowing a binding a live reference borrows is refused); bug 105
 (a reference-valued `if` miscompiles) is contained at the checker and bug 106 (a hung model-diff
-report the gate swallowed) is fixed.
+report the gate swallowed) is fixed. Bug 123 is fixed with it: a module constant of reference type
+is refused at the declaration (E0239), and a borrow rooted at a module constant (`&X`, `&K.v`,
+`&A[i]`, the implicit `&self` of `K.get()`), which read a stack slot nothing initialized, is
+E0238; copy the constant into a local first. The review also refused writing a reference through
+a reference (`*slot = &local`), which left the caller a dangling reference on `main`.
 
 ### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
 

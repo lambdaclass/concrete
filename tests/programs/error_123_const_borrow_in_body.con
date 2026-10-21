@@ -1,0 +1,13 @@
+// Bug 123: a module constant has no storage; `&X` in a function body lowered to the address of
+// a local named X that does not exist (an uninitialized slot; exit 0 instead of 42). Refused
+// (E0238) until constants have storage.
+const X: Int = 42;
+
+fn get(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let r: &Int = &X;
+    return get(r);
+}

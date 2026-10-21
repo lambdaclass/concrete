@@ -1,0 +1,15 @@
+// Bug 123: `K.get()` with `get(&self)` borrows the module constant implicitly; the binary read
+// an uninitialized slot (exit 255 for 0 on main). Refused (E0238).
+struct Copy B { v: Int }
+
+impl B {
+    fn get(&self) -> Int {
+        return self.v;
+    }
+}
+
+const K: B = B { v: 42 };
+
+fn main() -> Int {
+    return K.get() - 42;
+}

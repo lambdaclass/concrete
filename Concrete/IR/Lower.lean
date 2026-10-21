@@ -489,6 +489,10 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
       | some (reg, _) => return some (.reg reg refTy)
       | none =>
         let cur ← lookupVar name
+        -- Bug 123 (defense in depth behind Check's E0238): a module constant has no storage.
+        -- Taking its address gave a fresh slot that nothing initialized; refuse it here too.
+        if cur.isNone && ((← getState).constants.any fun (n, _, _) => n == name) then
+          throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
         let slot ← freshReg "addr."
         emitEntryAlloca (.alloca slot varTy)
         match cur with

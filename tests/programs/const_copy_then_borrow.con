@@ -1,0 +1,24 @@
+// Bug 123: the working spelling. A module constant is copied into a local, which has storage,
+// and the local is borrowed (reads, field borrows and `&self` receivers alike).
+struct Copy B { v: Int }
+
+impl B {
+    fn get(&self) -> Int {
+        return self.v;
+    }
+}
+
+const X: Int = 40;
+const K: B = B { v: 2 };
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() with(Std) -> Int {
+    let x: Int = X;
+    let k: B = K;
+    print_int(read(&x) + read(&k.v) + k.get() - 2 + K.v - 2);
+    print_char(10);
+    return 0;
+}

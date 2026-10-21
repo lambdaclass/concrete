@@ -341,6 +341,27 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
             else if !(← isCopyType innerTy) then refused
   | _ => pure ()
 
+/-- The module constant a borrowed place is rooted at, if any: `X`, `X.f`, `X[i]`, `(X).f`. A
+    local binding of the same name shadows the constant. -/
+partial def constBorrowRoot : Expr → CheckM (Option String)
+  | .paren _ e => constBorrowRoot e
+  | .fieldAccess _ b _ => constBorrowRoot b
+  | .arrayIndex _ b _ => constBorrowRoot b
+  | .ident _ n => do
+    if (← lookupVarInfo n).isSome then return none
+    if ((← getEnv).constants.lookup n).isSome then return some n
+    return none
+  | _ => return none
+
+/-- Bug 123: a module constant has no storage. Lower inlines a constant where it is READ, but a
+    borrow of one (`&X`, `&K.v`, the implicit `&self` of `K.get()`) took the address of a local
+    named `X` that does not exist and read a slot nothing initialized. Refused (E0238) until
+    constants have storage; a copy into a local is the spelling that works. -/
+def refuseConstBorrow (subject : String) (e : Expr) (span : Option Span) : CheckM Unit := do
+  if let some n ← constBorrowRoot e then
+    throwCheck (.untraceablePlace subject
+      s!"'{n}' is a module constant, which has no storage to borrow (bug 123); copy it into a local first (`let c = {n};`)") span
+
 /-- Bug 091 round 3: a method call's IMPLICIT receiver borrow is the explicit `&place` /
     `&mut place` it stands for, checked by the same `checkSharedAccess` / `checkMutAccess` on
     the receiver's NORMALIZED place (one rule for concrete and trait-bound receivers):
@@ -354,6 +375,9 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
 def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty)
     (methodName : String) (span : Option Span) : CheckM Unit := do
   let subject := s!"the receiver of `&mut self` method '{methodName}'"
+  match selfKind with
+  | some .ref | some .refMut => refuseConstBorrow s!"the receiver of '{methodName}'" obj span
+  | _ => pure ()
   let n ← receiverNorm obj objTy
   if let .reject why := n then
     throwCheck (.untraceablePlace s!"the receiver of '{methodName}'" why) span
@@ -1681,12 +1705,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       refuseRefValuedBranch "a `match` expression" matchResultTy (some e.getSpan)
       return matchResultTy
   | .borrow _ inner =>
+    refuseConstBorrow "the borrowed place" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- The normalized place rule (bug 091 round 3): `&e` borrows `e`'s normalized place;
     -- one shared-access check whatever the spelling, E0238 if `e` is not a traceable place.
     checkSharedAccess (← normPlace inner) "the borrowed place" (some e.getSpan)
     return .ref innerTy
   | .borrowMut _ inner =>
+    refuseConstBorrow "a place" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- One rule for `&mut x`, `&mut (x)`, `&mut w.f` and `&mut (*r)`: never through a shared
     -- reference (E0237), and an owned root is `mut` and unborrowed (bug 091 round 3).
@@ -3008,6 +3034,9 @@ def checkModule (m : Module) (summary : FileSummary)
           v.fields.map fun f => (s!"field '{f.name}' of {ed.name}::{v.name}", ownParams ed.typeParams f.ty, ed.span))
     -- A newtype is a one-field wrapper: its inner type is a stored field too.
     ++ (m.newtypes.map fun nt => (s!"inner type of newtype '{nt.name}'", ownParams nt.typeParams nt.innerTy, nt.span))
+    -- A module constant is storage, not a binding: a bare `&T` constant stores a reference too
+    -- (REF-3; bug 123 — `const R: &Int = &X` was accepted and read an uninitialized slot).
+    ++ (m.constants.map fun c => (s!"module constant '{c.name}'", c.ty, c.span))
   -- Through type aliases (`type Ref = &Int; newtype W = Ref;`).
   match refFields.find? (fun (_, ty, _) =>
       tyStoresRef (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty)) with

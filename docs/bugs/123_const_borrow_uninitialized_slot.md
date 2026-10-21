@@ -1,6 +1,6 @@
 # Bug 123 — a borrow of a module constant reads a stack slot that is never initialized
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (batch 2, `land2-fix`)
 **Found:** 2026-10-21, by the exit 2i specification (MEMORY_SEMANTICS §15.3 REF-3, gap G1).
 **Severity:** silent wrong code in safe code. A constant of bare reference type is accepted, and
 the binary reads an uninitialized stack slot through it.
@@ -67,6 +67,29 @@ function body, `return get(&X);` or `let r: &Int = &X; return get(r);`, compiles
 E0201 ("use of undeclared variable 'X'"). That shape needs a rejection or a correct lowering before
 batch 2 lands.
 
+## Fix
+
+Batch 2 (`land2-fix`, 2026-10-21), fail closed at both halves:
+
+1. **The declaration.** `checkModule`'s stored-reference declaration check (E0239) covers module
+   constants, with `tyStoresRef` through `expandAliasDeep`, so a bare `&Int` constant counts: a
+   constant is storage, not a binding. After monomorphization, `verifyNoStoredRefs` checks a
+   constant's type with `tyStoresRefV` (bare references included) instead of
+   `tyHoldsRefInAggregateV`. The reproducer is now refused at `const R: &Int = &X;` (E0239,
+   `error_123_const_ref_type.con`).
+2. **Borrowing a constant.** A module constant has no storage, so a borrow rooted at one is
+   refused (E0238, `refuseConstBorrow` in `Concrete/Check/Check.lean`) in each spelling: `&X` in a
+   function body (`error_123_const_borrow_in_body.con`), a field `&K.v`
+   (`error_123_const_field_borrow.con`), an element `&A[1]` (`error_123_const_index_borrow.con`),
+   and the implicit `&self` of `K.get()` (`error_123_const_receiver_borrow.con`). The field and
+   receiver spellings miscompiled on main as well (exit 255 for 0). Copying the constant into a
+   local first is the spelling that works (`const_copy_then_borrow.con`, native: the interpreter
+   half is bug 117). Lower's `addrOfLocal` refuses the address of a module constant too (E0602),
+   defense in depth behind the check.
+
+The open-bug reproducer row in `check_example_outputs.sh` is dropped, and `run_tests.sh` runs the
+fixtures.
+
 ## Structural cause
 
 A documented rule with no enforcing site for one of its cases (REF-3 names module constants, the
@@ -84,7 +107,7 @@ and `verifyNoStoredRefs` (exit 2i REF-3, fixture `error_2i_ref3_const_bare_ref.c
 documented rule has an enforcing site) and R-0501 (S10, places in Place MIR, where a constant is
 not a place a reference can borrow from).
 
-## Containment while open
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `wrong-exit:42`) builds
 and runs the reproducer and requires that it does not exit 42. When the bug is fixed, by rejection

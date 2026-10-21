@@ -1555,6 +1555,16 @@ for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_throug
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 123: a module constant of reference type is refused at the declaration (E0239), and a
+# borrow rooted at a module constant (explicit, field, index or implicit `&self`) is refused
+# (E0238) until constants have storage; a copy into a local is the working spelling (native
+# only: the interpreter does not bind module constants, bug 117).
+run_err "$TESTDIR/error_123_const_ref_type.con"          "(E0239)"
+run_err "$TESTDIR/error_123_const_borrow_in_body.con"    "(E0238)"
+run_err "$TESTDIR/error_123_const_field_borrow.con"      "(E0238)"
+run_err "$TESTDIR/error_123_const_receiver_borrow.con"   "(E0238)"
+run_err "$TESTDIR/error_123_const_index_borrow.con"      "(E0238)"
+run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
 run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
@@ -1649,6 +1659,8 @@ error_091_norm_generic_nested_alias_ref:E0239
 error_091_norm_ref_write_through_ref:E0238
 error_091_norm_generic_fn_mut_param:E0238
 error_091_norm_generic_transitive_ref:E0238
+error_091_norm_free_under_projected_borrow:E0204
+error_091_norm_field_write_under_projected_borrow:E0232
 trait_generic_fn_value_param:ok
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok

@@ -58,6 +58,8 @@ some valid programs are rejected:
 - instantiating a type parameter with a reference type where the parameter occurs behind a
   reference or pointer in a parameter type of the generic function or method
   (`forward::<&P>(w: &W<T>, ..)`), since the generic body is checked once at its opaque `T`;
+- borrowing a module constant or a projection of one (`&X`, `&K.v`, `&A[i]`, the implicit
+  `&self` of `K.get()`), since a constant has no storage (bug 123; copy it into a local first);
 - writing a reference through a reference (`*slot = &local` with `slot: &mut &Int`), since the
   borrow lands in storage the writer does not own and its source is no longer traced;
 - shadowing a name that a live reference records as its source or parent

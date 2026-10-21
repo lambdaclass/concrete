@@ -786,12 +786,17 @@ an array literal element; a binding or parameter whose type holds a reference in
   `error_092_alias_struct_field_ref.con`, `error_092_const_ref_array.con`,
   `error_092_phantom_ref_type_arg.con`, `error_escape_field.con`. Accepted:
   `regress_092_refs_flow_down.con`, `regress_092_type_param_shadows_ref_alias.con`.
-- Status: **main** except G1: a constant whose type is a reference is accepted on both revisions,
-  because `tyHoldsRefInAggregateV` looks through the outer reference. On `main`,
+- Status: **main** except G1, which is **land2** (the bug 123 repair, on `land2-fix` after
+  `74f7284a`). On `main` a constant whose type is a reference is accepted, because
+  `tyHoldsRefInAggregateV` looks through the outer reference:
   `const X: Int = 42; const R: &Int = &X; fn get(r: &Int) -> Int { return *r; }` with
   `return get(R);` builds a binary that exits 0, while `--interp` reports `undefined variable 'R'`:
-  silent wrong code in safe code (bug 123). `land2-fix` refuses every use of `R` (E0238, "'R' is not a local
-  binding") but still accepts the declaration.
+  silent wrong code in safe code (bug 123). `land2-fix` refuses the declaration (E0239: the
+  `checkModule` declaration check covers constants, and `verifyNoStoredRefs` checks a constant's
+  type with `tyStoresRefV`; fixture `error_123_const_ref_type.con`), and refuses every borrow
+  rooted at a module constant, which has no storage (E0238: `&X`, `&K.v`, `&A[i]` and the
+  implicit `&self` of `K.get()`, the last two miscompiled on `main` too; fixtures
+  `error_123_const_*.con`).
 
 **Constants are values, not places (decided 2026-10-21).** A `const` denotes a value: each use
 copies it, it is never addressable, and its type may not hold a reference (§15.1), a bare outer
@@ -818,8 +823,9 @@ Three separate conditions, each refusing an instantiation `T := A`:
   parameter, binding or expression type, or a constant's type, holds a reference inside an
   aggregate (`tyHoldsRefInAggregateV`: the outer reference is looked through, so a bare `&Int`
   parameter or binding is allowed, as in `ignore::<&Int>`). So `Box<T>` at `A = &Int` is refused
-  and at `A = fn(&Int) -> Int` accepted, since a function pointer stores no reference. The
-  bare-reference constant falls through this predicate (G1);
+  and at `A = fn(&Int) -> Int` accepted, since a function pointer stores no reference. On `main`
+  the bare-reference constant falls through this predicate (G1); `land2-fix` checks a constant's
+  type with `tyStoresRefV`, so it counts;
 - (c) `A` **contains** a reference and `T` occurs behind a reference or pointer in one of the
   generic's parameter types, including inside a function type (`w: &W<T>`, `r: &T`,
   `p: *mut T`, `f: fn(&mut T)`; `tyParamOccursNested`), because the generic body is checked once
@@ -1035,7 +1041,9 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
   binary returns 2 where `--interp` returns 1); REF-6 refuses both at their first reference `let`.
 - Fixtures: `error_borrow_frozen.con` (E0203), `error_named_ref_mut_conflict.con` (E0232);
   *`error_107_shadow_under_live_ref.con`*, *`error_107_shadow_in_block_under_live_ref.con`*,
-  *`error_091_norm_assign_under_shared_ref.con`*, *`error_091_norm_copied_mut_ref.con`*.
+  *`error_091_norm_assign_under_shared_ref.con`*, *`error_091_norm_copied_mut_ref.con`*,
+  *`error_091_norm_free_under_projected_borrow.con`* (E0204),
+  *`error_091_norm_field_write_under_projected_borrow.con`* (E0232).
 - Status: on `main` the source is recorded only for a direct `let r = &x` / `&mut x`
   (`checkStmt` `let` case), so moving, freeing, freezing and let-borrow conflicts are enforced for
   those. A projected borrow is not tracked on `main`: `let r: &Int = &h.v; free(h);` is accepted
@@ -1188,7 +1196,7 @@ accepted fixtures, with the diagnostic text updated.
 |---|---|---|---|
 | REF-1 | 1 | E0236 (to be attached at the front end, G2); E0575 for an `extern fn` signature (FFI safety, which then also carries the `rule` evidence and a rewrite) | H1 closure, 2026-06-13; post-mono re-assertion, class 6 |
 | REF-2 | 1 | E0236 (proposed; no code today) | H1 closure, 2026-06-13 |
-| REF-3 | 1 | E0239 | bug 092 (`df0215f0`; batch 4 follow-ups `fc34504e` to `7f4ae423`); bare-reference constants once G1 is repaired |
+| REF-3 | 1 | E0239 | bug 092 (`df0215f0`; batch 4 follow-ups `fc34504e` to `7f4ae423`); bare-reference constants with batch 2 (bug 123) |
 | REF-4 | 1 | E0236 (a), E0239 (b), E0238 (c) | (a) 2026-06-13; (b) batch 4; (c) batch 2 |
 | REF-5 | 1 | E0238 | batch 2, landing under exit 0b |
 | REF-6 | 1 | E0302 for (a) and E0303 for (b), both proposed; E0234 and E0238 kept as defense in depth | the 2026-10-21 decision, which replaced the draft's same-source comparison before any version of it landed; E0234 earlier; E0238 batch 2 |
@@ -1360,11 +1368,11 @@ manifest row:
 
 | gap | what is missing | proposed owner |
 |---|---|---|
-| G1 | REF-3: a constant of bare reference type is accepted on both revisions; on `main` its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), which also records that `land2-fix` compiles `&X` of a constant in a function body to the same uninitialized slot | row 0, exit 0b: reject the declaration with E0239 in `checkModule` and `verifyNoStoredRefs` |
+| G1 | REF-3: a constant of bare reference type is accepted on `main`; its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), fixed on `land2-fix`: the declaration is E0239 and every borrow rooted at a module constant is E0238 | exit 0b (batch 2 landing) |
 | G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
 | G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
 | G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
-| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 has no fixture yet for the free or the field write under a projected borrow, which it rejects with E0204 and E0232), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
+| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 rejects the free and the field write under a projected borrow with E0204 and E0232, fixtures `error_091_norm_free_under_projected_borrow.con` and `error_091_norm_field_write_under_projected_borrow.con`), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
 | G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
 | G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |

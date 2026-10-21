@@ -409,7 +409,8 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
           acc3 ++ if tyStoresRefV t then [{ fnName := s!"{ed.name}::{vname}", message := s!"{label}: enum field '{fname}' type {tyToStr t}" }] else []) acc2) acc) []
     -- Module constants: the declared type and every initializer subexpression.
     let constVs := m.constants.foldl (fun acc (name, ty, value) =>
-      acc ++ (if tyHoldsRefInAggregateV ty
+      -- a constant is storage: a bare reference type counts (bug 123)
+      acc ++ (if tyStoresRefV ty
               then [{ fnName := name, message := s!"{label} in constant type: {tyToStr ty}" }] else [])
           ++ collectExprViolations name tyHoldsRefInAggregateV label value) []
     fnVs ++ structVs ++ enumVs ++ constVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []

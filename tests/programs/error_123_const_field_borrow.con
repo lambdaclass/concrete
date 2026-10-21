@@ -1,0 +1,12 @@
+// Bug 123: `&K.v` borrows a field of a module constant; the binary read an uninitialized slot
+// (exit 255 for 0 on main). Refused (E0238).
+struct Copy B { v: Int }
+const K: B = B { v: 42 };
+
+fn get(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return get(&K.v) - 42;
+}

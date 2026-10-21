@@ -1,0 +1,13 @@
+// Bug 123: a module constant is storage, so a constant of bare reference type stores a
+// reference (REF-3). It was accepted, and get(R) read a stack slot nothing initialized.
+// Refused at the declaration (E0239).
+const X: Int = 42;
+const R: &Int = &X;
+
+fn get(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return get(R);
+}
