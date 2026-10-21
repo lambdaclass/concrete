@@ -1,0 +1,18 @@
+// Bug 097 (Codex round 2): a parameter named like a colliding top-level function (`h`)
+// is a local; only the global function value is respelled. Expected (compiled AND
+// --interp): 1211099.
+mod a {
+    fn h() -> Int { return 11; }
+    fn twelve() -> Int { return 12; }
+    fn apply(h: fn() -> Int) -> Int { let f: fn() -> Int = h; return f(); }
+    pub fn fa() -> Int { return apply(twelve) * 100 + h(); }
+}
+mod c {
+    fn h() -> Int { return 99; }
+    pub fn fc() -> Int { return h(); }
+}
+mod m {
+    import a.{fa};
+    import c.{fc};
+    fn main() with(Std) -> Int { print_int(fa() * 1000 + fc()); print_char(10); return 0; }
+}

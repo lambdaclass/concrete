@@ -1,0 +1,13 @@
+// Bug 097 (Codex round 2): a free function `P_get` in one module and a method `P.get`
+// (Core `P_get`) in another were one callee (binary 61296042401001, --interp a runtime
+// error). The free function is respelled `a_P_get`. Expected (compiled AND --interp): 51001.
+mod a { pub fn P_get(x: i64) -> i64 { return x + 1000; } pub fn fa() -> i64 { return P_get(1); } }
+mod b {
+    pub struct Copy P { pub x: i64 }
+    impl P { pub fn get(&self) -> i64 { return self.x; } }
+}
+mod m {
+    import a.{fa};
+    import b.{P};
+    fn main() with(Std) -> Int { let p: P = P { x: 5 }; print_int(p.get() * 10000 + fa()); print_char(10); return 0; }
+}

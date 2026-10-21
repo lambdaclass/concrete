@@ -1,0 +1,6 @@
+// Bug 097 (Codex round 2): a's and b's private `h` collide, and `a_h` (a's respelled `h`)
+// is also c's function. Refused (E0299) rather than joined.
+mod a { fn h() -> Int { return 1; } pub fn fa() -> Int { return h(); } }
+mod b { fn h() -> Int { return 2; } pub fn fb() -> Int { return h(); } }
+mod c { pub fn a_h() -> Int { return 3; } }
+mod m { import a.{fa}; import b.{fb}; import c.{a_h}; fn main() with(Std) -> Int { print_int(fa() * 100 + fb() * 10 + a_h()); print_char(10); return 0; } }

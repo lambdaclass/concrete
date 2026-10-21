@@ -2407,7 +2407,10 @@ def importCallSpellingsFor (m : Module) (summary : FileSummary)
           | some (_, ts) =>
             if !(ts.functions.any (·.1 == orig)) then none
             else
-              let definers := topLevel.filter fun (_, t) => t.functions.any (·.1 == orig)
+              -- Bugs 097/098: a method's Core name (`Type_method`) counts as a definer too,
+              -- the set `qualifyCollidingTopLevelFns` reads.
+              let definers := topLevel.filter fun (_, t) =>
+                t.functions.any (·.1 == orig) || t.implMethodSigs.any (·.1 == orig)
               if aliased || definers.length > 1
               then some (localName, imp.moduleName ++ "_" ++ orig) else none
           | none => none
@@ -2466,6 +2469,60 @@ def importSpellingCollisions (m : Module) (spellings : List (String × String))
           some { severity := .error, message := e.message, pass := "elab", span := some imp.span,
                  hint := e.hint, code := e.code }
 
+/-- Bug 096: every `.named`/`.generic` type name a type mentions. -/
+partial def tyNamesIn : Ty → List String
+  | .named n => [n]
+  | .generic n args _ => n :: args.flatMap tyNamesIn
+  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyNamesIn t
+  | .fn_ ps _ r => ps.flatMap tyNamesIn ++ tyNamesIn r
+  | _ => []
+
+/-- Bug 096: the declaration (`definedIn`, name) the module summarized by `d` binds the type
+    spelling `n` to: its own declaration, else the declaration its import of `n` names
+    (`decls` is every (name, definedIn) type declaration of the program). `none` when that
+    does not identify exactly one declaration. -/
+def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : String) :
+    Option (String × String) :=
+  let own := (d.structs.filter (·.name == n)).map (fun sd => (sd.definedIn, sd.definitionName))
+    ++ (d.enums.filter (·.name == n)).map (fun ed => (ed.definedIn, ed.definitionName))
+    ++ (d.newtypes.filter (·.name == n)).map (fun nt => (nt.definedIn, nt.name))
+  match own.eraseDups with
+  | [b] => some b
+  | _ :: _ => none
+  | [] =>
+    match d.imports.findSome? fun imp =>
+        (imp.symbols.find? (·.effectiveName == n)).map fun sym => (imp.moduleName, sym.name) with
+    | none => none
+    | some (modName, orig) =>
+      match (decls.filter fun (nm, defIn) =>
+          nm == orig && (defIn == modName || defIn.endsWith ("." ++ modName))).eraseDups with
+      | [(nm, defIn)] => some (defIn, nm)
+      | _ => none
+
+/-- Bug 096: the types an imported or sibling declaration carries into this module's Core,
+    each with the module summary it was written in. A function's own type parameters are not
+    type names. -/
+def summaryEntityTypes (d : FileSummary) (sym : String) : List (String × List Ty) :=
+  let sigTys := fun (fs : FnSummary) => (fs.params.map (·.2)) ++ [fs.retTy]
+  (d.functions.filter (·.1 == sym)).map (fun (n, fs) => (s!"function '{n}'", sigTys fs))
+  ++ (d.externFnSigs.filter (·.1 == sym)).map (fun (n, fs) => (s!"function '{n}'", sigTys fs))
+  ++ (d.implMethodSigs.filter fun (n, _) => n.startsWith (sym ++ "_")).map
+       (fun (n, fs) => (s!"method '{n}'", sigTys fs))
+  ++ (d.structs.filter (·.name == sym)).map (fun sd => (s!"struct '{sd.name}'", sd.fields.map (·.ty)))
+  ++ (d.enums.filter (·.name == sym)).map (fun ed =>
+       (s!"enum '{ed.name}'", ed.variants.flatMap fun v => v.fields.map (·.ty)))
+  ++ (d.newtypes.filter (·.name == sym)).map (fun nt => (s!"newtype '{nt.name}'", [nt.innerTy]))
+  ++ (d.typeAliases.filter (·.name == sym)).map (fun ta => (s!"type alias '{ta.name}'", [ta.targetTy]))
+
+/-- The type parameter names declared by `sym`'s declaration(s) in `d`, which are not type
+    names when they appear in its types. -/
+def summaryEntityTypeParams (d : FileSummary) (sym : String) : List String :=
+  ((d.functions ++ d.externFnSigs).filter (·.1 == sym)).flatMap (·.2.typeParams)
+  ++ (d.implMethodSigs.filter fun (n, _) => n.startsWith (sym ++ "_")).flatMap (·.2.typeParams)
+  ++ (d.structs.filter (·.name == sym)).flatMap (·.typeParams)
+  ++ (d.enums.filter (·.name == sym)).flatMap (·.typeParams)
+  ++ (d.newtypes.filter (·.name == sym)).flatMap (·.typeParams)
+
 partial def elabModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {})
     (summaryTable : List (String × FileSummary) := [])
@@ -2477,6 +2534,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
     -- Bug 096: type names declared by two or more modules of the program. Core
     -- spells those by their defining module (see `TypeSpelling`).
     (ambiguousTypes : List String := [])
+    -- Bug 096: every (name, definedIn) type declaration of the program.
+    (typeDecls : List (String × String) := [])
     (prefixSubs : Bool := true)
     (proofModulePath : String := "")
     (proofFnPrefix : String := "") : Except Diagnostics CModule :=
@@ -2868,7 +2927,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                          else proofFnPrefix ++ "_" ++ sub.name
       match elabModule sub subSummary subImports summaryTable (topLevel := topLevel)
           (siblingSubs := if prefixSubs then summary.submoduleSummaries.filter (·.1 != sub.name) else [])
-          (ambiguousTypes := ambiguousTypes)
+          (ambiguousTypes := ambiguousTypes) (typeDecls := typeDecls)
           (prefixSubs := false) (proofModulePath := childPath)
           (proofFnPrefix := childPrefix) with
       | .ok csub => .ok (lst ++ [{ csub with sourceFile := sub.sourceFile }])
@@ -2987,9 +3046,61 @@ partial def elabModule (m : Module) (summary : FileSummary)
     allStructs.map (fun sd => (sd.name, structCanon sd))
     ++ allEnums.map (fun ed => (ed.name, enumCanon ed))
     ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, canonTypeName nt.definedIn nt.name))
-  let typeSpellings : List (String × String) :=
+  let ownSpellings : List (String × String) :=
     (spellingCandidates.foldl (fun acc (sp, c) =>
       if acc.any (·.1 == sp) then acc else (sp, c) :: acc) []).filter (fun (sp, c) => sp != c)
+  -- Types written in ANOTHER module (an imported or sibling declaration's signature or
+  -- fields, a submodule function's signature) reach this module's Core spelled as their
+  -- module wrote them. Each such mention of an ambiguous name must mean, in that module,
+  -- the declaration this module's spelling means; a name this module does not bind takes the
+  -- binding those modules agree on. Anything else is refused (E0299): Core could not spell it.
+  -- Explicit imports are checked strictly (`true`): the module asked for that declaration.
+  -- A submodule's or sibling's declarations are visible without an import and mostly
+  -- unused, so they only supply a binding this module lacks, never a refusal.
+  let foreignSources : List (FileSummary × String × Bool) :=
+    if ambiguousTypes.isEmpty then [] else
+    (m.imports.flatMap fun (imp : ImportDecl) =>
+      let d? : Option FileSummary := match summary.submoduleSummaries.find? (·.1 == imp.moduleName) with
+        | some (_, s) => some s
+        | none => match siblingSubs.find? (·.1 == imp.moduleName) with
+          | some (_, s) => some s
+          | none => match summaryTable.lookup imp.moduleName with
+            | some s => some s
+            | none => topLevel.lookup imp.moduleName
+      match d? with
+      | some d => imp.symbols.map fun (sym : ImportSymbol) => (d, sym.name, true)
+      | none => [])
+    ++ (summary.submoduleSummaries.flatMap fun (_, d) =>
+      (d.functions.map (·.1) ++ d.externFnSigs.map (·.1) ++ d.structs.map (·.name)
+        ++ d.enums.map (·.name)).map (d, ·, false)
+      ++ d.implMethodSigs.map fun (n, _) => (d, (n.splitOn "_").headD n, false))
+    ++ (siblingSubs.flatMap fun (_, d) =>
+      (d.structs.map (·.name) ++ d.enums.map (·.name)).map (d, ·, false)
+      ++ d.implMethodSigs.map fun (n, _) => (d, (n.splitOn "_").headD n, false))
+  let foreignReqs : List (String × Option String × String × Bool) :=
+    foreignSources.flatMap fun (d, sym, strict) =>
+      let tps := summaryEntityTypeParams d sym
+      (summaryEntityTypes d sym).flatMap fun (what, tys) =>
+        ((tys.flatMap tyNamesIn).eraseDups.filter fun n =>
+            ambiguousTypes.contains n && !tps.contains n).map fun n =>
+          (n, (summaryTypeBinding typeDecls d n).map (fun (defIn, nm) => canonTypeName defIn nm),
+           s!"{what} of module '{d.name}'", strict)
+  let foreignNames := (foreignReqs.map (·.1)).eraseDups
+  let inherited : List (String × String) := foreignNames.filterMap fun n =>
+    if ownSpellings.any (·.1 == n) then none else
+    -- the explicit imports' agreed binding, else the visible declarations' agreed binding
+    let strictCs := ((foreignReqs.filter fun r => r.1 == n && r.2.2.2).map (·.2.1)).eraseDups
+    let allCs := ((foreignReqs.filter (·.1 == n)).map (·.2.1)).eraseDups
+    match (if strictCs.isEmpty then allCs else strictCs) with
+    | [some c] => some (n, c)
+    | _ => none
+  let typeSpellings := ownSpellings ++ inherited
+  let spellingConflicts : Diagnostics := foreignReqs.filterMap fun (n, c?, what, strict) =>
+    if !strict || (c?.isSome && c? == typeSpellings.lookup n) then none else
+    some { severity := .error, pass := "elab", span := none, code := "E0299"
+           message := s!"{what} names type '{n}', which several modules declare, and that module and this one do not bind '{n}' to the same declaration; Core cannot tell which type it means (bug 096)"
+           hint := some s!"import '{n}' from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
+  if !spellingConflicts.isEmpty then .error (spellingConflicts.eraseDupsBy (·.message == ·.message)) else
   -- A method is named `<Type>_<method>` after its receiver type's spelling, so a
   -- respelled type respells its methods' definitions and calls with it.
   let methodNames : List String :=
@@ -3215,36 +3326,57 @@ def ambiguousTypeNames (tops : List (String × FileSummary)) : List String :=
   let names := (decls.map (·.1)).eraseDups
   names.filter fun n => !compilerKnown.contains n && (decls.filter (·.1 == n)).length ≥ 2
 
-/-- Bugs 097 and 098: a function name defined by two TOP-LEVEL modules is spelled
-    `<module>_<name>` in Core: its definition, every call to it and every reference to
-    it from its own module. Submodule functions already carry such a prefix
-    (`prefixModuleFnNames`); top-level ones kept their bare name, and every consumer
-    that resolves a callee by name met two definitions: the interpreter ran the first
-    (a module calling its OWN private `h` got another module's), and Mono specialized a
-    generic from whichever it registered. EmitSSA qualified the two LLVM symbols itself,
-    so only the compiled path of a non-generic call was right.
+/-- Every Core function name of a module tree. -/
+partial def coreFnNamesDeep (cm : CModule) : List String :=
+  cm.functions.map (·.name) ++ cm.submodules.flatMap coreFnNamesDeep
 
-    Calls from OTHER modules already use this spelling: Elab spells an import of a name
-    several top-level modules define as `<module>_<orig>` (`importCallSpellingsFor`), as
-    does `module::name`. The entry point keeps its name. A call target recorded under the
-    old spelling (`callTargets`, bug 081) is recorded under the new one too. -/
-def qualifyCollidingTopLevelFns (cms : List CModule) : List CModule :=
+/-- Bugs 097 and 098: a FREE function name defined by two TOP-LEVEL modules is spelled
+    `<module>_<name>` in Core: its definition, every call, function reference and function
+    value naming it in its own module, and its `callTargets` key. Submodule functions
+    already carry such a prefix (`prefixModuleFnNames`); top-level ones kept their bare
+    name, and every consumer that resolves a callee by name met two definitions: the
+    interpreter ran the first (a module calling its OWN private `h` got another module's),
+    and Mono specialized a generic from whichever it registered. EmitSSA qualified the two
+    LLVM symbols itself, so only the compiled path of a non-generic call was right.
+
+    The colliding set is read from the same summaries `importCallSpellingsFor` reads: a free
+    function (`FileSummary.functions`) whose name another top-level module defines as a free
+    function or as a method's Core name (`implMethodSigs`, `Type_method`). Calls from OTHER
+    modules, which it spells `<module>_<orig>` for exactly those names, name the renamed
+    definitions. Methods are not renamed here (bug 096 respells them with their type). The entry point
+    keeps its name. A new spelling that some other function already has is refused (E0299)
+    rather than joining two definitions. -/
+def qualifyCollidingTopLevelFns (tops : List (String × FileSummary)) (cms : List CModule) :
+    Except Diagnostics (List CModule) :=
+  let freeFns := fun (mn : String) => ((tops.lookup mn).map fun s => s.functions.map (·.1)).getD []
+  let methods := fun (mn : String) => ((tops.lookup mn).map fun s => s.implMethodSigs.map (·.1)).getD []
+  -- A free function collides with another module's free function OR method of its name
+  -- (a method's Core name is `Type_method`, which a free function can also be named).
   let owners : List (String × String) := cms.flatMap fun cm =>
-    (cm.functions.filter (!·.isEntryPoint)).map fun f => (f.name, cm.name)
+    (freeFns cm.name ++ methods cm.name).eraseDups.map (·, cm.name)
   let colliding := (owners.filter fun (n, mn) =>
-    owners.any fun (n2, mn2) => n2 == n && mn2 != mn).map (·.1) |>.eraseDups
-  if colliding.isEmpty then cms else
-  cms.map fun cm =>
-    let rmap := (cm.functions.filter fun f => !f.isEntryPoint && colliding.contains f.name).map
-      fun f => (f.name, cm.name ++ "_" ++ f.name)
+    (freeFns mn).contains n && owners.any fun (n2, mn2) => n2 == n && mn2 != mn).map (·.1) |>.eraseDups
+  if colliding.isEmpty then .ok cms else
+  let rmaps : List (String × List (String × String)) := cms.map fun cm =>
+    (cm.name, ((cm.functions.filter fun f =>
+        !f.isEntryPoint && colliding.contains f.name && (freeFns cm.name).contains f.name).map
+      fun f => (f.name, cm.name ++ "_" ++ f.name)).eraseDups)
+  let renamed := cms.map fun cm =>
+    let rmap := (rmaps.lookup cm.name).getD []
     if rmap.isEmpty then cm else
+    let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.lookup n).getD n }
     { cm with
-      functions := cm.functions.map fun f =>
-        match rmap.lookup f.name with
-        | some n => { f with name := n, declName := some f.sourceName, body := renameFnStmts rmap f.body }
-        | none => { f with body := renameFnStmts rmap f.body }
+      functions := cm.functions.map rn.fnDef
       callTargets := cm.callTargets ++ cm.callTargets.filterMap fun (n, id) =>
         (rmap.lookup n).map (·, id) }
+  let allNames := renamed.flatMap coreFnNamesDeep
+  let newNames := rmaps.flatMap fun (_, rm) => rm.map (·.2)
+  let clashes := newNames.filter fun n => (allNames.filter (· == n)).length > 1
+  if clashes.isEmpty then .ok renamed else
+  .error (clashes.eraseDups.map fun n =>
+    { severity := .error, pass := "elab", span := none, code := "E0299"
+      message := s!"the Core spelling '{n}' of a function several top-level modules define is already the name of another function; Core cannot tell them apart (bug 097)"
+      hint := some "rename one of the functions. Tracking: docs/bugs/097_same_named_private_fns_interp.md" })
 
 def elabProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics (List CModule) :=
@@ -3255,6 +3387,21 @@ def elabProgram (resolved : List ResolvedModule)
       | some (_, s) => s
       | none => buildFileSummary m)
   let ambiguousTypes := ambiguousTypeNames moduleSummaryList
+  let typeDecls := (moduleSummaryList.flatMap fun (_, s) => collectTypeDecls s).eraseDups
+  -- Bug 096: the canonical spellings must be new names. `a.b`'s `P` and `a_b`'s `P`, or a
+  -- respelled `a_P` and a declared `a_P`, would otherwise be one Core type again.
+  let canonOfDecl := fun ((nm, defIn) : String × String) =>
+    if ambiguousTypes.contains nm then defIn.replace "." "_" ++ "_" ++ nm else nm
+  let typeSpellingClashes := (typeDecls.filter fun (nm, _) => ambiguousTypes.contains nm).filterMap fun d =>
+    let c := canonOfDecl d
+    if (typeDecls.filter fun d2 => canonOfDecl d2 == c).length > 1
+    then some (c, d.1) else none
+  if !typeSpellingClashes.isEmpty then
+    .error (typeSpellingClashes.eraseDups.map fun (c, nm) =>
+      { severity := .error, pass := "elab", span := none, code := "E0299"
+        message := s!"type '{nm}' is declared by several modules and its module-qualified Core spelling '{c}' is also another type's; Core cannot tell them apart (bug 096)"
+        hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" })
+  else
   let (cms, allErrors) := resolved.foldl (fun (acc, errs) rm =>
     let m := rm.module
     let summary := match moduleSummaryList.find? fun (n, _) => n == m.name with
@@ -3284,12 +3431,12 @@ def elabProgram (resolved : List ResolvedModule)
         functions := imports.functions ++ siblingFns
         linkerAliases := imports.linkerAliases ++ siblingAliases }
       match elabModule m summary imports summaryTable (topLevel := moduleSummaryList)
-          (ambiguousTypes := ambiguousTypes) with
+          (ambiguousTypes := ambiguousTypes) (typeDecls := typeDecls) with
       -- Top-level modules keep their source file too (submodules already did): the assumption
       -- summary scopes declarations by the package that file belongs to (R-0484 R10).
       | .ok cm => (acc ++ [{ cm with sourceFile := m.sourceFile }], errs)
       | .error ds => (acc, errs ++ ds.addContext s!"while elaborating module '{m.name}'")
   ) (([] : List CModule), ([] : Diagnostics))
-  if allErrors.isEmpty then .ok (qualifyCollidingTopLevelFns cms) else .error allErrors
+  if allErrors.isEmpty then qualifyCollidingTopLevelFns moduleSummaryList cms else .error allErrors
 
 end Concrete

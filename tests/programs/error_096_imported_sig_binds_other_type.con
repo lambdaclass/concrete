@@ -1,0 +1,17 @@
+// Bug 096 (Codex round 2): b binds `P` to a's P but calls c's `mk`, which returns c's P;
+// Check compares the two by spelling and accepted it (the binary read the wrong layout).
+// Elab refuses it (E0299): Core cannot spell that `P`.
+mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub fn mk(v: i64) -> P { return P { x: v }; }
+}
+mod b {
+    import a.{ P };
+    import c.{ mk };
+    pub fn probe() -> i64 { let p: P = mk(7); return p.x; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

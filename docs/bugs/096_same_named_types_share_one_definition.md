@@ -62,6 +62,23 @@ and imports before the program-wide scope (`ShallowResult.moduleScopes`). Mono's
 interpreter's ambiguous-name refusals (bug 052 round 3) are no longer reached by these programs;
 `check_collections_copy_only.sh` now pins the correct output of its two collision fixtures.
 
+Types written in another module (an imported or sibling declaration's fields, payloads or
+signature, a submodule function's signature) are spelled as their module binds them: each such
+mention of a respelled name must mean, there, the declaration this module's spelling means, and a
+name this module does not bind takes the binding those modules agree on
+(`regress_096_imported_struct_field_binding.con`). For an explicitly imported declaration that
+disagrees, Elab refuses (E0299); a submodule's or sibling's declarations, visible without an
+import, only supply a binding the module lacks. Example of the refusal: b binding `P`
+to a's while calling c's `mk`, which returns c's `P`, was accepted by Check (it compares types by
+spelling) and read the wrong layout (`error_096_imported_sig_binds_other_type.con`). A canonical
+spelling that is already another type's (`a.b`'s `P` and `a_b`'s `P`) is refused the same way
+(`error_096_canonical_type_spelling_clash.con`). A function value of a respelled method
+(`P_get`) is respelled; a local of function type never is (`CoreRename.locals`). Names the
+compiler itself special-cases (`builtinTypeNames`, `HashMap`, `HashSet`, `BinaryHeap`) are never
+respelled; a collision on one stays under bug 052's refusals. `CFnDef.declName` keeps a
+respelled method's declaration name, so ProofCore's `CallableId`s and the reports' qualified
+names are unchanged.
+
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of
 [bug 118](118_interp_nested_module_import.md), so that leg is native only.

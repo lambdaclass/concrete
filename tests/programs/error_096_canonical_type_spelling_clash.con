@@ -1,0 +1,5 @@
+// Bug 096 (Codex round 2): `a.b`'s P and `a_b`'s P would both be Core `a_b_P`. Refused
+// (E0299) rather than joined.
+mod a { mod b { pub struct Copy P { pub x: i64 } pub fn fb() -> i64 { let p: P = P { x: 1 }; return p.x; } } import b.{fb}; pub fn fa() -> i64 { return fb(); } }
+mod a_b { pub struct Copy P { pub x: i64, pub w: i64 } pub fn fab() -> i64 { let p: P = P { x: 4, w: 5 }; return p.w; } }
+mod m { import a.{fa}; import a_b.{fab}; fn main() with(Std) -> Int { print_int(fa() * 10 + fab()); print_char(10); return 0; } }

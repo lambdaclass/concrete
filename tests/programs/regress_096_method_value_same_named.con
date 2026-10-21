@@ -1,0 +1,13 @@
+// Bug 096 (Codex round 2): a respelled type's method used as a function value (`P_get`)
+// names the respelled method. Expected (compiled AND --interp): 1017.
+mod a {
+    pub struct Copy P { pub x: i64 }
+    impl P { pub fn get(&self) -> i64 { return self.x + 100; } }
+    pub fn fa() -> i64 { let f: fn(&P) -> i64 = P_get; let p: P = P { x: 1 }; return f(&p); }
+}
+mod c {
+    pub struct Copy P { pub x: i64, pub y: i64 }
+    impl P { pub fn get(&self) -> i64 { return self.y; } }
+    pub fn fc() -> i64 { let p: P = P { x: 1, y: 7 }; return p.get(); }
+}
+mod m { import a.{fa}; import c.{fc}; fn main() with(Std) -> Int { print_int(fa() * 10 + fc()); print_char(10); return 0; } }

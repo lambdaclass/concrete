@@ -605,15 +605,15 @@ and an unresolved or destructor-less type is refused (E0814). Check's
 `destroyable` no longer accepts every unmatched type (E0241 for arrays of
 non-destroyable elements, `Heap<T>`, `HeapArray<T>`, `&mut T`). Gated by the
 bug 052 legs of COLLECTIONS-DROP-GLUE, compiled and under `--interp`.
-Remaining limit: Elab can still instantiate a generic call at `Placeholder`
-when an argument is a field access; a destroy reaching Mono that way is
-refused (E0814), not guessed, and needs a turbofish.
-Second limit (round 3): Core and runtime values name a type by its bare name,
-so two modules' same-named types are one Core name. Trait dispatch on such a
-name — destructor or any `T$m` — is refused in both backends (E0814/E0815,
---interp a runtime error) rather than choosing either impl; qualified type
-identity in Core would lift the refusal. Check's trait-bound satisfaction still
-reads the bare name, which is why the refusal sits in Mono and the interpreter.
+Former limit, closed by bug 099 (2026-10-21): Elab instantiated a generic call at
+`Placeholder` when an argument was a field access, index or call result (a destroy
+reaching Mono that way was refused, E0814); Check and Elab now share one argument-type
+peek. Former limit (round 3), closed by bug 096 (2026-10-21): two modules' same-named
+types were one Core name, and trait dispatch on it was refused (E0814/E0815). Core now
+spells such a type by its defining module (`<module path>_<name>`), so each dispatch
+reaches its own impl; the refusals remain for compiler-known names (`Vec`, `String`,
+`HashMap`, ...), which are never respelled, and Elab refuses (E0299) a program whose
+imported signatures name such a type ambiguously.
 
 This does **not** authorize implicit scope-end destruction. Concrete stays
 linear, not affine: the outer disposal remains a source-visible consuming

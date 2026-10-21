@@ -1453,15 +1453,17 @@ run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
 for r052c in "collision_destroy:2" "collision_trait:1 100"; do
     r052c_f="${r052c%%:*}"; r052c_want="${r052c#*:}"
     r052c_src="tests/regressions/bug052_vec_array_destroy/$r052c_f.con"
-    r052c_n=""
+    # The whole output and the exit status of both: the binary prints the lines and exits 0;
+    # --interp prints the lines, then main's result (0), and exits 0.
+    r052c_n="(no binary)"
     if $COMPILER "$r052c_src" -o "$TESTDIR/.r052c_bin" >/dev/null 2>&1; then
-        r052c_n=$("$TESTDIR/.r052c_bin" 2>&1 | tr '\n' ' ' | sed 's/ $//' || true)
+        r052c_n=$("$TESTDIR/.r052c_bin" 2>&1; echo "rc=$?")
+        r052c_n=$(printf '%s' "$r052c_n" | tr '\n' ' ')
     fi
     rm -f "$TESTDIR/.r052c_bin"
-    # --interp prints the program's lines, then its exit status
-    r052c_lines=$(printf '%s\n' $r052c_want | wc -l | tr -d ' ')
-    r052c_i=$($COMPILER "$r052c_src" --interp 2>&1 | awk "NR<=$r052c_lines" | tr '\n' ' ' | sed 's/ $//' || true)
-    if [ "$r052c_n" = "$r052c_want" ] && [ "$r052c_i" = "$r052c_want" ]; then
+    r052c_i=$($COMPILER "$r052c_src" --interp 2>&1; echo "rc=$?")
+    r052c_i=$(printf '%s' "$r052c_i" | tr '\n' ' ')
+    if [ "$r052c_n" = "$r052c_want rc=0" ] && [ "$r052c_i" = "$r052c_want 0 rc=0" ]; then
         echo "  ok  bug 052/096: $r052c_f — binary and --interp print $r052c_want"
         PASS=$((PASS + 1))
     else
@@ -1575,13 +1577,24 @@ run_ok "$TESTDIR/regress_096_local_and_imported_same_name.con" "7" 0
 run_ok "$TESTDIR/regress_096_same_named_destroy.con" "102" 0
 run_ok "$TESTDIR/regress_097_098_same_named_private_fns.con" "112124" 0
 run_ok "$TESTDIR/regress_096_nested_same_named_methods.con" "751300" 0
+run_ok "$TESTDIR/regress_096_imported_struct_field_binding.con" "73" 0
+run_ok "$TESTDIR/regress_097_param_named_like_colliding_fn.con" "1211099" 0
+run_ok "$TESTDIR/regress_097_free_fn_named_like_method.con" "51001" 0
+run_ok "$TESTDIR/regress_096_method_value_same_named.con" "1017" 0
+run_err "$TESTDIR/error_096_imported_sig_binds_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_canonical_type_spelling_clash.con" "(E0299)"
+run_err "$TESTDIR/error_097_canonical_fn_spelling_clash.con" "(E0299)"
 for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported_type_layout:7" \
             "regress_096_local_and_imported_same_name:7" "regress_096_same_named_destroy:102" \
+            "regress_096_imported_struct_field_binding:73" "regress_097_param_named_like_colliding_fn:1211099" \
+            "regress_097_free_fn_named_like_method:51001" "regress_096_method_value_same_named:1017" \
             "regress_097_098_same_named_private_fns:112124" "regress_096_nested_same_named_methods:751300:native"; do
     r096_f="${r096%%:*}"; r096_rest="${r096#*:}"; r096_want="${r096_rest%%:*}"
     case "$r096_rest" in *:native) continue ;; esac
-    r096_got=$($COMPILER "$TESTDIR/$r096_f.con" --interp 2>&1 | awk "NR<=1" || true)
-    if [ "$r096_got" = "$r096_want" ]; then
+    # the whole --interp output (the value, then main's result 0) and its exit status
+    r096_got=$($COMPILER "$TESTDIR/$r096_f.con" --interp 2>&1; echo "rc=$?")
+    r096_got=$(printf '%s' "$r096_got" | tr '\n' ' ')
+    if [ "$r096_got" = "$r096_want 0 rc=0" ]; then
         echo "  ok  $r096_f: --interp prints $r096_want"
         PASS=$((PASS + 1))
     else
@@ -1794,8 +1807,10 @@ run_ok "$TESTDIR/regress_099_generic_infer_cap_method.con" "14" 0
 for r099 in "regress_099_generic_infer_field_index:43043" "regress_099_generic_infer_call_results:4" \
             "regress_100_generic_ref_destroy:2" "regress_099_generic_infer_cap_method:14"; do
     r099_f="${r099%%:*}"; r099_want="${r099#*:}"
-    r099_got=$($COMPILER "$TESTDIR/$r099_f.con" --interp 2>&1 | awk "NR<=1" || true)
-    if [ "$r099_got" = "$r099_want" ]; then
+    # the whole --interp output (the value, then main's result 0) and its exit status
+    r099_got=$($COMPILER "$TESTDIR/$r099_f.con" --interp 2>&1; echo "rc=$?")
+    r099_got=$(printf '%s' "$r099_got" | tr '\n' ' ')
+    if [ "$r099_got" = "$r099_want 0 rc=0" ]; then
         echo "  ok  $r099_f: --interp prints $r099_want"
         PASS=$((PASS + 1))
     else

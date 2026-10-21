@@ -31,10 +31,16 @@ the first `h`. EmitSSA qualified the two LLVM symbols itself, so only the compil
 
 ## Fix
 
-`elabProgram` spells a function name defined by two or more top-level modules as
-`<module>_<name>` in Core (`qualifyCollidingTopLevelFns`): the definition, every call and every
-function reference in its own module, and its `callTargets` key. Calls from other modules already
-used that spelling (`importCallSpellingsFor`, `module::name`). The entry point keeps its name.
+`elabProgram` spells a free function whose name another top-level module defines (as a free
+function, or as a method's Core name `Type_method`) as `<module>_<name>` in Core
+(`qualifyCollidingTopLevelFns`): the definition, every call, function reference and function
+value naming it in its own module (a local of function type keeps its name:
+`regress_097_param_named_like_colliding_fn.con`), and its `callTargets` key. Calls from other
+modules use that spelling (`importCallSpellingsFor`, `module::name`, whose definers now include
+methods: `regress_097_free_fn_named_like_method.con`, where a free `P_get` and a method `P.get`
+were one callee). The entry point keeps its name. A new spelling that another function already
+has is refused (E0299, `error_097_canonical_fn_spelling_clash.con`). `CFnDef.declName` keeps the
+declaration name for ProofCore and the reports.
 
 ## Structural cause
 

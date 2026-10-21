@@ -43,11 +43,49 @@ partial def renameTyNames (tn : String → String) : Ty → Ty
   | .fn_ ps cs ret => .fn_ (ps.map (renameTyNames tn)) cs (renameTyNames tn ret)
   | t => t
 
-/-- What a Core rename changes: type names, and the direct callee names that are
-    methods of a renamed type (`P_get` → `a_P_get`). -/
+/-- Every name a function body BINDS: parameters, `let`s, match binders and borrow-block
+    binders. Core spells a function value as `.ident` with a function type, the same
+    constructor a local of function type uses; a name bound here is the local. -/
+partial def cfnLocalNames (f : CFnDef) : List String :=
+  f.params.map (·.1) ++ stmtsBinders f.body
+where
+  stmtsBinders (ss : List CStmt) : List String := ss.flatMap stmtBinders
+  stmtBinders : CStmt → List String
+    | .letDecl n _ _ v => n :: exprBinders v
+    | .assign _ v => exprBinders v
+    | .return_ (some v) _ => exprBinders v
+    | .expr e _ => exprBinders e
+    | .ifElse c t el => exprBinders c ++ stmtsBinders t ++ (el.map stmtsBinders).getD []
+    | .while_ c b _ st => exprBinders c ++ stmtsBinders b ++ stmtsBinders st
+    | .fieldAssign o _ v => exprBinders o ++ exprBinders v
+    | .derefAssign t v => exprBinders t ++ exprBinders v
+    | .arrayIndexAssign a i v => exprBinders a ++ exprBinders i ++ exprBinders v
+    | .break_ (some v) _ => exprBinders v
+    | .defer e => exprBinders e
+    | .borrowIn v rf _ _ _ b => v :: rf :: stmtsBinders b
+    | _ => []
+  exprBinders : CExpr → List String
+    | .match_ s arms _ => exprBinders s ++ arms.flatMap armBinders
+    | .ifExpr c t el _ => exprBinders c ++ stmtsBinders t ++ stmtsBinders el
+    | .binOp _ l rh _ => exprBinders l ++ exprBinders rh
+    | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _
+    | .cast e _ => exprBinders e
+    | .call _ _ args _ | .arrayLit args _ => args.flatMap exprBinders
+    | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (exprBinders ·.2)
+    | .arrayIndex a i _ | .allocCall a i _ => exprBinders a ++ exprBinders i
+    | _ => []
+  armBinders : CMatchArm → List String
+    | .enumArm _ _ bs g b => bs.map (·.1) ++ ((g.map exprBinders).getD []) ++ stmtsBinders b
+    | .litArm _ g b | .rangeArm _ _ _ g b => ((g.map exprBinders).getD []) ++ stmtsBinders b
+    | .varArm n _ g b => n :: ((g.map exprBinders).getD []) ++ stmtsBinders b
+
+/-- What a Core rename changes: type names, and the names of global functions (direct
+    callees, function references, and function values not bound in the body — `locals`)
+    that are renamed (`P_get` → `a_P_get`, bugs 096 - 098). -/
 structure CoreRename where
   tyName : String → String
   fnName : String → String
+  locals : List String := []
 
 namespace CoreRename
 
@@ -66,7 +104,12 @@ partial def expr (r : CoreRename) : CExpr → CExpr
   | .boolLit b => .boolLit b
   | .strLit s => .strLit s
   | .charLit c => .charLit c
-  | .ident n t => .ident n (r.ty t)
+  | .ident n t =>
+    -- A function VALUE is `.ident` with a function type; a local of function type is too,
+    -- and keeps its name (bugs 050, 096 - 098).
+    match t with
+    | .fn_ .. => .ident (if r.locals.contains n then n else r.fnName n) (r.ty t)
+    | _ => .ident n (r.ty t)
   | .binOp op l rh t => .binOp op (expr r l) (expr r rh) (r.ty t)
   | .unaryOp op e t => .unaryOp op (expr r e) (r.ty t)
   | .call callee targs args t =>
@@ -117,7 +160,7 @@ partial def stmts (r : CoreRename) (ss : List CStmt) : List CStmt := ss.map (stm
 end
 
 def fnDef (r : CoreRename) (f : CFnDef) : CFnDef :=
-  let r' := r.shadow f.typeParams
+  let r' := { r.shadow f.typeParams with locals := cfnLocalNames f }
   let name' := r.fnName f.name
   { f with
     name := name'
