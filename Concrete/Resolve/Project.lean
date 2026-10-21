@@ -520,6 +520,15 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
+  -- A MANIFEST THAT CANNOT DECLARE NATIVE LIBRARIES IS NOT READ HERE. The strictness below exists
+  -- so a native declaration can never silently disappear; it must not change how other sections
+  -- of other manifests are treated (their own readers warn on malformed lines, a documented
+  -- contract — run_tests.sh's malformed-manifest legs). A manifest can only name the `native`
+  -- table, key or section by containing the text `native`, or by spelling it with a backslash
+  -- escape inside a quoted key (TOML literal strings have no escapes; keys compare literally), so
+  -- a manifest with neither declares nothing and is left to those readers.
+  if !(((content.splitOn "native").length > 1) || content.contains '\\') then
+    return []
   -- CRLF line endings are normalised; a carriage return anywhere else is refused, because names
   -- compared below would otherwise carry it invisibly (`[native\r]` is not `[native]`).
   let content := content.replace "\r\n" "\n"

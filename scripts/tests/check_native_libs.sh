@@ -384,6 +384,9 @@ metadata = [
 [package]
 name = "nlapp"
 version = "0.1.0"
+
+[native]
+libs = ["m"]
 EOF
 refused "$TMP/mismatch" mismatch "mismatched '}'" "a '[' closed by '}' is refused (a mismatched value cannot end early or late and hide lines)"
 # The balanced counterpart: brackets match, but a [native] section inside an array value is not
@@ -488,6 +491,20 @@ libs = ["m"]' "unexpected text in or after a table header" "a header [native = f
 mkapp "$TMP/keyhdr" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nfoo [native] = ["lost"]\n' > "$TMP/keyhdr/Concrete.toml"
 refused "$TMP/keyhdr" keyhdr "not a TOML key before '='" "a header embedded in a key (foo [native] = ...) is refused"
+# STRICT ONLY WHERE A NATIVE DECLARATION IS POSSIBLE. A manifest with no "native" text and no
+# backslash cannot declare a native library, so its malformed lines keep the existing contract
+# (other readers warn, the build proceeds); the same garbage next to a [native] section is refused.
+mkapp "$TMP/garbled" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n\n[dependencies]\ngarbled line without equals\n\n[policy]\nunknown_future_key = true\n' > "$TMP/garbled/Concrete.toml"
+( cd "$TMP/garbled" && $TO "$C" check ) > "$TMP/garbled.out" 2>&1; rcg=$?
+if grep -q "warning.*Concrete.toml.*policy.*unrecognized" "$TMP/garbled.out" && ! grep -q "Concrete.toml \[native\]" "$TMP/garbled.out"; then
+  ok "CONTROL: a manifest that cannot declare native keeps the existing warnings (rc=$rcg; the [native] reader stays out of it)"
+else
+  no "CONTROL: manifest without native: rc=$rcg $(head -4 "$TMP/garbled.out" | tr '\n' ' ')"
+fi
+mkapp "$TMP/garblednative" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n\n[dependencies]\ngarbled line without equals\n\n[native]\nlibs = ["nladd"]\n' > "$TMP/garblednative/Concrete.toml"
+refused "$TMP/garblednative" garblednative "neither a table header nor a key = value" "the same garbled line in a manifest WITH a [native] section is refused"
 # Keys are matched exactly: "lib s" is not libs.
 bad spacedkey '
 [native]

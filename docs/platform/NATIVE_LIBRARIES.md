@@ -78,6 +78,12 @@ carriage return is refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 
+The strict reading applies only to a manifest that could declare a native library: one whose text
+contains `native` or a backslash (the only ways to name the table, key or section, since TOML keys
+compare literally and only basic strings have escapes). Any other manifest is left to the existing
+readers, which keep their contract of warning on malformed lines in `[dependencies]` and
+unrecognized `[policy]` keys. Making those sections strict too is a separate decision, not taken here.
+
 ## No flag injection
 
 Every value reaches clang as one argument vector element; no shell is involved. A name cannot
