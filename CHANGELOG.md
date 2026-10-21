@@ -34,12 +34,14 @@ Bug 135 is fixed: `concrete fmt` no longer changes float literals. It printed th
 `toString`, six decimals, so `0.0000000001` became `0.000000` and `0.123456789` became `0.123457`,
 a different program with no diagnostic. The fmt gate's fingerprint comparison did not notice,
 because the legacy fingerprint renders floats the same lossy way. One exact printer,
-`floatLiteralString`, the inverse of the lexer's correctly rounded reader, prints the shortest
-decimal that reads back to the same double; the formatter, `--emit-core` and `--emit-ssa` use it.
-A literal already in its shortest form keeps its spelling; redundant digits are dropped (`1.50`
-prints as `1.5`). `check_concrete_fmt.sh` gains a round-trip leg over every float literal in the
-corpus plus 307 sampled doubles, judged by Python's float reader against the exact constants in the
-LLVM output. The legacy proof fingerprint keeps its lossy float rendering, since changing it would
+`floatLiteralString`, the inverse of the lexer's correctly rounded reader, prints the canonical
+spelling: the shortest decimal that reads back to the same double, and among those the nearest
+(what Python's `repr` picks); the formatter, `--emit-core` and `--emit-ssa` use it. Formatting
+preserves every literal's value; a literal written canonically keeps its spelling, any other
+spelling becomes the canonical one (`1.50` prints as `1.5`). `check_concrete_fmt.sh` gains a
+round-trip leg over every float literal in the corpus plus 311 sampled doubles, judged by Python's
+float reader against the exact constants in the LLVM output, and a leg requiring the canonical
+spelling of each sampled double. The legacy proof fingerprint keeps its lossy float rendering, since changing it would
 move identities; floats carry no proof claims today, and the v2 identity bytes were already exact.
 
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)

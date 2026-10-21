@@ -133,7 +133,7 @@ grep -rhoE '(^|[^0-9A-Za-z_.])[0-9]+[.][0-9]+' --include='*.con' tests examples 
 nlex="$(wc -l < "$TMP/lexemes.txt" | tr -d ' ')"
 if [ "$nlex" -lt 10 ]; then
   no "corpus float-lexeme scan found only $nlex literals: the scan is broken, the leg would be vacuous"
-elif ! python3 "$RT" gen "$TMP/lexemes.txt" "$TMP/floats.con" "$TMP/want.txt"; then
+elif ! python3 "$RT" gen "$TMP/lexemes.txt" "$TMP/floats.con" "$TMP/want.txt" "$TMP/sample.txt"; then
   no "float round-trip generator failed"
 else
   "$C" fmt "$TMP/floats.con" > "$TMP/floats_fmt.con" 2>/dev/null || true
@@ -152,9 +152,24 @@ else
     no "fmt changed the value of $(diff "$TMP/want.txt" "$TMP/got_fmt.txt" | grep -c '^>') of $nwant float literals"
     paste "$TMP/want.txt" "$TMP/got_fmt.txt" | awk '$1 != $2' | head -3 | sed 's/^/      /'
   fi
+  # Shortest, not merely exact: each sampled lexeme is already the canonical shortest
+  # spelling (Python's repr), so fmt must print it unchanged. Exactness alone would accept
+  # `0.000000059604644775390625` for 2^-24, whose canonical spelling is `...539063`.
+  nsample="$(wc -l < "$TMP/sample.txt" | tr -d ' ')"
+  python3 "$RT" args "$TMP/floats_fmt.con" | tail -n "$nsample" > "$TMP/sample_fmt.txt"
+  if [ "$nsample" -lt 300 ]; then
+    no "only $nsample sampled lexemes: the canonical-spelling leg would be vacuous"
+  elif cmp -s "$TMP/sample.txt" "$TMP/sample_fmt.txt"; then
+    ok "fmt prints each of $nsample sampled doubles in its canonical shortest spelling"
+  else
+    no "fmt printed $(diff "$TMP/sample.txt" "$TMP/sample_fmt.txt" | grep -c '^>') of $nsample sampled doubles in a non-canonical spelling"
+    paste "$TMP/sample.txt" "$TMP/sample_fmt.txt" | awk '$1 != $2' | head -3 | sed 's/^/      /'
+  fi
 fi
-# The bug's own literals, as text: the shortest round-trip spelling of a literal written that
-# way is the literal itself, so formatting keeps every lexeme of the regression file.
+# The bug's own literals, as text: each is written in its canonical shortest spelling, so
+# formatting keeps every lexeme of the regression file. (In general fmt preserves the VALUE and
+# prints the canonical spelling: `1.50` becomes `1.5`, and `1.0000000000000003`, a shortest but
+# not the nearest spelling of its double, becomes `1.0000000000000002`.)
 FL="tests/regressions/fmt_roundtrip/floats.con"
 "$C" fmt "$FL" > "$TMP/fl_fmt.con" 2>/dev/null || true
 # (code lines only: the comment above the code quotes the old lossy output, and fmt drops comments)

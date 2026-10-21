@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Float-literal round-trip helper for check_concrete_fmt.sh (bug 135).
 
-  float_roundtrip.py gen <corpus-lexemes-file> <out.con> <expected-bits-file>
+  float_roundtrip.py gen <corpus-lexemes-file> <out.con> <expected-bits-file> <sample-file>
       Writes a program passing every float lexeme (the corpus's, plus a fixed
       pseudo-random set of doubles across the whole exponent range, written
       without an exponent, which is the only spelling the lexer has) to an f64
-      parameter, and the IEEE-754 bits Python reads each lexeme as, one per line.
+      parameter, the IEEE-754 bits Python reads each lexeme as, one per line, and
+      the sampled lexemes alone (each the canonical shortest spelling: Python's repr,
+      written without an exponent), one per line.
+
+  float_roundtrip.py args <file.con>
+      Prints the literal passed to each `keep(...)` call, in order.
 
   float_roundtrip.py bits <file.ll>
       Prints the f64 constants passed to `keep`, in order, as 16 hex digits.
@@ -36,9 +41,13 @@ def sample() -> list:
         exp = rng.randrange(0, 0x7FF)  # finite, positive, normals and subnormals
         frac = rng.getrandbits(52)
         out.append(struct.unpack("<d", struct.pack("<Q", (exp << 52) | frac))[0])
-    # Edges: min subnormal, max subnormal, min normal, max finite, near halfway values.
+    # Edges: min subnormal, max subnormal, min normal, max finite, 0.1, 1 + ulp, 2^53,
+    # and powers of two (an asymmetric rounding interval: 2^-24's nearest shortest
+    # candidate is a tie that does not read back, its neighbour does).
     for bits in (1, 0x000FFFFFFFFFFFFF, 0x0010000000000000, 0x7FEFFFFFFFFFFFFF,
-                 0x3FB999999999999A, 0x3FF0000000000001, 0x4340000000000000):
+                 0x3FB999999999999A, 0x3FF0000000000001, 0x4340000000000000,
+                 0x3E70000000000000, 0x3FF0000000000000, 0x0020000000000000,
+                 0x7FE0000000000000):
         out.append(struct.unpack("<d", struct.pack("<Q", bits))[0])
     return [plain(x) for x in out]
 
@@ -61,6 +70,15 @@ def main() -> int:
         with open(sys.argv[4], "w") as f:
             for lx in lexemes:
                 f.write(bits_of(lx) + "\n")
+        with open(sys.argv[5], "w") as f:
+            for lx in lexemes[len(corpus):]:
+                f.write(lx + "\n")
+        return 0
+    if sys.argv[1] == "args":
+        for line in open(sys.argv[2]):
+            m = re.search(r"keep\(([0-9.]+)\);", line)
+            if m:
+                print(m.group(1))
         return 0
     if sys.argv[1] == "bits":
         for line in open(sys.argv[2]):

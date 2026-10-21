@@ -195,7 +195,9 @@ where
 
     For increasing precision `d` (from the integer part's digit count, negative, upward) it
     takes `N = round(x · 10^d)` (exact big-`Nat` arithmetic, ties to even) and stops at the
-    first `d` whose `N · 10^(-d)` reads back to `x`. A finite double is `sig · 2^e`, so
+    first `d` at which `N`, or failing that `N - 1` or `N + 1`, reads back to `x` as
+    `N · 10^(-d)`. Among the shortest spellings it therefore picks the one nearest `x`,
+    the canonical spelling (the one Python's `repr` and Ryu-style printers choose). A finite double is `sig · 2^e`, so
     `d = -e` is always exact: the loop terminates by `d = 1074`. The literal syntax has no
     exponent and no sign: a negative value (never produced by the lexer) gets a leading `-`, `+Inf` (a literal too large for a double)
     prints as `1` followed by 309 zeros and `.0`, which reads back as `+Inf`, and NaN,
@@ -236,14 +238,23 @@ def floatLiteralString (x : Float) : String :=
                else floatOfDecimalMantissa n d.toNat
       n != 0 && v.toBits == pos.toBits
     -- Start at the coarsest precision that could hold the integer part (`d = -(digits)`,
-    -- whose `N` is 0 or 1) and refine one digit at a time; the first `d` that reads back
-    -- is the shortest. Exactness is reached by `d = 1074`, so the fuel never runs out.
+    -- whose `N` is 0 or 1) and refine one digit at a time; the first `d` with a candidate
+    -- that reads back is the shortest. At each `d` the nearest candidate `N` is tried
+    -- first, then `N - 1` and `N + 1`: at a power of two the rounding interval is
+    -- asymmetric, so the nearest `d`-digit decimal can fall outside it while a neighbour
+    -- falls inside (2^-24 is `0.00000005960464477539063`, whose nearest 23-digit
+    -- neighbour does not read back). Exactness is reached by `d = 1074`, so the fuel never
+    -- runs out.
     let intDigits : Nat := (toString (scaled 0)).length
     let rec go (d : Int) (fuel : Nat) : String :=
       let n := scaled d
       match fuel with
       | 0 => render n d
-      | fuel + 1 => if readsBack n d then render n d else go (d + 1) fuel
+      | fuel + 1 =>
+        if readsBack n d then render n d
+        else if n > 0 && readsBack (n - 1) d then render (n - 1) d
+        else if readsBack (n + 1) d then render (n + 1) d
+        else go (d + 1) fuel
     if sig == 0 then sgn ++ "0.0" else go (-(intDigits : Int)) (intDigits + 1100)
 
 /-- Lex a number literal (integer or float), including hex/bin/oct. -/

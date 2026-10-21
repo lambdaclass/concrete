@@ -46,14 +46,19 @@ One exact printer, `floatLiteralString` in `Concrete/Frontend/Lexer.lean`, next 
 correctly rounded reader `floatOfDecimalMantissa`, of which it is the inverse: it prints the
 shortest decimal in the lexer's own syntax (`digits.digits`, no exponent) that reads back to the
 same double, bit for bit. It raises the precision one digit at a time from the integer part's
-magnitude, rounding the exact value (`sig · 2^e`, big-`Nat` arithmetic) and stopping at the first
-spelling that `floatOfDecimalMantissa` reads back to the same bits, so `parse (print x) = x` holds
-by construction. A literal already written in its shortest form is kept as written
-(`0.0000000001`); a literal with redundant digits gets its shortest spelling (`1.50` becomes
-`1.5`, `3.14159265358979323846` becomes `3.141592653589793`): the value is preserved, the lexeme
-is not. The AST does not carry lexemes, so preserving the original text would need a new AST field
-in every constructor site; the shortest round-trip spelling gives the property that matters
-without it.
+magnitude, rounding the exact value (`sig · 2^e`, big-`Nat` arithmetic); at each precision it tries
+the nearest candidate and then its two neighbours (at a power of two the rounding interval is
+asymmetric, so the nearest can miss while a neighbour reads back: 2^-24 prints as
+`0.00000005960464477539063`, not the exact 24-digit expansion), and stops at the first spelling
+that `floatOfDecimalMantissa` reads back to the same bits, so `parse (print x) = x` holds by
+construction. The result is the canonical spelling: the shortest, and among the shortest the
+nearest to the double (what Python's `repr` chooses). Formatting preserves the VALUE of every
+literal, and the spelling of a literal written canonically, as most hand-written literals are
+(`0.0000000001`); any other spelling is replaced by the canonical one (`1.50` becomes `1.5`,
+`3.14159265358979323846` becomes `3.141592653589793`, and `1.0000000000000003`, a shortest but
+not the nearest spelling of its double, becomes `1.0000000000000002`). The AST does not carry
+lexemes, so keeping every original spelling would need a new AST field in every constructor
+site; the canonical spelling gives the property that matters without it.
 
 Users of the printer: the formatter, and the two debug printers that had the same `toString`:
 `ppCExpr` (`Concrete/Elab/Core.lean`, `--emit-core` and the debug bundle) and `ppSVal`
@@ -62,15 +67,20 @@ Users of the printer: the formatter, and the two debug printers that had the sam
 Regression legs, `check_concrete_fmt.sh` section 8:
 
 - **Round trip over every float literal.** Every float lexeme in the `.con` corpus (`tests`,
-  `examples`, `std`), plus 307 doubles across the whole exponent range (a fixed pseudo-random set,
-  subnormals, the smallest and largest finite values), is compiled before and after `fmt`; the f64
+  `examples`, `std`), plus 311 doubles across the whole exponent range (a fixed pseudo-random set of 300,
+  and 11 edges: subnormals, the smallest and largest finite values, powers of two), is compiled before and after `fmt`; the f64
   constants in the LLVM text (exact IEEE bits since bug 109) must equal what Python reads each
   lexeme as, on both sides. The judge shares no code with the compiler's printers or reader
   (`scripts/tests/lib/float_roundtrip.py`).
+- **Canonical spelling.** Each sampled double is written in its canonical spelling (Python's
+  `repr`, without an exponent), and `fmt` must print it unchanged: exactness alone would accept a
+  longer spelling (the Codex review found 2^-24 printed as its 24-digit expansion before the
+  neighbour candidates were added).
 - **The bug's literals as text.** Formatting `tests/regressions/fmt_roundtrip/floats.con` keeps
   every float lexeme of its code exactly as written.
 
-Both legs failed with the old `toString` restored in `Format.lean` and pass with the fix.
+The round-trip and text legs failed with the old `toString` restored in `Format.lean`; the
+canonical-spelling leg includes 2^-24, which the first version of the printer spelled longer.
 
 ## Not changed: the legacy proof fingerprint
 
