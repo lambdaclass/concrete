@@ -23,8 +23,15 @@
 #
 # AMENDMENTS (optional third argument, docs/verification/identity-rows-amendments.tsv): a row
 # legitimately re-frozen after the baseline is listed there as its baseline value (`-`) and its new
-# value (`+`). Each `-` row must appear exactly once in the baseline or the tool refuses; it is
-# replaced before pairing and reported as an `amended` line. Anything not listed still has to pair.
+# value (`+`), written NORMALIZED as check_identity_rows.sh reads them (one file serves both gates).
+# A `link` row is the same in both forms and is taken as written. Any other `-` row is resolved to the
+# ONE raw baseline row whose normalization it is (none or several is a refusal, never a guess), and the
+# fields the `+` row changes are rewritten IN that raw row: each changed value must occur exactly once
+# in it, and the rewritten row must normalize to the `+` row. Package digests and other raw-only
+# fields stay the baseline's, so the row still pairs by the usual content key against the new tree,
+# and its implementation digest is still compared there (the `#` explanation in the file is what
+# accepts the change). The amended row is reported as an `amended` line. Anything not listed still has
+# to pair.
 # A row listed as `A` is a row the baseline never had (a new fixture, not a migrated subject), written
 # NORMALIZED as check_identity_rows.sh reads it; it is resolved to the one raw row of the new tree it
 # normalizes from, must be absent from the baseline, is entered as if the baseline had it, and is
@@ -51,6 +58,39 @@ def load(path):
 old, new = load(sys.argv[1]), load(sys.argv[2])
 out, refused, shared = [], 0, 0
 amended_lines = []
+
+def make_norm(tree):
+    # The rules of identity_rows.sh's normalize, over one tree's own fixture labels and references.
+    lab = {pkg: label for label, pkg in tree.get("fixture", [])}
+    ref_pkg = {r[0]: r[1] for r in tree.get("reference", [])}
+    def L(p): return "-" if p == "-" else lab.get(p, "UNMAPPED:" + p)
+    def T(sym, p):
+        pre = "_" + p[:8] + "_"
+        return sym.replace(pre, "_@_", 1) if p and pre in sym else "NOPREFIX:" + sym
+    return {
+        "fixture":    lambda r: ["scope", r[0]],
+        "subject":    lambda r: ["subject", r[0], r[3], r[4], r[5], r[6], r[7], r[8]],
+        "dependency": lambda r: ["dependency", r[0], r[2], r[3], r[4], r[5], L(r[7]), r[8], r[9], r[10]],
+        "reference":  lambda r: ["reference", T(r[0], r[1]), L(r[1]), r[2], r[3], r[4]],
+        "selection":  lambda r: ["selection", r[0], r[1], r[2], T(r[3], ref_pkg.get(r[3], "")),
+                                 L(ref_pkg.get(r[3], "-"))],
+    }
+
+def resolve(tree, norm, row, what):
+    # The one raw row of `tree` that `row` (normalized, or a link row) names.
+    if row[0] == "link":
+        hits = [r for r in tree.get("link", []) if r == row[1:]]
+        kind = "link"
+    else:
+        kind = "fixture" if row[0] == "scope" else row[0]
+        if kind not in norm:
+            print(f"FATAL: {what} row of unknown kind: " + "\t".join(row), file=sys.stderr); sys.exit(2)
+        hits = [r for r in tree.get(kind, []) if norm[kind](r) == row]
+    if len(hits) != 1:
+        print(f"FATAL: {what} row matches {len(hits)} rows, not one: " + "\t".join(row), file=sys.stderr)
+        sys.exit(2)
+    return kind, hits[0]
+
 if len(sys.argv) > 3:
     minus, plus = [], []
     for line in open(sys.argv[3], encoding="utf-8"):
@@ -59,12 +99,28 @@ if len(sys.argv) > 3:
         elif line.startswith("+\t"): plus.append(line[2:].split("\t"))
     if len(minus) != len(plus):
         print("FATAL: amendments must pair each - row with a + row", file=sys.stderr); sys.exit(2)
+    norm_old = make_norm(old)
     for o, n in zip(minus, plus):
-        if o[0] != n[0] or old.get(o[0], []).count(o[1:]) != 1:
-            print("FATAL: amendment is not exactly one baseline row: " + "\t".join(o), file=sys.stderr); sys.exit(2)
-        rows = old[o[0]]
-        rows[rows.index(o[1:])] = n[1:]
-        amended_lines.append("\t".join(["amended", o[0], "\t".join(o[1:]), "->", "\t".join(n[1:])]))
+        if o[0] != n[0] or len(o) != len(n):
+            print("FATAL: an amendment changes the row kind or shape: " + "\t".join(o), file=sys.stderr); sys.exit(2)
+        kind, old_raw = resolve(old, norm_old, o, "amended baseline (-)")
+        if o[0] == "link":
+            new_raw = n[1:]
+        else:
+            new_raw = list(old_raw)
+            for ov, nv in zip(o, n):
+                if ov == nv: continue
+                at = [j for j, v in enumerate(new_raw) if v == ov]
+                if len(at) != 1:
+                    print(f"FATAL: amended value {ov} occurs {len(at)} times in the baseline row, not once: "
+                          + "\t".join(old_raw), file=sys.stderr); sys.exit(2)
+                new_raw[at[0]] = nv
+            if norm_old[kind](new_raw) != n:
+                print("FATAL: the amended baseline row does not normalize to the + row: " + "\t".join(n),
+                      file=sys.stderr); sys.exit(2)
+        rows = old[kind]
+        rows[rows.index(old_raw)] = new_raw
+        amended_lines.append("\t".join(["amended", kind, "\t".join(old_raw), "->", "\t".join(new_raw)]))
     # ADDED rows (`A`): subjects the baseline never had (new fixtures, not migrated subjects). Each must
     # be absent from the baseline; it is entered as if the baseline had it, so it must still pair.
     # An `A` row is written as check_identity_rows.sh reads it: NORMALIZED (package digests replaced
@@ -72,20 +128,7 @@ if len(sys.argv) > 3:
     # For every other kind the row is resolved to the ONE raw row of the new tree whose normalization
     # it is (the rules of identity_rows.sh's normalize) — none or several is a refusal, never a guess —
     # and that raw row is what is entered.
-    lab_new_a = {pkg: label for label, pkg in new.get("fixture", [])}
-    ref_pkg_new = {r[0]: r[1] for r in new.get("reference", [])}
-    def L(p): return "-" if p == "-" else lab_new_a.get(p, "UNMAPPED:" + p)
-    def T(sym, p):
-        pre = "_" + p[:8] + "_"
-        return sym.replace(pre, "_@_", 1) if p and pre in sym else "NOPREFIX:" + sym
-    norm = {
-        "fixture":    lambda r: ["scope", r[0]],
-        "subject":    lambda r: ["subject", r[0], r[3], r[4], r[5], r[6], r[7], r[8]],
-        "dependency": lambda r: ["dependency", r[0], r[2], r[3], r[4], r[5], L(r[7]), r[8], r[9], r[10]],
-        "reference":  lambda r: ["reference", T(r[0], r[1]), L(r[1]), r[2], r[3], r[4]],
-        "selection":  lambda r: ["selection", r[0], r[1], r[2], T(r[3], ref_pkg_new.get(r[3], "")),
-                                 L(ref_pkg_new.get(r[3], "-"))],
-    }
+    norm = make_norm(new)
     for line in open(sys.argv[3], encoding="utf-8"):
         line = line.rstrip("\n")
         if not line.startswith("A\t"): continue

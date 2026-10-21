@@ -11,7 +11,7 @@ dependency	examples/elf_header/src/main.con	main.validate_header	Concrete.Proof.
 dependency	examples/elf_header/src/main.con	main.validate_header	Concrete.Proof.elfFns	attested	model=present:compiler-linked	examples/elf_header/src/main.con	main	check_data	b8a148bbb74cfaf7852c74289a803990
 dependency	examples/elf_header/src/main.con	main.validate_header	Concrete.Proof.elfFns	attested	model=present:compiler-linked	examples/elf_header/src/main.con	main	check_magic	a774a2e10d4c812456c99912239a7a81
 dependency	examples/elf_header/src/main.con	main.validate_header	Concrete.Proof.elfFns	attested	model=present:compiler-linked	examples/elf_header/src/main.con	main	check_version	b24dd48ad33452aac540f4fbd34f4908
-dependency	examples/hmac_sha256/src/main.con	hmac_sha256.hmac_sha256	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1
+dependency	examples/hmac_sha256/src/main.con	hmac_sha256.hmac_sha256	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385
 dependency	examples/hmac_sha256/src/main.con	hmac_sha256.sha256_compress	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	block_to_words	2566f0877ae2ddb261ffb5ffe3d745ff
 dependency	examples/hmac_sha256/src/main.con	hmac_sha256.sha256_compress	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_k	a857c18a4abd382142dd072913aa3e6f
 dependency	examples/hmac_sha256/src/main.con	hmac_sha256.sha256_compress	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_round	629f9b2876a77f0f5d52a860659daeb8
@@ -200,7 +200,7 @@ reference	shaFns_@_hmac_sha256	examples/hmac_sha256/src/main.con	hmac_sha256	hma
 reference	shaFns_@_maj	examples/hmac_sha256/src/main.con	hmac_sha256	maj	24c6e19e81df257bf73ad1a67b7d9d44
 reference	shaFns_@_sha256_compress	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_compress	db23b155922cb4251360f8f6ba63708d
 reference	shaFns_@_sha256_compress_at	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_compress_at	0419685e7ed4f0816654b1ddf3a67c43
-reference	shaFns_@_sha256_hash	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1
+reference	shaFns_@_sha256_hash	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385
 reference	shaFns_@_sha256_init	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_init	1cbbcac2dedb20c50ca91b1953ab562f
 reference	shaFns_@_sha256_k	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_k	a857c18a4abd382142dd072913aa3e6f
 reference	shaFns_@_sha256_round	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_round	629f9b2876a77f0f5d52a860659daeb8
@@ -306,7 +306,7 @@ subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_payload_len
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_tag	cf91a78b05bd6b5122cfcf885bc70810	-	-	-
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_total_len	266b488da1cb0e50ae0007d391f67c5f	-	-	-
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_version	4144f657237960a825835689f6ccc7ef	-	-	-
-subject	examples/hmac_sha256/src/main.con	hmac_sha256	abc_block	0a1aaedeead2cb884ae4f41d41cee053	-	-	-
+subject	examples/hmac_sha256/src/main.con	hmac_sha256	abc_block	e8d3ffd648e7974f075c98c5af1f2318	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma0	2fc56fcc1fe1179b08d9634389f4e6da	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma1	bf9e5f67627630de3db89a6a505259bb	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	block_to_words	2566f0877ae2ddb261ffb5ffe3d745ff	Examples.HmacSha256.Proofs.block_to_words_refines_spec	-	-
@@ -320,7 +320,7 @@ subject	examples/hmac_sha256/src/main.con	hmac_sha256	rfc4231_tc2_tag	b874e7a0d0
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	rotr	7517bd0029038a1da5bc2aed740dd3af	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_compress	db23b155922cb4251360f8f6ba63708d	Examples.HmacSha256.Proofs.sha256_compress_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_compress_at	0419685e7ed4f0816654b1ddf3a67c43	Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
-subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1	Examples.HmacSha256.Proofs.sha256_hash_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
+subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385	Examples.HmacSha256.Proofs.sha256_hash_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_init	1cbbcac2dedb20c50ca91b1953ab562f	Examples.HmacSha256.Proofs.sha256_init_correct	Concrete.Proof.FnTable.empty	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_k	a857c18a4abd382142dd072913aa3e6f	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_round	629f9b2876a77f0f5d52a860659daeb8	Examples.HmacSha256.Proofs.round_refines_list	Examples.HmacSha256.Proofs.shaFns	-

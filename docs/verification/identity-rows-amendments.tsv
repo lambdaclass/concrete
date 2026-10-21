@@ -9,6 +9,24 @@
 -	link	examples/proof_pressure/src/main.con	check_nonce	v2:4955d6cc09961305512d96a7a054a0f2
 +	link	examples/proof_pressure/src/main.con	check_nonce	v2:e83f888fed44f06537168062486f4da1
 #
+# 2026-10-21, bug 110 (branch backend-108-116): an array-element assignment's value is elaborated with
+# the element type as its hint (Elab `.arrayIndexAssign`; Check already passed it). An integer literal
+# assigned to a `u8` element is now a `u8` literal in Core instead of an `Int` literal that Lower
+# coerced with a cast, so the implementation digest of every function with such an assignment moves.
+# In examples/hmac_sha256 that is `abc_block` (`b[0] = 97;` ... `b[63] = 24;`) and `sha256_hash`
+# (`buf[len] = 128;`); every literal fits `u8`, so the value stored is the same, and the SSA after
+# cleanup is identical to main's with register names erased (measured: reverting only the Elab hint
+# restores both digests and every frozen row byte for byte). The dependency and reference rows carry
+# `sha256_hash`'s digest; the reference moves with the regenerated Concrete/Proof/GeneratedAttestations.lean.
+-	dependency	examples/hmac_sha256/src/main.con	hmac_sha256.hmac_sha256	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1
++	dependency	examples/hmac_sha256/src/main.con	hmac_sha256.hmac_sha256	Examples.HmacSha256.Proofs.shaFns	attested	model=present:generator-asserted	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385
+-	reference	shaFns_@_sha256_hash	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1
++	reference	shaFns_@_sha256_hash	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385
+-	subject	examples/hmac_sha256/src/main.con	hmac_sha256	abc_block	0a1aaedeead2cb884ae4f41d41cee053	-	-	-
++	subject	examples/hmac_sha256/src/main.con	hmac_sha256	abc_block	e8d3ffd648e7974f075c98c5af1f2318	-	-	-
+-	subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	a75e1f52a094df0bfbbb0b3f5d9bb0e1	Examples.HmacSha256.Proofs.sha256_hash_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
++	subject	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_hash	6c98e1764ec6bb626608827675029385	Examples.HmacSha256.Proofs.sha256_hash_refines_spec	Examples.HmacSha256.Proofs.shaFns	-
+#
 # `A` = a row ADDED after the baseline: a subject the baseline never had, so nothing migrated. It must
 # be absent from the baseline projection; the frozen rows include it, sorted.
 #

@@ -67,6 +67,18 @@ reproducer `repro.con` exits 3 natively and under `--interp`; the cast shapes ar
 interpreter refuses them: "unsupported cast"). examples/snippets/arrays.con and
 hello_world_array.con are promoted to `compile` with `@run` rules.
 
+**Identity consequence.** The element-type hint changes the elaborated Core of every function that
+assigns an integer literal to a narrower array element: the literal is now typed with the element
+type rather than `Int` plus a Lower coercion. In the frozen identity corpus this moves
+`examples/hmac_sha256`'s `abc_block` and `sha256_hash` implementation digests (and the dependency and
+reference rows that carry `sha256_hash`'s). Every such literal fits its element type, so the stored
+values are unchanged: reverting only the hint restores both digests and every frozen row byte for
+byte, and the post-cleanup SSA of both functions is identical to main's with register names erased.
+The rows are re-frozen with explained amendments in `docs/verification/identity-rows-amendments.tsv`,
+and `Concrete/Proof/GeneratedAttestations.lean` is regenerated. No program's meaning changes: a literal that does
+not fit (`b[0] = 300;` on `[u8; N]`) was already refused by Check, which passes the element type
+(E0227).
+
 Not repaired: EmitSSA's fallback for a cast between two different aggregate types still
 reinterprets bytes. Nothing on the checked surface produces one after this fix (CoreCheck admits no
 user cast between distinct array types), but a future Lower coercion of an aggregate would reach it.

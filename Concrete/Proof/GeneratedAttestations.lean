@@ -112,7 +112,7 @@ def shaFns_1217df44_sha256_compress : Except DefinitionIdentityRefusal Definitio
 def shaFns_1217df44_sha256_compress_at : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_compress_at" "0419685e7ed4f0816654b1ddf3a67c43"
 def shaFns_1217df44_sha256_hash : Except DefinitionIdentityRefusal DefinitionIdentity :=
-  DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_hash" "a75e1f52a094df0bfbbb0b3f5d9bb0e1"
+  DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_hash" "6c98e1764ec6bb626608827675029385"
 def shaFns_1217df44_sha256_init : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_init" "1cbbcac2dedb20c50ca91b1953ab562f"
 def shaFns_1217df44_sha256_k : Except DefinitionIdentityRefusal DefinitionIdentity :=
