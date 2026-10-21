@@ -45,9 +45,10 @@ interpreter agree by construction (verified by the differential oracle).
   signed `MIN / -1` (and `MIN % -1`) overflow traps. (Stage 2.4/2.5; was previously
   `sdiv`/`udiv`/`srem`/`urem` with div-by-zero left as LLVM UB.) The interpreter
   traps to match.
-- **Shift**: checked — a shift amount `>= bitwidth` (or negative) traps (abort).
-  (Stage 2.4/2.5; was previously an LLVM poison value / UB.) The interpreter traps
-  to match.
+- **Shift**: checked on the *count*, not the result — a shift amount `>= bitwidth`
+  (or negative) traps (abort); with a valid count the bits shifted out are discarded
+  without a trap (`i8` `100 << 1` is `-56`; §6). (Stage 2.4/2.5; was previously an
+  LLVM poison value / UB.) The interpreter traps to match (`IntArith.evalShift`).
 - **Negation**: checked — `-x` traps when `x` is the type's `MIN` (the result is
   unrepresentable), exactly like the `0 - x` checked subtraction. (Was previously
   `sub 0, x` wrapping silently.) The interpreter traps to match.
@@ -316,16 +317,22 @@ Future stdlib may provide `checked_div(a, b) -> Option<i32>` for code that wants
 
 ## 6. Shift Overflow
 
-**Decision: trap when shift amount >= bitwidth.**
+**Decision: a shift checks its count, not its result.** With operand width `w` and count `n`:
 
 | Operation | Condition | Behavior |
 |-----------|-----------|----------|
-| `a << n` | `n < bitwidth` | Normal left shift |
-| `a << n` | `n >= bitwidth` | Abort (trap) |
-| `a >> n` | `n < bitwidth` | Normal right shift (arithmetic for signed, logical for unsigned) |
-| `a >> n` | `n >= bitwidth` | Abort (trap) |
+| `a << n` | `0 <= n < w` | Left shift; the bits shifted out of the top are discarded (no trap, whatever the sign of the result) |
+| `a >> n` | `0 <= n < w` | Right shift: arithmetic (sign-filling) for a signed type, logical (zero-filling) for an unsigned type |
+| `a << n`, `a >> n` | `n >= w` or `n < 0` | Abort (trap) |
 
-**Implementation**: emit a comparison of the shift amount against the bitwidth, branch to abort on out-of-range. This replaces the current LLVM poison value (which is UB if consumed) with a defined abort.
+So `i8` `100 << 1` is `-56` and `u8` `200 << 1` is `144`, with no trap, in every profile. A shift is
+therefore *not* overflow-checked the way `+ - *` are: code that needs to detect bits lost by a left
+shift checks the operand's range first, or widens before shifting.
+
+**Status: enforced on main** (codegen compares the count with the width and branches to the abort
+helper; the interpreter and the folder share `IntArith.evalShift`), probed for both consumers on
+2026-10-21. Earlier text in this document that said "shift overflow traps" meant the count check
+only.
 
 Wrapping variants are not provided for shifts — there is no common use case for "shift by (n mod bitwidth)". If this proves needed, `wrapping_shl` and `wrapping_shr` can be added later.
 
@@ -351,41 +358,125 @@ This is a departure from C (where signed overflow is UB exploited by optimizers)
 
 ---
 
-## 8. Narrowing and Widening Casts
+## 8. Numeric Conversions (`as`)
 
-**Decision: no implicit conversions; explicit narrowing may truncate.**
+**Decision (2026-10-21; adopted, staged, not yet enforced): `as` performs only conversions that are
+lossless for every value of the source type. Every other numeric conversion written with `as` is a
+compile error; the program uses a named operation instead.** This replaces the earlier decision
+"explicit narrowing may truncate".
 
-### Widening (always safe)
+**Scope.** Numeric, `bool` and `char` conversions only. `as` stays the spelling of pointer and
+reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`: 281 lines in std alone), which
+this decision does not change.
 
-Widening casts are lossless. `as` is sufficient:
+### 8.1 What `as` accepts
 
-```
-let wide: Int = narrow_val as Int;    // i32 -> i64, zero-extend or sign-extend
-let big: u64 = small_val as u64;      // u32 -> u64, zero-extend
-```
+`as` from `S` to `T` is accepted exactly when every value of `S` converts to a value of `T` that
+means the same number (or the same `bool` / byte):
 
-### Narrowing (may lose data)
+| source → target | accepted by `as` |
+|---|---|
+| any type to itself | yes |
+| integer → wider integer of the same signedness | yes |
+| unsigned integer → wider signed integer | yes |
+| integer → narrower integer, signed → unsigned, unsigned → signed of the same width | **no** |
+| `bool` → integer | yes (`false` 0, `true` 1) |
+| integer → `bool` | **no** (never total) |
+| `char` → unsigned integer of ≥ 8 bits, or signed integer of ≥ 16 bits | yes (`char` is one byte today, a byte-oriented code unit: STRING_TEXT_CONTRACT §2) |
+| `char` → `i8` | **no** (only 0–127 fit) |
+| `u8` → `char` | yes (every byte is a `char` today) |
+| any other integer → `char` | **no** |
+| integer → float, when every value of the source is exactly representable (`i8`, `u8`, `i16`, `u16` → `f32`; integers of ≤ 32 bits → `f64`) | yes |
+| any other integer → float (`i32`/`u32` → `f32`; `Int`/`u64` → `f32` or `f64`) | **no** (rounds) |
+| float → integer | **no** (fractions, range, NaN and ±∞) |
+| `f32` → `f64` | yes |
+| `f64` → `f32` | **no** |
 
-Narrowing casts may truncate. The `as` cast truncates silently (it keeps the low bits):
+A Unicode-scalar `char` would be a separate surface proposal with its own conversion rows.
 
-```
-let narrow: i32 = wide_val as i32;    // i64 -> i32, truncates high bits
-```
+### 8.2 The named operations (three families)
 
-This is explicit at the source level (the programmer wrote `as i32`) but does not trap on data loss. For code that needs to detect data loss, a future stdlib function `try_narrow<T, U>(val: T) -> Option<U>` will return `None` when the value does not fit in the target type.
+Every conversion `as` refuses has a named operation, chosen per site by what the program means:
 
-**Design note**: we considered making `as` trap on narrowing overflow, but this conflicts with legitimate bit-pattern reinterpretation (casting a `u32` byte-assembled value to `i32` for API compatibility). The `as` keyword means "I know the bit pattern; give me this type." Data-loss detection belongs in a separate checked function.
+1. **Lossless conversion.** `as` itself, for the rows above.
+2. **Checked conversion returning an error.** `try_convert::<T>(x) -> Option<T>` (or a `Result`
+   with a reason) returns the value-preserving result or none: none when an integer is out of the
+   target's range, when a float is not integral, out of range, NaN or ±∞, and when an integer or a
+   float is not exactly representable in the target float. This is the `try_narrow` this document
+   promised before, generalized.
+3. **Explicit bit-level and rounding operations, with exact semantics.** `truncate::<T>(x)` keeps
+   the low `width(T)` bits of the two's-complement representation (`truncate::<u8>(300)` is 44);
+   `reinterpret::<T>(x)` changes signedness at the same width, preserving the bit pattern
+   (`reinterpret::<u32>(x)` with `x: i32` equal to -1 is 4294967295); float → integer rounding
+   operations (`trunc`, `round`, `floor`, `ceil`) each state their result for every input,
+   including NaN and ±∞, either as a value or as an error; integer → float and `f64` → `f32`
+   conversions name their rounding (round-to-nearest-even). Masked idioms such as `(v & 0xFF)`
+   followed by a conversion to `u8` use `truncate` (or `try_convert`, which then always succeeds).
 
-### Signed/unsigned reinterpretation
+The spellings above are indicative; the API's owner fixes them in stage 1. All three families are
+specified in one place, the arithmetic authority (`IntArith`, R-0493), and every consumer (Check's
+folder, the interpreter, Lower / EmitSSA, the extracted model, Core) uses it.
 
-Casting between signed and unsigned types of the same width reinterprets the bit pattern:
+**Why a compile error, not a trap.** A trapping `as` (value-preserving or abort, like Zig's
+`@intCast` with safety on) was the cheaper migration, since sites that never see a lossy value
+would keep compiling. It was not chosen: it turns previously silent results into aborts with no
+cleanup ([FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)) in programs that tolerated them, and it gives
+every `as` a value-preservation obligation. With the compile error `as` is total and
+obligation-free, which is the property the verified pipeline benefits from most; the cost is
+rewriting sites that are in fact safe.
 
-```
-let signed: i32 = unsigned_val as i32;    // bit pattern preserved
-let unsigned: u32 = signed_val as u32;    // bit pattern preserved
-```
+### 8.3 Status on main (`5b63cd87`; probed 2026-10-21 with the binary and `--interp`)
 
-No trap. The bit pattern is identical. This is necessary for byte-manipulation code like the endian readers in `pressure_parse_binary_endian.con`.
+| conversion | today |
+|---|---|
+| widening | exact, in both consumers |
+| integer narrowing, sign change | **silent truncation / reinterpretation**: `300 as u8` is 44, `-1 as u32` is 4294967295, `-1 as u64` is 2^64 − 1, in both consumers |
+| float → integer | truncates toward zero (`3.9 as i32` is 3, `-3.9 as i32` is -3) and **traps** when the value is out of the target's range (`1e20 as i32` aborts); the interpreter rejects float literals ("float literals not yet supported"), so only integer-origin floats can be compared |
+| integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement (a probe defect, exit 0b) |
+| integer → `bool` | `x as bool` with `x: Int` passes the checker and fails in `llvm-as` (`bitcast i64 to i1`); the interpreter refuses it (a probe defect, exit 2c) |
+| `bool` → integer | invalid IR (bug 108, exit 2c) |
+| `--report arithmetic` | lists checked float → integer casts but **no integer narrowing cast** (`fn n(x: Int) -> u8 { return x as u8; }` is absent), so silent truncation is invisible in the report meant to classify arithmetic sites |
+
+So the rule is **not enforced**: every row marked "no" in §8.1 is accepted by `as` today.
+
+### 8.4 Staging
+
+1. **Named operations first.** Add the three families of §8.2 to the arithmetic authority and
+   `std`, with the interpreter, the folder, the backend and the models agreeing; classify every
+   cast in `--report arithmetic` (lossless `as`, lossy `as`, named operation); refuse `Int as bool`
+   and repair `bool as` integer (defects, exit 2c); repair the interpreter's integer → float
+   identity (exit 0b).
+2. **Rejection with versioned migration diagnostics.** The check lands with its diagnostic in the
+   form of [MEMORY_SEMANTICS.md §15.5](MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
+   stable code, the rule tag (`CAST-1@1`), the conversion class, and the mechanical rewrite
+   (`truncate` / `reinterpret` when the program relies on today's bits, `try_convert` when it
+   wants detection, a rounding operation for floats). It first runs as the typed inventory: every
+   cast with its location and source and target types, taken before constant folding (folding
+   removes casts of constants, so `--emit-ssa`'s `cast` lines are only a supplement).
+3. **Migration.** `std`, examples and tests are rewritten with those rewrites, and the check
+   becomes a hard error for all code in the same change, with the interpreter, `IntArith` and the
+   models. There is no edition switch and no opt-out (the §15.5 policy).
+
+**Migration cost (estimate).** 1 347 `as` occurrences with a numeric, `bool` or `char` target (a
+textual count, comments included: `as Int` 513, `as i32` 331, `as u64` 194, `as u8` 177, `as i64`
+54, `as u32` 30, `as char` 24, `as u16` 17, `as bool` 5, `as i8` 2, `as f32` / `as f64` 0). The
+target type alone does not decide lossiness (`Int` → `u64` is lossy, `u8` → `i32` is not); a rough,
+unvalidated estimate of lossy sites is 500 – 700, mostly lengths `Int` → `i32` and byte extraction
+to `u8`. Stage 2's inventory replaces the estimate.
+
+**Sequencing with exit 2h.** Exit 2h (R-0493) makes one `IntArith` the arithmetic authority,
+casts included. It centralizes the *current* cast semantics faithfully and does not wait for this
+decision; stage 3 then changes that one authority and its consumers together.
+
+**Prevents.** The bug 080 class (a narrowing cast modelled as identity: a false-proof surface),
+bug 108, the interpreter's integer → float identity, the `as bool` failure, and the report gap.
+Each is a consumer disagreeing about a lossy cast; a lossless-only `as` removes the lossy cases
+from what every consumer must model.
+
+**Owners.** The rule and its class table: ROADMAP exit 2k (R-0500), "cast semantics per width
+pair". The authority that implements it: exit 2h (R-0493). The defects: the integer → float
+identity in exit 0b (R-0482); `as bool`, bug 108 and the permanent differential legs in exit 2c
+(R-0491). [NUMERIC_MODEL.md](NUMERIC_MODEL.md) points here for casts.
 
 ---
 
@@ -532,8 +623,8 @@ site evidence for selected code.
 | `a / 0` | UB (hardware-dependent) | Traps (abort) |
 | `a << 64` | Poison (UB) | Traps (abort) |
 | Ring buffer `(head + 1) % 16` | Works (wrapping) | Must use `wrapping_add(head, 1) % 16` or will trap if `head` is `i32::MAX` (unlikely but possible) |
-| Byte assembly `(b0 << 24) \| ...` | Works (wrapping) | Must use `wrapping_shl` or widen to `i64` first |
-| `as i32` narrowing | Truncates silently | Truncates silently (unchanged) |
+| Byte assembly `(b0 << 24) \| ...` | Works (wrapping) | Unchanged: a valid shift count discards the shifted-out bits without a trap (§6) |
+| `as i32` narrowing | Truncates silently | Truncates silently today; a compile error once the 2026-10-21 cast decision lands (§8) |
 
 ### Pressure set impact
 
@@ -541,7 +632,7 @@ Programs from the Phase 2 pressure set that need updating:
 
 - **`pressure_fixcap_ring_buffer.con`**: `(r.head + 1) % 16` — in practice `head` is always 0..15 so checked arithmetic will not trap, but the intent is modular. Consider `wrapping_add` for clarity, or leave as-is if the domain guarantees no overflow.
 - **`pressure_fixcap_controller.con`**: `c.integral + error` — the manual `clamp` already bounds the result, but the intermediate addition could overflow before clamping. Use `saturating_add` or widen to `i64` for the intermediate computation.
-- **`pressure_parse_binary_endian.con`**: `(b0 << 24) | ...` — shift of a `u8`-widened-to-`i32` value by 24 produces values above `i32::MAX`. This needs wrapping intrinsics or should use `u32` / `i64` for the intermediate value.
+- **`pressure_parse_binary_endian.con`**: `(b0 << 24) | ...` — shift of a `u8`-widened-to-`i32` value by 24 sets the sign bit for `b0 >= 128`. A shift checks only its count (§6), so this does not trap; use `u32` or `i64` for the intermediate value if the result is meant to be non-negative.
 
 ### Interpreter alignment
 
@@ -604,12 +695,12 @@ This closes the interpreter-vs-compiled divergence for the first time.
 2. Wrapping arithmetic is available via explicit named intrinsics (`wrapping_add`, `wrapping_sub`, `wrapping_mul`).
 3. Saturating arithmetic is available via explicit named intrinsics (`saturating_add`, `saturating_sub`, `saturating_mul`).
 4. Division by zero always traps (abort).
-5. Shift by >= bitwidth always traps (abort).
+5. A shift traps (abort) on a count `>= bitwidth` or negative, and otherwise discards the shifted-out bits without a trap (§6).
 6. Signed overflow is never undefined behavior. Concrete never emits LLVM `nsw`.
-7. Narrowing casts (`as`) truncate silently. Checked narrowing is a separate stdlib function.
+7. `as` performs only lossless numeric conversions; every lossy numeric conversion is a compile error and uses a named operation: checked conversion returning an error, or explicit truncation / reinterpretation / rounding with exact semantics (decided 2026-10-21, staged, not yet enforced: today narrowing `as` still truncates silently; §8).
 8. Arithmetic mode is per-expression, not per-function or per-module. No ambient mode switches.
 9. `--report arithmetic` shows the arithmetic mode and operation counts per function.
-10. Wrapping and saturating intrinsics are excluded from the proof-eligible subset.
+10. Of the wrapping and saturating intrinsics, only `wrapping_add` at `u32` is in the proof-eligible subset (it extracts to `addw 32`, §10.2); every other wrapping or saturating intrinsic is excluded until it is modeled.
 11. Overflow proof obligations are opt-in during the staged rollout through
     `#[overflow_checked]`; absence of the attribute must never be displayed as a
     proof of no overflow.
