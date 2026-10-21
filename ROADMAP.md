@@ -94,7 +94,6 @@ SHA, never the mutation aggregate alone.
 | candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
 |---|---|---|---|---|---|---|---|---|---|---|
 | type-identity | 096, 097, 098 | — | `bug096-type-identity` | `dd651baa7c0a` | 0b | not run | not run | not run | exit 0b progress | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
-| generic-destroy | 099, 100 | — | `bug099-generic-destroy` | `c745f795c6f7` | 0b | not run | not run | not run | exit 0b progress | partial; finish after batch 2 lands, then Codex review and stages (b) and (c) |
 | rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bugs 102, 103), 2i | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | landed on main at 094e51bf but not accepted: exits 0b (bugs 102, 103) and 2i; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](docs/platform/NATIVE_LIBRARIES.md)), G3 remains |
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->

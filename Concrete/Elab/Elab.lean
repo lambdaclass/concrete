@@ -14,6 +14,7 @@ import Concrete.Resolve.BuiltinEnums
 import Concrete.Resolve.TypeId
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
+import Concrete.Resolve.PeekType
 import Concrete.Semantics.TypeJudgment
 import Concrete.Proof.CallCollect
 
@@ -525,65 +526,27 @@ private def addGhostVar (name : String) : ElabM Unit := do
 -- Type-arg inference is single-sourced in `Shared.unifyTypes` (Phase 6.5
 -- InstantiationJudgment axis); this pass and Check share that one algorithm.
 
+/-- Elab's view of the environment for the shared argument-type peek
+    (`Resolve.PeekType`, single-sourced with Check — bug 099). -/
+private def elabPeekCtx : PeekCtx ElabM where
+  var name := lookupVar name
+  constant name := do return (← getEnv).constants.lookup name
+  fnSig name := lookupFnSig name
+  fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
+  struct name := lookupStruct name
+  newtype name := do return (← getEnv).newtypes.find? fun nt => nt.name == name
+  boundMethod n methodName := do
+    let env ← getEnv
+    let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
+    return bounds.findSome? fun traitName =>
+      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
+        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+  typeParams := do return (← getEnv).currentTypeParams
+  resolve ty := try resolveTypeE ty catch _ => pure .placeholder
+  subst := substTy
+
 /-- Peek at an expression's type without any side effects, for type inference. -/
-private partial def peekExprType (e : Expr) : ElabM Ty := do
-  match e with
-  | .intLit _ _ => return .int
-  | .floatLit _ _ => return .float64
-  | .boolLit _ _ => return .bool
-  | .strLit _ _ => return .string
-  | .charLit _ _ => return .char
-  | .ident _ name =>
-    let env ← getEnv
-    -- locals shadow module constants (the `.ident` case of `elabExprEv`)
-    match env.vars.lookup name with
-    | some ty => return ty
-    | none =>
-    match env.constants.lookup name with
-    | some ty => return ty
-    | none =>
-      match ← lookupFnSig name with
-      | some sig =>
-        let paramTys := sig.params.map Prod.snd
-        return .fn_ paramTys sig.capSet sig.retTy
-      | none => return .placeholder
-  | .structLit _ name typeArgs fields _ =>
-    -- R-0484: capability arguments read off the fields' peeked types (same rule as Check).
-    match ← lookupStruct name with
-    | some sd =>
-      if sd.capParams.isEmpty then
-        if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
-      else
-        let mapping := sd.typeParams.zip typeArgs
-        let mut capMap : List (String × CapSet) := []
-        for sf in sd.fields do
-          if (tyCapNames sf.ty).any sd.capParams.contains then
-            match fields.find? fun (fn, _) => fn == sf.name with
-            | some (_, fe) =>
-              let fty ← peekExprType fe
-              for (k, v) in inferCapBindings sd.capParams (substTy mapping sf.ty) fty do
-                if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
-            | none => pure ()
-        return .generic name typeArgs (sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg)
-    | none =>
-      if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
-  | .enumLit _ enumName _ typeArgs _ =>
-    -- Enums take no capability parameters.
-    if typeArgs.isEmpty then return .named enumName else return .generic enumName typeArgs []
-  | .fnRef _ name =>
-    let env ← getEnv
-    match env.allFnSigPairs.lookup name with
-    | some sig => return .fn_ (sig.params.map Prod.snd) sig.capSet sig.retTy
-    | none => return .placeholder
-  | .paren _ inner => peekExprType inner
-  | .binOp _ _ lhs _ => peekExprType lhs
-  | .borrow _ inner => return .ref (← peekExprType inner)
-  | .borrowMut _ inner => return .refMut (← peekExprType inner)
-  | .deref _ inner =>
-    match ← peekExprType inner with
-    | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => return t
-    | _ => return .placeholder
-  | _ => return .placeholder
+private def peekExprType (e : Expr) : ElabM Ty := peekExprTypeIn elabPeekCtx e
 
 -- ============================================================
 -- Core elaboration
@@ -1264,8 +1227,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             for (arg, pTy) in args.zip methodParamTys do
               let argTy ← peekExprType arg
               for (name, ty) in unifyTypes pTy argTy methodTypeParams do
-                if !(inferred.any fun (n, _) => n == name) then
-                  inferred := inferred ++ [(name, ty)]
+                inferred := recordInferred inferred name ty
             pure (methodTypeParams.map fun tp => (inferred.lookup tp).getD (.typeVar tp))
         let mapping := implMapping ++ methodTypeParams.zip methodArgs
         let methodParams := (sig.params.drop 1).map fun (_, t) => (substTy mapping t)
@@ -1666,8 +1628,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
           let argTy ← peekExprType arg
           let bindings := unifyTypes pTy argTy sig.typeParams
           for (name, ty) in bindings do
-            if !(inferred.any fun (n, _) => n == name) then
-              inferred := inferred ++ [(name, ty)]
+            inferred := recordInferred inferred name ty
         pure (sig.typeParams.map fun tp =>
           match inferred.lookup tp with
           | some ty => ty

@@ -5,6 +5,7 @@ import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
+import Concrete.Resolve.PeekType
 import Concrete.Check.CheckError
 import Concrete.Check.Layout
 
@@ -659,137 +660,27 @@ def checkBlockLocalsConsumed
 -- Type substitution for generics
 -- ============================================================
 
+/-- Check's view of the environment for the shared argument-type peek
+    (`Resolve.PeekType`, single-sourced with Elab — bug 099). -/
+def checkPeekCtx : PeekCtx CheckM where
+  var name := do return ((← getEnv).vars.lookup name).map (·.ty)
+  constant name := do return (← getEnv).constants.lookup name
+  fnSig name := lookupFn name
+  fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
+  struct name := lookupStruct name
+  newtype name := lookupNewtype name
+  boundMethod n methodName := do
+    let env ← getEnv
+    let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
+    return bounds.findSome? fun traitName =>
+      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
+        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+  typeParams := do return (← getEnv).currentTypeParams
+  resolve ty := try resolveType ty catch _ => pure .placeholder
+  subst := substTy
+
 /-- Peek at an expression's type without consuming any linear variables. -/
-partial def peekExprType (e : Expr) : CheckM Ty := do
-  match e with
-  | .intLit _ _ => return .int
-  | .floatLit _ _ => return .float64
-  | .boolLit _ _ => return .bool
-  | .strLit _ _ => return .string
-  | .charLit _ _ => return .char
-  | .ident _ name =>
-    let env ← getEnv
-    -- locals shadow module constants (the `.ident` case of `checkExprCore`)
-    match env.vars.lookup name with
-    | some info => return info.ty
-    | none =>
-    match env.constants.lookup name with
-    | some ty => return ty
-    | none =>
-      match ← lookupFn name with
-      | some sig =>
-        let paramTys := sig.params.map fun (_, t) => t
-        return .fn_ paramTys sig.capSet sig.retTy
-      | none => return .placeholder
-  | .structLit _ name typeArgs fields _ =>
-    -- R-0484: capability arguments are read off the fields' peeked types, the same rule
-    -- the full check uses, so a peeked literal and a checked one have one type.
-    match ← lookupStruct name with
-    | some sd =>
-      if sd.capParams.isEmpty then
-        if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
-      else
-        let mapping := sd.typeParams.zip typeArgs
-        let mut capMap : List (String × CapSet) := []
-        for sf in sd.fields do
-          if (tyCapNames sf.ty).any sd.capParams.contains then
-            match fields.find? fun (fn, _) => fn == sf.name with
-            | some (_, fe) =>
-              let fty ← peekExprType fe
-              for (k, v) in inferCapBindings sd.capParams (substTy mapping sf.ty) fty do
-                if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
-            | none => pure ()
-        return .generic name typeArgs (sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg)
-    | none =>
-      if typeArgs.isEmpty then return .named name else return .generic name typeArgs []
-  | .enumLit _ enumName _ typeArgs _ =>
-    if typeArgs.isEmpty then return .named enumName
-    else return .generic enumName typeArgs [] -- enums take no capability parameters
-  | .fnRef _ name =>
-    let env ← getEnv
-    match env.allFnSummarys.lookup name with
-    | some sig =>
-      let paramTys := sig.params.map Prod.snd
-      return .fn_ paramTys sig.capSet sig.retTy
-    | none => return .placeholder
-  | .paren _ inner => peekExprType inner
-  | .binOp _ _ lhs _ => peekExprType lhs
-  -- BUG 063. A struct field's type is KNOWN — it is written in the struct
-  -- declaration — so answering `.placeholder` for `ops.op` was not conservatism, it
-  -- was declining to look. The caller then invented `with()` for a fn-typed field and
-  -- blamed the program for not matching it, which is how a capability-carrying callback
-  -- became unpassable to a `cap C` combinator. DECISIONS.md recommends a struct of
-  -- function pointers as THE answer for pluggable interfaces, so this shape is the
-  -- intended use, not an exotic one.
-  --
-  -- Auto-derefs through a borrow because field access itself does; `(&ops).op` and
-  -- `ops.op` name the same field and must peek to the same type.
-  | .fieldAccess _ obj fieldName =>
-    let objTy ← peekExprType obj
-    -- field access auto-derefs one layer: a reference or a heap shell (`h.next`)
-    let objTy := match objTy with
-      | .ref (.heap t) | .refMut (.heap t) | .heap t | .heapArray t => t
-      | t => t
-    let structName? : Option String :=
-      match objTy with
-      | .named n => some n
-      | .generic n _ _ => some n
-      | .ref (.named n) => some n
-      | .refMut (.named n) => some n
-      | .ref (.generic n _ _) => some n
-      | .refMut (.generic n _ _) => some n
-      | _ => none
-    -- the type arguments of a generic struct substitute into the field's declared type
-    -- (`G<&P>.v` is `&P`, not `T`), so the normalized place rule sees a reference stored in
-    -- a generic field as one (bug 091 round 3, Codex review)
-    let typeArgs : List Ty := match objTy with
-      | .generic _ args _ | .ref (.generic _ args _) | .refMut (.generic _ args _) => args
-      | _ => []
-    -- a newtype's `.0` is its wrapped type
-    let nt? ← match structName? with
-      | some sn => if fieldName == "0" then lookupNewtype sn else pure none
-      | none => pure none
-    if let some nt := nt? then
-      return substTy (nt.typeParams.zip typeArgs) nt.innerTy
-    match structName? with
-    | some sn =>
-      match ← lookupStructField sn fieldName with
-      | some ty =>
-        match ← lookupStruct sn with
-        | some sd => return substTy (sd.typeParams.zip typeArgs) ty
-        | none => return ty
-      | none => return .placeholder
-    | none => return .placeholder
-  | .cast _ _ ty => return ty
-  -- Borrows must carry the reference wrapper so generic inference can unify
-  -- `&T` against `&i64` (ROADMAP Phase 5 #6b). Without these, `peekExprType
-  -- (&w)` fell through to `.placeholder` and `id(&w)` could not infer `T`,
-  -- forcing an explicit turbofish.
-  | .borrow _ inner => return .ref (← peekExprType inner)
-  | .borrowMut _ inner => return .refMut (← peekExprType inner)
-  | .deref _ inner =>
-    match ← peekExprType inner with
-    | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => return t
-    | _ => return .placeholder
-  -- BUG 063, same reasoning as `fieldAccess`: the callee's return type is declared, so
-  -- `apply(pick(), 4)` has a knowable type. Generic returns are NOT answered here —
-  -- substituting the callee's type arguments is the caller's job and doing it in a
-  -- "cheap peek" would duplicate `unifyTypes`. `.placeholder` for those is honest
-  -- ignorance, which the caller now handles by contributing no binding.
-  | .call _ fnName typeArgs _ =>
-    if !typeArgs.isEmpty then return .placeholder
-    else
-      match ← lookupFn fnName with
-      | some sig => if sig.typeParams.isEmpty then return sig.retTy else return .placeholder
-      | none => return .placeholder
-  -- An array's element type is written in its own type, so `fns[0]` is knowable.
-  | .arrayIndex _ arr _ =>
-    match ← peekExprType arr with
-    | .array t _ => return t
-    | .ref (.array t _) => return t
-    | .refMut (.array t _) => return t
-    | _ => return .placeholder
-  | _ => return .placeholder
+def peekExprType (e : Expr) : CheckM Ty := peekExprTypeIn checkPeekCtx e
 
 -- Type-arg inference (`unifyTypes`) is single-sourced in `Shared.unifyTypes`
 -- (Phase 6.5 InstantiationJudgment axis); Check and Elab share the one algorithm.
@@ -954,8 +845,7 @@ partial def inferMethodParamAndRetTys
       for (arg, (_, pTy)) in args.zip methodParamTys do
         let argTy ← peekExprType arg
         for (name, ty) in unifyTypes pTy argTy methodTypeParams do
-          if !(inferred.any fun (n, _) => n == name) then
-            inferred := inferred ++ [(name, ty)]
+          inferred := recordInferred inferred name ty
       pure (methodTypeParams.map fun tp => (inferred.lookup tp).getD (.typeVar tp))
   let fullMapping := implMapping ++ methodTypeParams.zip methodArgs
   -- Enforce the impl's + method's trait/Copy bounds at the call site (the impl's

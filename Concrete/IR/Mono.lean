@@ -569,6 +569,30 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
           -- Generic function called without type args (e.g., sibling method call).
           -- Try to infer type args from concrete argument types.
           let inferredArgs := inferTypeArgs fnDef.typeParams fnDef.params args'
+          -- Bug 100: a destructor's receiver is matched through its implicit borrow.
+          -- `destroy(h)` passes the value itself to a `&self` destructor (Lower takes its
+          -- address), so `&Holder<T>` never unified with the actual `Holder<i64>` and a
+          -- generic impl's destructor was left unspecialized: a call to the never-defined
+          -- `@Holder_destroy`. A destructor whose type arguments the receiver does not
+          -- determine is refused, never left for the backend to meet.
+          let isDestructor := (← get).destroyImpls.any fun (_, d) => d == fnDef.name || d == fn
+          let inferredArgs :=
+            if isDestructor && inferredArgs.length != fnDef.typeParams.length then
+              match fnDef.params, args' with
+              | [(_, Ty.ref _)], [a] =>
+                match cexprTy a with
+                | Ty.ref _ | Ty.refMut _ => inferredArgs
+                | t => inferTypeArgs fnDef.typeParams fnDef.params [CExpr.borrow a (Ty.ref t)]
+              | [(_, Ty.refMut _)], [a] =>
+                match cexprTy a with
+                | Ty.ref _ | Ty.refMut _ => inferredArgs
+                | t => inferTypeArgs fnDef.typeParams fnDef.params [CExpr.borrowMut a (Ty.refMut t)]
+              | _, _ => inferredArgs
+            else inferredArgs
+          if isDestructor && (inferredArgs.length != fnDef.typeParams.length || inferredArgs.any tyUnresolved) then
+            throw [{ severity := .error, pass := "mono", span := none, code := "E0814"
+                     message := s!"destructor '{fn}' for '{String.intercalate ", " (args'.map fun a => tyToSuffix (cexprTy a))}' cannot be specialized: the argument type does not determine its type arguments (bug 100)"
+                     hint := some "this is a compiler containment failure, not a program error. Tracking: docs/bugs/100_generic_destroy_impl_unspecialized.md" }]
           if inferredArgs.isEmpty then
             return .call fn [] args' ty  -- couldn't infer, leave as-is
           else

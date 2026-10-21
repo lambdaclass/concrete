@@ -1749,6 +1749,25 @@ else
     FAIL=$((FAIL + 1))
 fi
 run_err "$TESTDIR/error_091_generic_self_return_mismatch.con" "(E0582)"
+# Bug 099: generic inference reads ONE argument-type peek (Resolve.PeekType) in Check and
+# Elab, through fields, indexes, calls and method calls. Bug 100: a generic impl's `&self`
+# destructor reached by `destroy(h)` is specialized through the receiver's implicit borrow.
+# Each reproducer runs natively and under --interp, and both print the recorded value.
+run_ok "$TESTDIR/regress_099_generic_infer_field_index.con" "43043" 0
+run_ok "$TESTDIR/regress_099_generic_infer_call_results.con" "4" 0
+run_ok "$TESTDIR/regress_100_generic_ref_destroy.con" "2" 0
+for r099 in "regress_099_generic_infer_field_index:43043" "regress_099_generic_infer_call_results:4" \
+            "regress_100_generic_ref_destroy:2"; do
+    r099_f="${r099%%:*}"; r099_want="${r099#*:}"
+    r099_got=$($COMPILER "$TESTDIR/$r099_f.con" --interp 2>&1 | awk "NR<=1" || true)
+    if [ "$r099_got" = "$r099_want" ]; then
+        echo "  ok  $r099_f: --interp prints $r099_want"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r099_f: --interp gave '$r099_got', want $r099_want"
+        FAIL=$((FAIL + 1))
+    fi
+done
 run_err "$TESTDIR/error_cap_pure.con"            "but caller has"
 run_err "$TESTDIR/error_cap_propagation.con"     "but caller has"
 run_err "$TESTDIR/error_cap_method.con"          "but caller has"

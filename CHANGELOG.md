@@ -37,6 +37,17 @@ Found on the way and filed, not fixed here: bug 134, `==` on an enum or struct p
 and fails in `llvm-as` (`icmp eq i64` on an aggregate); pinned in `check_example_outputs.sh` for
 exit 2c.
 
+### Generic Inference Reads One Argument-Type Peek; Generic `&self` Destructors Specialize (bugs 099, 100, 2026-10-21)
+
+Check and Elab each inferred a generic call's type arguments from their own argument-type peek, and
+the two drifted: Elab could not see through a field access, an index or a call, so Core
+instantiated `pick<Placeholder>` where Check had typed `pick<Inner>` (invalid LLVM IR, or bug 052's
+E0814 refusal for a `Destroy`-bounded call), and Check could not type a method-call result (a false
+E0220). Both now call one peek, `Concrete/Resolve/PeekType.lean` (bug 099). `destroy(h)` on a generic impl's `&self` destructor was left
+unspecialized (`use of undefined value '@Holder_destroy'`); Mono now matches a destructor's
+receiver through its implicit borrow and refuses (E0814) a destructor it cannot specialize
+(bug 100). Each reproducer runs natively and in the interpreter in `run_tests.sh`.
+
 ### Language Semantics Decisions Written Into The Normative Docs (2026-10-21)
 
 Ten language-semantics proposals and four items of external advice were evaluated against probes of

@@ -16,6 +16,7 @@ import Concrete.Proof.SimpAttr
 import Concrete.Resolve.CallableId
 import Concrete.Resolve.TypeId
 import Concrete.Resolve.Shared
+import Concrete.Resolve.PeekType
 import Concrete.Resolve.Resolve
 import Concrete.Semantics.TypeJudgment
 import Concrete.Frontend.Lexer

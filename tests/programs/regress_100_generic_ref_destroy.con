@@ -1,0 +1,24 @@
+// Bug 100: a generic impl's &self destructor reached by destroy(h) with h by value.
+// Mono's inference unified &Holder<T> against Holder<i64>, found nothing, and left the
+// call to the never-defined generic Holder_destroy (llvm-as: use of undefined value).
+// Expected (compiled AND --interp): 2.
+mod single {
+    struct Holder<T> { cell: *mut u64, v: T }
+    trusted impl<T: Copy> Destroy for Holder<T> {
+        fn destroy(&self) {
+            *self.cell = *self.cell + 1;
+        }
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        let h: Holder<i64> = Holder::<i64> { cell: cell, v: 5 };
+        destroy(h);
+        let g: Holder<i32> = Holder::<i32> { cell: cell, v: 6 };
+        g.destroy();
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

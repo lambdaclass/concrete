@@ -1,0 +1,18 @@
+// Bug 099: a generic call's type argument inferred through a field access and an index.
+// Elab's argument-type peek could not see through either, so Core instantiated
+// pick<Placeholder> while Check had typed it, and the native backend emitted invalid IR.
+// Expected (compiled AND --interp): 43043.
+mod single {
+    fn pick<T: Copy>(x: &T) -> T { return *x; }
+    struct Copy Inner { a: i64, b: i64 }
+    struct Copy Outer { inner: Inner, n: i64 }
+    fn main() with(Std) -> Int {
+        let o: Outer = Outer { inner: Inner { a: 3, b: 4 }, n: 5 };
+        let i: Inner = pick(&o.inner);
+        let arr: [Inner; 2] = [Inner { a: 10, b: 20 }, Inner { a: 30, b: 40 }];
+        let j: Inner = pick(&arr[1]);
+        print_int(i.a + i.b * 10 + j.a * 100 + j.b * 1000);
+        print_char(10);
+        return 0;
+    }
+}

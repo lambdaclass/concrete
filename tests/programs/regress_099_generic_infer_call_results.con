@@ -1,0 +1,36 @@
+// Bug 099: a Destroy-bounded generic call whose argument is a call or a method-call result.
+// Elab's peek typed a call result Placeholder (Mono then refused the destructor, E0814);
+// Check's peek could not type a method-call result (a false E0220). One shared peek now.
+// Expected (compiled AND --interp): 4.
+mod single {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(self) {
+            let Tracked { cell } = self;
+            *cell = *cell + 1;
+        }
+    }
+    fn kill<T: Destroy>(x: T) with(Alloc) {
+        x.destroy();
+    }
+    struct Copy Maker { cell: *mut u64 }
+    impl Maker {
+        fn both(&self) -> [Tracked; 2] {
+            return [Tracked { cell: self.cell }, Tracked { cell: self.cell }];
+        }
+    }
+    fn make_arr(cell: *mut u64) -> [Tracked; 2] {
+        return [Tracked { cell: cell }, Tracked { cell: cell }];
+    }
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    fn main() with(Std, Unsafe) -> Int {
+        let mut c: u64 = 0;
+        let cell: *mut u64 = &mut c as *mut u64;
+        kill(make_arr(cell));          // call result: +2
+        let m: Maker = Maker { cell: cell };
+        kill(m.both());                // method-call result: +2
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

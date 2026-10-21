@@ -1039,8 +1039,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- Try to unify pTy with argTy to learn type variables
             let bindings := unifyTypes pTy argTy sig.typeParams
             for (name, ty) in bindings do
-              if !(inferred.any fun (n, _) => n == name) then
-                inferred := inferred ++ [(name, ty)]
+              inferred := recordInferred inferred name ty
           -- Build ordered type args from inferred mapping
           pure (sig.typeParams.map fun tp =>
             match inferred.lookup tp with

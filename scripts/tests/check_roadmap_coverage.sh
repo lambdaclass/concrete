@@ -824,15 +824,18 @@ PY
   neg prerequisites_row_relabelled \
     "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l |')" \
     "deliverable V1b is labelled row 5, but queue row 3 schedules it"
+  # The implemented-table controls do not depend on which candidates are live: each inserts two
+  # control rows (bugs 901, 902 and 903, which no ledger record names) into its copy first.
+  CTL_ROWS="hdr='| candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |\n|---|---|---|---|---|---|---|---|---|---|---|\n'; assert s.count(hdr)==1; s=s.replace(hdr, hdr+'| ctl-a | 901, 902 | — | \`ctl-a-branch\` | \`cccccccccccc\` | 0b | not run | not run | not run | exit 0b progress | control row |\n| ctl-b | 903 | — | \`ctl-b-branch\` | \`dddddddddddd\` | 0b | not run | not run | not run | exit 0b progress | control row |\n');"
   neg implemented_bug_already_fixed \
-    "old='| type-identity | 096,'; assert s.count(old)==1; s=s.replace(old,'| type-identity | 080, 096,')" \
+    "$CTL_ROWS old='| ctl-a | 901,'; assert s.count(old)==1; s=s.replace(old,'| ctl-a | 080, 901,')" \
     "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
   neg implemented_bug_no_branch \
-    "old='| \`bug096-type-identity\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
-    "implemented-bug row \"type-identity\" names no branch"
+    "$CTL_ROWS old='| \`ctl-a-branch\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
+    "implemented-bug row \"ctl-a\" names no branch"
   neg implemented_bug_no_step \
-    "import re; s,n=re.subn(r'^(\| generic-destroy \|.*\|) [^|]+ \|$', r'\\1  |', s, flags=re.M); assert n==1" \
-    "implemented-bug row \"generic-destroy\" has no remaining acceptance step"
+    "$CTL_ROWS import re; s,n=re.subn(r'^(\| ctl-b \|.*\|) [^|]+ \|$', r'\\1  |', s, flags=re.M); assert n==1" \
+    "implemented-bug row \"ctl-b\" has no remaining acceptance step"
   neg implemented_row_no_bug_no_deliverable \
     "old='| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) |'; assert s.count(old)==1; s=s.replace(old,'| rocksdb-slice1 | — | — |')" \
     "implemented-bug row \"rocksdb-slice1\" names no bug number and no deliverable"
@@ -890,7 +893,13 @@ exec(sys.argv[2])
 open(p, 'w', encoding='utf-8').write(s)
 PY
     then no "control $1: could not build its mutated ledger"; return; fi
-    if BUG_LEDGER_DIR="$d" run_on "$TARGET"; then
+    python3 - "$TARGET" "$TMPD/$1.ctl.md" "$CTL_ROWS" <<'PY' || { no "control $1: could not build its roadmap copy"; return; }
+import sys
+s = open(sys.argv[1], encoding='utf-8').read()
+exec(sys.argv[3])
+open(sys.argv[2], 'w', encoding='utf-8').write(s)
+PY
+    if BUG_LEDGER_DIR="$d" run_on "$TMPD/$1.ctl.md"; then
       no "control $1: the mutated ledger passed"
     elif printf '%s\n' "$RESULT" | grep -q -- "$4"; then
       ok "control $1 is rejected ($4)"
@@ -898,25 +907,26 @@ PY
       no "control $1 failed for an unexpected reason"
     fi
   }
-  # The controls use bugs of a row still in the table (type-identity 096, generic-destroy 099/100);
-  # those bugs have no record file on main, so the Status controls create one in the copied ledger.
+  # The controls use the control rows' bugs (901 - 903), which have no record file, so the Status
+  # controls create one in the copied ledger.
   bugneg ledger_fixed_in_readme_only \
-    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [096_control.md](096_control.md)\n')" \
-    README.md "bug 096 is listed as not yet accepted but the bug ledger records it fixed"
+    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [901_control.md](901_control.md)\n')" \
+    README.md "bug 901 is listed as not yet accepted but the bug ledger records it fixed"
   bugneg ledger_fixed_bold_status \
-    "import os; open(os.path.join(os.path.dirname(p), '099_control.md'), 'w').write('# Bug 099\n\n**Status:** FIXED 2026-10-20\n')" \
-    README.md "bug 099 is listed as not yet accepted but the bug ledger records it fixed"
+    "import os; open(os.path.join(os.path.dirname(p), '902_control.md'), 'w').write('# Bug 902\n\n**Status:** FIXED 2026-10-20\n')" \
+    README.md "bug 902 is listed as not yet accepted but the bug ledger records it fixed"
   bugneg ledger_fixed_plain_status \
-    "import os; open(os.path.join(os.path.dirname(p), '100_control.md'), 'w').write('# Bug 100\n\nStatus: fixed\n')" \
-    README.md "bug 100 is listed as not yet accepted but the bug ledger records it fixed"
+    "import os; open(os.path.join(os.path.dirname(p), '903_control.md'), 'w').write('# Bug 903\n\nStatus: fixed\n')" \
+    README.md "bug 903 is listed as not yet accepted but the bug ledger records it fixed"
   # Positive control: a bug whose README entry sits under "Fixed Bugs" but says OPEN (077) is open.
   cp "$TARGET" "$TMPD/open_entry.md"
-  if python3 - "$TMPD/open_entry.md" <<'PY'
+  if python3 - "$TMPD/open_entry.md" "$CTL_ROWS" <<'PY'
 import sys
 p = sys.argv[1]; s = open(p, encoding='utf-8').read()
-old = '| type-identity | 096,'
+exec(sys.argv[2])
+old = '| ctl-a | 901,'
 assert s.count(old) == 1
-s = s.replace(old, '| type-identity | 077, 096,')
+s = s.replace(old, '| ctl-a | 077, 901,')
 open(p, 'w', encoding='utf-8').write(s)
 PY
   then
