@@ -38,9 +38,11 @@ llvm-as: .../repro.con.ll:838:17: error: invalid cast opcode for cast from 'i64'
 ## Cause
 
 CoreCheck's cast-validity table in `Concrete/Check/CoreCheck.lean` (`ccCheckExpr`, `.cast`) admits
-`isInteger innerTy && targetTy == .bool`. The backend then picks an opcode from the two widths
-(`bitcast` for `Int`, a `zext`/`sext`/`trunc` for the narrower widths), none valid to `i1`, and the
-interpreter's `evalCast` wraps the integer and tags it `bool`.
+`isInteger innerTy && targetTy == .bool`. The backend's integer-cast case in
+`Concrete/Backend/EmitSSA.lean` picks the opcode from a local width table that has no entry for
+`bool`, so `bool` falls to the 64-bit default: an `Int` source is "equal width" and gets `bitcast`, a
+narrower source gets `sext`/`zext`, and neither opcode is valid to `i1` (the `trunc` that would be
+is never chosen). The interpreter's `evalCast` wraps the integer and tags it `bool`.
 
 **Unlanded repair.** Branch `backend-108-116` (`ba09598a`; the CoreCheck change is `ee9a16cb`,
 "fix bug 108") removes that row, so `<int> as bool` is refused with E0553. It covers this exact shape:
