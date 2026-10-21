@@ -33,8 +33,9 @@ displaced linear value exactly once. **Breaking:** the four `close` signatures,
 `FsError`/`NetError` (see `examples/http`). `Child::wait` remains consume-on-failure: outside the
 supported runtime profile (a foreign signal handler without `SA_RESTART`), an `EINTR` would abandon
 the child, and telling it apart needs `errno`, which std does not bind yet.
-Found on the way and not fixed here (compiler): `==` between two values of a fieldless `Copy` enum
-passes the checker and emits ill-typed LLVM (`icmp eq i64` on the enum struct).
+Found on the way and filed, not fixed here: bug 134, `==` on an enum or struct passes the checker
+and fails in `llvm-as` (`icmp eq i64` on an aggregate); pinned in `check_example_outputs.sh` for
+exit 2c.
 
 ### Language Semantics Decisions Written Into The Normative Docs (2026-10-21)
 

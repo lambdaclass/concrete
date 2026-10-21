@@ -1,0 +1,17 @@
+struct Copy P {
+    x: i32,
+    y: i32,
+}
+
+fn eq(a: P, b: P) -> bool {
+    return a == b;
+}
+
+fn main() -> Int {
+    let p: P = P { x: 1, y: 2 };
+    let q: P = P { x: 1, y: 2 };
+    if eq(p, q) {
+        return 0;
+    }
+    return 1;
+}
