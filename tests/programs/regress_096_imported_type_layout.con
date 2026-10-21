@@ -1,0 +1,13 @@
+// Bug 096: module b imports c's `P { y, x }` while a declares `P { x }`. Core named
+// both `P`, and the binary read b's `p.x` at a's offset (exit 0 on main; --interp 7).
+// Expected (compiled AND --interp): 7.
+mod a { pub struct Copy P { pub x: Int } }
+mod c { pub struct Copy P { pub y: Int, pub x: Int } }
+mod b {
+    import c.{ P };
+    pub fn probe() -> Int { let p: P = P { y: 1, x: 7 }; return p.x; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

@@ -1,0 +1,27 @@
+// Bug 096 in nested submodules, with methods: a's `P` and c's `P` have different
+// layouts and each has a `get`. The binary read b's `P` with a's layout and called
+// a's `get` (100751300 on main). Expected (compiled): 751300. --interp cannot yet call
+// a sibling submodule's method (the bug 118 family), so this leg is native only.
+mod main {
+mod a {
+    pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 }
+    impl P {
+        pub fn get(&self) -> i64 { return self.x + 1000; }
+    }
+    pub fn ma() -> i64 { let p: P = P { pad: 100, pad2: 200, x: 300 }; return p.get(); }
+}
+mod c {
+    pub struct Copy P { pub x: i64 }
+    impl P {
+        pub fn get(&self) -> i64 { return self.x; }
+    }
+    pub fn mk(v: i64) -> P { return P { x: v }; }
+}
+mod b {
+    import c.{P, mk};
+    pub fn probe() -> i64 { let p: P = mk(7); let q: P = P { x: 5 }; return p.get() * 10 + q.x; }
+}
+import b.{probe};
+import a.{ma};
+pub fn main() with(Std) -> Int { print_int(probe() * 10000 + ma()); print_char(10); return 0; }
+}

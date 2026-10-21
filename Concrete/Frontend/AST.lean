@@ -349,6 +349,10 @@ structure StructDef where
 
 structure NewtypeDef where
   name : String
+  /-- Definition-site module, stamped by `buildFileSummary` (bug 096: Core
+      spells a newtype declared by two modules by its defining module). Empty
+      before semantic resolution. -/
+  definedIn : String := ""
   innerTy : Ty
   typeParams : List String := []
   typeBounds : List (String × List String) := []

@@ -29,12 +29,12 @@ def buildIdentity : String := "1a8c893a6bfe66c75d80eb9fd906bd87"
     Carried so that a SHRINKING inventory is detectable. The content digest moves when a file is
     removed, but it moves the same way it does for an ordinary edit — this value distinguishes the
     two, and a digest computed over fewer files is a weaker claim wearing the same shape. -/
-def buildIdentitySourceCount : Nat := 106
+def buildIdentitySourceCount : Nat := 107
 
 /-- Digest of the inventory's FILE LIST, independent of file contents.
 
     Moves only when files are added, removed, or renamed. Together with the count, this makes
     "the inventory changed" distinguishable from "a source changed". -/
-def buildIdentityInventoryDigest : String := "3558ba03df44a6c53a9ecf02fff89810"
+def buildIdentityInventoryDigest : String := "8a47ce3994a20575205faa5a9d918c1a"
 
 end Concrete

@@ -210,7 +210,7 @@ private def qualifyCallee (_qualPrefix : String) (definedNames : List (String ×
 private partial def buildQualNameMap (m : CModule) (pfx : String := "")
     : List (String × String) :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
-  let entries := m.functions.map fun f => (f.name, qualPrefix ++ "." ++ f.name)
+  let entries := m.functions.map fun f => (f.name, qualPrefix ++ "." ++ f.sourceName)
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildQualNameMap sub qualPrefix) []
 
@@ -244,7 +244,7 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
         | _ => bare
       | _ => bare  -- intrinsic, extern, unknown, or ambiguous
   let fnEntries := m.functions.map fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let callees := collectCallsStmts f.body |>.eraseDups |>.map resolveCallee
     (qualName, callees)
   fnEntries ++ m.submodules.foldl (fun acc sub =>
@@ -291,7 +291,7 @@ kept separate from `eligible`. -/
 private partial def indirectSeedModule (m : CModule) (pfx : String := "") : List String :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   let here := m.functions.filterMap fun f =>
-    if hasIndirectCallStmts f.body then some (qualPrefix ++ "." ++ f.name) else none
+    if hasIndirectCallStmts f.body then some (qualPrefix ++ "." ++ f.sourceName) else none
   here ++ m.submodules.foldl (fun acc sub => acc ++ indirectSeedModule sub qualPrefix) []
 
 /-- One round: a function is opaque if any direct callee is. -/
@@ -3238,7 +3238,7 @@ private partial def extractModule
     : List ProofCoreEntry × List ProofCoreExcluded :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let (entries, excluded) := m.functions.foldl (fun (accE, accX) f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let bareName := f.name
     -- From the resolved module path and the checked declaration name, at the one
     -- point where both are facts rather than substrings. The type-parameter
@@ -3247,7 +3247,7 @@ private partial def extractModule
     -- callable, and one erased entry would answer for instantiations that do not
     -- agree (`i8` arithmetic wraps where `Int` does not). Carrying the arity
     -- makes `CallableId.isComplete` refuse it instead.
-    let cid : CallableId := CallableId.ofUser qualPrefix f.name f.typeParams.length
+    let cid : CallableId := CallableId.ofUser qualPrefix f.sourceName f.typeParams.length
     let fp := bodyFingerprint f.body
     -- The facts captured before contract erasure, looked up BY IDENTITY. They
     -- travel on the module as a parallel record, so nothing is recomputed here

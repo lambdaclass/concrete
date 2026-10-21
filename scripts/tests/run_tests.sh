@@ -1447,16 +1447,25 @@ run_ok  "$TESTDIR/trait_generic_receiver_forms.con" "4030412" 0
 # legal `&mut self` receiver form still runs (8), and --interp agrees (it failed on `T$bump`
 # and on a projection through `&mut W`).
 # Bug 052 round 3 (Codex): same-named types in two modules — generic dispatch chose the
-# top-level impl for the nested type (101 / 100). Refused in both backends.
-run_err "tests/regressions/bug052_vec_array_destroy/collision_destroy.con" "(E0814)"
-run_err "tests/regressions/bug052_vec_array_destroy/collision_trait.con"   "(E0815)"
-for r052c in collision_destroy collision_trait; do
-    r052c_out=$($COMPILER "tests/regressions/bug052_vec_array_destroy/$r052c.con" --interp 2>&1 || true)
-    if grep -qF "several types of that name" <<<"$r052c_out"; then
-        echo "  ok  bug 052: $r052c — --interp refuses the ambiguous dispatch"
+# top-level impl for the nested type (101 / 100), then was refused (E0814 / E0815). Bug 096:
+# Core spells each type by its defining module, so each dispatch reaches its own impl,
+# natively and under --interp.
+for r052c in "collision_destroy:2" "collision_trait:1 100"; do
+    r052c_f="${r052c%%:*}"; r052c_want="${r052c#*:}"
+    r052c_src="tests/regressions/bug052_vec_array_destroy/$r052c_f.con"
+    r052c_n=""
+    if $COMPILER "$r052c_src" -o "$TESTDIR/.r052c_bin" >/dev/null 2>&1; then
+        r052c_n=$("$TESTDIR/.r052c_bin" 2>&1 | tr '\n' ' ' | sed 's/ $//' || true)
+    fi
+    rm -f "$TESTDIR/.r052c_bin"
+    # --interp prints the program's lines, then its exit status
+    r052c_lines=$(printf '%s\n' $r052c_want | wc -l | tr -d ' ')
+    r052c_i=$($COMPILER "$r052c_src" --interp 2>&1 | awk "NR<=$r052c_lines" | tr '\n' ' ' | sed 's/ $//' || true)
+    if [ "$r052c_n" = "$r052c_want" ] && [ "$r052c_i" = "$r052c_want" ]; then
+        echo "  ok  bug 052/096: $r052c_f — binary and --interp print $r052c_want"
         PASS=$((PASS + 1))
     else
-        echo "FAIL  bug 052: $r052c — --interp did not refuse the ambiguous dispatch"
+        echo "FAIL  bug 052/096: $r052c_f — binary '$r052c_n', --interp '$r052c_i', want '$r052c_want'"
         FAIL=$((FAIL + 1))
     fi
 done
@@ -1552,6 +1561,31 @@ for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_throug
         PASS=$((PASS + 1))
     else
         echo "FAIL  $r119: --interp gave '$r119_i', binary exit '$r119_n'"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# Bugs 096 - 098: two modules' same-named types, private functions and generic functions are
+# distinct definitions in Core (types spelled by their defining module, colliding top-level
+# functions by theirs). Each reproducer prints its value natively and under --interp; the
+# nested-methods one is native only (an interpreter sibling-submodule method call is the bug
+# 118 family).
+run_ok "$TESTDIR/regress_096_type_identity_same_named.con" "1234567" 0
+run_ok "$TESTDIR/regress_096_imported_type_layout.con" "7" 0
+run_ok "$TESTDIR/regress_096_local_and_imported_same_name.con" "7" 0
+run_ok "$TESTDIR/regress_096_same_named_destroy.con" "102" 0
+run_ok "$TESTDIR/regress_097_098_same_named_private_fns.con" "112124" 0
+run_ok "$TESTDIR/regress_096_nested_same_named_methods.con" "751300" 0
+for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported_type_layout:7" \
+            "regress_096_local_and_imported_same_name:7" "regress_096_same_named_destroy:102" \
+            "regress_097_098_same_named_private_fns:112124" "regress_096_nested_same_named_methods:751300:native"; do
+    r096_f="${r096%%:*}"; r096_rest="${r096#*:}"; r096_want="${r096_rest%%:*}"
+    case "$r096_rest" in *:native) continue ;; esac
+    r096_got=$($COMPILER "$TESTDIR/$r096_f.con" --interp 2>&1 | awk "NR<=1" || true)
+    if [ "$r096_got" = "$r096_want" ]; then
+        echo "  ok  $r096_f: --interp prints $r096_want"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r096_f: --interp gave '$r096_got', want $r096_want"
         FAIL=$((FAIL + 1))
     fi
 done
@@ -1756,8 +1790,9 @@ run_err "$TESTDIR/error_091_generic_self_return_mismatch.con" "(E0582)"
 run_ok "$TESTDIR/regress_099_generic_infer_field_index.con" "43043" 0
 run_ok "$TESTDIR/regress_099_generic_infer_call_results.con" "4" 0
 run_ok "$TESTDIR/regress_100_generic_ref_destroy.con" "2" 0
+run_ok "$TESTDIR/regress_099_generic_infer_cap_method.con" "14" 0
 for r099 in "regress_099_generic_infer_field_index:43043" "regress_099_generic_infer_call_results:4" \
-            "regress_100_generic_ref_destroy:2"; do
+            "regress_100_generic_ref_destroy:2" "regress_099_generic_infer_cap_method:14"; do
     r099_f="${r099%%:*}"; r099_want="${r099#*:}"
     r099_got=$($COMPILER "$TESTDIR/$r099_f.con" --interp 2>&1 | awk "NR<=1" || true)
     if [ "$r099_got" = "$r099_want" ]; then

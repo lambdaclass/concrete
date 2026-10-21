@@ -1,0 +1,49 @@
+// Bug 096: two modules each declare a type of the same name with different
+// representations. Core, Layout, Mono, Lower and EmitSSA keyed types by bare
+// name, so the whole program shared ONE `P` (and one `Shape`, one `Box`, one
+// `Id`) and a module using the other declaration read it at the wrong offsets;
+// Resolve refused `Shape::Line` (E0103) because the global scope held a's Shape.
+// a.ma() is 0 and b.probe() is 1234567. Expected (compiled AND --interp): 1234567.
+mod a {
+    pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 }
+    pub enum Copy Shape { Big { w: i64, h: i64, d: i64 }, Dot }
+    pub struct Copy Box<T> { pub pad: i64, pub v: T }
+    pub newtype Id = i8;
+    pub fn ma() -> i64 {
+        let p: P = P { pad: 100, pad2: 200, x: 1 };
+        let s: Shape = Shape::Big { w: 0, h: 0, d: 0 };
+        let b: Box<i64> = Box::<i64> { pad: 9, v: 0 };
+        let r: i64 = match s { Shape::Big { w, h, d } => w + h + d + 1, Shape::Dot => 50 };
+        return p.x + r - 2 + b.v;
+    }
+}
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub enum Copy Shape { Dot, Line { len: i64 } }
+    pub struct Copy Box<T> { pub v: T }
+    pub newtype Id = i64;
+    pub fn mk(v: i64) -> P { return P { x: v }; }
+    pub fn line(n: i64) -> Shape { return Shape::Line { len: n }; }
+    pub fn id(n: i64) -> Id { return Id(n); }
+    impl P {
+        pub fn get(&self) -> i64 { return self.x; }
+    }
+}
+mod b {
+    import c.{ P, Shape, Box, Id, mk, line, id };
+    import c.{ P as Q };
+    pub fn probe() -> i64 {
+        let p: P = mk(1);
+        let q: Q = Q { x: 2 };
+        let s: Shape = line(3);
+        let l: i64 = match s { Shape::Line { len } => len, Shape::Dot => 90 };
+        let bx: Box<i64> = Box::<i64> { v: 4 };
+        let i: Id = id(500);
+        return p.x * 1000000 + q.x * 100000 + l * 10000 + bx.v * 1000 + i.0 + p.get() * 60 + 7;
+    }
+}
+mod m {
+    import b.{ probe };
+    import a.{ ma };
+    pub fn main() with(Std) -> Int { print_int(probe() + ma()); print_char(10); return 0; }
+}

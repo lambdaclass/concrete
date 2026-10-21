@@ -23,6 +23,7 @@ import Concrete.Frontend.Lexer
 import Concrete.Frontend.Parser
 import Concrete.Check.Check
 import Concrete.Elab.Core
+import Concrete.Elab.TypeSpelling
 import Concrete.Elab.Elab
 import Concrete.IR.SSA
 import Concrete.Check.Layout

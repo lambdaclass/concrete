@@ -16,12 +16,10 @@ Most bugs since 039 fall into a dozen classes, and most classes are owned by a s
 A bug may belong to more than one class; the first listed is its primary class.
 
 **Sources.** Bug records on main for 039 – 080, 084 – 086, 088, 090, 092 – 094, 101 – 104 and 107;
-on branches for 081, 083 and 089 (`land3`), 082, 087 and 091 (`land2-fix`). Bugs 099 and 100 have records on main (fixed on `land5`). **No checked-in
-record** exists yet for 095 – 098 (exit 2b requires them): 095 is classified from the
+on branches for 081, 083 and 089 (`land3`), 082, 087 and 091 (`land2-fix`). Bugs 096 – 100 have records on main (fixed on `land5`). **No checked-in
+record** exists yet for 095 (exit 2b requires it): 095 is classified from the
 verified-pipeline plan ("requires correct storage aliasing during lowering"; the historical 092/095
-aggregate-reference programs), 096 – 098 from exit 0b and the reproducer probes behind branch
-`bug096-type-identity` (same-named types, private functions and generic functions in two modules
-resolved to one definition). Bug 105's record is on `land2-fix`
+aggregate-reference programs). Bug 105's record is on `land2-fix`
 (`105_reference_valued_if_miscompiles.md`): a reference-valued `if` expression miscompiles (the
 binary segfaults while `--interp` prints 2); the branch CONTAINS it at the checker (E0238 refuses
 every reference-valued `if`/`match`, with permanent fixtures) while the lowering defect itself stays

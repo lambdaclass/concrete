@@ -1,0 +1,21 @@
+// Bug 099 (Codex round 1): a method result whose type mentions the impl's capability
+// parameter. The shared peek reads `C := Console` off the receiver `Sink<Console>`, as
+// Check's resolveCaps does; without that `ident(s.get())` was a false E0220.
+// Expected (compiled AND --interp): 14.
+mod m {
+    fn shout(x: i32) with(Console) -> i32 { return x * 2; }
+    struct Copy Sink<cap C> { f: fn(i32) with(C) -> i32 }
+    impl<cap C> Sink<C> {
+        fn get(&self) -> fn(i32) with(C) -> i32 { return self.f; }
+    }
+    fn ident<T: Copy>(x: T) -> T { return x; }
+    fn main() with(Std) -> Int {
+        let s: Sink<Console> = Sink { f: shout };
+        let g: fn(i32) with(Console) -> i32 = ident(s.get());
+        let h: fn(i32) with(Console) -> i32 = s.get();
+        let k: fn(i32) with(Console) -> i32 = ident(h);
+        print_int((g(3) + k(4)) as Int);
+        print_char(10);
+        return 0;
+    }
+}

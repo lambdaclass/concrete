@@ -284,7 +284,7 @@ private def recursionUncertain (callGraph : CallGraph)
 private partial def indirectCallFns (m : CModule) (pfx : String := "") : List String :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   (m.functions.filterMap fun f =>
-      if hasIndirectCallStmts f.body then some (qualPrefix ++ "." ++ f.name) else none)
+      if hasIndirectCallStmts f.body then some (qualPrefix ++ "." ++ f.sourceName) else none)
     ++ m.submodules.foldl (fun acc sub => acc ++ indirectCallFns sub qualPrefix) []
 
 /-- The two transitively-closed sets every profile consumer needs, from one place.
@@ -401,7 +401,7 @@ private partial def effectsForModule
     (m : CModule) (modulePath : String := "") : List FnEffects :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let fns := m.functions.map fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let isEffectOpaque := opaqueSet.contains qualName
     let callees := collectCallsStmts f.body |>.eraseDups
     let allocs := callees.filter isAllocCall
@@ -645,7 +645,7 @@ private partial def collectStackFns
     : List (String × String × Nat × Bool × Option SourceLoc) :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   let fns := m.functions.map fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let frame := computeFrameBytes ctx f
     -- An indirect call contributes no call-graph edge, so the deepest chain through this body
     -- looks like one frame and the report would state a specific byte bound for a function that
@@ -794,7 +794,7 @@ partial def checkPredictableModule
     (m : CModule) (modulePath : String := "") : List ProfileViolation :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let fnViolations := m.functions.foldl (fun acc f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let fnLoc := lookupLoc locMap qualName
     let entry := lookupBody locMap qualName
     let astBody := match entry with | some e => e.body | none => []
@@ -1099,7 +1099,7 @@ private partial def collectProofStatus
     (registry : ProofRegistry := []) : List ProofStatusEntry :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let entries := m.functions.map fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let entry := lookupBody locMap qualName
     let fnLoc := lookupLoc locMap qualName
     let fnSp := entry.map (·.fnSpan)
@@ -5176,7 +5176,7 @@ open Json in
 private partial def collectCapFactsModule (lookup : CapLookup) (assumptions : Assumptions.Table)
     (idx : Std.HashMap String String) (m : CModule) (modulePath : String := "") : List Val :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
-  let fnFacts := m.functions.map fun f => capToFact lookup assumptions idx (qualPrefix ++ "." ++ f.name) f m.linkerAliases
+  let fnFacts := m.functions.map fun f => capToFact lookup assumptions idx (qualPrefix ++ "." ++ f.sourceName) f m.linkerAliases
   let externFacts := m.externFns.map fun (n, _, _, trusted) =>
     -- What CALLING the binding requires: its declared effects, plus Unsafe unless trusted. The
     -- declared effects are an assumption about C (R-0484 R10), never a checked fact.
@@ -5206,7 +5206,7 @@ open Json in
 private partial def collectUnsafeFactsModule (externNames : List String) (m : CModule) (modulePath : String := "") : List Val :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let fnFacts := m.functions.filterMap fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     let hasUnsafe := hasUnsafeCap f.capSet
     let hasRawPtrs := fnUsesRawPtrs f
     let trusted := f.isTrusted
@@ -5260,7 +5260,7 @@ private def allocToFact (qualName : String) (f : CFnDef) : Option Val :=
 open Json in
 private partial def collectAllocFactsModule (m : CModule) (modulePath : String := "") : List Val :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
-  let fnFacts := m.functions.filterMap fun f => allocToFact (qualPrefix ++ "." ++ f.name) f
+  let fnFacts := m.functions.filterMap fun f => allocToFact (qualPrefix ++ "." ++ f.sourceName) f
   fnFacts ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectAllocFactsModule sub qualPrefix) []
 

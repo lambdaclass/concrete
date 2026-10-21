@@ -37,6 +37,19 @@ Found on the way and filed, not fixed here: bug 134, `==` on an enum or struct p
 and fails in `llvm-as` (`icmp eq i64` on an aggregate); pinned in `check_example_outputs.sh` for
 exit 2c.
 
+### Same-Named Types And Functions In Two Modules Are Two Definitions (bugs 096 – 098, 2026-10-21)
+
+Core identified a struct, enum or newtype by its spelling, so two modules' `P` were one type to
+Layout, Mono, Lower, EmitSSA and the interpreter: a module read another module's `P` at the wrong
+offsets (silent wrong code), a module's own enum variant was refused by Resolve, and generic
+destruction of two same-named types was refused (bug 052's E0814/E0815 containment). Elab now
+spells every type by the definition it resolved to, `<defining module path>_<name>` when two
+modules declare the name and the plain name otherwise (`Concrete/Elab/TypeSpelling.lean`), and
+Resolve searches each module's own scope first (bug 096). A function name two top-level modules
+define is spelled `<module>_<name>` in Core, so the interpreter no longer runs another module's
+private function (bug 097) and Mono no longer shares one specialization between two modules'
+generics (bug 098). Each reproducer runs natively and in the interpreter in `run_tests.sh`.
+
 ### Generic Inference Reads One Argument-Type Peek; Generic `&self` Destructors Specialize (bugs 099, 100, 2026-10-21)
 
 Check and Elab each inferred a generic call's type arguments from their own argument-type peek, and

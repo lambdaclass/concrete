@@ -31,7 +31,7 @@ partial def countModuleFns (m : CModule) : Nat :=
 partial def countModulePure (opaqueSet : List String) (qualPfx : String) (m : CModule) : Nat :=
   let qualPrefix := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
   let local_ := (m.functions.filter fun f =>
-    f.capSet == .empty && !opaqueSet.contains (qualPrefix ++ "." ++ f.name)).length
+    f.capSet == .empty && !opaqueSet.contains (qualPrefix ++ "." ++ f.sourceName)).length
   local_ + m.submodules.foldl (fun acc sub => acc + countModulePure opaqueSet qualPrefix sub) 0
 
 partial def countModuleExterns (m : CModule) : Nat :=
@@ -130,8 +130,8 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
     -- The headline conclusion follows the SAME summary the `assumes:` line renders: an
     -- incomplete call graph cannot read `(pure)`, and a complete one that rests on a foreign
     -- binding's honesty claims no capability, not purity (R-0484 R10).
-    let summ := idx.get? (qualPrefix ++ "." ++ f.name) >>= assumptions.fns.get?
-    let unknownFx := opaqueSet.contains (qualPrefix ++ "." ++ f.name) || (summ.map (!·.complete)).getD false
+    let summ := idx.get? (qualPrefix ++ "." ++ f.sourceName) >>= assumptions.fns.get?
+    let unknownFx := opaqueSet.contains (qualPrefix ++ "." ++ f.sourceName) || (summ.map (!·.complete)).getD false
     let capsStr := match summ with
       | some sm => if !unknownFx && f.capSet.isEmpty && !(assumptions.foreignFacts sm).isEmpty
                    then "(no declared capability)"
@@ -139,7 +139,7 @@ partial def capReportModule (opaqueSet : List String) (qualPfx : String)
       | none => ppAuthority f.capSet unknownFx
     let mainLine := s!"{indent}  {pubStr}{f.name} : {capsStr}"
     let traceLines := capWhyTrace lookup f indent assumptions.depCallees m.linkerAliases
-    let qual := assumesLine assumptions idx (qualPrefix ++ "." ++ f.name) f.capSet (indent ++ "      ")
+    let qual := assumesLine assumptions idx (qualPrefix ++ "." ++ f.sourceName) f.capSet (indent ++ "      ")
     acc ++ [mainLine] ++ qual ++ traceLines) []
   let trustedExterns := m.externFns.filter fun (_, _, _, t) => t
   let untrustedExterns := m.externFns.filter fun (_, _, _, t) => !t
@@ -165,8 +165,8 @@ partial def countNoAuthority (assumptions : Assumptions.Table) (idx : Std.HashMa
     (opaqueSet : List String) (qualPfx : String) (m : CModule) : Nat :=
   let qp := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
   let here := (m.functions.filter fun f =>
-    match idx.get? (qp ++ "." ++ f.name) >>= assumptions.fns.get? with
-    | some sm => assumptions.noExternalAuthority sm f.capSet && !opaqueSet.contains (qp ++ "." ++ f.name)
+    match idx.get? (qp ++ "." ++ f.sourceName) >>= assumptions.fns.get? with
+    | some sm => assumptions.noExternalAuthority sm f.capSet && !opaqueSet.contains (qp ++ "." ++ f.sourceName)
     | none => false).length
   here + m.submodules.foldl (fun acc sub => acc + countNoAuthority assumptions idx opaqueSet qp sub) 0
 
@@ -304,7 +304,7 @@ partial def arithRowsForModule (locMap : FnLocMap) (m : CModule)
     (modulePath : String := "") : List ArithFnRow :=
   let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
   let rows : List ArithFnRow := m.functions.map fun f =>
-    let qualName := qualPrefix ++ "." ++ f.name
+    let qualName := qualPrefix ++ "." ++ f.sourceName
     { qualName := qualName, loc := lookupLoc locMap qualName,
       sites := (f.body.map arithSitesS).flatten }
   rows ++ m.submodules.foldl (fun acc sub => acc ++ arithRowsForModule locMap sub qualPrefix) []

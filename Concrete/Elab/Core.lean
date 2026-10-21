@@ -138,12 +138,21 @@ structure CFnDef where
   isTrusted : Bool := false
   isEntryPoint : Bool := false  -- tagged by Elab when name == mainFnName
   trustedImplOrigin : Option String := none  -- "TypeName" if from a trusted impl/trait-impl
+  /-- The declaration's own name when Core spells its symbol differently (bugs 096 - 098:
+      a method of a type two modules declare is `a_P_get`, a function two top-level modules
+      define is `a_h`). `none` when the Core name IS the declaration name. Proof and report
+      identities (`CallableId`, qualified names) are the declaration's; the Core name is
+      only the symbol. Submodule prefixing (`prefixModuleFnNames`) prefixes both. -/
+  declName : Option String := none
   capSet : CapSet := .empty
   -- Source location of the function declaration, carried across the AST→Core
   -- boundary so Core-level diagnostics, the compiler ledger, and audit/obligation
   -- artifacts can point back at source (ROADMAP Phase 4 #13). `none` for synthesized
   -- functions with no source form.
   declSpan : Option Span := none
+
+/-- The declaration name proof and report identities use (see `CFnDef.declName`). -/
+def CFnDef.sourceName (f : CFnDef) : String := f.declName.getD f.name
 
 structure CStructDef where
   name : String

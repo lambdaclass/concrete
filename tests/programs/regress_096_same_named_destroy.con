@@ -1,0 +1,47 @@
+// Bug 096 through Destroy: two modules each declare a private `Tracked` with its own
+// destructor. Core could not tell them apart, so main refused the program (E0814,
+// bug 052 round 3's containment). Each type is now spelled by its defining module.
+// Expected (compiled AND --interp): 102.
+mod a {
+    struct Tracked { cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(self) {
+            let Tracked { cell } = self;
+            *cell = *cell + 1;
+        }
+    }
+    fn kill<T: Destroy>(x: T) with(Alloc) { x.destroy(); }
+    pub fn run(cell: *mut u64) with(Alloc) {
+        let t: Tracked = Tracked { cell: cell };
+        kill(t);
+        let u: Tracked = Tracked { cell: cell };
+        destroy(u);
+    }
+}
+mod c {
+    struct Tracked { pad: i64, cell: *mut u64 }
+    trusted impl Destroy for Tracked {
+        fn destroy(self) {
+            let Tracked { pad, cell } = self;
+            *cell = *cell + 100;
+        }
+    }
+    pub fn run(cell: *mut u64) with(Alloc) {
+        let t: Tracked = Tracked { pad: 5, cell: cell };
+        t.destroy();
+    }
+}
+mod m {
+    import a.{ run as runa };
+    import c.{ run as runc };
+    trusted fn count(p: *mut u64) -> u64 { return *p; }
+    pub fn main() with(Std, Unsafe) -> Int {
+        let mut n: u64 = 0;
+        let cell: *mut u64 = &mut n as *mut u64;
+        runa(cell);
+        runc(cell);
+        print_int(count(cell) as i64);
+        print_char(10);
+        return 0;
+    }
+}

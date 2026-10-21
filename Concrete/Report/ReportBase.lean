@@ -200,7 +200,7 @@ partial def buildQualCapLookupModule (m : CModule) (pfx : String := "")
     : CapLookup :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   let fnEntries := m.functions.map fun f =>
-    (qualPrefix ++ "." ++ f.name, f.capSet)
+    (qualPrefix ++ "." ++ f.sourceName, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
     (n, Capabilities.externFnRequiredCaps trusted ((m.externFnCaps.lookup n).getD .empty))
   fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
@@ -213,7 +213,7 @@ def buildQualCapLookup (modules : List CModule) : CapLookup :=
 partial def buildBareToQualMap (m : CModule) (pfx : String := "")
     : List (String × String) :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
-  let entries := m.functions.map fun f => (f.name, qualPrefix ++ "." ++ f.name)
+  let entries := m.functions.map fun f => (f.name, qualPrefix ++ "." ++ f.sourceName)
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildBareToQualMap sub qualPrefix) []
 

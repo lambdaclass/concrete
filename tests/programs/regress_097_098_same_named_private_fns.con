@@ -1,0 +1,20 @@
+// Bugs 097 and 098: two top-level modules each define a private `h` and a private
+// generic `g`. The interpreter ran a's `h` for c's call (097), and Mono specialized
+// `g<Int>` from whichever module it registered first, natively and in the interpreter
+// (098). On main: compiled 112122, --interp 112112.
+// Expected (compiled AND --interp): 112124.
+mod a {
+    fn h() -> Int { return 11; }
+    fn g<T: Copy>(x: T) -> Int { return 1; }
+    pub fn fa() -> Int { let f: fn() -> Int = h; return f() * 10 + g::<Int>(0) + g(true); }
+}
+mod c {
+    fn h() -> Int { return 12; }
+    fn g<T: Copy>(x: T) -> Int { return 2; }
+    pub fn fc() -> Int { let f: fn() -> Int = h; return f() * 10 + g::<Int>(0) + g(true); }
+}
+mod m {
+    import a.{fa};
+    import c.{fc};
+    pub fn main() with(Std) -> Int { print_int(fa() * 1000 + fc()); print_char(10); return 0; }
+}

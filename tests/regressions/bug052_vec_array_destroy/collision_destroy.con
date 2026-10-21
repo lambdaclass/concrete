@@ -2,9 +2,9 @@
 // (+1) both implement Destroy. Core names types by their bare name, so generic
 // destruction of the NESTED value chose the top-level destructor (Mono preferred
 // the top-level definition; the interpreter keyed impls by bare type name):
-// compiled AND --interp printed 101 instead of 2. Until the defining module
-// survives into Core and runtime values, the ambiguous dispatch is refused:
-// E0814 compiled, a runtime error under --interp — never a guess.
+// compiled AND --interp printed 101 instead of 2. It was then refused (E0814)
+// until bug 096's fix: Core spells each type by its defining module
+// (`m_inner_Tracked`, `m_Tracked`). Expected (compiled AND --interp): 2.
 mod m {
     mod inner {
         pub struct Tracked { cell: *mut u64 }

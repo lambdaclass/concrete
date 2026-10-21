@@ -1,0 +1,16 @@
+// Bug 096: module b imports c's `P { x }` and also declares its own `P { y, z }`; the
+// import binds the name (as Check resolves it), but Core held two `P`s and the binary
+// read the wrong one (exit 0 on main; --interp 7). Expected (compiled AND --interp): 7.
+mod c {
+    pub struct Copy P { pub x: i64 }
+    pub fn mk(v: i64) -> P { return P { x: v }; }
+}
+mod b {
+    import c.{P, mk};
+    struct Copy P { pub y: i64, pub z: i64 }
+    pub fn probe() -> i64 { let p: P = mk(7); return p.x; }
+}
+mod m {
+    import b.{probe};
+    pub fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; }
+}

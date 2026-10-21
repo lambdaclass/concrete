@@ -487,7 +487,10 @@ for cells in irows:
             no(f'bug {n} is listed as not yet accepted but the bug ledger records it fixed; remove it from the table'); ibad2 += 1
 if irows and not ibad2:
     ok(f'{len(irows)} implemented-but-not-accepted rows name {len(seen_bug)} bugs the ledger does not record fixed, each with a branch and a remaining step')
-if irows and not ibad2 and not seen_bug:
+# No bug at all is legitimate only when every row says so explicitly (deliverable rows): a
+# bugs column that parsed as something else would otherwise read as an empty table.
+if irows and not ibad2 and not seen_bug and not all(
+        (c + [''] * len(ihdr))[icol['bugs']] in ('—', '-') for c in irows):
     no('the "Implemented, not yet accepted" table names no bug at all'); ibad2 += 1
 qbad = 0; named = 0
 for order, work in qrows:

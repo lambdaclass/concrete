@@ -185,11 +185,15 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | none => return .placeholder
   | .staticMethodCall _ typeName methodName _ _ =>
     match ← ctx.fnSig (mangledMethodName typeName methodName) with
-    | some sig => return (if sig.typeParams.isEmpty then sig.retTy else .placeholder)
+    | some sig =>
+      return (if sig.typeParams.isEmpty && sig.capParams.isEmpty then sig.retTy else .placeholder)
     | none => return .placeholder
   -- A method's return type at the receiver's type arguments (the impl's parameters are
   -- the receiver type's, substituted, not inferred); a method with its own type
-  -- parameters is generic and not answered.
+  -- parameters is generic and not answered. Capability parameters are read off the
+  -- receiver (`impl<cap C> Sink<C>` at `Sink<Console>`: `C := Console`), as Check's
+  -- `resolveCaps` reads them; one the receiver does not determine (the method's own,
+  -- bound by its arguments) makes the call unanswered.
   | .methodCall _ obj methodName _ _ =>
     let objTy ← peekExprTypeIn ctx obj
     let innerTy0 := match objTy with | .ref t | .refMut t => t | t => t
@@ -210,7 +214,14 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | some sig =>
         let objTypeArgs := match innerTy with | .generic _ targs _ => targs | _ => []
         if sig.typeParams.length != objTypeArgs.length then return .placeholder
-        return ctx.subst (sig.typeParams.zip objTypeArgs) sig.retTy
+        let tyMap := sig.typeParams.zip objTypeArgs
+        let selfPat : Ty := match sig.params.head? with
+          | some (_, .ref t) | some (_, .refMut t) => ctx.subst tyMap t
+          | some (_, t) => ctx.subst tyMap t
+          | none => .placeholder
+        let capBinds := inferCapBindings sig.capParams selfPat innerTy
+        if !(sig.capParams.all fun c => capBinds.any (·.1 == c)) then return .placeholder
+        return substCapNamesTy capBinds (ctx.subst tyMap sig.retTy)
       | none => return .placeholder
   | _ => return .placeholder
 

@@ -239,7 +239,7 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
     traits := m.traits
     constants := m.constants.map fun c => { name := c.name, ty := c.ty, isPublic := c.isPublic }
     typeAliases := m.typeAliases
-    newtypes := m.newtypes
+    newtypes := m.newtypes.map (fun nt => { nt with definedIn := thisDefinitionPath })
     externFns := m.externFns
     externFnSigs := externFnSigs
     implMethodSigs := implMethodSigs

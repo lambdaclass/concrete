@@ -131,6 +131,12 @@ structure ShallowResult where
   traitMethods : List (String × List String)
   traitImpls : List (String × String)
   errors : Diagnostics
+  /-- Bug 096: each top-level module's OWN declarations and imports, searched
+      before `globalScope`. The global scope is every module's declarations in
+      one first-wins map, so `Shape::Line` in a module whose `Shape` has a `Line`
+      variant was refused (E0103) when another module's `Shape`, registered
+      first, had none. -/
+  moduleScopes : List (String × List (String × SymKind)) := []
 
 def ResolveError.code : ResolveError → String
   | .undeclaredVariable _ => "E0100"
@@ -636,7 +642,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   -- Build per-module export tables (public symbols only) from summaryTable
   let fullExportTable := summaryTable.map fun (n, s) => (n, s.publicNames)
   -- Validate imports from summaries and add imported symbols to scope
-  let (importErrors, importedSymbols, importedTypes) := moduleSummaries.foldl (fun (errs, syms, tys) s =>
+  let importsOf := fun (s : FileSummary) => [s].foldl (fun (errs, syms, tys) s =>
     s.imports.foldl (fun (errs, syms, tys) imp =>
       match fullExportTable.find? (fun (n, _) => n == imp.moduleName) with
       | none =>
@@ -697,13 +703,20 @@ def resolveShallow (moduleSummaries : List FileSummary)
         ) (errs, syms, tys)
     ) (errs, syms, tys)
   ) (([] : Diagnostics), ([] : List (String × SymKind)), ([] : List String))
+  let perModule := moduleSummaries.map fun s => (s, importsOf s)
+  let importErrors := perModule.flatMap fun (_, (e, _, _)) => e
+  let importedSymbols := perModule.flatMap fun (_, (_, syms, _)) => syms
+  let importedTypes := perModule.flatMap fun (_, (_, _, tys)) => tys
+  let moduleScopes := perModule.map fun (s, (_, syms, _)) =>
+    (s.name, syms ++ (buildGlobalScopeFromSummary s).1.symbols)
   let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes
   { globalScope := combinedScope
   , knownTypes := combinedTypes
   , traitMethods := traitMethods
   , traitImpls := traitImpls_
-  , errors := importErrors }
+  , errors := importErrors
+  , moduleScopes := moduleScopes }
 
 -- ============================================================
 -- Body-level resolution
@@ -717,7 +730,10 @@ def resolveShallow (moduleSummaries : List FileSummary)
     (ROADMAP Phase 4 #12a.) -/
 def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (List ResolvedModule × Diagnostics) :=
   let (resolved, bodyErrors) := modules.foldl (fun (acc, errs) m =>
-    let (rm, mErrs) := resolveModule m shallow.globalScope shallow.knownTypes shallow.traitMethods shallow.traitImpls
+    let scope := match shallow.moduleScopes.lookup m.name with
+      | some own => Scope.ofSymbols (own ++ shallow.globalScope.symbols)
+      | none => shallow.globalScope
+    let (rm, mErrs) := resolveModule m scope shallow.knownTypes shallow.traitMethods shallow.traitImpls
     (acc ++ [rm], errs ++ mErrs)
   ) ([], [])
   (resolved, shallow.errors ++ bodyErrors)
