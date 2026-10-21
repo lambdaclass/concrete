@@ -123,7 +123,10 @@ fi
 
 # --- scratch copy: tracked + untracked-unignored files, plus the executable ----------------------------
 W="$TMP/repo"; mkdir -p "$W/.lake/build"
-git ls-files -co --exclude-standard -z | (cd "$ROOT_DIR" && xargs -0 tar cf -) | (cd "$W" && tar xf -) \
+# ONE tar reads the whole NUL-separated list (-T -). Through xargs, a list longer than xargs'
+# command buffer (131072 bytes, GNU) became several concatenated archives; the receiving tar stops
+# at the first end-of-archive marker and the next writer died of SIGPIPE.
+git ls-files -co --exclude-standard -z | (cd "$ROOT_DIR" && tar cf - --null -T -) | (cd "$W" && tar xf -) \
   || { no "could not copy the repository"; echo "IDENTITY-ROWS: PASS=$PASS FAIL=$FAIL"; exit 1; }
 # A COPY of the executable, not a link: the compiler finds std relative to `IO.appPath`, so a linked
 # binary would read the ORIGINAL tree's std and the std-edit controls would measure nothing.

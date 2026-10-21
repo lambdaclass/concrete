@@ -38,7 +38,10 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # Scratch copy: tracked + untracked-unignored files, and a COPY of the binary (the compiler finds
 # std relative to `IO.appPath`, so a linked binary would read the original tree's std).
 W="$TMP/repo"; mkdir -p "$W/.lake/build/bin"
-git ls-files -co --exclude-standard -z | xargs -0 tar cf - | (cd "$W" && tar xf -) \
+# ONE tar reads the whole NUL-separated list (-T -). Through xargs, a list longer than xargs'
+# command buffer (131072 bytes, GNU) became several concatenated archives; the receiving tar stops
+# at the first end-of-archive marker and the next writer died of SIGPIPE.
+git ls-files -co --exclude-standard -z | tar cf - --null -T - | (cd "$W" && tar xf -) \
   || { no "could not copy the repository"; echo "IDENTITY-SEPARATION: PASS=$PASS FAIL=$FAIL"; exit 1; }
 WBIN="$W/.lake/build/bin/concrete"
 cp -c "$BIN" "$WBIN" 2>/dev/null || cp "$BIN" "$WBIN"
