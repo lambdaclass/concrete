@@ -1,0 +1,14 @@
+// Bug 096 (Codex round 7): c's W holds `Q`, c's alias of a's P; main imports W (unused)
+// and declares its own Q. W's copy in main follows c's binding, so the copies agree.
+// Expected (compiled AND --interp): 4.
+mod a { pub struct Copy P { pub x: i64 } }
+mod z { pub struct Copy P { pub y: i64 } }
+mod c {
+    import a.{ P as Q };
+    pub struct Copy W { pub q: Q }
+}
+mod main {
+    import c.{ W };
+    struct Copy Q { pub x: i64 }
+    fn main() with(Std) -> Int { let q: Q = Q { x: 4 }; print_int(q.x); print_char(10); return 0; }
+}

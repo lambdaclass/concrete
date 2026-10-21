@@ -3234,7 +3234,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let rn : CoreRename := {
     tyName := fun n => (typeSpellings.lookup n).getD n
     fnName := renameMethod }
-  let respell := !typeSpellings.isEmpty
+  let respell := !typeSpellings.isEmpty || !ambiguousTypes.isEmpty
   let localStructCanon := fun (name : String) =>
     match summary.structs.find? (·.name == name) with
     | some sd => structCanon sd
@@ -3249,9 +3249,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let definerRn : String → CoreRename := fun defIn =>
     if defIn.isEmpty || isOwnDef defIn then rn else
     { rn with tyName := fun n =>
-        if !ambiguousTypes.contains n then rn.tyName n else
+        -- the defining module's binding of the spelling, aliases included (`P as Q`)
         match (defSummary defIn).bind (summaryTypeBinding typeDecls · n summaryTable) with
-        | some (di, dn) => canonTypeName di dn
+        | some (di, dn) => if ambiguousTypes.contains dn then canonTypeName di dn else rn.tyName n
         | none => rn.tyName n }
   let importedStructSrc := imports.structs.filter fun sd => !(localStructNames.contains sd.name)
   let cStructs := if !respell then cStructs ++ cImportedStructs else
@@ -3518,6 +3518,14 @@ def checkRespelledFnNames (cms : List CModule) : Except Diagnostics (List CModul
       message := s!"the module-qualified Core spelling '{n}' of a function or method is already the name of another function; Core cannot tell them apart (bugs 096, 097)"
       hint := some "rename one of the functions or types. Tracking: docs/bugs/097_same_named_private_fns_interp.md" })
 
+/-- Does a type mention a type variable? -/
+partial def tyHasTypeVar : Ty → Bool
+  | .typeVar _ => true
+  | .generic _ args _ => args.any tyHasTypeVar
+  | .ref t | .refMut t | .heap t | .heapArray t | .ptrMut t | .ptrConst t | .array t _ => tyHasTypeVar t
+  | .fn_ ps _ r => ps.any tyHasTypeVar || tyHasTypeVar r
+  | _ => false
+
 mutual
 /-- Bug 096: the (expected, actual, where) type pairs a Core body asserts: each argument of a
     direct call against the callee's parameter, the call's type against its return type, a
@@ -3525,18 +3533,33 @@ mutual
     type. `fns` resolves a callee's definition; generic callees are Mono's business. -/
 partial def coreTyPairsExpr (fns : String → Option CFnDef)
     (field : Ty → String → Option Ty := fun _ _ => none) : CExpr → List (Ty × Ty × String)
-  | .call callee targs args t =>
+  | .call callee _ args t =>
     let inner := args.flatMap (coreTyPairsExpr fns field)
     match callee with
     | .direct n =>
       match fns n with
       | some f =>
-        if f.typeParams.isEmpty && targs.isEmpty && f.params.length == args.length then
-          inner ++ (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'"))
-            ++ [(f.retTy, t, s!"the result of '{n}'")]
+        -- a generic callee is checked at every position its type parameters do not reach
+        let concrete := fun (ty : Ty) => !((tyNamesIn ty).any f.typeParams.contains) && !tyHasTypeVar ty
+        if f.params.length == args.length then
+          inner ++ ((f.params.zip args).filter (fun ((_, pt), _) => concrete pt)).map
+              (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'"))
+            ++ (if concrete f.retTy then [(f.retTy, t, s!"the result of '{n}'")] else [])
         else inner
       | none => inner
     | .indirect _ => inner
+  | .fnRef n t =>
+    match fns n with
+    | some f => if f.typeParams.isEmpty
+        then [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'")] else []
+    | none => []
+  | .ident n t =>
+    -- a global function used as a value (a local of function type is resolved away by the
+    -- caller: `fns` answers only names the body does not bind)
+    match t, fns n with
+    | .fn_ .., some f => if f.typeParams.isEmpty
+        then [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'")] else []
+    | _, _ => []
   | .binOp _ l r _ => coreTyPairsExpr fns field l ++ coreTyPairsExpr fns field r
   | .fieldAccess e f t =>
     coreTyPairsExpr fns field e ++ ((field e.ty f).map (fun ft => [(ft, t, s!"field '{f}'")])).getD []
@@ -3578,6 +3601,37 @@ partial def coreTyPairsStmts (fns : String → Option CFnDef) (field : Ty → St
     | .borrowIn _ _ _ _ _ b => coreTyPairsStmts fns field retTy b
     | _ => []
 end
+
+/-- Every name a function body binds anywhere (parameters, lets, match and borrow binders):
+    an over-approximation of its locals, so a global function value is checked only where no
+    local of that name could be meant. -/
+partial def cfnBoundNames (f : CFnDef) : List String :=
+  f.params.map (·.1) ++ stmts f.body
+where
+  stmts (ss : List CStmt) : List String := ss.flatMap stmt
+  stmt : CStmt → List String
+    | .letDecl n _ _ v => n :: expr v
+    | .assign _ v | .expr v _ | .defer v => expr v
+    | .return_ (some v) _ | .break_ (some v) _ => expr v
+    | .ifElse c t el => expr c ++ stmts t ++ ((el.map stmts).getD [])
+    | .while_ c b _ st => expr c ++ stmts b ++ stmts st
+    | .fieldAssign o _ v | .derefAssign o v => expr o ++ expr v
+    | .arrayIndexAssign a i v => expr a ++ expr i ++ expr v
+    | .borrowIn v rf _ _ _ b => v :: rf :: stmts b
+    | _ => []
+  expr : CExpr → List String
+    | .match_ sc arms _ => expr sc ++ arms.flatMap arm
+    | .ifExpr c t e _ => expr c ++ stmts t ++ stmts e
+    | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => expr l ++ expr r
+    | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => expr e
+    | .call _ _ args _ | .arrayLit args _ => args.flatMap expr
+    | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (expr ·.2)
+    | _ => []
+  arm : CMatchArm → List String
+    | .enumArm _ _ bs g b => bs.map (·.1) ++ ((g.map expr).getD []) ++ stmts b
+    | .varArm n _ g b => n :: ((g.map expr).getD []) ++ stmts b
+    | .litArm v g b => expr v ++ ((g.map expr).getD []) ++ stmts b
+    | .rangeArm lo hi _ g b => expr lo ++ expr hi ++ ((g.map expr).getD []) ++ stmts b
 
 /-- Every function definition of a module tree. -/
 partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
@@ -3632,7 +3686,9 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     | none => none
   let fnsWithStructs := cms.flatMap coreFnsWithStructsDeep
   let callDiags : Diagnostics := fnsWithStructs.flatMap fun (sds, f) =>
-    (coreTyPairsStmts fns (fieldIn sds) (some f.retTy) f.body).filterMap fun (exp, act, whr) =>
+    let bound := cfnBoundNames f
+    let fnsHere : String → Option CFnDef := fun n => if bound.contains n then none else fns n
+    (coreTyPairsStmts fnsHere (fieldIn sds) (some f.retTy) f.body).filterMap fun (exp, act, whr) =>
       if fam exp == fam act then none else
       some (diag s!"in '{f.sourceName}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
   let structs := cms.flatMap coreStructsDeep

@@ -102,9 +102,13 @@ bindings, so every copy agrees with its definition. Because Check compares types
 front-end checks above are not the last word: `checkCoreTypeAgreement` reads the finished Core and
 refuses (E0299) any type position where two same-named types meet: a call argument against the
 callee's parameter (callees resolved through linker aliases too, so `c::read` is checked:
-`error_096_qualified_call_other_type.con`), a call result against the return type, a `let` or
-`return` against its declared type, a field read against the struct's field, and any two copies of
-one struct or enum that disagree (`error_096_alias_signature_other_type.con`). Strict front-end
+`error_096_qualified_call_other_type.con`; a generic callee at every position its type
+parameters do not reach: `error_096_generic_qualified_call_other_type.con`), a call result against
+the return type, a global function taken as a value against its definition
+(`error_096_fn_value_other_type.con`), a `let` or `return` against its declared type, a field read
+against the struct's field, and any two copies of one struct or enum that disagree
+(`error_096_alias_signature_other_type.con`). A copy follows its defining module's binding of each
+spelling, import aliases included (`regress_096_alias_copy_unused.con`). Strict front-end
 refusals fire only when both bindings are known; what the summaries cannot reconstruct is left to
 this backstop rather than refused (`regress_096_sibling_injected_binding.con`).
 

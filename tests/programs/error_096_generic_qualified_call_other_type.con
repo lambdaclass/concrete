@@ -1,0 +1,16 @@
+// Bug 096 (Codex round 7): the qualified call is to a GENERIC callee; its concrete `&P`
+// parameter (c's P) is still checked against main's a's P. Refused (E0299).
+mod a { pub struct Copy P { pub x: i64, pub pad: i64 } }
+mod c {
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub fn read<T: Copy>(p: &P, unused: T) -> i64 { return p.x; }
+}
+mod main {
+    import a.{ P };
+    fn main() with(Std) -> Int {
+        let p: P = P { x: 7, pad: 99 };
+        print_int(c::read(&p, 0));
+        print_char(10);
+        return 0;
+    }
+}
