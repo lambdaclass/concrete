@@ -64,10 +64,17 @@ fi
 # name-keyed provedFunctions table and carried no attribute, so the fixture was outside the manifest.
 # They now live in source: its three declarations enter as subjects, parse_byte and check_length
 # attested under Concrete.Proof.proofFns and validate untabled (it is not claimed).
-if [ "$ROWS" = "89" ] && [ "$MAPPED" = "49" ] && [ "$UNTABLED" = "40" ] && [ "$NOID" = "0" ]; then
-  ok "corpus accounting is exactly rows=89 attested=49 untabled=40 no-identity=0"
+# 89/49/40 -> 105/56/49 ON 2026-10-21 (workload proofs): examples/toml, examples/hexdump and
+# examples/png_chunks gained their first proof links, so all three fixtures enter the manifest with
+# every extracted declaration as a subject (16 rows). Attested +7, each under FnTable.empty:
+# toml_parser.{is_ws,is_newline,is_digit,is_bare_key_char}, hexdump.{gutter_byte,line_len},
+# png_chunks.png_sig_ok. Untabled +9, declarations with no claim: toml_parser.{mk_string_val,
+# mk_int_val,mk_bool_val,mk_array_val,mk_table_val,mk_error_val,is_error,err_result} and
+# png_chunks.is_png_sig.
+if [ "$ROWS" = "105" ] && [ "$MAPPED" = "56" ] && [ "$UNTABLED" = "49" ] && [ "$NOID" = "0" ]; then
+  ok "corpus accounting is exactly rows=105 attested=56 untabled=49 no-identity=0"
 else
-  no "corpus accounting moved: rows=$ROWS attested=$MAPPED untabled=$UNTABLED no-identity=$NOID (was 89/49/40/0) — say which subjects changed and why"
+  no "corpus accounting moved: rows=$ROWS attested=$MAPPED untabled=$UNTABLED no-identity=$NOID (was 105/56/49/0) — say which subjects changed and why"
 fi
 
 # NO SILENT DEFECTS. Each of these has been zero since the collapse was closed; a non-zero value is a
@@ -103,16 +110,17 @@ else
   no "one-to-one broken: $EMPTY_SRCS consuming fixtures, $EMPTY_PKGS package identities — fixtures are collapsing into one package or splitting across several"
 fi
 
-# TODAY'S CORPUS DENOMINATOR, which is a different kind of claim. 10 is what this corpus currently
+# TODAY'S CORPUS DENOMINATOR, which is a different kind of claim. 13 is what this corpus currently
 # contains; it is NOT architectural truth, and it moves whenever a fixture is added or removed. It is
-# pinned so such a move is stated rather than absorbed — not because 10 means anything by itself.
+# pinned so such a move is stated rather than absorbed — not because 13 means anything by itself.
 #
 # (It was 8 in my own earlier note, taken from a map built on the `#[proof_by]` population alone;
 # `evidence_classes/proved_by_lean` and `hmac_sha256` reach this table through IN-REPO theorems.)
-if [ "$EMPTY_PKGS" = "10" ]; then
-  ok "corpus denominator: FnTable.empty is attested to 10 packages (today's measurement, not an invariant)"
+# 10 -> 13 ON 2026-10-21: the toml, hexdump and png_chunks packages (workload proofs, all FnTable.empty).
+if [ "$EMPTY_PKGS" = "13" ]; then
+  ok "corpus denominator: FnTable.empty is attested to 13 packages (today's measurement, not an invariant)"
 else
-  no "FnTable.empty denominator moved to $EMPTY_PKGS (was 10) — say which fixture was added or removed"
+  no "FnTable.empty denominator moved to $EMPTY_PKGS (was 13) — say which fixture was added or removed"
 fi
 
 # RECOMPUTED AGAINST CURRENT FACTS. The manifest is derived, not stored, so its identities are only

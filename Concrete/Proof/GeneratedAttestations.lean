@@ -19,12 +19,26 @@ def empty_1217df44_sha256_init : Except DefinitionIdentityRefusal DefinitionIden
   DefinitionIdentity.of? "1217df442ecef82341d7977b0e0bfd49" "hmac_sha256" "sha256_init" "1cbbcac2dedb20c50ca91b1953ab562f"
 def empty_30eb5d05_scale_by_two : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "30eb5d05d96a3ffd5a9f7725fa5d88bd" "workspace" "scale_by_two" "5dbfd1f078e081530352591407626e2c"
+def empty_4a9be627_gutter_byte : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "4a9be627fad03b01d9849bf089bb1f4b" "hexdump" "gutter_byte" "78b720bc08ed1ff2b1e241a5000ba636"
+def empty_4a9be627_line_len : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "4a9be627fad03b01d9849bf089bb1f4b" "hexdump" "line_len" "b9d9a14eb676fdb152a88d30c5789e21"
 def empty_540f289a_plain : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "540f289aef1e552cbb40645833fc1a1e" "ghost" "plain" "7114bc0f7ce3e447aa9bd74d3e6d4418"
 def empty_540f289a_with_ghost : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "540f289aef1e552cbb40645833fc1a1e" "ghost" "with_ghost" "9fce59fc43e5787ce68c810e409cf38f"
+def empty_655fa6e5_is_bare_key_char : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "655fa6e5ae571d2e5541752f39e7b80f" "toml_parser" "is_bare_key_char" "e093bf13e0af3a655b6b6e9dbcb6d3dc"
+def empty_655fa6e5_is_digit : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "655fa6e5ae571d2e5541752f39e7b80f" "toml_parser" "is_digit" "41a5f3eb7085f8d7178a69f3bdf654a4"
+def empty_655fa6e5_is_newline : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "655fa6e5ae571d2e5541752f39e7b80f" "toml_parser" "is_newline" "6245e7b85653366f3736ad1c414fb7f1"
+def empty_655fa6e5_is_ws : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "655fa6e5ae571d2e5541752f39e7b80f" "toml_parser" "is_ws" "0b6bd910aa3d882bcaeb60133a98d15c"
 def empty_69341bbb_sum4 : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "69341bbba46c9098a928045c4e786448" "fold" "sum4" "6b0b02cd3611f49788a6f88669115d5f"
+def empty_7868370d_png_sig_ok : Except DefinitionIdentityRefusal DefinitionIdentity :=
+  DefinitionIdentity.of? "7868370d4a1323f844a6cdfbc53ebe6b" "png_chunks" "png_sig_ok" "92aa1a74ae3cf8e50f269957000816fc"
 def empty_80b53ab2_partial : Except DefinitionIdentityRefusal DefinitionIdentity :=
   DefinitionIdentity.of? "80b53ab23c73575a465098c7427b5ce8" "states" "partial" "ecd934a117e4376625071651869df4c5"
 def empty_80b53ab2_stale : Except DefinitionIdentityRefusal DefinitionIdentity :=

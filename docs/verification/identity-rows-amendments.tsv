@@ -82,3 +82,41 @@ A	subject	examples/thesis_demo/src/main.con	main	validate	7425f4f6896095e113deb1
 A	link	tests/regressions/bug089_ensures_proof/ens_coverage_only/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
 A	link	tests/regressions/bug089_ensures_proof/ens_missing_with_proof_by/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
 A	link	tests/regressions/bug089_ensures_proof/ens_unrelated_theorem/src/main.con	compute_tag	v2:541394bce99c9dfdf86a776e4e8d2fc5
+# 2026-10-21, workload proofs (branch proof-workloads): examples/toml, examples/hexdump and
+# examples/png_chunks gained their first proof links. Each becomes an attested scope: a link row per
+# claim (7), a generated FnTable.empty reference per claim (7), the scope (3), and every extracted
+# declaration as a subject (16: the 7 claimed, plus toml_parser's 8 unclaimed mk_*/is_error/err_result
+# and png_chunks.is_png_sig, which are untabled). No existing row changed.
+A	link	examples/hexdump/src/main.con	gutter_byte	v2:6b47a1b0e3571b8a7acab1061c589dfd
+A	link	examples/hexdump/src/main.con	line_len	v2:168691431b07dce2cdaf24c83c0e5bef
+A	link	examples/png_chunks/src/main.con	png_sig_ok	v2:560bf1629eeb7e9a0128e38af6e42add
+A	link	examples/toml/src/main.con	is_bare_key_char	v2:141788d5363d9e05c913bdeaccad2322
+A	link	examples/toml/src/main.con	is_digit	v2:c9a897dc9913ee39c2e47addb3fec44d
+A	link	examples/toml/src/main.con	is_newline	v2:81a132378537ccbcfefbc1b271243844
+A	link	examples/toml/src/main.con	is_ws	v2:75ef5af48e40bd4da402285fe89d73c7
+A	reference	empty_@_gutter_byte	examples/hexdump/src/main.con	hexdump	gutter_byte	78b720bc08ed1ff2b1e241a5000ba636
+A	reference	empty_@_is_bare_key_char	examples/toml/src/main.con	toml_parser	is_bare_key_char	e093bf13e0af3a655b6b6e9dbcb6d3dc
+A	reference	empty_@_is_digit	examples/toml/src/main.con	toml_parser	is_digit	41a5f3eb7085f8d7178a69f3bdf654a4
+A	reference	empty_@_is_newline	examples/toml/src/main.con	toml_parser	is_newline	6245e7b85653366f3736ad1c414fb7f1
+A	reference	empty_@_is_ws	examples/toml/src/main.con	toml_parser	is_ws	0b6bd910aa3d882bcaeb60133a98d15c
+A	reference	empty_@_line_len	examples/hexdump/src/main.con	hexdump	line_len	b9d9a14eb676fdb152a88d30c5789e21
+A	reference	empty_@_png_sig_ok	examples/png_chunks/src/main.con	png_chunks	png_sig_ok	92aa1a74ae3cf8e50f269957000816fc
+A	scope	examples/hexdump/src/main.con
+A	scope	examples/png_chunks/src/main.con
+A	scope	examples/toml/src/main.con
+A	subject	examples/hexdump/src/main.con	hexdump	gutter_byte	78b720bc08ed1ff2b1e241a5000ba636	Examples.Hexdump.Proofs.gutter_byte_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/hexdump/src/main.con	hexdump	line_len	b9d9a14eb676fdb152a88d30c5789e21	Examples.Hexdump.Proofs.line_len_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/png_chunks/src/main.con	png_chunks	is_png_sig	bd9fca9339834b52ea54d1b490f2fb31	-	-	-
+A	subject	examples/png_chunks/src/main.con	png_chunks	png_sig_ok	92aa1a74ae3cf8e50f269957000816fc	Examples.PngChunks.Proofs.png_sig_ok_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/toml/src/main.con	toml_parser	err_result	529ffae439ca4257eaf967be280a0056	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	is_bare_key_char	e093bf13e0af3a655b6b6e9dbcb6d3dc	Examples.Toml.Proofs.is_bare_key_char_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/toml/src/main.con	toml_parser	is_digit	41a5f3eb7085f8d7178a69f3bdf654a4	Examples.Toml.Proofs.is_digit_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/toml/src/main.con	toml_parser	is_error	3d2483eb623fa5c26c1ec7ec8d9b0849	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	is_newline	6245e7b85653366f3736ad1c414fb7f1	Examples.Toml.Proofs.is_newline_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/toml/src/main.con	toml_parser	is_ws	0b6bd910aa3d882bcaeb60133a98d15c	Examples.Toml.Proofs.is_ws_correct	Concrete.Proof.FnTable.empty	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_array_val	212bc0f7d0e9c273cc347139ee303650	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_bool_val	f7930c38d514b11710904fc0a57e6bb0	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_error_val	5f4b38b1661baf50fef84dac9af94810	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_int_val	01b92c1252786935f804796a6acd3bda	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_string_val	cd034b129c3291822b2b9af2a729a2ad	-	-	-
+A	subject	examples/toml/src/main.con	toml_parser	mk_table_val	d9e39d7975905d8f510e882c45e41818	-	-	-

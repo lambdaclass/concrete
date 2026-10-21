@@ -68,10 +68,13 @@ link	examples/fixed_capacity/src/main.con	compute_tag	v2:2923eed8bc7393434ff8ca3
 link	examples/fixed_capacity/src/main.con	ring_contains	v2:305c64211d4a71b8871c39c2191bc925
 link	examples/fixed_capacity/src/main.con	ring_new	v2:4e6483db92f2cf315528bb77137df01a
 link	examples/fixed_capacity/src/main.con	ring_push	v2:e9515c6ab114e7506e32fac4fbcefb4b
+link	examples/hexdump/src/main.con	gutter_byte	v2:6b47a1b0e3571b8a7acab1061c589dfd
+link	examples/hexdump/src/main.con	line_len	v2:168691431b07dce2cdaf24c83c0e5bef
 link	examples/loop_invariant/src/main.con	count_up	v2:18c4b47626da9bc746d615ae55bf2032
 link	examples/parse_validate/src/main.con	parse_header	v2:2abe0822f9255597e7a1b3c26317436d
 link	examples/parse_validate/src/main.con	validate_header_fields	v2:9954d5a1222e186d1dedad624d3e4b24
 link	examples/parse_validate/src/main.con	validate_version	v2:88d352fd80f69ad36dff7cddbf7d1b6b
+link	examples/png_chunks/src/main.con	png_sig_ok	v2:560bf1629eeb7e9a0128e38af6e42add
 link	examples/proof_patterns/array_update/src/main.con	put	v2:00223095d6e1b7ce2287fb974e233ddd
 link	examples/proof_patterns/composition/src/main.con	combine	v2:134a0c9894e547e37361be48bb3fd44b
 link	examples/proof_patterns/composition/src/main.con	dbl	v2:8b219bbb41be3e6740707506024a3b26
@@ -95,6 +98,10 @@ link	examples/thesis_demo/src/main.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed
 link	examples/thesis_demo/src/main.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
 link	examples/thesis_demo/src/main_drifted.con	check_length	v2:cc8ef4628dfd8d27e5aaa4fed063919f
 link	examples/thesis_demo/src/main_drifted.con	parse_byte	v2:1c3e21f465653bc6296626b22c6aeedd
+link	examples/toml/src/main.con	is_bare_key_char	v2:141788d5363d9e05c913bdeaccad2322
+link	examples/toml/src/main.con	is_digit	v2:c9a897dc9913ee39c2e47addb3fec44d
+link	examples/toml/src/main.con	is_newline	v2:81a132378537ccbcfefbc1b271243844
+link	examples/toml/src/main.con	is_ws	v2:75ef5af48e40bd4da402285fe89d73c7
 link	std/src/base64.con	char_of	v2:7ee3e9b442c7c72d7bcef43f20564802
 link	std/src/base64.con	val_of	v2:f5d49a083d382998eb015eb63d430a43
 link	std/src/numeric.con	try_from_u32	f87fb5c677827de64b3ead111edf1faf
@@ -168,8 +175,15 @@ reference	empty_@_add_three	examples/proof_patterns/straight_line/src/main.con	s
 reference	empty_@_ch	examples/evidence_classes/proved_by_lean/src/main.con	hmac_sha256	ch	f58b438c3db9c748789c8de68945fdea
 reference	empty_@_ch	examples/hmac_sha256/src/main.con	hmac_sha256	ch	3e315e17b9a1420dc0c9c4988af52511
 reference	empty_@_copy2	examples/proof_patterns/loop_copy/src/main.con	loopcopy	copy2	c8a37b314145120f678fcf80ca1d6d27
+reference	empty_@_gutter_byte	examples/hexdump/src/main.con	hexdump	gutter_byte	78b720bc08ed1ff2b1e241a5000ba636
+reference	empty_@_is_bare_key_char	examples/toml/src/main.con	toml_parser	is_bare_key_char	e093bf13e0af3a655b6b6e9dbcb6d3dc
+reference	empty_@_is_digit	examples/toml/src/main.con	toml_parser	is_digit	41a5f3eb7085f8d7178a69f3bdf654a4
+reference	empty_@_is_newline	examples/toml/src/main.con	toml_parser	is_newline	6245e7b85653366f3736ad1c414fb7f1
+reference	empty_@_is_ws	examples/toml/src/main.con	toml_parser	is_ws	0b6bd910aa3d882bcaeb60133a98d15c
+reference	empty_@_line_len	examples/hexdump/src/main.con	hexdump	line_len	b9d9a14eb676fdb152a88d30c5789e21
 reference	empty_@_partial	examples/proof_patterns/stale_missing_partial/src/main.con	states	partial	ecd934a117e4376625071651869df4c5
 reference	empty_@_plain	examples/proof_patterns/ghost/src/main.con	ghost	plain	7114bc0f7ce3e447aa9bd74d3e6d4418
+reference	empty_@_png_sig_ok	examples/png_chunks/src/main.con	png_chunks	png_sig_ok	92aa1a74ae3cf8e50f269957000816fc
 reference	empty_@_put	examples/proof_patterns/array_update/src/main.con	arr	put	74839d8db744f8ea74fe51737d89c273
 reference	empty_@_scale_by_two	examples/proof_patterns/workspace/src/main.con	workspace	scale_by_two	5dbfd1f078e081530352591407626e2c
 reference	empty_@_sha256_init	examples/hmac_sha256/src/main.con	hmac_sha256	sha256_init	1cbbcac2dedb20c50ca91b1953ab562f
@@ -217,9 +231,11 @@ scope	examples/evidence_classes/partial_contract/src/main.con
 scope	examples/evidence_classes/proved_by_lean/src/main.con
 scope	examples/evidence_classes/stale_proof/src/main.con
 scope	examples/fixed_capacity/src/main.con
+scope	examples/hexdump/src/main.con
 scope	examples/hmac_sha256/src/main.con
 scope	examples/loop_invariant/src/main.con
 scope	examples/parse_validate/src/main.con
+scope	examples/png_chunks/src/main.con
 scope	examples/proof_patterns/array_update/src/main.con
 scope	examples/proof_patterns/composition/src/main.con
 scope	examples/proof_patterns/composition_trusted_helper/src/main.con
@@ -233,6 +249,7 @@ scope	examples/proof_patterns/straight_line/src/main.con
 scope	examples/proof_patterns/workspace/src/main.con
 scope	examples/proof_pressure/src/main.con
 scope	examples/thesis_demo/src/main.con
+scope	examples/toml/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	checkNonceFn	cryptoFns_@_check_nonce	examples/crypto_verify/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	checkNonceFn	cryptoFns_@_check_nonce	examples/proof_pressure/src/main.con
 selection	Concrete/Proof/Proof.lean	cryptoFns	computeTagFn	cryptoFns_@_compute_tag	examples/crypto_verify/src/main.con
@@ -306,6 +323,8 @@ subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_payload_len
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_tag	cf91a78b05bd6b5122cfcf885bc70810	-	-	-
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_total_len	266b488da1cb0e50ae0007d391f67c5f	-	-	-
 subject	examples/fixed_capacity/src/main.con	fixed_capacity	validate_version	4144f657237960a825835689f6ccc7ef	-	-	-
+subject	examples/hexdump/src/main.con	hexdump	gutter_byte	78b720bc08ed1ff2b1e241a5000ba636	Examples.Hexdump.Proofs.gutter_byte_correct	Concrete.Proof.FnTable.empty	-
+subject	examples/hexdump/src/main.con	hexdump	line_len	b9d9a14eb676fdb152a88d30c5789e21	Examples.Hexdump.Proofs.line_len_correct	Concrete.Proof.FnTable.empty	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	abc_block	e8d3ffd648e7974f075c98c5af1f2318	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma0	2fc56fcc1fe1179b08d9634389f4e6da	-	-	-
 subject	examples/hmac_sha256/src/main.con	hmac_sha256	big_sigma1	bf9e5f67627630de3db89a6a505259bb	-	-	-
@@ -339,6 +358,8 @@ subject	examples/parse_validate/src/main.con	parse_validate	validate_msg_type	6c
 subject	examples/parse_validate/src/main.con	parse_validate	validate_payload_len	4c20bb22a0c4d96a48ef4abcc4b0dd0f	-	-	-
 subject	examples/parse_validate/src/main.con	parse_validate	validate_total_len	867ba31c93068cc4a2e4f29d41424155	-	-	-
 subject	examples/parse_validate/src/main.con	parse_validate	validate_version	5eea51e813c69ef88321a943434cf957	Examples.ParseValidate.Proofs.validate_version_correct	Concrete.Proof.parseValidateFns	-
+subject	examples/png_chunks/src/main.con	png_chunks	is_png_sig	bd9fca9339834b52ea54d1b490f2fb31	-	-	-
+subject	examples/png_chunks/src/main.con	png_chunks	png_sig_ok	92aa1a74ae3cf8e50f269957000816fc	Examples.PngChunks.Proofs.png_sig_ok_correct	Concrete.Proof.FnTable.empty	-
 subject	examples/proof_patterns/array_update/src/main.con	arr	put	74839d8db744f8ea74fe51737d89c273	Examples.ProofPatterns.Proofs.put_writes_index_1_frames_rest	Concrete.Proof.FnTable.empty	-
 subject	examples/proof_patterns/composition/src/main.con	calls	combine	75e3325a189ef34014260cc046888b42	Examples.ProofPatterns.Proofs.combine_correct	Examples.ProofPatterns.Proofs.combineFns	-
 subject	examples/proof_patterns/composition/src/main.con	calls	dbl	c3f254410bdebc8d14050f5087629bf0	Examples.ProofPatterns.Proofs.dbl_correct	Examples.ProofPatterns.Proofs.combineFns	-
@@ -366,3 +387,15 @@ subject	examples/proof_pressure/src/main.con	main	validate_header	84329dda14c4d9
 subject	examples/thesis_demo/src/main.con	main	check_length	124a2854cd57d9c4172763074d9843eb	Concrete.Proof.check_length_rejects_short	Concrete.Proof.proofFns	-
 subject	examples/thesis_demo/src/main.con	main	parse_byte	79c5aced1f7a362adbf8860c5a17f403	Concrete.Proof.parse_byte_correct	Concrete.Proof.proofFns	-
 subject	examples/thesis_demo/src/main.con	main	validate	7425f4f6896095e113deb15243234c4e	-	-	-
+subject	examples/toml/src/main.con	toml_parser	err_result	529ffae439ca4257eaf967be280a0056	-	-	-
+subject	examples/toml/src/main.con	toml_parser	is_bare_key_char	e093bf13e0af3a655b6b6e9dbcb6d3dc	Examples.Toml.Proofs.is_bare_key_char_correct	Concrete.Proof.FnTable.empty	-
+subject	examples/toml/src/main.con	toml_parser	is_digit	41a5f3eb7085f8d7178a69f3bdf654a4	Examples.Toml.Proofs.is_digit_correct	Concrete.Proof.FnTable.empty	-
+subject	examples/toml/src/main.con	toml_parser	is_error	3d2483eb623fa5c26c1ec7ec8d9b0849	-	-	-
+subject	examples/toml/src/main.con	toml_parser	is_newline	6245e7b85653366f3736ad1c414fb7f1	Examples.Toml.Proofs.is_newline_correct	Concrete.Proof.FnTable.empty	-
+subject	examples/toml/src/main.con	toml_parser	is_ws	0b6bd910aa3d882bcaeb60133a98d15c	Examples.Toml.Proofs.is_ws_correct	Concrete.Proof.FnTable.empty	-
+subject	examples/toml/src/main.con	toml_parser	mk_array_val	212bc0f7d0e9c273cc347139ee303650	-	-	-
+subject	examples/toml/src/main.con	toml_parser	mk_bool_val	f7930c38d514b11710904fc0a57e6bb0	-	-	-
+subject	examples/toml/src/main.con	toml_parser	mk_error_val	5f4b38b1661baf50fef84dac9af94810	-	-	-
+subject	examples/toml/src/main.con	toml_parser	mk_int_val	01b92c1252786935f804796a6acd3bda	-	-	-
+subject	examples/toml/src/main.con	toml_parser	mk_string_val	cd034b129c3291822b2b9af2a729a2ad	-	-	-
+subject	examples/toml/src/main.con	toml_parser	mk_table_val	d9e39d7975905d8f510e882c45e41818	-	-	-
