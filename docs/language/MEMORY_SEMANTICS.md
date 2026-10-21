@@ -805,10 +805,14 @@ references stores none and is not). `&C` of a constant `C` is a borrow of a non-
 refused exactly like `&42` (REF-5, temporaries); the rewrite is `let c = C; f(&c)`. Indexing a
 constant array (`TABLE[i]`) is a value operation (copy, then index), which the backend may implement
 as a read from read-only data. Status: a constant whose type holds a reference inside an aggregate is
-E0239 on **main**; a bare-reference constant is accepted on both revisions (G1, bug 123); `&C` in a
-function body is refused on **main** only incidentally (E0201, "use of undeclared variable", because
-neither Check nor Lower knows a constant as a local) and compiles to an uninitialized slot on
-`land2-fix` (bug 123). It prevents bug 123, gap G1, the constant half of G12 and the consumer
+E0239 on **main**; a bare-reference constant is accepted on **main** (G1, bug 123) and E0239 on
+`land2-fix`; `&C` in a function body is refused on **main** only incidentally (E0201, "use of
+undeclared variable", because neither Check nor Lower knows a constant as a local), while `&K.v`,
+`&A[i]` and the implicit `&self` of `K.get()` compile on **main** to an uninitialized slot. On
+`land2-fix` (the bug 123 repair) every borrow rooted at a constant is E0238, a constant
+initializer is lowered with the caller's locals hidden and may not borrow (E0602), and a local
+shadows a constant of its name; a constant name defined by two modules is refused at its use
+(E0602, bug 132) until constants carry their module. It prevents bug 123, gap G1, the constant half of G12 and the consumer
 disagreement of bug 117 (constants as places would need a global storage model in Core). Owners:
 exit 0b for bug 123 (reject the declaration with E0239); exit 2i (R-0500) for REF-3 / G1 and REF-5 /
 G12. [VALUE_MODEL.md](VALUE_MODEL.md) records the value category.
@@ -1378,7 +1382,7 @@ manifest row:
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
 | G9 | `&mut` usage modes are inconsistent and partly unspecified: a borrow-block `&mut` is consumed when passed to a call (MUT_REF_SEMANTICS §3) yet may lapse unused; a parameter `&mut` is reborrowed at every call (and may also lapse unused); a `let`-bound `&mut` (`let r: &mut Int = &mut x;`) is linear with no discharging use, since writing through it, passing it to a call, reborrowing it or moving it into another `let` all end in E0208. The 2026-10-21 decision settles the `let`-bound half by refusing it (REF-6 (a)); what remains is design example B1 (one rule for `&mut` arguments; recommended: implicit reborrow for every `&mut` argument) and B2 (an exclusive reference that may lapse unused is not implicit destruction, since it owns nothing, so it is compatible with the no-implicit-destruction stance) | an R-0500 decision under exit 2i with R-0511 (design examples B1, B2 and G1), with the coordinated change to OWNERSHIP_MODEL, this document, MUT_REF_SEMANTICS and VALUE_MODEL; the V1 model may not model a looser rule than the compiler enforces |
 | G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule. Under the 2026-10-21 stance B7 is a relaxation and waits for a workload that needs owner reads under a named shared borrow |
-| G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)` and temporary `&mut self` receivers are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
+| G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted on both revisions (only `&(40 + 2)`, temporary `&mut self` receivers and, the constant half, a borrow rooted at a module constant are refused, on `land2-fix`); the interpreter refuses them, so this is also an interpreter/binary disagreement | R-0500: reject them (E0238), or specify temporaries as anonymous block locals as REF-5@2 |
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
 | G14 | REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; closed by subtraction when REF-6@1 lands (no `let` can receive the copy and no binding can be assigned it), so E0234 needs no cast-aware extension (R-0500) |
 | G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
