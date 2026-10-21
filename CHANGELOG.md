@@ -17,8 +17,8 @@ consuming API that can fail either returns the resource in its error, consumes i
 reason, or only borrows it. Four `close` methods ignored the OS result, so a failed close was
 silent. `fs.File::close`, `io.TextFile::close`, `net.TcpListener::close` and
 `net.TcpStream::close` now return `Result<u64, FsError | IoError | NetError>`. The error carries
-no handle, because `fclose` releases the stream whether or not it fails and a failed `close(2)`
-must not be retried. `FsError` and `NetError` each gain a `CloseFailed` variant. `fs.write_file`
+no handle, because `fclose` releases the stream whether or not it fails and Linux releases the
+descriptor even when `close(2)` fails, so a retry could close someone else's descriptor. `FsError` and `NetError` each gain a `CloseFailed` variant. `fs.write_file`
 and `fs.append_file` now report a failed final `fclose` instead of returning `Ok`.
 `text.AsciiText::try_new` returns the rejected string (`Result<AsciiText, String>`) instead of
 freeing it behind `None`. `Vec::set_unchecked` and `MutSlice::set_unchecked` now require `T: Copy`:

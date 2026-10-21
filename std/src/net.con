@@ -78,12 +78,13 @@ mod net {
         BindFailed,
         ConnectFailed,
         AcceptFailed,
-        /// `close(2)` reported failure. The handle is CONSUMED all the same. On
-        /// the supported hosts (Linux, macOS) a failed `close` has released the
-        /// descriptor, so a retry could close one another handle now owns.
-        /// POSIX.1-2024 lets EINTR leave it open instead, but EINTR needs a signal
-        /// handler installed without SA_RESTART, which std never installs (the
-        /// runtime profile at `std.process.spawn`).
+        /// `close(2)` reported failure. The handle is CONSUMED all the same and
+        /// close is never retried. Linux releases the descriptor before it can
+        /// report any error, EINTR included, so a retry could close a descriptor
+        /// another handle now owns. POSIX.1-2024 instead keeps the descriptor
+        /// open after EINTR; on such a system this choice can leak it. std takes
+        /// the possible leak over the possible close of someone else's descriptor,
+        /// as the Linux close(2) man page recommends.
         CloseFailed,
     }
 

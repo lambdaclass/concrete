@@ -148,8 +148,8 @@ its error type shows which:
 - **Consumed.** The error carries no handle (a `Copy` error enum). The resource
   is gone whether or not the operation succeeded, and the doc comment says why a
   retry is impossible or meaningless. `close` is the usual case: `fclose` releases
-  the stream even when it fails (C11 7.21.5.1), and on the supported hosts a
-  failed `close(2)` has released the descriptor, so it must not be retried.
+  the stream even when it fails (C11 7.21.5.1), and on Linux a failed
+  `close(2)` has already released the descriptor, so it must not be retried.
 - **Retained.** The operation borrows (`&self` / `&mut self`), so after a
   failure the caller still owns the resource. Retained says who owns it, not
   that nothing happened: `write_all` may have sent a prefix and a file `read`
@@ -162,8 +162,8 @@ returns a `Result` and does not discard the OS result. Callers that do not care
 discard it explicitly (`discard(h.close())`), so the choice is visible.
 
 APIs that *replace* a stored value state what happens to the displaced one:
-returned to the caller, or destroyed (only under a `Destroy` bound, which the
-signature shows).
+returned to the caller, handed to a caller-supplied function that owns it from
+then on, or destroyed (only under a `Destroy` bound, which the signature shows).
 
 The normative statement of the rule for the language and the FFI boundary
 belongs to [ERROR_CONVENTIONS.md](../language/ERROR_CONVENTIONS.md) and
@@ -179,13 +179,14 @@ displace a value is listed here (audit 2026-10-21, from
 | `fs.File::close` | `(self) -> Result<u64, FsError>` | **Consumed**: `Err(CloseFailed)`; `fclose` releases the stream either way. *Changed 2026-10-21* (was `()`, failure ignored). |
 | `io.TextFile::close` | `(self) -> Result<u64, IoError>` | **Consumed**: `Err(CloseFailed)`, as above. *Changed 2026-10-21* (was `()`). |
 | `io.Writer<C>::close`, `io.Reader<C>::close` | `(self) -> Result<u64, IoError>` | **Consumed**: `Err(CloseFailed)` for a file sink/source (flush or `fclose` failed); console and fixed-buffer closes cannot fail. |
-| `net.TcpListener::close`, `net.TcpStream::close` | `(self) -> Result<u64, NetError>` | **Consumed**: `Err(CloseFailed)`. On Linux and macOS a failed `close(2)` has released the descriptor, so a retry could close someone else's. POSIX.1-2024 lets `EINTR` leave it open, but that needs a signal handler without `SA_RESTART`, which is outside the supported runtime profile (stated at `std.process.spawn`). *Changed 2026-10-21* (was `()`, failure ignored). |
+| `net.TcpListener::close`, `net.TcpStream::close` | `(self) -> Result<u64, NetError>` | **Consumed**: `Err(CloseFailed)`, never retried. Linux releases the descriptor before reporting any error, `EINTR` included, so a retry could close a descriptor another handle now owns. POSIX.1-2024 keeps the descriptor open after `EINTR`; there this choice can leak it, which std prefers to closing someone else's descriptor. *Changed 2026-10-21* (was `()`, failure ignored). |
 | `process.Child::wait` | `(self) -> Result<ExitStatus, ProcessError>` | **Consumed**: `Err(WaitFailed)`. Within the supported runtime profile it means `ECHILD` (the pid was reaped outside std), where a retry cannot help. Outside the profile (a foreign signal handler without `SA_RESTART`) it can also be `EINTR`, which abandons a live child; telling the two apart needs `errno`, which std does not bind yet. |
 | `bytes.Bytes::to_string` | `(self) -> Option<String>` | **Consumed**: invalid UTF-8 frees the buffer. A caller that needs the bytes afterwards validates without consuming first (`Bytes::range_to_text(&self, ..)`). |
 | `cli.Cli::parse` | `(self, ..) -> CliResult` | **Consumed**: on `Err` the flag declarations are released. The process arguments are fixed, so a retry would fail identically. |
 | `map.HashMap::insert`, `ordered_map.OrderedMap::insert` | `(&mut self, key: K, value: V) -> Option<V>` | **Displaced value returned** (`Some(old)`); the displaced old key is destroyed (`K: Destroy`), the incoming key is stored. |
 | `set.HashSet::insert`, `ordered_set.OrderedSet::insert` | `(&mut self, key: K) -> bool` | **Displaced key destroyed** (`K: Destroy`) and the incoming key stored; `false` reports that the key was already present. |
 | `vec.Vec::replace` | `(&mut self, at, value: T) -> T` | **Displaced value returned.** |
+| `map.HashMap::update`, `ordered_map.OrderedMap::update` | `(&mut self, key: &K, f: fn(V) -> V) -> bool` | **Displaced value handed to `f`**, which owns it and returns the replacement. A missing key returns `false` without calling `f`; nothing changes hands. |
 | `vec.Vec::set`, `slice.MutSlice::set` | `(&mut self, at, value: T) -> bool` | Out of range returns `false`; `T: Copy`, so nothing owned is lost. |
 | `vec.Vec::set_unchecked`, `slice.MutSlice::set_unchecked` | `(&mut self, at, value: T)` | Overwrites without returning or destroying the old element, so it is **`T: Copy` only**. *Changed 2026-10-21*: it accepted any `T` and silently lost a displaced linear element. Linear elements use `Vec::replace`. |
 | `test.assert_*`, `test.expect_sink` | `(.., message: String) -> bool` | **Consumed**: the diagnostic message is consumed on both outcomes; `false` reports a failed assertion, not a failed resource operation. |
