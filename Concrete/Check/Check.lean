@@ -1433,9 +1433,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant bindings guard body => do
+          | .mk _ _armEnum armVariant patBinds guard body => do
             -- Bind variant fields in scope (substitute generic type args)
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
+            -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
+            let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
+              | .ok bs => pure bs
+              | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
             -- the scrutinee's normalization, taken before any binder can shadow its name
@@ -2521,15 +2525,21 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => []
     let mapping := typeParams.zip typeArgs
     let structIsCopy ← isCopyType valTy
+    -- A binder takes the field its label names, or (shorthand) the field of its own name.
+    let fieldKeys := bindings.map PatBind.fieldName
+    match fieldKeys.find? (fun k => (fieldKeys.filter (· == k)).length > 1) with
+    | some k => throwCheck (.patternFieldMismatch s!"struct destructure '{structName}'" s!"pattern binds field '{k}' more than once") (some stmt.getSpan)
+    | none => pure ()
     if !structIsCopy then
       match ← lookupStruct structName with
       | some sd =>
         for sf in sd.fields do
-          if !(bindings.contains sf.name) then
+          if !(fieldKeys.contains sf.name) then
             throwCheck (.missingFieldInLiteral sf.name s!"struct destructure '{structName}'") (some stmt.getSpan)
       | none => pure ()
-    for b in bindings do
-      match ← lookupStructField structName b with
+    for pb in bindings do
+      let b := pb.name
+      match ← lookupStructField structName pb.fieldName with
       | some fieldTy =>
         let bTy ← resolvedOr (substTy mapping fieldTy)
         -- H16 for destructure binders too (bug 094).
@@ -2542,7 +2552,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             "a reference read out of a struct field is not traced; borrow a named place instead") (some stmt.getSpan)
         | _ => pure ()
         addVar b bTy true (declSpan := some stmt.getSpan)
-      | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
+      | none => throwCheck (.structHasNoField structName pb.fieldName) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []
@@ -2831,7 +2841,7 @@ private partial def specBinders : Expr → List String
   | _ => []
 
 private partial def specBindersArm : MatchArm → List String
-  | .mk _ _ _ bs g b => bs ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
+  | .mk _ _ _ bs g b => PatBind.names bs ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .varArm _ n g b => n :: (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .litArm _ v g b => specBinders v ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .rangeArm _ lo hi _ g b =>
@@ -2839,8 +2849,8 @@ private partial def specBindersArm : MatchArm → List String
 
 private partial def specBindersStmt : Stmt → List String
   | .letDecl _ n _ _ v _ => n :: specBinders v
-  | .letDestructure _ _ _ bs v eb => bs ++ specBinders v ++ (eb.map (·.flatMap specBindersStmt)).getD []
-  | .letStructDestructure _ _ bs v => bs ++ specBinders v
+  | .letDestructure _ _ _ bs v eb => PatBind.names bs ++ specBinders v ++ (eb.map (·.flatMap specBindersStmt)).getD []
+  | .letStructDestructure _ _ bs v => PatBind.names bs ++ specBinders v
   | .borrowIn _ _ r _ _ b => r :: b.flatMap specBindersStmt
   | .forLoop _ init c st b _ =>
       (init.map specBindersStmt).getD [] ++ specBinders c

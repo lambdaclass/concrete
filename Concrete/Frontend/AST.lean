@@ -178,6 +178,42 @@ structure Param where
   ty : Ty
   deriving Repr
 
+/-- One binder of a pattern's field list (`Variant { value }`, `Variant { value: inner }`,
+    `let S { a, b: y } = ...`). `field` is the explicit field label when the source wrote
+    `field: name` (exit 2i G4, MEMORY_SEMANTICS §15.4: the renamed pattern binder SCOPE-1 needs
+    for nested `Option`/`Result` patterns); `none` for the shorthand `name`. -/
+structure PatBind where
+  field : Option String := none
+  name : String
+  deriving Repr, BEq, Inhabited
+
+/-- The binder names of a pattern's field list, in source order. -/
+def PatBind.names (bs : List PatBind) : List String := bs.map (·.name)
+
+/-- A shorthand binder (no field label). -/
+def PatBind.short (name : String) : PatBind := { name }
+
+/-- The field a struct-destructure binder takes: its label, or (shorthand) its own name. -/
+def PatBind.fieldName (b : PatBind) : String := b.field.getD b.name
+
+/-- An enum pattern's binders in the variant's FIELD order (exit 2i G4). Without labels the
+    list is positional, as it always was. With any label, every entry names its field (a
+    shorthand `value` names field `value`), each field appears exactly once, and every field
+    is listed (`field: _` ignores a Copy field). Error: a human message. -/
+def PatBind.resolveEnum (fieldNames : List String) (bs : List PatBind) : Except String (List String) :=
+  if bs.all (·.field.isNone) then .ok (PatBind.names bs)
+  else
+    let keys := bs.map PatBind.fieldName
+    match keys.find? (fun k => !fieldNames.contains k) with
+    | some k => .error s!"pattern names field '{k}', which the variant does not have"
+    | none =>
+      match keys.find? (fun k => (keys.filter (· == k)).length > 1) with
+      | some k => .error s!"pattern binds field '{k}' more than once"
+      | none =>
+        match fieldNames.find? (fun f => !keys.contains f) with
+        | some f => .error s!"a labeled pattern must list every field; '{f}' is missing (write `{f}: _` to ignore a Copy field)"
+        | none => .ok (fieldNames.map fun f => ((bs.find? (·.fieldName == f)).map (·.name)).getD "_")
+
 mutual
 inductive Expr where
   | intLit (span : Span) (val : Int)
@@ -212,7 +248,7 @@ inductive Expr where
 -- `guard` is an optional `if <cond>` tested after the pattern matches (and its
 -- bindings are in scope); if it is false, matching falls through to the next arm.
 inductive MatchArm where
-  | mk (span : Span) (enumName : String) (variant : String) (bindings : List String) (guard : Option Expr) (body : List Stmt)
+  | mk (span : Span) (enumName : String) (variant : String) (bindings : List PatBind) (guard : Option Expr) (body : List Stmt)
   | litArm (span : Span) (value : Expr) (guard : Option Expr) (body : List Stmt)           -- literal pattern: 0 [if g] -> ...
   | varArm (span : Span) (binding : String) (guard : Option Expr) (body : List Stmt)        -- variable pattern: n [if g] -> ...
   | rangeArm (span : Span) (lo : Expr) (hi : Expr) (inclusive : Bool) (guard : Option Expr) (body : List Stmt)  -- range: lo..=hi [if g] -> ...
@@ -249,9 +285,9 @@ inductive Stmt where
   | assume_ (span : Span) (cond : Expr)
   | borrowIn (span : Span) (var : String) (ref : String) (region : String) (isMut : Bool) (body : List Stmt)
   -- let...else and irrefutable destructuring let (desugared to match before Elab)
-  | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List String) (value : Expr) (elseBody : Option (List Stmt))
+  | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List PatBind) (value : Expr) (elseBody : Option (List Stmt))
   -- struct destructuring let (desugared to field-access lets before Elab)
-  | letStructDestructure (span : Span) (structName : String) (bindings : List String) (value : Expr)
+  | letStructDestructure (span : Span) (structName : String) (bindings : List PatBind) (value : Expr)
 end
 
 def Expr.getSpan : Expr → Span
@@ -629,7 +665,7 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
     collectFreeVarsExpr scrutinee bound ++
     arms.flatMap (fun arm => match arm with
       | .mk _ _ _ bindings guard body =>
-        let newBound := bound ++ bindings
+        let newBound := bound ++ PatBind.names bindings
         (guard.map (collectFreeVarsExpr · newBound)).getD [] ++ collectFreeVarsStmts body newBound
       | .litArm _ _ guard body =>
         (guard.map (collectFreeVarsExpr · bound)).getD [] ++ collectFreeVarsStmts body bound
@@ -705,9 +741,9 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
         let elseFree := match elseBody with
           | some body => collectFreeVarsStmts body bound
           | none => []
-        (valueFree ++ elseFree, bindings ++ bound)
+        (valueFree ++ elseFree, PatBind.names bindings ++ bound)
       | .letStructDestructure _ _ bindings value =>
-        (collectFreeVarsExpr value bound, bindings ++ bound)
+        (collectFreeVarsExpr value bound, PatBind.names bindings ++ bound)
       | .assert_ _ cond | .assume_ _ cond =>
         (collectFreeVarsExpr cond bound, bound)
     freeVars ++ collectFreeVarsStmts rest newBound

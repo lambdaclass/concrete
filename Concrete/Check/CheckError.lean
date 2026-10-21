@@ -256,6 +256,9 @@ inductive CheckError where
   -- drop the shadowed value (scope exit resolves names, so the older entry's
   -- obligation vanished). Consume the old value first, or use another name.
   | shadowsLiveLinear (name : String)
+  -- Exit 2i G4: a labeled pattern field list (`Variant { value: inner }`) names an unknown
+  -- field, names one twice, or omits one.
+  | patternFieldMismatch (pattern : String) (why : String)
   -- #18 container-not-in-context enforcement: within ONE call's arguments
   -- (including the auto-borrowed method receiver), a variable may be borrowed
   -- at most once when any of its borrows is `&mut` — `f(&mut x, &mut x)` and
@@ -385,6 +388,7 @@ def CheckError.message : CheckError → String
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
+  | .patternFieldMismatch pat why => s!"pattern {pat}: {why}"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
@@ -534,6 +538,7 @@ def CheckError.code : CheckError → String
   | .fieldAccessPrivate _ _ => "E0298"
   | .guardMovesLinear _ => "E0300"
   | .mainHasParams _ => "E0310"
+  | .patternFieldMismatch _ _ => "E0304"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 
