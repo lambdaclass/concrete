@@ -118,6 +118,54 @@ echo "=== 7. legacy --fmt flag still works (golden baselines depend on it) ==="
 cmp -s "$TMP/legacy.txt" "$TMP/file_out.txt" && ok "legacy --fmt output matches 'concrete fmt'" \
                                              || no "legacy --fmt diverged from 'concrete fmt'"
 
+echo "=== 8. float literals round-trip exactly (bug 135) ==="
+# The formatter printed floats with Lean's toString (six decimals): `0.0000000001` became
+# `0.000000`, silently changing the program. Section 6 could not see it: the legacy
+# fingerprint renders floats with the same lossy toString, so both versions fingerprinted alike.
+# The judge here is independent of every compiler printer: the LLVM emitter writes each f64
+# constant as its exact IEEE bits (bug 109), and Python reads the original lexeme. For every
+# float lexeme in the corpus plus a fixed pseudo-random sample across the exponent range
+# (subnormals and the largest finite included), the constants compiled from the source AND
+# from its formatted copy must both equal Python's reading of the lexeme.
+RT="scripts/tests/lib/float_roundtrip.py"
+grep -rhoE '(^|[^0-9A-Za-z_.])[0-9]+[.][0-9]+' --include='*.con' tests examples std \
+  | grep -oE '[0-9]+[.][0-9]+' | sort -u > "$TMP/lexemes.txt" || true
+nlex="$(wc -l < "$TMP/lexemes.txt" | tr -d ' ')"
+if [ "$nlex" -lt 10 ]; then
+  no "corpus float-lexeme scan found only $nlex literals: the scan is broken, the leg would be vacuous"
+elif ! python3 "$RT" gen "$TMP/lexemes.txt" "$TMP/floats.con" "$TMP/want.txt"; then
+  no "float round-trip generator failed"
+else
+  "$C" fmt "$TMP/floats.con" > "$TMP/floats_fmt.con" 2>/dev/null || true
+  "$C" "$TMP/floats.con" --emit-llvm > "$TMP/floats.ll" 2>/dev/null || true
+  "$C" "$TMP/floats_fmt.con" --emit-llvm > "$TMP/floats_fmt.ll" 2>/dev/null || true
+  python3 "$RT" bits "$TMP/floats.ll" > "$TMP/got.txt"
+  python3 "$RT" bits "$TMP/floats_fmt.ll" > "$TMP/got_fmt.txt"
+  nwant="$(wc -l < "$TMP/want.txt" | tr -d ' ')"
+  if [ "$nwant" -le "$nlex" ]; then
+    no "round-trip program holds $nwant literals, not the corpus's $nlex plus the sample"
+  elif ! cmp -s "$TMP/want.txt" "$TMP/got.txt"; then
+    no "the compiler reads $(diff "$TMP/want.txt" "$TMP/got.txt" | grep -c '^>') of $nwant float lexemes differently from Python (lexer, not formatter)"
+  elif cmp -s "$TMP/want.txt" "$TMP/got_fmt.txt"; then
+    ok "all $nwant float literals ($nlex from the corpus) keep their exact value through fmt"
+  else
+    no "fmt changed the value of $(diff "$TMP/want.txt" "$TMP/got_fmt.txt" | grep -c '^>') of $nwant float literals"
+    paste "$TMP/want.txt" "$TMP/got_fmt.txt" | awk '$1 != $2' | head -3 | sed 's/^/      /'
+  fi
+fi
+# The bug's own literals, as text: the shortest round-trip spelling of a literal written that
+# way is the literal itself, so formatting keeps every lexeme of the regression file.
+FL="tests/regressions/fmt_roundtrip/floats.con"
+"$C" fmt "$FL" > "$TMP/fl_fmt.con" 2>/dev/null || true
+# (code lines only: the comment above the code quotes the old lossy output, and fmt drops comments)
+lx_src="$(grep -vE '^[[:space:]]*//' "$FL" | grep -oE '[0-9]+[.][0-9]+' | sort)"
+lx_fmt="$(grep -oE '[0-9]+[.][0-9]+' "$TMP/fl_fmt.con" | sort)"
+if [ -n "$lx_fmt" ] && [ "$lx_src" = "$lx_fmt" ]; then
+  ok "fmt keeps every float lexeme of $FL as written (0.0000000001 stays 0.0000000001)"
+else
+  no "fmt rewrote float lexemes of $FL:"; diff <(echo "$lx_src") <(echo "$lx_fmt") | head -6 | sed 's/^/      /'
+fi
+
 echo ""
 echo "CONCRETE-FMT: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

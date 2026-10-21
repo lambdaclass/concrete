@@ -164,7 +164,7 @@ private def ppSVal : SVal → String
   -- the whole point of the constructor.
   | .fnRef n _ => s!"@{n}"
   | .intConst v _ => toString v
-  | .floatConst v _ => toString v
+  | .floatConst v _ => floatLiteralString v  -- exact (bug 135), not `toString`'s six decimals
   | .boolConst b => if b then "1" else "0"
   | .strConst s => s!"@str.{s.hash}"
   | .strConstRef s => s!"&@str.{s.hash}"

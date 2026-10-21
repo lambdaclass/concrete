@@ -186,6 +186,66 @@ where
     let up := if twice > d then true else if twice < d then false else q % 2 == 1
     if up then q + 1 else q
 
+/-- The one exact printer for a float literal (bug 135): the shortest decimal, in the
+    lexer's own `digits.digits` syntax, that `floatOfDecimalMantissa` reads back to the
+    SAME double (`parse (print x) = x`, bit for bit). It is the inverse of the function
+    above, and every surface that prints a float as source text (the formatter, and the
+    `--emit-core` / `--emit-ssa` printers) uses it instead of `toString`, which keeps six decimals
+    (`0.0000000001` printed as `0.000000`).
+
+    For increasing precision `d` (from the integer part's digit count, negative, upward) it
+    takes `N = round(x · 10^d)` (exact big-`Nat` arithmetic, ties to even) and stops at the
+    first `d` whose `N · 10^(-d)` reads back to `x`. A finite double is `sig · 2^e`, so
+    `d = -e` is always exact: the loop terminates by `d = 1074`. The literal syntax has no
+    exponent and no sign: a negative value (never produced by the lexer) gets a leading `-`, `+Inf` (a literal too large for a double)
+    prints as `1` followed by 309 zeros and `.0`, which reads back as `+Inf`, and NaN,
+    which no literal denotes, prints as `nan`. -/
+def floatLiteralString (x : Float) : String :=
+  let bits := x.toBits
+  let neg := (bits >>> 63) == 1
+  let expBits := ((bits >>> 52) &&& 0x7FF).toNat
+  let frac := (bits &&& 0xFFFFFFFFFFFFF).toNat
+  if expBits == 0x7FF then
+    if frac != 0 then "nan"
+    else (if neg then "-" else "") ++ "1" ++ String.ofList (List.replicate 309 '0') ++ ".0"
+  else
+    -- x = sig · 2^e2, exactly
+    let (sig, e2) : Nat × Int :=
+      if expBits == 0 then (frac, -1074) else (frac + 2^52, (expBits : Int) - 1075)
+    let pos := Float.ofBits (bits &&& 0x7FFFFFFFFFFFFFFF)
+    let sgn := if neg then "-" else ""
+    -- `N · 10^(-d)` as source: `d ≥ 1` fraction digits, or (`d ≤ 0`) `N` followed by `-d`
+    -- zeros and `.0`.
+    let render (n : Nat) (d : Int) : String :=
+      if d ≤ 0 then sgn ++ toString n ++ String.ofList (List.replicate (-d).toNat '0') ++ ".0"
+      else
+        let d := d.toNat
+        let s := toString n
+        let s := if s.length ≤ d then String.ofList (List.replicate (d + 1 - s.length) '0') ++ s else s
+        let k := s.length - d
+        sgn ++ (s.take k).toString ++ "." ++ (s.drop k).toString
+    -- round(sig · 2^e2 · 10^d), exactly, ties to even
+    let scaled (d : Int) : Nat :=
+      let num := sig * (if e2 ≥ 0 then 2 ^ e2.toNat else 1) * (if d ≥ 0 then 10 ^ d.toNat else 1)
+      let den := (if e2 < 0 then 2 ^ (-e2).toNat else 1) * (if d < 0 then 10 ^ (-d).toNat else 1)
+      let q := num / den
+      let r := num % den
+      if 2 * r > den then q + 1 else if 2 * r < den then q else if q % 2 == 1 then q + 1 else q
+    let readsBack (n : Nat) (d : Int) : Bool :=
+      let v := if d ≤ 0 then floatOfDecimalMantissa (n * 10 ^ (-d).toNat) 0
+               else floatOfDecimalMantissa n d.toNat
+      n != 0 && v.toBits == pos.toBits
+    -- Start at the coarsest precision that could hold the integer part (`d = -(digits)`,
+    -- whose `N` is 0 or 1) and refine one digit at a time; the first `d` that reads back
+    -- is the shortest. Exactness is reached by `d = 1074`, so the fuel never runs out.
+    let intDigits : Nat := (toString (scaled 0)).length
+    let rec go (d : Int) (fuel : Nat) : String :=
+      let n := scaled d
+      match fuel with
+      | 0 => render n d
+      | fuel + 1 => if readsBack n d then render n d else go (d + 1) fuel
+    if sig == 0 then sgn ++ "0.0" else go (-(intDigits : Int)) (intDigits + 1100)
+
 /-- Lex a number literal (integer or float), including hex/bin/oct. -/
 partial def lexNumberLoop (s : LexerState) (acc : Nat) : LexerState × TokenKind :=
   -- If acc is 0, check for hex/bin/oct prefix

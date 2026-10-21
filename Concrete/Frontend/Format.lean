@@ -1,4 +1,5 @@
 import Concrete.Frontend.AST
+import Concrete.Frontend.Lexer
 
 namespace Concrete
 
@@ -138,7 +139,8 @@ def escapeCharLit (c : Char) : String :=
 mutual
 partial def fmtExprAt (ind : Nat) : Expr → String
   | .intLit _ val => toString val
-  | .floatLit _ val => toString val
+  -- Bug 135: `toString` kept six decimals, so `fmt` rewrote `0.0000000001` to `0.000000`.
+  | .floatLit _ val => floatLiteralString val
   | .boolLit _ val => if val then "true" else "false"
   | .strLit _ val => s!"\"{escapeStrLit val}\""
   | .charLit _ val => s!"'{escapeCharLit val}'"

@@ -50,7 +50,9 @@ not fixed. Permanent leg: `tests/programs/regress_109_float_literals.con` in `ru
 0.0000000001 keep their value). The interpreter has no floats, so the leg is native-only.
 examples/snippets/floats.con is promoted to `compile` with a `@run` rule.
 
-Not repaired here (same lossy `toString` on `Float`, different consumers): the formatter
+Not repaired here (same lossy `toString` on `Float`, different consumers; the formatter and the
+SSA debug printer were since repaired as [bug 135](135_fmt_float_literals_lossy.md), with the Core
+printer): the formatter
 (`Frontend/Format.lean`, so `concrete fmt` rewrites `0.0000000001` to `0.000000`), the legacy proof
 fingerprint (`ProofCore.fingerprintExpr`, `(float {v})`, where two distinct literals can render
 alike; floats are outside ProvableV1, so it carries no claim today) and the SSA debug printer

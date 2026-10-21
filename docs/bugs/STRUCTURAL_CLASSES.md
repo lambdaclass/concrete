@@ -1,7 +1,7 @@
 # Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
-specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) and 136 – 137 (found fixing 127, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
+specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) and 135 – 137 (135 recorded by 109's fix, 136 – 137 found fixing 127; 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
@@ -44,7 +44,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
-| 12. One fact kept in two places | 042, 057, 064, 070, 108, 109 (float rendering kept in several places), 110 (the element-type hint: Check passes it, Elab did not), 112, 121, 122, 129 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
+| 12. One fact kept in two places | 042, 057, 064, 070, 108, 109 (float rendering kept in several places), 135 (the formatter's copy of that rendering), 110 (the element-type hint: Check passes it, Elab did not), 112, 121, 122, 129 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124, 130, 134, 136 (evaluation-order rule 6: Core cannot bind the base once) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |

@@ -1,0 +1,17 @@
+// Bug 135: `concrete fmt` printed float literals with `toString` (six decimals),
+// so formatting this file rewrote 0.0000000001 to 0.000000 (zero) and
+// 0.123456789 to 0.123457, changing the program. The formatter now prints the
+// shortest decimal that reads back to the same double, so each literal below is
+// kept as written. Exits 42 when every value survived.
+fn main() -> Int {
+    let tiny: f64 = 0.0000000001;
+    let nine: f64 = 0.123456789;
+    let pi: f64 = 3.141592653589793;
+    let big: f64 = 123456789012345680000.0;
+    if tiny == 0.0 { return 1; }
+    if tiny * 10000000000.0 != 1.0 { return 2; }
+    if nine * 1000000000.0 != 123456789.0 { return 3; }
+    if pi < 3.1415926535 || pi > 3.1415926536 { return 4; }
+    if big < 123456789012345000000.0 { return 5; }
+    return 42;
+}

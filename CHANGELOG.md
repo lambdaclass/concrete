@@ -30,6 +30,18 @@ defects, contained by open-bug reproducers for exit 0b: functional update evalua
 per omitted field (bug 136), and enum-variant literal fields run in declaration order in both
 consumers (bug 137).
 
+Bug 135 is fixed: `concrete fmt` no longer changes float literals. It printed them with Lean's
+`toString`, six decimals, so `0.0000000001` became `0.000000` and `0.123456789` became `0.123457`,
+a different program with no diagnostic. The fmt gate's fingerprint comparison did not notice,
+because the legacy fingerprint renders floats the same lossy way. One exact printer,
+`floatLiteralString`, the inverse of the lexer's correctly rounded reader, prints the shortest
+decimal that reads back to the same double; the formatter, `--emit-core` and `--emit-ssa` use it.
+A literal already in its shortest form keeps its spelling; redundant digits are dropped (`1.50`
+prints as `1.5`). `check_concrete_fmt.sh` gains a round-trip leg over every float literal in the
+corpus plus 307 sampled doubles, judged by Python's float reader against the exact constants in the
+LLVM output. The legacy proof fingerprint keeps its lossy float rendering, since changing it would
+move identities; floats carry no proof claims today, and the v2 identity bytes were already exact.
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a

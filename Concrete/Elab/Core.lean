@@ -1,4 +1,5 @@
 import Concrete.Frontend.AST
+import Concrete.Frontend.Lexer
 import Concrete.Proof.SubjectFacts
 import Concrete.Proof.EvidenceTree
 
@@ -407,7 +408,7 @@ mutual
 partial def ppCExpr (e : CExpr) : String :=
   match e with
   | .intLit v _ => toString v
-  | .floatLit v _ => toString v
+  | .floatLit v _ => floatLiteralString v  -- exact (bug 135), not `toString`'s six decimals
   | .boolLit b => toString b
   | .strLit s => s!"\"{s}\""
   | .charLit c => s!"'{c}'"
