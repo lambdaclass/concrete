@@ -52,24 +52,27 @@ private def isPtrLikeTy : Ty → Bool
   | _ => false
 
 /-- Replace an SVal in an instruction (for trivial phi elimination). -/
-private def replaceRegInSVal (v : SVal) (oldReg : String) (replacement : SVal)
-    (keepUseTy : Bool := false) : SVal :=
+private def replaceRegInSVal (v : SVal) (oldReg : String) (replacement : SVal) : SVal :=
   match v with
   | .reg name useTy =>
     if name == oldReg then
-      -- `keepUseTy`: a POINTER register standing for another pointer register keeps the
-      -- type its use site was written with (see `eliminateGepZero`). Only pointer to
-      -- pointer: a GEP may also be based on an aggregate VALUE register, which the
-      -- backend spills by its own (aggregate) type, so that type must survive.
-      match keepUseTy, replacement with
-      | true, .reg r baseTy => if isPtrLikeTy baseTy && isPtrLikeTy useTy then .reg r useTy else replacement
-      | _, _ => replacement
+      -- A POINTER register standing for another pointer register keeps the type its
+      -- use site was written with: the address is the same, the pointee type is the
+      -- use's. GEP-zero elimination substitutes `p` for `gep p, 0` (`&mut p.v`, a
+      -- first field), and identity-cast elimination substitutes an operand whose
+      -- type equals the cast's but not necessarily its uses' (after GEP-zero has
+      -- retyped them); taking the replacement's type made `vec_push` see `&mut P`
+      -- instead of `&mut Vec<i32>` (bug 116). Only pointer to pointer: a GEP may be
+      -- based on an aggregate VALUE register, which the backend spills by its own
+      -- (aggregate) type, so that type must survive.
+      match replacement with
+      | .reg r baseTy => if isPtrLikeTy baseTy && isPtrLikeTy useTy then .reg r useTy else replacement
+      | _ => replacement
     else v
   | other => other
 
-private def replaceRegInInst (inst : SInst) (oldReg : String) (replacement : SVal)
-    (keepUseTy : Bool := false) : SInst :=
-  let r := fun v => replaceRegInSVal v oldReg replacement keepUseTy
+private def replaceRegInInst (inst : SInst) (oldReg : String) (replacement : SVal) : SInst :=
+  let r := fun v => replaceRegInSVal v oldReg replacement
   match inst with
   | .binOp dst op lhs rhs ty => .binOp dst op (r lhs) (r rhs) ty
   | .unaryOp dst op operand ty => .unaryOp dst op (r operand) ty
@@ -91,9 +94,8 @@ private def replaceRegInInst (inst : SInst) (oldReg : String) (replacement : SVa
   | .cast dst val tgt => .cast dst (r val) tgt
   | .memcpy dst src size => .memcpy (r dst) (r src) size
 
-private def replaceRegInTerm (t : STerm) (oldReg : String) (replacement : SVal)
-    (keepUseTy : Bool := false) : STerm :=
-  let r := fun v => replaceRegInSVal v oldReg replacement keepUseTy
+private def replaceRegInTerm (t : STerm) (oldReg : String) (replacement : SVal) : STerm :=
+  let r := fun v => replaceRegInSVal v oldReg replacement
   match t with
   | .ret (some v) => .ret (some (r v))
   | .condBr cond tl el => .condBr (r cond) tl el
@@ -203,7 +205,7 @@ private def termUses : STerm → List String
 
 /-- Apply register replacements across all blocks. -/
 private def applyReplacements (blocks : List SBlock)
-    (replacements : List (String × SVal)) (keepUseTy : Bool := false) : List SBlock :=
+    (replacements : List (String × SVal)) : List SBlock :=
   if replacements.isEmpty then blocks
   else
     -- Build an O(1)-lookup map, fully resolving reg→reg chains (fuel-bounded).
@@ -231,11 +233,11 @@ private def applyReplacements (blocks : List SBlock)
       let insts := insts.map fun inst =>
         (instUses inst).foldl (fun i r =>
           match rmap.get? r with
-          | some v => replaceRegInInst i r v keepUseTy
+          | some v => replaceRegInInst i r v
           | none => i) inst
       let term := (termUses b.term).foldl (fun t r =>
         match rmap.get? r with
-        | some v => replaceRegInTerm t r v keepUseTy
+        | some v => replaceRegInTerm t r v
         | none => t) b.term
       { b with insts := insts, term := term }
 
@@ -648,7 +650,8 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
     The ADDRESS is the identity, not the type: `&mut p.v` for a first field `v` is
     `gep p, 0` typed `&mut Vec<i32>`, and substituting `p` with its own type
     (`&mut P`) made every use see a `P` pointer, so `vec_push` lost its element
-    type and was emitted unspecialized (bug 116). Uses keep their own type. -/
+    type and was emitted unspecialized (bug 116). Uses keep their own type
+    (`replaceRegInSVal`, for every substitution pass). -/
 private def eliminateGepZero (blocks : List SBlock) : List SBlock :=
   let replacements := blocks.foldl (fun acc b =>
     b.insts.foldl (fun acc inst =>
@@ -656,7 +659,7 @@ private def eliminateGepZero (blocks : List SBlock) : List SBlock :=
       | .gep dst base [.intConst 0 _] _ => (dst, base) :: acc
       | _ => acc) acc) []
   if replacements.isEmpty then blocks
-  else applyReplacements blocks replacements (keepUseTy := true)
+  else applyReplacements blocks replacements
 
 -- ============================================================
 -- Pass 7: Store-load forwarding (block-local)

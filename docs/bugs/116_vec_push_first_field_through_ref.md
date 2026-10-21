@@ -51,16 +51,19 @@ the unspecialized name. Any later field is a nonzero GEP, which the pass leaves 
 
 ## Fix
 
-A zero-index GEP is the identity on the ADDRESS, not on the type: `applyReplacements` gained
-`keepUseTy`, and GEP-zero elimination substitutes the base register under the type each use was
-written with, when both are reference/pointer types. A GEP can also be based on an aggregate VALUE
-register (the backend spills it to address it); there the base keeps its own type, which the first
-draft of this fix got wrong (elf_header then failed with `'%t19' defined with type
-'%struct.FixedSinkState' but expected 'ptr'`). The other replacement passes cannot change a use's
-type: identity-cast elimination and store-to-load forwarding substitute only between equal types,
-and redundant-load elimination keys on the loaded type.
+A zero-index GEP is the identity on the ADDRESS, not on the type. Every substitution pass
+(`applyReplacements` -> `replaceRegInSVal`) now keeps the type a use was written with when a
+pointer register replaces a pointer register. The first draft limited that to GEP-zero
+elimination; the Codex review showed that identity-cast elimination, which runs later, undid it:
+`&mut (p as &mut P).v` became `gep q, 0` -> `q` typed `&mut Vec<i32>` -> `p` typed `&mut P`, and
+`@vec_push` came back (the cast's operand and result types are equal; its uses' types need not
+be). A GEP can also be based on an aggregate VALUE register (the backend spills it to address
+it); there the base keeps its own type, which an earlier draft got wrong (elf_header then failed
+with `'%t19' defined with type '%struct.FixedSinkState' but expected 'ptr'`).
 Permanent leg: `tests/programs/regress_116_vec_push_first_field.con` in `run_tests.sh` (run_ok 42:
-pushes to a first-field `Vec<i32>` and a second-field `Vec<u8>` through `&mut P`, reads both back).
+pushes to a first-field `Vec<i32>` through `&mut P` directly and through an identity-cast alias,
+`vec_set` on the first field (specialized from its first argument as well), a second-field
+`Vec<u8>`, each value read back).
 The reproducer exits 1 natively; the interpreter cannot run it (bug 120, field borrow through a
 reference), so the differential half waits on 120.
 

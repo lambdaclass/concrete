@@ -2,7 +2,10 @@
 // lowered to `gep p, 0`, and GEP-zero elimination substituted `p` with its own
 // type (`&mut P`), so the call lost its Vec element type and was emitted as the
 // undefined, unspecialized `@vec_push`. A later field (a nonzero GEP) worked.
-// The first-field Vec is pushed through a reference, read back, and set.
+// Covered: push through the parameter, push through an identity-cast alias of
+// it (identity-cast elimination substitutes after GEP-zero elimination), and
+// `vec_set`, which is specialized from its first argument too; each value is
+// read back.
 struct P {
     v: Vec<i32>,
     w: Vec<u8>,
@@ -10,6 +13,14 @@ struct P {
 
 fn add(p: &mut P, x: i32) with(Alloc) {
     vec_push::<i32>(&mut p.v, x);
+}
+
+fn add_alias(p: &mut P, x: i32) with(Alloc) {
+    vec_push::<i32>(&mut (p as &mut P).v, x);
+}
+
+fn set_first(p: &mut P, x: i32) {
+    vec_set::<i32>(&mut p.v, 0, x);
 }
 
 fn add_byte(p: &mut P, b: u8) with(Alloc) {
@@ -20,13 +31,18 @@ fn main() with(Alloc) -> Int {
     let mut p: P = P { v: vec_new::<i32>(), w: vec_new::<u8>() };
     add(&mut p, 5);
     add(&mut p, 30);
+    add_alias(&mut p, 100);
     add_byte(&mut p, 7);
     let n: Int = vec_len::<i32>(&mut p.v) as Int;
-    let s: Int = (vec_get::<i32>(&p.v, 0) + vec_get::<i32>(&p.v, 1)) as Int;
-    let b: Int = vec_get::<u8>(&p.w, 0) as Int;
+    let mut code: Int = 42;
+    if n != 3 { code = 1; }
+    if vec_get::<i32>(&p.v, 1) != 30 { code = 2; }
+    if vec_get::<i32>(&p.v, 2) != 100 { code = 3; }
+    set_first(&mut p, 9);
+    if vec_get::<i32>(&p.v, 0) != 9 { code = 4; }
+    if vec_get::<u8>(&p.w, 0) != 7 { code = 5; }
     let P { v, w } = p;
     vec_free::<i32>(v);
     vec_free::<u8>(w);
-    // 2 elements, 5 + 30, one byte 7: 2 + 35 + 7 - 2 = 42
-    return n + s + b - 2;
+    return code;
 }
