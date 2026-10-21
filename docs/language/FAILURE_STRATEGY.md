@@ -36,6 +36,31 @@ Concrete uses **abort-only failure**. There is no panic, no stack unwinding, no 
 An explicit error return is ordinary control flow, not unwinding. `defer` runs because the source
 contains a normal `return`; Concrete has no postfix propagation syntax that hides that exit.
 
+### Recoverable versus terminal (normative restatement, decided 2026-10-21)
+
+The table above is the rule, restated as the 2026-10-21 decision adopted it:
+
+- **Terminal failures** abort without unwinding, and no cleanup runs after a terminal trap. A trap
+  inside cleanup is terminal too, and a value is destroyed at most once, so a destructor never runs
+  again after a trap interrupted it. This is the shipped policy (enforced: the trap helpers and
+  `__concrete_check_oom` call libc `abort()`).
+- **Recoverable failures** are values (`Result` / `Option`, [ERROR_CONVENTIONS.md](ERROR_CONVENTIONS.md)
+  bucket 1). Operations an application can reasonably handle get a fallible API: resource
+  acquisition already has one (`read_file` and the open functions return `Result`); a consuming
+  fallible API states what happens to the resource on failure (ERROR_CONVENTIONS, "Ownership on
+  failure in consuming APIs").
+- **Fallible allocation** is the one missing piece: `std` has no `try_alloc`, `try_reserve` or
+  `try_push`, and `__concrete_check_oom` aborts on a null result, so allocation failure is
+  terminal today. It needs an allocator path that can fail without aborting and a decision about
+  which collections offer `try_*` operations. It is a **pull-gated backlog item with no owner yet**,
+  pulled by a workload that needs recovery (RocksDB slice 1 does not); the completed allocator
+  decision (`research/stdlib/allocator-as-value.md`) is design background, not an implementation
+  owner.
+
+Neither half needs implicit destruction or weaker reference rules. The cast decision of the same
+date adds no terminal exit: lossy numeric `as` casts become compile errors, not traps
+(ARITHMETIC_POLICY §8).
+
 ---
 
 ## Failure Taxonomy
@@ -78,6 +103,7 @@ runs.
 | User code | `abort()` intrinsic | User | No (requires Process capability) |
 | Stdlib | Precondition violations in `std.alloc` | Stdlib wrappers | No (requires Alloc) |
 | Checked integer operation | overflow, div/mod zero, invalid shift, `MIN / -1` | compiler-emitted trap helper | Yes unless statically discharged |
+| Float → integer conversion | a value out of the target's range | compiler-emitted trap helper | Yes unless statically discharged |
 | Checked array index | negative or OOB index | compiler-emitted bounds helper | Yes unless statically discharged |
 
 **Abort behavior:**
@@ -256,4 +282,5 @@ Proved functions cannot call extern functions (FFI gate in proof eligibility). T
    and resource assumptions.
 6. **FFI is trust-based**: extern function contracts are not mechanically verified.
 7. **Proved code avoids all failure sources**: by construction (no capabilities, no raw pointers, no allocation).
-8. **Integer overflow and array OOB are known gaps**: documented, not yet mitigated at runtime.
+8. **Integer overflow and array OOB trap at runtime**: every ordinary integer operation is checked in every profile (ARITHMETIC_POLICY §1, since ROADMAP #10 Stage 2.3) and raw indexing is bounds-checked (KNOWN_HOLES H8, closed 2026-06-28); both abort.
+9. **Recoverable versus terminal** (2026-10-21): terminal traps abort with no cleanup; operations applications reasonably handle get fallible APIs; fallible allocation is pull-gated.

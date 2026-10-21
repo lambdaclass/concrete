@@ -102,6 +102,49 @@ distinguish from status codes — do not convert a trap into a status.
    is genuinely needed, add a separate `try_*`/`checked_*` API.
 4. State the classification in the API's doc comment. The audit fixture
    (`examples/error_conventions/`) shows the report-visible form of each bucket.
+5. **Resource on failure** (decided 2026-10-21; next section). For each consuming
+   API that can fail, state what happens to the resource it took when it fails:
+   **returned** (inside the error value), **consumed** (gone, released or not), or
+   **retained** (the operation only borrowed it). For each replacing API, state what
+   happens to the displaced value.
+
+## Ownership on failure in consuming APIs (normative convention, decided 2026-10-21)
+
+**Rule.** Every `std` or foreign-boundary API that takes ownership of a resource (a linear
+handle, a buffer, a key) and can fail declares, in its doc comment and in its classification
+fact, which of three things happens to that resource on failure:
+
+| class | the caller after a failure | example shape |
+|---|---|---|
+| returned | gets the resource back, inside the error value | `fn send(self, m: Msg) -> Result<Unit, SendError<Self>>` |
+| consumed | no longer has it; the API released it or recorded why it could not | `fn close(self) -> Result<Unit, IoError>` |
+| retained | still has it; the API only borrowed it | `fn write(&mut self, b: &Bytes) -> Result<u64, IoError>` |
+
+A *replacing* API (one that puts a value where another was) states what happens to the displaced
+value: returned to the caller, destroyed (which requires a `Destroy` bound), or kept. A failing
+close must be reported: an API that releases an OS resource and can observe a failure returns a
+`Result`, it does not discard it. This is a `std` and foreign-boundary convention plus a checked
+classification column, not a compiler rule: the compiler already guarantees that the resource is
+accounted for exactly once on every path (linearity); the convention says which account the
+caller gets.
+
+**Status on main.** Replacement is explicit and correct: `HashMap.insert` / `OrderedMap.insert`
+require `K: Destroy`, destroy the displaced old key, keep the incoming key and return the old value
+(`std/src/map.con`); `OrderedSet.insert` delegates to it; `Vec.replace(at, v) -> T` returns the
+displaced element. Of the six `close(self)` methods, two return `Result<u64, IoError>` and consume
+the handle on failure (`io.Writer.close`, documented "Consume the handle; flushes/releases the
+sink", and `io.Reader.close`), the consumption on failure stated only implicitly; **four discard
+the OS result**, so a failed close is silent: `fs.File.close` (`fclose`), `io.TextFile.close`
+(`fclose`) and the two `net` closes (`TcpListener.close`, `TcpStream.close`: `close(fd)`). No bug
+record covers them (bug 072, spawn/exec failure flushing parent buffers, is the nearest filed
+failure-path defect). The classification column does not exist yet.
+
+**Work.** Add the column to the `std` fact manifest; document the two `Result` closes as
+"consumed"; change the four silent closes to return a `Result` (an API change that ripples to
+their callers, not yet counted); classify every RocksDB slice-1 handle as it is designed.
+
+**Owners.** R-0285 (RocksDB slice 1 handles), R-0283 (the foreign boundary), the `std` fact
+manifest for the column.
 
 ## The shipped exemplars (the audit fixture)
 
