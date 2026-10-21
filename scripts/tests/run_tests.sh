@@ -7520,6 +7520,10 @@ run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
 # (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
 run_ok "$TESTDIR/regress_109_float_literals.con" 42
+# Bug 110: an array value held as a pointer to its storage was stored as the
+# aggregate (an unhinted `a[i] = [..]` literal coerced by a whole-array cast;
+# an array cast to a raw pointer; a newtype wrap of an array).
+run_ok "$TESTDIR/regress_110_array_value_store.con" 42
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

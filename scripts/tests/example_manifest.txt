@@ -174,7 +174,7 @@ examples/smt/teaching/path_feasibility.con compile-lib
 examples/smt/teaching/range_block_count.con compile-lib
 examples/smt/teaching/unsupported_theory.con compile-lib
 examples/snippets/arithmetic.con compile
-examples/snippets/arrays.con known-bug 110 defined with type 'ptr' but expected '[2 x i64]'
+examples/snippets/arrays.con compile
 examples/snippets/assoc_method.con compile
 examples/snippets/borrow.con compile
 examples/snippets/casts.con compile
@@ -201,7 +201,7 @@ examples/snippets/generic_enum_impl.con compile
 examples/snippets/generic_struct.con compile
 examples/snippets/generics_basic.con compile
 examples/snippets/hello_world.con compile
-examples/snippets/hello_world_array.con known-bug 110 defined with type 'ptr' but expected '[13 x i8]'
+examples/snippets/hello_world_array.con compile
 examples/snippets/hello_world_hacky.con compile
 examples/snippets/if_else.con compile
 examples/snippets/if_if_false.con compile
@@ -327,6 +327,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/smt/policy_assumptions_missing/src/main.con policy_assumptions_missing exit=6 ret=6 interp=yes stdout=empty
 @run examples/smt/policy_forbid/src/main.con policy_forbid exit=6 ret=6 interp=yes stdout=empty
 @run examples/snippets/arithmetic.con arithmetic exit=105 ret=103300713 interp=yes stdout=empty
+@run examples/snippets/arrays.con arrays exit=5 ret=5 interp=yes stdout=empty
 @run examples/snippets/assoc_method.con assoc_method exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/borrow.con borrow exit=6 ret=6 interp=yes stdout=empty
 @run examples/snippets/casts.con casts exit=2 ret=2 interp=yes stdout=empty
@@ -351,6 +352,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/generic_struct.con generic_struct exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/generics_basic.con generics_basic exit=4 ret=4 interp=yes stdout=empty
 @run examples/snippets/hello_world.con hello_world exit=0 interp=fails:field~access~on~non
+@run examples/snippets/hello_world_array.con hello_world_array exit=0 interp=fails:unsupported~cast
 @run examples/snippets/hello_world_hacky.con hello_world_hacky exit=0 interp=fails:undefined~function~'malloc'
 @run examples/snippets/if_else.con if_else exit=59 ret=59 interp=yes stdout=empty
 @run examples/snippets/if_if_false.con if_if_false exit=7 ret=7 interp=yes stdout=empty

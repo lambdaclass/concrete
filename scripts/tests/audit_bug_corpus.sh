@@ -72,6 +72,8 @@ declare -A BUG_TEST_MAP=(
   [108]="regress_108_bool_cast_widen.con error_108_int_as_bool.con"
   # Bug 109: float constants printed with six decimals (f32 invalid IR, f64 wrong value).
   [109]="regress_109_float_literals.con"
+  # Bug 110: an array SSA value (a pointer) stored as if it were the aggregate.
+  [110]="regress_110_array_value_store.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
   # Bug 121: enum LLVM types disagreed with tySize/tyAlign, so an enum field moved the
   # fields after it on aggregate copies (conlog SIGSEGV). Class leg: check_enum_union_layout.sh leg 5.
@@ -135,7 +137,6 @@ declare -A SKIP_BUGS=(
   [101]="FIXED 2026-10-19 -- a branch- or body-local let was nested over the code after its scope in the proof model (scoped(1): model 10, runtime 1); branches composing with a continuation refuse when their locals reach it. Regression vehicle: tests/regressions/bug085_loop_step/repro.con scoped/reloop + check_model_diff.sh leg S"
   [102]="OPEN -- &mut x as *mut *mut T on a pointer-typed local passes x's value, not its address (silent wrong code; the interpreter refuses the cast). Found by the RocksDB slice 1 groundwork. Regression vehicle lands with the fix under queue exit 0b: the docs/bugs/102 program as a permanent fixture, plus interpreter support for the cast so differential gates cover it"
   [103]="OPEN -- Mono drop glue synthesizes an empty definition for any unresolved callee ending in _destroy, so an extern fn foo_destroy never reaches the C library (silent leak). Found by the RocksDB slice 1 groundwork. Regression vehicle lands with the fix under queue exit 0b: the docs/bugs/103 program checked by --emit-llvm (extern stays a declare) and a linked C stub counting the call; check_rocksdb_slice1.sh also fails on it"
-  [110]="OPEN -- an array value is stored as an aggregate where the SSA value is a pointer; reproducer tests/regressions/bug110_array_value_store/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [111]="OPEN -- main may declare parameters, and the wrapper calls it with none; reproducer tests/regressions/bug111_main_params_accepted/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [112]="OPEN -- the declaration std.mem uses for sizeof is rejected (E0116 at 0:0) outside std; reproducer tests/regressions/bug112_user_intrinsic_e0116/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [113]="OPEN -- R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules; reproducer tests/regressions/bug113_submodule_extern_effects_unchecked/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"

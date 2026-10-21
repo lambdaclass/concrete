@@ -380,8 +380,6 @@ open_bug_reproducers() {
       *) no "$label: unknown mode '$mode'" ;;
     esac
   done <<'TABLE'
-110|bug110_array_value_store/repro.con|compile-fails|defined with type 'ptr' but expected '[2 x i64]'
-110|bug110_array_value_store/repro_cast.con|compile-fails|defined with type 'ptr' but expected '[3 x i8]'
 111|bug111_main_params_accepted/repro.con|compiles|
 112|bug112_user_intrinsic_e0116/repro.con|compile-fails|(E0116) foreign binding 'sizeof' does not declare its effects
 113|bug113_submodule_extern_effects_unchecked/repro.con|compiles|

@@ -1027,6 +1027,16 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       | .ptr =>
         emitStructured s (.gep dst .i8 valOp [(.i32, .intLit 0)])
       | .struct_ _ | .array _ _ | .enum_ _ =>
+        if isKnownPtr s val then
+          -- The aggregate is held by a pointer to its storage (bug 110): storing the
+          -- pointer as the aggregate is invalid IR. Copy the storage into a fresh
+          -- slot (the value semantics of the store path) and yield its address.
+          let (s, tmp) := freshLocal s
+          let tmpName := (tmp.drop 1).toString
+          let s := emitAllocaTy s tmpName targetTy srcLLTy
+          let s := emitStructured s (.memcpy (.reg tmpName) valOp (ssaTySize s srcTy))
+          markPtr (emitStructured s (.gep dst .i8 (.reg tmpName) [(.i32, .intLit 0)])) dst
+        else
         let (s, tmp) := freshLocal s
         let tmpName := (tmp.drop 1).toString
         let s := emitAllocaTy s tmpName targetTy srcLLTy
@@ -1044,7 +1054,13 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         emitStructured s (.cast dst .ptrtoint .ptr valOp dstLLTy)
       else
         -- non-ptr → ptr: use inttoptr for ints, alloca+store for structs
-        if ssaIsPassByPtr s srcTy then
+        if ssaIsPassByPtr s srcTy && isKnownPtr s val then
+          -- An aggregate held by a pointer to its storage (an array local or
+          -- literal): the address IS the operand (bug 110: `x as *mut u8` stored
+          -- the pointer into a slot typed as the array).
+          let s := emitStructured s (.gep dst .i8 valOp [(.i32, .intLit 0)])
+          markPtr s dst
+        else if ssaIsPassByPtr s srcTy then
           let (s, tmp) := freshLocal s
           let tmpName := (tmp.drop 1).toString
           let s := emitAllocaTy s tmpName srcTy srcLLTy

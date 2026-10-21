@@ -1,6 +1,6 @@
 # Bug 110 — an array value is stored as an aggregate where the SSA value is a pointer
 
-**Status:** OPEN
+**Status:** FIXED (branch `backend-108-116`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.
 
@@ -31,14 +31,46 @@ Store the aggregate (load it first, or memcpy from the pointer).
 
 examples/snippets/arrays.con and examples/snippets/hello_world_array.con, manifest `known-bug 110`.
 
+## Cause
+
+The two shapes have different roots, and the fix found a third shape of the second.
+
+1. `a[1] = [3, 4]`: `Elab` elaborated the right-hand side of an array-element assignment with no
+   type hint (`Concrete/Elab/Elab.lean`, `.arrayIndexAssign`), unlike a field or deref assignment and
+   unlike `Check`, which passes the element type. The literal became `[Int; 2]`, and `Lower`'s
+   `storeToPlace` coerced it to `[i32; 2]` with a whole-array `cast`. EmitSSA's fallback for a cast
+   between different aggregate types stores the operand into a slot of the source type and reloads
+   it as the target: invalid IR here because the array operand is a pointer, and a byte
+   reinterpretation (3, 0 rather than 3, 4) had it been accepted.
+2. `x as *mut u8`: EmitSSA's aggregate-to-pointer cast spilled the operand into a fresh slot with
+   `store [3 x i8] %x`, but an array SSA value is the pointer to its storage (`isKnownPtr`). The
+   same assumption sat in the same-LLVM-type aggregate cast, reached by a newtype wrap of an array
+   (`Buf(x)` for `newtype Buf = [i32; 3]`), which failed the same way.
+
+## Fix
+
+`Elab` hints the assigned value with the element type, resolved through one ref/ptr/heap layer as
+for `.arrayIndex` reads, so no whole-array cast is generated for the assignment. In EmitSSA's
+`.cast`, an aggregate operand that is a known pointer is not stored as an aggregate: a cast to a
+pointer yields the storage address, and a same-LLVM-type rebrand copies the storage (`memcpy`)
+into a fresh slot, keeping the copy semantics of the old path. Probed alongside: returns, call
+arguments, struct literal fields, whole-array assignment, `if`-expression arms and `*r = [..]` are
+all hinted already. Permanent leg: `tests/programs/regress_110_array_value_store.con` in
+`run_tests.sh` (run_ok 42: both elements of the assigned row, the same through `&mut`, a `u8`
+row, a pointer read through `x as *mut u8` in main and in a callee, and a newtype wrap). The
+reproducer `repro.con` exits 3 natively and under `--interp`; the cast shapes are native-only (the
+interpreter refuses them: "unsupported cast"). examples/snippets/arrays.con and
+hello_world_array.con are promoted to `compile` with `@run` rules.
+
+Not repaired: EmitSSA's fallback for a cast between two different aggregate types still
+reinterprets bytes. Nothing on the checked surface produces one after this fix (CoreCheck admits no
+user cast between distinct array types), but a future Lower coercion of an aggregate would reach it.
+
 ## Structural cause
 
-Lower decides ad hoc whether an array value is an SSA aggregate or a pointer to storage, and the store it emits assumes the other one. This is storage and places decided per construct in Lower ([structural class](STRUCTURAL_CLASSES.md) 8, with 078, 095, 102, 105).
+Lower decides ad hoc whether an array value is an SSA aggregate or a pointer to storage, and the store it emits assumes the other one. This is storage and places decided per construct in Lower ([structural class](STRUCTURAL_CLASSES.md) 8, with 078, 095, 102, 105). Confirmed on the fix: the emitter learns whether an aggregate is a value or a pointer from a by-name register set (`ptrRegs`), and each cast branch had to remember to ask. Shape 1 adds class 12: the element-type hint for an element assignment was computed by `Check` and not by `Elab`, the elaborator that decides the literal's type.
 
 ## Structural owner
 
 R-0501 (S10 Place MIR: every aggregate has one storage representation and stores go through places), with R-0504 (S12 validators).
 
-## Containment while open
-
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.

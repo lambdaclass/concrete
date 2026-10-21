@@ -1976,7 +1976,17 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     let cArr := cArrEv.core
     let cIdxEv ← elabExprEv index (some .int)
     let cIdx := cIdxEv.core
-    let cValEv ← elabExprEv value
+    -- The element type is the value's hint, as for a field assignment (bug 110): unhinted,
+    -- `a[1] = [3, 4]` on `[[i32; 2]; 2]` elaborated the literal as `[Int; 2]`, and Lower
+    -- then "coerced" the whole array with a cast the backend cannot express. Resolved
+    -- through one ref/ptr/heap layer, like `.arrayIndex`.
+    let elemTy? : Option Ty := match cArr.ty with
+      | .array t _ => some t
+      | .ref (.array t _) | .refMut (.array t _)
+      | .ptrConst (.array t _) | .ptrMut (.array t _)
+      | .heap (.array t _) => some t
+      | _ => none
+    let cValEv ← elabExprEv value elemTy?
     let cVal := cValEv.core
     return ElaboratedStmtV2.mk [.arrayIndexAssign cArr cIdx cVal]
       (Proof.EvidenceStmtV2.assign (Proof.evIndex cArrEv.evidence cIdxEv.evidence) cValEv.evidence)
