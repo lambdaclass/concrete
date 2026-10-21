@@ -154,9 +154,9 @@ refused). The meaning the repair must implement was decided on 2026-10-21 as the
 ([MEMORY_SEMANTICS §5](../language/MEMORY_SEMANTICS.md), "Field access through a reference or a
 heap shell"): `&h` and `&mut h` denote the slot `h`, and `e.f` with `e : &mut Heap<S>`
 dereferences the reference to the slot and then the heap pointer the slot holds. The interim
-repair makes Elab's heap-shell desugar follow that rule (two dereferences for `&Heap<S>` and
-`&mut Heap<S>`), keeps the heap-pointer representation of `&h` only where it is shown equivalent
-to passing the slot, and adds a run fixture for both the write and the read.
+repair (the Fix section) makes Elab's heap-shell desugar follow that rule (two dereferences for
+`&Heap<S>` and `&mut Heap<S>`) and gives every `&h` / `&mut h` the slot: it keeps no cheaper
+heap-pointer representation of `&h`, since none is shown equivalent to passing the slot.
 
 ## Containment while open
 

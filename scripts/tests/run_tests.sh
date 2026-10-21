@@ -1555,7 +1555,9 @@ run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 63
 # Two distinct zero-sized places may share an address natively; the interpreter refuses to
 # compare them rather than answer from paths (Codex review of bug 102).
 run_ok  "$TESTDIR/regress_102_zero_sized_ptr_eq.con" 1
-if $COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 | grep -qF "distinct zero-sized places is not modelled"; then
+run_ok  "$TESTDIR/regress_102_ptr_eq_through_raw_base.con" 3
+r102_z=$($COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 || true)
+if grep -qF "distinct zero-sized places is not modelled" <<< "$r102_z"; then
     echo "  ok  regress_102_zero_sized_ptr_eq: --interp refuses the comparison"
     PASS=$((PASS + 1))
 else
@@ -1571,7 +1573,7 @@ run_err "$TESTDIR/error_115_vec_get_generic_unbounded.con"  "(E0290)"
 run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
 # Bugs 102 and 105: the interpreter agrees with the binary (102 needed pointer equality on
 # reference paths in the interpreter; 105's reproducer runs in both).
-for r102 in regress_102_pointer_local_address regress_105_ref_valued_branch_generic; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""

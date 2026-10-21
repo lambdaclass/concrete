@@ -1,0 +1,15 @@
+// Bug 102's interpreter half (Codex round 2): `&p[0]` through a raw pointer `p` to an
+// array and `&a[0]` are one address. The interpreter rooted the first path at `p`'s own
+// binding and answered 0; a raw-pointer projection base now forwards the place it points
+// at, as a reference base does. Expected 3 natively and under --interp.
+trusted fn main() -> Int {
+    let a: [u8; 2] = [7, 8];
+    let p: *const [u8; 2] = &a as *const [u8; 2];
+    let q: *const u8 = &p[0] as *const u8;
+    let r: *const u8 = &a[0] as *const u8;
+    let s: *const u8 = &a[1] as *const u8;
+    let mut out: Int = 0;
+    if q == r { out = out + 1; }
+    if q != s { out = out + 2; }
+    return out;
+}

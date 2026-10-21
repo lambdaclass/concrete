@@ -56,14 +56,17 @@ The interpreter compares pointers: two reference paths are equal when they name 
 the null pointer `0 as *mut T`, and any other mix of a path and an integer address, or an ordering
 comparison, is a clear `interp:` error rather than a guess (`evalPtrCompare`). Two distinct places
 holding a zero-sized value may share one address natively (the elements of `[Z; 2]` for a
-field-less `Z`), so comparing them is refused too (Codex review).
+field-less `Z`), so comparing them is refused too, as is a comparison of a path that names no place; a projection
+through a raw-pointer base (`&p[0]` with `p: *const [u8; 2]`) forwards the place the pointer names,
+as a reference base does, so it and `&a[0]` compare equal (Codex review).
 
 Permanent legs: `tests/programs/regress_102_pointer_local_address.con` in `run_tests.sh` (run_ok
 63: the reproducer's out-slot, a write back through the re-pointed local, the address taken in a
 loop body, in a loop condition, in one branch only, and a shared borrow read through `*const *mut
 u8`; the pre-fix
 binary traps, exit 133), and the `--interp == binary` leg on the same program, so the differential
-covers the cast; `regress_102_zero_sized_ptr_eq.con` (native 1, `--interp` refuses). The open-bug reproducer row is not needed: the record had none (the RocksDB
+covers the cast; `regress_102_zero_sized_ptr_eq.con` (native 1, `--interp` refuses) and
+`regress_102_ptr_eq_through_raw_base.con` (3, `--interp == binary`). The open-bug reproducer row is not needed: the record had none (the RocksDB
 groundwork pinned it in prose). The RocksDB binding's heap out-slot can now be a stack slot; the
 workaround stays until the binding is rebuilt against a RocksDB install (ROCKSDB_SLICE1.md G2).
 

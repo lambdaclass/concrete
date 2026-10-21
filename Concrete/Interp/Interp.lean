@@ -448,6 +448,15 @@ def evalPtrCompare (env : Env) (op : BinOp) (lhs rhs : IVal) : Option (Except St
         | .ok pv => isZeroSizedVal pv
         | .error _ => false
       | none => false
+    -- Both paths must name a live place: a path that does not resolve (rooted at a binding
+    -- that does not hold what its steps expect) says nothing about the address.
+    let resolves (r : RefPath) : Bool :=
+      match envGet (envViewAtFrame env r.frame) r.base with
+      | some v => match lookupAt v r.steps with | .ok _ => true | .error _ => false
+      | none => false
+    if !(resolves p && resolves q) then
+      some (.error "interp: pointer comparison of a path that names no place is not modelled; run the compiled binary")
+    else
     match placeIdentity env p, placeIdentity env q with
     | some a, some b =>
       if a == b then result true
@@ -566,7 +575,10 @@ mutual
 partial def evalProjectionBase (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (obj : CExpr)
     (isMut : Bool) : Except String (Env × RefPath) := do
   match obj.ty with
-  | .ref _ | .refMut _ =>
+  -- A raw pointer base auto-derefs the same way (`p[0]` with `p: *const [u8; 1]`): its
+  -- path is the place it points at. Rooting the projection at the pointer's own binding
+  -- gave `&p[0]` and `&a[0]` different paths for one address (Codex review of bug 102).
+  | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ =>
     let (env, v) ← evalExprVal fns enums env obj
     match v with
     | .ref p => return (env, { p with isMut := p.isMut || isMut })
