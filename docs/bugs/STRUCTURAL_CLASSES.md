@@ -3,7 +3,11 @@
 Status: reference (2026-10-20). Bugs 108 – 120 (the examples-health pass) are placed in the summary table
 from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
-or adds one.
+or adds one. Since 2026-10-21 the roadmap's defect disposition rule
+([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
+(memory safety, wrong code, false proofs) are stopped at once by repair or fail-closed containment;
+loud defects are filed with the class owner below, pinned, and removed when that owner's structural fix
+lands; and repair effort is charged to the capacity track of the defect's exit under that rule.
 
 A bug fix repairs one spelling of a defect. This file asks the other question: which design fact let
 the defect exist, which other bugs share it, and which roadmap task removes it for the whole class.

@@ -51,7 +51,8 @@ parts:
 `Structural cause` and `Structural owner` are required for every bug numbered 102 or higher
 (`scripts/tests/check_bug_filing_complete.sh` fails without them). The classes found so far, with
 their owners, are in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md); a new bug either joins a class
-there or adds one.
+there or adds one. Whether a new bug is repaired now or contained until its owner lands follows the
+roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-current-execution-queue)).
 
 ## Fixed Bugs
 

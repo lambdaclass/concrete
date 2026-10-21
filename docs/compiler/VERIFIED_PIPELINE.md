@@ -320,11 +320,12 @@ contracts are fixed at this boundary (S7 with R-0502).
   admitted subset, basic capability containment, every used pass or validator, and transport of one
   nontrivial Core claim; re-check the proof closure with con-leche and nanoda and bind it to the exact
   retained artifacts. Fuel-bounded evaluation never stands in for a termination proof.
-- **Frontend assurance.** Early backend releases explicitly begin at retained `CheckedCore`. In
+- **V1c: frontend assurance.** Early backend releases explicitly begin at retained `CheckedCore`. In
   parallel, the restricted surface syntax, resolution and elaboration judgments are specified
   independently of their implementations; before V1 is called source-to-native verified, successful
   parsing, resolution, desugaring and elaboration are proved to implement them, or proved certificate
-  checkers cover those boundaries. The first theorem may cover a single source unit with fixed imports;
+  checkers cover those boundaries; V1b and V1c together are the first source-to-native theorem, and a
+  Core-to-native theorem alone is never described as one. The first theorem may cover a single source unit with fixed imports;
   later slices extend it to package resolution and exact import roots. Each admitted surface extension
   carries its frontend obligation. Retained-Core inspection and differential testing are transitional
   aids, not correspondence proofs.
@@ -368,7 +369,10 @@ name-keyed lookup grants current authority.
 **The shared front end is whole-language early (queue row 4, R-0514).** Core, its identities and its
 checker are shared by both profiles; only lowering differs. So the authoritative checker on Core is made
 whole-language alongside the first verified releases — closing the checked-is-not-compiled gap (087,
-090, 092 – 094) for every user — while the slices prove its rules as they reach them.
+090, 092 – 094) for every user — while the slices prove its rules as they reach them. Since
+2026-10-21 the same row also moves the existing profile onto one `Layout` authority (R-0502) and Place
+MIR passes (R-0501), as shadow paths, because structural classes 8 and 12 keep producing wrong code in
+the profile users run; their semantics and proofs still grow per slice.
 
 R-0514 and V1 share one checker implementation and payload-bound artifact chain: `CheckedCore` →
 checked specialization → `CheckedMonoCore` → lowering. Whole-language checker implementation coverage
@@ -673,8 +677,8 @@ independent replay for claims already issued.
 
 Stage order above is the dependency order *within* each slice. Queue row 2 delivers Track A's
 protections, the language decisions and gate health; row 3 carries slice V1 through every stage; row 4
-makes identities and Core checking authoritative across the supported language (soundness proofs remain
-scoped to the admitted subsets);
+makes identities and Core checking authoritative across the supported language and moves the existing
+profile onto one `Layout` and Place MIR (soundness proofs remain scoped to the admitted subsets);
 row 6 grows the slices and retires the legacy evidence layer. New soundness defects still enter at row 0, and each fix names the stage that would have
 prevented it; if none would, the plan gains one.
 
@@ -688,10 +692,12 @@ prevented it; if none would, the plan gains one.
   Qualified slices receive review and are published to both remotes before dependent releases rely on
   them. New boundaries arrive as shadow paths with disagreement gates.
 - **Capacity and priority.** Known authority and memory-safety defects preempt planned work and are
-  repaired or explicitly rejected before affected releases. For the one-maintainer team, at most one
-  shared-compiler migration checkpoint and one bounded proof checkpoint are active for integration at a
-  time; proof progress is reserved in each planning cycle; interop and application-feedback checkpoints
-  are scheduled within the same work-in-progress limit. The next checkpoint, its accountable maintainer
+  repaired or contained fail-closed before affected releases, under the roadmap's defect disposition
+  rule. Effort and integration slots are divided by the roadmap's
+  [capacity allocation](../../ROADMAP.md#capacity-allocation): this pipeline holds the majority share
+  and two slots (one shared-compiler migration checkpoint, one proof checkpoint); evidence integrity and
+  adversarial validation have protected minimums; interop, application, usability and release work
+  share one capped slot. The next checkpoint, its accountable maintainer
   and its required reviewer are recorded before it starts. Agents assist implementation and
   investigation but do not replace independent semantic review.
 - **Stage completion.** A stage closes when its stated proof obligations, compatibility requirements and

@@ -45,6 +45,12 @@
 #      a remaining acceptance step. The table is generated from docs/project/candidates.tsv
 #      (check_docs_drift.sh checks freshness); columns are found by header name, and a row names
 #      bugs or a feature deliverable.
+#  14. (2026-10-21) the "Capacity allocation" table assigns every queue row after Phase 1 and every
+#      Phase 1 exit to exactly one track; exactly one track is primary, with an "at least N%" share
+#      above 50% and larger than every other track's, two integration slots, and the rows of V1a/V1b/V1c
+#      and R-0514; evidence integrity and adversarial validation have positive minimums; the shares add
+#      up to 100%; every capped ("at most") track has one integration slot, and RocksDB
+#      slice 1's row is in one. V1c joins RocksDB slice 1, V1a and V1b as a required deliverable.
 #
 # Run with no argument it checks ROADMAP.md and the backlog with the reconciliation record and then runs
 # its negative controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row
@@ -57,8 +63,11 @@
 # blocks-features exit that blocks none, a prerequisite list that drops an exit or drifts from its queue
 # row (or a deliverable deleted, duplicated, weakened alone or relabelled to another row), and an
 # implemented-bug row that lists a fixed bug (fixed in the ledger README alone, or by a bold or a plain
-# Status line alone) or lacks its branch or remaining step; a
-# crashed or silent checker must fail too.
+# Status line alone) or lacks its branch or remaining step; so must a dropped V1c deliverable, and a
+# capacity table that is missing, leaves a row or an exit unallocated, allocates a row twice, gives the
+# primary track a minority, fewer or more than two slots or loses V1's row from it, leaves evidence
+# integrity or adversarial validation without a positive minimum, does not add up to 100%, gives the
+# capped track two slots or leaves RocksDB slice 1 uncapped; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -301,7 +310,7 @@ blocked_any = set(); row_blocked = {}
 # The first feature deliverables, each with its own row in the table and its own comparison against its
 # queue row's "prerequisite exits:" list: a union per row would let one deliverable mask another.
 # Each is bound to the queue row that schedules it, so relabelling a row cannot borrow another's list.
-REQUIRED_DELIVERABLES = {'RocksDB slice 1': 5, 'V1a': 3, 'V1b': 3}
+REQUIRED_DELIVERABLES = {'RocksDB slice 1': 5, 'V1a': 3, 'V1b': 3, 'V1c': 3}
 seen_deliv = set()
 if not prows:
     no('ROADMAP.md has no "### Feature prerequisites" table (| deliverable | blocked by | not blocked by |)'); pbad2 += 1
@@ -349,6 +358,81 @@ for o, delivs in sorted(row_blocked.items()):
             no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
 if prows and not pbad2:
     ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
+# --- capacity allocation (2026-10-21): every post-Phase-1 queue row and every Phase 1 exit belongs to
+# exactly one track; the primary track holds the majority and the rows of V1 and the shared compiler
+# structure; the capped feature track has one slot and holds RocksDB slice 1's row.
+crows = table_rows('Capacity allocation', 'track')
+cbad = 0
+if not crows:
+    no('ROADMAP.md has no "### Capacity allocation" table (| track | queue rows | Phase 1 exits | share per cycle | integration slots | scope |)'); cbad += 1
+    crows = []
+row_track = {}; exit_track = {}; tracks = []
+for cells in crows:
+    cells = cells + [''] * (6 - len(cells))
+    name = cells[0]
+    rows_c = [int(x) for x in re.findall(r'\b(\d+)\b', cells[1])]
+    exits_c = re.findall(r'\b(\d[a-z])\b', cells[2])
+    sm = re.fullmatch(r'(at least|at most) (\d+)%', cells[3])
+    if not sm:
+        no(f'capacity track "{name}" has no share "at least N%" or "at most N%"'); cbad += 1; continue
+    slm = re.match(r'(\d+)\b', cells[4])
+    if not slm:
+        no(f'capacity track "{name}" names no integration slot count'); cbad += 1; continue
+    if not rows_c and not exits_c:
+        no(f'capacity track "{name}" owns no queue row and no exit'); cbad += 1
+    tracks.append((name, sm.group(1), int(sm.group(2)), int(slm.group(1)), rows_c))
+    for r in rows_c:
+        if r in phase1_rows:
+            no(f'capacity track "{name}" lists Phase 1 row {r}; Phase 1 rows are allocated by exit'); cbad += 1
+        elif r not in qtasks:
+            no(f'capacity track "{name}" lists queue row {r}, which the queue does not have'); cbad += 1
+        elif r in row_track:
+            no(f'queue row {r} is in more than one capacity track'); cbad += 1
+        row_track.setdefault(r, name)
+    for e in exits_c:
+        if e not in exits:
+            no(f'capacity track "{name}" lists exit {e}, which does not exist'); cbad += 1
+        elif e in exit_track:
+            no(f'exit {e} is in more than one capacity track'); cbad += 1
+        exit_track.setdefault(e, name)
+if tracks:
+    for r in sorted(set(qtasks) - set(phase1_rows) - set(row_track)):
+        no(f'queue row {r} is in no capacity track'); cbad += 1
+    for e in sorted(set(exits) - set(exit_track)):
+        no(f'exit {e} is in no capacity track'); cbad += 1
+    prim = [t for t in tracks if '(primary)' in t[0]]
+    if len(prim) != 1:
+        no(f'the capacity allocation has {len(prim)} tracks marked (primary), not one'); cbad += 1
+    else:
+        pn, pk, pv, ps, prow = prim[0]
+        if pk != 'at least' or pv <= 50:
+            no(f'the primary track "{pn}" has share {pk} {pv}%, not a majority minimum'); cbad += 1
+        for t in tracks:
+            if t is not prim[0] and t[2] >= pv:
+                no(f'capacity track "{t[0]}" ({t[2]}%) is not smaller than the primary track ({pv}%)'); cbad += 1
+        if ps != 2:
+            no('the primary track must have two integration slots'); cbad += 1
+        must = {o for d, o in REQUIRED_DELIVERABLES.items() if d.startswith('V1')}
+        must |= {o for o, ts in qtasks.items() if 'R-0514' in ts}
+        for o in sorted(must - set(prow)):
+            no(f'queue row {o} (V1 or the shared compiler structure) is not in the primary track'); cbad += 1
+    for marker in ('**B. Evidence integrity**', '**C. Adversarial validation and gate health**'):
+        protected = [t for t in tracks if t[0].startswith(marker)]
+        if len(protected) != 1 or protected[0][1] != 'at least' or protected[0][2] <= 0:
+            no(f'{marker} must have a positive protected minimum'); cbad += 1
+    if sum(t[2] for t in tracks) != 100:
+        no(f'the capacity shares add up to {sum(t[2] for t in tracks)}%, not 100%'); cbad += 1
+    capped = [t for t in tracks if t[1] == 'at most']
+    if not capped:
+        no('the capacity allocation has no capped ("at most") track'); cbad += 1
+    for t in capped:
+        if t[3] != 1:
+            no(f'capped capacity track "{t[0]}" has {t[3]} integration slots, not one'); cbad += 1
+    rk = REQUIRED_DELIVERABLES['RocksDB slice 1']
+    if rk not in {r for t in capped for r in t[4]}:
+        no(f'queue row {rk} (RocksDB slice 1) is not in a capped capacity track'); cbad += 1
+if crows and not cbad:
+    ok(f'{len(tracks)} capacity tracks partition the post-Phase-1 queue rows and the Phase 1 exits; the primary track holds the majority, V1 and the shared compiler structure; the feature track is capped with one slot')
 irows = table_rows('Implemented, not yet accepted', 'candidate')
 # Columns are located by header name: the table is generated from docs/project/candidates.tsv
 # (scripts/gen/candidate_table.py), and a row names bugs or a deliverable ("—" for none).
@@ -755,6 +839,45 @@ PY
   neg implemented_table_column_dropped \
     "old='| candidate | bugs | deliverable | branch |'; assert s.count(old)==1; s=s.replace(old,'| candidate | bug list | deliverable | branch |')" \
     "has no \"bugs\" column"
+  neg v1c_deliverable_dropped \
+    "old='| V1c (row 3, R-0511) |'; assert s.count(old)==1; i=s.index(old); j=s.index('\n',i); s=s[:i]+s[j+1:]" \
+    "no row for deliverable V1c"
+  neg capacity_table_removed \
+    "old='### Capacity allocation\n'; assert s.count(old)==1; s=s.replace(old,'### Capacity notes\n')" \
+    "has no \"### Capacity allocation\" table"
+  neg capacity_row_unallocated \
+    "old='| **B. Evidence integrity** (protected) | 9, 10, 11, 12,'; assert s.count(old)==1; s=s.replace(old,'| **B. Evidence integrity** (protected) | 10, 11, 12,')" \
+    "queue row 9 is in no capacity track"
+  neg capacity_row_twice \
+    "old='| **D. Bounded features** (capped) | 5, 7, 8, 16 |'; assert s.count(old)==1; s=s.replace(old,'| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
+    "queue row 3 is in more than one capacity track"
+  neg capacity_exit_unallocated \
+    "old='| 0c, 2b, 2c, 2d, 2e, 2f, 2l | at least 10%'; assert s.count(old)==1; s=s.replace(old,'| 0c, 2b, 2d, 2e, 2f, 2l | at least 10%')" \
+    "exit 2c is in no capacity track"
+  neg capacity_primary_minority \
+    "old='| at least 55% |'; assert s.count(old)==1; s=s.replace(old,'| at least 45% |').replace('| at most 20% |','| at most 30% |')" \
+    "not a majority minimum"
+  neg capacity_v1_not_primary \
+    "old='| **A. Verified compiler** (primary) | 3, 4, 6 |'; assert s.count(old)==1; s=s.replace(old,'| **A. Verified compiler** (primary) | 4, 6 |').replace('| **D. Bounded features** (capped) | 5, 7, 8, 16 |','| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
+    "queue row 3 (V1 or the shared compiler structure) is not in the primary track"
+  neg capacity_shares_not_100 \
+    "old='| at least 15% |'; assert s.count(old)==1; s=s.replace(old,'| at least 25% |')" \
+    "add up to 110%"
+  neg capacity_feature_slots \
+    "old='| at most 20% | 1 |'; assert s.count(old)==1; s=s.replace(old,'| at most 20% | 2 |')" \
+    "has 2 integration slots, not one"
+  neg capacity_primary_slots \
+    "old='| 2: one shared-compiler migration checkpoint'; assert s.count(old)==1; s=s.replace(old,'| 1: one shared-compiler migration checkpoint')" \
+    "the primary track must have two integration slots"
+  neg capacity_evidence_unprotected \
+    "old='| at least 15% |'; assert s.count(old)==1; s=s.replace(old,'| at least 0% |').replace('| at least 55% |','| at least 70% |')" \
+    "B. Evidence integrity\*\* must have a positive protected minimum"
+  neg capacity_validation_unprotected \
+    "old='| at least 10% |'; assert s.count(old)==1; s=s.replace(old,'| at least 0% |').replace('| at least 55% |','| at least 65% |')" \
+    "C. Adversarial validation and gate health\*\* must have a positive protected minimum"
+  neg capacity_rocksdb_uncapped \
+    "old='| **D. Bounded features** (capped) | 5, 7, 8, 16 |'; assert s.count(old)==1; s=s.replace(old,'| **D. Bounded features** (capped) | 7, 8, 16 |').replace('| **A. Verified compiler** (primary) | 3, 4, 6 |','| **A. Verified compiler** (primary) | 3, 4, 5, 6 |')" \
+    "queue row 5 (RocksDB slice 1) is not in a capped capacity track"
   # Bug-ledger controls: the same roadmap against a mutated copy of docs/bugs, one way of recording a
   # fix at a time (README's Fixed list alone, a bold Status line alone, a plain Status line alone).
   bugneg() { # name, python-edit over s (file named in $3, relative to docs/bugs), file, expected-substring

@@ -7,29 +7,50 @@ the program's Core semantics allows, and that supported claims about Core transp
 Its evidence (proofs, receipts, trust and assumptions) is to be compositional, transferable and
 independently replayable ([verified-compiler decision](#decisions), [product north star](#product-north-star-compositional-transferable-evidence)).
 
-**Where we are (2026-10-19).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
-079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). The next release is the
-experimental systems preview; its [blockers](#next-release-blockers) are listed under
-[Releases](#releases). Fixes implemented on branches but not yet accepted on main are listed under
+**Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
+079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since
+2026-10-19 found bugs 102 – 120 in about two days, nearly all of them new instances of the recurring
+[structural classes](docs/bugs/STRUCTURAL_CLASSES.md): point repairs are not converging, which is why
+the [priority decision of 2026-10-21](#decisions) makes the verified compiler's structural work the
+primary track. The next release is the experimental systems preview; its
+[blockers](#next-release-blockers) are listed under [Releases](#releases). Fixes implemented on
+branches but not yet accepted on main are listed under
 [Implemented, not yet accepted](#implemented-not-yet-accepted).
 
 **Active phases:** 1
 
 **Next phases:** 2, 3
 
-**What is next.** Rows 0 – 2 finish Phase 1 through individually closable
-[Phase 1 exits](#phase-1-exits). Features do not wait for them to start. The usable-language track
-(Phase 3: interop, workloads and usability, rows 5, 7 and 8) is working on its first deliverable,
-**RocksDB slice 1** (row 5), and the proof track (Phase 2: V1a/V1b and the authoritative Core checker,
-rows 3 – 4) runs alongside it. Implementation and experiments on both may proceed now: early executable
-feedback is how defects surface (the RocksDB groundwork already found bugs 102 and 103). What a
-deliverable's [prerequisite checklist](#feature-prerequisites) controls is **acceptance**: RocksDB
-slice 1, V1a and V1b are not accepted, and their safety is not advertised, until their prerequisite
-exits hold. The remaining exits continue alongside both tracks and still close Phase 1. New soundness
-defects take priority over every phase; other new work enters the queue only under the
-[entry rule](#the-current-execution-queue). Every bug record states the design fact behind it and
-its structural owner; the recurring [structural classes](docs/bugs/STRUCTURAL_CLASSES.md) of bugs
-039 – 106 map each class to the task that removes it.
+**What is next.** The verified compiler is the primary engineering track. The
+[capacity allocation](#capacity-allocation) protects it with a minimum share of effort and two
+integration slots of its own; queue order alone does not. Its order:
+
+1. land the in-flight soundness repairs (row 0) and fix the semantics the proofs rely on: one
+   `IntArith` and the written rules for references, binding, literals, statement position, evaluation
+   order and casts (exits 2h – 2k);
+2. in the migration slot, make verified-pipeline Part 1's structure the shared compiler (row 4) once
+   row 0's in-flight candidates are accepted: `DefId`/`LocalId` identities, the authoritative checker
+   on Core for the whole language with checked specialization, then one `Layout` authority and Place
+   MIR in the existing profile;
+3. in the proof slot, V1a: checked Core → BIR preservation (row 3);
+4. V1b: the same subset through the backend to the identified native image, with traps, calls, memory
+   and the runtime boundary (row 3); and V1c: restricted source → checked Core correspondence. No V1
+   result is called source-to-native before V1c holds;
+5. grow the subset slice by slice, choosing what to admit next from real programs (row 6).
+
+Evidence integrity (one verdict authority, the axiom policy, minimal task identity, independent replay,
+and evidence bound through linking to the final image and its dependency versions) is a second
+protected track, and adversarial validation runs continuously. RocksDB slice 1 (row 5) is the one
+bounded executable workload alongside. The ethlambda port, broad library expansion and polished
+tooling stay bounded until V1b holds. New defects follow the [defect disposition
+rule](#the-current-execution-queue): silent ones (memory-safety violations, wrong code, false proofs)
+are stopped at once, and the rest are filed with their structural owner and contained fail-closed
+until that owner removes their class. Implementation and experiments on every track may proceed now:
+early executable feedback is how defects surface (the RocksDB groundwork already found bugs 102 and
+103). What a deliverable's [prerequisite checklist](#feature-prerequisites) controls is
+**acceptance**: RocksDB slice 1, V1a, V1b and V1c are not accepted, and their safety is not
+advertised, until their prerequisite exits hold. The remaining exits continue alongside and still
+close Phase 1. Every bug record states the design fact behind it and its structural owner.
 
 **Where things live.** This file answers *what happens next, in what order*: the phases, the one
 execution queue, the release plan, the standing decisions, and the tasks a queue row names or an active
@@ -84,12 +105,14 @@ SHA, never the mutation aggregate alone.
 Seven phases each group rows of the [execution queue](#the-current-execution-queue), have an exit, and
 produce a release scope (see [Releases](#releases)). After Phase 1, Phase 3 runs alongside the proof
 track, which progresses from Phase 2 into Phase 4; the shared-front-end work overlaps proof development.
-All checkpoints share the capacity rule, and new soundness defects take priority over every phase.
+Effort is divided between tracks by the [capacity allocation](#capacity-allocation), in which the
+verified compiler holds the majority; new soundness defects take priority over every phase and are
+disposed of by the [defect disposition rule](#the-current-execution-queue).
 
 | phase | goal | queue rows | exit | release |
 |---|---|---|---|---|
 | **Phase 1 — Stabilize** | Land the 2026-10-18 soundness repairs, close R-0482, put the immediate protections in place | 0 – 2 | every [Phase 1 exit](#phase-1-exits) (0a – 2l): repairs gated; R-0482 qualified; one `Verdict` authority; language rules enforced | 0.1 Experimental systems preview |
-| **Phase 2 — Verified foundation** | First proved end-to-end slice (V1a, V1b) and the authoritative Core checker for the whole language | 3 – 4 | V1a and V1b theorems; Core checker authoritative | 0.2 Verified preview |
+| **Phase 2 — Verified foundation** | First proved end-to-end slice (V1a, V1b, V1c) and the shared compiler structure for the whole language: identities, the authoritative Core checker, one `Layout`, Place MIR | 3 – 4 | V1a and V1b theorems and V1c's source correspondence; Core checker authoritative; one `Layout` and Place MIR in the existing profile | 0.2 Verified preview |
 | **Phase 3 — Usable language** | Interop, application workloads and the usability track | 5, 7, 8 | four-adapter interop checkpoint; usability checkpoints | none of its own; feeds every release |
 | **Phase 4 — Verified growth** | Cumulative slices V2 – V7 and claim migration to Core | 6 | each slice's theorem; V7 covers the feature inventory | 0.3 – 0.8 Verified-subset milestones |
 | **Phase 5 — Evidence as a product** | Compiler provenance, canonical task, independent consumer, receipt v1 | 9 – 11 | receipt v1 frozen | 0.9 Verified-component alpha (with Phases 4 and 6) |
@@ -101,8 +124,8 @@ All checkpoints share the capacity rule, and new soundness defects take priority
 | 0 | R-0482 | Land the active soundness repairs (bugs 079 – 101) and qualify R-0482 (exits 0a – 0c) |
 | 1 | R-0482 | Make R-0482's cross-package (P1) controls permanent (exit 1a) |
 | 2 | R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513 | Immediate protections (exits 2a – 2l): one verdict authority, prevention harness, trustworthy gates, axiom policy, one `IntArith`, language rules, demonstrated enforcement |
-| 3 | R-0511, R-0517 | First cumulative verified releases: design proofs, V1a and V1b, each accepted when its [prerequisites](#feature-prerequisites) hold |
-| 4 | R-0492, R-0497, R-0499, R-0514 | Shared front end: identities and the authoritative Core checker for the whole language |
+| 3 | R-0511, R-0517 | First cumulative verified releases: design proofs, V1a, V1b and V1c, each accepted when its [prerequisites](#feature-prerequisites) hold |
+| 4 | R-0492, R-0497, R-0499, R-0514, R-0502, R-0501, R-0355 | Shared compiler structure (verified-pipeline Part 1): identities, the authoritative Core checker, one `Layout` and Place MIR for the whole language, measured against a development-speed baseline |
 | 5 | R-0285, R-0283, R-0286, R-0287 | Bounded C/Rust/Zig interop: RocksDB slice 1 (work proceeds now; accepted when its [prerequisites](#feature-prerequisites) hold), then the four-adapter checkpoint |
 | 6 | R-0491–R-0510, R-0512 | Slices V2 – V7 and evidence migration to generated Core statements |
 | 7 | R-0490 | Continuous application feedback toward the ethlambda port |
@@ -123,7 +146,7 @@ above names the same task IDs per row (checked by `scripts/tests/check_roadmap_c
 ### Phase details
 
 - **Phase 1 — Stabilize** (rows 0 – 2). **Goal:** Land the 2026-10-18 soundness repairs (080 – 101), close the R-0482 identity migration, and put the immediate protections in place: one verdict authority, the prevention harness, demonstrated enforcement, the language decisions, one `IntArith`, the axiom policy and trustworthy gates. **Exit:** every [Phase 1 exit](#phase-1-exits): each repair's reproducer is a permanent gate; R-0482 qualified and its P1 controls permanent; one `Verdict` authority and the written language rules enforced. Feature work starts now and is accepted when its [prerequisites](#feature-prerequisites) hold. **Release:** **0.1 Experimental systems preview**, with the usability onboarding path and first pilot.
-- **Phase 2 — Verified foundation** (rows 3 – 4). **Goal:** The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, with design proofs for ownership, borrows and memory first), and identities plus the authoritative checker on Core for the whole language. **Exit:** V1a and V1b theorems with explicit boundaries; the Core checker authoritative for every program. **Release:** **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins.
+- **Phase 2 — Verified foundation** (rows 3 – 4). **Goal:** The first proved end-to-end slice (V1a Core → BIR, V1b native AArch64 through the Lean Compiler Backend, V1c restricted source → checked Core correspondence, with design proofs for ownership, borrows and memory first), and verified-pipeline Part 1's structure for the whole language: identities, the authoritative checker on Core, one `Layout` and Place MIR in the existing profile. **Exit:** V1a and V1b theorems with explicit boundaries and V1c's correspondence theorem; the Core checker authoritative for every program; the existing profile's layout from one `Layout` and its lowering jobs in Place MIR passes. **Release:** **0.2 Verified preview** (with Phase 3's tooling checkpoints); the candidate states where the theorem begins.
 - **Phase 3 — Usable language** (rows 5, 7, 8). **Goal:** Bounded C/Rust/Zig interop, real application workloads leading to the ethlambda port, and the usability track: onboarding, external pilots, diagnostics, editor and debugging, published performance. **Exit:** the four-adapter interop checkpoint; continuing workloads and pilots; each usability checkpoint's exit. **Release:** no release of its own: it runs alongside and feeds every release from 0.1 on (onboarding, pilots, tooling, the minimal editor path for beta).
 - **Phase 4 — Verified growth** (row 6). **Goal:** Cumulative slices V2 – V7 (aggregates and references, heap and linear resources, generics and capabilities, raw pointers and FFI, the rest of the language) each with its theorem, and eligible claims migrated onto compiler-generated Core statements independently of backend coverage, with explicit deprecation for retired claims and historical replay preserved. **Exit:** each slice's cumulative theorem; V7 covers the maintained feature inventory. **Release:** **0.3 – 0.8 Verified-subset milestones** (a slice may span several releases); V7 is required for 1.0.
 - **Phase 5 — Evidence as a product** (rows 9 – 11). **Goal:** Compiler provenance and one canonical verification task, the independent evidence consumer, and the receipt v1 freeze. **Exit:** receipt v1 frozen after producer and independent consumer agree on hostile fixtures. **Release:** **0.9 Verified-component alpha**, together with Phases 4 and 6 for the admitted component.
@@ -152,6 +175,35 @@ deliverable on it, naming that deliverable: today RocksDB slice 1 for the usable
 V1a for the proof track ([feature prerequisites](#feature-prerequisites)). Everything else goes to the
 [backlog](docs/project/ROADMAP_BACKLOG.md) with a pull trigger.
 
+**Defect disposition rule (2026-10-21).** Point repairs in the existing pipeline are not converging:
+the probes added since 2026-10-19 found bugs 102 – 120 in about two days, nearly all of them new
+spellings of the classes in [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md), whose owners are
+verified-pipeline stages. A newly reproduced defect is therefore disposed of by what it does:
+
+- **Silent defects are stopped now.** A memory-safety violation in accepted safe code, silent wrong
+  code, or a false proof or unsound claim is repaired in place or contained fail-closed (the shape
+  rejected with a diagnostic, or the claim refused), whichever is smaller and rejects nothing a
+  maintained example or the next deliverable needs. Either way its reproducer becomes a permanent gate
+  leg and it joins row 0 as a *blocks features* exit. A contained defect stays open in the bug ledger
+  until it is repaired.
+- **Fail-open validation is closed now.** A gate, report or evidence path that reads absence as a fact
+  (class 11) is made to fail closed; that is its containment.
+- **Loud defects wait for their structural owner.** A defect that already fails visibly (a valid
+  program rejected; a compile, link or interpreter failure; a diagnostic defect) is filed with its
+  class and owner, and its reproducer is checked in with its current outcome pinned, so a change to
+  silent success or different output fails the gate. The owner's exit lists it. It is repaired in the
+  existing pipeline only when the entry rule above admits it (a named deliverable depends on it) or it
+  keeps a maintained example out of the interpreter/native comparison.
+- **A point repair adds nothing its owner must retire**: no new name-keyed lookup, no second copy of a
+  fact, no per-surface verdict. Its bug record names the owner exit that removes the class, and that
+  exit lists the bug.
+
+Repair effort for an existing Phase 1 exit is charged to that exit's track in the
+[capacity allocation](#capacity-allocation). For a new defect, its row-0 exit records its primary
+structural class, its accountable structural owner and its capacity track when it is added; the
+capacity table is authoritative. Exits assigned before 2026-10-21 keep their
+obligations, including exit 2c's repairs of loud failures.
+
 **Example rule.** Every example has a gate: besides its entry in `scripts/tests/example_manifest.txt`, a
 new example has a gate leg that asserts its behaviour (expected output and exit status, an expected
 rejection with its diagnostic code, or its claims' statuses); a compile-only manifest entry does not
@@ -167,12 +219,12 @@ test or bug corpus and are invoked by the example's gate.
 | 0 | **Active soundness repairs and R-0482 qualification** | close bug 079's subject/model/spec binding at status, issuance and receipt consumption; land the bug 080 cast model and the 081 – 095 repairs (evidence, model/runtime, name-resolution and checker memory/capability-safety defects from the 2026-10-18 hunts), each with its reproducer as a permanent gate leg; repair campaign isolation and retain a qualified result naming its exact commit before closing the migration. Closes through exits 0a, 0b and 0c ([Phase 1 exits](#phase-1-exits)) |
 | 1 | **R-0482 P1 cross-package closures** | promote the manifestful std/dependency controls into permanent gates, retain D3's manifestless distinction and negative controls, and publish only after the subject-binding repair. Closes through exit 1a |
 | 2 | **Immediate protections and semantic decisions (R-0491, R-0493, R-0494, R-0498, R-0500, R-0506, R-0513)** | closes through the individually closable exits listed in [Phase 1 exits](#phase-1-exits), each with its owner, acceptance test and class: one `Verdict` authority renders every evidence surface (2a); permanent reproducer controls for 080 – 101 (2b) and the prevention harness (2c); trustworthy gate execution — checked inventories instead of incidental count pins (2d), minimum completed comparisons (2e), a fast push tier separate from full qualification (2f); the axiom-policy gate on today's evidence (2g); one `IntArith` for the existing pipeline (2h); the rules the next slice needs written down and enforced with versioned migration diagnostics — strictly second-class references and no block `let` shadowing (2i); typed literals, literal range, statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting (2j); explicit match binders and cast semantics per width (2k); demonstrated enforcement (2l). Known authority and safety defects are repaired under row 0. An exit classed *blocks features* holds back the acceptance of only the deliverables whose [prerequisites](#feature-prerequisites) name it; the others continue alongside feature work. Broader prevention coverage continues throughout and does not block isolated proof development |
-| 3 | **First cumulative verified releases (R-0511, with R-0517)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 through the Lean Compiler Backend, R-0517, with final-image correspondence; LCB's Stage 1 exit is necessary but insufficient — V1b needs a pinned certified LCB domain covering every reachable V1 operation and behaviour, including checked-arithmetic trap paths, direct calls and `print_int`, plus Concrete's proved adapter and semantic bridges; a smaller leaf-function intersection ships only as a separately named intermediate theorem; R-0517's explicitly selected fallback does not complete this row) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; restricted-source correspondence before V1 is called source-to-native; retained artifacts with minimal task identity and independent replay. The design examples and isolated proof development start now; V1a and V1b are accepted only when their prerequisite exits hold (prerequisite exits: 0a, 0b, 2a, 2g, 2h, 2i, 2j; the programs each must compile and the independently checked artifact are under [feature prerequisites](#feature-prerequisites)). See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
-| 4 | **Shared front end: identities and the authoritative checker on Core for the whole language (R-0492, R-0497, R-0499, R-0514)** | alongside row 3: the parts V1a's subset exercises proceed with V1a, and the whole-language rollout starts once row 2 lands; the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
-| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | first deliver **RocksDB slice 1**, the first executable feature deliverable: implementation and experiments proceed now (its groundwork on main already found bugs 102 and 103), and it is accepted, and its safety advertised, only when its prerequisite exits hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
+| 3 | **First cumulative verified releases (R-0511, with R-0517)** | reviewed machine-checked design examples for move/destroy, borrows, reborrowing, cleanup and typed-value memory representation before Core's interfaces freeze; V1a (checked Core → BIR refinement for the minimal scalar subset) and V1b (native AArch64 through the Lean Compiler Backend, R-0517, with final-image correspondence; LCB's Stage 1 exit is necessary but insufficient — V1b needs a pinned certified LCB domain covering every reachable V1 operation and behaviour, including checked-arithmetic trap paths, direct calls and `print_int`, plus Concrete's proved adapter and semantic bridges; a smaller leaf-function intersection ships only as a separately named intermediate theorem; R-0517's explicitly selected fallback does not complete this row) with explicit theorem boundaries; checker soundness, capability containment, resource and target-memory-validity obligations and one transported claim for the admitted subset; V1c, restricted source → checked Core correspondence for V1's surface (syntax, resolution and elaboration judgments specified independently of their implementations, then proved or certificate-checked; constructs outside the subset rejected explicitly), before any V1 result is called source-to-native; retained artifacts with minimal task identity and independent replay. The design examples and isolated proof development start now; V1a, V1b and V1c are accepted only when their prerequisite exits hold (prerequisite exits: 0a, 0b, 2a, 2g, 2h, 2i, 2j; the programs each must compile and the independently checked artifact are under [feature prerequisites](#feature-prerequisites)). See [the plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices) |
+| 4 | **Shared compiler structure: identities, the authoritative checker on Core, one `Layout` and Place MIR for the whole language (R-0492, R-0497, R-0499, R-0514, R-0502, R-0501, with R-0355's baseline)** | verified-pipeline Part 1, in the primary track's migration slot ([capacity allocation](#capacity-allocation)), alongside row 3: before the first whole-language change of R-0492, R-0499/R-0514, R-0502 or R-0501 lands on main, R-0355's [development-speed baseline](#task-r-0355) is recorded, so each structural change's cost to build time, rebuild time, compiler memory and test turnaround is visible; the parts V1a's subset exercises proceed with V1a, and the whole-language rollout starts once row 0's in-flight candidates (batch 2, type-identity, generic-destroy) are accepted on main, which edit the same checker code; it implements the rules as exits 2i – 2k state them and does not wait for row 2's other exits; the front end both profiles share uses `LocalId`/`DefId` from Resolve on, including the source checker's environments, with immutable payload-bound artifacts; one checker over Core implements every ownership, borrow, reference-escape, capability and `Unsafe` rule for the whole language, emits payload-bound `CheckedCore` consumed by checked specialization in both profiles; specialization produces payload-bound `CheckedMonoCore`, the only input to lowering; the source-tree checker holds no such rule; the 087 borrow-block case and 090 – 094 are rejected by it; capabilities are re-checked after Mono. Then, in the same slot: one `Layout` authority (R-0502) supplies every size, alignment, offset and enum representation the existing lowering and LLVM emission use, with a gate comparing it with the emitted types (class 12 of the [structural classes](docs/bugs/STRUCTURAL_CLASSES.md)); and `Lower`'s sequencing, match compilation, cleanup/`defer` and check expansion move into Place MIR passes (R-0501) that consume `CheckedMonoCore`, as shadow paths with disagreement gates against the existing lowering (class 8). Their semantics and proofs still grow per slice (rows 3 and 6), and the old `Lower` retires only under the plan's retirement conditions. The slices prove this checker's rules as they reach them (V1 – V7, beginning with scalar typing and basic capabilities in V1, downward borrows in V2, and extending through resources, polymorphism and unsafe/FFI interactions); this row makes it authoritative for every user now |
+| 5 | **Bounded interop track (R-0285, with R-0283/R-0286/R-0287)** | the one bounded executable workload beside the verified compiler, in the single feature slot ([capacity allocation](#capacity-allocation)): first deliver **RocksDB slice 1**, the first executable feature deliverable: implementation and experiments proceed now (its groundwork on main already found bugs 102 and 103), and it is accepted, and its safety advertised, only when its prerequisite exits hold (prerequisite exits: 0b, 2i; checklist and acceptance under [feature prerequisites](#feature-prerequisites)); then deliver the four-adapter checkpoint, after R-0515's practical debugging checkpoint and with the clean-machine upgrade-and-roll-back exercise (RocksDB C, Rust crypto/networking, an upstream Zig library; no application bridge/build scripts, generated-file edits or manual flags) on the supported existing profile alongside verified-pipeline work; foreign implementations remain named trust dependencies; interop neither waits for nor blocks the first native theorem |
 | 6 | **Cumulative slice growth and evidence migration (R-0512, R-0491–R-0510 by slice)** | extend the proved language and frontend correspondence slice by slice (V2 aggregates and downward references, V3 heap and linear resources, V4 full reference/resource interactions, V5 generics/traits/capabilities, V6 raw pointers/FFI/separate compilation, V7 the maintained feature inventory); migrate eligible claims to generated Core statements independently of backend coverage; ship supported releases and preserve historical replay throughout |
-| 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
-| 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the capacity rule, advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
+| 7 | **Continuous application feedback and eventual ethlambda completion (R-0490)** | begin bounded client-owned workloads after the relevant interop support, using the existing profile where necessary; until V1b's composed native exit holds these are bounded component workloads (a Concrete component called from the Rust client through R-0286) inside the feature slot, starting after R-0515's practical debugging checkpoint, and the bulk port starts after V1b, or earlier only by a dated decision recorded when V1b is blocked on LCB's external milestones; measured language, library, compile-time and runtime feedback informs slice priorities; full mixed-client node completion keeps its existing acceptance criteria and is not gated on V7 |
+| 8 | **Usability track (R-0515), alongside the proof track** | bounded checkpoints within the feature track of the [capacity allocation](#capacity-allocation), advancing the tasks that already own each concern: a first-project onboarding path before the first pilot; quarterly external pilots that record author assistance and require participant-validated fixes; a diagnostics quality bar gated on failing inputs and valid repairs; editor (types, diagnostics, navigation, proof/trust/capability status) and debugging checkpoints at V1a/V1b; published, regression-gated performance comparisons; the stability policy, `std` coverage inventory and named reviewers before public release. Pilots are a continuing obligation, not a gate for rows 9 – 17 |
 | 9 | **Compiler provenance and canonical `VerificationTask` (R-0521)** | separate source-build provenance from executable identity; establish one production task constructor binding the exact subject, proposition, contract state, rule set, dependency material and environment |
 | 10 | **R-0353 independent consumer and schema conformance** | publish experimental task/receipt encodings plus hostile conformance fixtures; independently parse, account and replay without importing the compiler/report implementation |
 | 11 | **Receipt v1 freeze (R-0338, with R-0353/R-0521)** | freeze only after producer and independent consumer agree on canonical fixtures and Slice 8's permanent attacks cover the finalized schema; incompatible changes require a version bump |
@@ -234,6 +286,7 @@ at least one *blocked by* list and no *continues alongside* exit appears in any.
 | RocksDB slice 1 (row 5, R-0285) | 0b, 2i | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l |
 | V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |
 | V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |
+| V1c (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l |
 
 - **RocksDB slice 1** (R-0285). Declare the RocksDB C library as a dependency, import it with a normal
   Concrete import, open a database, write a key and read it back, handle a failure path (opening an
@@ -271,6 +324,64 @@ at least one *blocked by* list and no *continues alongside* exit appears in any.
   is re-checked by con-leche and nanoda and bound to the exact retained image and artifacts, with
   final-image correspondence checked by R-0505 (the plan's native exit). A smaller leaf-function
   intersection is a separately named intermediate theorem and does not complete V1b.
+- **V1c** (R-0511). Restricted source → checked Core correspondence for V1's surface: for a single
+  source unit with fixed imports, successful parsing, resolution, desugaring and elaboration are proved
+  to implement syntax, resolution and elaboration judgments specified independently of their
+  implementations (a relation defined as whatever the elaborator produces does not count), or proved
+  certificate checkers cover those boundaries. Surface constructs outside the admitted subset are
+  rejected with a diagnostic, never elaborated unchecked. **Independently checked artifact:** the
+  correspondence theorem and its retained artifacts with a minimal canonical task identity, replayed by
+  the independent retained-artifact consumer. Once V1b and V1c both hold, their independently replayed
+  composition is required before the source-to-native statement for the subset is published. Until V1c holds, every V1 result states that its guarantee begins at
+  retained `CheckedCore`. V1c may be accepted before or after V1b; the source-to-native statement needs
+  both. **Why these prerequisites:** the same as V1a's: the judgments state 2i's and 2j's rules and
+  2h's literal typing, and 0b's name-resolution defects (096 – 098) are front-end defects.
+
+### Capacity allocation
+
+Queue order says what comes first within a track; this table says how effort is divided between the
+tracks, so that the verified compiler cannot be displaced by the work beside it. It replaces the earlier
+limit (one shared-compiler migration checkpoint and one proof checkpoint, with interop, application,
+usability and release work "under the same limit"), which did not say whether feature work could take
+the migration slot. `check_roadmap_coverage.sh` checks that every queue row after Phase 1 and every
+Phase 1 exit belongs to exactly one track, that the primary track holds the majority and the rows of
+V1 and the shared compiler structure, and that the feature track is capped with a single slot.
+
+| track | queue rows | Phase 1 exits | share per cycle | integration slots | scope |
+|---|---|---|---|---|---|
+| **A. Verified compiler** (primary) | 3, 4, 6 | 0b, 2h, 2i, 2j, 2k | at least 55% | 2: one shared-compiler migration checkpoint (row 4, then each slice's migrations) and one proof checkpoint (rows 3 and 6) | the semantics the proofs rely on (overflow, casts, evaluation order, traps, divergence, memory, with executable examples that agree: R-0493, R-0496, R-0500); the shared compiler structure; ownership and capability soundness, preserved through specialization (R-0499, R-0507, R-0510); source → Core correspondence (V1c, then each slice's frontend obligation); V1a – V7 |
+| **B. Evidence integrity** (protected) | 9, 10, 11, 12, 13, 14, 15, 17 | 0a, 1a, 2a, 2g | at least 15% | 1 | specification and claim correctness (the claimed property is the theorem's proposition, typed contracts); one verdict authority; the axiom policy; task identity and evidence bound through linking to the final image and its dependency versions; independent checking. Before rows 9 – 11, the bounded increments every published V1 claim needs: R-0521's minimal task identity and R-0353's minimal independent retained-artifact consumer |
+| **C. Adversarial validation and gate health** (continuous) | — | 0c, 2b, 2c, 2d, 2e, 2f, 2l | at least 10% | 1 | the prevention harness, scheduled hunts and fuzz campaigns, the adversarial example suite, demonstrated enforcement, trustworthy gates and qualification (R-0491, R-0498, R-0513) |
+| **D. Bounded features** (capped) | 5, 7, 8, 16 | — | at most 20% | 1 | interop, application workloads, usability, release preparation and the external-user workflow, one checkpoint at a time |
+
+- **Cycle.** Shares are measured over a planning cycle (a calendar month until release trains start,
+  then one train) as the share of integration and review effort spent on each track's checkpoints.
+  They are minimums and one maximum, not quotas: capacity a track of A – C does not use may go to
+  another of A – C, never to D beyond its maximum. A cycle that misses a minimum or exceeds the maximum
+  records the split, the reason and the recovery as a dated note under [Decisions](#decisions).
+- **Slots.** At most one checkpoint per slot is active for integration, each with its accountable
+  maintainer, required reviewer and exit recorded before it starts. D's single slot means feature work
+  grows by sequence, not by parallel checkpoints: RocksDB slice 1 holds it until it is accepted, and
+  the next D checkpoint (R-0515's preview checkpoints, the four-adapter checkpoint, release
+  preparation) is chosen at a cycle boundary by what the next release needs. Heavy validation runs
+  queue behind one another whatever their track.
+- **Defects.** Repairs preempt every track and are charged to their exit's track in this table, under
+  the [defect disposition rule](#the-current-execution-queue); a new defect's exit names its primary
+  class in [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) and its track when it is added. When repairs keep A below its minimum for
+  two consecutive cycles, the structural owner of the class causing most of them moves to the front of
+  A's migration slot.
+- **Scope bounds until V1b's composed native exit holds.** RocksDB slice 1 and its four companions are
+  the one executable workload; the four-adapter checkpoint follows its acceptance. R-0490 runs only
+  bounded component workloads (row 7). Workloads expand beyond RocksDB slice 1 only after R-0515's
+  practical debugging checkpoint. `std` work is limited to R-0021's usable subset for the first two
+  workloads and recorded asks (R-0031's broader APIs wait); tutorial expansion stays pull-gated (R-0515);
+  concurrency, a public registry and additional backends stay in the backlog behind their workload
+  triggers; and
+  editor, debugger and performance work goes no further than R-0515's V1 tooling checkpoints and the
+  preview's release bar. Foreign-code and runtime boundaries grow with interop, not ahead of it: each
+  foreign function or runtime facility a workload admits is recorded in R-0509's trusted-base
+  inventory with its ownership, error and authority contract when it is admitted (R-0283/R-0287 check
+  the C ABI), and V6 owns their proofs.
 
 ## Releases
 
@@ -324,7 +435,7 @@ subsection holds each release scope's acceptance; the candidate-record rules fol
 | release scope | user-visible outcome | required increments / owners | explicitly deferred |
 |---|---|---|---|
 | Experimental systems preview | Install Concrete and build, run and test a small program with explicit ownership and external authority, with honest reports of limitations. | Rows 0–2 qualified for the advertised scope; R-0333's exact candidate/subset record; R-0335/R-0336/R-0337 reference and honest claims; bounded R-0334/R-0346/R-0352/R-0354 installation/tutorial/distribution acceptance; R-0515 onboarding, first pilot and before-public-release checkpoint; R-0343/R-0345 security and threat disclosures; R-0357 supply-chain lock/license inventory; R-0358 compatibility/deprecation policy; preview-scoped R-0426/R-0427/R-0428 support, repair and response readiness. The preview checklist explicitly states which evidence-verifier/replay artifacts ship; unsupported proof replay cannot satisfy or advertise a verification release claim. | General verification claims, stable APIs, broad platform/backend coverage and the verified-component alpha promise. |
-| Verified preview | Obtain V1a checked Core → BIR proof evidence. Native-image proof evidence is available only when the separately recorded V1b gate passes; otherwise native output is explicitly tested and `backend_trusted`, and the candidate ships under R-0333’s narrower recorded scope without graduating this one (R-0517’s fallback). The authoritative Core checker guards every program. | R-0511’s V1a exit and R-0514’s whole-language checker; R-0515’s applicable tooling checkpoints; R-0333’s candidate record states the theorem start and endpoint, V1b status, assumptions and fallback mode. Native claims additionally require the complete R-0517/R-0505/R-0508 gate. | Everything outside the certified subset; native transport in fallback mode; claims beyond the transported example. |
+| Verified preview | Obtain V1a checked Core → BIR proof evidence. Native-image proof evidence is available only when the separately recorded V1b gate passes; otherwise native output is explicitly tested and `backend_trusted`, and the candidate ships under R-0333’s narrower recorded scope without graduating this one (R-0517’s fallback). The authoritative Core checker guards every program. | R-0511’s V1a exit and R-0514’s whole-language checker; R-0515’s applicable tooling checkpoints; R-0333’s candidate record states the theorem start and endpoint, V1b and V1c status, assumptions and fallback mode; without V1c the theorem is stated from retained `CheckedCore` and no source-to-native claim is made. This scope is narrower than Phase 2's exit: V1c, one `Layout` and Place MIR in the existing profile close Phase 2 but are not required to ship the verified preview, so the first verified release does not wait for the whole-language lowering migration. Native claims additionally require the complete R-0517/R-0505/R-0508 gate. | Everything outside the certified subset; native transport in fallback mode; claims beyond the transported example. |
 | Verified-subset milestones | Each slice V2 – V7 enlarges the subset the `verified` profile accepts, with its cumulative theorem. | The verified-pipeline plan's cumulative V2–V7 exits, delivered by R-0491–R-0510 as coordinated under queue row 6; R-0512 migration for eligible claims; R-0515 checkpoints for the same window. | Features of later slices; unsafe/FFI until V6. |
 | Verified-component alpha | A non-author changes a useful bounded component, repairs its contracts/evidence and independently replays the result. | R-0486's change-and-repair scenario, R-0150 measurements, the initial R-0182/R-0183 diff, R-0353 replay, and the queued qualification, identity and contract prerequisites; all existing release-bar-area alpha criteria. | General heap proofs, concurrency, whole-stdlib verification and proving every flagship completely. |
 | Project beta | Maintain a multi-package project and review a dependency upgrade with inherited assumptions, evidence and policy decisions visible. | All existing release-bar-area beta criteria; bounded local-package increments from R-0363–R-0383, R-0440 policy, compatibility work R-0338–R-0341, and the minimal editor and external-user workflow. | Public registry, hosted publishing, remote caches, advanced editor features and additional production backends. |
@@ -431,9 +542,10 @@ Each term is defined once, here; the linked documents hold the full definitions.
   LLVM is printed from it and the LCB adapter consumes it (R-0503).
 - **LCB.** The Lean Compiler Backend: a separately developed Lean 4 port of QBE 1.3 with a certified
   path to AArch64; Concrete's native backend and QBE path, reached through a proved adapter (R-0517).
-- **Slices V1a, V1b, V2 – V7.** Cumulative verified subsets carried through the whole compiler, each
+- **Slices V1a, V1b, V1c, V2 – V7.** Cumulative verified subsets carried through the whole compiler, each
   with its own theorem. V1a: checked Core → BIR for a minimal scalar subset. V1b: that subset to native
-  AArch64 through LCB. V2 – V7 add aggregates and downward references, heap and linear resources, full
+  AArch64 through LCB. V1c: restricted source → checked Core correspondence for that subset's surface;
+  V1b and V1c together are the first source-to-native theorem. V2 – V7 add aggregates and downward references, heap and linear resources, full
   reference/resource interactions, generics/traits/capabilities, raw pointers/FFI/separate compilation,
   and the rest of the maintained feature inventory. *S1 – S16* are the verified-compiler plan's
   implementation stages.
@@ -520,6 +632,49 @@ this file). Every other task lives, with its full text, ID and
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
+**Priority decision, 2026-10-21:** the verified compiler is the primary engineering track, protected
+by an explicit [capacity allocation](#capacity-allocation) rather than by queue numbering. Two inputs
+were weighed. An external review asked for exactly that, in the order: close known soundness defects
+and fix the semantics proofs rely on; make the Core checker authoritative with explicit identities and
+ownership/capability rules; V1a; V1b through the backend to the native image; then grow the subset
+from real programs, with one small executable workload alongside and evidence integrity as a second
+protected track. Separately, point repairs are not converging: probes found bugs 102 – 120 in about
+two days, nearly all of them new instances of [structural classes](docs/bugs/STRUCTURAL_CLASSES.md)
+whose owners are verified-pipeline Part 1 stages. Adopted: the capacity table (verified compiler at
+least 55%, evidence integrity at least 15%, adversarial validation at least 10%, features at most 20%
+in a single slot); the [defect disposition rule](#the-current-execution-queue); Part 1's structure as
+row 4's migration track once row 0's in-flight candidates are accepted, extended from identities and
+the checker to one `Layout` (R-0502) and Place MIR (R-0501) in the existing profile, because classes 8
+and 12 produce wrong code in the profile users run today; V1c as a named deliverable, so that a
+Core-to-native theorem is never presented as source-to-native; bounded scope for the ethlambda port,
+`std` breadth and tooling until V1b. Not adopted, with reasons: (1) repairing only memory-safety and
+wrong-code defects: false proofs and unsound claims are as silent, and the evidence is the product, so
+they are stopped at once too; and a silent defect may be contained fail-closed instead of repaired
+when that is smaller. (2) Moving rows 9 – 11 ahead of the slices: every published V1 claim already
+requires their bounded increments (minimal task identity, the independent retained-artifact consumer,
+final-image binding), and the complete cross-profile consumer and the receipt freeze have no consumer
+before V1b; track B's protected share keeps those increments from being starved instead. (3)
+Whole-language Place MIR and layout proofs now: the structure moves now, and its semantics and proofs
+stay per slice, as the vertical-slice decision requires. (4) Pausing feature work: RocksDB slice 1
+continues in its slot, because executable workloads are how defects surface. A second round of
+external advice, on day-to-day engineering, is attached to existing owners as acceptance milestones.
+Adopted: a development-speed baseline (clean build, one-function-edit rebuild, peak compiler memory,
+test turnaround, recorded per main commit) that must exist before row 4's first structural change lands
+(R-0355, now named by row 4); a clean-machine package exercise with dependency upgrade and roll-back
+(R-0285, R-0365); a shared fault-injection checkpoint for runtime, `std` and FFI, exercised composed in
+RocksDB slice 1's companions (R-0030); a practical debugging checkpoint, in which a non-author diagnoses
+a runtime trap and a failing foreign call, required before workloads expand beyond RocksDB slice 1
+(R-0515 with R-0281); a usable `std` subset named from the first two workloads and validated for
+ownership, errors and the foreign boundary together (R-0021, R-0488); and pilots that measure
+maintenance across a compiler and a dependency upgrade (R-0515). Two placements differ from the advice.
+The upgrade-and-roll-back half of the package exercise closes the four-adapter checkpoint rather than
+RocksDB slice 1, so the slice stays small; slice 1's acceptance already covers install to test. The
+debugging checkpoint does not gate slice 1, as the advice itself says. Concurrency, a public registry
+and additional backends already wait in the backlog behind workload triggers (R-0399, the registry
+task, the Wasm and freestanding targets); broad `std` expansion in this file (R-0031) is now bounded
+the same way. No new task ID was needed. No exit or acceptance criterion is removed; exits assigned
+before this date keep their obligations.
+
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
@@ -579,7 +734,8 @@ verdict authority and claims-on-Core land, and the fixes for 081 – 101 land fi
 
 **Usability decision, 2026-10-19:** a great language needs real users, good errors, tooling, a
 reliable `std` and published performance, not only a sound compiler. Usability moves from the end of
-the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule; the external
+the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule (since 2026-10-21 the
+feature track of the [capacity allocation](#capacity-allocation)); the external
 user pilot that row 16 required at the end now starts after rows 0–2 qualify and the onboarding path is ready.
 
 **Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
@@ -591,7 +747,8 @@ admitted language. One converging compiler architecture carries distinct assuran
 and the existing one), and the LLVM profile stays supported for production use. The proof track, the
 shared front end (row 4), and the bounded interop and application-feedback tracks proceed alongside one
 another after the immediate protections (amended 2026-10-20: each first deliverable waits only for its
-[prerequisite exits](#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each;
+[prerequisite exits](#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each
+(amended 2026-10-21: the [capacity allocation](#capacity-allocation));
 new authority defects take priority. Legacy claims migrate when their Core semantics and evidence boundaries are ready, preserving
 supported replay and exact assurance labels. Property gates replace brittle corpus cardinalities while
 keeping independent coverage inventories and minimum completed comparisons. No multi-year proof
@@ -1789,10 +1946,11 @@ changelog does not erase a still-relevant condition:
 
 The current execution queue is the sole scheduling authority. Task IDs identify
 obligations; file order and area headings do not schedule them. Phases summarize
-dependencies and permitted overlap, not additional integration capacity. For the
-one-maintainer team, at most one shared-compiler migration checkpoint and one bounded
-proof checkpoint are active for integration at a time. Usability, interop, application,
-incremental-driver and release work use that same limit; proof progress remains reserved.
+dependencies and permitted overlap, not additional integration capacity. The
+[capacity allocation](#capacity-allocation) divides effort and integration slots between
+the tracks: the verified compiler holds the majority and two slots, evidence integrity and
+adversarial validation have protected minimums, and usability, interop, application,
+incremental-driver and release work share one capped feature slot.
 Every activated checkpoint records its accountable maintainer, required reviewer and exit.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md) under a `### Completed Task R-NNNN`
@@ -2856,7 +3014,12 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Place MIR — stage S10 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned.**
+**Status (2026-10-18; amended 2026-10-21): planned.** Queue row 4 carries a whole-language structural
+checkpoint for the existing profile after R-0514's checker is authoritative: `Lower`'s sequencing,
+match compilation, cleanup/`defer` and check expansion move into Place MIR passes consuming
+`CheckedMonoCore`, as shadow paths with disagreement gates against the existing lowering (structural
+class 8). The Place MIR semantics, the per-pass differential against Core's semantics and the proofs
+grow per slice (rows 3 and 6).
 
 Depends on S7, S8a (consumes `CheckedMonoCore`). Carve sequencing, match compilation, cleanup/`defer`
 edges and check expansion out of `Lower.lean` into Core → Place MIR passes, one job each, with a
@@ -2881,7 +3044,10 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Memory model, layout and Memory CFG — stage S11 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned.**
+**Status (2026-10-18; amended 2026-10-21): planned.** Queue row 4 carries a whole-language checkpoint
+for the existing profile: one `Layout` authority supplies every size, alignment, offset and enum
+representation the existing lowering and LLVM emission use, with a gate comparing it with the emitted
+types (structural class 12). Representation certificates, Memory CFG and the proofs grow per slice.
 
 Owns the shared raw-memory specification with S7, block–offset/provenance memory, `Layout`, representation certificates and Place MIR → Memory CFG lowering.
 
@@ -3157,7 +3323,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 **Objective:** The first cumulative verified releases — a proved path from checked Core to a native
 image for a small language, carried through every stage of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices).
 
-**Status (2026-10-19; amended 2026-10-20): planned; queue row 3.** The design examples and isolated proof development start now; V1a and V1b are accepted only when their [prerequisite exits](#feature-prerequisites) hold, together with the subset obligations below.
+**Status (2026-10-19; amended 2026-10-20 and 2026-10-21): planned; queue row 3.** The design examples and isolated proof development start now; V1a, V1b and V1c are accepted only when their [prerequisite exits](#feature-prerequisites) hold, together with the subset obligations below. V1c names the restricted-source correspondence below as its own deliverable (2026-10-21).
 
 Work (details and premises in the plan's *V1 milestones*): reviewed machine-checked design examples for
 move/destroy, downward exclusive and shared borrows, reborrowing, structured cleanup and typed-value
@@ -3166,7 +3332,7 @@ executable BIR refinement for `i64`, `u64`, `bool`, locals and assignment, condi
 with structured exits, non-recursive direct calls, comparisons, checked `+ - *` and one
 capability-authorized `print_int` event, with terminating, trapping and divergent behaviours; subsequent
 V1 increments for the remaining widths, casts, division, shifts, recursion and loop forms; **V1b**,
-native AArch64 through Concrete’s proved BIR → LCB-IR adapter and an applicable pinned LCB preservation theorem (R-0517). C01–C03 establish only the certified typed-assembly endpoint; rendering and encoding remain named assumptions until separately covered. R-0505 supplies final-image correspondence, with R-0508 proving the composition through the exact image, runtime and startup. Any assumed rendering, assembler, linker, loader or ISA correspondence remains explicit in the claim; mutation-tested image checks alone do not establish validator soundness; restricted-source correspondence (syntax,
+native AArch64 through Concrete’s proved BIR → LCB-IR adapter and an applicable pinned LCB preservation theorem (R-0517). C01–C03 establish only the certified typed-assembly endpoint; rendering and encoding remain named assumptions until separately covered. R-0505 supplies final-image correspondence, with R-0508 proving the composition through the exact image, runtime and startup. Any assumed rendering, assembler, linker, loader or ISA correspondence remains explicit in the claim; mutation-tested image checks alone do not establish validator soundness; **V1c**, restricted-source correspondence (syntax,
 resolution, elaboration judgments specified independently, then proved or certificate-checked); a
 minimal canonical task identity and an independent retained-artifact consumer for every published slice
 claim. Stages exercised, restricted to the admitted subset: R-0492 – R-0493, R-0495 – R-0497, R-0499,
@@ -3178,7 +3344,7 @@ maximal-behaviour refinement through the explicit observation relation, the pres
 validity invariant and the sufficient-resource theorem; checker soundness and basic capability
 containment for the subset; every used pass or validator proved; one nontrivial Core claim transported
 to its binary; the closure re-checked by con-leche and nanoda and bound to the exact retained artifacts.
-V1 is described as source-to-native only once its frontend correspondence is proved; until then the
+V1 is described as source-to-native only once its frontend correspondence (V1c) is proved; until then the
 published theorem states that it starts at `CheckedCore`. An outside expert's review of Core's V1
 semantics and the design examples is recorded.
 
@@ -3304,7 +3470,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
 `verified` profile.
 
-**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout follows the immediate protections in rows 0 – 2. Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
+**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](#feature-prerequisites) hold; the whole-language rollout starts once row 0's in-flight candidates (batch 2, type-identity, generic-destroy) are accepted on main, implementing the rules as exits 2i – 2k state them, without waiting for row 2's other exits (amended 2026-10-21, [priority decision](#decisions)). Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
 and elaboration rebuilds the program independently, so the program checked is not the program compiled;
 bugs 087 (borrow-block use-after-free), 090 and 092 – 094 lived in that gap, and name-keyed
 environments produced 082, 087, 093, 094 and 096 – 098. The slices prove these rules only as they reach
@@ -3344,10 +3510,11 @@ regression cases and controls of these tasks transfer here unless the reason ret
 **Objective:** Make Concrete a language people choose to use, measured continuously alongside the proof
 track rather than after it, by advancing bounded checkpoints of the tasks that already own each concern.
 
-**Status (2026-10-19): planned; queue row 8, delivered through bounded checkpoints within the existing
-capacity rule.** After rows 0 – 2 qualify, each checkpoint records its scope, accountable maintainer,
-reviewer, acceptance evidence and integration slot before starting. Usability, interop and application
-work share the existing integration limit; proof progress remains reserved. Quarterly pilots are a
+**Status (2026-10-19; amended 2026-10-21): planned; queue row 8, delivered through bounded checkpoints
+within the feature track of the [capacity allocation](#capacity-allocation).** After rows 0 – 2 qualify,
+each checkpoint records its scope, accountable maintainer, reviewer, acceptance evidence and integration
+slot before starting. Usability, interop and application work share the feature track's single slot and
+capped share; the verified compiler's share and slots are reserved. Quarterly pilots are a
 continuing feedback obligation, not a prerequisite for advancing rows 9 – 17; missed pilots and their
 recovery dates are recorded rather than counted as completed.
 
@@ -3378,6 +3545,16 @@ Work, in bounded checkpoints:
   Test representative failing programs and repaired positive controls; suggested repairs must preserve
   the intended ownership and authority policy. Snapshots supplement these checks
   ([DIAGNOSTIC_UX](docs/compiler/DIAGNOSTIC_UX.md)).
+- **Practical debugging (2026-10-21; before workloads expand beyond RocksDB slice 1).** A non-author
+  diagnoses two injected failures in a program built on RocksDB slice 1 (a runtime trap, and a
+  foreign call that fails) with source locations, stack traces through Concrete, runtime and foreign
+  frames, and inspected values, on the supported existing profile. R-0281 owns the implementation.
+  The transcript, elapsed time and author assistance are retained. This checkpoint is a prerequisite
+  for the four-adapter checkpoint and for R-0490's component workloads, not for RocksDB slice 1.
+- **Continuing maintenance (2026-10-21).** The pilots measure keeping a program working, not only
+  the first build: a participant other than the authors maintains a small project across one
+  compiler upgrade and one dependency upgrade, recording the breakage, migration diagnostics, effort
+  and author assistance. Row 16 still owns the external-user dependency-upgrade and replay acceptance.
 - **V1 tooling checkpoints.** At V1a, qualify the minimal R-0385 – R-0388 editor path over the shared
   compiler session: types, diagnostics, definition navigation, proof/trust/capability status and replay
   links. At V1b, qualify DWARF line mappings and source-level trap traces for the admitted native subset
@@ -3407,7 +3584,12 @@ supported profile/target; benchmark sources, correctness checks, hardware, toolc
 flags, safety settings, repeated measurements and numeric regression thresholds are published, cold
 builds, incremental edits and runtime are measured separately, CI rejects a deliberately injected
 threshold violation, and unsupported comparisons are reported explicitly and do not count as covered;
-*before public release* — the stability policy, `std` coverage inventory and named reviewers are
+*practical debugging* — a non-author diagnoses the injected trap and the failing foreign call from
+source locations, stack traces and inspected values, with the transcript, time and assistance retained,
+and scripted fixtures check that the trap and the foreign failure each resolve to their source frame;
+*continuing maintenance* — one non-author maintenance record across a compiler upgrade and a dependency
+upgrade is retained, each blocking finding has an owner and disposition, and the record repeats with
+later pilots; *before public release* — the stability policy, `std` coverage inventory and named reviewers are
 published.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
@@ -3425,7 +3607,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 minutes of attention instead of days.
 
 **Status:** planned; Phase 3 release-preparation checkpoint coordinated by R-0333/R-0515
-within the existing capacity limit. Its nightly-publication subset precedes the first
+within the feature track of the capacity allocation. Its nightly-publication subset precedes the first
 automated nightly; its complete exit precedes the first automated train or milestone.
 
 Work: one command produces, from an exact main commit whose full tier passed (R-0513), the R-0333
@@ -6533,6 +6715,14 @@ fixture or reasoned exemption, API snapshot entry, and evidence/authority/
 failure classification fails CI. This extends the existing five-fact manifest
 and compiled-coverage machinery; do not create a parallel review database.
 
+**Usable `std` subset (2026-10-21; graduation criterion).** Name, in a checked list, the `std` APIs the
+first two workloads need: RocksDB slice 1 with its companions, and the first R-0490 component workload
+(or the first pilot's program if it comes first). Validate those APIs' ownership, error and foreign
+boundary behaviour together, in one composed program fixture per workload rather than one fixture per
+API. This subset and its fixtures are a graduation criterion for this inventory and for R-0488's
+library-usability checkpoint; `std` work beyond it before V1b follows recorded workload asks
+([capacity allocation](#capacity-allocation)).
+
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
@@ -6793,6 +6983,17 @@ correction slice.
   `docs/language/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
   replays a fixed fault schedule and asserts each effect-boundary property.
 
+**Shared fault-injection checkpoint (2026-10-21; pulled by RocksDB slice 1's companions).** One
+seam-based failure-schedule mechanism serves the runtime, `std` and FFI: allocation failure where the
+allocator supports injection, short reads and writes, failed initialization, failed cleanup and
+interrupted persistence. It is exercised composed in real programs, not only per API: R-0285's
+`ffi_error_release` and `ffi_resource_pool` companions and the RocksDB slice 1 consumer run under
+schedules that fail each acquisition, write, flush and release in turn. **Checkpoint exit:** each
+failure kind has a deterministic schedule that a composed program runs, asserting the typed error,
+exactly-once release of everything acquired and no use of a released resource; a control with the
+injected failure ignored by the program under test fails; unsupported injection points (an allocator
+without a seam) are listed, not counted as covered. It does not block RocksDB slice 1 itself.
+
 ### Task R-0031
 
 **Phase:** 3, 4, 6
@@ -6805,6 +7006,10 @@ correction slice.
 stable ordering helpers for ordered collections. Each API must state whether
 it requires `with(Alloc)`, whether it can fail, and which runtime
 obligations it creates.
+
+**Scope until V1b (2026-10-21):** new collection APIs are added for a recorded workload ask or R-0021's
+usable `std` subset, not for completeness ([capacity allocation](#capacity-allocation)); the list above
+stays this task's eventual scope.
 
 Every new collection API must preserve the H18 ownership contract documented
 in [CHANGELOG.md](CHANGELOG.md) and `docs/language/RUNTIME_COLLECTIONS.md`: a
@@ -7549,6 +7754,8 @@ bounded audit does not bypass identity, receipt or typed-contract prerequisites.
    clarity, duplicated cleanup, missed errors and audit effort. Reuse R-0485's
    review criteria and R-0486's flagship component; no new public flagship. Require
    repeated workload evidence before introducing more expressive language features.
+   Graduation also needs R-0021's usable `std` subset (2026-10-21): the APIs the first two workloads
+   need, validated for ownership, errors and the foreign boundary together.
    Include one fallible writer or owned-handle operation with R-0285's failure
    contract: record partial progress, ownership and usable state on error, and
    whether retry is valid. Retain a successful operation and a controlled failure
@@ -10576,7 +10783,8 @@ supports the foreign calls (otherwise the leg records that it is native-only); t
 acquisitions and releases, and the leg asserts one release per handle on every path. Compile-fail
 fixtures per example stay rejected: a handle not released on one error path, a handle used after
 release, a reference stored in a handle aggregate, a block `let` shadowing a live handle, and a
-context destroyed while its callback registration remains active. The examples use today's explicit foreign
+context destroyed while its callback registration remains active. Their failure paths also run under
+R-0030's [shared fault-injection checkpoint](#task-r-0030) (2026-10-21). The examples use today's explicit foreign
 declarations and move to generated bindings when this task's workflow covers them. They are
 companions accepted with or after RocksDB slice 1, not prerequisites of it; their 2i rejection
 fixtures join when exit 2i lands.
@@ -10726,6 +10934,16 @@ native-build failure, stale-cache and incompatible-upgrade controls. Retain the 
 format and supported API/target matrix with the acceptance record. This bounded exit unlocks
 R-0490; it does not require wrapping every dependency in advance. Implementation remains pending.
 
+**Clean-machine package workflow (2026-10-21; graduation criterion).** On a clean machine (a fresh
+runner or container with only the documented installer), one scripted exercise installs the toolchain,
+resolves the pinned dependencies, builds the native libraries the manifest declares (the `[native]`
+section of `Concrete.toml`, in progress on branch `native-libs`), runs the tests, upgrades one
+dependency, and rolls the upgrade back to the previous lock, with the build and tests passing at both
+ends and the rolled-back lock reproducing the original artifacts. RocksDB slice 1's acceptance already
+covers the install-to-test half (a fresh clone, normal commands, no manual flags); the upgrade and
+roll-back half is required before the four-adapter checkpoint closes, and R-0365's lockfile exit
+reuses the same exercise.
+
 ### Task R-0490
 
 **Phase:** 3
@@ -10735,7 +10953,11 @@ R-0490; it does not require wrapping every dependency in advance. Implementation
 **Objective:** Port the complete client-owned ethlambda implementation to Concrete, get it running
 and tested, and use concrete blockers to improve the language before proving client components.
 
-**Status (2026-10-17): planned; follows the bounded R-0285 interop checkpoint.** The initial
+**Status (2026-10-17; amended 2026-10-21): planned; follows the bounded R-0285 interop checkpoint.**
+Until V1b's composed native exit holds, this task runs bounded component workloads inside the feature
+track's single slot ([capacity allocation](#capacity-allocation)); the bulk port starts after V1b, or
+earlier only by a dated decision recorded when V1b is blocked on LCB's external milestones. The exit
+below is unchanged. The initial
 reference is [ethlambda at afc491b2](https://github.com/lambdaclass/ethlambda/tree/afc491b28d12de8c161fb5cd140b160ebf6d965d).
 Pin its protocol/specification and fixture revisions before measuring parity. Advancing a pin is
 an explicit compatibility change, with differences retained rather than absorbed into new goldens.
@@ -11929,7 +12151,7 @@ release policy.
  checksums, the supply-chain lock, and `THIRD_PARTY.md`.
 ### Task R-0355
 
-**Phase:** 3
+**Phase:** 2, 3
 
 **Reconciliation (2026-10-19):** Keep; consume performance ledger and add proof scalability metrics. Before large R-0512 migrations, budgets include proof scalability: elaboration/recheck memory, proof-term size, artifact size and validator scaling.
 
@@ -11942,6 +12164,21 @@ release policy.
  independent bundle-verification latency against
  `release/perf-baseline.json`. Done when
  release CI blocks unexplained regressions and prints the regressed command.
+
+**Development-speed baseline (2026-10-21; checkpoint of queue row 4, precedes its structural
+changes).** Before the first whole-language change of R-0492, R-0499/R-0514, R-0502 or R-0501 lands on
+main, record a baseline over a small named representative corpus (the compiler, `std`, one large
+example and one multi-module program, listed in `release/dev-speed-corpus.txt` (new)): clean build
+time of the compiler and of each corpus program, rebuild time after a one-function edit in the
+compiler and in a Concrete program, peak compiler memory on each corpus program, and the fast push
+tier's turnaround (R-0513). Each measurement is recorded per main commit with its SHA, host class and
+toolchain, and has a budget with a stated noise tolerance; `scripts/tests/check_dev_speed.sh` (new)
+fails a commit that exceeds a budget beyond its tolerance, and a budget is raised only by a commit that
+states the reason. **Checkpoint exit:** the baseline exists at a named main commit before that first
+structural change lands; a deliberately injected regression beyond tolerance fails the gate; the
+recorded series shows each structural change's effect. The release budgets above remain this task's
+exit; this checkpoint is their first, smaller corpus.
+
 ### Task R-0356
 
 **Phase:** 2, 3, 5
@@ -12346,6 +12583,10 @@ conditional dependencies, so switching targets preserves unrelated selections.
 Retain expected outcomes for duplicate-version/native-library conflicts and
 root-only overrides. The first R-0285 slice can use exact pins; introduce ranges
 only after their selection/compatibility rules and conflict fixtures are decided.
+
+**Graduation criterion (2026-10-21):** R-0285's clean-machine package workflow exercise (install,
+resolve pinned dependencies, build native libraries, test, upgrade one dependency, roll back to the
+previous lock and reproduce the original artifacts) passes with this task's lockfile and commands.
 
 ### Task R-0366
 

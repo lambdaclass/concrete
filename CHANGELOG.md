@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Verified Compiler Is The Primary Track, With A Gated Capacity Allocation (2026-10-21)
+
+The roadmap now protects the verified compiler by capacity, not only by queue order. A new
+[capacity allocation](ROADMAP.md#capacity-allocation) gives the verified compiler at least 55% of each
+planning cycle and two integration slots. Evidence integrity gets at least 15% and adversarial
+validation at least 10%. Interop, application, usability and release work are capped at 20% and share
+one slot. `check_roadmap_coverage.sh` gates the table with thirteen negative controls (78 checks). A
+defect disposition rule applies to new bugs. Silent defects (memory safety, wrong code, false proofs)
+are stopped at once, by repair or by fail-closed containment. Loud defects are filed with their owner
+in [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) and pinned until that owner removes their
+class. This answers bugs 102 – 120 being found in about two days. Queue row 4 becomes verified-pipeline
+Part 1 for the whole language: identities, the authoritative Core checker, and also one `Layout` and
+Place MIR in the existing profile. It starts once row 0's in-flight candidates are accepted, after a
+development-speed baseline (R-0355). V1c, restricted source → checked Core correspondence, is a named
+and gated deliverable, so a Core-to-native theorem is never presented as source-to-native. Several
+existing owners gained acceptance milestones: a clean-machine package exercise with upgrade and
+roll-back (R-0285, R-0365), a shared fault-injection checkpoint (R-0030), and a practical debugging
+checkpoint that gates workload expansion (R-0515, R-0281). The first two workloads' `std` subset
+(R-0021, R-0488) and maintenance pilots (R-0515) are covered too. The ethlambda port, `std` breadth and
+tooling stay bounded until V1b. The reasons, and what was not adopted, are in the roadmap's
+"Priority decision, 2026-10-21".
+
 ### Every Example Builds And Its Output Is Checked, Natively And In The Interpreter (2026-10-20)
 
 json, mal, vm and policy_engine had stopped compiling behind `skip`, and the CI smoke step only caught
