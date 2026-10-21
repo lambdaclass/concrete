@@ -2861,9 +2861,14 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let eraseTy := fun (params : List String) (t : Ty) =>
     let aliases := typeAliasMap.filter fun (n, _) => !params.contains n
     eraseNewtypeTy m.newtypes (expandAliasDeep aliases (aliases.length + 64) t)
+  -- the same type with newtypes kept (bug 096's agreement checker compares nominal types)
+  let nominalTy := fun (params : List String) (t : Ty) =>
+    let aliases := typeAliasMap.filter fun (n, _) => !params.contains n
+    expandAliasDeep aliases (aliases.length + 64) t
   let cStructs := m.structs.map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
       fields := sd.fields.map fun f => (f.name, eraseTy sd.typeParams f.ty),
+      nominalFields := sd.fields.map fun f => (f.name, nominalTy sd.typeParams f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
@@ -2873,6 +2878,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       !(localStructNames.contains sd.name)).map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
       fields := sd.fields.map fun f => (f.name, eraseTy sd.typeParams f.ty),
+      nominalFields := sd.fields.map fun f => (f.name, nominalTy sd.typeParams f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
@@ -3247,6 +3253,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
       { name := ed.name, typeParams := ed.typeParams,
         variants := ed.variants.map fun v =>
           (v.name, v.fields.map fun f => (f.name, eraseTy ed.typeParams f.ty)),
+        nominalVariants := ed.variants.map fun v =>
+          (v.name, v.fields.map fun f => (f.name, nominalTy ed.typeParams f.ty)),
         isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId,
         declSpan := some ed.span }
     if respell then { (definerRn ed.definedIn).enumDef ced with name := enumCanon ed } else ced
@@ -3537,13 +3545,13 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
     fs.flatMap (fun (_, e) => tyAgreeExpr c e) ++
     match c.structOf n with
     | some sd => fs.filterMap fun (fname, e) =>
-        (sd.fields.lookup fname).map fun ft => (ft, e.ty, s!"field '{fname}' of '{n}'", sd.typeParams)
+        (structFieldsNominal sd |>.lookup fname).map fun ft => (ft, e.ty, s!"field '{fname}' of '{n}'", sd.typeParams)
     | none => []
   | .enumLit en v _ fs _ =>
     fs.flatMap (fun (_, e) => tyAgreeExpr c e) ++
     match c.enumOf en with
     | some ed =>
-      match ed.variants.lookup v with
+      match (enumVariantsNominal ed).lookup v with
       | some vfs => fs.filterMap fun (fname, e) =>
           (vfs.lookup fname).map fun ft => (ft, e.ty, s!"field '{fname}' of '{en}::{v}'", ed.typeParams)
       | none => []
@@ -3551,7 +3559,7 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
   | .fieldAccess e f t =>
     tyAgreeExpr c e ++
     match c.structOf (tyStructName e.ty) with
-    | some sd => ((sd.fields.lookup f).map fun ft => [(ft, t, s!"field '{f}'", sd.typeParams)]).getD []
+    | some sd => (((structFieldsNominal sd).lookup f).map fun ft => [(ft, t, s!"field '{f}'", sd.typeParams)]).getD []
     | none => []
   | .binOp _ l r _ => tyAgreeExpr c l ++ tyAgreeExpr c r
   | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => tyAgreeExpr c e
@@ -3565,7 +3573,7 @@ partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAg
   | .enumArm en v bs g b =>
     -- each binder (positional, as Elab binds them) against the variant's payload field
     let payload : List TyAgreePair := match c.enumOf en with
-      | some ed => match ed.variants.lookup v with
+      | some ed => match (enumVariantsNominal ed).lookup v with
         | some fs => (fs.zip bs).map fun ((fname, ft), (_, bt)) =>
             (ft, bt, s!"the binding of field '{fname}' of '{en}::{v}'", ed.typeParams)
         | none => []
@@ -3600,7 +3608,7 @@ partial def tyAgreeStmt (c : TyAgreeCtx) : CStmt → List TyAgreePair
   | .fieldAssign o f v =>
     tyAgreeExpr c o ++ tyAgreeExpr c v ++
     match c.structOf (tyStructName o.ty) with
-    | some sd => ((sd.fields.lookup f).map fun ft => [(ft, v.ty, s!"field '{f}'", sd.typeParams)]).getD []
+    | some sd => (((structFieldsNominal sd).lookup f).map fun ft => [(ft, v.ty, s!"field '{f}'", sd.typeParams)]).getD []
     | none => []
   | .derefAssign t v => tyAgreeExpr c t ++ tyAgreeExpr c v
   | .arrayIndexAssign a i v => tyAgreeExpr c a ++ tyAgreeExpr c i ++ tyAgreeExpr c v
@@ -3687,13 +3695,13 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   let structs := cms.flatMap coreStructsDeep
   let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDups.filterMap fun n =>
     let copies := (structs.filter (·.2.name == n)).map fun (p : String × CStructDef) =>
-      p.2.fields.map fun (f : String × Ty) => fam f.2
+      (structFieldsNominal p.2).map fun (f : String × Ty) => fam f.2
     if copies.eraseDups.length ≤ 1 then none else
     some (diag s!"struct '{n}' reaches modules with fields naming different same-named types; Core would lay it out twice (bug 096)")
   let enums := cms.flatMap coreEnumsDeep
   let enumDiags : Diagnostics := (enums.map (·.2.name)).eraseDups.filterMap fun n =>
     let copies := (enums.filter (·.2.name == n)).map fun (p : String × CEnumDef) =>
-      p.2.variants.map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
+      (enumVariantsNominal p.2).map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
     if copies.eraseDups.length ≤ 1 then none else
     some (diag s!"enum '{n}' reaches modules with payloads naming different same-named types; Core would lay it out twice (bug 096)")
   let externDiags : Diagnostics := externNames.filterMap fun n =>

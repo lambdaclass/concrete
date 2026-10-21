@@ -1,0 +1,15 @@
+// Bug 096 (Codex round 12): two modules declare newtype Id; a struct field of a's Id is
+// compared by its NOMINAL type (a_Id), not its erased representation (Int).
+// Expected (compiled AND --interp): 7.
+mod a {
+    newtype Id = Int;
+    struct S { v: Id }
+    fn main() with(Std) -> Int {
+        let s: S = S { v: Id(7) };
+        let S { v } = s;
+        print_int(v.0);
+        print_char(10);
+        return 0;
+    }
+}
+mod b { newtype Id = Int; }

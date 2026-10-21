@@ -153,7 +153,8 @@ def fnDef (r : CoreRename) (f : CFnDef) : CFnDef :=
 
 def structDef (r : CoreRename) (sd : CStructDef) : CStructDef :=
   let r' := r.shadow sd.typeParams
-  { sd with name := r.tyName sd.name, fields := sd.fields.map fun (n, t) => (n, r'.ty t) }
+  { sd with name := r.tyName sd.name, fields := sd.fields.map fun (n, t) => (n, r'.ty t)
+            nominalFields := sd.nominalFields.map fun (n, t) => (n, r'.ty t) }
 
 def enumDef (r : CoreRename) (ed : CEnumDef) : CEnumDef :=
   -- A compiler-builtin enum is identified by `builtinId`, not by its spelling.
@@ -161,7 +162,8 @@ def enumDef (r : CoreRename) (ed : CEnumDef) : CEnumDef :=
   let r' := r.shadow ed.typeParams
   { ed with
     name := r.tyName ed.name
-    variants := ed.variants.map fun (v, fs) => (v, fs.map fun (n, t) => (n, r'.ty t)) }
+    variants := ed.variants.map fun (v, fs) => (v, fs.map fun (n, t) => (n, r'.ty t))
+    nominalVariants := ed.nominalVariants.map fun (v, fs) => (v, fs.map fun (n, t) => (n, r'.ty t)) }
 
 def newtypeDef (r : CoreRename) (nt : NewtypeDef) : NewtypeDef :=
   let r' := r.shadow nt.typeParams
@@ -213,6 +215,13 @@ structure TyAgreeCtx where
 
 /-- A type position the body asserts: (declared, actual, where, wildcard type parameters). -/
 abbrev TyAgreePair := Ty × Ty × String × List String
+
+/-- A struct copy's field types as values carry them (nominal when recorded). -/
+def structFieldsNominal (sd : CStructDef) : List (String × Ty) :=
+  if sd.nominalFields.isEmpty then sd.fields else sd.nominalFields
+/-- An enum copy's payload types as values carry them (nominal when recorded). -/
+def enumVariantsNominal (ed : CEnumDef) : List (String × List (String × Ty)) :=
+  if ed.nominalVariants.isEmpty then ed.variants else ed.nominalVariants
 
 /-- The name of the struct a value of this type is (through one reference or heap layer). -/
 def tyStructName : Ty → String

@@ -558,9 +558,25 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
       -- call's result is laid out as the other module's type.
       if !st.respelledTypes.isEmpty then
         if let some impl ← lookupFn resolved then
-          let argsOk := impl.params.length != args.length ||
-            (impl.params.zip args).all fun ((_, pt), a) => famAgree st.respelledTypes impl.typeParams pt a.ty
-          if !argsOk || !famAgree st.respelledTypes impl.typeParams impl.retTy ty then
+          -- A generic implementation is compared at its specialization: its type arguments
+          -- read off the call (explicit, else inferred from the arguments), substituted, then
+          -- compared with no wildcards. Arguments it cannot determine leave the comparison to
+          -- the uninstantiated signature only where it names no respelled type.
+          let args' ← args.mapM monoExpr
+          let targs := if typeArgs.length == impl.typeParams.length && !typeArgs.isEmpty then typeArgs
+            else inferTypeArgs impl.typeParams impl.params args'
+          let (params, retTy, wild) :=
+            if impl.typeParams.isEmpty then (impl.params, impl.retTy, ([] : List String))
+            else if targs.length == impl.typeParams.length then
+              let sub := substTy impl.typeParams (impl.typeParams.zip targs)
+              (impl.params.map (fun (n, t) => (n, sub t)), sub impl.retTy, ([] : List String))
+            else (impl.params, impl.retTy, impl.typeParams)
+          let undetermined := !wild.isEmpty &&
+            ((impl.retTy :: impl.params.map (·.2)).any fun t =>
+              (tyNamesIn t).any st.respelledTypes.contains)
+          let argsOk := params.length != args'.length ||
+            (params.zip args').all fun ((_, pt), a) => famAgree st.respelledTypes wild pt a.ty
+          if undetermined || !argsOk || !famAgree st.respelledTypes wild retTy ty then
             throw [{ severity := .error, pass := "mono", span := none, code := "E0299"
                      message := s!"trait method call '{m}' on '{c}' selects '{resolved}', whose signature names other same-named types than the call expects; two modules' same-named traits or types meet here (bug 096)"
                      hint := some "rename one of the traits or types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }]

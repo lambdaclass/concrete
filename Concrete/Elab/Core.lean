@@ -158,6 +158,10 @@ structure CStructDef where
   name : String
   typeParams : List String := []
   fields : List (String × Ty)
+  /-- Bug 096: the fields' NOMINAL types (aliases expanded, newtypes kept), which a value's type
+      is compared with; `fields` erases newtypes to their representation. Empty when the
+      producer did not record them (the checker then reads `fields`). -/
+  nominalFields : List (String × Ty) := []
   isPublic : Bool := false
   isCopy : Bool := false
   isReprC : Bool := false
@@ -171,6 +175,8 @@ structure CEnumDef where
   name : String
   typeParams : List String := []
   variants : List (String × List (String × Ty))
+  /-- Bug 096: the payloads' nominal types (see `CStructDef.nominalFields`). -/
+  nominalVariants : List (String × List (String × Ty)) := []
   isPublic : Bool := false
   isCopy : Bool := false
   builtinId : Option BuiltinEnumId := none

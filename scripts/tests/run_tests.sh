@@ -1602,6 +1602,8 @@ run_err "$TESTDIR/error_096_enum_payload_binding_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_const_initializer_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_trait_dispatch_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_extern_signature_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_generic_trait_impl_dispatch_other_type.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_newtype_field_nominal.con" "7" 0
 run_ok "$TESTDIR/regress_097_colliding_fn_in_const.con" "1112" 0
 run_ok "$TESTDIR/regress_096_alias_copy_unused.con" "4" 0
 run_ok "$TESTDIR/regress_097_let_shadows_colliding_fn.con" "1112" 0
@@ -1614,7 +1616,7 @@ for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported
             "regress_096_sibling_types_unused:1" "regress_096_method_owner_same_module:101007" \
             "regress_096_transitive_signature_binding:93" "regress_096_sibling_injected_binding:7" \
             "regress_096_alias_copy_unused:4" "regress_096_import_closure_copy:4" \
-            "regress_096_generic_method_param_named_like_type:3" \
+            "regress_096_generic_method_param_named_like_type:3" "regress_096_newtype_field_nominal:7" \
             "regress_097_098_same_named_private_fns:112124" "regress_096_nested_same_named_methods:751300:native"; do
     r096_f="${r096%%:*}"; r096_rest="${r096#*:}"; r096_want="${r096_rest%%:*}"
     case "$r096_rest" in *:native) continue ;; esac

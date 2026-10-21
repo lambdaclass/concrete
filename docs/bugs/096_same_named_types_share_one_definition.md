@@ -108,8 +108,12 @@ that mentions another module's type is never refused (`regress_096_private_metho
 Trait bounds name their trait by spelling, so a generic body written against one module's trait
 can dispatch to another module's same-named trait's impl, which only Mono resolves: Mono compares
 the selected implementation's signature with the call on the respelled types
-(`CModule.respelledTypes`) and refuses a disagreement (E0299,
-`error_096_trait_dispatch_other_type.con`); `--interp` runs the same Mono validation.
+(`CModule.respelledTypes`), a generic implementation at its specialization, and refuses a
+disagreement (E0299, `error_096_trait_dispatch_other_type.con`,
+`error_096_generic_trait_impl_dispatch_other_type.con`); `--interp` runs the same Mono validation.
+Fields and payloads are compared by their nominal types (`CStructDef.nominalFields`,
+`CEnumDef.nominalVariants`; `fields` erases newtypes to their representation):
+`regress_096_newtype_field_nominal.con`.
 
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of

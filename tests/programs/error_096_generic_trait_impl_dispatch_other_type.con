@@ -1,0 +1,23 @@
+// Bug 096 (Codex round 12): the trait-dispatch check runs at the GENERIC implementation's
+// specialization: a's impl<T> Read for P<T> returns a_P<i64>, c's call expects c_P. Refused
+// (E0299) in Mono, which --interp also runs.
+mod a {
+    struct Copy P<T> { x: T, pad: i64 }
+    trait Read { fn get(self) -> Self; }
+    impl<T: Copy> Read for P<T> {
+        fn get(self) -> P<T> { return self; }
+    }
+    fn main() with(Std) -> Int {
+        print_int(c::read(P::<i64> { x: 7, pad: 99 }));
+        print_char(10);
+        return 0;
+    }
+}
+mod c {
+    struct Copy P { pad: i64, x: i64 }
+    trait Read { fn get(self) -> P; }
+    pub fn read<T: Read + Copy>(w: T) -> i64 {
+        let p: P = w.get();
+        return p.x;
+    }
+}
