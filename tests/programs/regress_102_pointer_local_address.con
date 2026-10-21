@@ -2,7 +2,7 @@
 // address of `p`'s slot. The compiler passed `p`'s VALUE (the local never got a
 // slot), so writing through the out-pointer stored into whatever `p` pointed at
 // (here: address 0, SIGTRAP) and `p` itself never changed. Each case returns a
-// distinct bit; 31 when all hold. The interpreter models the same program
+// distinct bit; 63 when all hold. The interpreter models the same program
 // (pointer equality on reference paths), so --interp must agree with the binary.
 trusted fn set_through(p: *mut *mut u8, q: *mut u8) {
     *p = q;
@@ -65,6 +65,28 @@ trusted fn in_branch(take: bool) -> Int {
     return 8;
 }
 
+// The address is taken in a loop CONDITION: the slot is not re-initialized each time round
+// (Codex review: the header re-stored the pre-loop NULL, so `next` never saw its own write).
+trusted fn next(p: *mut *mut u8, x: *mut u8) -> bool {
+    if *p == (0 as *mut u8) {
+        *p = x;
+        return true;
+    }
+    return false;
+}
+
+trusted fn in_cond() -> Int {
+    let mut x: u8 = 7;
+    let mut p: *mut u8 = 0 as *mut u8;
+    let mut n: Int = 0;
+    while next(&mut p as *mut *mut u8, &mut x as *mut u8) {
+        n = n + 1;
+    }
+    if n != 1 { return 0; }
+    if *p != 7 { return 0; }
+    return 32;
+}
+
 // A shared borrow of the pointer local, read through `*const *mut u8`.
 trusted fn shared() -> Int {
     let mut x: u8 = 42;
@@ -76,5 +98,5 @@ trusted fn shared() -> Int {
 trusted fn main() -> Int {
     let both: Int = in_branch(true) + in_branch(false);
     let br: Int = if both == 16 { 8 } else { 0 };
-    return out_slot() + write_back() + in_loop() + br + shared();
+    return out_slot() + write_back() + in_loop() + br + shared() + in_cond();
 }

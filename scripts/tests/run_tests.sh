@@ -1551,7 +1551,17 @@ run_ok  "$TESTDIR/regress_105_ref_valued_branch_generic.con" 111
 # Bug 102 (FIXED): `&mut p` on a pointer-typed local is the address of p's slot; bug 126
 # (FIXED): `&h` / `&mut h` on a Heap<S> local is h's slot and a field access through
 # `&Heap<S>` / `&mut Heap<S>` dereferences twice (MEMORY_SEMANTICS §5 one-hop rule).
-run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 31
+run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 63
+# Two distinct zero-sized places may share an address natively; the interpreter refuses to
+# compare them rather than answer from paths (Codex review of bug 102).
+run_ok  "$TESTDIR/regress_102_zero_sized_ptr_eq.con" 1
+if $COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 | grep -qF "distinct zero-sized places is not modelled"; then
+    echo "  ok  regress_102_zero_sized_ptr_eq: --interp refuses the comparison"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp did not refuse the zero-sized pointer comparison"
+    FAIL=$((FAIL + 1))
+fi
 run_ok  "$TESTDIR/regress_126_heap_ref_one_hop.con" 255
 run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro.con" 43
 run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro_read.con" 10

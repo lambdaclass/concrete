@@ -1962,7 +1962,10 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         -- memory-backed (single source of truth) rather than phi-carried, else
         -- the mid-body address-of promotion collides with the loop's phi for it
         -- (lost condition / re-init counter / infinite loop — C9).
-        if isAgg || cstmtsTakeAddrOf name body then
+        -- The condition counts too: it is lowered in the header on every iteration, so a
+        -- lazy promotion there re-stores the pre-loop value each time round (Codex review
+        -- of bug 102: `while next(&mut p as *mut *mut u8, ..) {}` never advanced `p`).
+        if isAgg || cexprTakesAddrOf name cond || cstmtsTakeAddrOf name body then
           let allocaReg ← freshReg "agg."
           emitEntryAlloca (.alloca allocaReg ty)
           emit (.store val (.reg allocaReg ty))

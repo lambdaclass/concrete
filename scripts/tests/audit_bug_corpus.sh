@@ -38,7 +38,7 @@ declare -A BUG_TEST_MAP=(
   # promotes it) and two dereferences through `&Heap<S>`; 105: EmitSSA stores a reference
   # register as the reference, never as the aggregate it points at; 115: the builtin
   # vec_get / vec_set require a Copy element.
-  [102]="regress_102_pointer_local_address.con"
+  [102]="regress_102_pointer_local_address.con regress_102_zero_sized_ptr_eq.con"
   [126]="regress_126_heap_ref_one_hop.con"
   [105]="regress_105_ref_valued_branch_generic.con error_105_ref_valued_if_arg.con error_105_ref_valued_if_field.con"
   [115]="error_115_vec_get_non_copy.con error_115_vec_get_generic_unbounded.con error_115_vec_set_non_copy.con"

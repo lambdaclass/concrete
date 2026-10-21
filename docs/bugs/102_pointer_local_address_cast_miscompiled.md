@@ -44,7 +44,9 @@ integer (`unsupported binop on given value types`).
 One place rule for every non-array local: `&x` / `&mut x` is the address of `x`'s slot, whatever
 `x`'s type. `addrOfLocal` promotes a pointer-valued local to a stack slot exactly as it promotes a
 scalar, when the borrow's type points at the local's own type (`borrowsSlot`: `&mut p : &mut *mut
-T` for `p : *mut T`); `prePromoteAddrTaken` pre-promotes it before a branch. An array keeps its
+T` for `p : *mut T`); `prePromoteAddrTaken` pre-promotes it before a branch, and a loop pre-promotes a local whose
+address its CONDITION takes as well as its body (the header is lowered every iteration, so a lazy
+promotion there re-stored the pre-loop value each time round; Codex review). An array keeps its
 SVal (the array is its storage). A pointer-valued base of an index place (`&[T; N]`, `*mut [T;
 N]`) is still used by value in `placeAddr`, and a pointer-valued temporary borrowed as itself is
 spilled to a slot. The same rule is bug 126's caller half (`&h` on a `Heap<S>` local).
@@ -52,13 +54,16 @@ spilled to a slot. The same rule is bug 126's caller half (`&h` on a `Heap<S>` l
 The interpreter compares pointers: two reference paths are equal when they name the same place
 (the binding's position from the bottom of the environment plus the steps into it), a path is never
 the null pointer `0 as *mut T`, and any other mix of a path and an integer address, or an ordering
-comparison, is a clear `interp:` error rather than a guess (`evalPtrCompare`).
+comparison, is a clear `interp:` error rather than a guess (`evalPtrCompare`). Two distinct places
+holding a zero-sized value may share one address natively (the elements of `[Z; 2]` for a
+field-less `Z`), so comparing them is refused too (Codex review).
 
 Permanent legs: `tests/programs/regress_102_pointer_local_address.con` in `run_tests.sh` (run_ok
-31: the reproducer's out-slot, a write back through the re-pointed local, the address taken in a
-loop body, in one branch only, and a shared borrow read through `*const *mut u8`; the pre-fix
+63: the reproducer's out-slot, a write back through the re-pointed local, the address taken in a
+loop body, in a loop condition, in one branch only, and a shared borrow read through `*const *mut
+u8`; the pre-fix
 binary traps, exit 133), and the `--interp == binary` leg on the same program, so the differential
-covers the cast. The open-bug reproducer row is not needed: the record had none (the RocksDB
+covers the cast; `regress_102_zero_sized_ptr_eq.con` (native 1, `--interp` refuses). The open-bug reproducer row is not needed: the record had none (the RocksDB
 groundwork pinned it in prose). The RocksDB binding's heap out-slot can now be a stack slot; the
 workaround stays until the binding is rebuilt against a RocksDB install (ROCKSDB_SLICE1.md G2).
 

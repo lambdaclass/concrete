@@ -419,6 +419,14 @@ private def placeIdentity (env : Env) (p : RefPath) : Option (Nat × List RefSte
   | some i => some (view.length - 1 - i, p.steps)
   | none => none
 
+/-- A value that occupies no bytes (a field-less struct, `()`, an empty array or an array of
+    such values). Distinct places holding one may share an address in the binary. -/
+private partial def isZeroSizedVal : IVal → Bool
+  | .unit => true
+  | .struct_ _ fields => fields.all fun (_, v) => isZeroSizedVal v
+  | .array elems _ size => size == 0 || elems.all isZeroSizedVal
+  | _ => false
+
 /-- Pointer equality (`==` / `!=` on references and raw pointers, bug 102). A reference
     path is compared by the place it names; a path is never the null pointer, the only
     integer address the heapless model has (`0 as *mut T`). Any other mix of a path and
@@ -431,8 +439,21 @@ def evalPtrCompare (env : Env) (op : BinOp) (lhs rhs : IVal) : Option (Except St
     | _ => some (.error "interp: ordering comparison of pointers is not modelled; run the compiled binary")
   match lhs, rhs with
   | .ref p, .ref q =>
+    -- Two different places holding a zero-sized value may have one address natively (the
+    -- elements of `[Z; 2]` for a field-less `Z`); the model cannot say, so it refuses
+    -- (Codex review of bug 102).
+    let zeroSized (r : RefPath) : Bool :=
+      match envGet (envViewAtFrame env r.frame) r.base with
+      | some v => match lookupAt v r.steps with
+        | .ok pv => isZeroSizedVal pv
+        | .error _ => false
+      | none => false
     match placeIdentity env p, placeIdentity env q with
-    | some a, some b => result (a == b)
+    | some a, some b =>
+      if a == b then result true
+      else if zeroSized p || zeroSized q then
+        some (.error "interp: comparison of pointers to distinct zero-sized places is not modelled (they may share an address); run the compiled binary")
+      else result false
     | _, _ => some (.error "interp: pointer comparison of a reference whose place is gone")
   | .ref _, .int 0 _ | .int 0 _, .ref _ => result false
   | .ref _, .int _ _ | .int _ _, .ref _ =>
