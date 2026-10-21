@@ -1324,7 +1324,7 @@ Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
 **As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 127 rows and
-`scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `test-full`) checks them as stated
+`scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
 `pair` names the rewrite, not a one-to-one twin); a diagnostic produced by or after monomorphization

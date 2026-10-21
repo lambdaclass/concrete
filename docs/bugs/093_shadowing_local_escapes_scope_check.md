@@ -61,3 +61,7 @@ compiler); `regress_093_shadowing_locals_consumed.con` (shadowing locals and bin
 consumed) must compile and return 42. Every other `tests/programs` fixture keeps its check outcome;
 `check_examples.sh`, `check_linear_*`, `check_ownership_judgment.sh`, `check_pattern_ergonomics.sh`
 pass.
+
+## Exit 2i (2026-10-21)
+
+SCOPE-1@1 (exit 2i, E0301) now refuses every shadowing shape of this bug at the source; the identity-keyed never-consumed check stays as defense in depth (its mutation rows move to the E0301-disabled leg of R-0498).

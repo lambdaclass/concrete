@@ -80,3 +80,7 @@ when batch 2 lands with it as a permanent rejection fixture.
 `interp-fails:ref path base 'local' not in env`) requires the program to compile natively and the
 interpreter to fail with the recorded message. When the checker refuses it (as `land2-fix` does),
 that leg fails until this document, the corpus entry and the leg are updated together.
+
+## Exit 2i (2026-10-21)
+
+REF-6@1 (exit 2i) now refuses every assignment to a reference binding (E0303), whatever its value, so both fixtures report E0303; the E0238 re-pointing check stays as defense in depth.
