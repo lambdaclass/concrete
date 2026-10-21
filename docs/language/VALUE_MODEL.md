@@ -16,15 +16,16 @@ For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 | `&T` | Shared reference | Copy | Immutable borrow |
 | `&mut T` | Exclusive reference | Linear | Mutable borrow, consumed on use |
 | `*mut T` / `*const T` | Raw pointer | Copy | Requires `Unsafe` capability |
-| `Heap<T>` | Owned heap pointer | Linear | `->` field access, must be freed |
+| `Heap<T>` | Owned heap pointer | Linear | `.` field access through one heap layer ([MEMORY_SEMANTICS.md §5](MEMORY_SEMANTICS.md#5-field-access)), must be freed |
 | Structs | Value | Linear | Opt-in `Copy` via marker |
 | Enums | Value | Linear | Opt-in `Copy` via marker |
 | Newtypes | Same as inner type | Inherits | `newtype UserId = Int` is Copy because `Int` is Copy |
 | Function pointers | Value | Copy | No closures |
+| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
 
 ## Copy vs Linear
 
-- **Copy types** can be used multiple times and can be reassigned freely. Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
+- **Copy types** can be used multiple times and, when bound `mut`, reassigned freely (a reference binding never is: REF-6, decided 2026-10-21). Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
 - **Linear types** must be consumed exactly once. All structs and enums are
   linear by default. Branches must agree on consumption. Loops cannot leave an
   outer linear variable consumed. A `mut` linear place may be rebound after its
@@ -36,6 +37,11 @@ For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 The normative statement of these rules, with each rule's diagnostic, enforcing site, fixtures and
 current enforcement status, is [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) (REF-1 to REF-8).
 This section explains the design.
+
+Since the semantics decision of 2026-10-21, a reference exists only as a **parameter**, a **call
+argument** (scoped to the call), a **borrow-block binder** or an **arm-scoped pattern binder**
+through a borrowed scrutinee. No `let` binds a reference and no reference binding is ever assigned
+(REF-6), so where a reference comes from is a lexical fact, not a flow analysis.
 
 **Invariant (language-level).** References (`&T`, `&mut T`) are *scoped access*,
 not values you return and carry around. They may flow **downward** — into
@@ -190,6 +196,10 @@ newtype Wrapper<T> = T;     // Inherits from T
 - **Zero-cost:** Erased at compile time, no runtime representation
 
 ## Layout Attributes
+
+Layout is unspecified unless a `repr` attribute below guarantees it, and each attribute guarantees
+only its documented properties; safe code observes layout only through `sizeof` / `alignof`. The
+normative statement is [LAYOUT_CONTRACT.md §3.3](../platform/LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
 
 ### `#[repr(C)]`
 C-compatible struct layout. Required for FFI.

@@ -143,7 +143,13 @@ duplicating one would let it be freed twice. Concretely:
   and rebuild, or make the field `Copy`. The same rule covers the other overwrite
   sites (H15, **E0291**): `arr[i] = v` over a non-Copy element and `*r = v` through
   `&mut T` with non-Copy `T`. Raw-pointer stores (`*mut`) stay exempt — the trusted
-  collection idiom writes UNINITIALIZED slots.
+  collection idiom writes UNINITIALIZED slots. What an assignment does to the old value
+  (Copy overwritten with no event; a live non-Copy value never overwritten; the operations
+  that return the displaced value) is stated in
+  [MEMORY_SEMANTICS.md §10](MEMORY_SEMANTICS.md#10-assignment-rules), and the order in which an
+  assignment evaluates its parts (right-hand side first) in
+  [STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
+  (decided 2026-10-21).
 - **Functional update `S { ..base }`** may not *copy* a non-Copy field from `base`
   (**E0220**) — the value would be owned by both `base` and the result. Set each
   non-Copy field explicitly.

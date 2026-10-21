@@ -3,6 +3,11 @@
 Status: IMPLEMENTED (core) 2026-06-20 — ROADMAP #36 / LANGUAGE_GAPS #12
 Date: 2026-06-20
 
+The last section, [Evaluation order and assignment](#evaluation-order-and-assignment), is
+normative (decided 2026-10-21, ROADMAP exit 2j) and is the single statement of Concrete's
+evaluation order; the rest of this document is the as-built design record of the statement /
+trailing-expression model.
+
 > **Implemented as designed (Option A).** `AST.Stmt.expr` / `Core.CStmt.expr`
 > carry an `isValue` flag; the parser sets it (`parseExprBlock`, the direct
 > `=> expr` arm, and — a scope correction found during implementation — the
@@ -155,3 +160,62 @@ These are features, not the bug; keep them out so the fix stays bounded.
   the safety net; Stage 1/2 separation localizes any fallout to the flip.
 - `&&`/`||` short-circuit, `defer`, and ghost lets all build `.expr`/statements —
   mechanical flag updates only; covered by the compile-forces-all-sites property.
+
+## Evaluation order and assignment
+
+**Status:** normative, decided 2026-10-21 (ROADMAP [Decisions](../../ROADMAP.md#decisions),
+"Semantics decisions, 2026-10-21"); owner ROADMAP exit 2j (R-0500), which names evaluation order,
+short-circuiting and sequential assignment. This section is the only statement of evaluation
+order. [MEMORY_SEMANTICS.md](MEMORY_SEMANTICS.md) §10 states what an assignment does to the old
+value and cites this section; [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md) states what each
+operation does once its operands are evaluated.
+
+**Rule.** Statements execute in source order. Within an expression, subexpressions are evaluated
+**left to right in source order**, each completely (its calls, effects and traps included) before
+the next begins, and an operation is performed only after all its operands are evaluated:
+
+1. **Calls:** the callee's receiver first (`e.m(a, b)`: `e`), then the arguments left to right.
+2. **Binary operators:** the left operand, then the right. `&&` and `||` evaluate the right operand
+   only when the left one does not decide the result (short-circuit).
+3. **Array literals:** elements left to right.
+4. **Struct and enum literals:** field initializers in the order they are **written in the
+   source**, not the order the type declares its fields. `P { b: f(), a: g() }` calls `f` before
+   `g`.
+5. **Projections:** an index expression `a[i]` evaluates the base, then the index; a field access
+   evaluates its base.
+6. **Assignment, the one exception:** `place = e` evaluates the right-hand side `e` first, then
+   the subexpressions of the destination (its index expressions) left to right, then stores.
+   `arr[i()] = j()` calls `j` before `i`. This is also Rust's order for simple assignment.
+   Concrete has no compound assignment operators.
+
+A trap ends evaluation: no later operand is evaluated and the operation is not performed (traps
+are terminal, [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)). An arithmetic trap is checked after both
+operands are evaluated (ARITHMETIC_POLICY §1).
+
+**Status on main** (`5b63cd87`; probed with the binary and `--interp` at `b9b3cca9` and
+`5b63cd87`, and no evaluation, lowering or interpreter source changed between them):
+
+| rule | binary | interpreter | status |
+|---|---|---|---|
+| 1. receiver, then arguments left to right | yes | yes | enforced (not yet gated) |
+| 2. operands left to right; `&&` / `||` short-circuit | yes | yes | enforced; short-circuit in `Lower.lean` (`.binOp .and_ / .or_`) and `Interp.lean`, exercised by `regress_034_shortcircuit_borrow_promotion.con` and the differential fuzzer |
+| 3. array-literal elements | yes | yes | enforced (not yet gated) |
+| 4. struct-literal fields in source order | **no**: declaration order | yes | **violated**: a silent interpreter / native disagreement (`P { b: tick(5), a: tick(6) }` evaluates 6 then 5 natively and 5 then 6 in `--interp`), a probe defect for exit 0b |
+| 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other) |
+| 5. base before index | yes | yes | enforced (not yet gated) |
+| 6. assignment: right-hand side, then the destination's index | yes | yes | enforced (not yet gated) |
+
+Changing struct and enum literals to source order changes Elab / Lower (the binary uses
+declaration order for both), the interpreter for enum literals, and the extracted model and Core
+semantics so that all agree. No source migration is expected: no corpus program was observed to
+depend on declaration-order evaluation of field initializers with effects (a scan of literals
+with call initializers is part of the change).
+
+**Prevents.** The struct-literal order disagreement; it also discharges V1a's evaluation-order
+obligation, since the verified pipeline may not model a looser order than the compiler implements.
+
+**Owners.** The rule and its gate: exit 2j (R-0500), with permanent differential coverage of
+literal-field order in exit 2c (R-0491). The struct-literal disagreement is silent wrong code
+between consumers, so its repair or containment is exit 0b (R-0482) under the defect disposition
+rule.
+
