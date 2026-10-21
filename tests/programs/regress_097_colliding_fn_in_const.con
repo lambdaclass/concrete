@@ -1,0 +1,13 @@
+// Bug 097 (Codex round 10): a constant's initializer calls the module's colliding `h`; the
+// rename covers constants (Lower inlines them). Expected (compiled): 1112. --interp cannot
+// read a module constant here (bug 117, open), so the leg is native only.
+mod a {
+    fn h() -> Int { return 11; }
+    const K: Int = h();
+    pub fn fa() -> Int { return K; }
+}
+mod b {
+    fn h() -> Int { return 12; }
+    pub fn fb() -> Int { return h(); }
+}
+mod m { import a.{fa}; import b.{fb}; fn main() with(Std) -> Int { print_int(fa() * 100 + fb()); print_char(10); return 0; } }

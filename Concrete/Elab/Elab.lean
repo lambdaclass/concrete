@@ -3489,6 +3489,8 @@ def qualifyCollidingTopLevelFns (tops : List (String × FileSummary)) (cms : Lis
     let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.lookup n).getD n }
     { cm with
       functions := cm.functions.map rn.fnDef
+      -- a constant's initializer is inlined at each use, so its calls are renamed too
+      constants := cm.constants.map fun (n, t, e) => (n, t, rn.expr e)
       callTargets := cm.callTargets ++ cm.callTargets.filterMap fun (n, id) =>
         (rmap.lookup n).map (·, id) }
   .ok renamed
@@ -3647,6 +3649,10 @@ end
 /-- Every function of a module tree with its module's struct and enum copies. -/
 partial def coreFnsWithTypesDeep (cm : CModule) : List (List CStructDef × List CEnumDef × CFnDef) :=
   cm.functions.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreFnsWithTypesDeep
+/-- Every constant of a module tree with its module's struct and enum copies. -/
+partial def coreConstsWithTypesDeep (cm : CModule) :
+    List (List CStructDef × List CEnumDef × (String × Ty × CExpr)) :=
+  cm.constants.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreConstsWithTypesDeep
 /-- Every function definition of a module tree. -/
 partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
 /-- Every linker alias of a module tree. -/
@@ -3720,6 +3726,17 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     (tyAgreeStmts ctx f.body).filterMap fun (exp, act, whr, wild) =>
       if famAgree family wild exp act then none else
       some (diag s!"in '{f.sourceName}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
+  -- a constant's initializer is inlined at every use (Lower), so it is checked like a body
+  let constDiags : Diagnostics := (cms.flatMap coreConstsWithTypesDeep).flatMap fun (sds, eds, (n, t, e)) =>
+    let ctx : TyAgreeCtx := {
+      fns := fns
+      structOf := fun n => sds.find? (·.name == n)
+      enumOf := fun n => eds.find? (·.name == n)
+      retTy := none }
+    let pairs : List TyAgreePair := tyAgreeExpr ctx e ++ [(t, e.ty, s!"the initializer of constant '{n}'", [])]
+    pairs.filterMap fun ((exp, act, whr, wild) : TyAgreePair) =>
+        if famAgree family wild exp act then none else
+        some (diag s!"in constant '{n}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
   let structs := cms.flatMap coreStructsDeep
   let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDups.filterMap fun n =>
     let copies := (structs.filter (·.2.name == n)).map fun (p : String × CStructDef) =>
@@ -3732,7 +3749,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       p.2.variants.map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
     if copies.eraseDups.length ≤ 1 then none else
     some (diag s!"enum '{n}' reaches modules with payloads naming different same-named types; Core would lay it out twice (bug 096)")
-  let all := callDiags ++ structDiags ++ enumDiags
+  let all := callDiags ++ constDiags ++ structDiags ++ enumDiags
   if all.isEmpty then .ok cms else .error (all.eraseDupsBy (·.message == ·.message))
 
 def elabProgram (resolved : List ResolvedModule)

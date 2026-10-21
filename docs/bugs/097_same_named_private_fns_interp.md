@@ -34,7 +34,8 @@ the first `h`. EmitSSA qualified the two LLVM symbols itself, so only the compil
 `elabProgram` spells a free function whose name another top-level module defines (as a free
 function, or as a method's Core name `Type_method`) as `<module>_<name>` in Core
 (`qualifyCollidingTopLevelFns`): the definition, every call, function reference and function
-value naming it in its own module (a local of function type keeps its name:
+value naming it in its own module and in its constants' initializers, which Lower inlines
+(`regress_097_colliding_fn_in_const.con`) (a local of function type keeps its name:
 `regress_097_param_named_like_colliding_fn.con`), and its `callTargets` key. Calls from other
 modules use that spelling (`importCallSpellingsFor`, `module::name`, whose definers now include
 methods: `regress_097_free_fn_named_like_method.con`, where a free `P_get` and a method `P.get`

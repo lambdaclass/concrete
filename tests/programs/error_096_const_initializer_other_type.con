@@ -1,0 +1,24 @@
+// Bug 096 (Codex round 10): the enum-payload confusion inside a CONSTANT's initializer, which
+// Lower inlines at each use. The backstop checks constants like bodies. Refused (E0299).
+mod a {
+    pub struct Copy P { pub x: i64, pub pad: i64 }
+}
+mod c {
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub enum Copy E { V { p: P } }
+    pub fn mk() -> E {
+        return E::V { p: P { pad: 99, x: 7 } };
+    }
+}
+mod b {
+    import a.{ P };
+    import c.{ E, mk };
+    const ANSWER: i64 = match mk() { E::V { p } => p.x };
+    pub fn probe() -> i64 { return ANSWER; }
+}
+mod main {
+    import b.{ probe };
+    fn main() with(Std) -> Int {
+        print_int(probe()); print_char(10); return 0;
+    }
+}

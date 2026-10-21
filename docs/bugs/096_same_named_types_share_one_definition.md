@@ -98,6 +98,7 @@ taken as a value against its definition, a local of that name excepted lexically
 (`error_096_fn_value_other_type.con`), a `let` or `return` against its declared type, a struct or
 enum literal and a field read or write against the declaration's field, a match arm's binders
 against the variant's payload or the scrutinee (`error_096_enum_payload_binding_other_type.con`),
+every constant initializer, which Lower inlines at each use (`error_096_const_initializer_other_type.con`),
 and any two copies of one
 struct or enum that disagree (`error_096_alias_signature_other_type.con`). An unused declaration
 that mentions another module's type is never refused (`regress_096_private_method_not_transported.con`,
