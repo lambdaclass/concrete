@@ -599,7 +599,13 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "*raw_ptr" "Unsafe" "")
     | .heap _ =>
-      if !capsContain env.currentCapSet (.concrete ["Alloc"]) then
+      -- A heap shell reached THROUGH a reference (`r.f` with `r : &Heap<S>` elaborates to
+      -- `(*(*r)).f`, bug 126) is a projection through a borrow, which the source checker
+      -- admits without Alloc; only a dereference of an owned heap shell needs it.
+      let throughRef := match inner with
+        | .deref r _ => match r.ty with | .ref _ | .refMut _ => true | _ => false
+        | _ => false
+      if !throughRef && !capsContain env.currentCapSet (.concrete ["Alloc"]) then
         addCCError (.missingCapability "*heap_ptr" "Alloc" "")
     | _ => addCCError (.cannotDerefNonRef (toString (repr inner.ty)))
   | .arrayLit elems _ =>

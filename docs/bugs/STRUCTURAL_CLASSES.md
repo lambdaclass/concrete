@@ -1,7 +1,7 @@
 # Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
-specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) and 135 – 137 (135 recorded by 109's fix, 136 – 137 found fixing 127; 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
+specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) and 135 – 137 (135 recorded by 109's fix, 136 – 137 found fixing 127; 2026-10-21) are placed in the summary table (102, 105, 115 and 126 were fixed on 2026-10-21; their classes stand, and 105 moved from class 8 to classes 12 and 6 once its cause was reduced) from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
@@ -19,11 +19,12 @@ A bug may belong to more than one class; the first listed is its primary class.
 on branches for 081, 083 and 089 (`land3`), 082, 087 and 091 (`land2-fix`). Bugs 096 – 100 have records on main (fixed on `land5`). **No checked-in
 record** exists yet for 095 (exit 2b requires it): 095 is classified from the
 verified-pipeline plan ("requires correct storage aliasing during lowering"; the historical 092/095
-aggregate-reference programs). Bug 105's record is on `land2-fix`
-(`105_reference_valued_if_miscompiles.md`): a reference-valued `if` expression miscompiles (the
-binary segfaults while `--interp` prints 2); the branch CONTAINS it at the checker (E0238 refuses
-every reference-valued `if`/`match`, with permanent fixtures) while the lowering defect itself stays
-open. Bug 106's record is on `land2-fix` too (`106_model_diff_report_hangs.md`): `--report
+aggregate-reference programs). Bug 105's record is on main
+(`105_reference_valued_if_miscompiles.md`): a reference-valued `if` expression miscompiled (the
+binary segfaulted while `--interp` printed 2); the checker contains it in source (E0238 refuses
+every reference-valued `if`/`match`), a generic instantiated at a reference type got past that
+containment, and the defect itself, fixed on 2026-10-21, was EmitSSA storing a reference register
+as the aggregate it points at (classes 12 and 6 below, no longer class 8). Bug 106's record is on `land2-fix` too (`106_model_diff_report_hangs.md`): `--report
 model-diff` on `thesis_demo` never terminated and `check_model_diff.sh` composed reports with
 `|| true`, so the gate stayed green; the branch budgets the report and makes the gate fail closed
 (`f950969f`), while on main it is still open, and the residual (recursion and calls are not budgeted;
@@ -38,13 +39,13 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
-| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
+| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities), 105 (a source-level reference rule satisfied later by Mono's substitution) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107, 108, 110, 116, 126, 127, 130, 133, 134 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 107, 108, 110, 116, 126, 127, 130, 133, 134 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
-| 12. One fact kept in two places | 042, 057, 064, 070, 108, 109 (float rendering kept in several places), 135 (the formatter's copy of that rendering), 110 (the element-type hint: Check passes it, Elab did not), 112, 121, 122, 129 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
+| 12. One fact kept in two places | 042, 057, 064, 070, 105 (`isPassByPtr` read both as "passed as a pointer" and "a register holding an aggregate by pointer"), 108, 109 (float rendering kept in several places), 135 (the formatter's copy of that rendering), 110 (the element-type hint: Check passes it, Elab did not), 112, 121, 122, 129 | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124, 130, 134, 136 (evaluation-order rule 6: Core cannot bind the base once) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072 | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
@@ -204,8 +205,8 @@ Core: 084 – 086, 101); the harness R-0491 (S1, exit 2c) detects the class mean
 
 **Bugs.** 078 (an `if`/`else` whose arms both diverge left its merge block open), 095 (no record:
 stale storage of aggregate references, "requires correct storage aliasing during lowering"), 102 (a
-pointer-typed local whose address is taken got no stack slot), 105 (a reference-valued `if`
-expression miscompiles), 107 (a shadowing `let` was given the shadowed binding's slot because slots
+pointer-typed local whose address is taken got no stack slot), 105 (listed here while it was
+open; its cause turned out to be in EmitSSA, class 12), 107 (a shadowing `let` was given the shadowed binding's slot because slots
 are keyed by Core name, while a reference to the old binding was still live).
 
 **Design cause.** `Lower` performs sequencing, `defer`, match compilation, promotion, layout and

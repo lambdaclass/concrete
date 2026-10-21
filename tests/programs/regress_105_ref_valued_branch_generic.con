@@ -1,0 +1,37 @@
+// Bug 105: a reference-valued `if` / `match` was miscompiled. The checker refuses the
+// shape when it names a reference (E0238), but a generic body whose value type is a
+// type parameter is checked before instantiation, so `if c { a } else { b }` at
+// `T = &P` reached Lower with a reference-typed result. EmitSSA stored the branch's
+// reference into the result slot as if the register held a `P` by pointer (a memcpy of
+// the referent's first 8 bytes), so the use after the merge dereferenced a field value:
+// the binary segfaulted where --interp gave the right value. Expected exit 111.
+mod m {
+    struct Copy P { n: i64 }
+    fn rd(p: &P) -> Int { return p.n; }
+    fn bump(p: &mut P) -> Int { p.n = p.n + 100; return p.n; }
+
+    fn apply<T: Copy>(c: bool, a: T, b: T, f: fn(T) -> Int) -> Int {
+        return f(if c { a } else { b });
+    }
+
+    fn pick<T: Copy>(c: bool, a: T, b: T, f: fn(T) -> Int) -> Int {
+        let x: T = match c { true => a, false => b };
+        return f(x);
+    }
+
+    // A linear `T` (here `&mut P`) consumed in whichever branch runs.
+    fn through<T>(c: bool, a: T, f: fn(T) -> Int) -> Int {
+        return f(if c { a } else { a });
+    }
+
+    fn main() -> Int {
+        let mut p: P = P { n: 1 };
+        let q: P = P { n: 10 };
+        let r1: Int = apply::<&P>(true, &p, &q, rd);      // 1
+        let r2: Int = pick::<&P>(false, &p, &q, rd);      // 10
+        let r3: Int = through::<&mut P>(true, &mut p, bump);  // 101
+        if r1 != 1 || r2 != 10 || r3 != 101 { return 1; }
+        if p.n != 101 { return 2; }
+        return r2 + r3;
+    }
+}

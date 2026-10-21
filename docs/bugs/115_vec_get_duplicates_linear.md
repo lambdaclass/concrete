@@ -1,6 +1,6 @@
 # Bug 115 — the builtin `vec_get` returns a non-Copy element by value, duplicating a linear value
 
-**Status:** OPEN
+**Status:** FIXED (branch `lowering-bugs`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** memory safety: the checker accepts a program that double-frees.
 
@@ -38,6 +38,26 @@ fn main() with(Std) -> Int {
 
 Require `T: Copy` for `vec_get` (non-Copy elements go through a borrowing or moving API).
 
+## Fix
+
+The `vec_get` intercept in `Check` requires a Copy element: a non-Copy element read by value is
+E0290, the H11 rule a by-value array element read already follows ("cannot move non-Copy value
+... out of a Vec element"; the message names `pop`, `swap_remove`, `replace` and `with_at`, the
+std `Vec` operations that move a linear element out or read it in place). An unbounded type
+parameter is not Copy, so a generic body is refused before instantiation. The sibling `vec_set`
+intercept requires Copy too (E0291): it overwrote the element without returning or destroying it,
+which loses a linear value, the case the 2026-10-21 ownership-on-failure decision made
+`Vec::set` / `Vec::set_unchecked` Copy-only for; `Vec::replace` is the linear form.
+
+Callers migrated: `tests/programs/test_alloca_loop_stress.con` and
+`test_string_literal_in_loop.con` took each `String` out with `vec_get` and dropped it (each once,
+so no double free, but by the duplicating operation); they now take it with `vec_pop`. Every other
+`vec_get` / `vec_set` in `tests/`, `examples/` and `std/` is at a Copy element.
+
+Permanent legs in `run_tests.sh`: `error_115_vec_get_non_copy.con` (the reproducer, E0290),
+`error_115_vec_get_generic_unbounded.con` (E0290 at `T`) and `error_115_vec_set_non_copy.con`
+(E0291). The pre-fix compiler accepts all three. The open-bug reproducer row is dropped.
+
 ## Where it showed up
 
 examples/json kept a `Vec<String>` string pool read with `vec_get`; the port replaced it with one owned buffer of spans.
@@ -52,4 +72,4 @@ R-0499 (S8 use-once and conservation on Core, row 4); repair owner: queue exit 0
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") runs the reproducer and requires the recorded failure; when the bug is fixed that leg fails until this document, the corpus entry and the leg are updated together. Fixing the compiler is out of scope for the pass that filed it.
+`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") ran the reproducer and required the recorded failure until the fix, which dropped the row.

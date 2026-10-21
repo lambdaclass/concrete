@@ -19,8 +19,12 @@ fn main() with(Std) {
     let slen: Int = vec_len::<String>(&mut strings) as Int;
     let mut si: Int = 0;
     while si < slen {
-        let s: String = vec_get::<String>(&mut strings, si);
-        drop_string(s);
+        // Each element leaves the Vec exactly once (bug 115: vec_get no longer
+        // copies a non-Copy element out, which owned the same buffer twice).
+        match vec_pop::<String>(&mut strings) {
+            Option::Some { value } => { drop_string(value); },
+            Option::None => {},
+        }
         si = si + 1;
     }
     vec_free::<String>(strings);

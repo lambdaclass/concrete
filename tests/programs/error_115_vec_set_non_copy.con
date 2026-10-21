@@ -1,0 +1,12 @@
+// Bug 115's sibling: the builtin vec_set overwrote a non-Copy element without
+// returning or destroying it (the old String leaked). Copy-bounded like Vec::set
+// (ownership on failure); a linear element is exchanged with Vec::replace (E0291).
+fn main() with(Std) -> Int {
+    let mut v: Vec<String> = vec_new::<String>();
+    let a: String = "old";
+    let b: String = "new";
+    vec_push::<String>(&mut v, a);
+    vec_set::<String>(&mut v, 0, b);
+    vec_free::<String>(v);
+    return 0;
+}

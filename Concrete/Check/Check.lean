@@ -941,6 +941,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_get" "&Vec<T> or &mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
+      -- Bug 115: `vec_get` copies the element out and the Vec keeps it, so a non-Copy
+      -- element would be owned twice (a String taken twice double-freed). The same H11
+      -- rule as a by-value array element read; a linear element leaves the Vec through
+      -- `pop` / `swap_remove` / `replace`, or is read in place through `with_at`.
+      if !(← isCopyType elemTy) then
+        throwCheck (.nonCopyProjection (tyToString elemTy) "a Vec element (`vec_get`; use `pop`, `swap_remove`, `replace` or `with_at`)") (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
       expectTy .int idxTy "vec_get() index argument" (some e.getSpan)
       return elemTy
@@ -957,6 +963,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_set" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
       expectTy .int idxTy "vec_set() index argument" (some e.getSpan)
+      -- Bug 115's sibling: `vec_set` overwrites the element without returning or destroying
+      -- it, so a linear element would leak. Copy-bounded like `Vec::set` (ownership on
+      -- failure, 2026-10-21); a linear element is exchanged with `replace`.
+      if !(← isCopyType elemTy) then
+        throwCheck (.cannotOverwriteLinearPlace "Vec element (`vec_set`; use `replace`, which returns the displaced value)" (tyToString elemTy)) (some e.getSpan)
       let valTy ← checkExpr valArg (some elemTy)
       expectTy elemTy valTy "vec_set() value argument" (some e.getSpan)
       return .unit

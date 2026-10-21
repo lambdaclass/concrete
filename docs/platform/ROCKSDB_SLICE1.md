@@ -143,6 +143,9 @@ interpreter cannot run either program (`interp: unsupported cast`), so different
 not see it. Workaround in the binding: the out-slot lives on the heap (`new_err_slot` /
 `take_err_slot`). This is a codegen defect in the safe reference-to-pointer cast, the one
 pointer-producing cast FFI.md lists as safe; it belongs in the bug ledger with a regression.
+Filed as [bug 102](../bugs/102_pointer_local_address_cast_miscompiled.md), FIXED on 2026-10-21:
+`&mut err` on a pointer-typed local is now the local's slot, so the out-slot can live on the stack.
+The heap workaround stays in the binding until it is rebuilt and run against a RocksDB install.
 
 ### G3. Externs ending in `_destroy` are replaced by an empty body (silent leak)
 

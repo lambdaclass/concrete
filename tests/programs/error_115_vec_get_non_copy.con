@@ -1,0 +1,19 @@
+// Bug 115: the builtin vec_get copied the element out while the Vec kept it, so a
+// String taken twice was owned by three holders over one buffer: the binary
+// double-freed (abort) while --interp printed "AB". A non-Copy element read by value
+// is refused (E0290, the H11 by-value projection rule); it leaves the Vec through
+// vec_pop, or Vec's pop / swap_remove / replace.
+fn main() with(Std) -> Int {
+    let mut v: Vec<String> = vec_new::<String>();
+    let mut s: String = "";
+    string_push_char(&mut s, 65);
+    string_push_char(&mut s, 66);
+    vec_push::<String>(&mut v, s);
+    let a: String = vec_get::<String>(&mut v, 0);
+    let b: String = vec_get::<String>(&mut v, 0);
+    drop_string(a);
+    print_string(&b);
+    drop_string(b);
+    vec_free::<String>(v);
+    return 0;
+}

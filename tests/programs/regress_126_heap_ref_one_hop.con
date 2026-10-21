@@ -1,0 +1,136 @@
+// Bug 126: `&h` / `&mut h` on a `Heap<S>` local denote the slot `h` (the one-hop
+// rule of MEMORY_SEMANTICS §5), and a field access through `&Heap<S>` / `&mut Heap<S>`
+// dereferences twice: the reference to the slot, then the heap pointer it holds.
+// The callee dereferenced once while a `&mut h` call argument passed the slot, so a
+// field write overwrote the caller's heap-pointer slot (free got pointer + 1:
+// SIGTRAP) and a field read returned the heap pointer. Each case adds a distinct
+// bit; 255 when every case holds, and no case's failure can produce 255.
+struct Copy B { v: Int, w: Int }
+struct Copy C { n: Int }
+struct Outer { h: Heap<B>, k: Int }
+struct Cell<T> { val: T, tag: Int }
+
+fn bump(h: &mut Heap<B>) {
+    h.v = h.v + 1;
+}
+
+fn bump_w(h: &mut Heap<B>) {
+    h.w = h.w * 2;
+}
+
+fn get(h: &mut Heap<B>) -> Int {
+    return h.v;
+}
+
+fn peek(h: &Heap<B>) -> Int {
+    return h.v + h.w;
+}
+
+// A reference parameter passed on: the reborrow keeps the two-hop meaning.
+fn bump_twice(h: &mut Heap<B>) {
+    bump(h);
+    bump(h);
+}
+
+// Through generics: the field is reached through `&mut Heap<Cell<T>>` after Mono.
+fn set_val<T: Copy>(h: &mut Heap<Cell<T>>, x: T) {
+    h.val = x;
+    h.tag = h.tag + 1;
+}
+
+fn get_tag<T>(h: &Heap<Cell<T>>) -> Int {
+    return h.tag;
+}
+
+// Nested: a heap shell stored in a struct reached through a reference.
+fn bump_outer(o: &mut Outer) with(Alloc) {
+    o.h.v = o.h.v + 10;
+    bump(&mut o.h);
+}
+
+fn write_case() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42, w: 5 });
+    bump(&mut h);
+    bump_w(&mut h);
+    let v: Int = h.v;
+    let w: Int = h.w;
+    free(h);
+    if v == 43 && w == 10 { return 1; }
+    return 0;
+}
+
+fn read_case() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42, w: 5 });
+    let a: Int = get(&mut h);
+    let b: Int = peek(&h);
+    free(h);
+    if a == 42 && b == 47 { return 2; }
+    return 0;
+}
+
+fn reborrow_case() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 1, w: 0 });
+    bump_twice(&mut h);
+    let v: Int = h.v;
+    free(h);
+    if v == 3 { return 4; }
+    return 0;
+}
+
+fn generic_case() with(Alloc) -> Int {
+    let mut h: Heap<Cell<Int>> = alloc(Cell::<Int> { val: 0, tag: 7 });
+    set_val::<Int>(&mut h, 99);
+    let t: Int = get_tag::<Int>(&h);
+    let x: Int = h.val;
+    free(h);
+    if x == 99 && t == 8 { return 8; }
+    return 0;
+}
+
+fn nested_case() with(Alloc) -> Int {
+    let mut o: Outer = Outer { h: alloc(B { v: 5, w: 0 }), k: 3 };
+    bump_outer(&mut o);
+    let Outer { h, k } = o;
+    let v: Int = h.v;
+    free(h);
+    if v == 16 && k == 3 { return 16; }
+    return 0;
+}
+
+// A `&h` held in a binding (not a call argument) is the same slot.
+fn binding_case() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 20, w: 0 });
+    bump(&mut h);
+    let mut seen: Int = 0;
+    if true {
+        let r: &Heap<B> = &h;
+        seen = r.v + peek(r);
+    }
+    free(h);
+    if seen == 42 { return 32; }
+    return 0;
+}
+
+// The borrow taken in one branch only, then in a loop.
+fn control_case(take: bool) with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 0, w: 0 });
+    if take {
+        bump(&mut h);
+    }
+    let mut i: Int = 0;
+    while i < 3 {
+        bump(&mut h);
+        i = i + 1;
+    }
+    let v: Int = h.v;
+    free(h);
+    return v;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut out: Int = write_case() + read_case() + reborrow_case() + generic_case();
+    out = out + nested_case() + binding_case();
+    if control_case(true) == 4 && control_case(false) == 3 { out = out + 64; }
+    // 127 so far; the high bit marks that the program ran to the end.
+    return out + 128;
+}

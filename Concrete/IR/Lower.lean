@@ -483,13 +483,32 @@ private def snapshotVars : LowerM (List (String × SVal)) := do
 -- Expression and statement lowering
 -- ============================================================
 
+/-- The pointee of a reference or raw-pointer type, if it is one. -/
+private def refPointee? : Ty → Option Ty
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t => some t
+  | _ => none
+
+/-- Does a borrow of type `refTy` of a value of type `innerTy` denote the value's
+    own storage (`&x : &T` for `x : T`)? False for the retagging shapes, where the
+    borrow's type does not point at the operand's type. -/
+private def borrowsSlot (innerTy refTy : Ty) : Bool :=
+  refPointee? refTy == some innerTy
+
 /-- Address-of a LOCAL variable. Returns a pointer (retyped to `refTy`) to the
     local's stable storage, promoting the local to a stack alloca on first
     address-take so that the pointer actually aliases the variable. Reads and
     writes of the local then route through the alloca via `lookupVar`/`setVar`.
-    Returns `none` for non-local or already-addressable inners (arrays, refs,
-    pointers, heap), which the caller handles by its existing logic.
-    (ROADMAP Phase 4 #44d — fixes raw-pointer / `&mut`-to-local not aliasing.) -/
+    Returns `none` for non-local inners and arrays (an array's SVal is already
+    its storage), which the caller handles by its existing logic.
+    (ROADMAP Phase 4 #44d — fixes raw-pointer / `&mut`-to-local not aliasing.)
+
+    A local whose VALUE is itself a pointer (`*mut T`, `*const T`, `Heap<T>`, a
+    reference) is a place like any other: `&mut p` is the address of `p`'s slot,
+    never `p`'s value (bug 102: `&mut err as *mut *mut u8` passed the null `err`;
+    bug 126: `&h` / `&mut h` on a `Heap<B>` local denote the slot `h`, the one-hop
+    rule of MEMORY_SEMANTICS §5). The borrow's type says which is meant: the
+    slot when `refTy` points at the local's own type (`borrowsSlot`); any other
+    retagging shape keeps the caller's value path. -/
 private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
   match inner with
   | .ident name varTy =>
@@ -502,9 +521,15 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
     if !isLocal && (st.constants.any fun (n, _, _) => n == name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
-    -- arrays are already stack-allocated; refs/ptrs/heap are already pointers
-    | .array _ _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => return none
-    | _ =>
+    -- arrays are already stack-allocated: the array SVal is its storage
+    | .array _ _ => return none
+    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ =>
+      if !borrowsSlot varTy refTy then return none
+      promoteForAddr name varTy refTy
+    | _ => promoteForAddr name varTy refTy
+  | _ => return none
+where
+  promoteForAddr (name : String) (varTy refTy : Ty) : LowerM (Option SVal) := do
       match ← isPromoted name with
       | some (reg, _) => return some (.reg reg refTy)
       | none =>
@@ -516,7 +541,6 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
         | none => pure ()
         addPromotedAlloca name slot varTy
         return some (.reg slot refTy)
-  | _ => return none
 
 -- Does `&name` / `&mut name` (or a `borrow name as ...` block) appear anywhere
 -- in these expressions/statements? A scalar loop variable whose address is taken
@@ -577,15 +601,15 @@ end
     is global, so a sibling branch (and post-merge code on that path) reads an
     UNINITIALIZED alloca. Call this in the still-dominating block BEFORE the
     conditional terminator — alloca goes to entry, the store lands here. Same
-    rule the while-loop lowering applies to its body (C9). Skips types
-    `addrOfLocal` never promotes (arrays/refs/ptrs/heap are already
-    addressable) and already-promoted names. `takes name` = "some branch takes
+    rule the while-loop lowering applies to its body (C9). Skips arrays (the
+    array SVal is its storage) and already-promoted names; pointer-valued locals
+    are promoted too, since `&mut p` is `p`'s slot (bugs 102, 126). `takes name` = "some branch takes
     `&name`"; callers compose it from cstmtsTakeAddrOf / cmatchArmTakesAddrOf. -/
 private def prePromoteAddrTaken (preVars : List (String × SVal))
     (takes : String → Bool) : LowerM Unit := do
   for (name, val) in preVars do
     match val.ty with
-    | .array _ _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => pure ()
+    | .array _ _ => pure ()
     | vty =>
       if (← isPromoted name).isNone && takes name then
         let allocaReg ← freshReg "ifpro."
@@ -1384,9 +1408,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     match iVal with
     | .strConst name => return .strConstRef name
     | _ =>
-    -- If the inner value is not already a pointer/ref, alloca + store to get an address
+    -- If the inner value is not already a pointer/ref, alloca + store to get an address.
+    -- A pointer-valued operand borrowed AS ITSELF (`&e : &*mut T`) is a temporary place
+    -- like any other value (bugs 102, 126); only a retagging borrow casts the pointer.
     match innerTy with
     | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ =>
+      if borrowsSlot innerTy ty then
+        let slot ← freshReg "borrow."
+        emit (.alloca slot innerTy)
+        emit (.store iVal (.reg slot innerTy))
+        return .reg slot ty
       let dst ← freshReg
       emit (.cast dst iVal ty)
       return .reg dst ty
@@ -1422,6 +1453,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let innerTy := iVal.ty
     match innerTy with
     | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ =>
+      if borrowsSlot innerTy ty then
+        let slot ← freshReg "borrowmut."
+        emit (.alloca slot innerTy)
+        emit (.store iVal (.reg slot innerTy))
+        return .reg slot ty
       let dst ← freshReg
       emit (.cast dst iVal ty)
       return .reg dst ty
@@ -1619,9 +1655,13 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
       | _ => refTy
     -- A stable base pointer to the array storage: recurse for a nested place,
     -- else `lowerExpr arr` (an array ident / `&[T;N]` already lowers to a pointer).
-    let baseAddr ← match ← placeAddr arr (.ptrMut arr.ty) with
-      | some p => pure p
-      | none => lowerExpr arr
+    -- A pointer-valued base (`&[T;N]`, `*mut [T;N]`, a heap array) IS the
+    -- address: its value, never the address of the slot holding it (bug 102).
+    let baseAddr ← match arr.ty with
+      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => lowerExpr arr
+      | _ => match ← placeAddr arr (.ptrMut arr.ty) with
+             | some p => pure p
+             | none => lowerExpr arr
     let iVal ← lowerExpr index
     match arrayLenOfTy arr.ty with        -- H8: bounds-check `&a[i]` / `&mut a[i]`
     | some n => emitBoundsCheck iVal n

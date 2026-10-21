@@ -25,9 +25,12 @@ classes include trap preservation
 (bug 053 / R-0005), specialization and import identity (bugs 054–055 /
 R-0007–R-0008), callable SSA identity (bug 056 / R-0436), proof-subject
 freshness (bugs 058–060 / R-0004), ProofCore callable identity (bug 061 /
-R-0442), and memory safety in accepted programs: `vec_get` duplicating a linear
-element (bug 115, a double free, found by the 2026-10-20 examples pass and
-pinned by `check_example_outputs.sh`). R-0010 will replace the legacy skip-based audit with mechanically
+R-0442), and memory safety in accepted programs (exit 0b). Closed on 2026-10-21:
+`vec_get` duplicating a linear element (bug 115, a double free; the builtin now
+requires a Copy element), a field write through a `&mut Heap<T>` argument
+corrupting the caller's heap-pointer slot (bug 126), the address of a
+pointer-typed local being its value (bug 102), and a reference-valued
+`if`/`match` reached through a generic segfaulting (bug 105). R-0010 will replace the legacy skip-based audit with mechanically
 checked per-bug states.
 
 ### H28. Places are checked by a syntactic normalized-place rule — OPEN (deliberate restriction)

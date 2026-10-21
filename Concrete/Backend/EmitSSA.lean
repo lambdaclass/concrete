@@ -159,6 +159,18 @@ private def emitAllocaTy (s : EmitSSAState) (dst : String) (ty : Ty) (llTy : LLV
 private def ssaIsPassByPtr (s : EmitSSAState) (ty : Ty) : Bool :=
   Layout.isPassByPtr (layoutCtxOf s) ty
 
+/-- Does a pointer-held register of this type stand for an AGGREGATE stored at that
+    address (a struct, enum, array or String handled by pointer)? A reference is passed
+    by pointer too, but its register IS the reference's value: storing or returning it
+    moves the 8-byte address, never the pointee's bytes. Treating a `&S` register as an
+    `S` held by pointer copied the first 8 bytes of the referent into the slot meant for
+    the reference, so a reference-valued `if`/`match` (reached through a generic
+    instantiated at a reference type) read garbage after the merge (bug 105). -/
+private def ssaHoldsAggregateByPtr (s : EmitSSAState) (ty : Ty) : Bool :=
+  match ty with
+  | .ref _ | .refMut _ => false
+  | _ => ssaIsPassByPtr s ty
+
 
 /-- Map a Concrete type to a structured LLVMTy. Mirrors Layout.tyToLLVM. -/
 partial def tyToLLVMTy (s : EmitSSAState) : Ty → LLVMTy
@@ -988,7 +1000,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- If the value is a known pointer but typed as a struct, it is
     -- actually a pointer to the struct (e.g. a pass-by-ptr param).
     -- Use memcpy rather than a store that would misinterpret ptr as struct.
-    if isKnownPtr s val && ssaIsPassByPtr s val.ty then
+    if isKnownPtr s val && ssaHoldsAggregateByPtr s val.ty then
       let sz := ssaTySize s val.ty
       emitStructured s (.memcpy ptrOp (svalToOperand s val) sz)
     else
@@ -1131,7 +1143,7 @@ private def emitSTerm (s : EmitSSAState) (t : STerm) : EmitSSAState × LLVMTerm 
       let (s, ptr) := materializeStrConstRef s name
       (s, .ret .ptr (some (.reg (ptr.drop 1).toString)))
     | _ =>
-    if isKnownPtr s v && ssaIsPassByPtr s v.ty then
+    if isKnownPtr s v && ssaHoldsAggregateByPtr s v.ty then
       -- Value is a pointer to a struct (e.g. pass-by-ptr param); load it
       -- so we return the struct by value as the LLVM signature expects.
       let (s, tmp) := freshLocal s

@@ -192,6 +192,7 @@ displace a value is listed here (audit 2026-10-21, from
 | `map.HashMap::update`, `ordered_map.OrderedMap::update` | `(&mut self, key: &K, f: fn(V) -> V) -> bool` | **Displaced value handed to `f`**, which owns it and returns the replacement. A missing key returns `false` without calling `f`; nothing changes hands. |
 | `vec.Vec::set`, `slice.MutSlice::set` | `(&mut self, at, value: T) -> bool` | Out of range returns `false`; `T: Copy`, so nothing owned is lost. |
 | `vec.Vec::set_unchecked`, `slice.MutSlice::set_unchecked` | `(&mut self, at, value: T)` | Overwrites without returning or destroying the old element, so it is **`T: Copy` only**. *Changed 2026-10-21*: it accepted any `T` and silently lost a displaced linear element. Linear elements use `Vec::replace`. |
+| builtin `vec_get`, `vec_set` (legacy free functions) | `(&Vec<T>, i) -> T`, `(&mut Vec<T>, i, value: T)` | **`T: Copy` only.** *Changed 2026-10-21* (bug 115): `vec_get` copied a linear element out while the `Vec` kept it (a `String` taken twice double-freed), and `vec_set` overwrote one without returning it. Linear elements leave through `vec_pop`, `Vec::pop` / `swap_remove` / `replace`, or are read in place with `Vec::with_at`. |
 | `test.assert_*`, `test.expect_sink` | `(.., message: String) -> bool` | **Consumed**: the diagnostic message is consumed on both outcomes; `false` reports a failed assertion, not a failed resource operation. |
 
 Outside the table, because they report no failure of their own: the

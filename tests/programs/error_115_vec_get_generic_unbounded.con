@@ -1,0 +1,12 @@
+// Bug 115 through generics: an unbounded type parameter is not Copy, so vec_get at
+// T is refused (E0290) in the generic body, whatever it is later instantiated with.
+fn first<T>(v: &Vec<T>) -> T {
+    return vec_get::<T>(v, 0);
+}
+fn main() with(Std) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push::<Int>(&mut v, 7);
+    let x: Int = first::<Int>(&v);
+    vec_free::<Int>(v);
+    return x;
+}

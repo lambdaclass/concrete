@@ -33,7 +33,7 @@ open Concrete
 inductive RefStep where
   | field (name : String)
   | index (i : Nat)
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, BEq
 
 /-- A reference path roots at a variable name in the env at borrow
     creation time and walks through fields/indices. `frame` is the
@@ -409,6 +409,36 @@ private partial def lookupAt (val : IVal) (steps : List RefStep) : Except String
 private def envViewAtFrame (env : Env) (frame : Nat) : Env :=
   if env.length >= frame then env.drop (env.length - frame) else env
 
+/-- The identity of the place a reference path names: the binding's position counted
+    from the BOTTOM of the env (stable while the binding lives, unlike `frame`, which
+    is the env length at borrow time) and the steps into it. Two paths name the same
+    place exactly when their identities are equal; `none` when the base is gone. -/
+private def placeIdentity (env : Env) (p : RefPath) : Option (Nat × List RefStep) :=
+  let view := envViewAtFrame env p.frame
+  match view.findIdx? (fun (n, _) => n == p.base) with
+  | some i => some (view.length - 1 - i, p.steps)
+  | none => none
+
+/-- Pointer equality (`==` / `!=` on references and raw pointers, bug 102). A reference
+    path is compared by the place it names; a path is never the null pointer, the only
+    integer address the heapless model has (`0 as *mut T`). Any other mix of a path and
+    an integer address is not modelled. `none` when neither operand is a path. -/
+def evalPtrCompare (env : Env) (op : BinOp) (lhs rhs : IVal) : Option (Except String IVal) :=
+  let result (same : Bool) : Option (Except String IVal) :=
+    match op with
+    | .eq => some (.ok (.bool same))
+    | .neq => some (.ok (.bool !same))
+    | _ => some (.error "interp: ordering comparison of pointers is not modelled; run the compiled binary")
+  match lhs, rhs with
+  | .ref p, .ref q =>
+    match placeIdentity env p, placeIdentity env q with
+    | some a, some b => result (a == b)
+    | _, _ => some (.error "interp: pointer comparison of a reference whose place is gone")
+  | .ref _, .int 0 _ | .int 0 _, .ref _ => result false
+  | .ref _, .int _ _ | .int _ _, .ref _ =>
+    some (.error "interp: comparison of a reference with a non-null integer address is not modelled; run the compiled binary")
+  | _, _ => none
+
 partial def lookupPath (env : Env) (p : RefPath) : Except String IVal := do
   let view := envViewAtFrame env p.frame
   match envGet view p.base with
@@ -602,7 +632,9 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
     | .or_, .bool true => return (env, .val (.bool true))
     | _, _ =>
       let (env, rv) ← evalExprVal fns enums env rhs
-      let result ← evalBinOp op lv rv
+      let result ← match evalPtrCompare env op lv rv with
+        | some r => r
+        | none => evalBinOp op lv rv
       return (env, .val result)
 
   | .unaryOp op operand _ => do

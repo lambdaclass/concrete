@@ -783,9 +783,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let cObj := cObjEv.core
     -- 6D#3: `.field` on a heap shell derefs first (p.f ≡ (*p).f — the old
     -- `->` desugar folded into `.`), so downstream sees the plain struct.
+    -- Through a reference to a heap shell it is TWO dereferences (bug 126, the one-hop
+    -- rule of MEMORY_SEMANTICS §5): `r : &mut Heap<S>` points at the slot holding the
+    -- heap pointer, so `r.f` is `(*(*r)).f` — the reference to the slot, then the
+    -- heap pointer the slot holds.
     let cObj := match cObj.ty with
       | .heap t | .heapArray t => CExpr.deref cObj t
-      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref cObj t
+      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref (CExpr.deref cObj (.heap t)) t
       | _ => cObj
     let objTy := cObj.ty
     let innerTy := match objTy with
@@ -1880,13 +1884,15 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- through: `p.f = v` on a heap shell writes through a dereference and `q.f = v` on
     -- a plain struct does not. Describing both as a bare field projection would give
     -- one encoding to two different writes.
-    let derefed := match cObj.ty with
-      | .heap _ | .heapArray _ | .ref (.heap _) | .refMut (.heap _) => true
-      | _ => false
-    let cObjPlaceEv := if derefed then Proof.evDeref cObjEv.evidence else cObjEv.evidence
+    -- Through a reference to a heap shell the write dereferences twice (bug 126): the
+    -- reference to the slot, then the heap pointer the slot holds.
+    let cObjPlaceEv := match cObj.ty with
+      | .heap _ | .heapArray _ => Proof.evDeref cObjEv.evidence
+      | .ref (.heap _) | .refMut (.heap _) => Proof.evDeref (Proof.evDeref cObjEv.evidence)
+      | _ => cObjEv.evidence
     let cObj := match cObj.ty with
       | .heap t | .heapArray t => CExpr.deref cObj t
-      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref cObj t
+      | .ref (.heap t) | .refMut (.heap t) => CExpr.deref (CExpr.deref cObj (.heap t)) t
       | _ => cObj
     -- Pass the field's declared type as the value hint so integer literals
     -- pick the right width. Without this, `c.n = 100` where `n: i32` would

@@ -1,0 +1,80 @@
+// Bug 102: `&mut p as *mut *mut T`, where `p` is a local of pointer type, is the
+// address of `p`'s slot. The compiler passed `p`'s VALUE (the local never got a
+// slot), so writing through the out-pointer stored into whatever `p` pointed at
+// (here: address 0, SIGTRAP) and `p` itself never changed. Each case returns a
+// distinct bit; 31 when all hold. The interpreter models the same program
+// (pointer equality on reference paths), so --interp must agree with the binary.
+trusted fn set_through(p: *mut *mut u8, q: *mut u8) {
+    *p = q;
+}
+
+trusted fn read_through(p: *const *mut u8) -> u8 {
+    let inner: *mut u8 = *p;
+    return *inner;
+}
+
+// The original reproducer: an error out-slot that starts NULL.
+trusted fn out_slot() -> Int {
+    let mut x: u8 = 5;
+    let mut err: *mut u8 = 0 as *mut u8;
+    set_through(&mut err as *mut *mut u8, &mut x as *mut u8);
+    if err == (0 as *mut u8) { return 0; }
+    if *err != 5 { return 0; }
+    return 1;
+}
+
+// The slot is written through, then read back through the same local.
+trusted fn write_back() -> Int {
+    let mut a: u8 = 7;
+    let mut b: u8 = 9;
+    let mut p: *mut u8 = &mut a as *mut u8;
+    set_through(&mut p as *mut *mut u8, &mut b as *mut u8);
+    *p = 11;
+    if a != 7 { return 0; }
+    if b != 11 { return 0; }
+    return 2;
+}
+
+// The address is taken inside a loop body: the local is memory-backed across iterations.
+trusted fn in_loop() -> Int {
+    let mut xs: [u8; 3] = [1, 2, 3];
+    let mut p: *mut u8 = 0 as *mut u8;
+    let mut i: Int = 0;
+    let mut sum: Int = 0;
+    while i < 3 {
+        set_through(&mut p as *mut *mut u8, &mut xs[i] as *mut u8);
+        sum = sum + (*p as Int);
+        i = i + 1;
+    }
+    if sum != 6 { return 0; }
+    return 4;
+}
+
+// The address is taken in one branch only: the other path still reads the local.
+trusted fn in_branch(take: bool) -> Int {
+    let mut x: u8 = 3;
+    let mut p: *mut u8 = 0 as *mut u8;
+    if take {
+        set_through(&mut p as *mut *mut u8, &mut x as *mut u8);
+    }
+    if take {
+        if p == (0 as *mut u8) { return 0; }
+        return 8;
+    }
+    if p != (0 as *mut u8) { return 0; }
+    return 8;
+}
+
+// A shared borrow of the pointer local, read through `*const *mut u8`.
+trusted fn shared() -> Int {
+    let mut x: u8 = 42;
+    let p: *mut u8 = &mut x as *mut u8;
+    if read_through(&p as *const *mut u8) != 42 { return 0; }
+    return 16;
+}
+
+trusted fn main() -> Int {
+    let both: Int = in_branch(true) + in_branch(false);
+    let br: Int = if both == 16 { 8 } else { 0 };
+    return out_slot() + write_back() + in_loop() + br + shared();
+}

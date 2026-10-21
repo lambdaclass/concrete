@@ -297,7 +297,7 @@ done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
 # Bugs the examples exposed (docs/bugs/108-120, 122), the exit 2i specification found
-# (123-124) the semantics probes found (127-131), bug 126, bug 134 and bugs 136-137, pinned the way check_bug077_contained.sh
+# (123-124) the semantics probes found (127-131), bug 134 and bugs 136-137, pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
@@ -383,13 +383,10 @@ open_bug_reproducers() {
 112|bug112_user_intrinsic_e0116/repro.con|compile-fails|(E0116) foreign binding 'sizeof' does not declare its effects
 113|bug113_submodule_extern_effects_unchecked/repro.con|compiles|
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference
-115|bug115_vec_get_duplicates_linear/repro.con|compiles|
 117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
-126|bug126_field_write_through_mut_heap_ref/repro.con|signals|
-126|bug126_field_write_through_mut_heap_ref/repro_read.con|wrong-exit|10
 128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
 129|bug129_user_fn_captures_libc_symbol/repro.con|signals|
 134|bug134_aggregate_eq_invalid_ir/repro.con|compile-fails|but expected 'i64'

@@ -1543,8 +1543,40 @@ run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 # shapes are rejected, and one table records what every spelling of the bug-091 corpus now
 # does, so a change to the rule shows up as a changed row.
 run_err "$TESTDIR/error_091_norm_heap_deref_payload.con"        "(E0290)"
-# Bug 105 (OPEN, contained): a reference-valued `if`/`match` miscompiles; Check refuses it.
+# Bug 105 (FIXED): a reference-valued `if`/`match` named in source stays refused (E0238, the
+# normalized place rule); one reached through a generic instantiated at a reference type
+# compiled to a segfault (EmitSSA stored the reference as an aggregate) and now runs.
 run_err "$TESTDIR/error_105_ref_valued_if_arg.con"   "(E0238)"
+run_ok  "$TESTDIR/regress_105_ref_valued_branch_generic.con" 111
+# Bug 102 (FIXED): `&mut p` on a pointer-typed local is the address of p's slot; bug 126
+# (FIXED): `&h` / `&mut h` on a Heap<S> local is h's slot and a field access through
+# `&Heap<S>` / `&mut Heap<S>` dereferences twice (MEMORY_SEMANTICS §5 one-hop rule).
+run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 31
+run_ok  "$TESTDIR/regress_126_heap_ref_one_hop.con" 255
+run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro.con" 43
+run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro_read.con" 10
+# Bug 115 (FIXED): the builtin vec_get / vec_set require a Copy element (E0290 / E0291).
+run_err "$TESTDIR/error_115_vec_get_non_copy.con"           "(E0290)"
+run_err "$TESTDIR/error_115_vec_get_generic_unbounded.con"  "(E0290)"
+run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
+# Bugs 102 and 105: the interpreter agrees with the binary (102 needed pointer equality on
+# reference paths in the interpreter; 105's reproducer runs in both).
+for r102 in regress_102_pointer_local_address regress_105_ref_valued_branch_generic; do
+    r102_src="$TESTDIR/$r102.con"
+    r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
+    r102_n=""
+    if $COMPILER "$r102_src" -o "$TESTDIR/.r102_bin" >/dev/null 2>&1; then
+        "$TESTDIR/.r102_bin" >/dev/null 2>&1 && r102_n=0 || r102_n=$?
+    fi
+    rm -f "$TESTDIR/.r102_bin"
+    if [ -n "$r102_n" ] && [ "$r102_i" = "$r102_n" ]; then
+        echo "  ok  $r102: --interp == binary ($r102_n)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r102: --interp gave '$r102_i', binary exit '$r102_n'"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.

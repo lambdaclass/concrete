@@ -201,13 +201,16 @@ a rule reconciling them. The alternative of making `Heap<T>` an ordinary box wit
 dereference place operator was considered and rejected: it would turn `*h`, which consumes and
 frees the heap (§8), into a place operator, a larger change to `*` than the defect warrants.
 
-**Status on main.** The surface rule is enforced: `Check.lean` `.fieldAccess` (6D#3) accepts
-exactly the rows above. Agreement between consumers is **not** enforced: for
-`fn bump(h: &mut Heap<B>) { h.v = h.v + 1; }` called as `bump(&mut h)`, Elab desugars one
-dereference while Lower's call-argument `&mut` path passes the address of the slot, so the callee
-treats the heap pointer as field `v` and corrupts the caller's slot (the binary traps; a read
-returns the pointer's bits); `&h` lowers to the heap pointer and reads correctly. This is
-[bug 126](../bugs/126_field_write_through_mut_heap_ref.md) (OPEN).
+**Status.** The surface rule is enforced: `Check.lean` `.fieldAccess` (6D#3) accepts exactly the
+rows above. Elab and Lower agree since the fix of
+[bug 126](../bugs/126_field_write_through_mut_heap_ref.md) (FIXED, 2026-10-21): Elab elaborates a
+field access or assignment through `&Heap<S>` / `&mut Heap<S>` to two dereferences, and Lower
+gives `&h` and `&mut h` the slot `h` (the local is promoted to a stack slot, as any other
+non-array local whose address is taken). No cheaper representation of `&h` is used, so there is
+no equivalence for R-0504 to check yet. Before the fix, `bump(&mut h)` with
+`fn bump(h: &mut Heap<B>) { h.v = h.v + 1; }` corrupted the caller's slot (Elab desugared one
+dereference while the call passed the slot). The interpreter has no heap allocation, so it does
+not yet implement this row.
 
 **Prevents.** Bug 126 and the representation-disagreement half of [structural
 class](../bugs/STRUCTURAL_CLASSES.md) 8 for heap shells.
@@ -867,8 +870,9 @@ initialize a `let` or be assigned to any binding (REF-6). Each of the following 
 source of a reference:
 
 - an `if` or `match` whose value is a reference (`let r = if c { &a } else { &b };`,
-  `f(if c { &a } else { &b })`) — a deliberate restriction; the backend also miscompiles the form
-  (bug 105);
+  `f(if c { &a } else { &b })`) — a deliberate restriction; the backend miscompiled the form
+  until bug 105's fix (2026-10-21), which a generic instantiated at a reference type reached past
+  this refusal;
 - a borrow of a temporary, that is of any operand that is not a canonical place: a literal
   (`&42`), a call result (`&mk()`), an aggregate literal, an operator expression (`&(40 + 2)`),
   an owned temporary as a `&mut self` receiver (`make().bump()`), and a module constant (`&C`;
@@ -900,8 +904,8 @@ R-0499 may lift it as REF-5@2.
   *`error_091_norm_temporaries.con`*, *`error_091_norm_if_local_binding.con`*,
   *`error_091_norm_if_local_chain.con`*, *`error_091_norm_double_deref_read.con`*,
   *`error_091_norm_nested_ref_binder.con`*.
-- Status: **land2**, except temporaries. On `main` a reference-valued `if` is accepted and its
-  binary segfaults (bug 105), and every borrow of a temporary is accepted (the interpreter
+- Status: **land2**, except temporaries. A reference-valued `if` reached through a generic
+  instantiated at a reference type compiled to a segfault until bug 105's fix, and every borrow of a temporary is accepted (the interpreter
   rejects `&42` and `&mk()` with "unsupported borrow target shape" while the binary runs them).
   `land2-fix` rejects an operator operand (`&(40 + 2)`) and a temporary `&mut self` receiver, but
   classifies literals, call results and aggregate literals as `.temp` (`normPlace`) and accepts

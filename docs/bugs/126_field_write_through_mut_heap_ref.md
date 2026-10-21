@@ -1,6 +1,6 @@
 # Bug 126 — a field access through a `&mut Heap<T>` argument treats the slot holding the heap pointer as the struct
 
-**Status:** OPEN
+**Status:** FIXED (branch `lowering-bugs`, with bug 102)
 **Found:** 2026-10-21, while drafting reproducers for the exit 2i specification (bug 123's session).
 **Severity:** memory corruption in safe code. A field write through a `&mut Heap<B>` parameter
 overwrites the caller's heap-pointer slot (and stores 16 bytes into that 8-byte slot), and the
@@ -102,6 +102,38 @@ Two lowering decisions about how many pointer layers a reference to a heap shell
 
 `storeToPlace` then writes the updated `B` through the single-deref place, which is the slot.
 
+## Fix
+
+The decided one-hop rule, implemented on both sides so caller and callee agree:
+
+- **Callers (`Lower`).** `&h` and `&mut h` on a `Heap<S>` local denote the slot `h`, like a borrow
+  of any other non-array local (bug 102's place rule): `addrOfLocal` promotes the local to a stack
+  slot when the borrow's type points at `Heap<S>`, `prePromoteAddrTaken` does it before a branch,
+  and the `&mut h` call-argument write-back path already passed the slot. The shared borrow no
+  longer casts the heap pointer to the reference type, so `get(&h)` and `get(&mut h)` now pass
+  the same thing. No cheaper machine form is kept: passing the heap pointer itself is equivalent
+  only for a callee that never writes the slot, and nothing records that.
+- **Callees (`Elab`).** A field access or field assignment through `&Heap<S>` / `&mut Heap<S>`
+  elaborates to two dereferences, `(*(*r)).f`: the reference to the slot, then the heap pointer
+  it holds (an owned `Heap<S>` keeps one). The assignment's place evidence records both.
+- **`CoreCheck`.** The inner dereference of a heap shell reached through a reference does not
+  require `Alloc`, which keeps the source checker's rule (reading or writing a field through a
+  borrowed heap shell needs no capability; dereferencing an owned one does).
+
+A second defect on the same path is gone with it: a `&mut h` taken in one branch and in a loop
+produced an SSA phi mixing `Heap<B>` and `ptr<B>` (E0710 at `ssa-verify`), because the heap local
+was never promoted; it is now memory-backed.
+
+Permanent legs: `tests/programs/regress_126_heap_ref_one_hop.con` in `run_tests.sh` (run_ok 255:
+field write, field read through `&mut` and `&`, a `&mut Heap<B>` parameter passed on (reborrow),
+through generics (`&mut Heap<Cell<T>>`), nested (a heap field of a struct reached through
+`&mut Outer`, then `&mut o.h` passed on), a `&h` held in a binding, and the borrow taken in one
+branch and in a loop; on the pre-fix compiler it does not compile, E0710), and the existing
+`regress_090_guard_reads.con` and `regress_092_refs_flow_down.con` reads through `&Heap<B>`. Both
+reproducers now exit correctly (43 and 10); their open-bug rows are dropped. The interpreter
+still has no `alloc` (the gap that also keeps bug 104's heap reproducers out of it), so these
+legs are native only.
+
 ## Structural cause
 
 Storage and place representation decided ad hoc in `Lower` ([structural class](STRUCTURAL_CLASSES.md)
@@ -128,8 +160,9 @@ to passing the slot, and adds a run fixture for both the write and the read.
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") pins both reproducers:
+Until the fix, `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers") pinned both reproducers:
 `repro.con` in mode `signals` (the binary builds and is killed by a signal; the signal is not
 pinned, because the C allocator's response to the corrupted pointer differs by platform) and
 `repro_read.con` in mode `wrong-exit:10`. When the bug is fixed, by rejection or correct code,
-that leg fails until this document, the corpus entry and the leg are updated together.
+that leg failed until this document, the corpus entry and the leg were updated together; the fix
+dropped both rows.
