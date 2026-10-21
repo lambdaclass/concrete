@@ -330,11 +330,11 @@ private partial def tomlScanLiteral (cs : List Char) : Except String (List Char)
 
 /-- The scan state at the end of one line, given the state at its start: `(str, depth)` where `str`
     is 0 outside any string, 1 inside a multi-line basic string, 2 inside a multi-line literal
-    string, and `depth` is the bracket/brace nesting of the VALUE being read (a multi-line array
+    string, and `depth` is the stack of closers expected for the bracket/brace nesting of the VALUE being read (a multi-line array
     or inline table). Quote-, escape- and comment-aware, so a delimiter or bracket inside a plain
     string or a comment changes nothing. A multi-line string may end with up to two extra quotes
     (`""""`, `"""""`), which belong to its content. Brackets of a table header balance on its line. -/
-private partial def tomlScanLine (st : Nat × Nat) (cs : List Char) : Except String (Nat × Nat) :=
+private partial def tomlScanLine (st : Nat × List Char) (cs : List Char) : Except String (Nat × List Char) :=
   let (str, d) := st
   match str, cs with
   | 1, '\\' :: _ :: r => tomlScanLine (1, d) r
@@ -351,11 +351,15 @@ private partial def tomlScanLine (st : Nat × Nat) (cs : List Char) : Except Str
   | 0, '\'' :: '\'' :: '\'' :: r => tomlScanLine (2, d) r
   | 0, '"' :: r => do tomlScanLine (0, d) (← tomlScanBasic r)
   | 0, '\'' :: r => do tomlScanLine (0, d) (← tomlScanLiteral r)
-  | 0, '[' :: r => tomlScanLine (0, d + 1) r
-  | 0, '{' :: r => tomlScanLine (0, d + 1) r
-  | 0, ']' :: r => if d == 0 then .error "unbalanced ']'" else tomlScanLine (0, d - 1) r
-  | 0, '}' :: r => if d == 0 then .error "unbalanced '}'" else tomlScanLine (0, d - 1) r
-  | 0, _ :: r => tomlScanLine (0, d) r
+  | 0, '[' :: r => tomlScanLine (0, ']' :: d) r
+  | 0, '{' :: r => tomlScanLine (0, '}' :: d) r
+  | 0, c :: r =>
+    if c == ']' || c == '}' then
+      match d with
+      | close :: d' => if close == c then tomlScanLine (0, d') r
+                       else .error s!"mismatched '{c}' (expected '{close}')"
+      | [] => .error s!"unbalanced '{c}'"
+    else tomlScanLine (0, d) r
   | _, _ => .ok (str, d)
 
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
@@ -364,7 +368,7 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
-  let mut strState : Nat × Nat := (0, 0)  -- tomlScanLine's state at the start of the current line
+  let mut strState : Nat × List Char := (0, [])  -- tomlScanLine's state at the start of the current line
   for l in content.splitOn "\n" do
     let startState := strState
     strState ← match tomlScanLine startState l.toList with
@@ -372,7 +376,7 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
       | .error e => throw s!"{e} in line '{l.trimAscii}'"
     -- A line that BEGINS inside a multi-line string, array or inline table is part of a value,
     -- not structure: it is neither a table header nor a key.
-    if startState != (0, 0) then continue
+    if startState.1 != 0 || !startState.2.isEmpty then continue
     let t := l.trimAscii.toString
     if t.startsWith "[" then
       atTop := false
@@ -425,7 +429,7 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
               s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
           out := out ++ [(kind, v)]
   if strState.1 != 0 then throw "unterminated multi-line string"
-  if strState.2 != 0 then throw "unterminated array or inline table"
+  if !strState.2.isEmpty then throw "unterminated array or inline table"
   return out
 
 /-- The section for the trust reports: every declared native library, by package. Empty when none
@@ -534,11 +538,11 @@ partial def findProjectRoot (startDir : String) : IO (Option String) := do
   -- filesystem root where `dirOf` reaches its fixed point; an arbitrary 64 bought nothing but a
   -- silent wrong answer for deep trees.
   let rec up (dir : String) : IO (Option String) := do
-    let tomlExists ← try
-      let _ ← IO.FS.readFile ⟨dir ++ "/Concrete.toml"⟩
-      pure true
-    catch _ => pure false
-    if tomlExists then return some dir
+    -- EXISTENCE, not readability. A manifest that exists but cannot be read used to count as
+    -- absent, so discovery walked past it to an ancestor's (or to standalone mode) and its
+    -- declarations — [native] among them — silently vanished. The project is found here; the read
+    -- that follows reports the failure.
+    if ← System.FilePath.pathExists ⟨dir ++ "/Concrete.toml"⟩ then return some dir
     let parent := dirOf dir
     if parent == dir || parent.isEmpty then return none
     up parent

@@ -359,6 +359,19 @@ name = "nlapp"
 version = "0.1.0"
 EOF
 refused "$TMP/arrval" arrval "unsupported top-level key 'native.libs'" "a top-level native key after a multi-line array holding [1] is still refused"
+# A bracket closed by the wrong delimiter is malformed; it must not end the value early or late
+# and hide the [native] lines it encloses.
+mkapp "$TMP/mismatch" ''
+cat > "$TMP/mismatch/Concrete.toml" <<'EOF'
+metadata = [
+[native]
+libs = ["m"]
+}
+[package]
+name = "nlapp"
+version = "0.1.0"
+EOF
+refused "$TMP/mismatch" mismatch "mismatched '}'" "a '[' closed by '}' is refused rather than hiding the lines inside it"
 bad rpathcolon '
 [native]
 lib-dirs = ["lib:other"]' "is not an accepted library directory" "a ':' in a lib-dir is refused (an ELF rpath list separator)"
@@ -472,6 +485,30 @@ if [ -x "$TMP/app1file.bin" ]; then "$TMP/app1file.bin"; rcf=$?; else rcf=none; 
 [ "$rcff" != "0" ] && [ ! -e "$TMP/flagfile.bin" ] && grep -qF "is not a library name" "$TMP/flagfile.build" \
   && ok "single-file mode refuses a malformed [native] exactly as project mode does" \
   || no "single-file mode with a malformed [native]: rc=$rcff $(head -3 "$TMP/flagfile.build" | tr '\n' ' ')"
+# An enclosing manifest that exists but cannot be read is a refusal, never a fallback to a
+# readable ancestor manifest (or to standalone mode) that lacks its declarations.
+if [ "$(id -u)" != "0" ]; then
+  mkdir -p "$TMP/anc"
+  printf '[package]\nname = "ancestor"\nversion = "0.1.0"\n' > "$TMP/anc/Concrete.toml"
+  mkapp "$TMP/anc/inner" '
+[native]
+libs = ["nladd"]
+lib-dirs = ["lib"]'
+  mkdir -p "$TMP/anc/inner/lib" && cp "$TMP/static/libnladd.a" "$TMP/anc/inner/lib/"
+  chmod 000 "$TMP/anc/inner/Concrete.toml"
+  rm -f "$TMP/ancfile.bin"
+  ( cd "$TMP/anc/inner" && $TO "$C" src/main.con -o "$TMP/ancfile.bin" ) > "$TMP/ancfile.build" 2>&1; rca2=$?
+  [ "$rca2" != "0" ] && [ ! -e "$TMP/ancfile.bin" ] && grep -qF "cannot read" "$TMP/ancfile.build" \
+    && ok "single-file mode refuses an unreadable enclosing manifest (no fallback to the ancestor's)" \
+    || no "single-file mode with an unreadable manifest: rc=$rca2 $(head -3 "$TMP/ancfile.build" | tr '\n' ' ')"
+  ( cd "$TMP/anc/inner" && $TO "$C" build -o "$TMP/ancbuild.bin" ) > "$TMP/ancbuild.build" 2>&1; rca3=$?
+  [ "$rca3" != "0" ] && [ ! -e "$TMP/ancbuild.bin" ] \
+    && ok "concrete build refuses an unreadable manifest rather than building the ancestor project" \
+    || no "concrete build with an unreadable manifest: rc=$rca3 $(head -3 "$TMP/ancbuild.build" | tr '\n' ' ')"
+  chmod 644 "$TMP/anc/inner/Concrete.toml"
+else
+  ok "unreadable enclosing-manifest legs not applicable as root (stated, not skipped silently)"
+fi
 
 echo ""
 echo "NATIVE-LIBS: PASS=$PASS FAIL=$FAIL"

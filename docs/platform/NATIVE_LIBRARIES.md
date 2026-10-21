@@ -51,6 +51,8 @@ what G1 recorded.
 | any other spelling of the table: `["native"]`, `[ native ]`, `[native.x]`, `[[native]]`, a top-level `native = {...}` or `native.libs = [...]` (the line reader reads only the plain form, so it refuses the rest instead of skipping them) | load |
 | a table header or top-level key written with a backslash escape (escapes are not decoded, so it could spell `native`) | load |
 | a dependency manifest that exists but cannot be read (an absent one is a manifestless package) | load |
+| an enclosing or dependency manifest that exists but cannot be read is never treated as absent (project discovery no longer walks past it to an ancestor manifest) | discovery / load |
+| a bracket or brace closed by the other delimiter | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
 | a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |
 | a `lib-dirs` entry (or canonical, or pkg-config `-L`, directory) that is empty, starts with `-`, or contains `,` (splits `-Wl,`), `:` (an ELF rpath separator), `$` (an rpath token such as `$ORIGIN`) or a control character | load (pkg-config: link) |
