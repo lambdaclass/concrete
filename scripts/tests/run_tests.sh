@@ -7058,7 +7058,7 @@ fi
 # LLVM enum payload size matches report layout max_payload
 report_output=$(cached_output "$TESTDIR/report_layout_check.con" "--report layout")
 layout_max_payload=$(grep <<<"$report_output" -o "max_payload: [0-9]*" | grep -o "[0-9]*")
-if grep <<<"$llvm_output" -q "%enum.Shape = type { i32, \[$layout_max_payload x i8\] }"; then
+if grep <<<"$llvm_output" -qE "%enum\.Shape = type \{ (\[0 x i64\], )?i32, \[$layout_max_payload x i8\] \}"; then
     echo "  ok  report_layout_check.con --emit-llvm enum payload size matches --report layout max_payload ($layout_max_payload)"
     PASS=$((PASS + 1))
 else

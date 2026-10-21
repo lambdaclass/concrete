@@ -247,7 +247,29 @@ mod m {
 CON
 IR="$("$COMPILER" "$TMP/layout.con" --emit-llvm 2>/dev/null)"
 
-specialized="$(grep -cE '^%enum\.Wrap_[A-Za-z0-9_]+ = type \{ i32, \[[0-9]+ x i8\] \}' <<<"$IR")"
+# An enum declaration is `{ i32, [N x i8] }`, with a leading zero-length `[0 x i64]` member when
+# the payload needs 8-byte alignment (bug 121); the footprint is the byte array either way.
+WRAP_DECL='^%enum\.Wrap_[A-Za-z0-9_]+ = type \{ (\[0 x i64\], )?i32, \[[0-9]+ x i8\] \}'
+# wrap_checks <ir>: prints "specialized=<n> base=<0|1> footprints=<sizes...>".
+wrap_checks() {
+  local ir="$1" n base sizes
+  n="$(grep -cE "$WRAP_DECL" <<<"$ir" || true)"
+  base=0; grep -qE '^%enum\.Wrap = type' <<<"$ir" && base=1
+  sizes="$(grep -oE "$WRAP_DECL" <<<"$ir" | grep -oE '\[[0-9]+ x i8\]' | grep -oE '^\[[0-9]+' | tr -d '[' | sort -n -u | tr '\n' ' ')"
+  echo "specialized=$n base=$base footprints=${sizes% }"
+}
+# wrap_verdict <checks-line>: 0 iff >=2 specialized declarations, no base-name declaration, and
+# >=2 distinct payload footprints.
+wrap_verdict() {
+  local line="$1" n base fp
+  n="$(sed -E 's/.*specialized=([0-9]+).*/\1/' <<<"$line")"
+  base="$(sed -E 's/.*base=([01]).*/\1/' <<<"$line")"
+  fp="$(sed -E 's/.*footprints=//' <<<"$line" | wc -w | tr -d ' ')"
+  [ "$n" -ge 2 ] && [ "$base" = 0 ] && [ "$fp" -ge 2 ]
+}
+
+line="$(wrap_checks "$IR")"
+specialized="$(sed -E 's/.*specialized=([0-9]+).*/\1/' <<<"$line")"
 if [ "$specialized" -ge 2 ]; then
   ok "distinct specialized declarations emitted ($specialized)"
 else
@@ -263,13 +285,21 @@ fi
 # The `[i64;3]` and `i8` instantiations must have DIFFERENT payload footprints.
 # Compared as a set of sizes rather than by mangled name, so this stays true
 # when R-0007 replaces the mangling scheme.
-mapfile -t sizes < <(grep -oE '^%enum\.Wrap_[A-Za-z0-9_]+ = type \{ i32, \[[0-9]+ x i8\] \}' <<<"$IR" \
-  | grep -oE '\[[0-9]+ x' | grep -oE '[0-9]+' | sort -n -u)
+read -r -a sizes <<<"$(sed -E 's/.*footprints=//' <<<"$line")"
 if [ "${#sizes[@]}" -ge 2 ]; then
   ok "payload footprints differ per instantiation (${sizes[*]} bytes)"
 else
   no "all %enum.Wrap_* declarations share one payload footprint (${sizes[*]:-none}) — sized from a single instantiation?"
 fi
+
+# Negative controls: the same checks must refuse the bug-051 shapes, in both declaration spellings.
+if wrap_verdict "$line"; then ok "control: the real IR passes the verdict"; else no "control: the real IR fails the verdict ($line)"; fi
+ctl_shared='%enum.Wrap = type { [0 x i64], i32, [28 x i8] }'
+if wrap_verdict "$(wrap_checks "$ctl_shared")"; then no "control: one shared %enum.Wrap declaration was accepted"; else ok "control: one shared declaration is refused"; fi
+ctl_same=$'%enum.Wrap_A = type { [0 x i64], i32, [28 x i8] }\n%enum.Wrap_B = type { i32, [28 x i8] }'
+if wrap_verdict "$(wrap_checks "$ctl_same")"; then no "control: two declarations with one footprint were accepted"; else ok "control: two declarations sharing a footprint are refused"; fi
+ctl_ok=$'%enum.Wrap_A = type { [0 x i64], i32, [28 x i8] }\n%enum.Wrap_B = type { i32, [4 x i8] }'
+if wrap_verdict "$(wrap_checks "$ctl_ok")"; then ok "control: two declarations, both spellings, differing footprints pass"; else no "control: a valid mixed-spelling pair was refused"; fi
 
 echo "=== 4. builtin Option/Result keep the canonical union (NOT specialized) ==="
 
