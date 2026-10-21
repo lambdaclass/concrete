@@ -1,0 +1,16 @@
+// Bug 123: a module constant of bare reference type is accepted (REF-3
+// forbids storing a reference in a constant; expected E0239), and the
+// borrow of the constant `X` lowers to the address of a stack slot that is
+// never initialized. The binary exits 0 on arm64 where the program reads
+// 42; the interpreter fails "undefined variable 'R'". Silent wrong code in
+// safe code.
+const X: Int = 42;
+const R: &Int = &X;
+
+fn get(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return get(R);
+}

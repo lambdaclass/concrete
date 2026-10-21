@@ -1,0 +1,10 @@
+// Bug 124: two parameters of one function with the same name pass the
+// checker; llvm-as then fails ("redefinition of argument"). Expected: a
+// checker diagnostic (SCOPE-1, proposed E0301).
+fn f(a: Int, a: Int) -> Int {
+    return a;
+}
+
+fn main() -> Int {
+    return f(1, 2);
+}

@@ -281,12 +281,15 @@ while IFS= read -r line; do
 done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
-# Bugs the examples exposed (docs/bugs/108-120), pinned the way check_bug077_contained.sh
+# Bugs the examples exposed (docs/bugs/108-120) and the exit 2i specification found
+# (123-124), pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
 # Modes: compile-fails:<text> (alternatives ` || `), compiles (the bug is that it is
-# accepted), interp-fails:<text> (the binary runs; the interpreter rejects it).
+# accepted), interp-fails:<text> (the binary runs; the interpreter rejects it),
+# wrong-exit:<code> (silent wrong code: the binary builds and runs, and its exit is NOT the
+# correct <code>; the wrong value itself is not pinned, since it may be an uninitialized read).
 open_bug_reproducers() {
   local R="tests/regressions" num rel mode text out rc alt found
   while IFS='|' read -r num rel mode text; do
@@ -312,6 +315,14 @@ open_bug_reproducers() {
       compiles)
         if [ "$rc" -eq 0 ]; then ok "$label is still accepted"; else no "$label is now rejected — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
         ;;
+      wrong-exit)
+        if [ "$rc" -ne 0 ]; then no "$label is now rejected — fixed? update docs/bugs/$num, the corpus entry and this table"; continue; fi
+        timeout "$INTERP_TIMEOUT" "$TMP/bugrepro_$num" > /dev/null 2>&1 < /dev/null; rc=$?
+        # A timeout, a launch failure or a signal is not the recorded wrong value.
+        if [ "$rc" -ge 124 ]; then no "$label did not run to an exit (status $rc: timeout, launch failure or signal)"
+        elif [ "$rc" -eq "$text" ]; then no "$label now exits $text, the correct value — fixed? update docs/bugs/$num, the corpus entry and this table"
+        else ok "$label still exits $rc where $text is correct"; fi
+        ;;
       interp-fails)
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
         out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
@@ -336,6 +347,8 @@ open_bug_reproducers() {
 118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 119|bug119_interp_generic_trait_method/repro.con|interp-fails|undefined function 'U_v'
 120|bug120_interp_field_borrow_through_ref/repro.con|interp-fails|ref step .field on non-struct
+123|bug123_const_borrow_uninitialized_slot/repro.con|wrong-exit|42
+124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
 TABLE
 }
 if [ -z "$ONLY" ]; then

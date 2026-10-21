@@ -166,6 +166,8 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 - [118_interp_nested_module_import.md](118_interp_nested_module_import.md) — OPEN: the interpreter cannot call a function imported from a nested module (examples-health, 2026-10-20)
 - [119_interp_generic_trait_method.md](119_interp_generic_trait_method.md) — OPEN: the interpreter cannot call a trait method on a type parameter (examples-health, 2026-10-20)
 - [120_interp_field_borrow_through_ref.md](120_interp_field_borrow_through_ref.md) — OPEN: the interpreter cannot borrow a field through a reference parameter (examples-health, 2026-10-20)
+- [123_const_borrow_uninitialized_slot.md](123_const_borrow_uninitialized_slot.md) — OPEN: `const R: &Int = &X;` is accepted (REF-3 names constants) and `&X` lowers to an uninitialized stack slot, so `get(R)` exits 0 where 42 is read (silent wrong code); `land2-fix` refuses uses of `R` but compiles `&X` in a body to the same slot (exit 2i specification, G1, 2026-10-21). Joins exit 0b.
+- [124_duplicate_parameter_names.md](124_duplicate_parameter_names.md) — OPEN: `fn f(a: Int, a: Int)` passes the checker and fails in `llvm-as` ("redefinition of argument"), while `--interp` runs it; also on `land2-fix` (exit 2i specification, G3, 2026-10-21). Joins exit 2c; an input to 2i SCOPE-1.
 
 (045/046 numbers used by the parallel session's fixes — match-binder alpha-rename and keys/values Copy-bounding — before these entries were filed; the keys/values double-free finding from the same audit is tracked there, fixed.)
 

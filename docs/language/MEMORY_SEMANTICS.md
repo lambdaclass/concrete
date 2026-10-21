@@ -698,7 +698,7 @@ an array literal element; a binding or parameter whose type holds a reference in
   because `tyHoldsRefInAggregateV` looks through the outer reference. On `main`,
   `const X: Int = 42; const R: &Int = &X; fn get(r: &Int) -> Int { return *r; }` with
   `return get(R);` builds a binary that exits 0, while `--interp` reports `undefined variable 'R'`:
-  silent wrong code in safe code. `land2-fix` refuses every use of `R` (E0238, "'R' is not a local
+  silent wrong code in safe code (bug 123). `land2-fix` refuses every use of `R` (E0238, "'R' is not a local
   binding") but still accepts the declaration.
 
 #### REF-4. Generic instantiation preserves REF-1 and REF-3
@@ -875,7 +875,8 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
 - Status: on `main` the source is recorded only for a direct `let r = &x` / `&mut x`
   (`checkStmt` `let` case), so moving, freeing, freezing and let-borrow conflicts are enforced for
   those. A projected borrow is not tracked on `main`: `let r: &Int = &h.v; free(h);` is accepted
-  and `*r` then reads freed memory, and assigning `x = 1` under a live `let r = &x` is accepted
+  and `*r` then reads freed memory by the language's semantics (bug 091's projected-borrow case; today's binary reads a
+  stack copy Lower took at the borrow, which masks it), and assigning `x = 1` under a live `let r = &x` is accepted
   (`*r` reads 1). Both are refused on `land2-fix` (E0204 and E0232: the recorded path and
   `checkWriteAccess`). So: direct borrows **main**; projected borrows, writes under a shared
   reference, shadowing and ancestry **land2** (part of G5). Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
@@ -921,7 +922,7 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   has no fixture). `land2-fix` adds E0238 for a name a live reference borrows (REF-8).
 - Status: **gap** (G3). Every other rejected shape above is accepted on both revisions. Duplicate
   parameter names pass the checker on both and then fail in `llvm-as` ("redefinition of
-  argument"), a loud failure that also breaks LANGUAGE_INVARIANTS §19.
+  argument", bug 124), a loud failure that also breaks LANGUAGE_INVARIANTS §19.
 - Prerequisite (G4): the renamed pattern binder `Variant { value: inner }`, in `match`, `if let`,
   `while let` and destructuring `let`. It does not parse today ("expected identifier, got :").
   Without it a nested `Option` / `Result` match cannot be written under SCOPE-1, because both
@@ -1164,11 +1165,11 @@ manifest row:
 
 | gap | what is missing | proposed owner |
 |---|---|---|
-| G1 | REF-3: a constant of bare reference type is accepted on both revisions; on `main` its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. A candidate defect, not yet filed | row 0, exit 0b: file the bug, reject the declaration with E0239 in `checkModule` and `verifyNoStoredRefs` |
+| G1 | REF-3: a constant of bare reference type is accepted on both revisions; on `main` its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), which also records that `land2-fix` compiles `&X` of a constant in a function body to the same uninitialized slot | row 0, exit 0b: reject the declaration with E0239 in `checkModule` and `verifyNoStoredRefs` |
 | G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
-| G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
+| G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
 | G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
-| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference, and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
+| G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 has no fixture yet for the free or the field write under a projected borrow, which it rejects with E0204 and E0232), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
 | G6 | no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
 | G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |

@@ -33,7 +33,7 @@ examples/snippets/constants.con, recorded `interp=fails:` in the manifest.
 
 ## Structural cause
 
-The interpreter has its own environment construction and binds only functions and locals, not module constants, which Elab inlines for the backend. Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7, with 066, 084, 085).
+The interpreter has its own environment construction and binds only functions and locals, not module constants, which Lower inlines for the backend. Semantics implemented several times ([structural class](STRUCTURAL_CLASSES.md) 7, with 066, 084, 085).
 
 ## Structural owner
 
