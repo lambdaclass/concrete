@@ -27,7 +27,9 @@
 # A `link` row is the same in both forms and is taken as written. Any other `-` row is resolved to the
 # ONE raw baseline row whose normalization it is (none or several is a refusal, never a guess), and the
 # fields the `+` row changes are rewritten IN that raw row: each changed value must occur exactly once
-# in it, and the rewritten row must normalize to the `+` row. Package digests and other raw-only
+# in it, and the rewritten row must normalize to the `+` row. The `+` row itself must be exactly one
+# row of the new tree (normalized there), so a `+` row the tree does not have is refused even when
+# another row shares its pairing key. Package digests and other raw-only
 # fields stay the baseline's, so the row still pairs by the usual content key against the new tree,
 # and its implementation digest is still compared there (the `#` explanation in the file is what
 # accepts the change). The amended row is reported as an `amended` line. Anything not listed still has
@@ -99,11 +101,14 @@ if len(sys.argv) > 3:
         elif line.startswith("+\t"): plus.append(line[2:].split("\t"))
     if len(minus) != len(plus):
         print("FATAL: amendments must pair each - row with a + row", file=sys.stderr); sys.exit(2)
-    norm_old = make_norm(old)
+    norm_old, norm_new = make_norm(old), make_norm(new)
     for o, n in zip(minus, plus):
         if o[0] != n[0] or len(o) != len(n):
             print("FATAL: an amendment changes the row kind or shape: " + "\t".join(o), file=sys.stderr); sys.exit(2)
         kind, old_raw = resolve(old, norm_old, o, "amended baseline (-)")
+        # The `+` row must exist in the tree as written: content-key pairing alone would accept a
+        # different row with the same key (a reference key ignores the symbol suffix).
+        resolve(new, norm_new, n, "amended new (+)")
         if o[0] == "link":
             new_raw = n[1:]
         else:

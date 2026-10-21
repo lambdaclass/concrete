@@ -318,7 +318,21 @@ if [ -s "$NEWRAW" ]; then
   # Re-pointing one selection at another's symbol leaves two selections on one symbol and none on the
   # other: the tool refuses it by MULTIPLICITY. The leg used to expect "selects" and passed only because
   # a MAPPED line elsewhere contained `ch_selects_high` — the match is now on refused lines only.
-  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "multiplicity"
+  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "multiplicity"  # An amendment's `+` row must be a row of the tree, not merely share a pairing key with one: a
+  # reference key ignores the symbol suffix, so a `+` reference naming a symbol the tree does not
+  # have would otherwise pair with the real row (Codex review of the bug 110 re-freeze). Doctor the
+  # explained `+` reference row of hmac_sha256's sha256_hash and require the refusal.
+  awk 'BEGIN{FS=OFS="\t"} $1=="+" && $2=="reference" && $3=="shaFns_@_sha256_hash" {$3="shaFns_@_no_such_symbol"} {print}' \
+    "$AMEND" > "$TMP/doctored.amend"
+  if cmp -s "$AMEND" "$TMP/doctored.amend"; then
+    no "M: the amendment-doctor control found no + reference row for shaFns_@_sha256_hash to doctor"
+  elif bash scripts/tools/identity_migration_map.sh "$RAW" "$NEWRAW" "$TMP/doctored.amend" > /dev/null 2> "$TMP/doctored.amend.err"; then
+    no "M: the map tool accepted an amendment whose + row the tree does not have"
+  elif grep -q 'amended new (+) row matches 0 rows' "$TMP/doctored.amend.err"; then
+    ok "M: the map tool refuses an amendment whose + row the tree does not have"
+  else
+    no "M: the map tool refused the doctored amendment, but not for its missing + row: $(tail -1 "$TMP/doctored.amend.err")"
+  fi
 fi
 
 echo ""
