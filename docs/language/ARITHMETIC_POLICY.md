@@ -433,8 +433,8 @@ rewriting sites that are in fact safe.
 | integer narrowing, sign change | **silent truncation / reinterpretation**: `300 as u8` is 44, `-1 as u32` is 4294967295, `-1 as u64` is 2^64 − 1, in both consumers |
 | float → integer | truncates toward zero (`3.9 as i32` is 3, `-3.9 as i32` is -3) and **traps** when the value is out of the target's range (`1e20 as i32` aborts); the interpreter rejects float literals ("float literals not yet supported"), so only integer-origin floats can be compared |
 | integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement ([bug 128](../bugs/128_interp_int_to_float_identity.md), exit 0b) |
-| integer → `bool` | `x as bool` with `x: Int` passes the checker and fails in `llvm-as` (`bitcast i64 to i1`); the interpreter refuses it ([bug 130](../bugs/130_int_as_bool_invalid_ir.md), exit 2c) |
-| `bool` → integer | invalid IR (bug 108, exit 2c) |
+| integer → `bool` | refused by the checker (E0553), as §8.1 decides; before the fix it passed the checker and failed in `llvm-as` (`bitcast i64 to i1`) ([bug 130](../bugs/130_int_as_bool_invalid_ir.md), fixed) |
+| `bool` → integer | `false` 0, `true` 1 (zext) in both consumers; it was invalid IR ([bug 108](../bugs/108_bool_cast_trunc.md), fixed) |
 | `--report arithmetic` | lists checked float → integer casts but **no integer narrowing cast** (`fn n(x: Int) -> u8 { return x as u8; }` is absent), so silent truncation is invisible in the report meant to classify arithmetic sites |
 
 So the rule is **not enforced**: every row marked "no" in §8.1 is accepted by `as` today.

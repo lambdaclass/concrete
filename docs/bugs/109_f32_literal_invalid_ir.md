@@ -1,6 +1,6 @@
 # Bug 109 — an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant
 
-**Status:** FIXED (branch `backend-108-116`, commit 632a95aa)
+**Status:** FIXED (branch `backend-108-116`, commit 65acba45)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation for `f32`; found while fixing it, the same printer was **silent wrong code** for `f64` (six significant decimals: `0.123456789` compiled as `0.123457`, `0.0000000001` as `0`).
 

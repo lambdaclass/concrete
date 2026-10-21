@@ -630,8 +630,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       (isInteger innerTy && isInteger targetTy) ||
       -- `bool as <int>` is 0/1 (zext). `<int> as bool` is refused: neither the binary
       -- (an invalid `sext/zext/bitcast` to `i1`) nor the interpreter (an integer
-      -- tagged `bool`) ever gave it a meaning (bug 108), so it is not admitted until
-      -- one is chosen.
+      -- tagged `bool`) ever gave it a meaning (bugs 108, 130), and ARITHMETIC_POLICY
+      -- §8.1 decides `as` never accepts it (integer → `bool` is never total).
       (innerTy == .bool && isInteger targetTy) ||
       (isInteger innerTy && isFloat targetTy) ||
       (isFloat innerTy && isInteger targetTy) ||

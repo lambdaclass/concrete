@@ -1,6 +1,6 @@
 # Bug 108 — a `bool` cast to a wider integer is emitted as `trunc i1`
 
-**Status:** FIXED (branch `backend-108-116`, commit ee9a16cb)
+**Status:** FIXED (branch `backend-108-116`, commit 37eb5952)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation (a valid program is rejected after checking passed).
 
@@ -42,7 +42,8 @@ boolean"). `<int> as bool` never had a meaning in either backend.
 
 The width table gives `bool` 1 bit (and `bool` is unsigned), so `bool as <int>` is a `zext`
 everywhere; CoreCheck no longer admits `<int> as bool` (E0553), since no implementation ever gave it
-a value and none was chosen. Permanent legs: `tests/programs/regress_108_bool_cast_widen.con`
+a value; ARITHMETIC_POLICY §8.1 (2026-10-21) since decided that `as` never accepts it, and bug 130
+is the same refusal for an `Int` source. Permanent legs: `tests/programs/regress_108_bool_cast_widen.con`
 (run_ok 42: both values, all eight widths, parameter and constant operands) and
 `tests/programs/error_108_int_as_bool.con` (run_err E0553) in `run_tests.sh`, and
 `run_src bool true false` in `check_cast_matrix.sh` (interpreter and binary agree at every width).

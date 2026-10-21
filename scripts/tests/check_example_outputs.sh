@@ -394,7 +394,6 @@ open_bug_reproducers() {
 127|bug127_struct_literal_field_order/repro.con|runs-exit|65
 128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
 129|bug129_user_fn_captures_libc_symbol/repro.con|signals|
-130|bug130_int_as_bool_invalid_ir/repro.con|compile-fails|invalid cast opcode for cast from 'i64' to 'i1'
 TABLE
 }
 if [ -z "$ONLY" ]; then

@@ -1,0 +1,13 @@
+// Bug 130: `x as bool` with `x: Int` passed the checker and failed in llvm-as
+// (bitcast i64 to i1); the interpreter refused it. Refused with E0553 since the
+// bug 108 fix (no `<int> as bool`; ARITHMETIC_POLICY section 8.1).
+fn t(x: Int) -> bool {
+    return x as bool;
+}
+
+fn main() -> Int {
+    if t(2) {
+        return 1;
+    }
+    return 0;
+}
