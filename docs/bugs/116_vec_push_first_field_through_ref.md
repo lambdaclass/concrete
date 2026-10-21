@@ -1,6 +1,6 @@
 # Bug 116 — `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push`
 
-**Status:** FIXED (branch `backend-108-116`, commit 4bb8de68, follow-up c8a88828)
+**Status:** FIXED (branch `backend-108-116`, commit 4bb8de68, follow-ups c8a88828 and f447b864)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.
 
