@@ -255,20 +255,20 @@ agree with the classes.
 | exit | owner | closes when | acceptance test | class | why this class |
 |---|---|---|---|---|---|
 | 0a | R-0482 | bug 079's subject/model/spec binding is closed at status, issuance and receipt consumption, and the evidence and model repairs land: the bug 080 cast model, 081, 083 – 086, 089, 101 and the 065 stack-depth policy verdict | each bug's reproducer is a permanent gate leg (the `check_model_diff.sh` legs for 080, 084 – 086 and 101; the 079, 081, 083 and 089 reproducers in the evidence gates; 065's in the stack-depth policy gates), and the [bug ledger](docs/bugs/README.md) records each fixed on main | blocks features | known false proofs and unsound claims |
-| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095, 096 – 100, 102 – 104, 107, 111, 113, 115, 121 – 123, 127 – 129 and 131 | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091, and 104 and 131: a reference assigned from an inner block outlives its source, to a local or to a reference parameter), a safe user function named like a C symbol replacing it for the whole program (129: `fn malloc` becomes the allocator `alloc` calls), double free through `vec_get` taking a non-Copy element by value (115), silent wrong code (082, 088, 096 – 098, 102, 107, 111, and 123: a borrow of a module constant reads an uninitialized slot; 127: struct-literal initializers run in declaration order natively and in the ratified source order in the interpreter; 128: the interpreter, the differential reference, models an integer-to-float cast as the identity), missing extern effect declarations accepted in nested submodules (113; calls still charged `Unsafe`), a foreign destructor silently replaced by an empty body (103, a leak of every C resource released through a `*_destroy` function), and LLVM type layouts that disagree with the compiler's own, so aggregate copies move fields (121: conlog freed a corrupted String pointer; 122: the canonical builtin `Option`/`Result` union, including a stack overrun) |
+| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095, 096 – 100, 102 – 104, 107, 111, 113, 115, 121 – 123, 127 – 129 and 131, and the silent defects found while writing the [2026-10-21 semantics decisions](#decisions) into the docs, once they are filed in the bug ledger: an arm binder through a borrowed scrutinee whose root is moved inside the arm ([MEMORY_SEMANTICS §15.7](docs/language/MEMORY_SEMANTICS.md) G17), the binary evaluating a dereference assignment's destination before its right-hand side while the interpreter does the reverse ([evaluation order](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)), and the `&mut Heap<T>` field-write defect filed on branch `bug126` | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091, and 104 and 131: a reference assigned from an inner block outlives its source, to a local or to a reference parameter), a safe user function named like a C symbol replacing it for the whole program (129: `fn malloc` becomes the allocator `alloc` calls), double free through `vec_get` taking a non-Copy element by value (115), silent wrong code (082, 088, 096 – 098, 102, 107, 111, and 123: a borrow of a module constant reads an uninitialized slot; 127: struct-literal initializers run in declaration order natively and in the ratified source order in the interpreter; 128: the interpreter, the differential reference, models an integer-to-float cast as the identity), missing extern effect declarations accepted in nested submodules (113; calls still charged `Unsafe`), a foreign destructor silently replaced by an empty body (103, a leak of every C resource released through a `*_destroy` function), and LLVM type layouts that disagree with the compiler's own, so aggregate copies move fields (121: conlog freed a corrupted String pointer; 122: the canonical builtin `Option`/`Result` union, including a stack overrun); the defects found on 2026-10-21 are a read through an arm binder after its source moved, an interpreter/native disagreement on assignment order, and heap-slot corruption through a `&mut Heap<T>` argument |
 | 0c | R-0482 | campaign isolation is repaired and a qualified campaign result naming its exact commit is retained before the identity migration closes | a [stage (c)](#promotion-pipeline) qualification record with `verdict=qualified` at that commit: every required job succeeded there, the mutation aggregate's `qualified=1` among them | continues alongside | qualification of the identity migration; no deliverable depends on it |
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
 | 2b | R-0491 | permanent reproducer controls for 080 – 101: each bug has a checked-in record, reproducer, expected outcome and pre-fix/fixed SHA pair | each assigned control fails at its pre-fix SHA and passes at its fix; `check_bug_filing_complete.sh` and `audit_bug_corpus.sh` fail on a missing inventory entry | continues alongside | the reproducers already block as gate legs under 0a and 0b; this exit proves each one load-bearing |
-| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes; and closing the loud failures that keep valid examples out of the interpreter/native comparison (108 – 110, 112, 114, 116, 124, 130, and interpreter gaps 117 – 120) | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims; each bug assigned to this exit (108 – 110, 112, 114, 116, 117 – 120, 124, 130) has its reproducer permanently checking the corrected expected outcome, and the bug ledger records each fixed on main | continues alongside | prevention plus repairs of loud compilation/link failures and interpreter gaps, without a demonstrated authority or safety defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
+| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes; and closing the loud failures that keep valid examples out of the interpreter/native comparison (108 – 110, 112, 114, 116, 124, 130, and interpreter gaps 117 – 120); permanent differential legs for struct- and enum-literal field order, functional-update evaluation, assignment order and integer → float conversion ([2026-10-21 semantics decisions](#decisions)) | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims; each bug assigned to this exit (108 – 110, 112, 114, 116, 117 – 120, 124, 130) has its reproducer permanently checking the corrected expected outcome, and the bug ledger records each fixed on main | continues alongside | prevention plus repairs of loud compilation/link failures and interpreter gaps, without a demonstrated authority or safety defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
 | 2d | R-0513 | checked inventories replace incidental count pins: every expected claim and comparison is accounted for, exclusions carry reasons, and missing entries, skipped work or unexpected eligibility shrinkage fail | adding a legitimate proved example needs no incidental count edit; controls with a deleted inventory entry, a disabled generator, an empty suite and altered eligibility each fail | continues alongside | gate affordability; no reproduced soundness defect |
 | 2e | R-0513, R-0491 | minimum completed comparisons by semantic feature, with permanent positive and negative controls | every generated feature has a pinned minimum completed-comparison count, and a run below it fails | continues alongside | prevention; no reproduced defect |
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
 | 2g | R-0506 | the axiom-policy gate on today's authoritative evidence at status, issuance and consumption: `sorryAx` and unregistered axioms rejected transitively, kernel-only evidence limited to `propext`, `Classical.choice` and `Quot.sound`, registered native-evaluation and float axioms under distinct trust labels | positive controls and forbidden-transitive-dependency mutations, with `check_axiom_inventory.sh` | blocks features | V1's evidence must pass the declared axiom policy (R-0506 is a stage V1 exercises) |
 | 2h | R-0493 | one `IntArith` is the arithmetic authority for the existing pipeline's evaluation, folding and arithmetic-model generation, with emitted operations checked against the same semantics | `check_single_arithmetic.sh` (new) and differential controls over every supported width and operation family, including casts and defined traps | blocks features | V1a's checked `+ - *` and their traps are stated through it (R-0493 is a stage V1 exercises) |
-| 2i | R-0500 | the safety rules are written down and enforced: strictly second-class references (none stored in an aggregate) and no block `let` shadowing a visible name | per rule: a normative paragraph in `docs/language/` with accepted and rejected examples, cited fixtures, S1 generator coverage meeting its minima and a versioned migration diagnostic; the 092 and 093 reproducers stay rejected, and 087's shadowing reproducers, accepted today, become rejected by the shadowing rule | blocks features | their violations were use-after-free and leaks in safe code (087, 092, 093); RocksDB handles and V1 locals are checked under them |
-| 2j | R-0500 | the rules V1a's subset needs are written down and enforced: typed literals, literal range (signed minima preserved), statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting | the per-rule acceptance of 2i | blocks features | named dependency of V1a: the verified pipeline never models looser rules than the compiler enforces ([plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)) |
-| 2k | R-0500 | the remaining disputed rules are written down and enforced: explicit match binders and cast semantics per width pair | the per-rule acceptance of 2i | continues alongside | their defects (080, 084) are repaired under 0a; casts enter at a later V1 increment and match at V2, so neither is a dependency of RocksDB slice 1 or V1a |
+| 2i | R-0500 | the safety rules of [MEMORY_SEMANTICS §15](docs/language/MEMORY_SEMANTICS.md) are written down and enforced: strictly second-class references — they exist only as parameters, call arguments, borrow-block binders and arm-scoped pattern binders through a borrowed scrutinee; no reference binding is introduced by `let` or assigned; none is stored in an aggregate or a constant, and constants are values, never places — and one binding per visible scope chain (SCOPE-1: no binder reuses a visible name; sibling scopes may), with the design-example decisions on `&mut` arguments and unused exclusive references (B1, B2) and owner reads under a shared borrow (B7) recorded | per rule: a normative paragraph in `docs/language/` with accepted and rejected examples, cited fixtures, S1 generator coverage meeting its minima and a versioned migration diagnostic; the 092 and 093 reproducers stay rejected, 087's shadowing reproducers, accepted today, become rejected by the shadowing rule, and the `let`-bound and assigned reference shapes (REF-6), accepted today, become rejected | blocks features | their violations were use-after-free and leaks in safe code (087, 092, 093); RocksDB handles and V1 locals are checked under them |
+| 2j | R-0500 | the rules V1a's subset needs are written down and enforced: typed literals, literal range (signed minima preserved), statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting ([the evaluation-order rule](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment): left to right in source order, struct and enum literal fields in source order, an assignment evaluating its right-hand side before its destination), and what an assignment does to the old value (MEMORY_SEMANTICS §10) | the per-rule acceptance of 2i | blocks features | named dependency of V1a: the verified pipeline never models looser rules than the compiler enforces ([plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)) |
+| 2k | R-0500 | the remaining disputed rules are written down and enforced: explicit match binders and cast semantics per width pair, as [ARITHMETIC_POLICY §8](docs/language/ARITHMETIC_POLICY.md#8-numeric-conversions-as) decided it on 2026-10-21: `as` accepts only the always-lossless numeric, `bool` and `char` conversions of its class table, and every lossy conversion is a compile error that uses named truncation, reinterpretation, rounding or checked conversion; numeric scope only (pointer and reference casts unchanged); staged: the named operations, then the rejection with versioned migration diagnostics, then the migration | the per-rule acceptance of 2i | continues alongside | their defects (080, 084) are repaired under 0a; casts enter at a later V1 increment and match at V2, so neither is a dependency of RocksDB slice 1 or V1a |
 | 2l | R-0498 | enforcement is demonstrated (S3): a claim → gate-leg → targeted-mutation manifest over the verification and language docs, enforcement-bearing comments in `Concrete/Proof`, `Check` and `Backend`, and emitted contract text, with R-18 – R-20 relabelled shape-only until proved | every enforcement phrase in that scope at the commit that opens this exit has a manifest row whose mutation its leg kills in a qualified ([stage (c)](#promotion-pipeline)) campaign; later phrases join row 6's per-slice growth | continues alongside | prevention; no reproduced defect |
 
 ### Feature prerequisites
@@ -674,6 +674,42 @@ and additional backends already wait in the backlog behind workload triggers (R-
 task, the Wasm and freestanding targets); broad `std` expansion in this file (R-0031) is now bounded
 the same way. No new task ID was needed. No exit or acceptance criterion is removed; exits assigned
 before this date keep their obligations.
+
+**Semantics decisions, 2026-10-21:** a list of ten language-semantics proposals tied to bug records and
+four items of external advice were evaluated against probes of main (both consumers) and corpus
+counts, and every recommendation was adopted as evaluated, each written into its canonical document
+with its status on main, enforcing site, the bugs it prevents and its owning exit. **Adopted:**
+references exist only as parameters, call arguments, borrow-block binders and arm-scoped pattern
+binders, no reference binding is introduced by `let` and none is ever assigned (needed because
+reference parameters are assignable today), and constants are values (MEMORY_SEMANTICS §15; exit
+2i); one binding per visible scope chain, as SCOPE-1 already specified (exit 2i); the heap one-hop
+field rule as a representation rule (MEMORY_SEMANTICS §5; bug 126's repair in exit 0b, R-0501);
+evaluation strictly left to right in source order, with struct and enum literal fields in source order
+and assignment evaluating its right-hand side first as the one exception (STATEMENT_EXPRESSION_MODEL;
+exit 2j); explicit consumption before replacing a live resource (MEMORY_SEMANTICS §10); layout
+unspecified unless a `repr` guarantees it, observed only through `sizeof` / `alignof`, with one
+`Layout` authority (LAYOUT_CONTRACT §3.3; R-0502); every Concrete-defined function in a mangled
+namespace disjoint from C, with `#[link_name]` for imports and an export attribute for the reverse
+(FFI.md; R-0285, R-0283, R-0286, R-0510); ownership on failure stated by every consuming fallible
+`std` and foreign-boundary API (ERROR_CONVENTIONS; R-0285, R-0283); recoverable versus terminal
+failure restated (FAILURE_STRATEGY). **Adopted, staged:** `Option` and `Result` laid out per
+instantiation now (bug 122, exit 0b) and referred to only by resolved identity later (R-0492,
+R-0514; LAYOUT_CONTRACT §3.4); lossy numeric `as` casts become **compile errors** — the user's choice
+over a trapping `as` — reached through named operations first (checked conversion returning an error,
+or truncation, reinterpretation and rounding with exact bit semantics), then the rejection with
+versioned migration diagnostics, then the corpus migration (ARITHMETIC_POLICY §8; exit 2k, with exit
+2h centralizing today's cast semantics without waiting). **`main`:** `fn main() -> Int` stays, and
+parameters on `main` are banned now (bug 111, exit 0b). **Open, not adopted:** whether `main`'s
+return type narrows to MAIN_EXIT_MODEL's `fn main()` / `fn main() -> u8`; that end state stays a
+recorded preference until a later surface pass decides exit codes. **Stance:** reference restrictions
+are not relaxed and nothing is destroyed implicitly; the relaxations the decision names (immutable
+scoped `let` references or place-based borrow blocks; owner reads under a shared borrow) wait for a
+workload and would be new rule versions. Two items are pull-gated with no owner yet: fallible
+allocation (`try_*` collection operations and a non-aborting allocator path) and a general place
+`replace` / `swap`. The evaluation's probes also found defects, filed as bugs 127 – 131 (exits 0b and 2c), and
+showed stale documentation (the wrapping-overflow text in NUMERIC_MODEL, `--report profile`'s
+wrap-gap line, the removed `->` heap syntax), corrected with the decisions. No exit or acceptance
+criterion is removed; exit 2i's acceptance and exits 2j and 2k's scopes are made precise.
 
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
@@ -2732,6 +2768,12 @@ coercions: identities come from scope-aware environments through checked adapter
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
 explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (`ValidatedCore` is
 publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+
+**Semantics decisions (2026-10-21):** the compiler refers to `Option` and `Result` only by resolved
+identity, never by spelling, so a user enum named `Result` is a distinct type (LAYOUT_CONTRACT §3.4);
+mangled symbols for every Concrete-defined function take their disambiguator from `DefId` (FFI.md,
+"Symbol Names").
+
 Language: no block `let` shadowing a visible name; colliding import aliases rejected; match binders
 equal or name their field.
 
@@ -3001,6 +3043,14 @@ with accepted/rejected examples and fixtures.
 fixtures and S1 generator coverage meeting its minima. S7's exit later adds links from each
 paragraph to its semantic clause.
 
+**Semantics decisions (2026-10-21):** the rules this task enforces are now written in their
+canonical homes ([Decisions](#decisions)): references and scoping in MEMORY_SEMANTICS §15 (REF-6
+rewritten: no `let`-bound reference, no assignment to a reference binding, proposed E0302 / E0303;
+constants are values; SCOPE-1 staged behind the renamed pattern binder), evaluation order and
+assignment in STATEMENT_EXPRESSION_MODEL and MEMORY_SEMANTICS §10 (exit 2j), and casts in
+ARITHMETIC_POLICY §8 (exit 2k: the lossless class table, the three named-operation families and the
+three stages). Each records its status on main and its open gaps.
+
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
@@ -3050,6 +3100,12 @@ representation the existing lowering and LLVM emission use, with a gate comparin
 types (structural class 12). Representation certificates, Memory CFG and the proofs grow per slice.
 
 Owns the shared raw-memory specification with S7, block–offset/provenance memory, `Layout`, representation certificates and Place MIR → Memory CFG lowering.
+
+**Semantics decisions (2026-10-21):** layout is unspecified unless a `repr` guarantees it, each `repr`
+guarantees only its documented properties, code relies on nothing but `sizeof`, `alignof` and array
+stride = `sizeof`, and one `Layout` owns every fact; `Option` and `Result` are laid out per
+instantiation like every generic enum ([LAYOUT_CONTRACT §3.3 – §3.4](docs/platform/LAYOUT_CONTRACT.md)).
+Bug 122's per-instantiation repair is not deferred to this task; it lands under exit 0b.
 
 **Exit:** Memory CFG has executable semantics and a verifier; `Layout` emits checked
 representation certificates; Place MIR → Memory CFG comparisons cover related values and stores,
@@ -10697,6 +10753,11 @@ calling conventions, including the C-compatible adapters generated for Rust and 
 Execute native/Concrete round trips on every advertised target; type layout calculations alone
 do not qualify a target or an aggregate calling shape.
 
+**Semantics decisions (2026-10-21):** with R-0285, this task owns the foreign-name rule of
+[FFI.md, "Symbol Names"](docs/platform/FFI.md) (every Concrete-defined function mangled into a
+namespace disjoint from C; `#[link_name]` on `extern fn`) and the ownership-on-failure
+classification for foreign-boundary APIs ([ERROR_CONVENTIONS](docs/language/ERROR_CONVENTIONS.md)).
+
 ### Task R-0285
 
 **Phase:** 3
@@ -10705,6 +10766,12 @@ do not qualify a target or an aggregate calling shape.
 
 **Objective:** Make C, Rust and Zig libraries usable as normal Concrete dependencies, with generated
 bindings and one build command, before the bulk ethlambda port.
+
+**Semantics decisions (2026-10-21):** every RocksDB slice-1 handle API states what happens to the
+handle when it fails (returned, consumed or retained;
+[ERROR_CONVENTIONS](docs/language/ERROR_CONVENTIONS.md)), and slice 1 binds C symbols through
+`extern fn` (with `#[link_name]` where the C name is not a Concrete identifier) under the
+foreign-name rule of [FFI.md](docs/platform/FFI.md), owned with R-0283.
 
 **Scheduling (2026-10-17; amended 2026-10-20):** promoted into the current execution queue after the
 active soundness and R-0482 work. Its first deliverable is **RocksDB slice 1**, defined with its
@@ -11007,6 +11074,10 @@ architecture does not expand this task's exit.
 **Reconciliation (2026-10-19):** Keep; distinguish task “V1” from verified slice V1.
 
 **Objective:** Add outbound FFI / embeddability as a first-class backend/ABI contract.
+
+**Semantics decisions (2026-10-21):** the export attribute is the only way a Concrete-defined
+function gets an unmangled C name ([FFI.md, "Symbol Names"](docs/platform/FFI.md)); every other
+Concrete function is mangled.
 
  Concrete's most likely early adoption path is not replacing a whole
  process; it is exporting a small verified parser, protocol checker,
