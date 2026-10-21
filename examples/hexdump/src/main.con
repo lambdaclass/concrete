@@ -117,7 +117,7 @@ mod hexdump {
         path.drop();
         match opened {
             Result::Err { error } => {
-                discard(error == error);
+                discard(error);
                 return fail("hexdump: cannot open file");
             },
             Result::Ok { value } => {
