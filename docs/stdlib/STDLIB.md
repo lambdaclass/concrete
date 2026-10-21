@@ -351,7 +351,7 @@ TCP networking layer:
 - `TcpStream::write_all` — loop until all bytes sent, returns `bool`
 - `TcpStream::read_all` — read until EOF into `Bytes`, returns total bytes read
 - `write`, `read` keep `i64` returns (negative = error)
-- `TcpListener::close` / `TcpStream::close` return `Result<u64, NetError>`: a failed `close(2)` is `Err(CloseFailed)` and the handle is consumed (POSIX forbids a meaningful retry; [ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure))
+- `TcpListener::close` / `TcpStream::close` return `Result<u64, NetError>`: a failed `close(2)` is `Err(CloseFailed)` and the handle is consumed (on Linux and macOS a failed `close(2)` has released the descriptor, so it is not retried; [ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure))
 
 Near-term improvement goals:
 

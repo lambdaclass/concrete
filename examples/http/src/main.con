@@ -34,6 +34,19 @@ mod http_server {
         }
     }
 
+    // A response has been written to `stream`: a failed close may mean the
+    // client never got all of it, so it is reported, not discarded. The
+    // handle is consumed either way (std.net closes consume on failure).
+    fn close_client(stream: TcpStream) with(Std) {
+        match stream.close() {
+            Result::Ok { value } => {},
+            Result::Err { error } => {
+                drop_net_error(error);
+                println("Close error after response");
+            }
+        }
+    }
+
     // --- Request parsing: with(Alloc) — pure, no I/O ---
     // Returns method, path, and valid flag packed into three out-params
     // to avoid struct field access issues.
@@ -241,6 +254,8 @@ mod http_server {
         let n: i64 = stream.read(&buf as *mut u8, 4096);
 
         if n <= 0 {
+            // Nothing was read and nothing sent: the peer is gone, and a
+            // close failure here has nothing left to lose.
             discard(stream.close());
             return;
         }
@@ -256,7 +271,7 @@ mod http_server {
             send_string(&stream, &resp);
             resp.drop();
             raw.drop();
-            discard(stream.close());
+            close_client(stream);
             return;
         }
 
@@ -274,7 +289,7 @@ mod http_server {
             resp.drop();
             method.drop();
             path.drop();
-            discard(stream.close());
+            close_client(stream);
             return;
         }
         method.drop();
@@ -285,7 +300,7 @@ mod http_server {
             send_string(&stream, &resp);
             resp.drop();
             path.drop();
-            discard(stream.close());
+            close_client(stream);
             return;
         }
 
@@ -316,7 +331,7 @@ mod http_server {
         }
 
         file_path.drop();
-        discard(stream.close());
+        close_client(stream);
     }
 
     // --- Main: entry point ---

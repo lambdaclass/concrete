@@ -21,13 +21,18 @@ no handle, because `fclose` releases the stream whether or not it fails and a fa
 must not be retried. `FsError` and `NetError` each gain a `CloseFailed` variant. `fs.write_file`
 and `fs.append_file` now report a failed final `fclose` instead of returning `Ok`.
 `text.AsciiText::try_new` returns the rejected string (`Result<AsciiText, String>`) instead of
-freeing it behind `None`. `Child::wait` and `Cli::parse` now document that they consume on failure.
+freeing it behind `None`. `Vec::set_unchecked` and `MutSlice::set_unchecked` now require `T: Copy`:
+they overwrote a slot without returning or destroying the old element, silently losing a linear
+value (`Vec::replace` is the linear form). `Child::wait` and `Cli::parse` now document that they consume on failure.
 The audit table of every consuming fallible or replacing std API is in
 [STDLIB_DESIGN_PRINCIPLES.md](docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
 New tests cover closing an invalid descriptor, a flush-at-close failure on `/dev/full` (Linux), the
 rejected `AsciiText` input coming back byte for byte, and a same-key map insert returning the
 displaced linear value exactly once. **Breaking:** the four `close` signatures,
-`AsciiText::try_new`, and exhaustive matches on `FsError`/`NetError` (see `examples/http`).
+`AsciiText::try_new`, the `Copy` bound on both `set_unchecked`, and exhaustive matches on
+`FsError`/`NetError` (see `examples/http`). `Child::wait` remains consume-on-failure: outside the
+supported runtime profile (a foreign signal handler without `SA_RESTART`), an `EINTR` would abandon
+the child, and telling it apart needs `errno`, which std does not bind yet.
 Found on the way and not fixed here (compiler): `==` between two values of a fieldless `Copy` enum
 passes the checker and emits ill-typed LLVM (`icmp eq i64` on the enum struct).
 

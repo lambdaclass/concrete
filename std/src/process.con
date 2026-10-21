@@ -54,10 +54,13 @@ mod process {
         // Consuming: a process is waited on exactly once — the Child handle
         // IS the obligation, and wait() discharges it (linear process API).
         // CONSUMED ON FAILURE: `Err(WaitFailed)` carries no Child. A blocking
-        // waitpid fails only when the pid is not a waitable child of this
-        // process (ECHILD; EINVAL cannot arise with options 0) or on EINTR,
-        // which needs a signal handler installed without SA_RESTART, and std
-        // installs none. Neither is helped by retrying with the same handle.
+        // waitpid (options 0, so no EINVAL) fails with ECHILD when the pid is no
+        // longer a waitable child (something outside std reaped it): retrying
+        // cannot help. It can also fail with EINTR, but only if a signal handler
+        // is installed without SA_RESTART. std installs none, and a program in
+        // which foreign code installs one is OUTSIDE the supported runtime
+        // profile below: there `WaitFailed` may abandon a live child unreaped.
+        // Telling EINTR apart needs errno, which std does not bind yet.
         // (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
         pub trusted fn wait(self) with(Process) -> Result<ExitStatus, ProcessError> {
             // Destructure = consume the handle up front (it owns only the pid).
@@ -91,6 +94,10 @@ mod process {
     //    allocation and no stdio: only `execvp`, then `_exit` if exec fails. `cmd` is
     //    converted before the fork, and `args` must already be a NUL-terminated argv the
     //    caller built beforehand.
+    //  - No signal handler is installed without SA_RESTART. std installs none. Under such a
+    //    handler a blocking `waitpid` can fail with EINTR, which `Child::wait` reports as
+    //    `WaitFailed` while consuming the handle (it cannot tell EINTR from ECHILD without
+    //    errno), so the child would be left unreaped.
     //  - Descriptors are inherited: the parent's open descriptors survive into the child
     //    across exec, because std sets no close-on-exec. A close-on-exec policy is a separate
     //    follow-up, not part of this contract.

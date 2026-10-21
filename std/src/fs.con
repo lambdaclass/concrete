@@ -629,4 +629,28 @@ mod fs {
             },
         }
     }
+
+    // append_file reports a failed final flush too (same /dev/full probe).
+    #[test]
+    fn test_append_file_close_failure_reported() with(File, Alloc) -> i32 {
+        let probe: String = "/dev/full";
+        let exists: bool = file_exists(&probe);
+        probe.drop();
+        if !exists { return 0; }
+        let path: String = "/dev/full";
+        let mut data: Bytes = Bytes::new();
+        data.push(1); data.push(2); data.push(3);
+        let r: Result<u64, FsError> = append_file(&path, &data);
+        path.drop();
+        data.drop();
+        match r {
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => {
+                match error {
+                    FsError::CloseFailed => { return 0; },
+                    FsError::OpenFailed => { return 1; },
+                }
+            },
+        }
+    }
 }
