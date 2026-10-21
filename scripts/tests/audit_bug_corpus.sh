@@ -75,7 +75,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 110: an array SSA value (a pointer) stored as if it were the aggregate.
   [110]="regress_110_array_value_store.con"
   # Bug 116: vec_push on a first field through &mut called the undefined @vec_push.
-  [116]="regress_116_vec_push_first_field.con regress_116_deref_field_borrow.con"
+  [116]="regress_116_vec_push_first_field.con"
+  # Bug 133: &mut (*p).f borrowed a copy of *p (a write through it was lost).
+  [133]="regress_133_deref_field_borrow.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

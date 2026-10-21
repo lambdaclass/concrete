@@ -1,0 +1,22 @@
+// Bug 133: `&mut (*p).n` with `p: &mut P` borrowed the field of a COPY of `*p`,
+// so the write through the borrow was lost. Expected: exit 1 (interp prints 1).
+// Actual before the fix: exit 0.
+struct P {
+    v: i32,
+    n: i32,
+}
+
+fn incr(r: &mut i32) {
+    *r = *r + 1;
+}
+
+fn bump(p: &mut P) {
+    incr(&mut (*p).n);
+}
+
+fn main() -> i32 {
+    let mut p: P = P { v: 0, n: 0 };
+    bump(&mut p);
+    let P { v, n } = p;
+    return v + n;
+}

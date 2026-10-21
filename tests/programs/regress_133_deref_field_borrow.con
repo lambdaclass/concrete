@@ -1,4 +1,4 @@
-// Bug 116 (sibling found by the Codex round 2 review, silent wrong code on main):
+// Bug 133 (found by the Codex round 2 review of bug 116; silent wrong code on main):
 // `&mut (*p).n` with `p: &mut P` borrowed the field of a COPY of `*p` (Lower's
 // placeAddr had no case for a dereference place), so a write through the borrow
 // was lost: the binary returned 0 where the interpreter returns the written value.

@@ -1,6 +1,6 @@
 # Bug 130 — `x as bool` with an integer `x` passes the checker and fails in `llvm-as`
 
-**Status:** FIXED (branch `backend-108-116`, commit 37eb5952, the bug 108 fix)
+**Status:** FIXED (branch `backend-108-116`, commit 70025ca9, the bug 108 fix)
 **Found:** 2026-10-21, by the semantics probes (finding N4, `cast_bool.con`).
 **Severity:** loud failure on an accepted program: the checker accepts the cast, LLVM validation
 rejects the emitted IR, and the interpreter refuses the program at run time. The reverse direction of
@@ -46,7 +46,7 @@ is never chosen). The interpreter's `evalCast` wraps the integer and tags it `bo
 
 ## Fix
 
-The bug 108 fix (`37eb5952`) removed the `isInteger innerTy && targetTy == .bool` row from
+The bug 108 fix (`70025ca9`) removed the `isInteger innerTy && targetTy == .bool` row from
 CoreCheck's cast-validity table, so `<int> as bool` is refused with
 `error[core-check]: (E0553) [main] cannot cast Concrete.Ty.int to Concrete.Ty.bool`, as
 ARITHMETIC_POLICY §8.1 decides ("integer → `bool`: no, never total"). `isInteger` includes `Int`, so

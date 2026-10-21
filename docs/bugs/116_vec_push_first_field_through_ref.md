@@ -1,6 +1,6 @@
 # Bug 116 — `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push`
 
-**Status:** FIXED (branch `backend-108-116`, commit 4bb8de68, follow-ups c8a88828 and f447b864)
+**Status:** FIXED (branch `backend-108-116`, commit 595f0fc5, follow-ups 48d813da and 35a39f6c)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.
 
@@ -62,22 +62,17 @@ it); there the base keeps its own type, which an earlier draft got wrong (elf_he
 with `'%t19' defined with type '%struct.FixedSinkState' but expected 'ptr'`).
 
 The Codex round 2 review found the same symptom through an explicit dereference,
-`vec_push::<i32>(&mut (*p).v, x)`, with a worse sibling behind it. `Lower.placeAddr` had no case for
-a dereference place, so `&mut (*p).f` loaded `*p` into a temporary and took the field's address in
-the COPY: for a first-field `Vec` the GEP-zero base was then the loaded struct (aggregate-typed,
-correctly left alone by the substitution rule) and `@vec_push` came back; for any field a write
-through the borrow was silently lost. On main, `incr(&mut (*p).n)` leaves `p.n` unchanged in the
-binary while `--interp` increments it (measured: binary 0, interpreter 1 on the probe). `placeAddr`
-now treats `*r` (for `r` a reference, raw pointer or `Heap`) as the storage `r` points at, so the
-borrow is `r` itself, as the `&*r` reborrow already was.
+`vec_push::<i32>(&mut (*p).v, x)`. Its cause is a separate defect with a worse consequence, filed as
+[bug 133](133_deref_field_borrow_copies.md): `Lower.placeAddr` had no dereference case, so
+`&mut (*p).f` borrowed the field of a COPY of `*p` (a write through it was silently lost). Its fix
+(`35a39f6c`) also repairs this shape.
 Permanent leg: `tests/programs/regress_116_vec_push_first_field.con` in `run_tests.sh` (run_ok 42:
 pushes to a first-field `Vec<i32>` through `&mut P` directly and through an identity-cast alias,
 `vec_set` on the first field (specialized from its first argument as well), push and set through
-`&mut (*p).v`, a second-field `Vec<u8>`, each value read back) and
-`tests/programs/regress_116_deref_field_borrow.con` (run_ok 42, the interpreter agrees: increments
-through `&mut (*p).a` and `&mut (*p).n` must reach `p`; the pre-fix binary returns 39).
-The reproducer exits 1 natively; the interpreter cannot run it (bug 120, field borrow through a
-reference), so the differential half waits on 120.
+`&mut (*p).v`, a second-field `Vec<u8>`, each value read back); bug 133's lost-write leg is
+`tests/programs/regress_133_deref_field_borrow.con`.
+The reproducer exits 1 natively and under `--interp`, and the regression returns 42 on both (bug
+120, which kept the interpreter from borrowing a field through a reference, was fixed by batch 2).
 
 ## Structural cause
 

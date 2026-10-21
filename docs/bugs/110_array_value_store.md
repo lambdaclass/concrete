@@ -1,6 +1,6 @@
 # Bug 110 — an array value is stored as an aggregate where the SSA value is a pointer
 
-**Status:** FIXED (branch `backend-108-116`, commit fd13f3d0, follow-up d95c162e)
+**Status:** FIXED (branch `backend-108-116`, commit f3bba025, follow-up 262d3fe0)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.
 
