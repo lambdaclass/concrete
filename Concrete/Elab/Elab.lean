@@ -2478,26 +2478,26 @@ partial def tyNamesIn : Ty → List String
   | _ => []
 
 /-- Bug 096: the declaration (`definedIn`, name) the module summarized by `d` binds the type
-    spelling `n` to: its own declaration, else the declaration its import of `n` names
-    (`decls` is every (name, definedIn) type declaration of the program). `none` when that
-    does not identify exactly one declaration. -/
+    spelling `n` to, with the precedence Check's and Elab's lookups use (`allStructs` is
+    imports, then the module's own): the declaration its import of `n` names, else its own
+    declaration (`decls` is every (name, definedIn) type declaration of the program). `none`
+    when that does not identify exactly one declaration. -/
 def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : String) :
     Option (String × String) :=
   let own := (d.structs.filter (·.name == n)).map (fun sd => (sd.definedIn, sd.definitionName))
     ++ (d.enums.filter (·.name == n)).map (fun ed => (ed.definedIn, ed.definitionName))
     ++ (d.newtypes.filter (·.name == n)).map (fun nt => (nt.definedIn, nt.name))
-  match own.eraseDups with
-  | [b] => some b
-  | _ :: _ => none
-  | [] =>
-    match d.imports.findSome? fun imp =>
-        (imp.symbols.find? (·.effectiveName == n)).map fun sym => (imp.moduleName, sym.name) with
-    | none => none
-    | some (modName, orig) =>
-      match (decls.filter fun (nm, defIn) =>
-          nm == orig && (defIn == modName || defIn.endsWith ("." ++ modName))).eraseDups with
-      | [(nm, defIn)] => some (defIn, nm)
-      | _ => none
+  match d.imports.findSome? fun imp =>
+      (imp.symbols.find? (·.effectiveName == n)).map fun sym => (imp.moduleName, sym.name) with
+  | some (modName, orig) =>
+    match (decls.filter fun (nm, defIn) =>
+        nm == orig && (defIn == modName || defIn.endsWith ("." ++ modName))).eraseDups with
+    | [(nm, defIn)] => some (defIn, nm)
+    | _ => none
+  | none =>
+    match own.eraseDups with
+    | [b] => some b
+    | _ => none
 
 /-- Bug 096: the types a declaration named `sym` in the module summarized by `d` carries into
     another module's Core, each with the type parameters in scope for it (which are not type
@@ -2532,6 +2532,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     (ambiguousTypes : List String := [])
     -- Bug 096: every (name, definedIn) type declaration of the program.
     (typeDecls : List (String × String) := [])
+    -- Bug 096: the import closure as import resolution produced it, before a parent added
+    -- its sibling submodules' declarations (`none`: `imports` is the closure).
+    (closureImports : Option ResolvedImports := none)
     (prefixSubs : Bool := true)
     (proofModulePath : String := "")
     (proofFnPrefix : String := "") : Except Diagnostics CModule :=
@@ -2914,6 +2917,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
         !(localStructNames.contains sd.name)
       let filteredEnums := siblingEnums.filter fun ed =>
         !(localEnumNames.contains ed.name)
+      let subClosure := subImports
       let subImports := { subImports with
         structs := subImports.structs ++ filteredStructs
         enums := subImports.enums ++ filteredEnums
@@ -2924,6 +2928,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       match elabModule sub subSummary subImports summaryTable (topLevel := topLevel)
           (siblingSubs := if prefixSubs then summary.submoduleSummaries.filter (·.1 != sub.name) else [])
           (ambiguousTypes := ambiguousTypes) (typeDecls := typeDecls)
+          (closureImports := some subClosure)
           (prefixSubs := false) (proofModulePath := childPath)
           (proofFnPrefix := childPrefix) with
       | .ok csub => .ok (lst ++ [{ csub with sourceFile := sub.sourceFile }])
@@ -3072,10 +3077,42 @@ partial def elabModule (m : Module) (summary : FileSummary)
       | none => match summaryTable.lookup modName with
         | some s => some s
         | none => topLevel.lookup modName
-  let typeOwners : List (String × String) :=
-    imports.structs.map (fun sd => (sd.definitionName, sd.definedIn))
-    ++ imports.enums.map (fun ed => (ed.definitionName, ed.definedIn))
-    ++ imports.newtypes.map (fun nt => (nt.name, nt.definedIn))
+  let closure := closureImports.getD imports
+  -- Every type visible here as (local spelling, declaration name, defining module), and the
+  -- summary of the module that defines it.
+  let ownerCands : List (String × String × String) :=
+    allStructs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
+    ++ (allEnums.filter (·.builtinId.isNone)).map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
+    ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, nt.name, nt.definedIn))
+  let defSummary : String → Option FileSummary := fun defIn =>
+    if summary.structs.any (·.definedIn == defIn) || summary.enums.any (·.definedIn == defIn)
+       || summary.newtypes.any (·.definedIn == defIn) then some summary
+    else summaryAtPath defIn
+  -- The type a method's Core name `<Type>_<method>` belongs to: the one candidate whose
+  -- defining module declares exactly that method. Spelled by the local type spelling
+  -- (`byLocal`, a call site) or by the declaration name (a transported signature). A
+  -- textual prefix alone is not ownership: `A_B_get` is `A_B`'s `get`, not `A`'s `B_get`.
+  -- A call site's spelling means the FIRST binding of its local type spelling (the order
+  -- `ElabEnv.structs`/`enums` lookups use); a transported signature means a type of the import
+  -- closure.
+  let localOwners : List (String × String × String) :=
+    ownerCands.foldl (fun acc c => if acc.any (·.1 == c.1) then acc else acc ++ [c]) []
+  let closureOwners : List (String × String × String) :=
+    closure.structs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
+    ++ closure.enums.map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
+    ++ closure.newtypes.map (fun nt => (nt.name, nt.name, nt.definedIn))
+  let methodOwner : String → Bool → Option (String × String × String × String) := fun n byLocal =>
+    let cands := (if byLocal then localOwners else closureOwners).filterMap fun (ln, dn, di) =>
+      let sp := if byLocal then ln else dn
+      if dn.isEmpty || !n.startsWith (sp ++ "_") then none else
+      let rest := (n.drop (sp.length + 1)).toString
+      match defSummary di with
+      | some d => if d.implMethodSigs.any (·.1 == dn ++ "_" ++ rest) then some (ln, dn, di, rest) else none
+      | none => none
+    -- one DECLARATION (two local spellings of it, `P` and an alias `Q`, are one owner)
+    match (cands.map fun (_, dn, di, rest) => (dn, di, rest)).eraseDups with
+    | [_] => cands.head?
+    | _ => none
   -- (what, defining module's summary, types, type parameters in scope, strict)
   let foreignEnts : List (String × Option FileSummary × List Ty × List String × Bool) :=
     if ambiguousTypes.isEmpty then [] else
@@ -3085,19 +3122,18 @@ partial def elabModule (m : Module) (summary : FileSummary)
           (summaryEntityTypes d sym.name (withTypes := false)).map fun (w, tys, tps) =>
             (s!"{w} of module '{d.name}'", some d, tys, tps, true)
       | none => [])
-    ++ imports.structs.map (fun sd => (s!"imported struct '{sd.name}'", summaryAtPath sd.definedIn,
+    ++ closure.structs.map (fun sd => (s!"imported struct '{sd.name}'", summaryAtPath sd.definedIn,
           sd.fields.map (·.ty), sd.typeParams, true))
-    ++ imports.enums.map (fun ed => (s!"imported enum '{ed.name}'", summaryAtPath ed.definedIn,
+    ++ closure.enums.map (fun ed => (s!"imported enum '{ed.name}'", summaryAtPath ed.definedIn,
           ed.variants.flatMap (fun v => v.fields.map (·.ty)), ed.typeParams, true))
-    ++ imports.newtypes.map (fun nt => (s!"imported newtype '{nt.name}'", summaryAtPath nt.definedIn,
+    ++ closure.newtypes.map (fun nt => (s!"imported newtype '{nt.name}'", summaryAtPath nt.definedIn,
           [nt.innerTy], nt.typeParams, true))
-    ++ imports.implMethodSigs.map (fun (mn, fs) =>
-          -- A method of an imported type is checked with its type's module. Method
-          -- signatures with no imported owner are this module's own or a sibling's
-          -- (`siblingImplMethodSigs`), visible without an import: not strict.
-          let owner := typeOwners.find? fun (tn, _) => mn.startsWith (tn ++ "_")
-          (s!"imported method '{mn}'", owner.bind (summaryAtPath ·.2),
-           (fs.params.map (·.2)) ++ [fs.retTy], fs.typeParams, owner.isSome))
+    ++ closure.implMethodSigs.map (fun (mn, fs) =>
+          -- A method of an imported type is checked with its type's defining module; one
+          -- whose owner cannot be identified exactly is refused, never guessed.
+          let owner := methodOwner mn false
+          (s!"imported method '{mn}'", owner.bind fun (_, _, di, _) => defSummary di,
+           (fs.params.map (·.2)) ++ [fs.retTy], fs.typeParams, true))
     ++ ((summary.submoduleSummaries ++ siblingSubs).flatMap fun (_, d) =>
       (d.functions.map (·.1) ++ d.externFnSigs.map (·.1) ++ d.structs.map (·.name)
         ++ d.enums.map (·.name) ++ d.newtypes.map (·.name)).eraseDups.flatMap fun sym =>
@@ -3134,8 +3170,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     ++ imports.implMethodSigs.map (·.1)
   let renameMethod := fun (n : String) =>
     if !methodNames.contains n then n else
-    match typeSpellings.find? (fun (sp, _) => n.startsWith (sp ++ "_")) with
-    | some (sp, c) => c ++ "_" ++ (n.drop (sp.length + 1))
+    match methodOwner n true with
+    | some (_, dn, di, rest) =>
+      if ambiguousTypes.contains dn then canonTypeName di dn ++ "_" ++ rest else n
     | none => n
   let rn : CoreRename := {
     tyName := fun n => (typeSpellings.lookup n).getD n

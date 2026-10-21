@@ -71,8 +71,13 @@ the module imports by name and the whole import closure resolution transports (t
 through fields and signatures, their public methods), each in its own type-parameter scope; one
 that disagrees is refused (E0299: `error_096_import_closure_binds_other_type.con`,
 `error_096_generic_method_param_named_like_type.con`), and a private method resolution does not
-transport is not consulted (`regress_096_private_method_not_transported.con`). A submodule's or
-sibling's declarations, visible without an import, only supply a binding the module lacks.
+transport is not consulted (`regress_096_private_method_not_transported.con`). A module's
+binding of a spelling follows Check's and Elab's precedence, imports before its own declarations
+(`error_096_import_precedence_binding.con`), and a method signature belongs to the one type whose
+module declares exactly that method, not to a textual prefix (`A_B_get` is `A_B`'s:
+`error_096_method_owner_exact.con`). A submodule's or sibling's declarations, visible without an
+import (the parent injects them after import resolution, so Elab keeps the resolved closure apart),
+only supply a binding the module lacks (`regress_096_sibling_types_unused.con`).
 Example of the refusal: b binding `P`
 to a's while calling c's `mk`, which returns c's `P`, was accepted by Check (it compares types by
 spelling) and read the wrong layout (`error_096_imported_sig_binds_other_type.con`). A canonical

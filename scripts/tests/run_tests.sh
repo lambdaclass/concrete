@@ -1587,6 +1587,9 @@ run_err "$TESTDIR/error_097_canonical_fn_spelling_clash.con" "(E0299)"
 run_err "$TESTDIR/error_096_import_closure_binds_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_generic_method_param_named_like_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_method_spelling_clash.con" "(E0299)"
+run_err "$TESTDIR/error_096_import_precedence_binding.con" "(E0299)"
+run_err "$TESTDIR/error_096_method_owner_exact.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_sibling_types_unused.con" "1" 0
 run_ok "$TESTDIR/regress_097_let_shadows_colliding_fn.con" "1112" 0
 run_ok "$TESTDIR/regress_096_private_method_not_transported.con" "71" 0
 for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported_type_layout:7" \
@@ -1594,6 +1597,7 @@ for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported
             "regress_096_imported_struct_field_binding:73" "regress_097_param_named_like_colliding_fn:1211099" \
             "regress_097_free_fn_named_like_method:51001" "regress_096_method_value_same_named:1017" \
             "regress_097_let_shadows_colliding_fn:1112" "regress_096_private_method_not_transported:71" \
+            "regress_096_sibling_types_unused:1" \
             "regress_097_098_same_named_private_fns:112124" "regress_096_nested_same_named_methods:751300:native"; do
     r096_f="${r096%%:*}"; r096_rest="${r096#*:}"; r096_want="${r096_rest%%:*}"
     case "$r096_rest" in *:native) continue ;; esac

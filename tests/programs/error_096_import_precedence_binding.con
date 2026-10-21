@@ -1,0 +1,14 @@
+// Bug 096 (Codex round 4): c imports a's P and declares its own P; c's mk returns the
+// IMPORTED P (imports bind first, as Check and Elab look types up). b imports c's P and mk:
+// the two P's differ, refused (E0299).
+mod a { pub struct Copy P { pub x: i64 } }
+mod c {
+    import a.{ P };
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub fn mk() -> P { return P { x: 5 }; }
+}
+mod b {
+    import c.{ P, mk };
+    pub fn probe() -> i64 { return mk().x; }
+}
+mod main { import b.{ probe }; fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; } }
