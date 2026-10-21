@@ -8,9 +8,10 @@
 #   - a `[profile]` in Concrete.toml is honored,
 #   - CLI overrides the manifest,
 #   - an unknown profile (CLI or manifest) is rejected,
-#   - the report states arithmetic is checked SEMANTICS but the current LOWERING
-#     still wraps until Stage 2 — so the report never implies a guarantee the
-#     backend does not yet provide, and profiles are not arithmetic modes.
+#   - the report states arithmetic is checked SEMANTICS and that the lowering is
+#     checked in every profile (true since ROADMAP #10 Stage 2.3), never the
+#     retired "still lowers to silent wrap" text, and profiles are not
+#     arithmetic modes.
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
@@ -86,14 +87,15 @@ else
   grep -q "'nonsense' is unknown" "$TMP/o6" && ok "invalid manifest profile rejected" || no "invalid manifest profile: wrong error" "$TMP/o6"
 fi
 
-# 5. report states checked SEMANTICS but current wrapping LOWERING gap
+# 5. report states checked SEMANTICS and checked LOWERING in every profile, and
+#    no longer claims the retired wrapping lowering gap (stale since Stage 2.3)
 "$C" "$TMP/solo.con" --report profile >"$TMP/o7" 2>&1
 if grep -q "checked semantics" "$TMP/o7" \
-   && grep -qi "CURRENT LOWERING GAP" "$TMP/o7" \
-   && grep -qi "still lowers to silent" "$TMP/o7" \
-   && grep -qi "Stage 2" "$TMP/o7"; then
-  ok "report states checked-semantics + current-wrapping-gap (Stage 2)"
-else no "report missing the checked-semantics/wrapping-gap statement" "$TMP/o7"; fi
+   && grep -q "Lowered as checked (abort on trap) in every profile" "$TMP/o7" \
+   && ! grep -qi "LOWERING GAP" "$TMP/o7" \
+   && ! grep -qi "lowers to silent" "$TMP/o7"; then
+  ok "report states checked semantics + checked lowering in every profile (no stale wrap claim)"
+else no "report missing the checked-lowering statement, or still claims silent wrapping" "$TMP/o7"; fi
 
 # Profiles are not arithmetic modes: the arithmetic line is identical across
 # profiles (semantics are profile-invariant).

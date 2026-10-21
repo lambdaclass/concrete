@@ -105,15 +105,15 @@ def parseProfileName (content : String) : Option String := Id.run do
 /-- Render `--report profile`: the active profile and its policy bundle.
 
     The `arithmetic` line is identical for every profile — arithmetic meaning is
-    profile-invariant — and states the current lowering gap explicitly so the
-    report never implies a guarantee the backend does not yet provide. -/
+    profile-invariant — and states what the lowering does in every profile
+    (docs/language/ARITHMETIC_POLICY.md §1, §6). -/
 def renderProfileReport (p : BuildProfile) (src : ProfileSource) : String :=
   let arith :=
-    "checked semantics for `+ - *` (trap on overflow); explicit `wrapping_*` / " ++
+    "checked semantics for `+ - *`, negation, `/` and `%` (trap on overflow or a zero " ++
+    "divisor) and shifts (trap on a count >= width or negative); explicit `wrapping_*` / " ++
     "`saturating_*` for intentional modular/clamping arithmetic.\n" ++
-    "                  CURRENT LOWERING GAP: ordinary arithmetic still lowers to " ++
-    "silent two's-complement wrap; checked/trapping codegen is ROADMAP #10 Stage 2 " ++
-    "(not yet implemented). Profiles do NOT change this — the gap is uniform."
+    "                  Lowered as checked (abort on trap) in every profile; profiles do " ++
+    "NOT change arithmetic."
   "=== Build Profile ===\n" ++
   s!"  profile:        {p.name}\n" ++
   s!"  source:         {src.describe}\n" ++
