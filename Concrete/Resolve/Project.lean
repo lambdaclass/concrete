@@ -362,8 +362,11 @@ private partial def tomlScanLine (st : Nat × List Char) (cs : List Char) : Exce
     else tomlScanLine (0, d) r
   | _, _ => .ok (str, d)
 
-/-- The text of a line outside strings and comments (a multi-line string opened on the line drops
-    the rest of it). Used on lines that continue a multi-line value. -/
+/-- Stands for one complete single-line string in `tomlBareText`'s output. -/
+private def tomlStrMark : Char := Char.ofNat 1
+
+/-- The text of a line outside strings and comments, each string replaced by `tomlStrMark` (a
+    multi-line string opened on the line drops the rest of it). -/
 private partial def tomlBareText (cs : List Char) (acc : List Char := []) : List Char :=
   match cs with
   | [] => acc.reverse
@@ -371,10 +374,10 @@ private partial def tomlBareText (cs : List Char) (acc : List Char := []) : List
   | '"' :: '"' :: '"' :: _ => acc.reverse
   | '\'' :: '\'' :: '\'' :: _ => acc.reverse
   | '"' :: r => match tomlScanBasic r with
-    | .ok r' => tomlBareText r' (' ' :: acc)
+    | .ok r' => tomlBareText r' (tomlStrMark :: acc)
     | .error _ => acc.reverse
   | '\'' :: r => match tomlScanLiteral r with
-    | .ok r' => tomlBareText r' (' ' :: acc)
+    | .ok r' => tomlBareText r' (tomlStrMark :: acc)
     | .error _ => acc.reverse
   | c :: r => tomlBareText r (c :: acc)
 
@@ -403,6 +406,48 @@ private partial def tomlAssignInArray (cs : List Char) (stack : List Char) : Boo
   | ']' :: r | '}' :: r => tomlAssignInArray r stack.tail
   | '=' :: r => if stack.head? == some '}' then tomlAssignInArray r stack else true
   | _ :: r => tomlAssignInArray r stack
+
+private def tomlWs (c : Char) : Bool := c == ' ' || c == '\t' || c == '\r'
+
+/-- The rest after the bracket group whose opener was already consumed (`stack` holds the expected
+    closers), or `none` if the group does not close on this line. -/
+private partial def tomlCloseGroup (cs : List Char) (stack : List Char) : Option (List Char) :=
+  match stack with
+  | [] => some cs
+  | top :: below =>
+    match cs with
+    | [] => none
+    | '[' :: r => tomlCloseGroup r (']' :: stack)
+    | '{' :: r => tomlCloseGroup r ('}' :: stack)
+    | c :: r => if c == top then tomlCloseGroup r below else tomlCloseGroup r stack
+
+/-- A value's bare text has exactly one value's shape and nothing after it: one string, one bracket
+    group, or one scalar with no brackets or strings in it. A value still open at the end of the
+    line (a multi-line array, inline table or string) is checked line by line elsewhere. -/
+private def tomlValueShapeOk (v : List Char) : Bool :=
+  match v.dropWhile tomlWs with
+  | [] => true
+  | c :: r =>
+    if c == tomlStrMark then r.all tomlWs
+    else if c == '[' then match tomlCloseGroup r [']'] with
+      | some rest => rest.all tomlWs
+      | none => true
+    else if c == '{' then match tomlCloseGroup r ['}'] with
+      | some rest => rest.all tomlWs
+      | none => true
+    else !((c :: r).any fun x => x == '[' || x == '{' || x == tomlStrMark)
+
+/-- A table header's bare text is exactly `[name]` or `[[name]]` and nothing after it. -/
+private def tomlHeaderShapeOk (h : List Char) : Bool :=
+  let h := h.dropWhile tomlWs
+  let (opens, rest) := (h.takeWhile (· == '['), h.dropWhile (· == '['))
+  if opens.length != 1 && opens.length != 2 then false
+  else
+    let inner := rest.takeWhile (· != ']')
+    let after := rest.dropWhile (· != ']')
+    let closes := after.takeWhile (· == ']')
+    !inner.any (fun x => x == '[') && closes.length == opens.length
+      && (after.drop closes.length).all tomlWs
 
 /-- Whether a manifest ENTRY exists at `path`, judged by `lstat`: only a genuine "no such file or
     directory" is absence. Any other failure — a directory without search permission, a symlink
@@ -436,7 +481,7 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
       -- (a header, a key) would be structure hidden on a line this reader skips.
       if let some rest := tomlAfterClose startState.1 l.toList then
         let bare := tomlBareText rest
-        if !(bare.all fun c => c == ' ' || c == '\t' || c == '\r' || c == ',' || c == ']' || c == '}') then
+        if !(bare.all fun c => tomlWs c || c == ',' || c == ']' || c == '}' || c == tomlStrMark) then
           throw s!"unexpected text after a multi-line string closes: '{l.trimAscii}'"
       continue
     if !startState.2.isEmpty then
@@ -450,6 +495,19 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
         throw s!"'native' outside a string inside a multi-line value: '{l.trimAscii}'"
       continue
     let t := l.trimAscii.toString
+    -- EVERY structural line has exactly one shape and nothing after it. Text trailing a header or a
+    -- complete value (`[package] [native]`, `name = "x" [native]`) is not TOML, and skipping it
+    -- would hide whatever it spells, so it is refused.
+    let bare := tomlBareText l.toList
+    if t.startsWith "[" then
+      if !tomlHeaderShapeOk bare then
+        throw s!"unexpected text in or after a table header: '{t}'"
+    else if !(bare.all tomlWs) then
+      match bare.splitOn '=' with
+      | _ :: valParts@(_ :: _) =>
+        if !tomlValueShapeOk ((valParts.intersperse ['=']).flatten) then
+          throw s!"unexpected text after a value: '{t}'"
+      | _ => throw s!"a line that is neither a table header nor a key = value: '{t}'"
     if t.startsWith "[" then
       atTop := false
       let header := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile (· != ']'))

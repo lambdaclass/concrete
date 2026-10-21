@@ -408,6 +408,13 @@ description = """text
 libs = ["lost"]
 EOF
 refused "$TMP/afterclose" afterclose "unexpected text after a multi-line string closes" "a [native] header after a multi-line string's closing delimiter is refused"
+# Text trailing a header or a complete value is not TOML; skipping it would hide what it spells.
+mkapp "$TMP/trailhdr" ''
+printf '[package] [native]\nlibs = ["lost"]\nname = "nlapp"\n' > "$TMP/trailhdr/Concrete.toml"
+refused "$TMP/trailhdr" trailhdr "unexpected text in or after a table header" "a [native] header trailing another header is refused"
+mkapp "$TMP/trailval" ''
+printf '[package]\nname = "nlapp" [native]\nlibs = ["lost"]\n' > "$TMP/trailval/Concrete.toml"
+refused "$TMP/trailval" trailval "unexpected text after a value" "a [native] header trailing a value is refused"
 # Keys are matched exactly: "lib s" is not libs.
 bad spacedkey '
 [native]
