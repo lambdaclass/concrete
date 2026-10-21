@@ -3189,14 +3189,6 @@ partial def elabModule (m : Module) (summary : FileSummary)
     | [some c] => some (n, c)
     | _ => none
   let typeSpellings := ownSpellings ++ inherited
-  let spellingConflicts : Diagnostics := foreignReqs.filterMap fun (n, c?, what, strict) =>
-    -- refused only when both bindings are KNOWN and differ; anything the summaries cannot
-    -- reconstruct is left to `checkCoreTypeAgreement`, which reads the Core itself
-    if !strict || c?.isNone || (typeSpellings.lookup n).isNone || c? == typeSpellings.lookup n then none else
-    some { severity := .error, pass := "elab", span := none, code := "E0299"
-           message := s!"{what} names type '{n}', which several modules declare, and that module and this one do not bind '{n}' to the same declaration; Core cannot tell which type it means (bug 096)"
-           hint := some s!"import '{n}' from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
-  if !spellingConflicts.isEmpty then .error (spellingConflicts.eraseDupsBy (·.message == ·.message)) else
   -- A method is named `<Type>_<method>` after its receiver type's spelling, so a
   -- respelled type respells its methods' definitions and calls with it.
   let methodNames : List String :=
@@ -3251,7 +3243,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     { rn with tyName := fun n =>
         -- the defining module's binding of the spelling, aliases included (`P as Q`)
         match (defSummary defIn).bind (summaryTypeBinding typeDecls · n summaryTable) with
-        | some (di, dn) => if ambiguousTypes.contains dn then canonTypeName di dn else rn.tyName n
+        | some (di, dn) => canonTypeName di dn
         | none => rn.tyName n }
   let importedStructSrc := imports.structs.filter fun sd => !(localStructNames.contains sd.name)
   let cStructs := if !respell then cStructs ++ cImportedStructs else
@@ -3526,118 +3518,128 @@ partial def tyHasTypeVar : Ty → Bool
   | .fn_ ps _ r => ps.any tyHasTypeVar || tyHasTypeVar r
   | _ => false
 
+/-- Bug 096: what the Core type-agreement walk reads at a point of a body. -/
+structure TyAgreeCtx where
+  /-- A global function by Core name (linker aliases resolved). -/
+  fns : String → Option CFnDef
+  /-- This module's copy of a struct / enum. -/
+  structOf : String → Option CStructDef
+  enumOf : String → Option CEnumDef
+  /-- Names bound at this point (a `.ident` of one is the local, never a global function). -/
+  locals : List String := []
+  retTy : Option Ty := none
+  /-- The enclosing function's type parameters. -/
+  tps : List String := []
+
+/-- A type position the body asserts: (declared, actual, where, wildcard type parameters). -/
+abbrev TyAgreePair := Ty × Ty × String × List String
+
+/-- The name of the struct a value of this type is (through one reference or heap layer). -/
+def tyStructName : Ty → String
+  | .named n | .generic n _ _ | .ref (.named n) | .refMut (.named n) | .heap (.named n)
+  | .ref (.generic n _ _) | .refMut (.generic n _ _) | .heap (.generic n _ _) => n
+  | _ => ""
+
 mutual
-/-- Bug 096: the (expected, actual, where) type pairs a Core body asserts: each argument of a
-    direct call against the callee's parameter, the call's type against its return type, a
-    `let`'s declared type against its initializer, a `return` against the function's return
-    type. `fns` resolves a callee's definition; generic callees are Mono's business. -/
-partial def coreTyPairsExpr (fns : String → Option CFnDef)
-    (field : Ty → String → Option Ty := fun _ _ => none) : CExpr → List (Ty × Ty × String)
+/-- Bug 096: the type pairs a Core expression asserts: call arguments and results against the
+    callee's signature (a generic callee's type parameters are wildcards), a global function
+    value against its definition, struct and enum literals against the declaration's fields, a
+    field read against the struct's field. -/
+partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
   | .call callee _ args t =>
-    let inner := args.flatMap (coreTyPairsExpr fns field)
+    let inner := args.flatMap (tyAgreeExpr c)
     match callee with
     | .direct n =>
-      match fns n with
+      match c.fns n with
       | some f =>
-        -- a generic callee is checked at every position its type parameters do not reach
-        let concrete := fun (ty : Ty) => !((tyNamesIn ty).any f.typeParams.contains) && !tyHasTypeVar ty
-        if f.params.length == args.length then
-          inner ++ ((f.params.zip args).filter (fun ((_, pt), _) => concrete pt)).map
-              (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'"))
-            ++ (if concrete f.retTy then [(f.retTy, t, s!"the result of '{n}'")] else [])
-        else inner
+        if f.params.length != args.length then inner else
+        inner ++ (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'", f.typeParams))
+          ++ [(f.retTy, t, s!"the result of '{n}'", f.typeParams)]
       | none => inner
     | .indirect _ => inner
   | .fnRef n t =>
-    match fns n with
-    | some f => if f.typeParams.isEmpty
-        then [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'")] else []
+    match c.fns n with
+    | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]
     | none => []
   | .ident n t =>
-    -- a global function used as a value (a local of function type is resolved away by the
-    -- caller: `fns` answers only names the body does not bind)
-    match t, fns n with
-    | .fn_ .., some f => if f.typeParams.isEmpty
-        then [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'")] else []
-    | _, _ => []
-  | .binOp _ l r _ => coreTyPairsExpr fns field l ++ coreTyPairsExpr fns field r
+    match t with
+    | .fn_ .. =>
+      if c.locals.contains n then [] else
+      match c.fns n with
+      | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]
+      | none => []
+    | _ => []
+  | .structLit n _ fs _ =>
+    fs.flatMap (fun (_, e) => tyAgreeExpr c e) ++
+    match c.structOf n with
+    | some sd => fs.filterMap fun (fname, e) =>
+        (sd.fields.lookup fname).map fun ft => (ft, e.ty, s!"field '{fname}' of '{n}'", sd.typeParams)
+    | none => []
+  | .enumLit en v _ fs _ =>
+    fs.flatMap (fun (_, e) => tyAgreeExpr c e) ++
+    match c.enumOf en with
+    | some ed =>
+      match ed.variants.lookup v with
+      | some vfs => fs.filterMap fun (fname, e) =>
+          (vfs.lookup fname).map fun ft => (ft, e.ty, s!"field '{fname}' of '{en}::{v}'", ed.typeParams)
+      | none => []
+    | none => []
   | .fieldAccess e f t =>
-    coreTyPairsExpr fns field e ++ ((field e.ty f).map (fun ft => [(ft, t, s!"field '{f}'")])).getD []
-  | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _
-  | .cast e _ => coreTyPairsExpr fns field e
-  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (coreTyPairsExpr fns field ·.2)
-  | .match_ sc arms _ => coreTyPairsExpr fns field sc ++ arms.flatMap (coreTyPairsArm fns field)
-  | .arrayLit es _ => es.flatMap (coreTyPairsExpr fns field)
-  | .arrayIndex a i _ | .allocCall a i _ => coreTyPairsExpr fns field a ++ coreTyPairsExpr fns field i
-  | .ifExpr c t e _ => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field none t ++ coreTyPairsStmts fns field none e
+    tyAgreeExpr c e ++
+    match c.structOf (tyStructName e.ty) with
+    | some sd => ((sd.fields.lookup f).map fun ft => [(ft, t, s!"field '{f}'", sd.typeParams)]).getD []
+    | none => []
+  | .binOp _ l r _ => tyAgreeExpr c l ++ tyAgreeExpr c r
+  | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => tyAgreeExpr c e
+  | .match_ sc arms _ => tyAgreeExpr c sc ++ arms.flatMap (tyAgreeArm c)
+  | .arrayLit es _ => es.flatMap (tyAgreeExpr c)
+  | .arrayIndex a i _ | .allocCall a i _ => tyAgreeExpr c a ++ tyAgreeExpr c i
+  | .ifExpr cnd t e _ => tyAgreeExpr c cnd ++ tyAgreeStmts c t ++ tyAgreeStmts c e
   | _ => []
 
-partial def coreTyPairsArm (fns : String → Option CFnDef) (field : Ty → String → Option Ty) :
-    CMatchArm → List (Ty × Ty × String)
-  | .enumArm _ _ _ g b | .varArm _ _ g b =>
-    ((g.map (coreTyPairsExpr fns field)).getD []) ++ coreTyPairsStmts fns field none b
-  | .litArm v g b => coreTyPairsExpr fns field v ++ ((g.map (coreTyPairsExpr fns field)).getD []) ++ coreTyPairsStmts fns field none b
+partial def tyAgreeArm (c : TyAgreeCtx) : CMatchArm → List TyAgreePair
+  | .enumArm _ _ bs g b =>
+    let c' := { c with locals := bs.map (·.1) ++ c.locals }
+    ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
+  | .varArm n _ g b =>
+    let c' := { c with locals := n :: c.locals }
+    ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
+  | .litArm v g b => tyAgreeExpr c v ++ ((g.map (tyAgreeExpr c)).getD []) ++ tyAgreeStmts c b
   | .rangeArm lo hi _ g b =>
-    coreTyPairsExpr fns field lo ++ coreTyPairsExpr fns field hi ++ ((g.map (coreTyPairsExpr fns field)).getD [])
-      ++ coreTyPairsStmts fns field none b
+    tyAgreeExpr c lo ++ tyAgreeExpr c hi ++ ((g.map (tyAgreeExpr c)).getD []) ++ tyAgreeStmts c b
 
-partial def coreTyPairsStmts (fns : String → Option CFnDef) (field : Ty → String → Option Ty)
-    (retTy : Option Ty) (ss : List CStmt) :
-    List (Ty × Ty × String) :=
-  ss.flatMap fun st => match st with
-    | .letDecl n _ t v => coreTyPairsExpr fns field v ++ [(t, v.ty, s!"the initializer of '{n}'")]
-    | .assign _ v => coreTyPairsExpr fns field v
-    | .return_ (some v) _ =>
-      coreTyPairsExpr fns field v ++ ((retTy.map fun rt => [(rt, v.ty, "a returned value")]).getD [])
-    | .expr e _ => coreTyPairsExpr fns field e
-    | .ifElse c t el => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field retTy t
-        ++ ((el.map (coreTyPairsStmts fns field retTy)).getD [])
-    | .while_ c b _ step => coreTyPairsExpr fns field c ++ coreTyPairsStmts fns field retTy b ++ coreTyPairsStmts fns field retTy step
-    | .fieldAssign o _ v => coreTyPairsExpr fns field o ++ coreTyPairsExpr fns field v
-    | .derefAssign t v => coreTyPairsExpr fns field t ++ coreTyPairsExpr fns field v
-    | .arrayIndexAssign a i v => coreTyPairsExpr fns field a ++ coreTyPairsExpr fns field i ++ coreTyPairsExpr fns field v
-    | .break_ (some v) _ => coreTyPairsExpr fns field v
-    | .defer e => coreTyPairsExpr fns field e
-    | .borrowIn _ _ _ _ _ b => coreTyPairsStmts fns field retTy b
-    | _ => []
+/-- A block, lexically: a `let`'s binder is a local only AFTER its initializer. -/
+partial def tyAgreeStmts (c : TyAgreeCtx) (ss : List CStmt) : List TyAgreePair :=
+  (ss.foldl (fun (acc, c) st =>
+    match st with
+    | .letDecl n _ t v =>
+      (acc ++ tyAgreeExpr c v ++ [(t, v.ty, s!"the initializer of '{n}'", c.tps)],
+       { c with locals := n :: c.locals })
+    | _ => (acc ++ tyAgreeStmt c st, c)) ([], c)).1
+
+partial def tyAgreeStmt (c : TyAgreeCtx) : CStmt → List TyAgreePair
+  | .assign _ v | .expr v _ | .defer v => tyAgreeExpr c v
+  | .return_ (some v) _ =>
+    tyAgreeExpr c v ++ ((c.retTy.map fun rt => [(rt, v.ty, "a returned value", c.tps)]).getD [])
+  | .break_ (some v) _ => tyAgreeExpr c v
+  | .ifElse cnd t el => tyAgreeExpr c cnd ++ tyAgreeStmts c t ++ ((el.map (tyAgreeStmts c)).getD [])
+  | .while_ cnd b _ st => tyAgreeExpr c cnd ++ tyAgreeStmts c b ++ tyAgreeStmts c st
+  | .fieldAssign o f v =>
+    tyAgreeExpr c o ++ tyAgreeExpr c v ++
+    match c.structOf (tyStructName o.ty) with
+    | some sd => ((sd.fields.lookup f).map fun ft => [(ft, v.ty, s!"field '{f}'", sd.typeParams)]).getD []
+    | none => []
+  | .derefAssign t v => tyAgreeExpr c t ++ tyAgreeExpr c v
+  | .arrayIndexAssign a i v => tyAgreeExpr c a ++ tyAgreeExpr c i ++ tyAgreeExpr c v
+  | .borrowIn v rf _ _ _ b => tyAgreeStmts { c with locals := v :: rf :: c.locals } b
+  | _ => []
 end
 
-/-- Every name a function body binds anywhere (parameters, lets, match and borrow binders):
-    an over-approximation of its locals, so a global function value is checked only where no
-    local of that name could be meant. -/
-partial def cfnBoundNames (f : CFnDef) : List String :=
-  f.params.map (·.1) ++ stmts f.body
-where
-  stmts (ss : List CStmt) : List String := ss.flatMap stmt
-  stmt : CStmt → List String
-    | .letDecl n _ _ v => n :: expr v
-    | .assign _ v | .expr v _ | .defer v => expr v
-    | .return_ (some v) _ | .break_ (some v) _ => expr v
-    | .ifElse c t el => expr c ++ stmts t ++ ((el.map stmts).getD [])
-    | .while_ c b _ st => expr c ++ stmts b ++ stmts st
-    | .fieldAssign o _ v | .derefAssign o v => expr o ++ expr v
-    | .arrayIndexAssign a i v => expr a ++ expr i ++ expr v
-    | .borrowIn v rf _ _ _ b => v :: rf :: stmts b
-    | _ => []
-  expr : CExpr → List String
-    | .match_ sc arms _ => expr sc ++ arms.flatMap arm
-    | .ifExpr c t e _ => expr c ++ stmts t ++ stmts e
-    | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => expr l ++ expr r
-    | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => expr e
-    | .call _ _ args _ | .arrayLit args _ => args.flatMap expr
-    | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (expr ·.2)
-    | _ => []
-  arm : CMatchArm → List String
-    | .enumArm _ _ bs g b => bs.map (·.1) ++ ((g.map expr).getD []) ++ stmts b
-    | .varArm n _ g b => n :: ((g.map expr).getD []) ++ stmts b
-    | .litArm v g b => expr v ++ ((g.map expr).getD []) ++ stmts b
-    | .rangeArm lo hi _ g b => expr lo ++ expr hi ++ ((g.map expr).getD []) ++ stmts b
-
+/-- Every function of a module tree with its module's struct and enum copies. -/
+partial def coreFnsWithTypesDeep (cm : CModule) : List (List CStructDef × List CEnumDef × CFnDef) :=
+  cm.functions.map (cm.structs, cm.enums, ·) ++ cm.submodules.flatMap coreFnsWithTypesDeep
 /-- Every function definition of a module tree. -/
 partial def coreFnsDeep (cm : CModule) : List CFnDef := cm.functions ++ cm.submodules.flatMap coreFnsDeep
-/-- Every function of a module tree with its module's struct copies. -/
-partial def coreFnsWithStructsDeep (cm : CModule) : List (List CStructDef × CFnDef) :=
-  cm.functions.map (cm.structs, ·) ++ cm.submodules.flatMap coreFnsWithStructsDeep
 /-- Every linker alias of a module tree. -/
 partial def coreAliasesDeep (cm : CModule) : List (String × String) :=
   cm.linkerAliases ++ cm.submodules.flatMap coreAliasesDeep
@@ -3647,14 +3649,37 @@ partial def coreStructsDeep (cm : CModule) : List (String × CStructDef) :=
 partial def coreEnumsDeep (cm : CModule) : List (String × CEnumDef) :=
   cm.enums.map (cm.name, ·) ++ cm.submodules.flatMap coreEnumsDeep
 
+/-- Bug 096: do a declared type and an actual type agree on every respelled (`fam`) type they
+    name? Recursive: a type parameter (`wild`, or a type variable) on the declared side matches
+    anything, while the nominal constructors around it are still compared. Positions of
+    different shapes (an implicit borrow) compare the names they carry. -/
+partial def famAgree (fam wild : List String) (exp act : Ty) : Bool :=
+  let isWild : Ty → Bool := fun t => match t with
+    | .typeVar _ => true
+    | .named n => wild.contains n
+    | _ => false
+  let hasWild : Ty → Bool := fun t => tyHasTypeVar t || (tyNamesIn t).any wild.contains
+  let famNames : Ty → List String := fun t => (tyNamesIn t).filter fam.contains
+  let nameOk := fun (n m : String) => !(fam.contains n || fam.contains m) || n == m
+  if isWild exp then true else
+  match exp, act with
+  | .named n, .named m => nameOk n m
+  | .generic n as _, .generic m bs _ =>
+    nameOk n m && (as.length != bs.length || (as.zip bs).all fun (a, b) => famAgree fam wild a b)
+  | .ref a, .ref b | .refMut a, .refMut b | .heap a, .heap b | .heapArray a, .heapArray b
+  | .ptrMut a, .ptrMut b | .ptrConst a, .ptrConst b => famAgree fam wild a b
+  | .array a _, .array b _ => famAgree fam wild a b
+  | .fn_ ps _ r, .fn_ qs _ q =>
+    (ps.length != qs.length || (ps.zip qs).all fun (a, b) => famAgree fam wild a b) && famAgree fam wild r q
+  | _, _ => hasWild exp || famNames exp == famNames act
+
 /-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
     types by spelling, so a program can pass one module's `P` where another module's `P` is
-    meant; after respelling, Core carries the two declarations' different names. Whenever a
-    Core type position names a respelled (or still-bare ambiguous) type, the names it carries
-    must agree: call arguments with the callee's parameters, call results with its return type,
-    `let`s and `return`s with their declared types, and every copy of a struct or enum (a
-    module's imported copy and its definition) with every other. A disagreement is refused
-    (E0299) rather than laid out twice. `family` is every ambiguous name and its respellings. -/
+    meant; after respelling, Core carries the two declarations' different names. Every type
+    position a body asserts (`tyAgreeStmts`) must agree on the respelled types it names
+    (`famAgree`), and every copy of a struct or enum (a module's imported copy and its
+    definition) with every other. A disagreement is refused (E0299) rather than laid out twice.
+    `family` is every ambiguous name and its respellings. -/
 def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     Except Diagnostics (List CModule) :=
   if family.isEmpty then .ok cms else
@@ -3675,21 +3700,16 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     ({ severity := .error, pass := "elab", span := none, code := "E0299"
        message := msg
        hint := some "import the type from the module whose declaration is meant, or rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" } : Diagnostic)
-  -- a field's declared type, read off the module's own copy of a non-generic struct
-  let fieldIn : List CStructDef → Ty → String → Option Ty := fun sds objTy f =>
-    let sn := match objTy with
-      | .named n | .ref (.named n) | .refMut (.named n) | .heap (.named n) => n
-      | _ => ""
-    if sn.isEmpty then none else
-    match sds.find? (·.name == sn) with
-    | some sd => if sd.typeParams.isEmpty then sd.fields.lookup f else none
-    | none => none
-  let fnsWithStructs := cms.flatMap coreFnsWithStructsDeep
-  let callDiags : Diagnostics := fnsWithStructs.flatMap fun (sds, f) =>
-    let bound := cfnBoundNames f
-    let fnsHere : String → Option CFnDef := fun n => if bound.contains n then none else fns n
-    (coreTyPairsStmts fnsHere (fieldIn sds) (some f.retTy) f.body).filterMap fun (exp, act, whr) =>
-      if fam exp == fam act then none else
+  let callDiags : Diagnostics := (cms.flatMap coreFnsWithTypesDeep).flatMap fun (sds, eds, f) =>
+    let ctx : TyAgreeCtx := {
+      fns := fns
+      structOf := fun n => sds.find? (·.name == n)
+      enumOf := fun n => eds.find? (·.name == n)
+      locals := f.params.map (·.1)
+      retTy := some f.retTy
+      tps := f.typeParams }
+    (tyAgreeStmts ctx f.body).filterMap fun (exp, act, whr, wild) =>
+      if famAgree family wild exp act then none else
       some (diag s!"in '{f.sourceName}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
   let structs := cms.flatMap coreStructsDeep
   let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDups.filterMap fun n =>

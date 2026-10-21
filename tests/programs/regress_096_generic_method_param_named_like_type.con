@@ -1,5 +1,5 @@
-// Bug 096 (Codex round 3): a method's own type parameter named P does not hide the concrete
-// P of W's field from the binding check. Refused (E0299): b's P is a's, W.p means c's.
+// Bug 096 (Codex rounds 3, 7): a method's own type parameter named P does not stand for c's P;
+// b's copy of W keeps W.p as c's P. Expected (compiled AND --interp): 3.
 mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
 mod c {
     pub struct Copy P { pub x: i64 }

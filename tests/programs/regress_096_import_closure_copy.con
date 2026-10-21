@@ -1,5 +1,6 @@
-// Bug 096 (Codex round 3): b imports a's P and c's mkw; import resolution transports c's W
-// (mkw's return type), whose field means c's P. Refused (E0299): b's P is a's.
+// Bug 096 (Codex rounds 3, 7): b imports a's P and c's mkw; import resolution transports c's
+// W, whose field means c's P. b's copy of W follows c's binding (c_P), so it agrees with c's
+// definition, and b only reads `mkw(7).k`. Expected (compiled AND --interp): 4.
 mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
 mod c {
     pub struct Copy P { pub x: i64 }
