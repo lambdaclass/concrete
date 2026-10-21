@@ -491,7 +491,11 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
   | .ident name varTy =>
     -- Bug 123: a module constant has no storage, whatever its type (an array constant's
     -- element borrow `&A[0]` reaches here too). Refused unless a local of that name shadows it.
-    if (← lookupVar name).isNone && ((← getState).constants.any fun (n, _, _) => n == name) then
+    -- A pure state read: `lookupVar` would emit a load of a promoted local (a dead instruction
+    -- that renumbered every later temporary, golden ssa/cap_basic).
+    let st ← getState
+    let isLocal := (st.vars.lookup name).isSome || st.promotedAllocas.any fun (n, _, _) => n == name
+    if !isLocal && (st.constants.any fun (n, _, _) => n == name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
     -- arrays are already stack-allocated; refs/ptrs/heap are already pointers

@@ -24,8 +24,6 @@ namespace Concrete
 /-- 128-bit digest over the compiler's own sources at build time. -/
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 =======
->>>>>>> b0d869a2 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
-=======
 >>>>>>> 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 ||||||| parent of 99b08d91 (fix: bug 091 normalized place rule — Codex static review pass 4: references stored in aggregates)
 =======
@@ -1892,6 +1890,11 @@ def buildIdentity : String := "6b3399c6adf90d2c544ba357c9cfe51b"
 =======
 def buildIdentity : String := "f45f201011e139ae5a47a9429f650988"
 >>>>>>> d1f5d29d (regenerate Concrete/BuildIdentity.lean after rebasing onto 34060604)
+||||||| parent of 878af92a (fix: addrOfLocal's constant guard reads state instead of calling lookupVar)
+def buildIdentity : String := "f45f201011e139ae5a47a9429f650988"
+=======
+def buildIdentity : String := "5d18106300ab44e5478a9349e69e01cb"
+>>>>>>> 878af92a (fix: addrOfLocal's constant guard reads state instead of calling lookupVar)
 
 /-- How many source files the identity above was computed over.
 
