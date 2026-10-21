@@ -1,7 +1,7 @@
 # Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
-specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
+specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) are placed in the summary table from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
 structural cause and owner ([filing a bug](README.md#filing-a-bug)) and either joins a class below
 or adds one. Since 2026-10-21 the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)) uses these owners: silent defects
@@ -44,7 +44,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130 | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107, 108, 109, 110, 116, 127, 130 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 105 (the lowering defect), 107, 108, 109, 110, 116, 126, 127, 130 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |

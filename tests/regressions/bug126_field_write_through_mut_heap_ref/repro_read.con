@@ -1,0 +1,18 @@
+// Bug 126, read half: a field read through a `&mut Heap<B>` parameter
+// returns the heap pointer instead of the field. Expected exit: 10
+// (42 % 16). The heap pointer is at least 8-byte aligned, so the wrong
+// result is 0 or 8 and never 10 (0 on arm64 macOS, where malloc aligns to
+// 16). The callee also loads 16 bytes from the caller's 8-byte slot. See
+// docs/bugs/126.
+struct Copy B { v: Int, w: Int }
+
+fn get(h: &mut Heap<B>) -> Int {
+    return h.v;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42, w: 5 });
+    let out: Int = get(&mut h) % 16;
+    free(h);
+    return out;
+}

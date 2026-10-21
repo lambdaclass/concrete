@@ -206,8 +206,8 @@ exactly the rows above. Agreement between consumers is **not** enforced: for
 `fn bump(h: &mut Heap<B>) { h.v = h.v + 1; }` called as `bump(&mut h)`, Elab desugars one
 dereference while Lower's call-argument `&mut` path passes the address of the slot, so the callee
 treats the heap pointer as field `v` and corrupts the caller's slot (the binary traps; a read
-returns the pointer's bits); `&h` lowers to the heap pointer and reads correctly. This is filed as
-bug 126 on branch `bug126` (not yet on main).
+returns the pointer's bits); `&h` lowers to the heap pointer and reads correctly. This is
+[bug 126](../bugs/126_field_write_through_mut_heap_ref.md) (OPEN).
 
 **Prevents.** Bug 126 and the representation-disagreement half of [structural
 class](../bugs/STRUCTURAL_CLASSES.md) 8 for heap shells.

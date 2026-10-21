@@ -1,0 +1,25 @@
+// Bug 126: a field write through a `&mut Heap<B>` parameter. The caller
+// passes the address of the slot that holds the heap pointer; the callee
+// treats the parameter as a pointer to B, so it reads the heap pointer as
+// field `v`, adds 1, and stores 16 bytes back over the 8-byte slot. The
+// later `free(h)` receives the heap pointer plus one and the binary is killed
+// by a signal (arm64 macOS: SIGTRAP, exit 133). Expected exit: 43. Memory
+// corruption in safe code; see docs/bugs/126.
+struct Copy B { v: Int, w: Int }
+
+fn bump(h: &mut Heap<B>) {
+    h.v = h.v + 1;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42, w: 5 });
+    bump(&mut h);
+    let out: Int = h.v;
+    free(h);
+    // Every normal exit is below 128, so the signals pin can read a status
+    // above 128 as a signal: 43 when correct, 1 for any other value.
+    if out == 43 {
+        return 43;
+    }
+    return 1;
+}
