@@ -318,10 +318,11 @@ if [ -s "$NEWRAW" ]; then
   # Re-pointing one selection at another's symbol leaves two selections on one symbol and none on the
   # other: the tool refuses it by MULTIPLICITY. The leg used to expect "selects" and passed only because
   # a MAPPED line elsewhere contained `ch_selects_high` — the match is now on refused lines only.
-  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "multiplicity"  # An amendment's `+` row must be a row of the tree, not merely share a pairing key with one: a
-  # reference key ignores the symbol suffix, so a `+` reference naming a symbol the tree does not
+  doctor "a re-pointed selection" 'BEGIN{FS=OFS="\t"} /^selection\t/ {s[++n]=$0} !/^selection\t/ {print} END{split(s[1],a,"\t"); split(s[2],b,"\t"); for(i=1;i<=n;i++){ if(i==1){a[5]=b[5]; print a[1],a[2],a[3],a[4],a[5]} else print s[i]}}' "multiplicity"
+  # An amendment's plus row must be a row of the tree, not merely share a pairing key with one: a
+  # reference key ignores the symbol suffix, so a plus reference naming a symbol the tree does not
   # have would otherwise pair with the real row (Codex review of the bug 110 re-freeze). Doctor the
-  # explained `+` reference row of hmac_sha256's sha256_hash and require the refusal.
+  # explained plus reference row of hmac_sha256's sha256_hash and require the refusal.
   awk 'BEGIN{FS=OFS="\t"} $1=="+" && $2=="reference" && $3=="shaFns_@_sha256_hash" {$3="shaFns_@_no_such_symbol"} {print}' \
     "$AMEND" > "$TMP/doctored.amend"
   if cmp -s "$AMEND" "$TMP/doctored.amend"; then
