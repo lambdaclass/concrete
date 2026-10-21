@@ -3969,7 +3969,10 @@ structure ConsistencyViolation where
     Returns an empty list if all invariants hold. -/
 def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
   let allNames := (pc.entries.map (·.qualName)) ++ (pc.excluded.map (·.qualName))
-  let provedNames := pc.obligations.filterMap fun o =>
+  -- Over the WHOLE program, like INV-14 below: `dependencies` is computed from program-wide final
+  -- statuses, and a user-scoped ProofCore (`scopeToUser`) lists only user obligations, so a proved
+  -- dependency-package callee would otherwise read as "not proved" (INV-9).
+  let provedNames := pc.closureView.obligations.filterMap fun o =>
     if o.status == .proved then some o.functionId.qualName else none
 
   -- INV-1: Every obligation references a known function

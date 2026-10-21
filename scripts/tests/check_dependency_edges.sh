@@ -1429,8 +1429,9 @@ done
 # 13 -> 14 on 2026-10-18 (bug 083: the name-keyed `provedFunctions` table was deleted, so `thesis_demo/src/main.con`, `thesis_demo/src/main_drifted.con` and `crypto_verify_drifted` now carry in-source links and JOIN the `#[proof_by]` population): `thesis_demo`'s
 # `main.validate` makes no claim and its two edges are unclassified, so its root refuses.
 # 14 -> 16 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): two subjects that make NO claim
-# and call a claimed helper, so their single edge is unclassified and their root refuses —
-# `png_chunks.is_png_sig` (edge to `png_sig_ok`) and `toml_parser.err_result` (edge to `mk_error_val`).
+# and each have exactly one unclassified edge, so their root refuses — `png_chunks.is_png_sig` (to
+# `png_sig_ok`; its two other edges, to `Bytes_len` and `Bytes_get_unchecked`, are `trusted`) and
+# `toml_parser.err_result` (its only edge, to `mk_error_val`, which carries no claim either).
 # Neither is proved; no proved subject fails to root (asserted below).
 if [ "$ROOTREF" = "16" ]; then
   ok "16 subject roots refuse (measured, exact)"
