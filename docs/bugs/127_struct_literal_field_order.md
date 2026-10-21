@@ -54,8 +54,8 @@ positionally) is gone. The reproducer exits 56 natively, as it prints 56 under `
 
 Regression legs:
 
-- `tests/programs/regress_127_struct_literal_source_order.con` (`run_tests.sh`, exit 42, plus an
-  interpreter-versus-binary leg on it and the reproducer): two-field, rotated three-field, generic
+- `tests/programs/regress_127_struct_literal_source_order.con` (`run_tests.sh`: the binary must
+  exit 42 and `--interp` print 42; the reproducer likewise 56 from both): two-field, rotated three-field, generic
   and mixed-width (`u8`/`Int`) literals, and a functional update with a variable base, each
   checking the order the initializers ran in and every field's value, so storing by position would
   fail too.

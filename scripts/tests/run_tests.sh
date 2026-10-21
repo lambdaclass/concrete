@@ -1669,10 +1669,12 @@ run_err "$TESTDIR/error_111_main_params_unit.con"       "(E0310)"
 run_err "$TESTDIR/error_111_submodule_main_params.con"  "(E0310)"
 run_err "tests/regressions/bug111_main_params_accepted/repro.con" "(E0310)"
 # Bug 127: struct-literal initializers run in source order and land at their declared offsets,
-# natively and under --interp (the binary used to run them in declaration order).
-run_ok  "$TESTDIR/regress_127_struct_literal_source_order.con" "42"
-for r127_src in "$TESTDIR/regress_127_struct_literal_source_order.con" \
-                tests/regressions/bug127_struct_literal_field_order/repro.con; do
+# natively and under --interp (the binary used to run them in declaration order). One synchronous
+# loop compiles each source once (a parallel run_ok on the same file would race on its .ll), and
+# both consumers must give the expected value, not merely agree.
+for r127_case in "$TESTDIR/regress_127_struct_literal_source_order.con:42" \
+                 "tests/regressions/bug127_struct_literal_field_order/repro.con:56"; do
+    r127_src="${r127_case%:*}"; r127_want="${r127_case##*:}"
     if ! filter_match "$r127_src"; then SKIP=$((SKIP + 1)); continue; fi
     r127_i=$($COMPILER "$r127_src" --interp 2>&1 | awk "NR<=1" || true)
     r127_n=""
@@ -1680,11 +1682,11 @@ for r127_src in "$TESTDIR/regress_127_struct_literal_source_order.con" \
         "$TESTDIR/.r127_bin" >/dev/null 2>&1 && r127_n=0 || r127_n=$?
     fi
     rm -f "$TESTDIR/.r127_bin"
-    if [ -n "$r127_n" ] && [ "$r127_i" = "$r127_n" ]; then
-        echo "  ok  bug127 $r127_src: --interp == binary ($r127_n)"
+    if [ "$r127_n" = "$r127_want" ] && [ "$r127_i" = "$r127_want" ]; then
+        echo "  ok  bug127 $r127_src: --interp and binary both give $r127_want"
         PASS=$((PASS + 1))
     else
-        echo "FAIL  bug127 $r127_src: --interp gave '$r127_i', binary exit '$r127_n'"
+        echo "FAIL  bug127 $r127_src: expected $r127_want; --interp gave '$r127_i', binary exit '$r127_n'"
         FAIL=$((FAIL + 1))
     fi
 done

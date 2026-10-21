@@ -212,9 +212,9 @@ updated by the bug 127 fix, 2026-10-21):
 | 7. assignment to an indexed place: right-hand side, then the index | yes | yes | enforced (not yet gated) |
 | 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, not yet filed (exit 0b) |
 
-Changing struct and enum literals to source order changes Elab / Lower (the binary uses
-declaration order for both), the interpreter for enum literals, and the extracted model and Core
-semantics so that all agree. Functional update needs Elab to bind the base once to a fresh local
+Struct literals follow source order in both consumers since the bug 127 fix (`Lower` no longer
+reorders them). Changing enum literals to source order (bug 137) changes Elab, the positional
+payload in Lower, the interpreter and the extracted model, and Core semantics, so that all agree. Functional update needs Elab to bind the base once to a fresh local
 before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](PATTERN_ERGONOMICS.md)
 to use a simple place as the base describes today's behaviour, which this rule replaces), and the
 dereference assignment needs Lower to evaluate the right-hand side first. No source migration is expected: no corpus program was observed to
