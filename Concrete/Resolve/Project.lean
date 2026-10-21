@@ -252,13 +252,13 @@ def isValidNativeName (s : String) : Bool :=
 
 /-- A name `-l<name>` may carry: a valid native name whose `-l` spelling is not ALSO a driver or
     linker option. Prefixing `-l` does not make an argument a library: ld64 reads `-lto_library`,
-    `-ld_classic`, `-ld_new`, `-lazy-l…`, `-lazy_library`, `-lazy_framework` and `-load_hidden` as
+    `-ld_classic`, `-ld_new`, `-ld64`, `-lazy-l…`, `-lazy_library`, `-lazy_framework` and `-load_hidden` as
     options, clang reads `-lazy_*` itself, and GNU ld matches single-dash long options such as
     `-library…` before `-l`. Names beginning with those spellings are refused, in the manifest and
     in pkg-config output alike. -/
 def isLinkableLibName (s : String) : Bool :=
   isValidNativeName s &&
-    !(["to_", "to-", "d_", "d-", "azy", "oad_", "ibrary"].any (s.startsWith ·))
+    !(["to_", "to-", "d_", "d-", "d6", "azy", "oad_", "ibrary"].any (s.startsWith ·))
 
 /-- A library directory as written: non-empty, not flag-shaped, no `,` (it is spliced into
     `-Wl,-rpath,<dir>`), no `:` (an ELF rpath list separator) or `$` (an rpath token such as
@@ -402,6 +402,15 @@ private partial def tomlCloseGroup (cs : List Char) (stack : List Char) : Option
     | '{' :: r => tomlCloseGroup r ('}' :: stack)
     | c :: r => if c == top then tomlCloseGroup r below else tomlCloseGroup r stack
 
+/-- Whether bare text is a TOML key: dot-separated components, each a quoted string (one
+    `tomlStrMark`) or a bare key of letters, digits, `_` and `-`, with optional spaces around. -/
+private def tomlIsKey (k : List Char) : Bool :=
+  let parts := k.splitOn '.'
+  parts.all fun part =>
+    let part := (part.dropWhile tomlWs).reverse.dropWhile tomlWs |>.reverse
+    part == [tomlStrMark] ||
+      (!part.isEmpty && part.all fun c => c.isAlphanum || c == '_' || c == '-')
+
 /-- Split bare text at `sep` where it is outside every bracket group. -/
 private partial def tomlSplitTop (cs : List Char) (sep : Char) (depth : Nat := 0)
     (cur : List Char := []) (acc : List (List Char) := []) : List (List Char) :=
@@ -445,8 +454,7 @@ private partial def tomlIsValue (v : List Char) : Bool :=
         else (tomlSplitTop inner ',').all fun entry =>
           match tomlSplitTop entry '=' with
           | key :: valParts@(_ :: _) =>
-            !(key.all tomlWs) && !key.any (fun x => x == '[' || x == '{' || x == ']' || x == '}')
-              && tomlIsValue ((valParts.intersperse ['=']).flatten)
+            tomlIsKey key && tomlIsValue ((valParts.intersperse ['=']).flatten)
           | _ => false
       | _ => false
     else !(v.any fun x => x == '[' || x == '{' || x == ']' || x == '}' || x == tomlStrMark || x == '=' || x == '\n')
@@ -543,7 +551,10 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
         inNative := false
     else
       let valueBare ← match bare.splitOn '=' with
-        | _ :: valParts@(_ :: _) => pure ((valParts.intersperse ['=']).flatten)
+        | keyBare :: valParts@(_ :: _) =>
+          -- The text before `=` must BE a key; `foo [native] = [...]` is not one.
+          if !tomlIsKey keyBare then throw s!"not a TOML key before '=': '{t}'"
+          pure ((valParts.intersperse ['=']).flatten)
         | _ => throw s!"a statement that is neither a table header nor a key = value: '{t}'"
       -- One VALUE and nothing after it (tomlIsValue validates arrays and inline tables entry by
       -- entry): a header or key hidden inside or after a value is refused here.

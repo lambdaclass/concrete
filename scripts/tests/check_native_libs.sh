@@ -165,12 +165,13 @@ cat > "$STUB/pkg-config" <<EOF
 # Stub pkg-config: knows 'nlstub' (links libnladd) and 'nlevil' (emits a flag outside the allow-list).
 case "\$*" in
   --version) echo 0.29.2 ;;
-  "--print-errors --exists nlstub"|"--print-errors --exists nlevil"|"--print-errors --exists nlopt") exit 0 ;;
+  "--print-errors --exists nlstub"|"--print-errors --exists nlevil"|"--print-errors --exists nlopt"|"--print-errors --exists nld64") exit 0 ;;
   "--print-errors --exists "*) echo "Package \${3} was not found in the pkg-config search path." >&2
                                echo "No package '\${3}' found" >&2; exit 1 ;;
   "--libs nlstub") echo "-L$TMP/pc_static -lnladd" ;;
   "--libs nlevil") echo "-L$TMP/pc_static -lnladd -Wl,-undefined,dynamic_lookup" ;;
   "--libs nlopt") echo "-L$TMP/pc_static -lnladd -ld_classic" ;;
+  "--libs nld64") echo "-L$TMP/pc_static -lnladd -ld64" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -203,6 +204,11 @@ mkapp "$TMP/app3opt" '
 pkg-config = ["nlopt"]'
 refused "$TMP/app3opt" app3opt "emitted '-ld_classic', which is not an accepted link flag" \
   "a pkg-config -l token that is really a linker option (-ld_classic) is refused" PATH="$STUB:$PATH"
+mkapp "$TMP/app3d64" '
+[native]
+pkg-config = ["nld64"]'
+refused "$TMP/app3d64" app3d64 "emitted '-ld64', which is not an accepted link flag" \
+  "a pkg-config -ld64 token (ld64's classic-linker switch) is refused" PATH="$STUB:$PATH"
 
 echo "=== 4: malformed declarations fail closed; names cannot inject flags ==="
 bad(){ local tag="$1" native="$2" frag="$3" label="$4"
@@ -451,6 +457,10 @@ refused "$TMP/trailhdr" trailhdr "unexpected text in or after a table header" "a
 mkapp "$TMP/trailval" ''
 printf '[package]\nname = "nlapp" [native]\nlibs = ["lost"]\n' > "$TMP/trailval/Concrete.toml"
 refused "$TMP/trailval" trailval "unexpected text in or after a value" "a [native] header trailing a value is refused"
+# The text before '=' must be a key: a header embedded there is refused.
+mkapp "$TMP/keyhdr" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nfoo [native] = ["lost"]\n' > "$TMP/keyhdr/Concrete.toml"
+refused "$TMP/keyhdr" keyhdr "not a TOML key before '='" "a header embedded in a key (foo [native] = ...) is refused"
 # Keys are matched exactly: "lib s" is not libs.
 bad spacedkey '
 [native]
@@ -485,7 +495,7 @@ notes = """
 [native]
 libs = ["nladd"]' "unterminated multi-line string" "an unterminated multi-line string is refused"
 # -l<name> is not always a library: these spellings are linker options (ld64, clang, GNU ld).
-for nm in to_library d_classic azy_framework oad_hidden; do
+for nm in to_library d_classic d64 azy_framework oad_hidden; do
   bad "lopt_$nm" "
 [native]
 libs = [\"$nm\"]" "would be read as a linker option" "libs = [\"$nm\"] is refused (-l$nm is a linker option)"

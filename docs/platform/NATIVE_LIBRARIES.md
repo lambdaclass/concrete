@@ -57,7 +57,7 @@ what G1 recorded.
 | any line of the manifest that is not exactly one header, one `key = value` (one string, one bracket group, or one scalar) or a comment: text trailing a header or a complete value (`[package] [native]`, `name = "x" [native]`) is refused, since skipping it would hide what it spells | load |
 | the bare word `native` (outside a string) on a line continuing a multi-line array or inline table: no TOML value is that word, so it is refused rather than skipped | load |
 | a name that is not `[A-Za-z0-9_][A-Za-z0-9_.+-]*` (at most 128 characters) | load |
-| a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |
+| a `libs` name whose `-l<name>` spelling is a linker or driver option (`to_…`, `d_…`, `d6…`, `azy…`, `oad_…`, `ibrary…`: `-lto_library`, `-ld_classic`, `-ld64`, `-lazy_framework`, `-load_hidden`, GNU ld's single-dash `-library…`); the same rule applies to pkg-config's `-l` tokens | load (pkg-config: link) |
 | a `lib-dirs` entry (or canonical, or pkg-config `-L`, directory) that is empty, starts with `-`, or contains `,` (splits `-Wl,`), `:` (an ELF rpath separator), `$` (an rpath token such as `$ORIGIN`) or a control character | load (pkg-config: link) |
 | pkg-config not on `PATH` | link |
 | a pkg-config package pkg-config cannot find (its own `--print-errors` text is included) | link |
@@ -68,7 +68,8 @@ The manifest is read as STATEMENTS, not lines: each is one header or one `key = 
 many lines its strings, arrays and inline tables span, with strings, escapes, comments and
 three-to-five-quote closers resolved. Every statement must have exactly one such shape with nothing
 after it, so text quoted inside a string declares and refuses nothing, and a header or key hidden
-after a closing delimiter, inside an array, or after another header is refused. Values are validated
+after a closing delimiter, inside an array, or after another header is refused. The text before `=` must be a key (dotted components,
+each bare or quoted). Values are validated
 recursively: array elements are values, inline-table entries are `key = value` on one line (TOML
 1.0), a scalar holds no brackets, strings or `=`. A header is one line with no comment inside its
 brackets. Unterminated strings and values and mismatched brackets are refused.
