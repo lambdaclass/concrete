@@ -6,7 +6,27 @@ FRICTION #4): the old runtime echoed `main`'s return value to stdout and always
 exited 0, so a compiled CLI could neither keep its stdout clean when piped nor
 signal failure to the shell (`&&` / `set -e` never saw errors).
 
-## The model (end state, Zig-shaped)
+## Decision of 2026-10-21: no parameters now; the return type stays `-> Int`, exit codes are an open question
+
+**Adopted (normative).** `main` takes **no parameters**. Command-line arguments are read only
+through `std.args` (`std/src/args.con`, `with(Env)`). A parameterized `main` is a compile error.
+Status on main: **not enforced** — `fn main(argc: i64)` compiles, and the parameter reads an
+undefined register (bug 111, silent wrong code). Enforcing site: one rule in Check's entry-point
+check (to be added). Cost: about two existing invalid fixtures. Owner: ROADMAP exit 0b (R-0482),
+where bug 111 is already listed.
+
+**Kept.** `fn main() -> Int` remains the entry signature, with the Stage 1 semantics below (the
+value masked to 0–255; Unit exits 0; the narrower integer widths accepted). The process-exit
+mapping is a separately specified operation of the entry wrapper, not an `as` cast, so the cast
+decision of the same date (ARITHMETIC_POLICY §8) does not change it.
+
+**Open decision, not adopted.** Whether to narrow `main`'s return type to the end state below
+(`fn main()` and `fn main() -> u8`, so truncation is unrepresentable) is deferred to a later
+surface pass. Until it is decided, the end state below is a recorded preference, not the rule, and
+EXECUTION_MODEL states `-> Int` as the signature. The corpus today: `-> Int` / `-> i64` 973
+signatures, `-> i32` 190, Unit 107, `-> u8` 20, `-> u64` 5, `-> u32` 2 (occurrences, 2026-10-21).
+
+## The model (end state, Zig-shaped; a recorded preference, open since 2026-10-21)
 
 Two accepted `main` forms, value = process exit status, runtime writes nothing:
 

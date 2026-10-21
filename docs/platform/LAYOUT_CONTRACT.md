@@ -29,7 +29,7 @@ Exactly four annotations form the stable layout surface. No other `repr` forms a
 | *(none)* | struct, enum | **Opaque.** Compiler may change field order, padding, tag size, or discriminant. | — |
 | `#[repr(C)]` | struct | **Guaranteed.** C-compatible in-memory layout: declaration field order, standard padding, alignment. | No type parameters. All fields must be FFI-safe. |
 | `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position. |
-| `#[repr(align(N))]` | struct | **Guaranteed.** Minimum alignment of `N` bytes, where `N` is a power of two. May be combined with `#[repr(C)]`. | `N` ≥ natural alignment of the struct. |
+| `#[repr(align(N))]` | struct | **Guaranteed.** Minimum alignment of `N` bytes, where `N` is a power of two. May be combined with `#[repr(C)]`. Nothing about field order or offsets. | `N` a power of two (E0577). Today `N` may not exceed the struct's natural alignment (E0585, bug 037: over-aligned declarations are not yet emitted), so the attribute is accepted only where it is a no-op. |
 
 Any other annotation (`#[repr(transparent)]`, `#[repr(Rust)]`, integer-tagged enums, `u8`-repr enums, etc.) is **not** part of the first-release contract and is not accepted by the checker at freeze. See section 6 for reconsideration triggers.
 
@@ -59,6 +59,55 @@ Everything else is opaque. Specifically:
 - **Function pointer layout, vtable layout, trait object layout.** None exist in the stable surface; reserved for later design.
 
 Opaque does not mean hidden — the compiler will still emit layout facts in reports (section 5). It means the facts are not promises the language is willing to defend across versions or across targets.
+
+### 3.3 What code may rely on, and who owns layout (normative, decided 2026-10-21)
+
+**Rule.** Each `repr` form guarantees exactly the properties section 2 lists for it and nothing
+else: `#[repr(C)]` C field order, padding and alignment; `#[repr(packed)]` declaration order with no
+padding; `#[repr(align(N))]` a minimum alignment, with no promise about order or offsets. Every other
+layout fact of every other type is unspecified. Safe code observes layout only through
+`sizeof::<T>()` and `alignof::<T>()`. Trusted code that does pointer arithmetic over elements may
+rely on `sizeof` and on one further fact, which the layout authority states and keeps: the stride of
+an array, `HeapArray` or raw buffer of `T` is `sizeof::<T>()`. `#[repr(C)]` on an enum is rejected,
+and enums cross the foreign boundary as integers (section 3.2).
+
+**One authority.** One `Layout` module computes every size, alignment, offset, stride and emitted
+type for every consumer (the checker, `Lower`, the emitter, and every model that states a layout
+fact); no consumer keeps its own copy of a layout fact (structural class 12).
+
+**Status on main.** The `sizeof` / `alignof` surface is the only layout observation in std,
+examples and tests today (std 25 lines in 3 files, examples 4 in 3, tests 23 in 13; no source
+migration). One authority is **partly** true: `Concrete/Check/Layout.lean` owns sizes, alignments
+and offsets, and since bug 121 the emitted enum types carry exactly its size and alignment
+(`check_enum_union_layout.sh` leg 5), but the builtin `Option` / `Result` union is still computed
+once program-wide by `EmitSSA.scanBuiltinEnumArgs` instead of per instantiation (bug 122, section
+3.4). The stride fact is implemented but not yet stated or gated by the layout module.
+
+**Prevents.** Bugs 121 and 122 and their class (037, 057: one fact in two places), and the enum
+field-layout panics of bugs 005 and 035.
+
+**Owner.** R-0502 (one `Layout`, queue row 4's Layout checkpoint).
+
+### 3.4 `Option` and `Result` have no layout of their own (normative, decided 2026-10-21; staged)
+
+**Rule.** `Option` and `Result` have ordinary enum semantics. They are laid out per instantiation,
+like every generic enum since R-0001, and the compiler refers to them only by resolved identity (a
+definition id or lang item), never by spelling, so a user enum named `Result` is a different type
+with its own layout. Defining both in `std` source, with intrinsics that return them constructing
+the resolved `std` type or wrapped by `std` functions, is the preferred implementation; limited
+compiler recognition by resolved identity is the fallback. Spelling in user code does not change.
+
+**Status on main: not enforced.** Both are compiler-builtin (`Concrete/Resolve/BuiltinEnums.lean`,
+`BuiltinEnumId`); `EmitSSA.scanBuiltinEnumArgs` builds one canonical LLVM union per builtin for the
+whole program, which disagrees with the per-instantiation `Layout.tySize` and gives wrong field
+offsets and a stack overrun, including when a user enum is named `Result` (bug 122). Sixteen corpus
+files (1 example, 15 tests) define their own `Option` or `Result` enum and must stay distinct types.
+
+**Stages.** (1) Now, as a row-0 repair (ROADMAP exit 0b, R-0482): bug 122's per-instantiation
+layout, not deferred to the full Layout migration. (2) Identity by resolved definition and the
+`std` definitions ride R-0492 (`DefId`) and R-0514; the layout half is R-0502.
+
+**Prevents.** Bug 122 (both halves) and the builtin/user join by spelled name (structural class 1).
 
 ---
 

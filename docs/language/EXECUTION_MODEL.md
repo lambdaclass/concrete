@@ -29,8 +29,10 @@ The compiler generates a `main` function that calls the user's `main` (renamed t
    status range (`-1` exits 255, `257` exits 1). Unit `main` exits 0.
    Nothing is written to stdout — stdout belongs to the program.
 
-`fn main() -> Int` is the current entry signature; the model narrows to
-`fn main() -> u8 | Unit` so the 8-bit contract lives in the type (see
+`fn main() -> Int` is the entry signature and stays so (decided 2026-10-21); `main` takes no
+parameters, and arguments come only from `std.args`. Narrowing the return type to
+`fn main() -> u8 | Unit`, so the 8-bit contract lives in the type, is a recorded preference and an
+open decision, not adopted (see
 `docs/platform/MAIN_EXIT_MODEL.md` for the full decision record, including why there
 is deliberately no `process.exit()` in a linear language; the transitional
 harness echo knob was deleted when stage 2 completed — the exit-code

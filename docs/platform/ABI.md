@@ -21,7 +21,7 @@ For the exploratory design direction behind the source-facing `repr` surface, se
 | Pass-by-pointer convention | Implemented | **No** — which types are passed by pointer may change |
 | Calling convention | LLVM default | **No** — no explicit calling convention annotation |
 | String/Vec/HashMap internal layout | Implemented | **No** — opaque to FFI; sizes may change |
-| Linker symbol naming | Implemented | **No** — mangling scheme is not specified |
+| Linker symbol naming | Not implemented: Concrete functions are emitted under bare names | **No** — decided 2026-10-21: every Concrete-defined function gets a mangled symbol disjoint from C; only `extern fn`, `#[link_name]` and an export attribute name C symbols ([FFI.md](FFI.md#symbol-names-normative-decided-2026-10-21)) |
 
 ## Platform Assumptions
 
@@ -191,7 +191,7 @@ The language should not promise a large Rust-style menu of representation tricks
 
 ## Layout Verification
 
-The layout module (`Concrete/Check/Layout.lean`) is the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings. Both `Lower.lean` and `EmitSSA.lean` delegate to `Layout` rather than maintaining their own layout logic.
+The layout module (`Concrete/Check/Layout.lean`) is meant to be the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings, and `Lower.lean` and `EmitSSA.lean` delegate to it. One exception remains on main: the builtin `Option` / `Result` union is computed program-wide by `EmitSSA.scanBuiltinEnumArgs` (bug 122). The normative rule (one authority; code relies only on `sizeof` / `alignof` and array stride) is [LAYOUT_CONTRACT.md §3.3 – §3.4](LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
 
 Layout properties are verified by:
 
