@@ -71,9 +71,13 @@ CI yet: `check_gate_registration.sh` lists it as a declared skip until acceptanc
 and the CI job will need that install step.
 
 Gate result when the groundwork landed (macOS arm64, devshell): 28 legs pass, 5 fail, exactly
-G1 (the no-flags build) and G3. Since G1 closed (2026-10-21, `[native]`): 29 pass, 4 fail. Leg A,
+G1 (the no-flags build) and G3. Since G1 closed (2026-10-21, `[native]`), measured on a branch
+based on main 9d17ccc5 at commit 82c6cd15: 33 pass, 0 fail — the G3 legs pass on that base as well,
+although bug 103 is still recorded OPEN, so G3's status belongs to its owner to confirm. Measured
+first on the older base: 29 pass, 4 fail. Leg A,
 plain `concrete build` in the fresh clone, now produces the binary, so leg B's manual link is not
-used and every behaviour leg runs the normally built binary. The four failures are exactly G3: the
+used and every behaviour leg runs the normally built binary. On the older base the four failures
+were exactly G3: the
 compiler-defined `_destroy` symbols, and the three options objects the observer reports never
 released. Everything else — the typed error, the value read back, the absent key, the database on
 disk, exactly-once release of the database, value buffer and error message, the observer's own
