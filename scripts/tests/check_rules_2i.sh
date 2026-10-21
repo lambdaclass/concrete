@@ -54,6 +54,16 @@ LEDGER="$("$CC" tests/programs/fib.con --report diagnostic-codes 2>/dev/null || 
 # write the ledger to a file once: the JSON helper reads it from there
 printf '%s' "$LEDGER" > "$TMP/ledger.json"
 
+# The normative code -> rules map of MEMORY_SEMANTICS §15.5, stated here independently of the
+# compiler's ledger: a manifest tag must be allowed for its code, and the ledger must say the same.
+declare -A SPEC_RULES=(
+  [E0203]="REF-8@1" [E0204]="REF-8@1" [E0231]="REF-8@1" [E0232]="REF-8@1" [E0293]="REF-8@1"
+  [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1"
+  [E0234]="REF-6@1" [E0302]="REF-6@1" [E0303]="REF-6@1"
+  [E0236]="REF-1@1, REF-2@1, REF-4@1" [E0239]="REF-3@1, REF-4@1"
+  [E0238]="REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1"
+)
+
 # ---------------------------------------------------------------------------
 # Structure: returns 0 when the manifest is well formed (prints each defect).
 # ---------------------------------------------------------------------------
@@ -66,10 +76,31 @@ validate_manifest() {
     if [ ! -e "$fixture" ]; then echo "    defect: $rule row names a missing fixture '$fixture'"; bad=1; fi
     case "$expected" in
       reject:E[0-9][0-9][0-9][0-9]:*@[0-9]*)
+        local code tag
+        code="$(cut -d: -f2 <<<"$expected")"; tag="$(cut -d: -f3 <<<"$expected")"
+        # the row's rule column and its tag name one rule (a REF-7 row cannot count a REF-5 fixture)
+        if [ "${tag%@*}" != "$rule" ]; then echo "    defect: row $fixture is filed under $rule but expects $tag"; bad=1; fi
+        # and the tag is one §15.5 assigns to the code
+        if ! grep -qE "(^|, )${tag}(,|$)" <<<"${SPEC_RULES[$code]:-}"; then
+          echo "    defect: row $fixture expects $tag from $code, which §15.5 does not assign to it"; bad=1; fi
         if [ -z "$pair" ] || [ "$pair" = "-" ]; then echo "    defect: reject row $fixture has no pair"; bad=1
         elif ! awk -F'\t' -v p="$pair" '$4==p && $3 ~ /^run:/ {f=1} END {exit !f}' "$m"; then
           echo "    defect: reject row $fixture: pair '$pair' has no run row"; bad=1; fi ;;
       run:*)
+        # a run row must execute something: `binary` always, every mode known, an exemption only
+        # beside it, and a model mode naming a sidecar row with at least one assertion
+        if ! grep -qE '(^|,)binary(,|$)' <<<"$modes"; then echo "    defect: run row $fixture has no binary mode"; bad=1; fi
+        local md
+        IFS=',' read -r -a MDS <<<"$modes"
+        for md in "${MDS[@]}"; do
+          case "$md" in
+            binary|interp|fmt|interp-exempt:?*) : ;;
+            model:?*)
+              if ! awk -F'\t' -v id="${md#model:}" '$1==id && NF>=3 && $3!="" {f=1} END {exit !f}' "$SIDECAR"; then
+                echo "    defect: run row $fixture names model '${md#model:}' with no sidecar assertion"; bad=1; fi ;;
+            *) echo "    defect: run row $fixture has unknown mode '$md'"; bad=1 ;;
+          esac
+        done
         case "$rule" in SCOPE-2|SCOPE-3)
           if ! grep -qE '(^|,)(interp|interp-exempt:[^,]+)(,|$)' <<<"$modes"; then
             echo "    defect: $rule run row $fixture lacks mode interp (or interp-exempt:<reason>)"; bad=1; fi ;;
@@ -182,7 +213,7 @@ check_run() {
         local id="${m#model:}" row ext
         row="$(awk -F'\t' -v id="$id" '$1==id' "$SIDECAR")"
         if [ -z "$row" ]; then why="$why no sidecar row '$id';"; continue; fi
-        ext="$($TO "$CC" "$f" --report extraction 2>&1)"
+        ext="$($TO "$CC" "$f" --report extraction 2>&1)" || { why="$why --report extraction failed;"; continue; }
         while IFS= read -r need; do
           [ -z "$need" ] && continue
           case "$need" in
@@ -190,7 +221,7 @@ check_run() {
             *) grep -qE -- "$need" <<<"$ext" || why="$why model:$id lacks /$need/;" ;;
           esac
         done < <(printf '%s\n' "$row" | cut -f3- | tr '\t' '\n') ;;
-      interp-exempt:*|json-exempt:*|-) : ;;
+      interp-exempt:*|json-exempt:*) : ;;
       *) why="$why unknown mode '$m';" ;;
     esac
   done
@@ -224,6 +255,22 @@ elif validate_manifest "$MANIFEST"; then
 else no "$MANIFEST is malformed (defects above)"; fi
 
 echo ""
+echo "=== 1b. the ledger names exactly the rules §15.5 assigns to each code ==="
+for c in "${!SPEC_RULES[@]}"; do
+  got="$(python3 - "$TMP/ledger.json" "$c" <<'PY'
+import json, sys
+p, code = sys.argv[1:]
+d = json.load(open(p))
+for r in d.get("codes", []):
+    if r.get("code") == code:
+        print(", ".join(sorted(t.strip() for t in r.get("rules", "").split(",") if t.strip())))
+PY
+)"
+  want="$(tr ',' '\n' <<<"${SPEC_RULES[$c]}" | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g')"
+  if [ "$got" = "$want" ]; then ok "$c: ledger rules = §15.5 ($want)"; else no "$c: ledger rules '$got', §15.5 says '$want'"; fi
+done
+
+echo ""
 echo "=== 2. every row holds (reject: code, rule tag, spec, rewrite, related span, ledger; run: every mode) ==="
 run_manifest_rows "$MANIFEST"
 
@@ -234,10 +281,20 @@ grep -v $'\tREF-7\t' "$MANIFEST" | awk -F'\t' '!($1=="REF-7" && $3 ~ /^run:/)' >
 validate_manifest "$TMP/n1.tsv" > /dev/null && no "N1: dropping REF-7's run rows went unnoticed" || ok "N1: a rule without a run row is refused"
 awk -F'\t' 'BEGIN{OFS="\t"} !done && $3 ~ /^reject:/ {$4="-"; done=1} {print}' "$MANIFEST" > "$TMP/n2.tsv"
 validate_manifest "$TMP/n2.tsv" > /dev/null && no "N2: a reject row without a pair went unnoticed" || ok "N2: a reject row without a pair is refused"
-{ cat "$MANIFEST"; printf 'SCOPE-1\ttests/programs/error_2i_no_such_fixture.con\treject:E0301:SCOPE-1@1\tp-missing\t-\n'; } > "$TMP/n3.tsv"
-validate_manifest "$TMP/n3.tsv" > /dev/null && no "N3: a missing fixture went unnoticed" || ok "N3: a missing fixture (and its unpaired reject row) is refused"
+{ cat "$MANIFEST"; printf 'SCOPE-1\ttests/programs/error_2i_no_such_fixture.con\treject:E0301:SCOPE-1@1\tscope1-block_let\t-\n'; } > "$TMP/n3.tsv"
+validate_manifest "$TMP/n3.tsv" > /dev/null && no "N3: a missing fixture went unnoticed" || ok "N3: a missing fixture (its pair exists) is refused"
+{ cat "$MANIFEST"; printf 'SCOPE-1\ttests/programs/error_2i_scope1_block_let.con\treject:E0301:SCOPE-1@1\tp-no-run-row\t-\n'; } > "$TMP/n3b.tsv"
+validate_manifest "$TMP/n3b.tsv" > /dev/null && no "N3b: a pair with no run row went unnoticed" || ok "N3b: a reject row whose pair has no run row is refused"
 awk -F'\t' 'BEGIN{OFS="\t"} $1=="SCOPE-2" && $3 ~ /^run:/ {$5="binary"} {print}' "$MANIFEST" > "$TMP/n4.tsv"
 validate_manifest "$TMP/n4.tsv" > /dev/null && no "N4: a SCOPE-2 run row without interp went unnoticed" || ok "N4: a semantic-guarantee run row without interp is refused"
+for bad in '-' 'interp' 'interp-exempt:x' 'binary,model:no-such-model' 'binary,typo'; do
+  { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:42\t-\t%s\n' "$bad"; } > "$TMP/n4b.tsv"
+  validate_manifest "$TMP/n4b.tsv" > /dev/null && no "N4b: run row modes '$bad' went unnoticed" || ok "N4b: run row modes '$bad' are refused (nothing or nothing real executes)"
+done
+{ cat "$MANIFEST"; printf 'REF-7\ttests/programs/error_105_ref_valued_if_arg.con\treject:E0238:REF-5@1\tref7\t-\n'; } > "$TMP/n4c.tsv"
+validate_manifest "$TMP/n4c.tsv" > /dev/null && no "N4c: a REF-5 fixture filed as REF-7 went unnoticed" || ok "N4c: a row whose tag names another rule than its rule column is refused"
+{ cat "$MANIFEST"; printf 'REF-5\ttests/programs/error_escape_return.con\treject:E0236:REF-5@1\tref5\t-\n'; } > "$TMP/n4d.tsv"
+validate_manifest "$TMP/n4d.tsv" > /dev/null && no "N4d: a tag §15.5 does not assign to the code went unnoticed" || ok "N4d: a tag §15.5 does not assign to the code is refused"
 # N5-N8: execution. Wrong expectations on real fixtures must fail the row checks.
 check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@1 - > /dev/null \
   && no "N5: a wrong rule tag was accepted" || ok "N5: a reject row expecting the wrong rule tag fails"

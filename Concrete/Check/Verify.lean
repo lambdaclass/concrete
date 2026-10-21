@@ -538,8 +538,10 @@ private partial def refBindStmts (env : List (String × Ty)) : List CStmt → Li
 /-- One statement: its violations (code, message) and the bindings visible after it. -/
 private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (String × String) × List (String × Ty)
   | .letDecl n _ ty v =>
+    -- `__destr_*` is Elab's struct-destructuring temporary (a `let S { .. } = s` through `&S`
+    -- binds it to the reference); it is not a source `let`, whose binders Check already saw.
     (refBindExpr env v ++
-      (if isRefTyPM ty then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
+      (if isRefTyPM ty && !n.startsWith "__destr_" then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
      (n, ty) :: env)
   | .assign n v =>
     (refBindExpr env v ++

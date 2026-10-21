@@ -1,0 +1,24 @@
+// Exit 2i REF-6@1: a nested destructuring `let ... else` through a borrowed scrutinee binds a
+// reference by `let` (before exit 2i's review a nested destructure was never desugared: E0201).
+// Rejected: E0302.
+struct P { n: Int }
+
+fn get(o: &Option<P>) -> Int {
+    if true {
+        let Option::Some { value } = o else {
+            return 0;
+        };
+        return value.n;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    let o: Option<P> = Option::Some { value: P { n: 42 } };
+    let out: Int = get(&o);
+    match o {
+        Option::Some { value: inner } => { let P { n } = inner; },
+        Option::None => {}
+    }
+    return out;
+}

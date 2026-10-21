@@ -1,0 +1,20 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): a borrow-block reference may reuse the name of a
+// loop body's local, a sibling scope (the old E0214 test looked the name up in the ownership
+// environment, which keeps a finished loop body's locals; exit 2i review). Run 42, binary = --interp.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let n: Int = 42;
+    let mut k: Int = 0;
+    while k < 2 {
+        let r: Int = 0;
+        k = k + 1 + r;
+    }
+    let mut out: Int = 0;
+    borrow n as r in R {
+        out = read(r);
+    }
+    return out;
+}

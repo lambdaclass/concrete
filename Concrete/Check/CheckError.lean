@@ -270,6 +270,10 @@ inductive CheckError where
   -- Exit 2i REF-6@1 (b): no reference binding (parameter, borrow-block binder, arm binder)
   -- is the target of an assignment.
   | assignsReferenceBinding (name : String) (tyName : String)
+  -- REF-6@1 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
+  -- erased before monomorphization, where a runtime `let` at `T := &Int` is re-checked, so it is
+  -- refused here (exit 2i review).
+  | ghostLetAtTypeParam (name : String) (tyName : String)
   -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
   -- function, function type or reference instantiation would return a reference. The
   -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
@@ -411,6 +415,8 @@ def CheckError.message : CheckError → String
   | .assignsReferenceBinding name ty =>
     s!"a reference binding is never assigned: '{name}' has type '{ty}'"
   | .returnsReference msg _ => msg
+  | .ghostLetAtTypeParam name ty =>
+    s!"a `ghost let` of a type-parameter type could hold a reference once instantiated: '{name}' has type '{ty}' (a ghost binding is erased before monomorphization re-checks it)"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
@@ -564,6 +570,7 @@ def CheckError.code : CheckError → String
   | .shadowsVisibleBinding _ _ => "E0301"
   | .letBindsReference _ _ => "E0302"
   | .assignsReferenceBinding _ _ => "E0303"
+  | .ghostLetAtTypeParam _ _ => "E0302"
   | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
@@ -578,7 +585,7 @@ def CheckError.rule : CheckError → Option String
   | .shadowsVisibleBinding _ _ => some "SCOPE-1@1"
   | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
   | .shadowsLiveLinear _ => some "SCOPE-1@1"
-  | .letBindsReference _ _ | .assignsReferenceBinding _ _ => some "REF-6@1"
+  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"
   | .referenceEscapesBorrowBlock _ => some "REF-6@1"
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"

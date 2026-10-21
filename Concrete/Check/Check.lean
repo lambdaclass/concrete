@@ -2032,6 +2032,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | .ref _ | .refMut _ =>
       throwCheck (.letBindsReference name (tyToString finalTy)) (some stmt.getSpan)
     | _ => pure ()
+    if _isGhost && env.currentTypeParams.any (fun p => tyParamOccursIn p finalTy) then
+      throwCheck (.ghostLetAtTypeParam name (tyToString finalTy)) (some stmt.getSpan)
     -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
     match value with
     | .ident _ vn =>
@@ -2422,17 +2424,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           | none => pure ()
         | _ => pure ()
     | _ => pure ()
-  | .borrowIn _ var ref region isMut body =>
+  | .borrowIn _ var ref _region isMut body =>
     -- Check that var exists
     match ← lookupVarInfo var with
     | none => throwCheck (.undeclaredVariable var) (some stmt.getSpan)
     | some varInfo =>
-      -- Check no shadowing of ref and region names
+      -- A ref or region name reusing a VISIBLE binding is SCOPE-1@1 (E0301), refused by the
+      -- lexical walk before the body is checked. The old E0214 / E0215 test here looked the name
+      -- up in the ownership environment, which keeps a finished loop body's locals, so it refused
+      -- legal sibling reuse (`while .. { let r = .. } borrow n as r in R { .. }`; exit 2i review).
       let env ← getEnv
-      if (env.vars.lookup ref).isSome then
-        throwCheck (.borrowRefShadows ref) (some stmt.getSpan)
-      if (env.vars.lookup region).isSome then
-        throwCheck (.borrowRegionShadows region) (some stmt.getSpan)
       -- Check if variable is consumed (moved)
       if !varInfo.isCopy && varInfo.state == .consumed then
         throwCheck (.cannotBorrowMoved var) (some stmt.getSpan)

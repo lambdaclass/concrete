@@ -756,26 +756,78 @@ end
 def collectFreeVars (stmts : List Stmt) (paramNames : List String) : List String :=
   (collectFreeVarsStmts stmts paramNames).eraseDups
 
+mutual
 /-- Desugar destructuring let statements into match/field-access.
-    Must be applied before Check and Elab, since both pattern-match on Stmt. -/
+    Must be applied before Check and Elab, since both pattern-match on Stmt.
+    Recursive (exit 2i review): a destructuring `let` inside any nested block — an `if` or loop
+    body, a borrow block, a match arm, an if-expression, a `let` initializer, an else body — is
+    desugared too; before, only a function's top-level statements were, so a nested one reached
+    Check unchanged (skipped; its binders undeclared, E0201) and Elab as an internal error. -/
 partial def desugarStmts : List Stmt → List Stmt
   | [] => []
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
-    let wildcardArm := MatchArm.varArm sp "_" none elseBody
-    [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm]) false]
+    let wildcardArm := MatchArm.varArm sp "_" none (desugarStmts elseBody)
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm, wildcardArm]) false]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
-    [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm]) false]
   -- NOTE: `letStructDestructure` is intentionally NOT desugared here. Desugaring it
   -- to `let __destr = value; let a = __destr.a; …` is unsound for a LINEAR struct —
   -- field access does not move, so `__destr` is left unconsumed (E0208) and the
   -- fields would alias it. Instead it is linearity-checked natively in Check
   -- (consume the source, move each field out) and expanded to the temp+field form
   -- only at Elab time, past the linear checker. See docs/language/OWNERSHIP_MODEL.md.
-  | s :: rest => s :: desugarStmts rest
+  | s :: rest => desugarStmt s :: desugarStmts rest
+
+/-- One non-destructuring statement, with its nested blocks and expressions desugared. -/
+partial def desugarStmt : Stmt → Stmt
+  | .letDecl sp n m t v g => .letDecl sp n m t (desugarExpr v) g
+  | .assign sp n v => .assign sp n (desugarExpr v)
+  | .return_ sp v => .return_ sp (v.map desugarExpr)
+  | .expr sp e isV => .expr sp (desugarExpr e) isV
+  | .ifElse sp c t e => .ifElse sp (desugarExpr c) (desugarStmts t) (e.map desugarStmts)
+  | .while_ sp c b l => .while_ sp (desugarExpr c) (desugarStmts b) l
+  | .forLoop sp i c st b l =>
+    .forLoop sp (i.map desugarStmt) (desugarExpr c) (st.map desugarStmt) (desugarStmts b) l
+  | .fieldAssign sp o f v => .fieldAssign sp (desugarExpr o) f (desugarExpr v)
+  | .derefAssign sp t v => .derefAssign sp (desugarExpr t) (desugarExpr v)
+  | .arrayIndexAssign sp a i v => .arrayIndexAssign sp (desugarExpr a) (desugarExpr i) (desugarExpr v)
+  | .break_ sp v l => .break_ sp (v.map desugarExpr) l
+  | .defer sp b => .defer sp (desugarExpr b)
+  | .borrowIn sp v r rg m b => .borrowIn sp v r rg m (desugarStmts b)
+  | .letStructDestructure sp sn bs v => .letStructDestructure sp sn bs (desugarExpr v)
+  | s => s
+
+partial def desugarExpr : Expr → Expr
+  | .binOp sp op l r => .binOp sp op (desugarExpr l) (desugarExpr r)
+  | .unaryOp sp op x => .unaryOp sp op (desugarExpr x)
+  | .call sp f ta args => .call sp f ta (args.map desugarExpr)
+  | .paren sp x => .paren sp (desugarExpr x)
+  | .structLit sp n ta fs b => .structLit sp n ta (fs.map fun (k, e) => (k, desugarExpr e)) (b.map desugarExpr)
+  | .fieldAccess sp o f => .fieldAccess sp (desugarExpr o) f
+  | .enumLit sp en v ta fs => .enumLit sp en v ta (fs.map fun (k, e) => (k, desugarExpr e))
+  | .match_ sp scr arms => .match_ sp (desugarExpr scr) (arms.map desugarArm)
+  | .borrow sp x => .borrow sp (desugarExpr x)
+  | .borrowMut sp x => .borrowMut sp (desugarExpr x)
+  | .deref sp x => .deref sp (desugarExpr x)
+  | .arrayLit sp es => .arrayLit sp (es.map desugarExpr)
+  | .arrayIndex sp a i => .arrayIndex sp (desugarExpr a) (desugarExpr i)
+  | .cast sp x t => .cast sp (desugarExpr x) t
+  | .methodCall sp o m ta args => .methodCall sp (desugarExpr o) m ta (args.map desugarExpr)
+  | .staticMethodCall sp tn m ta args => .staticMethodCall sp tn m ta (args.map desugarExpr)
+  | .allocCall sp i a => .allocCall sp (desugarExpr i) (desugarExpr a)
+  | .ifExpr sp c t e => .ifExpr sp (desugarExpr c) (desugarStmts t) (desugarStmts e)
+  | e => e
+
+partial def desugarArm : MatchArm → MatchArm
+  | .mk sp en v bs g b => .mk sp en v bs (g.map desugarExpr) (desugarStmts b)
+  | .litArm sp v g b => .litArm sp v (g.map desugarExpr) (desugarStmts b)
+  | .varArm sp n g b => .varArm sp n (g.map desugarExpr) (desugarStmts b)
+  | .rangeArm sp lo hi inc g b => .rangeArm sp lo hi inc (g.map desugarExpr) (desugarStmts b)
+end
 
 /-- Apply desugaring to all function bodies in a module. -/
 partial def desugarModule (m : Module) : Module :=

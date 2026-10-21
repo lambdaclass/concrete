@@ -145,10 +145,12 @@ scrutinee. Nested patterns rename a binder with **`Variant { value: inner }`** (
 reference/binding diagnostic names its rule and version (`rule: REF-6@1`, `spec: ...§15`) and gives
 the mechanical rewrite in `next:`; the `--report diagnostic-codes` ledger names each code's rules;
 the front-end "may not return a reference" rejections now carry E0236. The acceptance manifest
-`tests/rules/exit_2i.tsv` (129 rows) is checked by `scripts/tests/check_rules_2i.sh`. Migration:
+`tests/rules/exit_2i.tsv` (134 rows) is checked by `scripts/tests/check_rules_2i.sh`. Migration:
 std 16 binders, examples 17 sites (one a `let`-bound reference), tests about 70 fixtures (renamed,
 rewritten, or re-expecting E0301 / E0302 / E0303). Found on the way: a shared borrow-block binder over
-a `Heap` passed to `&Heap<T>` reads through the slot (bug 126's third form).
+a `Heap` passed to `&Heap<T>` reads through the slot (bug 126's third form), and a destructuring
+`let` was desugared only at a function's top level (a nested one, or one in a method, had
+undeclared binders); it is desugared everywhere now.
 
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 

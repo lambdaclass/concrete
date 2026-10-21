@@ -74,6 +74,10 @@ REF-6	tests/programs/error_131_param_repointed_param.con	reject:E0303:REF-6@1	re
 REF-6	tests/programs/regress_2i_ref6_arm_binder_through_ref.con	run:42	ref6-use	binary,interp
 REF-6	tests/programs/error_2i_ref6_let_else_through_ref.con	reject:E0302:REF-6@1	ref6-let-else	-
 REF-6	tests/programs/regress_2i_ref6_method_let_else.con	run:42	ref6-let-else	binary,interp
+REF-6	tests/programs/error_2i_ref6_nested_let_else_through_ref.con	reject:E0302:REF-6@1	ref6-let-else	-
+REF-6	tests/programs/regress_2i_nested_let_destructure.con	run:42	ref6-let-else	binary,interp
+REF-6	tests/programs/error_2i_ref6_ghost_let_at_type_param.con	reject:E0302:REF-6@1	ref6-generic	-
+REF-6	tests/programs/regress_2i_ref6_struct_destructure_through_ref.con	run:42	-	binary,interp
 REF-6	tests/programs/error_2i_ref6_mut_param_repointed.con	reject:E0303:REF-6@1	ref6-write	-
 REF-6	tests/programs/regress_2i_ref6_write_through_param.con	run:42	ref6-write	binary,interp
 REF-7	tests/programs/error_091_norm_ref_write_through_ref.con	reject:E0238:REF-7@1	ref7	-
@@ -130,6 +134,7 @@ SCOPE-2	tests/programs/regress_2i_scope2_sibling_arms.con	run:42	-	binary,interp
 SCOPE-2	tests/programs/regress_2i_scope2_consecutive_loops.con	run:42	-	binary,interp
 SCOPE-2	tests/programs/regress_2i_scope2_loop_body_let.con	run:42	-	binary,interp
 SCOPE-2	tests/programs/regress_2i_scope2_assign_rebind.con	run:42	-	binary,interp
+SCOPE-2	tests/programs/regress_2i_scope2_borrow_after_loop.con	run:42	-	binary,interp
 SCOPE-2	tests/programs/regress_087_sibling_promoted.con	run:42	-	binary,interp
 SCOPE-2	tests/programs/regress_087_unpromoted_sibling.con	run:42	-	binary,interp
 SCOPE-3	tests/programs/regress_2i_scope1_087_renamed.con	run:42	scope3-087	binary,interp,model:087-renamed
