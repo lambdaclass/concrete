@@ -383,7 +383,7 @@ metadata = [
 libs = ["nosuchlib"]
 ]
 EOF
-refused "$TMP/inarray" inarray "'native' outside a string inside a value" "a [native] section hidden inside a balanced multi-line array is refused"
+refused "$TMP/inarray" inarray "unexpected text in or after a value" "a [native] section hidden inside a balanced multi-line array is refused"
 # Its string-quoted variant: the header is a valid string element, but the key line after it is an
 # assignment inside an array, which no TOML array holds.
 mkapp "$TMP/inarrayq" ''
@@ -396,7 +396,7 @@ metadata = [
 libs = ["lost"]
 ]
 EOF
-refused "$TMP/inarrayq" inarrayq "an assignment inside an array value" "a quoted [\"native\"] plus key hidden inside a multi-line array is refused"
+refused "$TMP/inarrayq" inarrayq "unexpected text in or after a value" "a quoted [\"native\"] plus key hidden inside a multi-line array is refused"
 # Structure after a multi-line string closes, on the closing line, is refused rather than skipped.
 mkapp "$TMP/afterclose" ''
 cat > "$TMP/afterclose/Concrete.toml" <<'EOF'
@@ -418,6 +418,32 @@ refused "$TMP/afterarr" afterarr "unexpected text in or after a value" 'a ["nati
 mkapp "$TMP/afterinl" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nmeta = { a = [\n1] } ["native"]\nlibs = ["lost"]\n' > "$TMP/afterinl/Concrete.toml"
 refused "$TMP/afterinl" afterinl "unexpected text in or after a value" 'a ["native"] header after an inline table closes is refused'
+# A header spanning lines or holding a comment, and a header hidden in a multi-line inline table.
+mkapp "$TMP/hdrlines" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n[\nnative\n]\nlibs = ["m"]\n' > "$TMP/hdrlines/Concrete.toml"
+refused "$TMP/hdrlines" hdrlines "a table header spanning lines" "a header split across lines is refused"
+mkapp "$TMP/hdrcomment" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n[ # comment\nnative]\nlibs = ["m"]\n' > "$TMP/hdrcomment/Concrete.toml"
+refused "$TMP/hdrcomment" hdrcomment "a table header spanning lines or holding a comment" "a header holding a comment is refused"
+mkapp "$TMP/inltable" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nmetadata = {\n["native"]\nlibs = ["lost"]\n}\n' > "$TMP/inltable/Concrete.toml"
+refused "$TMP/inltable" inltable "unexpected text in or after a value" "a quoted header hidden in a multi-line inline table is refused"
+# Control: ordinary values of every shape the reader validates still build.
+mkapp "$TMP/shapes" '
+[native]
+libs = ["nladd"]
+lib-dirs = ["lib"]'
+python3 - "$TMP/shapes/Concrete.toml" <<'PYEOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+s = s.replace('version = "0.1.0"\n', 'version = "0.1.0"\nmeta = { a = 1, "b c" = [1, 2], d = { e = "f" } }\nlist = [\n  { x = 1 },  # comment\n  { y = [2, 3] },\n]\nempty = []\nwhen = 1979-05-27 07:32:00Z\nflag = true\n', 1)
+open(p, 'w').write(s)
+PYEOF
+mkdir -p "$TMP/shapes/lib" && cp "$TMP/static/libnladd.a" "$TMP/shapes/lib/"
+build_run "$TMP/shapes" shapes
+[ "$(cat "$TMP/shapes.brc")" = "0" ] && [ "$(cat "$TMP/shapes.rrc")" = "42" ] \
+  && ok "CONTROL: inline tables, arrays of tables, empty arrays, dates and booleans are read and the manifest builds" \
+  || no "CONTROL: value-shapes manifest: brc=$(cat "$TMP/shapes.brc"): $(head -3 "$TMP/shapes.build" | tr '\n' ' ')"
 # Text trailing a header or a complete value is not TOML; skipping it would hide what it spells.
 mkapp "$TMP/trailhdr" ''
 printf '[package] [native]\nlibs = ["lost"]\nname = "nlapp"\n' > "$TMP/trailhdr/Concrete.toml"

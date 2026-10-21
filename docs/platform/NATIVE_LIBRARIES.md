@@ -68,8 +68,10 @@ The manifest is read as STATEMENTS, not lines: each is one header or one `key = 
 many lines its strings, arrays and inline tables span, with strings, escapes, comments and
 three-to-five-quote closers resolved. Every statement must have exactly one such shape with nothing
 after it, so text quoted inside a string declares and refuses nothing, and a header or key hidden
-after a closing delimiter, inside an array, or after another header is refused. Unterminated
-strings and values and mismatched brackets are refused.
+after a closing delimiter, inside an array, or after another header is refused. Values are validated
+recursively: array elements are values, inline-table entries are `key = value` on one line (TOML
+1.0), a scalar holds no brackets, strings or `=`. A header is one line with no comment inside its
+brackets. Unterminated strings and values and mismatched brackets are refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 

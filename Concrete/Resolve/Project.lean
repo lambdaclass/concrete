@@ -352,7 +352,7 @@ private partial def tomlStatements (cs : List Char) (raw bare stack : List Char)
     if !stack.isEmpty then .error "unterminated array or inline table" else .ok emit
   | '\n' :: r =>
     if stack.isEmpty then tomlStatements r [] [] [] emit
-    else tomlStatements r ('\n' :: raw) (' ' :: bare) stack acc
+    else tomlStatements r ('\n' :: raw) ('\n' :: bare) stack acc
   | '#' :: r =>
     let com := r.takeWhile (· != '\n')
     tomlStatements (r.drop com.length) ((('#' :: com).reverse) ++ raw) bare stack acc
@@ -401,6 +401,55 @@ private partial def tomlCloseGroup (cs : List Char) (stack : List Char) : Option
     | '[' :: r => tomlCloseGroup r (']' :: stack)
     | '{' :: r => tomlCloseGroup r ('}' :: stack)
     | c :: r => if c == top then tomlCloseGroup r below else tomlCloseGroup r stack
+
+/-- Split bare text at `sep` where it is outside every bracket group. -/
+private partial def tomlSplitTop (cs : List Char) (sep : Char) (depth : Nat := 0)
+    (cur : List Char := []) (acc : List (List Char) := []) : List (List Char) :=
+  match cs with
+  | [] => (acc ++ [cur.reverse])
+  | c :: r =>
+    if c == '[' || c == '{' then tomlSplitTop r sep (depth + 1) (c :: cur) acc
+    else if c == ']' || c == '}' then tomlSplitTop r sep (depth - 1) (c :: cur) acc
+    else if c == sep && depth == 0 then tomlSplitTop r sep depth [] (acc ++ [cur.reverse])
+    else tomlSplitTop r sep depth (c :: cur) acc
+
+private def tomlWsNl (c : Char) : Bool := tomlWs c || c == '\n'
+
+/-- Whether bare text is exactly one TOML VALUE, recursively: one string, one scalar (no brackets,
+    braces, strings or `=`), an array whose comma-separated elements are values (a trailing comma
+    allowed), or a single-line inline table whose comma-separated entries are `key = value` with a
+    plain or quoted key. Anything else — a header or an assignment inside an array, text after a
+    value, a multi-line inline table — is not a value. -/
+private partial def tomlIsValue (v : List Char) : Bool :=
+  let v := (v.dropWhile tomlWsNl).reverse.dropWhile tomlWsNl |>.reverse
+  match v with
+  | [] => false
+  | c :: r =>
+    if c == tomlStrMark then r.isEmpty
+    else if c == '[' then
+      match r.reverse with
+      | ']' :: innerRev =>
+        let elems := tomlSplitTop innerRev.reverse ','
+        -- A trailing comma leaves one empty last element; an empty array is one empty element.
+        let elems := match elems.reverse with
+          | last :: before => if last.all tomlWsNl then before.reverse else elems
+          | [] => elems
+        elems.all tomlIsValue
+      | _ => false
+    else if c == '{' then
+      match r.reverse with
+      | '}' :: innerRev =>
+        let inner := innerRev.reverse
+        if inner.contains '\n' then false
+        else if inner.all tomlWs then true
+        else (tomlSplitTop inner ',').all fun entry =>
+          match tomlSplitTop entry '=' with
+          | key :: valParts@(_ :: _) =>
+            !(key.all tomlWs) && !key.any (fun x => x == '[' || x == '{' || x == ']' || x == '}')
+              && tomlIsValue ((valParts.intersperse ['=']).flatten)
+          | _ => false
+      | _ => false
+    else !(v.any fun x => x == '[' || x == '{' || x == ']' || x == '}' || x == tomlStrMark || x == '=' || x == '\n')
 
 /-- A value's bare text is exactly one value with nothing after it: one string, one closed bracket
     group, or one scalar with no brackets or strings in it. -/
@@ -472,6 +521,11 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
     if isHeader then
       if !tomlHeaderShapeOk bare then
         throw s!"unexpected text in or after a table header: '{t}'"
+      -- A header is one line with nothing inside it but its name: a newline or a comment inside
+      -- the brackets would make the raw name differ from the one TOML reads.
+      let rawHeader := String.ofList ((t.toList.takeWhile (· != ']')))
+      if t.contains '\n' || rawHeader.contains '#' then
+        throw s!"a table header spanning lines or holding a comment: '{t}'"
       atTop := false
       let header := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile (· != ']'))
       if header.contains '\\' then
@@ -491,7 +545,9 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
       let valueBare ← match bare.splitOn '=' with
         | _ :: valParts@(_ :: _) => pure ((valParts.intersperse ['=']).flatten)
         | _ => throw s!"a statement that is neither a table header nor a key = value: '{t}'"
-      if !tomlValueShapeOk valueBare then
+      -- One VALUE and nothing after it (tomlIsValue validates arrays and inline tables entry by
+      -- entry): a header or key hidden inside or after a value is refused here.
+      if !tomlValueShapeOk valueBare || !tomlIsValue valueBare then
         throw s!"unexpected text in or after a value: '{t}'"
       -- No TOML value is the bare word `native`; one inside a value is malformed, or an attempt to
       -- hide a native section inside one, and is refused rather than skipped.
