@@ -10,8 +10,8 @@ whether `a + b` wraps. Arithmetic semantics are fixed and explicit (checked
 
 Stage 1 makes the active profile and its bundle VISIBLE (`--profile`,
 `[profile]` in Concrete.toml, `--report profile`). It has NO codegen or semantic
-effect: in particular the report states honestly that ordinary arithmetic still
-lowers to silent wrapping until ROADMAP #10 Stage 2.
+effect. Since ROADMAP #10 Stage 2.3 ordinary arithmetic is lowered as checked
+(trapping) in every profile, and the report says so.
 -/
 namespace Concrete
 
@@ -44,10 +44,11 @@ def summary : BuildProfile → String
   | proof          => "proof admission floor: eligible functions are expected to carry proofs"
   | highIntegrity => "strictest admission and reporting"
 
-/-- Runtime-check enforcement strategy (Stage 1 reports intent; no codegen yet). -/
+/-- Runtime-check enforcement strategy. Codegen is profile-independent: every profile emits the
+    same checks (arithmetic, shifts, float-to-integer range, array bounds). -/
 def runtimeChecks : BuildProfile → String
-  | release => "enabled; a proof may elide a redundant check, and any further elision must be explicit + reported"
-  | _       => "enabled (bounds via checked APIs; div/shift/overflow trapping arrives in Stage 2/3)"
+  | release => "enabled: the same checks as every profile (no check is elided today; a future proof-based elision must be explicit + reported)"
+  | _       => "enabled: integer overflow, zero divisors, invalid shift counts, out-of-range float-to-integer conversions and array bounds trap (abort)"
 
 def diagnostics : BuildProfile → String
   | release => "terse (machine-oriented)"

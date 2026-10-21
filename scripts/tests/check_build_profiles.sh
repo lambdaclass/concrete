@@ -93,7 +93,8 @@ fi
 if grep -q "checked semantics" "$TMP/o7" \
    && grep -q "Lowered as checked (abort on trap) in every profile" "$TMP/o7" \
    && ! grep -qi "LOWERING GAP" "$TMP/o7" \
-   && ! grep -qi "lowers to silent" "$TMP/o7"; then
+   && ! grep -qi "lowers to silent" "$TMP/o7" \
+   && ! grep -qi "arrives in Stage" "$TMP/o7"; then
   ok "report states checked semantics + checked lowering in every profile (no stale wrap claim)"
 else no "report missing the checked-lowering statement, or still claims silent wrapping" "$TMP/o7"; fi
 
