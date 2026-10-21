@@ -383,7 +383,7 @@ metadata = [
 libs = ["nosuchlib"]
 ]
 EOF
-refused "$TMP/inarray" inarray "'native' outside a string inside a multi-line value" "a [native] section hidden inside a balanced multi-line array is refused"
+refused "$TMP/inarray" inarray "'native' outside a string inside a value" "a [native] section hidden inside a balanced multi-line array is refused"
 # Its string-quoted variant: the header is a valid string element, but the key line after it is an
 # assignment inside an array, which no TOML array holds.
 mkapp "$TMP/inarrayq" ''
@@ -396,7 +396,7 @@ metadata = [
 libs = ["lost"]
 ]
 EOF
-refused "$TMP/inarrayq" inarrayq "an assignment inside a multi-line array" "a quoted [\"native\"] plus key hidden inside a multi-line array is refused"
+refused "$TMP/inarrayq" inarrayq "an assignment inside an array value" "a quoted [\"native\"] plus key hidden inside a multi-line array is refused"
 # Structure after a multi-line string closes, on the closing line, is refused rather than skipped.
 mkapp "$TMP/afterclose" ''
 cat > "$TMP/afterclose/Concrete.toml" <<'EOF'
@@ -407,14 +407,24 @@ description = """text
 """ [native]
 libs = ["lost"]
 EOF
-refused "$TMP/afterclose" afterclose "unexpected text after a multi-line string closes" "a [native] header after a multi-line string's closing delimiter is refused"
+refused "$TMP/afterclose" afterclose "unexpected text in or after a value" "a [native] header after a multi-line string's closing delimiter is refused"
+# The same with the string closing on its OPENING line, and after a multi-line array closes.
+mkapp "$TMP/sameline" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\ndescription = """text""" [native]\nlibs = ["lost"]\n' > "$TMP/sameline/Concrete.toml"
+refused "$TMP/sameline" sameline "unexpected text in or after a value" "a [native] header after a same-line triple-quoted string is refused"
+mkapp "$TMP/afterarr" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nmetadata = [\n] ["native"]\nlibs = ["lost"]\n' > "$TMP/afterarr/Concrete.toml"
+refused "$TMP/afterarr" afterarr "unexpected text in or after a value" 'a ["native"] header after a multi-line array closes is refused'
+mkapp "$TMP/afterinl" ''
+printf '[package]\nname = "nlapp"\nversion = "0.1.0"\nmeta = { a = [\n1] } ["native"]\nlibs = ["lost"]\n' > "$TMP/afterinl/Concrete.toml"
+refused "$TMP/afterinl" afterinl "unexpected text in or after a value" 'a ["native"] header after an inline table closes is refused'
 # Text trailing a header or a complete value is not TOML; skipping it would hide what it spells.
 mkapp "$TMP/trailhdr" ''
 printf '[package] [native]\nlibs = ["lost"]\nname = "nlapp"\n' > "$TMP/trailhdr/Concrete.toml"
 refused "$TMP/trailhdr" trailhdr "unexpected text in or after a table header" "a [native] header trailing another header is refused"
 mkapp "$TMP/trailval" ''
 printf '[package]\nname = "nlapp" [native]\nlibs = ["lost"]\n' > "$TMP/trailval/Concrete.toml"
-refused "$TMP/trailval" trailval "unexpected text after a value" "a [native] header trailing a value is refused"
+refused "$TMP/trailval" trailval "unexpected text in or after a value" "a [native] header trailing a value is refused"
 # Keys are matched exactly: "lib s" is not libs.
 bad spacedkey '
 [native]

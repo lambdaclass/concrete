@@ -302,102 +302,85 @@ partial def parseNativeStrArray (s : String) : Except String (List String) :=
 private def normTomlName (s : String) : String :=
   String.ofList (s.toList.filter fun c => c != '"' && c != '\'' && c != ' ' && c != '\t')
 
-/-- The `[native]` declarations of one manifest, in order, or the reason they are refused.
-
-    Only the plain spelling is read: one `[native]` header, then `key = ["...", ...]` lines. Every
-    other TOML spelling that would name the same table — a quoted header (`["native"]`), a subtable
-    or array table (`[native.x]`, `[[native]]`), a top-level `native = {...}` inline table or
-    dotted key (`native.libs = [...]`) — is REFUSED rather than ignored, as are a second `[native]`
-    section and a repeated key: this line reader is not a full TOML parser, so anything it cannot
-    read exactly must stop the build instead of silently declaring nothing. For the same reason a
-    table header or top-level key written with a backslash escape (`["\u006eative"]`) is refused:
-    escapes are not decoded, so such a name cannot be shown not to be `native`.
-
-    Lines inside a multi-line string (`"""` or `'''`) are text, not structure, and are skipped, so
-    a description that mentions `[native]` declares nothing and refuses nothing. -/
-private partial def tomlScanBasic (cs : List Char) : Except String (List Char) :=
-  match cs with
-  | '\\' :: _ :: r => tomlScanBasic r
-  | '"' :: r => .ok r
-  | _ :: r => tomlScanBasic r
-  | [] => .error "unterminated string"
-
-private partial def tomlScanLiteral (cs : List Char) : Except String (List Char) :=
-  match cs with
-  | '\'' :: r => .ok r
-  | _ :: r => tomlScanLiteral r
-  | [] => .error "unterminated string"
-
-/-- The scan state at the end of one line, given the state at its start: `(str, depth)` where `str`
-    is 0 outside any string, 1 inside a multi-line basic string, 2 inside a multi-line literal
-    string, and `depth` is the stack of closers expected for the bracket/brace nesting of the VALUE being read (a multi-line array
-    or inline table). Quote-, escape- and comment-aware, so a delimiter or bracket inside a plain
-    string or a comment changes nothing. A multi-line string may end with up to two extra quotes
-    (`""""`, `"""""`), which belong to its content. Brackets of a table header balance on its line. -/
-private partial def tomlScanLine (st : Nat × List Char) (cs : List Char) : Except String (Nat × List Char) :=
-  let (str, d) := st
-  match str, cs with
-  | 1, '\\' :: _ :: r => tomlScanLine (1, d) r
-  | 1, '"' :: '"' :: '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
-  | 1, '"' :: '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
-  | 1, '"' :: '"' :: '"' :: r => tomlScanLine (0, d) r
-  | 1, _ :: r => tomlScanLine (1, d) r
-  | 2, '\'' :: '\'' :: '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
-  | 2, '\'' :: '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
-  | 2, '\'' :: '\'' :: '\'' :: r => tomlScanLine (0, d) r
-  | 2, _ :: r => tomlScanLine (2, d) r
-  | 0, '#' :: _ => .ok (0, d)
-  | 0, '"' :: '"' :: '"' :: r => tomlScanLine (1, d) r
-  | 0, '\'' :: '\'' :: '\'' :: r => tomlScanLine (2, d) r
-  | 0, '"' :: r => do tomlScanLine (0, d) (← tomlScanBasic r)
-  | 0, '\'' :: r => do tomlScanLine (0, d) (← tomlScanLiteral r)
-  | 0, '[' :: r => tomlScanLine (0, ']' :: d) r
-  | 0, '{' :: r => tomlScanLine (0, '}' :: d) r
-  | 0, c :: r =>
-    if c == ']' || c == '}' then
-      match d with
-      | close :: d' => if close == c then tomlScanLine (0, d') r
-                       else .error s!"mismatched '{c}' (expected '{close}')"
-      | [] => .error s!"unbalanced '{c}'"
-    else tomlScanLine (0, d) r
-  | _, _ => .ok (str, d)
-
-/-- Stands for one complete single-line string in `tomlBareText`'s output. -/
+/-- Stands for one complete string (single- or multi-line) in a statement's bare text. -/
 private def tomlStrMark : Char := Char.ofNat 1
 
-/-- The text of a line outside strings and comments, each string replaced by `tomlStrMark` (a
-    multi-line string opened on the line drops the rest of it). -/
-private partial def tomlBareText (cs : List Char) (acc : List Char := []) : List Char :=
+private def tomlWs (c : Char) : Bool := c == ' ' || c == '\t' || c == '\r'
+
+/-- The rest of a single-line basic string after its opening quote: `(consumed, rest)`, the consumed
+    part ending with the closing quote. A newline or end of input first is an unterminated string. -/
+private partial def tomlScanBasic1 (cs acc : List Char) : Except String (List Char × List Char) :=
   match cs with
-  | [] => acc.reverse
-  | '#' :: _ => acc.reverse
-  | '"' :: '"' :: '"' :: _ => acc.reverse
-  | '\'' :: '\'' :: '\'' :: _ => acc.reverse
-  | '"' :: r => match tomlScanBasic r with
-    | .ok r' => tomlBareText r' (tomlStrMark :: acc)
-    | .error _ => acc.reverse
-  | '\'' :: r => match tomlScanLiteral r with
-    | .ok r' => tomlBareText r' (tomlStrMark :: acc)
-    | .error _ => acc.reverse
-  | c :: r => tomlBareText r (c :: acc)
+  | '\\' :: c :: r => if c == '\n' then .error "unterminated string" else tomlScanBasic1 r (c :: '\\' :: acc)
+  | '"' :: r => .ok (('"' :: acc).reverse, r)
+  | '\n' :: _ => .error "unterminated string"
+  | [] => .error "unterminated string"
+  | c :: r => tomlScanBasic1 r (c :: acc)
 
-/-- The rest of a line after the multi-line string it began inside closes (`kind` 1 = basic,
-    2 = literal), or `none` if the string does not close on this line. -/
-private partial def tomlAfterClose (kind : Nat) (cs : List Char) : Option (List Char) :=
-  match kind, cs with
-  | 1, '\\' :: _ :: r => tomlAfterClose 1 r
-  | 1, '"' :: '"' :: '"' :: '"' :: '"' :: r => some r
-  | 1, '"' :: '"' :: '"' :: '"' :: r => some r
-  | 1, '"' :: '"' :: '"' :: r => some r
-  | 2, '\'' :: '\'' :: '\'' :: '\'' :: '\'' :: r => some r
-  | 2, '\'' :: '\'' :: '\'' :: '\'' :: r => some r
-  | 2, '\'' :: '\'' :: '\'' :: r => some r
-  | k, _ :: r => tomlAfterClose k r
-  | _, [] => none
+private partial def tomlScanLiteral1 (cs acc : List Char) : Except String (List Char × List Char) :=
+  match cs with
+  | '\'' :: r => .ok (('\'' :: acc).reverse, r)
+  | '\n' :: _ => .error "unterminated string"
+  | [] => .error "unterminated string"
+  | c :: r => tomlScanLiteral1 r (c :: acc)
 
-/-- Whether bare text (strings and comments removed) continuing a value assigns a key at ARRAY
-    level: an `=` whose innermost open delimiter is not an inline table's `{`. Arrays hold values,
-    never assignments, so such a line is malformed. -/
+/-- The rest of a multi-line string after its opening delimiter (`q` is `"` or `'`), through its
+    closing run of three to five quotes; escapes are skipped only in basic strings. -/
+private partial def tomlScanMulti (q : Char) (cs acc : List Char) : Except String (List Char × List Char) :=
+  match cs with
+  | '\\' :: c :: r => if q == '"' then tomlScanMulti q r (c :: '\\' :: acc) else tomlScanMulti q (c :: r) ('\\' :: acc)
+  | a :: b :: c :: r =>
+    if a == q && b == q && c == q then
+      -- A closing run may carry up to two more quotes, which belong to the content.
+      let extra := (r.takeWhile (· == q)).take 2
+      .ok ((extra ++ [q, q, q] ++ acc).reverse, r.drop extra.length)
+    else tomlScanMulti q (b :: c :: r) (a :: acc)
+  | [] => .error "unterminated multi-line string"
+  | c :: r => tomlScanMulti q r (c :: acc)
+
+/-- The manifest as STATEMENTS: each is `(raw text, bare text)`, ending at a newline that is outside
+    every string, array and inline table. In the bare text every string (single- or multi-line,
+    wherever it closes) is one `tomlStrMark`, comments are removed and newlines inside a value are
+    spaces, so a statement's SHAPE can be checked as a whole — a header, or one `key = value` — no
+    matter how many lines it spans. Unterminated strings and values and mismatched brackets are
+    refused. -/
+private partial def tomlStatements (cs : List Char) (raw bare stack : List Char)
+    (acc : Array (String × List Char)) : Except String (Array (String × List Char)) :=
+  let emit := acc.push (String.ofList raw.reverse, bare.reverse)
+  match cs with
+  | [] =>
+    if !stack.isEmpty then .error "unterminated array or inline table" else .ok emit
+  | '\n' :: r =>
+    if stack.isEmpty then tomlStatements r [] [] [] emit
+    else tomlStatements r ('\n' :: raw) (' ' :: bare) stack acc
+  | '#' :: r =>
+    let com := r.takeWhile (· != '\n')
+    tomlStatements (r.drop com.length) ((('#' :: com).reverse) ++ raw) bare stack acc
+  | '"' :: '"' :: '"' :: r => do
+    let (body, rest) ← tomlScanMulti '"' r []
+    tomlStatements rest (body.reverse ++ ['"', '"', '"'] ++ raw) (tomlStrMark :: bare) stack acc
+  | '\'' :: '\'' :: '\'' :: r => do
+    let (body, rest) ← tomlScanMulti '\'' r []
+    tomlStatements rest (body.reverse ++ ['\'', '\'', '\''] ++ raw) (tomlStrMark :: bare) stack acc
+  | '"' :: r => do
+    let (body, rest) ← tomlScanBasic1 r []
+    tomlStatements rest (body.reverse ++ ['"'] ++ raw) (tomlStrMark :: bare) stack acc
+  | '\'' :: r => do
+    let (body, rest) ← tomlScanLiteral1 r []
+    tomlStatements rest (body.reverse ++ ['\''] ++ raw) (tomlStrMark :: bare) stack acc
+  | '[' :: r => tomlStatements r ('[' :: raw) ('[' :: bare) (']' :: stack) acc
+  | '{' :: r => tomlStatements r ('{' :: raw) ('{' :: bare) ('}' :: stack) acc
+  | c :: r =>
+    if c == ']' || c == '}' then
+      match stack with
+      | close :: below =>
+        if close == c then tomlStatements r (c :: raw) (c :: bare) below acc
+        else .error s!"mismatched '{c}' (expected '{close}')"
+      | [] => .error s!"unbalanced '{c}'"
+    else tomlStatements r (c :: raw) (c :: bare) stack acc
+
+/-- Whether a value's bare text assigns at ARRAY level (or outside any group): an `=` whose innermost
+    open delimiter is not an inline table's `{`. Arrays hold values, never assignments. -/
 private partial def tomlAssignInArray (cs : List Char) (stack : List Char) : Bool :=
   match cs with
   | [] => false
@@ -407,10 +390,8 @@ private partial def tomlAssignInArray (cs : List Char) (stack : List Char) : Boo
   | '=' :: r => if stack.head? == some '}' then tomlAssignInArray r stack else true
   | _ :: r => tomlAssignInArray r stack
 
-private def tomlWs (c : Char) : Bool := c == ' ' || c == '\t' || c == '\r'
-
 /-- The rest after the bracket group whose opener was already consumed (`stack` holds the expected
-    closers), or `none` if the group does not close on this line. -/
+    closers), or `none` if it does not close. -/
 private partial def tomlCloseGroup (cs : List Char) (stack : List Char) : Option (List Char) :=
   match stack with
   | [] => some cs
@@ -421,20 +402,19 @@ private partial def tomlCloseGroup (cs : List Char) (stack : List Char) : Option
     | '{' :: r => tomlCloseGroup r ('}' :: stack)
     | c :: r => if c == top then tomlCloseGroup r below else tomlCloseGroup r stack
 
-/-- A value's bare text has exactly one value's shape and nothing after it: one string, one bracket
-    group, or one scalar with no brackets or strings in it. A value still open at the end of the
-    line (a multi-line array, inline table or string) is checked line by line elsewhere. -/
+/-- A value's bare text is exactly one value with nothing after it: one string, one closed bracket
+    group, or one scalar with no brackets or strings in it. -/
 private def tomlValueShapeOk (v : List Char) : Bool :=
   match v.dropWhile tomlWs with
-  | [] => true
+  | [] => false
   | c :: r =>
     if c == tomlStrMark then r.all tomlWs
     else if c == '[' then match tomlCloseGroup r [']'] with
       | some rest => rest.all tomlWs
-      | none => true
+      | none => false
     else if c == '{' then match tomlCloseGroup r ['}'] with
       | some rest => rest.all tomlWs
-      | none => true
+      | none => false
     else !((c :: r).any fun x => x == '[' || x == '{' || x == tomlStrMark)
 
 /-- A table header's bare text is exactly `[name]` or `[[name]]` and nothing after it. -/
@@ -462,53 +442,36 @@ def manifestEntryExists (path : String) : IO Bool := do
     | .noFileOrDirectory .. => pure false
     | _ => pure true
 
+/-- The `[native]` declarations of one manifest, in order, or the reason they are refused.
+
+    The manifest is first split into STATEMENTS (`tomlStatements`), each a header or one
+    `key = value` however many lines it spans, with strings and comments resolved. Every statement
+    must have exactly one such shape with nothing after it; an assignment inside an array, the bare
+    word `native` inside a value, and anything else that is not TOML are refused, because this is
+    not a full TOML parser and a construct it cannot read exactly must stop the build rather than
+    silently declare nothing.
+
+    Only the plain spelling is read: one `[native]` header, then `pkg-config`, `libs` and `lib-dirs`
+    keys each with a one-line array of plain strings. Every other spelling that would name the same
+    table — a quoted or spaced header, `[native.x]`, `[[native]]`, a top-level `native = {...}` or
+    `native.libs = [...]`, a header or top-level key with a backslash escape (escapes are not
+    decoded) — is refused, as are a second `[native]` section, a repeated key and a quoted key. -/
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
   let mut seenNative := false
   let mut atTop := true
   let mut seenKeys : List String := []
   let mut out : List (NativeKind × String) := []
-  let mut strState : Nat × List Char := (0, [])  -- tomlScanLine's state at the start of the current line
-  for l in content.splitOn "\n" do
-    let startState := strState
-    strState ← match tomlScanLine startState l.toList with
-      | .ok s => pure s
-      | .error e => throw s!"{e} in line '{l.trimAscii}'"
-    -- A line that BEGINS inside a multi-line string, array or inline table is part of a value,
-    -- not structure: it is neither a table header nor a key.
-    if startState.1 != 0 then
-      -- After the closing delimiter, only the value's own punctuation may follow; anything else
-      -- (a header, a key) would be structure hidden on a line this reader skips.
-      if let some rest := tomlAfterClose startState.1 l.toList then
-        let bare := tomlBareText rest
-        if !(bare.all fun c => tomlWs c || c == ',' || c == ']' || c == '}' || c == tomlStrMark) then
-          throw s!"unexpected text after a multi-line string closes: '{l.trimAscii}'"
-      continue
-    if !startState.2.isEmpty then
-      if tomlAssignInArray (tomlBareText l.toList) startState.2 then
-        throw s!"an assignment inside a multi-line array: '{l.trimAscii}'"
-
-      -- A line continuing an array or inline table holds values, and no TOML value is the bare word
-      -- `native`; text that looks like a native section or key here is malformed (or an attempt to
-      -- hide one), so it is refused rather than skipped.
-      if ((String.ofList (tomlBareText l.toList)).splitOn "native").length > 1 then
-        throw s!"'native' outside a string inside a multi-line value: '{l.trimAscii}'"
-      continue
-    let t := l.trimAscii.toString
-    -- EVERY structural line has exactly one shape and nothing after it. Text trailing a header or a
-    -- complete value (`[package] [native]`, `name = "x" [native]`) is not TOML, and skipping it
-    -- would hide whatever it spells, so it is refused.
-    let bare := tomlBareText l.toList
-    if t.startsWith "[" then
+  let stmts ← match tomlStatements content.toList [] [] [] #[] with
+    | .ok s => pure s
+    | .error e => throw e
+  for (raw, bare) in stmts do
+    if bare.all tomlWs then continue  -- blank, or a comment
+    let t := raw.trimAscii.toString
+    let isHeader := (bare.dropWhile tomlWs).head? == some '['
+    if isHeader then
       if !tomlHeaderShapeOk bare then
         throw s!"unexpected text in or after a table header: '{t}'"
-    else if !(bare.all tomlWs) then
-      match bare.splitOn '=' with
-      | _ :: valParts@(_ :: _) =>
-        if !tomlValueShapeOk ((valParts.intersperse ['=']).flatten) then
-          throw s!"unexpected text after a value: '{t}'"
-      | _ => throw s!"a line that is neither a table header nor a key = value: '{t}'"
-    if t.startsWith "[" then
       atTop := false
       let header := String.ofList ((t.toList.dropWhile (· == '[')).takeWhile (· != ']'))
       if header.contains '\\' then
@@ -524,7 +487,18 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
           throw s!"unsupported table '{t}': native libraries are declared in one plain [native] section"
       else
         inNative := false
-    else if !t.isEmpty && !t.startsWith "#" then
+    else
+      let valueBare ← match bare.splitOn '=' with
+        | _ :: valParts@(_ :: _) => pure ((valParts.intersperse ['=']).flatten)
+        | _ => throw s!"a statement that is neither a table header nor a key = value: '{t}'"
+      if !tomlValueShapeOk valueBare then
+        throw s!"unexpected text in or after a value: '{t}'"
+      -- No TOML value is the bare word `native`; one inside a value is malformed, or an attempt to
+      -- hide a native section inside one, and is refused rather than skipped.
+      if ((String.ofList valueBare).splitOn "native").length > 1 then
+        throw s!"'native' outside a string inside a value: '{t}'"
+      if tomlAssignInArray valueBare [] then
+        throw s!"an assignment inside an array value: '{t}'"
       let rawKey := ((t.splitOn "=").headD "").trimAscii.toString
       if atTop then
         if rawKey.contains '\\' then
@@ -533,6 +507,7 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
         if k == "native" || k.startsWith "native." then
           throw s!"unsupported top-level key '{rawKey}': native libraries are declared in a plain [native] section"
       else if inNative then
+        if t.contains '\n' then throw s!"'{rawKey}': arrays must be on one line"
         let valParts := (t.splitOn "=").drop 1
         -- EXACT spellings only: normalising `"lib s"` to `libs` would accept a key the manifest
         -- did not write.
@@ -560,8 +535,6 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
             else
               s!"'{key}': '{v}' is not a library name (accepted: letters, digits, '_', '.', '+', '-'; not starting with '-')")
           out := out ++ [(kind, v)]
-  if strState.1 != 0 then throw "unterminated multi-line string"
-  if !strState.2.isEmpty then throw "unterminated array or inline table"
   return out
 
 /-- The section for the trust reports: every declared native library, by package. Empty when none

@@ -64,12 +64,12 @@ what G1 recorded.
 | a pkg-config `--libs` token other than `-L<dir>`, `-l<name>`, `-pthread`, `-framework <name>` | link |
 | a library directory that does not exist or is not a directory | link |
 
-Lines inside a multi-line string (`"""` or `'''`) are text, not structure: a description that
-quotes a `[native]` section declares and refuses nothing. String boundaries are found by a quote-,
-escape- and comment-aware scan, so a delimiter inside a plain string or a comment opens nothing,
-and a closing run of four or five quotes is handled. Lines inside a multi-line array or inline
-table are likewise part of a value, never a header or key. An unterminated string, array or inline
-table is refused.
+The manifest is read as STATEMENTS, not lines: each is one header or one `key = value`, however
+many lines its strings, arrays and inline tables span, with strings, escapes, comments and
+three-to-five-quote closers resolved. Every statement must have exactly one such shape with nothing
+after it, so text quoted inside a string declares and refuses nothing, and a header or key hidden
+after a closing delimiter, inside an array, or after another header is refused. Unterminated
+strings and values and mismatched brackets are refused.
 
 A link that still fails prints the declared libraries, or says none is declared and points here.
 
