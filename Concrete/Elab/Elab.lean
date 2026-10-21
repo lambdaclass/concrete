@@ -3578,10 +3578,24 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
       | .named n => (c.newtypeOf n).map (·, [])
       | .generic n args _ => (c.newtypeOf n).map (·, args)
       | _ => none
+    -- One step either way, as CoreCheck admits it: an unwrap (the operand's newtype's inner type
+    -- is the target) or a construction (the target's newtype's inner type is the operand), each
+    -- at the newtype's actual type arguments. A cast that is neither on the respelled names is
+    -- reported against the unwrap reading.
+    let innerAt := fun ((nt, args) : NewtypeDef × List Ty) => substTy (nt.typeParams.zip args) nt.innerTy
+    let unwrapOk := (ntOf e.ty).map fun p => famAgree c.family [] (innerAt p) t
+    let wrapOk := (ntOf t).map fun p => famAgree c.family [] (innerAt p) e.ty
     tyAgreeExpr c e ++
-    match ntOf e.ty, ntOf t with
-    | some (nt, _), _ => [(nt.innerTy, t, s!"the inner value of newtype '{nt.name}'", nt.typeParams)]
-    | none, some (nt, _) => [(nt.innerTy, e.ty, s!"the value wrapped by newtype '{nt.name}'", nt.typeParams)]
+    match unwrapOk, wrapOk with
+    | some true, _ | _, some true => []
+    | some false, _ =>
+      match ntOf e.ty with
+      | some p => [(innerAt p, t, s!"the inner value of newtype '{p.1.name}'", [])]
+      | none => []
+    | none, some false =>
+      match ntOf t with
+      | some p => [(innerAt p, e.ty, s!"the value wrapped by newtype '{p.1.name}'", [])]
+      | none => []
     | none, none => []
   | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ => tyAgreeExpr c e
   | .match_ sc arms _ => tyAgreeExpr c sc ++ arms.flatMap (tyAgreeArm c sc.ty)
@@ -3717,6 +3731,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)
+      family := family
       locals := f.params.map (·.1)
       retTy := some f.retTy
       tps := f.typeParams }
@@ -3730,6 +3745,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)
+      family := family
       retTy := none }
     let pairs : List TyAgreePair := tyAgreeExpr ctx e ++ [(t, e.ty, s!"the initializer of constant '{n}'", [])]
     pairs.filterMap fun ((exp, act, whr, wild) : TyAgreePair) =>

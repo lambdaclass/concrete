@@ -1,0 +1,18 @@
+// Bug 096 (Codex round 15): Outer(Inner(P)) constructs a newtype from a newtype; a cast is
+// accepted one step either way (unwrap or construction), as CoreCheck admits it, with another
+// module declaring P. Expected (compiled): 7. --interp refuses nested newtype casts on main
+// too (`unsupported cast`), so the leg is native only.
+mod a {
+    struct Copy P { x: i64 }
+    newtype Inner = P;
+    newtype Outer = Inner;
+    fn main() with(Std) -> Int {
+        let o: Outer = Outer(Inner(P { x: 7 }));
+        let i: Inner = o.0;
+        let p: P = i.0;
+        print_int(p.x);
+        print_char(10);
+        return 0;
+    }
+}
+mod b { struct Copy P { x: i64 } }

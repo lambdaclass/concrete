@@ -116,7 +116,8 @@ Fields and payloads are compared by their nominal types (`CStructDef.nominalFiel
 `regress_096_newtype_field_nominal.con`. Constant annotations and enum-arm binder types are
 alias-expanded like the values they are compared with (`regress_096_alias_typed_const.con`), and
 so are extern annotations (`regress_096_extern_alias_param.con`). A newtype constructor or `.0`
-unwrap is checked against the newtype's inner type (`error_096_newtype_unwrap_other_type.con`).
+unwrap is checked one step either way, as CoreCheck admits it, at the newtype's type arguments
+(`error_096_newtype_unwrap_other_type.con`, `regress_096_nested_newtype_construct.con`).
 
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of
