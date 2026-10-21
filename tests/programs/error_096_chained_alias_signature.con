@@ -1,0 +1,16 @@
+// Bug 096 (Codex round 5): c's mk returns First = Second = c's P. The check reads the
+// signature import resolution transports (aliases normalized), so b's binding of P to a's
+// is refused (E0299).
+mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
+mod c {
+    pub struct Copy P { pub x: i64 }
+    type First = Second;
+    type Second = P;
+    pub fn mk(v: i64) -> First { return P { x: v }; }
+}
+mod b {
+    import a.{ P };
+    import c.{ mk };
+    pub fn probe() -> i64 { let p: P = mk(7); return p.x; }
+}
+mod main { import b.{ probe }; fn main() with(Std) -> Int { print_int(probe()); print_char(10); return 0; } }

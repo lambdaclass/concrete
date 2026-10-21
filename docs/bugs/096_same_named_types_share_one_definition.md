@@ -73,9 +73,14 @@ that disagrees is refused (E0299: `error_096_import_closure_binds_other_type.con
 `error_096_generic_method_param_named_like_type.con`), and a private method resolution does not
 transport is not consulted (`regress_096_private_method_not_transported.con`). A module's
 binding of a spelling follows Check's and Elab's precedence, imports before its own declarations
-(`error_096_import_precedence_binding.con`), and a method signature belongs to the one type whose
-module declares exactly that method, not to a textual prefix (`A_B_get` is `A_B`'s:
-`error_096_method_owner_exact.con`). A submodule's or sibling's declarations, visible without an
+(`error_096_import_precedence_binding.con`) and through its resolved import closure (a type it
+binds only through an imported signature: `regress_096_transitive_signature_binding.con`); an
+imported function is checked by the signature import resolution transports, aliases normalized
+(`error_096_chained_alias_signature.con`). A method this module defines is renamed by its own
+receiver; any other method spelling belongs to the one type whose module has an impl of exactly
+that type declaring exactly that method, not to a textual prefix (`A_B_get` is `A_B`'s:
+`error_096_method_owner_exact.con`, `regress_096_method_owner_same_module.con`), and a spelling a
+respelled type may own whose owner is not identified is refused (E0299). A submodule's or sibling's declarations, visible without an
 import (the parent injects them after import resolution, so Elab keeps the resolved closure apart),
 only supply a binding the module lacks (`regress_096_sibling_types_unused.con`).
 Example of the refusal: b binding `P`

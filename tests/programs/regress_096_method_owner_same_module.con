@@ -1,0 +1,16 @@
+// Bug 096 (Codex round 5): two modules each declare A, A_B and A_B.get. A_B_get is A_B's
+// method in each, renamed with its own receiver (a_A_B_get, c_A_B_get), never left as one
+// shared A_B_get. Expected (compiled AND --interp): 101007.
+mod a {
+    pub struct Copy A { pub v: i64 }
+    pub struct Copy A_B { pub v: i64 }
+    impl A_B { pub fn get(&self) -> i64 { return self.v + 100; } }
+    pub fn fa() -> i64 { let o: A_B = A_B { v: 1 }; let x: A = A { v: 0 }; return o.get() + x.v; }
+}
+mod c {
+    pub struct Copy A { pub w: i64, pub v: i64 }
+    pub struct Copy A_B { pub w: i64, pub v: i64 }
+    impl A_B { pub fn get(&self) -> i64 { return self.v; } }
+    pub fn fc() -> i64 { let o: A_B = A_B { w: 0, v: 7 }; let x: A = A { w: 0, v: 0 }; return o.get() + x.v; }
+}
+mod m { import a.{fa}; import c.{fc}; fn main() with(Std) -> Int { print_int(fa() * 1000 + fc()); print_char(10); return 0; } }

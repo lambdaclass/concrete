@@ -1,0 +1,18 @@
+// Bug 096 (Codex round 5): b binds P only through mk's return type (import closure); its
+// relay() -> P means a's P, as main's does, and an unrelated d declares another P.
+// Expected (compiled AND --interp): 93.
+mod a {
+    pub struct Copy P { pub pad: i64, pub x: i64 }
+    pub fn mk(v: i64) -> P { return P { pad: 0, x: v }; }
+}
+mod b {
+    import a.{ mk };
+    pub fn relay(v: i64) -> P { return mk(v); }
+}
+mod d { pub struct Copy P { pub y: i64 } pub fn fd() -> i64 { let p: P = P { y: 3 }; return p.y; } }
+mod main {
+    import a.{ P };
+    import b.{ relay };
+    import d.{ fd };
+    fn main() with(Std) -> Int { let p: P = relay(9); print_int(p.x * 10 + fd()); print_char(10); return 0; }
+}

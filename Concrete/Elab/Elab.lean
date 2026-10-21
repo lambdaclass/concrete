@@ -2482,11 +2482,30 @@ partial def tyNamesIn : Ty → List String
     imports, then the module's own): the declaration its import of `n` names, else its own
     declaration (`decls` is every (name, definedIn) type declaration of the program). `none`
     when that does not identify exactly one declaration. -/
-def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : String) :
-    Option (String × String) :=
+def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : String)
+    (summaryTable : List (String × FileSummary) := []) : Option (String × String) :=
   let own := (d.structs.filter (·.name == n)).map (fun sd => (sd.definedIn, sd.definitionName))
     ++ (d.enums.filter (·.name == n)).map (fun ed => (ed.definedIn, ed.definitionName))
     ++ (d.newtypes.filter (·.name == n)).map (fun nt => (nt.definedIn, nt.name))
+  -- The definer's resolved import closure (named types and the types its imported
+  -- signatures reach), in the first-binding order Elab's `typeSpellings` uses: structs
+  -- (imports, then own), enums (imports, then own), newtypes (imports, then own).
+  let closure? : Option ResolvedImports :=
+    match resolveImports d.imports summaryTable (fun _ => "") (fun _ _ => "") (pass := "elab") with
+    | .ok r => some r
+    | .error _ => none
+  let ordered : List (String × String × String) := match closure? with
+    | none => []
+    | some r =>
+      r.structs.map (fun sd => (sd.name, sd.definedIn, sd.definitionName))
+      ++ d.structs.map (fun sd => (sd.name, sd.definedIn, sd.definitionName))
+      ++ r.enums.map (fun ed => (ed.name, ed.definedIn, ed.definitionName))
+      ++ d.enums.map (fun ed => (ed.name, ed.definedIn, ed.definitionName))
+      ++ r.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.name))
+      ++ d.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.name))
+  match ordered.find? (fun (sp, defIn, dn) => sp == n && !defIn.isEmpty && !dn.isEmpty) with
+  | some (_, defIn, dn) => some (defIn, dn)
+  | none =>
   match d.imports.findSome? fun imp =>
       (imp.symbols.find? (·.effectiveName == n)).map fun sym => (imp.moduleName, sym.name) with
   | some (modName, orig) =>
@@ -3106,8 +3125,12 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let sp := if byLocal then ln else dn
       if dn.isEmpty || !n.startsWith (sp ++ "_") then none else
       let rest := (n.drop (sp.length + 1)).toString
+      -- an impl (inherent or trait) of exactly `dn` declaring a method named exactly `rest`
       match defSummary di with
-      | some d => if d.implMethodSigs.any (·.1 == dn ++ "_" ++ rest) then some (ln, dn, di, rest) else none
+      | some d =>
+        if d.implBlocks.any (fun ib => ib.typeName == dn && ib.methods.any (·.name == rest))
+           || d.traitImpls.any (fun tb => tb.typeName == dn && tb.methods.any (·.name == rest))
+        then some (ln, dn, di, rest) else none
       | none => none
     -- one DECLARATION (two local spellings of it, `P` and an alias `Q`, are one owner)
     match (cands.map fun (_, dn, di, rest) => (dn, di, rest)).eraseDups with
@@ -3119,7 +3142,18 @@ partial def elabModule (m : Module) (summary : FileSummary)
     (m.imports.flatMap fun (imp : ImportDecl) =>
       match importSummary imp.moduleName with
       | some d => imp.symbols.flatMap fun (sym : ImportSymbol) =>
-          (summaryEntityTypes d sym.name (withTypes := false)).map fun (w, tys, tps) =>
+          -- the signature import resolution transports (aliases normalized), not the
+          -- exporting summary's own spelling of it
+          let transported : List (String × List Ty × List String) :=
+            (closure.functions.filter (fun (p : String × FnSummary) => p.1 == sym.effectiveName)).map
+              fun (p : String × FnSummary) =>
+                (s!"function '{p.1}'", (p.2.params.map (·.2)) ++ [p.2.retTy], p.2.typeParams)
+          let aliasTys : List (String × List Ty × List String) :=
+            (closure.typeAliases.filter (fun (p : String × Ty) => p.1 == sym.effectiveName)).map
+              fun (p : String × Ty) => (s!"type alias '{p.1}'", [p.2], ([] : List String))
+          let fallback := if transported.isEmpty && aliasTys.isEmpty
+            then summaryEntityTypes d sym.name (withTypes := false) else []
+          (transported ++ aliasTys ++ fallback).map fun (w, tys, tps) =>
             (s!"{w} of module '{d.name}'", some d, tys, tps, true)
       | none => [])
     ++ closure.structs.map (fun sd => (s!"imported struct '{sd.name}'", summaryAtPath sd.definedIn,
@@ -3143,7 +3177,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     foreignEnts.flatMap fun (what, d?, tys, tps, strict) =>
       ((tys.flatMap tyNamesIn).eraseDups.filter fun n =>
           ambiguousTypes.contains n && !tps.contains n).map fun n =>
-        (n, d?.bind fun d => (summaryTypeBinding typeDecls d n).map (fun (defIn, nm) => canonTypeName defIn nm),
+        (n, d?.bind fun d => (summaryTypeBinding typeDecls d n summaryTable).map (fun (defIn, nm) => canonTypeName defIn nm),
          what, strict)
   let foreignNames := (foreignReqs.map (·.1)).eraseDups
   let inherited : List (String × String) := foreignNames.filterMap fun n =>
@@ -3168,12 +3202,33 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let tn := tyName it
       if tn.isEmpty then none else some (tn ++ "_" ++ f.name))
     ++ imports.implMethodSigs.map (·.1)
+  -- A method this module DEFINES is renamed by its own receiver type (known exactly); any
+  -- other method spelling by the type that owns it (`methodOwner`).
+  let localMethodRenames : List (String × String) :=
+    allFnPairs.filterMap fun (f, implTy) => implTy.bind fun it =>
+      let tn := tyName it
+      if tn.isEmpty then none else
+      match typeSpellings.lookup tn with
+      | some c => some (tn ++ "_" ++ f.name, c ++ "_" ++ f.name)
+      | none => none
   let renameMethod := fun (n : String) =>
+    match localMethodRenames.lookup n with
+    | some n' => n'
+    | none =>
     if !methodNames.contains n then n else
     match methodOwner n true with
     | some (_, dn, di, rest) =>
       if ambiguousTypes.contains dn then canonTypeName di dn ++ "_" ++ rest else n
     | none => n
+  -- A method spelling that a respelled type may own, whose owner is not identified exactly,
+  -- would keep a name another module's method may also have: refused.
+  let unresolvedMethods : Diagnostics := (methodNames.filter fun n =>
+      (localMethodRenames.lookup n).isNone && (methodOwner n true).isNone
+      && localOwners.any fun (ln, dn, _) => ambiguousTypes.contains dn && n.startsWith (ln ++ "_")).eraseDups.map fun n =>
+    { severity := .error, pass := "elab", span := none, code := "E0299"
+      message := s!"method '{n}' belongs to a type several modules declare, and Elab cannot tell which type's method it is; Core cannot spell it (bug 096)"
+      hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
+  if !unresolvedMethods.isEmpty then .error unresolvedMethods else
   let rn : CoreRename := {
     tyName := fun n => (typeSpellings.lookup n).getD n
     fnName := renameMethod }
