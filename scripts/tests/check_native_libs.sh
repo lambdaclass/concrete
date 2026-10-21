@@ -364,14 +364,42 @@ refused "$TMP/arrval" arrval "unsupported top-level key 'native.libs'" "a top-le
 mkapp "$TMP/mismatch" ''
 cat > "$TMP/mismatch/Concrete.toml" <<'EOF'
 metadata = [
-[native]
-libs = ["m"]
+  1,
 }
 [package]
 name = "nlapp"
 version = "0.1.0"
 EOF
-refused "$TMP/mismatch" mismatch "mismatched '}'" "a '[' closed by '}' is refused rather than hiding the lines inside it"
+refused "$TMP/mismatch" mismatch "mismatched '}'" "a '[' closed by '}' is refused (a mismatched value cannot end early or late and hide lines)"
+# The balanced counterpart: brackets match, but a [native] section inside an array value is not
+# TOML. Refused, not skipped as value text.
+mkapp "$TMP/inarray" ''
+cat > "$TMP/inarray/Concrete.toml" <<'EOF'
+[package]
+name = "nlapp"
+version = "0.1.0"
+metadata = [
+[native]
+libs = ["nosuchlib"]
+]
+EOF
+refused "$TMP/inarray" inarray "'native' outside a string inside a multi-line value" "a [native] section hidden inside a balanced multi-line array is refused"
+# Control: an array whose STRING elements say native is ordinary data and builds.
+mkapp "$TMP/inarrayok" '
+[native]
+libs = ["nladd"]
+lib-dirs = ["lib"]'
+python3 - "$TMP/inarrayok/Concrete.toml" <<'PYEOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+s = s.replace('version = "0.1.0"\n', 'version = "0.1.0"\nkeywords = [\n  "native",\n  "[native]",\n]\n', 1)
+open(p, 'w').write(s)
+PYEOF
+mkdir -p "$TMP/inarrayok/lib" && cp "$TMP/static/libnladd.a" "$TMP/inarrayok/lib/"
+build_run "$TMP/inarrayok" inarrayok
+[ "$(cat "$TMP/inarrayok.brc")" = "0" ] && [ "$(cat "$TMP/inarrayok.rrc")" = "42" ] \
+  && ok "CONTROL: string elements mentioning native inside a multi-line array are data; the manifest builds" \
+  || no "CONTROL: string-element array manifest: brc=$(cat "$TMP/inarrayok.brc"): $(head -3 "$TMP/inarrayok.build" | tr '\n' ' ')"
 bad rpathcolon '
 [native]
 lib-dirs = ["lib:other"]' "is not an accepted library directory" "a ':' in a lib-dir is refused (an ELF rpath list separator)"
@@ -506,6 +534,18 @@ lib-dirs = ["lib"]'
     && ok "concrete build refuses an unreadable manifest rather than building the ancestor project" \
     || no "concrete build with an unreadable manifest: rc=$rca3 $(head -3 "$TMP/ancbuild.build" | tr '\n' ' ')"
   chmod 644 "$TMP/anc/inner/Concrete.toml"
+  # A manifest that is a symlink into a directory without search permission is present, not absent.
+  mkdir -p "$TMP/locked"
+  cp "$TMP/anc/inner/Concrete.toml" "$TMP/locked/real.toml"
+  mv "$TMP/anc/inner/Concrete.toml" "$TMP/anc/inner/Concrete.toml.orig"
+  ln -s "$TMP/locked/real.toml" "$TMP/anc/inner/Concrete.toml"
+  chmod 000 "$TMP/locked"
+  rm -f "$TMP/anclink.bin"
+  ( cd "$TMP/anc/inner" && $TO "$C" src/main.con -o "$TMP/anclink.bin" ) > "$TMP/anclink.build" 2>&1; rca4=$?
+  [ "$rca4" != "0" ] && [ ! -e "$TMP/anclink.bin" ] && grep -qF "cannot read" "$TMP/anclink.build" \
+    && ok "a manifest symlinked into an unsearchable directory is refused, not treated as absent" \
+    || no "symlinked inaccessible manifest: rc=$rca4 $(head -3 "$TMP/anclink.build" | tr '\n' ' ')"
+  chmod 755 "$TMP/locked"
 else
   ok "unreadable enclosing-manifest legs not applicable as root (stated, not skipped silently)"
 fi

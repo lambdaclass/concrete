@@ -362,6 +362,35 @@ private partial def tomlScanLine (st : Nat × List Char) (cs : List Char) : Exce
     else tomlScanLine (0, d) r
   | _, _ => .ok (str, d)
 
+/-- The text of a line outside strings and comments (a multi-line string opened on the line drops
+    the rest of it). Used on lines that continue a multi-line value. -/
+private partial def tomlBareText (cs : List Char) (acc : List Char := []) : List Char :=
+  match cs with
+  | [] => acc.reverse
+  | '#' :: _ => acc.reverse
+  | '"' :: '"' :: '"' :: _ => acc.reverse
+  | '\'' :: '\'' :: '\'' :: _ => acc.reverse
+  | '"' :: r => match tomlScanBasic r with
+    | .ok r' => tomlBareText r' (' ' :: acc)
+    | .error _ => acc.reverse
+  | '\'' :: r => match tomlScanLiteral r with
+    | .ok r' => tomlBareText r' (' ' :: acc)
+    | .error _ => acc.reverse
+  | c :: r => tomlBareText r (c :: acc)
+
+/-- Whether a manifest ENTRY exists at `path`, judged by `lstat`: only a genuine "no such file or
+    directory" is absence. Any other failure — a directory without search permission, a symlink
+    into one — counts as present, so the read that follows reports it instead of the manifest's
+    declarations silently disappearing (`pathExists` folds every error into `false`). -/
+def manifestEntryExists (path : String) : IO Bool := do
+  try
+    let _ ← System.FilePath.symlinkMetadata ⟨path⟩
+    pure true
+  catch e =>
+    match e with
+    | .noFileOrDirectory .. => pure false
+    | _ => pure true
+
 def parseNativeSection (content : String) : Except String (List (NativeKind × String)) := do
   let mut inNative := false
   let mut seenNative := false
@@ -376,7 +405,14 @@ def parseNativeSection (content : String) : Except String (List (NativeKind × S
       | .error e => throw s!"{e} in line '{l.trimAscii}'"
     -- A line that BEGINS inside a multi-line string, array or inline table is part of a value,
     -- not structure: it is neither a table header nor a key.
-    if startState.1 != 0 || !startState.2.isEmpty then continue
+    if startState.1 != 0 then continue
+    if !startState.2.isEmpty then
+      -- A line continuing an array or inline table holds values, and no TOML value is the bare word
+      -- `native`; text that looks like a native section or key here is malformed (or an attempt to
+      -- hide one), so it is refused rather than skipped.
+      if ((String.ofList (tomlBareText l.toList)).splitOn "native").length > 1 then
+        throw s!"'native' outside a string inside a multi-line value: '{l.trimAscii}'"
+      continue
     let t := l.trimAscii.toString
     if t.startsWith "[" then
       atTop := false
@@ -542,7 +578,7 @@ partial def findProjectRoot (startDir : String) : IO (Option String) := do
     -- absent, so discovery walked past it to an ancestor's (or to standalone mode) and its
     -- declarations — [native] among them — silently vanished. The project is found here; the read
     -- that follows reports the failure.
-    if ← System.FilePath.pathExists ⟨dir ++ "/Concrete.toml"⟩ then return some dir
+    if ← manifestEntryExists (dir ++ "/Concrete.toml") then return some dir
     let parent := dirOf dir
     if parent == dir || parent.isEmpty then return none
     up parent
@@ -742,7 +778,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       -- dropping its [native] declarations and its identity. It is refused instead.
       let depTomlPath := resolvedPath ++ "/Concrete.toml"
       let depTomlRead : Except String (Option String) ←
-        if !(← System.FilePath.pathExists ⟨depTomlPath⟩) then pure (.ok none)
+        if !(← manifestEntryExists depTomlPath) then pure (.ok none)
         else try pure (.ok (some (← readFile depTomlPath))) catch e => pure (.error (toString e))
       let depToml ← match depTomlRead with
         | .ok t => pure t
