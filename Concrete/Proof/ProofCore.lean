@@ -4137,7 +4137,14 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
   -- in place made the invariant fire on correct output (a `missing` callee), and
   -- the field was renamed from `staleDeps` for the same reason: a name saying
   -- "stale" while holding "missing" is the restated-fact hazard again.
-  let notCurrentOblNames := (pc.obligations.filter fun o =>
+  --
+  -- Read over the WHOLE program (`closureView`), the population `notCurrentDeps` was computed
+  -- over. A user-scoped ProofCore (`scopeToUser`) keeps only user obligations, so a user
+  -- function reaching a not-current std callee (toml's `main` reaching the ineligible
+  -- `std.args.args_count`) was reported as listing a "current" dependency: the std obligation was
+  -- not missing from the program, only from the scoped listing. The check stays strict — a name
+  -- absent from the whole program, or present and current, still fires.
+  let notCurrentOblNames := (pc.closureView.obligations.filter fun o =>
     !o.status.isCurrentForDependents).map (·.functionId.qualName)
   let depStale := pc.obligations.foldl (fun acc o =>
     acc ++ o.notCurrentDeps.filterMap fun dep =>
