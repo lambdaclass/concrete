@@ -1598,6 +1598,7 @@ run_err "$TESTDIR/error_096_alias_signature_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_sibling_injected_binding.con" "7" 0
 run_err "$TESTDIR/error_096_generic_qualified_call_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_fn_value_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_enum_payload_binding_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_alias_copy_unused.con" "4" 0
 run_ok "$TESTDIR/regress_097_let_shadows_colliding_fn.con" "1112" 0
 run_ok "$TESTDIR/regress_096_private_method_not_transported.con" "71" 0

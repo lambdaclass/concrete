@@ -96,7 +96,9 @@ resolved through linker aliases, so `c::read` is checked: `error_096_qualified_c
 `error_096_method_owner_exact.con`, `error_096_chained_alias_signature.con`), a global function
 taken as a value against its definition, a local of that name excepted lexically
 (`error_096_fn_value_other_type.con`), a `let` or `return` against its declared type, a struct or
-enum literal and a field read or write against the declaration's field, and any two copies of one
+enum literal and a field read or write against the declaration's field, a match arm's binders
+against the variant's payload or the scrutinee (`error_096_enum_payload_binding_other_type.con`),
+and any two copies of one
 struct or enum that disagree (`error_096_alias_signature_other_type.con`). An unused declaration
 that mentions another module's type is never refused (`regress_096_private_method_not_transported.con`,
 `regress_096_generic_method_param_named_like_type.con`, `regress_096_sibling_types_unused.con`).

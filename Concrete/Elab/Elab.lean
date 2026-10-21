@@ -3591,19 +3591,28 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
     | none => []
   | .binOp _ l r _ => tyAgreeExpr c l ++ tyAgreeExpr c r
   | .unaryOp _ e _ | .borrow e _ | .borrowMut e _ | .deref e _ | .cast e _ => tyAgreeExpr c e
-  | .match_ sc arms _ => tyAgreeExpr c sc ++ arms.flatMap (tyAgreeArm c)
+  | .match_ sc arms _ => tyAgreeExpr c sc ++ arms.flatMap (tyAgreeArm c sc.ty)
   | .arrayLit es _ => es.flatMap (tyAgreeExpr c)
   | .arrayIndex a i _ | .allocCall a i _ => tyAgreeExpr c a ++ tyAgreeExpr c i
   | .ifExpr cnd t e _ => tyAgreeExpr c cnd ++ tyAgreeStmts c t ++ tyAgreeStmts c e
   | _ => []
 
-partial def tyAgreeArm (c : TyAgreeCtx) : CMatchArm → List TyAgreePair
-  | .enumArm _ _ bs g b =>
+partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAgreePair
+  | .enumArm en v bs g b =>
+    -- each binder (positional, as Elab binds them) against the variant's payload field
+    let payload : List TyAgreePair := match c.enumOf en with
+      | some ed => match ed.variants.lookup v with
+        | some fs => (fs.zip bs).map fun ((fname, ft), (_, bt)) =>
+            (ft, bt, s!"the binding of field '{fname}' of '{en}::{v}'", ed.typeParams)
+        | none => []
+      | none => []
     let c' := { c with locals := bs.map (·.1) ++ c.locals }
-    ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
-  | .varArm n _ g b =>
+    payload ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
+  | .varArm n bt g b =>
+    -- a catch-all binder holds the scrutinee itself
     let c' := { c with locals := n :: c.locals }
-    ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
+    [(bt, scrutTy, s!"the binding '{n}' of a match", c.tps)]
+      ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
   | .litArm v g b => tyAgreeExpr c v ++ ((g.map (tyAgreeExpr c)).getD []) ++ tyAgreeStmts c b
   | .rangeArm lo hi _ g b =>
     tyAgreeExpr c lo ++ tyAgreeExpr c hi ++ ((g.map (tyAgreeExpr c)).getD []) ++ tyAgreeStmts c b
