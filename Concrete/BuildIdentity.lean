@@ -25,9 +25,6 @@ namespace Concrete
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-||||||| parent of 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
-=======
->>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 ||||||| parent of b0d869a2 (fix: bug 091 normalized place rule — Codex static review pass 3: every binding introduction)
 ||||||| parent of 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
 =======
@@ -209,6 +206,18 @@ def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
 =======
 def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+||||||| parent of 89bc1b0a (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
+||||||| parent of c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
+||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
+=======
+||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
+||||||| parent of d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+def buildIdentity : String := "c970505bec99e70152d01cbddbeae8d2"
+=======
+def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
+>>>>>>> d105bc7c (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
+=======
+>>>>>>> 89bc1b0a (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
 =======
 >>>>>>> c961bf60 (fix: bug 091 normalized place rule — Codex review pass 2: reads/writes, scoped borrows, shadowing, intrinsics)
 =======
@@ -1073,7 +1082,14 @@ def buildIdentity : String := "6be2996ba461d2e46f1025fe102d9fd9"
 =======
 def buildIdentity : String := "7e9c5276427d6e9846c63aa9a7d2ecce"
 >>>>>>> ce4632b5 (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
->>>>>>> 458f0c3e (fix: bug 123 review pass 5 — a constant initializer that fails to elaborate is an error, not 0)
+||||||| parent of 89bc1b0a (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
+=======
+||||||| parent of 51bf1ef8 (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
+def buildIdentity : String := "7e9c5276427d6e9846c63aa9a7d2ecce"
+=======
+def buildIdentity : String := "6b3399c6adf90d2c544ba357c9cfe51b"
+>>>>>>> 51bf1ef8 (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
+>>>>>>> 89bc1b0a (fix: bug 123 review pass 6 — Check's type peek resolves locals before constants)
 
 /-- How many source files the identity above was computed over.
 

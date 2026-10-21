@@ -669,11 +669,12 @@ partial def peekExprType (e : Expr) : CheckM Ty := do
   | .charLit _ _ => return .char
   | .ident _ name =>
     let env ← getEnv
-    match env.constants.lookup name with
-    | some ty => return ty
-    | none =>
+    -- locals shadow module constants (the `.ident` case of `checkExprCore`)
     match env.vars.lookup name with
     | some info => return info.ty
+    | none =>
+    match env.constants.lookup name with
+    | some ty => return ty
     | none =>
       match ← lookupFn name with
       | some sig =>

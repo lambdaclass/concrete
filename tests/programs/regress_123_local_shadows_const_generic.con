@@ -1,0 +1,14 @@
+// Bug 123 review: generic inference peeks a type, and the peek resolved a module constant before
+// a local of the same name, inferring T = Int for `&X` with `X: bool` and refusing the call.
+const X: Int = 42;
+
+fn inspect<T>(x: &T) -> Int {
+    return 5;
+}
+
+fn main() with(Std) -> Int {
+    let X: bool = true;
+    print_int(inspect(&X));
+    print_char(10);
+    return 0;
+}
