@@ -274,6 +274,51 @@ else
     || no "unresolved-type destroy rejected without E0814"
 fi
 
+# (f) ownership on failure (B2, 2026-10-21): an overwrite that neither returns nor
+#     destroys the displaced element is Copy-only. set_unchecked on a linear
+#     element must not compile (it used to drop the old String silently);
+#     replace() is the linear form. The Copy control proves the fixture is live.
+mkproj overwrite <<'CON'
+mod overwrite {
+    import std.vec.{Vec};
+    fn main() with(Std) -> Int {
+        let mut v: Vec<String> = Vec::<String>::new();
+        let a: String = "a";
+        v.push(a);
+        let b: String = "b";
+        v.set_unchecked(0, b);   // must NOT compile: the displaced "a" would be lost
+        v.drop();
+        return 0;
+    }
+}
+CON
+if (cd "$TMP/overwrite" && "$C" build >"$TMP/overwrite.out" 2>&1); then
+  no "Vec<String>.set_unchecked compiled: a displaced linear element is silently lost"
+else
+  grep -q "E0241" "$TMP/overwrite.out" && grep -q "Copy" "$TMP/overwrite.out" && grep -q "set_unchecked" "$TMP/overwrite.out" \
+    && ok "Vec<String>.set_unchecked rejected with E0241 naming Copy (overwrite without return/destroy is Copy-only)" \
+    || { no "Vec<String>.set_unchecked rejected, but not by the Copy bound"; head -5 "$TMP/overwrite.out"; }
+fi
+mkproj overwrite_copy <<'CON'
+mod overwrite_copy {
+    import std.vec.{Vec};
+    fn main() with(Std) -> Int {
+        let mut v: Vec<i64> = Vec::<i64>::new();
+        v.push(1);
+        v.set_unchecked(0, 2);
+        let x: i64 = v.get_unchecked(0);
+        v.drop();
+        if x == 2 { return 0; }
+        return 1;
+    }
+}
+CON
+if (cd "$TMP/overwrite_copy" && "$C" build >"$TMP/overwrite_copy.out" 2>&1); then
+  ok "CONTROL: Vec<i64>.set_unchecked still compiles"
+else
+  no "CONTROL: Vec<i64>.set_unchecked does not compile (fixture is dead)"; head -5 "$TMP/overwrite_copy.out"
+fi
+
 echo "=== traversal policy (P7 #8): HashMap unordered; OrderedMap/Set own defined order ==="
 M="docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv"
 # ordered traversal APIs exist

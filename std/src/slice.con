@@ -29,11 +29,6 @@ mod slice {
         // Bounds-checked `set` lives in the Copy-bounded impl below: its
         // early `return false` must be free to drop the rejected value.
 
-        pub fn set_unchecked(&mut self, at: u64, value: T) {
-            let target_ptr: *mut T = self.ptr + at;
-            *target_ptr = value;
-        }
-
         pub fn len(&self) -> u64 {
             return self.len;
         }
@@ -59,6 +54,16 @@ mod slice {
     }
 
     trusted impl<T: Copy> MutSlice<T> {
+        /// Unchecked set. Caller must ensure index is within bounds. Copy-bounded
+        /// (ownership on failure, 2026-10-21): the overwritten element is neither
+        /// returned nor destroyed, which is sound only when it owns nothing. For a
+        /// linear element, write through the owning `Vec::replace`, which returns
+        /// the displaced value.
+        pub fn set_unchecked(&mut self, at: u64, value: T) {
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+        }
+
         pub fn set(&mut self, at: u64, value: T) -> bool {
             if at >= self.len {
                 return false;

@@ -372,11 +372,11 @@ sha256	hash_raw	yes	constructs	infallible	Alloc,Unsafe	trusted-boundary	gated	(d
 sha256	hash_string	yes	constructs	infallible	Alloc	trusted-boundary	gated	(s: &String) with(Alloc) -> Vec<u32>	-
 slice	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	Slice<T>
 slice	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool	Slice<T>
-slice	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T)	MutSlice<T>
 slice	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	MutSlice<T>
 slice	is_empty	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> bool	MutSlice<T>
 slice	get_unchecked	no	borrows	infallible	none	trusted-boundary	gated	(&self, at: u64) -> T	Slice<T>
 slice	get	no	borrows	option	none	trusted-boundary	gated	(&self, at: u64) -> Option<T>	Slice<T>
+slice	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T)	MutSlice<T>
 slice	set	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T) -> bool	MutSlice<T>
 slice	get_unchecked	no	borrows	infallible	none	trusted-boundary	gated	(&self, at: u64) -> T	MutSlice<T>
 slice	get	no	borrows	option	none	trusted-boundary	gated	(&self, at: u64) -> Option<T>	MutSlice<T>
@@ -444,7 +444,6 @@ vec	push	yes	mut	infallible	Alloc	trusted-boundary	gated	(&mut self, value: T) w
 vec	pop	no	mut	option	none	trusted-boundary	gated	(&mut self) -> Option<T>	Vec<T>
 vec	swap_remove	no	mut	option	none	trusted-boundary	gated	(&mut self, at: u64) -> Option<T>	Vec<T>
 vec	get_mut	no	mut	infallible	Unsafe	trusted-boundary	gated	(&mut self, at: u64) with(Unsafe) -> *mut T	Vec<T>
-vec	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T)	Vec<T>
 vec	len	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	Vec<T>
 vec	raw_ptr	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> *mut T	Vec<T>
 vec	cap	no	borrows	infallible	none	trusted-boundary	gated	(&self) -> u64	Vec<T>
@@ -460,6 +459,7 @@ vec	for_each_with	no	borrows	infallible	C	trusted-boundary	gated	<Ctx, cap C>(&s
 vec	clear	yes	mut	infallible	Alloc	trusted-boundary	gated	(&mut self) with(Alloc)	Vec<T>
 vec	drop	yes	consumes	infallible	Alloc	trusted-boundary	gated	(self) with(Alloc)	Vec<T>
 vec	destroy	yes	borrows	infallible	Alloc	trusted-boundary	gated	(&self) with(Alloc)	Vec<T>
+vec	set_unchecked	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T)	Vec<T>
 vec	set	no	mut	infallible	none	trusted-boundary	gated	(&mut self, at: u64, value: T) -> bool	Vec<T>
 vec	get_unchecked	no	borrows	infallible	none	trusted-boundary	gated	(&self, at: u64) -> T	Vec<T>
 vec	get	no	borrows	option	none	trusted-boundary	gated	(&self, at: u64) -> Option<T>	Vec<T>
