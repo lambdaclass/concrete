@@ -112,6 +112,12 @@ locals first; Lower refuses a constant name defined by more than one module at i
 (`error_123_const_initializer_array_borrow.con`). The collision is a separate defect from this
 bug's and may deserve its own number; its containment is the E0602 refusal.
 
+A fourth pass found `&mut X` as a call argument in an initializer, which took Lower's
+write-back path and fabricated a local named `X` (`const Y = change(&mut X) + X` read 7). Check
+does not check constant initializers, so Lower refuses every borrow form (`&`, `&mut`, a `&mut`
+call argument, a borrow block) while an initializer is inlined (`inConstInit`, E0602;
+`error_123_const_initializer_mut_arg.con`).
+
 The open-bug reproducer row in `check_example_outputs.sh` is dropped, and `run_tests.sh` runs the
 fixtures.
 

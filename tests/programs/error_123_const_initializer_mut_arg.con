@@ -1,0 +1,14 @@
+// Bug 123 review: `&mut X` as a call argument in a constant's initializer took Lower's
+// write-back path, which fabricated a local named X, so the later `X` read 7. Check does not
+// check initializers; Lower refuses every borrow form while one is inlined (E0602).
+const X: Int = 42;
+const Y: Int = change(&mut X) + X;
+
+fn change(p: &mut Int) -> Int {
+    *p = 7;
+    return 0;
+}
+
+fn main() -> Int {
+    return Y;
+}

@@ -83,6 +83,9 @@ structure LowerState where
   /-- True after terminateBlock, cleared by startBlock. Used to detect
       dead code after early returns inside borrow blocks. -/
   blockTerminated : Bool := false
+  /-- True while a module constant's initializer is being inlined (bug 123): a constant has no
+      storage, and Check does not check initializers, so every borrow form is refused here. -/
+  inConstInit : Bool := false
 
 abbrev LowerM := ExceptT Diagnostics (StateM LowerState)
 
@@ -90,6 +93,11 @@ private def throwLower (msg : String) : LowerM α :=
   throw [{ severity := .error, message := msg, pass := "lower", span := none, hint := none, code := "E0602" }]
 
 private def getState : LowerM LowerState := get
+
+/-- Bug 123: no borrow in a module constant's initializer (see `inConstInit`). -/
+private def refuseBorrowInConstInit : LowerM Unit := do
+  if (← get).inConstInit then
+    throwLower "a module constant's initializer may not borrow (a constant has no storage; bug 123)"
 private def setState (s : LowerState) : LowerM Unit := set s
 
 private def freshReg (pfx : String := "t") : LowerM String := do
@@ -773,9 +781,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- locals and promoted slots are hidden while it lowers, so a name in it is a constant
         -- (and `&X` there reaches addrOfLocal's refusal), then restored.
         let saved ← getState
-        set { saved with vars := [], promotedAllocas := [] }
+        set { saved with vars := [], promotedAllocas := [], inConstInit := true }
         let v ← lowerExpr constExpr
-        modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas }
+        modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas,
+                                   inConstInit := saved.inConstInit }
         return v
       | none =>
         -- If it's a function type and not a local var, treat as global function reference
@@ -917,6 +926,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     for arg in args do
       match arg with
       | .borrowMut (.ident varName innerTy) _ =>
+        refuseBorrowInConstInit
         -- If the variable is already promoted to a stable alloca (address taken,
         -- e.g. an address-taken loop counter), pass that alloca directly — the
         -- alloca IS the storage, so no copy + write-back is needed (and a
@@ -1336,6 +1346,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .unit
 
   | .borrow inner ty =>
+    refuseBorrowInConstInit
     -- Reborrow: `&(*r)` has the same address as `r`, so it must lower to the
     -- pointer `r` itself — never a copy. Without this, `&*ctx` would load the
     -- pointee into a temp and take *its* address, so the borrow would not alias
@@ -1383,6 +1394,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .reg slot ty
 
   | .borrowMut inner ty =>
+    refuseBorrowInConstInit
     -- Reborrow: `&mut (*r)` has the same address as `r`. This is what makes a
     -- `&mut Ctx` threadable across repeated callback calls — each `&mut *ctx`
     -- is a fresh reborrow that ends when the callee returns, never a copy. See
@@ -2129,6 +2141,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     addDeferredToCurrentScope body
 
   | .borrowIn var ref _region isMut refTy body =>
+    refuseBorrowInConstInit
     -- Create a memory slot for the borrowed variable, set ref to point to it.
     -- The ref variable is stored with the full reference type (refMut T / ref T)
     -- so that when passed as a function argument, the correct pointer type is emitted.

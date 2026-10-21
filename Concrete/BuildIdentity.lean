@@ -25,9 +25,6 @@ namespace Concrete
 def buildIdentity : String := "97d56171fe06dc694a28aa854c7b6e96"
 ||||||| parent of 5237c5fc (fix: bug 091 Codex round 3 review — by-value derefs, paren arguments, root provenance)
 def buildIdentity : String := "5d5d808f2f47938102ab6f40a3f487b8"
-||||||| parent of 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
-=======
->>>>>>> b2298367 (fix: bug 091 Codex round 3 review — exclusive references, reassignment provenance)
 =======
 >>>>>>> 93b19d03 (fix: bug 091 normalized place rule — Codex static review pass 2: reads normalize, pre-bind provenance, nested casts)
 ||||||| parent of 9ede08ae (fix: bug 091 Codex round 3 review — a nested reborrow may be used while its parent is held)
@@ -181,6 +178,11 @@ def buildIdentity : String := "6a84c4f099a6d9cae06cad445e9c465b"
 >>>>>>> 56440bd9 (fix: a constant's initializer is lowered with the caller's locals hidden (bug 123 review))
 =======
 >>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+||||||| parent of 64f42cca (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
+=======
+>>>>>>> 250e3641 (fix: bug 091 normalized place rule — Codex review: casts, reference arguments, ancestry, fail-closed heap base)
+=======
+>>>>>>> 64f42cca (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
 ||||||| parent of 87c4131e (fix: bug 091 Codex round 3 review — no re-pointed references, argument borrows through parens and *)
 =======
 ||||||| parent of 3692f038 (fix: bug 091 Codex round 3 review — newtype payload through &, one place for (*r).p and r.p)
@@ -1048,7 +1050,14 @@ def buildIdentity : String := "d35c5d6abd184f71254db0e3647c0264"
 =======
 def buildIdentity : String := "f78a1e70d939b91e52afce6cc7420882"
 >>>>>>> ea90eb7e (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
->>>>>>> 5a2ea5b2 (fix: bug 123 review pass 3 — Check resolves locals before constants; colliding constant names refused)
+||||||| parent of 64f42cca (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
+=======
+||||||| parent of 296cad6e (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
+def buildIdentity : String := "f78a1e70d939b91e52afce6cc7420882"
+=======
+def buildIdentity : String := "6be2996ba461d2e46f1025fe102d9fd9"
+>>>>>>> 296cad6e (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
+>>>>>>> 64f42cca (fix: bug 123 review pass 4 — no borrow form in a constant's initializer)
 
 /-- How many source files the identity above was computed over.
 
