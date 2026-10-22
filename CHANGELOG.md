@@ -60,6 +60,22 @@ directories; test mode still keeps its IR and binary after a failure it reports,
 paths (`regress_179_concurrent_compile.con`, `regress_179_concurrent_build`). On the previous
 compiler, 35 of 40 file-mode compiles and 9 of 12 project builds failed.
 
+### Match Lowering Is Linear Again (bug 178, 2026-10-22)
+
+A 1000-arm `match` spent 8.45 s in the `lower` stage and a 2000-arm one 78 s (about n^3). The
+cubic term was SSAVerify's dominator computation over `List String` sets and its per-block lists
+of every strict dominator's definitions; SSACleanup and Lower added quadratic list lookups and
+appends, and a deep `if` nest was also cubic in the obligation walk (`assignedScalarsS`) that runs
+on every compile. SSAVerify now answers dominance in O(1) (Cooper-Harvey-Kennedy immediate
+dominators and dominator-tree DFS times, the same relation as before including unreachable
+regions), SSACleanup uses maps for reachability, predecessors, phi sources, empty-block renames
+and replacement chains, and Lower accumulates blocks and arm lists newest first. A 2000-arm
+`match` compiles in 0.81 G instructions instead of 334 G (410x), a 2000-deep `if` nest in 2.2 G
+instead of 1555 G (703x). Emitted LLVM and SSA are byte-identical across all 1684 corpus files
+and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_heartbeats`), and
+`check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
+(heartbeats everywhere, `instructions:u` where perf counts). Structural class 16, owner R-0422.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
