@@ -38,6 +38,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh). The gate
 # still exits nonzero, so a probe loop that never terminates (bug 048) cannot pass.
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
+export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 # runs <name> <expected-exit> <body>
@@ -250,5 +251,6 @@ runs linear_payload_exactly_once 0 'mod main {
 }'
 
 echo
+bounded_summary
 echo "HASHMAP-PROBE-INVARIANTS: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
 [ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]

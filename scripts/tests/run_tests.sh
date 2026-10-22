@@ -11834,6 +11834,7 @@ fi
 # `timeout` is coreutils; present in the devshell and on CI. Degrade to running
 # without a watchdog rather than skipping the fixtures entirely, but say so, so
 # a hang on such a machine is at least explicable.
+export BOUNDED_OUTCOME_FILE="$SUITE_TMPDIR/bounded.outcome" BOUNDED_LOG="$SUITE_TMPDIR/bounded.log"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 if ! command -v timeout >/dev/null 2>&1; then
     echo "  warn  'timeout' not found — project fixtures run WITHOUT a hang watchdog"
@@ -12179,6 +12180,7 @@ fi # end scoping tests
 
 # --- Summary ---
 echo ""
+bounded_summary
 echo "=== Results ==="
 echo "  passed:  $PASS"
 echo "  failed:  $FAIL"

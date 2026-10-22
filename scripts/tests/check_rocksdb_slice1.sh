@@ -173,7 +173,10 @@ fi
 # that inherited it would load the observer too and append a second (empty) record at its own exit.
 run_observed(){ local bin="$1" tag="$2"
   rm -f "$TMP/$tag.obs"
-  $TO env "$PRELOAD=$OBS" ROCKSDB_OBSERVER_OUT="$TMP/$tag.obs" "$bin" "$3" "$4" \
+  # The observer file is reset inside the watched command, so a re-run after a timeout
+  # (lib/bounded.sh) starts from an empty record instead of appending a second one.
+  $TO sh -c 'rm -f "$1"; shift; exec env "$@"' sh "$TMP/$tag.obs" \
+    "$PRELOAD=$OBS" ROCKSDB_OBSERVER_OUT="$TMP/$tag.obs" "$bin" "$3" "$4" \
     > "$TMP/$tag.out" 2> "$TMP/$tag.err"
   echo $? > "$TMP/$tag.rc"
 }

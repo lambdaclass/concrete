@@ -226,14 +226,26 @@ bug_neg bug_in_two_batches "old='\t134\t-'; assert s.count(old)==1; s=s.replace(
 bug_neg silent_not_found "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134\t133')" docs/bugs/discovery.tsv 2
 bug_neg unknown_kind "old='\tsemantics\t'; assert s.count(old)==1; s=s.replace(old,'\tvibes\t')" docs/bugs/discovery.tsv 2
 bug_neg bug_without_record "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,999\t-')" docs/bugs/discovery.tsv 2
+bug_neg status_malformed "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" docs/bugs/124_duplicate_parameter_names.md 2
+bug_neg status_missing "import re; s,n=re.subn(r'^\*\*Status:\*\*[^\n]*\n', '', s, count=1, flags=re.M); assert n==1" docs/bugs/124_duplicate_parameter_names.md 2
+bug_neg counting_batch_effort_unrecorded "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tcontrol campaign\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
 bug_neg empty_cell "old='\tunrecorded\t134\t'; assert s.count(old)==1; s=s.replace(old,'\t\t134\t')" docs/bugs/discovery.tsv 2
 # Positive control: a new quiet counting batch, regenerated, passes and moves the signal.
 bug_copy
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 fuzz hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if python3 -I "$BGEN" --write --root "$BTMP" >/dev/null 2>&1 && python3 -I "$BGEN" --check --root "$BTMP" >/dev/null 2>&1 \
-   && grep -qF 'the last 1 of' "$BTMP/ROADMAP.md"; then
+   && grep -qF 'signal (exit 2m): 1 consecutive' "$BTMP/ROADMAP.md"; then
   ok "positive control: a recorded quiet probe batch regenerates, checks and counts toward the signal"
 else no "positive control: a well-formed probe batch failed to regenerate, check or count"; fi
+# A token batch (zero or too little effort) is recorded but does not move the signal.
+for eff in "0 hours" "3 hours" "2 programs"; do
+  bug_copy
+  printf '2099-01-01\tfuzz\tcontrol campaign\t%s\t-\t-\n' "$eff" >> "$BTMP/docs/bugs/discovery.tsv"
+  if python3 -I "$BGEN" --write --root "$BTMP" >/dev/null 2>&1 && grep -qF 'signal (exit 2m): 0 consecutive' "$BTMP/ROADMAP.md" \
+     && grep -qF 'token (does not count)' "$BTMP/ROADMAP.md"; then
+    ok "control: a token batch ($eff) is shown but does not count toward the signal"
+  else no "control: a token batch ($eff) moved the discovery signal"; fi
+done
 
 echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"

@@ -62,7 +62,9 @@
 # inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
 # interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
 # pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
-# pass and be counted.
+# pass and be counted. Four controls pin lib/bounded.sh: a command that prints and then hangs twice
+# is incomplete with no output; a command that itself exits 124 is not incomplete; a run that
+# times out once and then completes is recorded as recovered; the watchdog form reports INCOMPLETE.
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
@@ -94,9 +96,9 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"; : > "$BOUNDED_LOG"
 # shellcheck source=lib/bounded.sh
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
-export BOUNDED_LOG="$TMP/bounded.log"; : > "$BOUNDED_LOG"
 
 PASS=0
 FAIL=0
@@ -533,6 +535,26 @@ run_controls() {
     no "positive control: the real rule for $unit fails:"
     grep FAIL "$dir/positive.log" | awk 'NR<=3'
   fi
+  # The timeout helper (lib/bounded.sh), in a subshell with its own outcome file and log so the
+  # controls do not count toward this run's own recovered/incomplete tally.
+  local bres
+  bres=$(
+    export BOUNDED_OUTCOME_FILE="$dir/b.outcome" BOUNDED_LOG="$dir/b.log"; : > "$BOUNDED_LOG"
+    cd "$dir" || exit 1
+    out=$(bounded_run -r 1 1 -- sh -c 'echo EXPECTED; sleep 5'); rc=$?
+    { bounded_is_incomplete "$rc" && [ -z "$out" ]; } && echo hang_twice_incomplete_no_output
+    out=$(bounded_run 5 -- sh -c 'echo own; exit 124'); rc=$?
+    { [ "$rc" = 124 ] && ! bounded_is_incomplete "$rc" && [ "$out" = own ]; } && echo own_exit_124_not_incomplete
+    rm -f marker
+    out=$(bounded_run -r 5 1 -- sh -c 'if [ -e marker ]; then echo second; else : > marker; sleep 3; fi'); rc=$?
+    { [ "$rc" = 0 ] && [ "$out" = second ] && grep -q '^recovered' "$BOUNDED_LOG"; } && echo recovered_recorded
+    out=$(bash "$ROOT_DIR/scripts/tests/lib/bounded.sh" 1 sh -c 'echo EXPECTED; sleep 5' 2> "$dir/wd.err"); rc=$?
+    { [ "$rc" = 124 ] && [ -z "$out" ] && grep -q '^INCOMPLETE' "$dir/wd.err"; } && echo watchdog_incomplete
+  )
+  for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete; do
+    if grep -qx "$c" <<< "$bres"; then echo "  ok   bounded control $c"; PASS=$((PASS + 1))
+    else no "bounded control $c: lib/bounded.sh does not behave as specified"; fi
+  done
   # Positive control: a real unverified golden passes and is counted, not hidden.
   local uunit="examples/snippets/constants.con"
   if ! grep -qE "^@run $uunit .*oracle=unverified:" "$MANIFEST"; then
@@ -553,6 +575,7 @@ fi
 echo ""
 recovered=$(grep -c '^recovered' "$BOUNDED_LOG" || true)
 echo "=== Example outputs: $PASS passed, $FAIL failed, $INCOMPLETE incomplete (timed out twice; $recovered recovered on the re-run alone), $NORUN units not run (each with a reason) ==="
+bounded_summary
 echo "=== Golden oracles: $ORACLE_INTERP checked by the interpreter, $ORACLE_SPEC derived from a specification, $UNVERIFIED unverified (tracked gaps) ==="
 [ "$UNVERIFIED" -gt 0 ] && echo -e "Unverified goldens (no independent check yet):$unverified_list"
 if [ "$INCOMPLETE" -gt 0 ]; then

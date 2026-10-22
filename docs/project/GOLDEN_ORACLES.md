@@ -70,10 +70,15 @@ is byte-identical to the `words` golden.
 
 ### tar_list
 
-Reference: `tar tf`. `tar tf testdata/sample.tar` lists `docs/`, `docs/readme.txt`, `data.bin`,
-`empty.txt`, the `sample` golden. `tar tf testdata/truncated.tar` lists `docs/` and then reports
-the truncation; the example prints the members read before the truncation (`docs/`, the
-`truncated` golden) and exits 1.
+`sample`: reference `tar tf testdata/sample.tar`, which lists `docs/`, `docs/readme.txt`,
+`data.bin`, `empty.txt`, the `sample` golden.
+
+`truncated`, by hand from the example's archive contract (every header is a full 512-byte block,
+and an archive that ends inside a header is malformed, exit 1): `testdata/truncated.tar` is 700
+bytes; its first 512-byte header is the directory `docs/` (size 0, no data blocks), which leaves
+188 bytes where the next header must be. The example prints `docs/` (the `truncated` golden) and
+exits 1. `tar tf` is not the oracle here: GNU tar 1.35 also lists only `docs/`, but it ignores the
+short trailing block and exits 0, a looser contract than the example's.
 
 ### conlog
 

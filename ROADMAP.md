@@ -93,35 +93,37 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 18** (11 silent, 6 loud, 1 filed before the discovery record) of 135 bug records.
+**Open bugs: 23** (11 silent, 6 loud, 6 filed before the discovery record) of 135 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 2 | 077, 114, 118, 122, 129 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 118, 122, 129 |
 | 2. Binder identity by name, not a `LocalId` | 1 | 0 | 124 |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 1 | 1 | 103 |
 | 4. No reference-provenance model in the source checker | 1 | 1 | 105 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 6 | 4 | 102, 117, 128, 134, 136, 137 |
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 1 | 1 | 126 |
-| 11. Absence read as a fact (fail-open defaults) | 1 | 0 | 112 |
+| 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 112 |
+| 12. One fact kept in two places | 1 | 0 | 064 |
 | 13. Documented rules with no enforcing site | 2 | 2 | 113, 115 |
+| no class yet | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
 | exit 0b | 10 | 10 | 102, 103, 113, 115, 122, 126, 128, 129, 136, 137 |
 | exit 2c | 6 | 0 | 112, 114, 117, 118, 124, 134 |
-| no exit names it | 2 | 1 | 077, 105 |
+| no exit names it | 7 | 1 | 027, 049, 054, 058, 064, 077, 105 |
 
-| discovery rate: counting probe batch | date | effort | found | silent | loud |
-|---|---|---|---|---|---|
-| hunt: name-resolution, collision, model-vs-runtime, scope, literal, checker-ownership and red-team hunts; type-identity and generic-destroy review probes | 2026-10-18 | unrecorded | 20 | 16 | 4 |
-| workload: RocksDB slice 1 groundwork | 2026-10-20 | unrecorded | 2 | 2 | 0 |
-| design-proofs: V1 design examples (design question B6) | 2026-10-20 | unrecorded | 1 | 1 | 0 |
-| examples: examples-health pass: port and output-test every example | 2026-10-20 | unrecorded | 13 | 4 | 9 |
-| spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 |
-| semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 |
+| discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
+|---|---|---|---|---|---|---|
+| hunt: name-resolution, collision, model-vs-runtime, scope, literal, checker-ownership and red-team hunts; type-identity and generic-destroy review probes | 2026-10-18 | unrecorded | 19 | 15 | 4 | found bugs |
+| workload: RocksDB slice 1 groundwork | 2026-10-20 | unrecorded | 2 | 2 | 0 | found bugs |
+| design-proofs: V1 design examples (design question B6) | 2026-10-20 | unrecorded | 1 | 1 | 0 | found bugs |
+| examples: examples-health pass: port and output-test every example | 2026-10-20 | unrecorded | 13 | 4 | 9 | found bugs |
+| spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 | found bugs |
+| semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 
-Discovery signal (exit 2m): the last 0 of 6 counting batches were quiet (no silent bug, at most one loud); the exit needs 3 in a row. 9 attribution-only batches (reviews, follow-ons, CI, controls, development) found 13 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 6 counting batches recorded. 9 attribution-only batches (reviews, follow-ons, CI, controls, development) found 14 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -323,7 +325,7 @@ agree with the classes.
 | 2j | R-0500 | the rules V1a's subset needs are written down and enforced: typed literals, literal range (signed minima preserved), statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting ([the evaluation-order rule](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment): left to right in source order, struct and enum literal fields in source order, a functional-update base evaluated once after the explicit fields, an assignment evaluating its right-hand side before its destination), and what an assignment does to the old value (MEMORY_SEMANTICS §10) | the per-rule acceptance of 2i | blocks features | named dependency of V1a: the verified pipeline never models looser rules than the compiler enforces ([plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)) |
 | 2k | R-0500 | the remaining disputed rules are written down and enforced: explicit match binders and cast semantics per width pair, as [ARITHMETIC_POLICY §8](docs/language/ARITHMETIC_POLICY.md#8-numeric-conversions-as) decided it on 2026-10-21: `as` accepts only the always-lossless numeric, `bool` and `char` conversions of its class table, and every lossy conversion is a compile error that uses named truncation, reinterpretation, rounding or checked conversion; numeric scope only (pointer and reference casts unchanged); staged: the named operations, then the rejection with versioned migration diagnostics, then the migration | the per-rule acceptance of 2i | continues alongside | their defects (080, 084) are repaired under 0a; casts enter at a later V1 increment and match at V2, so neither is a dependency of RocksDB slice 1 or V1a |
 | 2l | R-0498 | enforcement is demonstrated (S3): a claim → gate-leg → targeted-mutation manifest over the verification and language docs, enforcement-bearing comments in `Concrete/Proof`, `Check` and `Backend`, and emitted contract text, with R-18 – R-20 relabelled shape-only until proved | every enforcement phrase in that scope at the commit that opens this exit has a manifest row whose mutation its leg kills in a qualified ([stage (c)](#promotion-pipeline)) campaign; later phrases join row 6's per-slice growth | continues alongside | prevention; no reproduced defect |
-| 2m | R-0491 | the bug-discovery rate has fallen to about zero: the last three consecutive *counting* probe batches in the [discovery record](docs/bugs/discovery.tsv) (new workloads, fuzzing campaigns, new examples, hunts, semantics probes, specifications, design proofs, interpreter coverage) each found no silent bug and at most one loud bug. Each batch records its effort, and a batch counts only when its effort is comparable to the batches of its kind that found bugs (a token batch is recorded but does not count). Reviews, fix follow-ons, CI and development attribute their bugs but are not probe rounds | the [bug dashboard](#bug-dashboard)'s discovery signal, generated by `scripts/gen/bug_dashboard.py` and checked by `check_docs_drift.sh`, reads three quiet counting batches in a row at the closing commit, and every bug record from 079 on is attributed to one batch (the generator refuses an unattributed record) | continues alongside | a convergence measure: it says whether the point repairs and the structural work have stopped the classes of [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) from producing new bugs; no reproduced defect and no deliverable depends on it, while Phase 1 and the preview's advertised stability do |
+| 2m | R-0491 | the bug-discovery rate has fallen to about zero: the last three consecutive *counting* probe batches in the [discovery record](docs/bugs/discovery.tsv) (new workloads, fuzzing campaigns, new examples, hunts, semantics probes, specifications, design proofs, interpreter coverage) each found no silent bug and at most one loud bug. Each batch records its effort, and a quiet batch counts only with a recorded effort of at least four hours or ten probe programs, examples or cases (a smaller, token batch is recorded and shown but does not count). Reviews, fix follow-ons, CI and development attribute their bugs but are not probe rounds | the [bug dashboard](#bug-dashboard)'s discovery signal, generated by `scripts/gen/bug_dashboard.py` and checked by `check_docs_drift.sh`, reads three quiet counting batches in a row at the closing commit, and every bug record from 079 on is attributed to one batch (the generator refuses an unattributed record) | continues alongside | a convergence measure: it says whether the point repairs and the structural work have stopped the classes of [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) from producing new bugs; no reproduced defect and no deliverable depends on it, while Phase 1 and the preview's advertised stability do |
 
 ### Feature prerequisites
 
@@ -483,13 +485,17 @@ why the difference cannot affect it.
 - **incomplete**: it did not finish, so nothing was observed. A timeout is incomplete, not failed and
   not passed. A test that exceeds its budget is re-run once, alone, with a larger budget: a
   completed re-run is judged normally and recorded *recovered*; a second timeout is reported
-  `INCOMPLETE`. `scripts/tests/lib/bounded.sh` implements this for the per-test budgets of
-  `check_example_outputs.sh`, `check_callable_values.sh`, `check_hashmap_probe_invariants.sh`,
-  `check_model_diff.sh` and `run_tests.sh`'s project fixtures, and as the watchdog wrapper of the
+  `INCOMPLETE`, and the timed-out run's partial output is discarded, so no output check can pass on
+  it. `scripts/tests/lib/bounded.sh` implements this (a command's own exit 124 is told apart from a
+  timeout; its behaviour is pinned by controls in `check_example_outputs.sh`) for the per-test
+  budgets of `check_example_outputs.sh`, `check_callable_values.sh`,
+  `check_hashmap_probe_invariants.sh`, `check_model_diff.sh` and `run_tests.sh`'s project fixtures,
+  which count incomplete results apart and list recovered ones, and as the watchdog wrapper of the
   gates that bound single commands; `test_ssa.sh` applies the same rule to its parallel 5-second
-  alarms (re-run alone with 30 s). In the watchdog-form gates a second timeout still fails the
-  wrapped command, so their own tally counts it among their failures while the log line says
-  `INCOMPLETE`; R-0513 owns moving them to per-check accounting. Fuzzers are the exception by
+  alarms (re-run alone with 30 s). In the watchdog-form gates a second timeout fails the wrapped
+  command with no output, so their own tally counts it among their failures while the log line says
+  `INCOMPLETE`, and a recovered run is listed only when the caller exports `BOUNDED_LOG`; R-0513
+  owns moving them to per-check accounting. Fuzzers are the exception by
   design: a hang on a generated input is their finding, triaged like a crash;
 - **skipped**: deliberately not run, with a recorded reason (a platform without the tool, an opt-in
   leg);

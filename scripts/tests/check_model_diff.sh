@@ -41,6 +41,7 @@ PASS=0; FAIL=0; INCOMPLETE=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
+export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 echo "=== C/V: the corpus ==="
@@ -282,5 +283,6 @@ want "$TMP/t" tailif 0 4 T
 for fn in tailmatch tailif; do allagree "$TMP/t" "$fn" T; done
 
 echo ""
+bounded_summary
 echo "MODEL-DIFF-GATE: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
 [ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]

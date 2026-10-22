@@ -31,8 +31,9 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh).
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
-source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 run() {
   local name="$1" src="$2" exp="$3"
@@ -216,5 +217,6 @@ echo "      #[test]s (run via --stdlib-module map): test_map_with_value,"
 echo "      test_map_with_value_missing. with_value_mut/modify are DEFERRED"
 echo "      (separate container-not-in-context obligation)."
 echo ""
+bounded_summary
 echo "CALLABLE-VALUES: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
 [ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]

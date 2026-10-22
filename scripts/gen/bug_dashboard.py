@@ -7,15 +7,21 @@
                               hand-edited); check_docs_drift.sh runs this
 
 Inputs, each the single owner of its fact:
-  docs/bugs/NNN_*.md                 status: a record whose first **Status:** line starts with OPEN is open
+  docs/bugs/NNN_*.md                 status: the first word of the record's first **Status:** (or
+                                     legacy `Status:`) line: OPEN/Open, CONTAINED, Half (closed) and
+                                     Partially (fixed) are open; FIXED/Fixed/fixed is closed; anything
+                                     else, or no status line, is refused
   docs/bugs/STRUCTURAL_CLASSES.md    the summary table's classes; a bug's primary class is the first
                                      class row, in table order, that lists it
   docs/bugs/discovery.tsv            which probe batch found each bug from 079 on, and which are silent
   ROADMAP.md "Phase 1 exits"         which exits name each bug in their completion condition
 
 The discovery-rate signal (Phase 1 exit 2m): a COUNTING batch (an independent probe kind) is quiet
-when it found no silent bug and at most one loud bug; the signal holds when the last
-QUIET_RUN_NEEDED counting batches are all quiet.
+when it found no silent bug and at most one loud bug. A quiet batch moves the signal only when its
+recorded effort reaches the minimum (MIN_HOURS hours, or MIN_UNITS probe programs, examples or
+cases); a smaller one is a token batch, shown but skipped. A batch that found more is never skipped:
+it ends the streak. The signal holds when QUIET_RUN_NEEDED consecutive eligible batches are quiet.
+A counting batch dated EFFORT_REQUIRED_FROM or later must record its effort in those units.
 
 FAIL-CLOSED (exit 2, nothing generated): a malformed discovery record (wrong header, wrong column
 count, an empty cell, a bad date or kind, a malformed bug list, a silent bug the row does not list,
@@ -37,6 +43,12 @@ COLS = ["date", "kind", "probe", "effort", "bugs", "silent"]
 COUNTING = {"hunt", "examples", "workload", "design-proofs", "semantics", "spec", "fuzz", "interp-coverage"}
 ATTRIBUTION = {"ci", "review", "follow-on", "controls", "development"}
 FIRST_ATTRIBUTED = 79
+MIN_HOURS = 4
+MIN_UNITS = 10
+EFFORT_REQUIRED_FROM = "2026-10-22"
+EFFORT = re.compile(r"^(\d+(?:\.\d+)?) (hours?|programs?|probes?|examples?|cases?)\b")
+OPEN_WORDS = {"open", "contained", "half", "partially"}
+CLOSED_WORDS = {"fixed"}
 QUIET_RUN_NEEDED = 3
 RECENT = 6
 
@@ -70,8 +82,17 @@ def load_records(root):
         num = os.path.basename(p)[:3]
         if num in recs:
             die(f"bug {num} has two records")
-        m = re.search(r"^\*\*Status:\*\*\s*(.*)$", read(p), re.M)
-        recs[num] = bool(m and m.group(1).startswith("OPEN"))
+        m = re.search(r"^(?:\*\*Status:\*\*|Status:)\s*(.*)$", read(p), re.M)
+        if not m:
+            die(f"{os.path.basename(p)} has no **Status:** line")
+        word = (re.findall(r"[A-Za-z]+", m.group(1))[:1] or [""])[0].lower()
+        if word in OPEN_WORDS:
+            recs[num] = True
+        elif word in CLOSED_WORDS:
+            recs[num] = False
+        else:
+            die(f"{os.path.basename(p)}: status '{m.group(1)[:40]}' is not one of OPEN, CONTAINED, "
+                "Half closed, Partially fixed or FIXED")
     if not recs:
         die("no bug records under docs/bugs")
     return recs
@@ -108,6 +129,9 @@ def load_discovery(root, recs):
             if b not in recs:
                 die(f"{path} data row {n}: bug {b} has no record docs/bugs/{b}_*.md")
             seen[b] = n
+        if r["kind"] in COUNTING and r["date"] >= EFFORT_REQUIRED_FROM and not EFFORT.match(r["effort"]):
+            die(f"{path} data row {n}: a counting batch from {EFFORT_REQUIRED_FROM} on records its effort as "
+                f"'<N> hours|programs|probes|examples|cases', got '{r['effort']}'")
         rows.append(r)
     missing = sorted(b for b in recs if int(b) >= FIRST_ATTRIBUTED and b not in seen)
     if missing:
@@ -204,20 +228,38 @@ def render(recs, disc, classes, exits):
     out.append("")
     counting = [r for r in disc if r["kind"] in COUNTING]
     quiet = lambda r: not r["silent"] and len(r["bugs"]) - len(r["silent"]) <= 1  # noqa: E731
+
+    def substantial(r):
+        m = EFFORT.match(r["effort"])
+        if not m:
+            return False
+        return float(m.group(1)) >= (MIN_HOURS if m.group(2).startswith("hour") else MIN_UNITS)
+
+    def verdict(r):
+        if not quiet(r):
+            return "found bugs"
+        return "quiet" if substantial(r) else "token (does not count)"
+
     streak = 0
     for r in reversed(counting):
-        if not quiet(r):
+        v = verdict(r)
+        if v.startswith("token"):
+            continue
+        if v != "quiet":
             break
         streak += 1
-    out.append("| discovery rate: counting probe batch | date | effort | found | silent | loud |")
-    out.append("|---|---|---|---|---|---|")
+    tokens = sum(1 for r in counting if verdict(r).startswith("token"))
+    out.append("| discovery rate: counting probe batch | date | effort | found | silent | loud | signal |")
+    out.append("|---|---|---|---|---|---|---|")
     for r in counting[-RECENT:]:
         nb, ns = len(r["bugs"]), len(r["silent"])
-        out.append(f"| {r['kind']}: {r['probe']} | {r['date']} | {r['effort']} | {nb} | {ns} | {nb - ns} |")
+        out.append(f"| {r['kind']}: {r['probe']} | {r['date']} | {r['effort']} | {nb} | {ns} | {nb - ns} | {verdict(r)} |")
     out.append("")
     other = [r for r in disc if r["kind"] not in COUNTING]
-    out.append(f"Discovery signal (exit 2m): the last {streak} of {len(counting)} counting batches were quiet "
-               f"(no silent bug, at most one loud); the exit needs {QUIET_RUN_NEEDED} in a row. "
+    out.append(f"Discovery signal (exit 2m): {streak} consecutive eligible counting batches are quiet "
+               f"(no silent bug, at most one loud, effort at least {MIN_HOURS} hours or {MIN_UNITS} programs); "
+               f"the exit needs {QUIET_RUN_NEEDED}. {len(counting)} counting batches recorded"
+               + (f", {tokens} of them token batches" if tokens else "") + ". "
                f"{len(other)} attribution-only batches (reviews, follow-ons, CI, controls, development) "
                f"found {sum(len(r['bugs']) for r in other)} further bugs.")
     out.append("")
