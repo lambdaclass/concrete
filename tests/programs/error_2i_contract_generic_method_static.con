@@ -1,0 +1,14 @@
+// Exit 2i (review round 9): a contract calls a generic method as `Type::method`. E0305.
+struct S { n: i32 }
+impl S {
+    fn probe<T: Copy>(x: T) -> bool {
+        let y: T = x;
+        return true;
+    }
+}
+#[requires(S::probe((x)))]
+fn f(x: &i32) -> i32 { return *x; }
+fn main() -> i32 {
+    let n: i32 = 42;
+    return f(&n);
+}

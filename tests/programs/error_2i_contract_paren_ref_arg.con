@@ -1,0 +1,9 @@
+// Exit 2i (review round 9): a contract passes a reference parameter to a call through
+// parentheses. E0305.
+fn probe(x: &i32) -> bool { return true; }
+#[requires(probe((x)))]
+fn f(x: &i32) -> i32 { return *x; }
+fn main() -> i32 {
+    let n: i32 = 42;
+    return f(&n);
+}

@@ -1151,9 +1151,13 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   (`contractBinds`, tagged SCOPE-1@1; an exhaustive walk, `contractExprBad`), and so is a borrow, a
   reference-typed parameter passed to a call, or any call to a generic function of the module: an
   erased contract never reaches monomorphization, so a generic it called would have its
-  specialization go unchecked. For the same reason a generic instantiated inside an `assert`,
-  `assume` or ghost initializer must be instantiated at a closed, reference-free type (no
-  reference, no forwarded type parameter): otherwise E0302 (`erasedRefInstantiation`). Spec fn
+  specialization go unchecked (a call by name, mangled `Type_method`, `Type::method` or method
+  syntax). For the same reason a generic instantiated inside an `assert`, `assume` or ghost
+  initializer must be instantiated at a type that cannot hold a reference under substitution (no
+  reference, and no forwarded type parameter except behind a function or raw-pointer type, which
+  substitution cannot turn into a reference binding): otherwise E0302 (`erasedRefInstantiation`).
+  In a constant initializer a cast to a reference type counts as a borrow, and type aliases are
+  expanded before the test. Spec fn
   parameters get the duplicate-name test.
   Fixtures: the twelve `error_2i_scope1_*.con` with their `_renamed` twins, and the 087 / 093 / 094
   / 107 shadowing fixtures and `error_borrow_shadow.con`, all rows of `tests/rules/exit_2i.tsv`
@@ -1330,7 +1334,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 161 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 166 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
