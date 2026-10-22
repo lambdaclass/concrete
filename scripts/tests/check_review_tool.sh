@@ -246,6 +246,16 @@ reset_fake
 review >/dev/null 2>&1
 check "next round restarts from the base, not after the blocked round" grep -q "complete change of a branch" "$FAKE_LOG/prompt.1"
 check "and carries the blocked round's findings forward" grep -q "counter is never reset" "$FAKE_LOG/prompt.1"
+# A blocked round that finds nothing new must still hand the old finding on.
+commit_file a.txt "MARK_REFUSE_ALWAYS" "rewrite a.txt"
+review >/dev/null 2>&1
+check "a blocked round with no findings of its own records the carried ones" \
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | grep -q 'counter is never reset'"
+commit_file c.txt "c" "c"
+reset_fake
+review >/dev/null 2>&1
+check "after two blocked rounds in a row the finding still reaches the prompt" \
+  grep -q "counter is never reset" "$FAKE_LOG/prompt.1"
 
 echo "=== pre-push hook: a review-notes push runs no gates ==="
 HOOK="$ROOT_DIR/.githooks/pre-push"
@@ -393,6 +403,17 @@ check "origin holds the racing note" \
   bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | grep -q 'race note'"
 check "origin holds our note" \
   bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | grep -q 'verdict: clean'"
+
+echo "=== notes push: any other refusal stops at once (exit 6) ==="
+printf '#!/bin/sh\necho "remote policy says no" >&2\nexit 1\n' >"$T/origin.git/hooks/pre-receive"
+chmod +x "$T/origin.git/hooks/pre-receive"
+reset_fake
+commit_file z3.txt "z3" "z3"
+review >"$T/out9" 2>&1; rc=$?
+rm -f "$T/origin.git/hooks/pre-receive"
+check "a refused (not non-fast-forward) push exits 6 (got $rc)" test "$rc" -eq 6
+check "and is not retried as if it were a race" bash -c "! grep -q 'rejected; fetching and merging' '$T/out9'"
+check "the note is still recorded locally" test "$(field verdict)" = clean
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?

@@ -377,6 +377,14 @@ base: $BASE_SHA
 pieces: $K
 EOF
 git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
+  # A blocked round cannot resolve the findings it was given: some code went
+  # unreviewed. Record them with this round's own, so a later round (even after
+  # several blocked rounds in a row, or a re-run on the same HEAD) still gets them.
+  FINDINGS_TEXT="$FINDINGS_TEXT
+[carried from earlier rounds; not confirmed resolved, because this round was blocked]
+$PREV_FINDINGS"
+fi
 if [ "$VERDICT" != clean ]; then
   printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
   git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
