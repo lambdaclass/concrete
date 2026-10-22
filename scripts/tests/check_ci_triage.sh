@@ -291,6 +291,26 @@ grep -qE $'^7001\t1\t0+7001\tmain\tpush\t2026-10-20\tLanguage-surface gates \\(P
 grep -qE $'^7004\t1\t.*\tcheck_linear_discard.sh\tfailed\treal$' "$TMP/h4.tsv" \
   && ok "a gate failing after a tolerated install failure is recorded real (sections matched by gate)" \
   || { no "tolerated-failure pairing"; sed 's/^/        /' "$TMP/h4.tsv"; }
+python3 -I - "$ROOT_DIR/scripts/ci" <<'PY' && ok "two failed non-gate steps are unattributed, never each other's class" || no "non-gate step attribution"
+import sys
+sys.path.insert(0, sys.argv[1])
+import ci_logs as L, flake_history as F
+steps = [{"name": "Install tools", "conclusion": "failure"}, {"name": "Upload results", "conclusion": "failure"}]
+log = ("##[group]Run curl https://example.invalid/tools\n##[endgroup]\ncurl: (6) Could not resolve host: x\n"
+       "##[error]Process completed with exit code 6.\n##[group]Run upload-results\n##[endgroup]\n"
+       "error: required report does not exist\n##[error]Process completed with exit code 1.\n")
+F.gates_at = lambda sha: []
+L.gh_json = lambda args, repo=None: ({"head_sha": "abc", "run_attempt": 1} if "/attempts/" not in args[1]
+                                     else {"jobs": [{"id": 1, "name": "build", "conclusion": "failure", "steps": steps}]})
+L.job_log = lambda *a: log
+got = [(r["step"], r["class"]) for r in F.record_run(1, "o/r", [])]
+assert got == [("Install tools", "unattributed"), ("Upload results", "unattributed")], got
+steps[:] = steps[:1]
+log2 = log.split("##[group]Run upload-results")[0]
+L.job_log = lambda *a: log2
+got = [(r["step"], r["class"]) for r in F.record_run(1, "o/r", [])]
+assert got == [("Install tools", "infra")], got
+PY
 grep -qE $'\tcheck_external_checker.sh\tfailed\tinfra-defect$' "$H" && ok "the lean4export failure is recorded as an infra defect" \
   || no "lean4export outcome class"
 CAND="$("${FH[@]}" candidates --history "$H")"

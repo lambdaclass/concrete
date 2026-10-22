@@ -141,6 +141,7 @@ def record_run(run_id, repo, ledger):
             secs = res["sections"] if res else []
             mapped = {gate_for(gmap, jname, s_.get("name", "")) for s_ in steps} - {None}
             unclaimed = [r for r in secs if r["gate"] not in mapped]
+            unmapped_failed = [s_ for s_ in failed if gate_for(gmap, jname, s_.get("name", "")) is None]
             for s_ in steps:
                 concl = s_.get("conclusion")
                 if concl is None:
@@ -153,14 +154,17 @@ def record_run(run_id, repo, ledger):
                     # A failed step takes the classification of the log section that RAN ITS GATE
                     # (the last one, if it ran twice). Sections and steps are never paired by index:
                     # a tolerated continue-on-error failure is a section with no failed step.
-                    # A failed step that runs no gate (an install or upload) takes a section no gate
-                    # step claims; with none left it is unattributed, never another gate's result.
+                    # A failed step that runs no gate (an install or upload) has no gate to match its
+                    # log section by. It takes the one section no gate step claims only when it is the
+                    # one such step and that section is the only one; any ambiguity is recorded as
+                    # failed/unattributed, never as another step's result.
                     if gate is not None:
                         own = [r for r in secs if r["gate"] == gate]
                         r = own[-1] if own else res
                     else:
                         gate = s_.get("name", "")
-                        r = unclaimed[-1] if unclaimed else {"outcome": "failed", "class": "unattributed"}
+                        r = (unclaimed[0] if len(unclaimed) == 1 and len(unmapped_failed) == 1
+                             else {"outcome": "failed", "class": "unattributed"})
                     outcome, cls = r["outcome"], r["class"]
                 row(att, jname, s_.get("name", ""), gate, outcome, cls)
     return rows
