@@ -94,6 +94,11 @@ jobs:
       - name: Hole-status consistency (no document contradicts KNOWN_HOLES)
         run: bash scripts/tests/check_hole_status_consistency.sh
 
+      # Build-free: drives scripts/fuzz/farm/ with a fake compiler and fake generators
+      # (classification, dedup, minimizer, re-check, promote, drift alert, status JSON).
+      - name: Fuzz-farm gate (the server farm's findings pipeline)
+        run: bash scripts/tests/check_fuzz_farm.sh
+
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 

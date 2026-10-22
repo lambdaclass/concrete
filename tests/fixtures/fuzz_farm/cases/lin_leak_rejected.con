@@ -1,0 +1,6 @@
+struct Res { tag: Int }
+fn main() -> Int {
+    let v1: Res = mk(1);
+    let v2: Res = v1;
+    return 0;
+}
