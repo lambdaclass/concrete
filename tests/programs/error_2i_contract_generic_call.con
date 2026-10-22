@@ -1,0 +1,14 @@
+// Exit 2i (review round 8): a contract calls a generic function of the module (here with a
+// parenthesized reference argument). Contracts are erased before monomorphization, so the call's
+// specialization would never be checked: E0305.
+fn probe<T: Copy>(x: T) -> bool {
+    let y: T = x;
+    return true;
+}
+#[requires(probe::<&i32>((x)))]
+fn f(x: &i32) -> i32 { return *x; }
+
+fn main() -> i32 {
+    let n: i32 = 42;
+    return f(&n);
+}

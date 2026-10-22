@@ -3209,6 +3209,30 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
       | none => ((local_, modName, orig) :: seen, ds)
   vsLocal ++ dups.reverse
 
+/-- Calls in a contract to a generic function of this module (review round 8): a contract is
+    erased before monomorphization, so such a call's specialization would never be checked. -/
+private partial def contractGenericCalls (gs : List String) (e : Expr) : List String :=
+  (collectCalls e).filter gs.contains |>.map fun g => s!"a call to the generic function `{g}`"
+where
+  collectCalls : Expr → List String
+    | .call _ f _ args => f :: args.flatMap collectCalls
+    | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => collectCalls l ++ collectCalls r
+    | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x | .cast _ x _
+    | .borrow _ x | .borrowMut _ x => collectCalls x
+    | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap collectCalls
+    | .methodCall _ o _ _ args => collectCalls o ++ args.flatMap collectCalls
+    | .structLit _ _ _ fs b => fs.flatMap (fun (_, x) => collectCalls x) ++ (b.map collectCalls).getD []
+    | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, x) => collectCalls x)
+    | .match_ _ s arms => collectCalls s ++ arms.flatMap fun a => match a with
+        | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
+          (g.map collectCalls).getD [] ++ b.flatMap fun st => match st with
+            | .expr _ x _ => collectCalls x
+            | _ => []
+    | .ifExpr _ c t f => collectCalls c ++ (t ++ f).flatMap fun st => match st with
+        | .expr _ x _ => collectCalls x
+        | _ => []
+    | _ => []
+
 /- What a contract expression may not contain (exit 2i review rounds 5-6): a binder of any kind (a
     match-pattern binder included) or any statement other than a block's trailing value. An
     exhaustive walk over every `Expr` constructor, so a new constructor cannot hide one. Nor may
@@ -3506,11 +3530,14 @@ def checkModule (m : Module) (summary : FileSummary)
   let exit2iContractDs : List Diagnostic :=
     (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).flatMap fun f =>
       let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
+      let genericFns : List String :=
+        (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).filterMap fun g =>
+          if g.typeParams.isEmpty then none else some g.name
       let refPs := f.params.filterMap fun p => match p.ty with
         | .ref _ | .refMut _ => some p.name
         | _ => none
       clauses.flatMap fun e =>
-        match (contractExprBad refPs e).eraseDups with
+        match (contractExprBad refPs e ++ contractGenericCalls genericFns e).eraseDups with
         | [] => []
         | bad =>
           let ce := CheckError.contractBinds f.name (", ".intercalate bad)
@@ -3633,7 +3660,9 @@ def checkModule (m : Module) (summary : FileSummary)
                   , message := s!"contract on '{f.name}': impure call '{impureCalls.headD ""}' — spec/ghost must be pure and total"
                   , pass := "check", span := some f.span
                   , hint := some "a contract may call `spec fn`s and capability-free functions; a capability-requiring function performs I/O, so the contract's meaning would depend on runtime effects" }]
-        else if !shadowedParams.isEmpty then
+        -- A local reusing a parameter's name is SCOPE-1@1 (E0301, reported by checkFn with its
+        -- rule tag and related span); this older untagged refusal stays only as defense in depth.
+        else if !shadowedParams.isEmpty && (scope1Diagnostics f).isEmpty then
           .error [{ severity := .error
                   , message := s!"contract on '{f.name}' names parameter(s) shadowed by a local: {", ".intercalate shadowedParams}"
                   , pass := "check", span := some f.span
