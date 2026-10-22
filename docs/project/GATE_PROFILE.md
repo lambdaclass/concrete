@@ -272,3 +272,93 @@ the verifying build always runs, the seed is never a substitute for building.
 `.lake/build`, so a shared read-only build directory cannot serve as a live build directory.
 Copy-on-write seeding gives the same speed-up without sharing a mutable directory between
 worktrees.
+
+## Parallel scaling on concrete-ci-1 (R-0547)
+
+The full local set (`run_ci_gates_local.sh`) was measured on concrete-ci-1 (AMD EPYC 8324P, 32 cores
+/ 64 threads, 251 GiB) through `concrete-remote`, one pass at a time, with the fuzz farm running at
+idle priority beside it. Every pass writes `.ci-gate-timings.tsv` (start, end, seconds, stage, verdict,
+command per gate execution); the numbers below come from those files and from a 5-second sampler of
+load and `MemTotal - MemAvailable`.
+
+### Before: `911c7db2` (wip/load-and-profile 2825d4c8 plus the timing rows only)
+
+"Pool wall" is the parallel phase alone. The runner then re-ran every pool failure **serially**; that
+tail was cut off in these measurements because it is serial and would dominate them (at JOBS=64 the
+partial tail alone ran past 40 minutes).
+
+| JOBS | pool wall | pool failures (of 257) | peak memory used | max load (1 min) |
+|---|---|---|---|---|
+| 8  | 1357 s (22.6 min) | 14 | 14.8 GB | 59 |
+| 16 | 1578 s (26.3 min) | 16 | 12.5 GB | 38 |
+| 32 | 865 s (14.4 min)  | 21 | 14.5 GB | 47 |
+| 48 | 413 s (6.9 min)   | 28 | 14.8 GB | 59 |
+| 64 | 461 s (7.7 min)   | 33 | 18.9 GB | 58 |
+
+It did not scale, and it did not finish: every width had 14 to 33 failing gates, nearly all of which
+passed when re-run alone. The 48/64 rows are short because the long gates failed early, not because
+they ran faster. Memory was never a limit (under 20 GB of 251).
+
+### What broke under parallelism, and the fix for each
+
+Every one of these is a race inside a gate (or the compiler), not load: the runner's sequential
+re-check had been absorbing them as "contention flakes".
+
+1. **`run_fast_surface_gates.sh --mutate` edited tracked files in place**, including
+   `Concrete/Report/Report.lean`. Every concurrent `require_fresh_binary` then rebuilt the shared
+   compiler from the mutated source: the binary vanished mid-relink, `.olean` files were missing,
+   the build identity moved. This alone explains most of the failures above. It now mutates a private
+   checkout (`scripts/tests/lib/private_checkout.sh`).
+2. **Other gates that wrote the shared tree**: `check_attestation_manifest.sh` appended a probe
+   function to `examples/hmac_sha256` and regenerated a tracked `.lean` in place;
+   `check_build_identity_freshness.sh` rewrote `Concrete/BuildIdentity.lean` and appended to
+   `Concrete/Proof/Replay.lean`; `check_receipt_consumption.sh` added a module under
+   `Concrete/Proof/`; five gates created probe directories inside the checkout, which made the
+   mutation driver's `cp -a` of the checkout fail when they vanished. All now work on private copies
+   or write to `$TMPDIR`.
+3. **The compiler wrote its IR to `<source>.ll` and deleted it after linking**, so two builds of one
+   source raced ("no such file or directory: .../main.con.ll"). The IR and test binaries now go to
+   `$TMPDIR` under the process id (`scratchPath` in Main.lean); `--emit-llvm` is unchanged.
+4. **Fixed `/tmp` names** in a dozen gates (and `EXAMPLES_OUT_DIR=/tmp/concrete_examples_out` in the
+   workflow) collided between concurrent passes on one host. They are per-run now, and
+   `check_gate_hygiene.sh` refuses a fixed `/tmp` path.
+5. **`concrete-remote` used a git worktree**, and the mutation drivers behind
+   `check_phase6c_observability.sh` and `check_campaign_summary_golden.sh` refuse worktrees, so a
+   server pass could never be green. It now uses `git clone --shared`.
+6. **Host gaps, reported, not hidden**: the server has no elan, so `check_external_checker.sh` is a
+   named host skip (`lib/host_tools.sh`), which keeps the pass PARTIAL. Two `run_tests.sh` cases and
+   one `check_example_outputs.sh` reproducer fail on this host on `main` too: the devshell clang
+   finds no `stddef.h` for C stubs, and the linker is lld, whose wording ("undefined symbol") the
+   bug-114 expectation does not list. These are environment defects of the server, not races.
+
+### Duplicated work removed (one run per assertion)
+
+Measured from CI run 39775852735 (main 713778e2). Each removed re-run's assertions still run exactly
+once, in their own step, and the umbrella asserts that the step exists and is unconditional
+(`scripts/tests/lib/delegated_gates.sh`, with a negative-control fixture).
+
+| Re-run removed | CI before | What remains |
+|---|---|---|
+| `check_phase3_obligation_core.sh` re-running 8 sub-gates | 797 s | own probes, about 60 s |
+| `check_phase2_vc.sh` re-running 9 sub-gates | 483 s | delegation check, under 1 s |
+| `check_phase1_contracts.sh` re-running 2 sub-gates | 165 s | own legs, about 16 s |
+| nested `check_snapshots.sh` / `test_prove_cli.sh` in the two obligation view gates | about 195 s | delegation check |
+| standalone steps for identity, kernel re-check, checker policy, claim inventory (CI also ran them inside `checker_acceptance_evidence.sh`) | 643 s | the acceptance step is now their only run; it runs them concurrently (about 115 s on the server) |
+
+That is about 37 CI-minutes less per push, before counting the faster acceptance step. The local
+inventory went from 257 to 253 commands (`EXPECTED_GATE_COMMANDS`).
+`check_mint_batch_accounting.sh` was **not** de-duplicated: its nine runs of
+`check_dependency_edges.sh` each set a different self-test flag and assert a different refusal, and
+one case's shape check depends on the full assertion total. Its cases now run concurrently instead
+(396 s to about 70-90 s); removing the repeated ordinary sections needs a mint-only mode in that gate.
+
+### Longest gates made parallel inside
+
+`check_claim_inventory` (per-source replay), `check_showcase` (per flagship), both fuzzers (cases
+generated in order, checked concurrently, lowest failing case reported), and the acceptance step
+(its five gates under one lock). The runner starts gates longest-first from
+`scripts/tests/gate_weights.tsv` (ordering only; a stale weight never changes a verdict).
+
+### After
+
+AFTER_TABLE_PLACEHOLDER
