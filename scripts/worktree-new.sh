@@ -76,19 +76,26 @@ echo "  base   : ${BASE_SHA:0:8} ($BASE)"
 git worktree add "$DEST" -b "$NAME" "$BASE_SHA" || exit 1
 
 # SEED THE LEAN BUILD (R-0546). A fresh worktree otherwise rebuilds all 242 Lean jobs (~52 s wall,
-# ~255 s CPU measured). scripts/lake-seed.sh copies this checkout's .lake copy-on-write and lets
-# `lake build` re-verify it by content hash, so the seed can only save work, never go stale.
-# CONCRETE_LAKE_SEED=0 skips it.
+# ~255 s CPU measured). scripts/dev/seed-lake.sh copies this checkout's .lake/build copy-on-write
+# when the toolchain, manifest, platform and lean executable match (it refuses otherwise), and the
+# first `lake build` re-verifies every module by content hash, so the seed can only save work, never
+# go stale. The parent's copy of the script runs with --checkout, since the new worktree's base may
+# predate it. CONCRETE_LAKE_SEED=0 skips it.
+SEEDED=0
 if [ "${CONCRETE_LAKE_SEED:-1}" != "0" ] && [ -d "$ROOT_DIR/.lake/build" ]; then
-  ( cd "$DEST" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) \
-    || echo "worktree-new: lake seed failed; the first build will start from scratch."
+  if bash "$ROOT_DIR/scripts/dev/seed-lake.sh" --checkout "$DEST" --from "$ROOT_DIR"; then SEEDED=1
+  else echo "worktree-new: no lake seed (see above); the first build will start from scratch."; fi
 fi
 
 echo ""
 echo "worktree-new: ready. cd $DEST"
 echo "worktree-new: run all commands from there — do NOT cd back to $(basename "$ROOT_DIR")."
-echo "worktree-new: warm start: nix develop -c bash scripts/dev/seed-lake.sh --build"
-echo "             (copies the main checkout's .lake/build when toolchain, manifest and lean match; lake build still runs)"
+if [ "$SEEDED" = 1 ]; then
+  echo "worktree-new: .lake/build seeded from $ROOT_DIR; the first 'nix develop -c lake build' re-verifies it"
+else
+  echo "worktree-new: warm start: nix develop -c bash scripts/dev/seed-lake.sh --build"
+  echo "             (copies the main checkout's .lake/build when toolchain, manifest and lean match; lake build still runs)"
+fi
 
 # DELIBERATELY NOT WARNING about other processes in the tree. Two attempts were
 # measured and both cried wolf:

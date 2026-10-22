@@ -78,7 +78,8 @@ remove_first_line_with() {
 # The runner's sequential recheck then passed them all, so a real race in this gate was being
 # absorbed as "contention". The copy holds this checkout's tracked content (uncommitted edits
 # included) in its own git repository, with its own .lake seeded copy-on-write from this one and
-# verified by lake build (scripts/lake-seed.sh), and its own repository lock.
+# verified by lake build (scripts/dev/seed-lake.sh --build: a refused seed builds cold), and its own
+# repository lock.
 mutate_copy() { # -> prints the copy's root; nonzero when it could not be made faithfully
   local base="$1" tree="$1/tree"
   git clone --quiet --shared --no-checkout "$ROOT_DIR" "$tree" >"$base/seed.log" 2>&1 \
@@ -98,7 +99,7 @@ mutate_copy() { # -> prints the copy's root; nonzero when it could not be made f
     rm -f "$tree/$f" || { echo "could not apply deletion of $f" >> "$base/seed.log"; exit 1; }
   done || return 1
   if [ -d "$ROOT_DIR/.lake" ]; then
-    ( cd "$tree" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) >"$base/seed.log" 2>&1 || return 1
+    ( cd "$tree" && bash "$ROOT_DIR/scripts/dev/seed-lake.sh" --checkout "$tree" --from "$ROOT_DIR" --build ) >"$base/seed.log" 2>&1 || return 1
   fi
   printf '%s' "$tree"
 }

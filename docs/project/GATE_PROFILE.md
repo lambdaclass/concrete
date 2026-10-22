@@ -251,8 +251,10 @@ session). The remaining time is in places the cache does not reach:
 **What a fresh build costs.** A fresh checkout builds all 242 Lean jobs. Measured at `25eb35fd`:
 **52 s wall, 255 s user CPU** on the 18-core laptop. On CI it is about 2.6 min (#9 above).
 
-**How seeding works.** On concrete-ci-1 a clone seeded this way and verified with `lake build` in 1 s at `2825d4c8`. `scripts/lake-seed.sh` copies another checkout's `.lake` copy-on-write
-(APFS `cp -c`, or Linux `--reflink`), then runs `lake build`. Measured: **0.2 s to copy and 0.6 to
+**How seeding works.** On concrete-ci-1 a clone seeded this way and verified with `lake build` in 1 s at `2825d4c8`. `scripts/dev/seed-lake.sh` (the one seeding script; train 2 retired the
+earlier `scripts/lake-seed.sh`) copies another checkout's `.lake/build` copy-on-write (APFS `cp -c`, or
+Linux `--reflink`) when the toolchain, manifest, platform and lean executable match, and `lake build`
+then re-verifies it. Measured: **0.2 s to copy and 0.6 to
 1.1 s for the verifying `lake build`**, about a 50× speed-up for a new worktree.
 `scripts/worktree-new.sh` seeds by default (`CONCRETE_LAKE_SEED=0` opts out).
 
