@@ -45,3 +45,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-22	review	Codex reviews of safety-eval2 (rule (c), bug 144 migration, bug 146, operand and exit-path checks)	unrecorded	145,146,147,148,149	149
 2026-10-22	fuzz	fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z	269145 programs	176	176
 2026-10-22	development	devshell toolchain change (Nix clang ahead on PATH) exposing a run_tests race	unrecorded	179	-
+2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-

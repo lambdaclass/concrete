@@ -1661,6 +1661,33 @@ r179_leg regress_179_concurrent_compile 5 8 42 \
     "$ROOT_DIR/$COMPILER" "$ROOT_DIR/$TESTDIR/regress_179_concurrent_compile.con" -o
 r179_build() { cd "$ROOT_DIR/$TESTDIR/regress_179_concurrent_build" && "$ROOT_DIR/$COMPILER" build -o "$1"; }
 r179_leg regress_179_concurrent_build 3 4 0 r179_build
+# Bug 184 (FIXED): `--interp` read ALL of standard input before `main` ran, so a program that
+# never reads stdin, fed by a pipe that stays open, waited for the writer to close it (the binary
+# returns at once). Standard input is now pulled when the program reads it. Each leg feeds the
+# program a pipe held open for 30 s (a process substitution, so the leg does not wait for the
+# writer) under `timeout 10`: a run that waits for end of input times out (124) and fails.
+# regress_184_interp_stdin_unread never reads stdin (21); regress_184_interp_stdin_read is the
+# control that does: one read(0, buf, 2) of "AB" returns both bytes at once (65 + 66 = 131).
+r184_leg() {  # <fixture> <bytes the open pipe carries first> <expected value>
+    local src="$TESTDIR/$1.con" feed="$2" want="$3" bin="$TMPDIR/r184_$1" i_out i_rc n_rc
+    i_rc=0
+    i_out=$(timeout 10 "$COMPILER" "$src" --interp 2>&1 < <(printf '%s' "$feed"; exec sleep 30 2>/dev/null)) || i_rc=$?
+    n_rc=""
+    if "$COMPILER" "$src" -o "$bin" >/dev/null 2>&1; then
+        n_rc=0
+        timeout 10 "$bin" >/dev/null 2>&1 < <(printf '%s' "$feed"; exec sleep 30 2>/dev/null) || n_rc=$?
+    fi
+    rm -f "$bin"
+    if [ "$i_rc" = 0 ] && [ "$i_out" = "$want" ] && [ "$n_rc" = "$want" ]; then
+        echo "  ok  bug 184: $1 with stdin held open: --interp == binary ($want), neither waits for end of input"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 184: $1 with stdin held open: --interp rc $i_rc output '$i_out', binary exit '$n_rc' (124 = timed out), want $want"
+        FAIL=$((FAIL + 1))
+    fi
+}
+r184_leg regress_184_interp_stdin_unread "" 21
+r184_leg regress_184_interp_stdin_read AB 131
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.

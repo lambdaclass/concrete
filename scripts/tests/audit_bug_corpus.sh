@@ -101,6 +101,9 @@ declare -A BUG_TEST_MAP=(
   [116]="regress_116_vec_push_first_field.con"
   # Bug 133: &mut (*p).f borrowed a copy of *p (a write through it was lost).
   [133]="regress_133_deref_field_borrow.con"
+  # Bug 184: --interp read all of stdin before main ran (waited for an open pipe to close);
+  # both fixtures run under run_tests.sh's r184_leg with stdin held open.
+  [184]="regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con"
   # Bug 179: concurrent compiles of one source shared the intermediate <input>.ll / <main>.ll;
   # both fixtures are compiled concurrently by run_tests.sh (file mode and project mode).
   [179]="regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con"
