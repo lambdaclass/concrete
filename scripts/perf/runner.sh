@@ -164,21 +164,36 @@ PY
     BISECT_JSON="$OUT/bisect-$S12.json"
     ATTEMPTS_FILE="$OUT/bisect-$S12.attempts"
     ATTEMPTS="$(cat "$ATTEMPTS_FILE" 2>/dev/null || echo 0)"
-    if [ ! -s "$BISECT_JSON" ]; then
+    # The limit is checked BEFORE launching, and the counter is bumped before the run, so a bisect
+    # killed mid-way still counts: at most 3 launches per commit, however they end.
+    if [ ! -s "$BISECT_JSON" ] && [ "$ATTEMPTS" -lt 3 ]; then
       coordinate "perf-bisect $S12" || exit 0
       echo $((ATTEMPTS + 1)) > "$ATTEMPTS_FILE"
       log "regression in $METRIC; bisecting ${GOOD:0:12}..$S12 (attempt $((ATTEMPTS + 1)))"
+      rm -f "$BISECT_JSON.tmp"
       set +e
       nix develop "$REPO" -c python3 "$PERF/perf_bisect.py" --repo "$REPO" --metric "$METRIC" --good "$GOOD" \
         --bad "$HEAD_SHA" --band "$BAND" --machine "$MACHINE" --work "$PERF_HOME/work" --out "$BISECT_JSON.tmp" \
         >>"$RUNLOG" 2>&1
       brc=$?
       set -e
-      # A bisect that crashed is retried at the next tick (3 attempts), not silently dropped.
-      if [ "$brc" -eq 0 ] || [ "$brc" -eq 2 ]; then
-        [ -s "$BISECT_JSON.tmp" ] && mv -f "$BISECT_JSON.tmp" "$BISECT_JSON"
+      # Accepted only as a well-formed result for THIS metric and commit with a known verdict.
+      if python3 - "$BISECT_JSON.tmp" "$METRIC" "$HEAD_SHA" <<'PY'
+import json, sys
+try:
+    b = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    sys.exit(1)
+ok = (b.get("schema") == "concrete.perf.bisect.v1" and b.get("metric") == sys.argv[2]
+      and b.get("bad") == sys.argv[3]
+      and b.get("verdict") in ("culprit", "range", "not_reproduced", "unmeasurable", "not_ancestor"))
+sys.exit(0 if ok else 1)
+PY
+      then
+        mv -f "$BISECT_JSON.tmp" "$BISECT_JSON"
       elif [ "$((ATTEMPTS + 1))" -lt 3 ]; then
-        log "bisect failed (exit $brc); retrying at the next tick"; state retry "$S12 bisect exit $brc"; exit 0
+        log "bisect failed (exit $brc, no valid result); retrying at the next tick"
+        state retry "$S12 bisect exit $brc"; exit 0
       else
         log "bisect failed 3 times; reporting the regression without a culprit"
       fi

@@ -280,6 +280,16 @@ python3 -I "$PERF/store.py" put --data "$D" --machine evil --name x.json --file 
 rm -f "$D/data/evil"
 [ "$(python3 -I "$PERF/store.py" pending --data "$D" --machine fixture-1)" = "$(tail -1 "$REC" | python3 -I -c 'import json,sys; print(json.loads(sys.stdin.read())["sha"])')" ] \
   && ok "pending: the newest measured-but-unprocessed commit is resumed first" || no "pending"
+NEWEST="$(tail -1 "$REC" | python3 -I -c 'import json,sys; print(json.loads(sys.stdin.read())["sha"])')"
+PREV="$(tail -2 "$REC" | head -1 | python3 -I -c 'import json,sys; print(json.loads(sys.stdin.read())["sha"])')"
+python3 -I "$PERF/store.py" processed --data "$D" --machine fixture-1 --sha "$NEWEST" --mark
+[ "$(python3 -I "$PERF/store.py" pending --data "$D" --machine fixture-1)" = "$PREV" ] \
+  && ok "pending: an older unprocessed commit behind a processed one is not stranded" || no "pending skipped an older unprocessed commit"
+ln -s "$TMP/outside/victim" "$D/data/fixture-1/.planted"
+python3 -I "$PERF/store.py" put --data "$D" --machine fixture-1 --name planted-dest.json --file "$TMP/s.json" >/dev/null 2>&1
+[ ! -e "$TMP/outside/victim" ] && ok "atomic writes never follow a planted symlink" || no "a write followed a planted symlink"
+rm -f "$D/data/fixture-1/.planted"
+G rm -q --cached "data/fixture-1/planted-dest.json" >/dev/null 2>&1; rm -f "$D/data/fixture-1/planted-dest.json"; G commit -qm "test cleanup" >/dev/null 2>&1
 [ -z "$(G status --porcelain)" ] && ok "the data worktree is clean after every write" || no "uncommitted data: $(G status --porcelain | head -3)"
 
 echo "=== detect.py / report.py on the stored data ==="
