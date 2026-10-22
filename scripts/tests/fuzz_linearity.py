@@ -23,7 +23,7 @@ Usage:
   python3 scripts/tests/fuzz_linearity.py [--n N] [--seed S] [--keep]
 Exit nonzero on the first oracle/checker disagreement; prints the program.
 """
-import argparse, os, random, subprocess, sys, tempfile
+import argparse, concurrent.futures, os, random, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")
@@ -171,20 +171,27 @@ def main():
     if not os.path.exists(CC):
         print(f"error: build first ({CC} missing)", file=sys.stderr)
         return 2
+    # GENERATED IN ORDER, CHECKED CONCURRENTLY (R-0547). The checks draw nothing from the seeded
+    # stream, so generating every case first yields exactly the serial sequence; each case compiles
+    # in its own file. The reported failure is the LOWEST failing case, the one a serial run stops
+    # at, so a seed gives the same report at any FUZZ_JOBS (default: half the cores, at most 8).
     rng = random.Random(args.seed)
     tmpdir = tempfile.mkdtemp(prefix="fuzz_linearity_")
-    cases = fails = 0
+    work = []
     for i in range(args.n):
         steps = rng.randrange(1, args.max_steps + 1)
-        for kind, src, must in gen_cases(rng, steps):
-            cases += 1
-            err = run_case(kind, src, must, tmpdir, i, args.keep)
-            if err:
-                fails += 1
-                print(err)
-                print(f"FUZZ-LINEARITY: FAILED after {cases} cases (seed {args.seed})")
-                return 1
-    print(f"FUZZ-LINEARITY: {cases} cases OK (seed {args.seed}, {args.n} chains)")
+        for j, (kind, src, must) in enumerate(gen_cases(rng, steps)):
+            work.append((kind, src, must, f"{i}_{j}"))
+    cores = os.cpu_count() or 2
+    jobs = int(os.environ.get("FUZZ_JOBS", "0") or 0) or max(1, min(8, cores // 2))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        errs = list(ex.map(lambda w: run_case(w[0], w[1], w[2], tmpdir, w[3], args.keep), work))
+    for k, err in enumerate(errs):
+        if err:
+            print(err)
+            print(f"FUZZ-LINEARITY: FAILED after {k + 1} cases (seed {args.seed})")
+            return 1
+    print(f"FUZZ-LINEARITY: {len(work)} cases OK (seed {args.seed}, {args.n} chains)")
     return 0
 
 
