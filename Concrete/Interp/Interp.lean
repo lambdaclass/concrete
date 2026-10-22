@@ -893,6 +893,24 @@ def implMethodFns (modules : List CModule) (fns : List CFnDef) : List CFnDef :=
     | _, _ => marker k)
   ++ ambiguousTypes.map marker
 
+/-- The builtin spelling the interpreter's builtin table uses for a call spelling Lower also
+    treats as that intrinsic (`resolveIntrinsic`'s aliases: `_sizeof`, `Vec_push`, `String_len`,
+    `string_len`...). Reached only when no Concrete function has the spelling. -/
+def canonicalBuiltin (name : String) : String :=
+  match resolveIntrinsic name with
+  | some .sizeof => "sizeof"
+  | some .vecNew => "vec_new" | some .vecPush => "vec_push" | some .vecGet => "vec_get"
+  | some .vecSet => "vec_set" | some .vecLen => "vec_len" | some .vecPop => "vec_pop"
+  | some .vecFree => "vec_free"
+  | some .stringLength => "string_length" | some .stringConcat => "string_concat"
+  | some .stringEq => "string_eq" | some .stringSlice => "string_slice"
+  | some .stringCharAt => "string_char_at" | some .stringContains => "string_contains"
+  | some .stringTrim => "string_trim" | some .dropString => "drop_string"
+  | some .stringPushChar => "string_push_char" | some .stringAppend => "string_append"
+  | some .stringAppendInt => "string_append_int" | some .stringAppendBool => "string_append_bool"
+  | some .stringSubstr => "string_substr" | some .stringReserve => "string_reserve"
+  | _ => name
+
 /-- A function pointer to a foreign declaration: `fnPtr (externPtrPrefix ++ decl)`. -/
 def externPtrPrefix : String := "$extern:"
 
@@ -2320,7 +2338,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
           | .struct_ n fs => .struct_ n (fs.map fun (f, v) => if f == "len" then (f, .int needed .uint) else (f, v))
           | other => other
         updatePath cx env p s
-      match fnName, argVals with
+      match canonicalBuiltin fnName, argVals with
       | "string_length", [arg] => do
         let (_, len, _) ← stringFields (← autoDeref cx env arg)
         return (env, .val (.int len .int))
