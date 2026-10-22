@@ -956,6 +956,9 @@ jobs:
       - name: "Gate lock (a lock is refused, never reclaimed on a dead creator PID)"
         run: bash scripts/tests/check_gate_lock.sh
 
+      - name: "Heavy slots (R-0543: at most N heavy runs per machine; a third waits; a dead holder is reclaimed)"
+        run: bash scripts/tests/check_heavy_slots.sh
+
       - name: "Pre-push validation record (reused only when every bound input matches)"
         run: bash scripts/tests/check_prepush_record.sh
 

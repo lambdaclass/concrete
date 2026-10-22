@@ -20,7 +20,8 @@
 #
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
 #        scripts/tests/run_ci_gates_local.sh --job "<CI job name substring>"
-#        scripts/tests/run_ci_gates_local.sh [--plan] [--first CMD]... [--job J]... [--filter S]...
+#        scripts/tests/run_ci_gates_local.sh [--plan] [--no-wait] [--first CMD]... [--job J]... [--filter S]...
+#   --no-wait    a heavy run (see R-0543 below) exits 75 instead of waiting when every slot is busy.
 #
 # SELECTORS COMPOSE INTO ONE UNIQUE LIST. `--job`, `--filter` (or a bare positional substring) and
 # `--first` may each be repeated; the union is resolved ONCE, deduplicated by the normalized command
@@ -54,6 +55,7 @@ WORKFLOW=".github/workflows/lean_action_ci.yml"
 # except in --plan mode, which never takes the lock.
 ARG_ERR=""
 PLAN=0
+HEAVY_NO_WAIT="${CONCRETE_HEAVY_NO_WAIT:-0}"
 JOBSEL=(); FILTERS=(); FIRST_CMDS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -61,6 +63,7 @@ while [ $# -gt 0 ]; do
     # no gate, and produced a partial result that looked like a deliberate subset.
     --closure) CONCRETE_CLOSURE_RUN=1; shift ;;
     --plan)    PLAN=1; shift ;;
+    --no-wait) HEAVY_NO_WAIT=1; shift ;;   # R-0543: fail fast (exit 75) when every heavy slot is busy
     --job|--filter|--first)
       if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
       case "$1" in
@@ -147,7 +150,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
-EXPECTED_GATE_COMMANDS=255
+# 255 -> 256: check_heavy_slots.sh (R-0543 machine-wide heavy-run semaphore), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=256
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
@@ -374,6 +378,24 @@ fi
 # `require_fresh_binary` rebuild for themselves, but the ones that do not — the first extracted
 # command, scripts/ci/proof_gate.sh, among them — ran against whatever was on disk, so a closure
 # run could record the current HEAD while its early verdicts described an older compiler.
+# MACHINE-WIDE LOAD CONTROL (R-0543, scripts/tests/lib/heavy_slots.sh). A full pass, or a selection
+# larger than CONCRETE_HEAVY_MIN_GATES (default 8; the pre-push hook's job selections are), takes one
+# of CONCRETE_HEAVY_SLOTS machine-wide slots BEFORE the rebuild below, because a fresh worktree's
+# build is itself heavy. Small selections and single gates never wait. Taken after the repository
+# lock, so a waiting run holds only its own worktree. Released at the end; a killed run's slot is
+# reclaimed by the next waiter (its pid is dead).
+HEAVY_RUN=0
+if source "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh" 2>/dev/null && [ -z "$ARG_ERR" ] && resolve_selection 2>/dev/null; then
+  if [ "$SELECTING" = "0" ] || [ "${#SELECTED[@]}" -gt "${CONCRETE_HEAVY_MIN_GATES:-8}" ]; then HEAVY_RUN=1; fi
+fi
+if [ "$HEAVY_RUN" = "1" ]; then
+  _hargs=(); [ "$HEAVY_NO_WAIT" = "1" ] && _hargs=(--no-wait)
+  heavy_slot_acquire "run_ci_gates_local.sh (${#SELECTED[@]} gates)" ${_hargs[@]+"${_hargs[@]}"}; _hrc=$?
+  if [ "$_hrc" -ne 0 ]; then
+    ci_write_summary 0 " heavy_slot_unavailable"; _gate_lock_release
+    exit "$_hrc"
+  fi
+fi
 if ! require_fresh_binary ".lake/build/bin/concrete"; then
   ci_write_summary 0 " compiler_not_fresh"
   echo "error: refusing to run the gate set against an unverified compiler." >&2
@@ -411,6 +433,11 @@ JOBS_EXPLICIT=0
 JOBS_DEFAULT=$(( CORES - 2 ))
 [ "$JOBS_DEFAULT" -lt 1 ] && JOBS_DEFAULT=1
 [ "$JOBS_DEFAULT" -gt 8 ] && JOBS_DEFAULT=8
+# R-0543: with more than one machine-wide heavy slot the machine is shared, so the default becomes
+# this run's fair share of the free cores (heavy_jobs_default), not a fixed 8.
+if command -v heavy_jobs_default >/dev/null 2>&1 && [ "$(heavy_slots_n)" -gt 1 ]; then
+  JOBS_DEFAULT="$(heavy_jobs_default)"
+fi
 JOBS="${JOBS:-$JOBS_DEFAULT}"
 
 # ---------------------------------------------------------------------------
@@ -809,6 +836,7 @@ if [ "${RUN_INTERRUPTED:-0}" = "1" ]; then
 else
   _gate_lock_release
 fi
+[ "$HEAVY_RUN" = "1" ] && heavy_slot_release
 
 # The artifact write is part of the verdict: a pass with no durable record is not closure evidence.
 [ "$RUN_OK" = "1" ]

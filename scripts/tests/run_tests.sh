@@ -30,6 +30,7 @@ on_exit() {
   # an unguarded compile fail and the campaign could only report "never reached the end".
   # SUITE_TMPDIR, never the inherited TMPDIR: before it is assigned this must remove nothing.
   [ -z "${SUITE_TMPDIR:-}" ] || rm -rf "$SUITE_TMPDIR"
+  command -v heavy_slot_release >/dev/null 2>&1 && heavy_slot_release
   if [ "$SUMMARY_WRITTEN" -ne 1 ]; then
     echo "" >&2
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
@@ -77,7 +78,8 @@ Modes:
   --manifest          List all test files with categories (no execution)
 
 Options:
-  -j N                Override parallelism (default: number of CPU cores)
+  -j N                Override parallelism (default: number of CPU cores; --full: fair share, R-0543)
+  --no-wait           --full only: exit 75 instead of waiting for a machine-wide heavy slot
   -h, --help          Show this help
 
 Environment:
@@ -100,6 +102,8 @@ USAGE
     exit 0
 }
 
+TEST_JOBS_EXPLICIT=0; [ -n "${TEST_JOBS:-}" ] && TEST_JOBS_EXPLICIT=1
+HEAVY_NO_WAIT="${CONCRETE_HEAVY_NO_WAIT:-0}"
 # Auto-detect CPU count for default parallelism
 if [ -z "${TEST_JOBS:-}" ]; then
     if command -v nproc &>/dev/null; then
@@ -143,11 +147,30 @@ while [ $# -gt 0 ]; do
             ;;
         --filter)  FILTER="$2"; shift 2 ;;
         --manifest) MODE="manifest"; shift ;;
-        -j)        TEST_JOBS="$2"; shift 2 ;;
+        -j)        TEST_JOBS="$2"; TEST_JOBS_EXPLICIT=1; shift 2 ;;
+        --no-wait) HEAVY_NO_WAIT=1; shift ;;
         -h|--help) usage ;;
         *)         echo "Unknown option: $1"; usage ;;
     esac
 done
+
+# --- Machine-wide load control (R-0543, scripts/tests/lib/heavy_slots.sh) ---
+# --full is a heavy run: it waits for one of CONCRETE_HEAVY_SLOTS machine-wide slots (default 2), or
+# with --no-wait exits 75. Every other mode is unaffected. A killed run's slot is reclaimed by the
+# next waiter because its pid is dead; on_exit releases it on every normal path.
+if [ "$MODE" = "full" ]; then
+    source "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh"
+    _hargs=(); [ "$HEAVY_NO_WAIT" = "1" ] && _hargs=(--no-wait)
+    _hrc=0; heavy_slot_acquire "run_tests.sh --full" ${_hargs[@]+"${_hargs[@]}"} || _hrc=$?
+    if [ "$_hrc" -ne 0 ]; then
+        SUMMARY_WRITTEN=1   # not an aborted suite: it never started
+        echo "run_tests.sh --full: no heavy slot (exit $_hrc); nothing was run." >&2
+        exit "$_hrc"
+    fi
+    if [ "$TEST_JOBS_EXPLICIT" = "0" ] && [ "$(heavy_slots_n)" -gt 1 ]; then
+        TEST_JOBS="$(heavy_jobs_default)"
+    fi
+fi
 
 # --- Manifest mode: list all tests and exit ---
 if [ "$MODE" = "manifest" ]; then

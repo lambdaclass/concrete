@@ -95,6 +95,18 @@ else
   # cleanup never removed the lock at all, wedging every later run — the opposite failure.
   MUT_HELD_MUT_LOCK=1
 fi
+# MACHINE-WIDE LOAD CONTROL (R-0543, scripts/tests/lib/heavy_slots.sh): a mutating run is heavy and
+# takes one of CONCRETE_HEAVY_SLOTS slots; cleanup_lock releases it. Read-only modes take none.
+if [ "$MUT_READ_ONLY" = "0" ]; then
+  source "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh"
+  _hrc=0; heavy_slot_acquire "test_mutation.sh" || _hrc=$?
+  if [ "$_hrc" -ne 0 ]; then
+    [ "${MUT_HELD_MUT_LOCK:-0}" = "1" ] && rm -rf "$LOCK_DIR"
+    [ "${MUT_HELD_GATE_LOCK:-0}" = "1" ] && _gate_lock_release
+    echo "error: no machine-wide heavy slot (exit $_hrc); nothing was mutated." >&2
+    exit "$_hrc"
+  fi
+fi
 # Backups live in a unique temp dir, not beside the source: a `<file>.mutbak`
 # sitting in the tree is itself a way to leave state behind, and two runs racing
 # on the same path is what corrupted Proof.lean.
@@ -146,6 +158,7 @@ build_kill_declared() { case " $MUT_EXPECT_BUILD_KILL " in *" $1 "*) return 0;; 
 MUT_SIGNALLED=0
 cleanup_lock() {
   local rc=$?
+  command -v heavy_slot_release >/dev/null 2>&1 && heavy_slot_release
   if [ "${MUT_SIGNALLED:-0}" = "1" ] && [ "$rc" -eq 0 ]; then
     rc=130   # terminated by a signal — never a verdict
   fi

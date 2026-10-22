@@ -390,6 +390,15 @@ if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
   fi
 fi
 
+# MACHINE-WIDE LOAD CONTROL (R-0543, scripts/tests/lib/heavy_slots.sh). A campaign is a heavy run: it
+# takes one of CONCRETE_HEAVY_SLOTS slots before the snapshot. `exec` below keeps this pid and the
+# exported token, so the slot covers the whole campaign and is reclaimable once the process is gone.
+# Query modes take no slot. CONCRETE_HEAVY_NO_WAIT=1 fails fast with exit 75.
+if [ "$_MUT_READ_ONLY_MODE" = "0" ] && [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
+  . "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh" 2>/dev/null && heavy_slot_acquire "check_gate_mutation_coverage.sh" || {
+    _hrc=$?; echo "error: no machine-wide heavy slot (exit $_hrc); the campaign did not start." >&2
+    _gate_lock_release 2>/dev/null || true; exit "$_hrc"; }
+fi
 if [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
   # Same namespace as the workspace below, and marked, so a later run's sweep reclaims it: the EXIT
   # trap that removes this cannot fire on SIGKILL. Measured 2026-08-21: nine of these were stranded.
