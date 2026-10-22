@@ -82,7 +82,8 @@ def main() -> int:
         return 0
     if sys.argv[1] == "bits":
         for line in open(sys.argv[2]):
-            m = re.search(r"@keep\(double 0x([0-9A-Fa-f]{16})\)", line)
+            # `keep` is emitted under its mangled symbol `@_C.<module>.keep` (bug 129).
+            m = re.search(r"@_C\.[A-Za-z0-9_.]*\.keep\(double 0x([0-9A-Fa-f]{16})\)", line)
             if m:
                 print(m.group(1).upper())
         return 0
