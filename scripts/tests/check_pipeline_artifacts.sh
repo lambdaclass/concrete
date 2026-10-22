@@ -84,7 +84,7 @@ neg() {
     no "$id: failed, but not for the expected reason /$want/: $(grep -m2 'error' <<<"$out" | head -c 400)"
   fi
 }
-PRIV='private|unknown (constant|identifier)|invalid constructor|cannot be accessed'
+PRIV='private|[Uu]nknown (constant|identifier) `Concrete\.[A-Za-z]+\.mk`'
 
 echo ""
 echo "=== F: forgery outside the producer ==="
@@ -107,7 +107,7 @@ neg U4 "$PRIV" 'def reuse (s : CoreSubset) (xs : List CModule) : CoreSubset := {
 
 echo ""
 echo "=== D: diagnostic and subset artifacts are not certificates ==="
-neg D1 'type mismatch|Application type mismatch|has type' 'def bypass (u : Pipeline.UnverifiedSSA) : String := Pipeline.emit u'
+neg D1 'type mismatch|Application type mismatch|has type' 'def bypass (u : UnverifiedSSA) : String := Pipeline.emit u'
 neg D2 'type mismatch|Application type mismatch|has type' 'def bypass (s : CoreSubset) := Pipeline.monomorphize s'
 neg D3 'type mismatch|Application type mismatch|has type' 'def bypass (s : CoreSubset) := Pipeline.runVerifyGates s'
 neg D4 'type mismatch|Application type mismatch|has type' 'def bypass (e : ElaboratedProgram) := Pipeline.monomorphize e'
@@ -138,11 +138,12 @@ else
   # Every specialization the report lists is a function the build emits, and the build emits none
   # the report omits: the report and the compile describe one program.
   grep -E '^  [^ ].* -> ' <<<"$MONO" | sed -E 's/.* -> //' | sort -u > "$TMP/rep.names"
-  grep -oE '^define [^@]*@[A-Za-z0-9_.$]+' <<<"$LL" | sed -E 's/.*@//' | grep '_for_' | sort -u > "$TMP/ll.names"
+  # An emitted symbol is `_C.<module path>.<mono name>`; the report lists the mono name.
+  grep -oE '^define [^@]*@[A-Za-z0-9_.$]+' <<<"$LL" | sed -E 's/.*@//; s/.*\.//' | grep '_for_' | sort -u > "$TMP/ll.names"
   NREP="$(grep -c . "$TMP/rep.names" || true)"; NLL="$(grep -c . "$TMP/ll.names" || true)"
   MISSING="$(comm -13 "$TMP/rep.names" "$TMP/ll.names" | head -5 | tr '\n' ' ')"
   if [ "$NLL" -gt 0 ] && [ "$SPEC" -gt 0 ] && [ -z "$MISSING" ]; then
-    ok "B: wordfreq's project --report mono lists $SPEC specializations, covering all $NLL the build emits"
+    ok "B: wordfreq's project --report mono lists $SPEC specializations, including all $NLL the build emits"
   else
     no "B: wordfreq's --report mono lists $SPEC ($NREP names) but the build emits $NLL; unlisted: ${MISSING:-none}"
   fi
