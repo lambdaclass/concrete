@@ -37,6 +37,11 @@
 #   --checkout DIR                      act on DIR instead of the checkout holding this script
 #   --elan                              check against ~/.elan's lean only (CI: what lean-action runs)
 #
+# RESIDUAL RISK (accepted, documented): seeding from a CHECKOUT trusts that its traces describe its
+# artifacts. The quiet window, the artifact-newer-than-trace check and the provenance re-check on the
+# copy catch a running or interrupted build; a checkout whose files were edited by hand with
+# matching timestamps is not detected. CI seeds only from published entries, which are immutable.
+#
 # EXIT  0 seeded (or published) | 3 refused: no usable seed, nothing changed | 2 usage/internal error
 # With --build, the exit status is lake build's, whatever seeding did.
 #
@@ -136,6 +141,15 @@ check_trace_bins() {
     [ "$(sha256_file "$b")" = "$ours" ] || { echo "$build was built by a different lean executable ($b) than $bin"; return 1; }
   done < <(trace_lean_bins "$build" "$(lean_commit "$bin")")
   [ $n -gt 0 ] || { echo "$build has no module trace from this Lean version"; return 1; }
+  # AN INTERRUPTED MODULE. Lake writes a module's trace after the lean process that wrote its
+  # .olean/.ilean exits. A build killed or suspended in between leaves an artifact NEWER than its
+  # trace, and the old trace would vouch for the new artifact. Refuse any such pair.
+  local t a
+  while IFS= read -r t; do
+    for a in "${t%.trace}.olean" "${t%.trace}.ilean"; do
+      if [ -e "$a" ] && [ "$a" -nt "$t" ]; then echo "$a is newer than its trace (an interrupted build)"; return 1; fi
+    done
+  done < <(find "$build/lib" -name '*.trace' -type f 2>/dev/null)
 }
 
 # copy_tree <src> <dst>: copy-on-write where the file system can, a plain copy otherwise. Never
@@ -256,15 +270,19 @@ do_seed() {
   # write. Published cache entries need none of this: they are moved into place whole, after a
   # completed build, and never written again.
   local quiet="${CONCRETE_SEED_QUIET:-10}"
-  : > "$stamp"
-  perl -e '$t = time - shift; utime $t, $t, shift' "$quiet" "$stamp" || die "cannot backdate $stamp"
-  if [ -z "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
-    copy_tree "$src" "$tmp" || { rm -rf "$tmp" "$stamp"; die "copy from $src failed"; }
+  if [ "$from_checkout" = 1 ]; then
+    : > "$stamp"
+    perl -e '$t = time - shift; utime $t, $t, shift' "$quiet" "$stamp" || die "cannot backdate $stamp"
+    if [ -z "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
+      copy_tree "$src" "$tmp" || { rm -rf "$tmp" "$stamp"; die "copy from $src failed"; }
+    fi
+    if [ -n "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
+      rm -rf "$tmp" "$stamp"; refuse "$src was written to within ${quiet}s of or during the copy (a build is running there)"
+    fi
+    rm -f "$stamp"
+  else
+    copy_tree "$src" "$tmp" || { rm -rf "$tmp"; die "copy from $src failed"; }
   fi
-  if [ -n "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
-    rm -rf "$tmp" "$stamp"; refuse "$src was written to within ${quiet}s of or during the copy (a build is running there)"
-  fi
-  rm -f "$stamp"
   # Provenance is re-checked on the COPY: what was validated is exactly what will be used.
   if [ "$from_checkout" = 1 ]; then
     local why2

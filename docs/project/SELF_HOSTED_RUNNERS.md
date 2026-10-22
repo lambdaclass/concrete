@@ -256,6 +256,10 @@ cache entries.
   therefore be quiet: nothing in it may be written from 10 s before the copy
   (`CONCRETE_SEED_QUIET`) until the copy ends. A `lake build` that is running, or has just
   finished, in the main checkout refuses the seed. Provenance is checked again on the copy itself.
+  So is the order of writes: an `.olean` or `.ilean` newer than its trace means the build was
+  killed or suspended mid-module, and that refuses the seed too. One risk remains and is accepted:
+  checkout files edited by hand with matching timestamps are not detected. CI seeds only from
+  published entries.
   Published cache entries need neither check. Each one is moved into place whole, after a completed
   build, and never written again. One seeder runs per checkout at a time (`.lake/seed.lock`).
 - **CI checks against `~/.elan`'s lean** (`--elan`). That is the binary lean-action builds with,

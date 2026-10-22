@@ -142,6 +142,14 @@ PATH="$T/fakecp:$PATH" seed; rc=$?
 ls "$T/wt/.lake" 2>/dev/null | grep -q 'build.seeding\|seed.stamp\|seed.lock' && no "a refused seed left temporary files" || ok "a refused seed leaves no temporary files or lock"
 age
 
+newwt
+perl -e '$t = time - 30; utime $t, $t, @ARGV' "$M/.lake/build/lib/lean/Concrete/A.olean"
+perl -e '$t = time - 90; utime $t, $t, @ARGV' "$M/.lake/build/lib/lean/Concrete/A.trace"
+seed; rc=$?
+[ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && grep -q 'interrupted' "$T/out" \
+  && ok "an .olean newer than its trace (a build interrupted mid-module) is refused" || no "interrupted module seeded (exit $rc)"
+age
+
 newwt; mkdir -p "$T/wt/.lake/seed.lock"
 seed; rc=$?
 [ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && [ -d "$T/wt/.lake/seed.lock" ] && ok "a concurrent seeder's lock is respected (and not removed)" || no "lock ignored (exit $rc)"
@@ -185,6 +193,7 @@ E="$CR/$K0/$S0"
   && ok "publish writes <key>/<srchash>/{build,seed.key} and latest" || no "publish failed (exit $rc): $(cat "$T/out")"
 PATH="$T/fakebin:$PATH" LAKE_RC=1 LEAN_BIN="$LA" bash "$SEED" --checkout "$M" --publish "$T/cache2" >"$T/out" 2>&1; rc=$?
 [ $rc -ne 0 ] && [ ! -d "$T/cache2/$K0" ] && ok "a failed lake build publishes nothing" || no "published after a failed build"
+touch "$E/build/lib/lean/Concrete/A.trace"   # a freshly published entry: no quiet window applies
 newwt; seed --cache-root "$CR"; rc=$?
 [ $rc -eq 0 ] && grep -q 'exact sources' "$T/out" && ok "consumer picks the exact-sources entry" || no "exact entry not used: $(cat "$T/out")"
 newwt; echo 'def a := 3' > "$T/wt/Concrete/A.lean"; seed --cache-root "$CR"; rc=$?
