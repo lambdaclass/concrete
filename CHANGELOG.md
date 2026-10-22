@@ -21,8 +21,7 @@ may affect con-leche.
   worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
   about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
   fix is already in con-leche's own toolchain (v4.35.0; v4.35.0-rc3 via backport #15306 at the
-  earlier pins), so this is defence
-  in depth.
+  earlier pins), so this is defence in depth.
 - con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
   results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
   the gate 22/0. The next day the Arena published a new round, the freshness check reported both
