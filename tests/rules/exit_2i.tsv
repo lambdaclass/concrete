@@ -98,6 +98,9 @@ SCOPE-1	tests/programs/error_2i_contract_trait_impl_invariant.con	reject:E0305:S
 SCOPE-1	tests/programs/error_2i_contract_place_assignment.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_contract_borrow_to_generic.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_contract_generic_call.con	reject:E0305:SCOPE-1@1	contract	-
+SCOPE-1	tests/programs/error_2i_contract_aliased_ref_param.con	reject:E0305:SCOPE-1@1	contract	-
+SCOPE-1	tests/programs/error_2i_contract_ref_receiver.con	reject:E0305:SCOPE-1@1	contract	-
+SCOPE-1	tests/programs/regress_2i_contract_nongeneric_call_beside_generic_method.con	run:42	contract	binary,interp
 SCOPE-1	tests/programs/error_2i_contract_generic_method_mangled.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_contract_generic_method_static.con	reject:E0305:SCOPE-1@1	contract	-
 REF-6	tests/programs/error_2i_ref6_const_cast_to_ref.con	reject:E0302:REF-6@1	const-init	-

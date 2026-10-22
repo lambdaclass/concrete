@@ -3208,17 +3208,20 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
 
 /-- Calls in a contract to a generic function of this module (review round 8): a contract is
     erased before monomorphization, so such a call's specialization would never be checked. -/
-private partial def contractGenericCalls (gs : List String) (e : Expr) : List String :=
-  (collectCalls e).filter gs.contains |>.map fun g => s!"a call to the generic function `{g}`"
+private partial def contractGenericCalls (gs : List String) (ms : List String) (e : Expr) : List String :=
+  (collectCalls e).filterMap fun (isMethod, g) =>
+    if (if isMethod then ms.contains g else gs.contains g) then some s!"a call to the generic function `{g}`" else none
 where
-  collectCalls : Expr → List String
-    | .call _ f _ args => f :: args.flatMap collectCalls
+  -- (method-syntax?, name): a plain or `Type::method` call is matched against function names
+  -- (mangled for methods); `x.m(..)` against bare generic method names (review round 10)
+  collectCalls : Expr → List (Bool × String)
+    | .call _ f _ args => (false, f) :: args.flatMap collectCalls
     | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => collectCalls l ++ collectCalls r
     | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x | .cast _ x _
     | .borrow _ x | .borrowMut _ x => collectCalls x
-    | .staticMethodCall _ tn mn _ args => s!"{tn}_{mn}" :: mn :: args.flatMap collectCalls
+    | .staticMethodCall _ tn mn _ args => (false, s!"{tn}_{mn}") :: args.flatMap collectCalls
     | .arrayLit _ args => args.flatMap collectCalls
-    | .methodCall _ o mn _ args => mn :: collectCalls o ++ args.flatMap collectCalls
+    | .methodCall _ o mn _ args => (true, mn) :: collectCalls o ++ args.flatMap collectCalls
     | .structLit _ _ _ fs b => fs.flatMap (fun (_, x) => collectCalls x) ++ (b.map collectCalls).getD []
     | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, x) => collectCalls x)
     | .match_ _ s arms => collectCalls s ++ arms.flatMap fun a => match a with
@@ -3277,6 +3280,9 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
         | none => none) ++ args.flatMap (contractExprBad refPs)
   | .arrayLit _ args => args.flatMap (contractExprBad refPs)
   | .methodCall _ o _ _ args =>
+    (match contractArgRoot o with
+     | some n => if refPs.contains n then [s!"the reference `{n}` used as a method receiver"] else []
+     | none => []) ++
     args.filterMap (fun a => match a with
       | a => match contractArgRoot a with
         | some n => if refPs.contains n then some s!"the reference `{n}` passed to a call" else none
@@ -3540,14 +3546,21 @@ def checkModule (m : Module) (summary : FileSummary)
       let genericFns : List String :=
         (m.functions.filterMap fun g => if g.typeParams.isEmpty then none else some g.name)
         ++ (m.implBlocks.flatMap fun ib => ib.methods.flatMap fun g =>
-              if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [g.name, s!"{ib.typeName}_{g.name}"])
+              if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [s!"{ib.typeName}_{g.name}"])
         ++ (m.traitImpls.flatMap fun tb => tb.methods.flatMap fun g =>
-              if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [g.name, s!"{tb.typeName}_{g.name}"])
-      let refPs := f.params.filterMap fun p => match p.ty with
+              if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [s!"{tb.typeName}_{g.name}"])
+      let genericMethods : List String :=
+        (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+          if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+        ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+          if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
+      -- reference-typed parameters, aliases expanded (review round 10)
+      let refPs := f.params.filterMap fun p =>
+        match expandAliasDeep typeAliasMap (typeAliasMap.length + 64) p.ty with
         | .ref _ | .refMut _ => some p.name
         | _ => none
       clauses.flatMap fun e =>
-        match (contractExprBad refPs e ++ contractGenericCalls genericFns e).eraseDups with
+        match (contractExprBad refPs e ++ contractGenericCalls genericFns genericMethods e).eraseDups with
         | [] => []
         | bad =>
           let ce := CheckError.contractBinds f.name (", ".intercalate bad)

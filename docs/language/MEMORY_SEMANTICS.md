@@ -1149,7 +1149,7 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   binder- and statement-free propositions, like spec bodies: a binder of any kind (a pattern
   binder included) or any statement other than a block's trailing value in one is E0305
   (`contractBinds`, tagged SCOPE-1@1; an exhaustive walk, `contractExprBad`), and so is a borrow, a
-  reference-typed parameter passed to a call, or any call to a generic function of the module: an
+  reference-typed parameter (aliases expanded) passed to a call or used as a method receiver, or any call to a generic function of the module: an
   erased contract never reaches monomorphization, so a generic it called would have its
   specialization go unchecked (a call by name, mangled `Type_method`, `Type::method` or method
   syntax). For the same reason a generic instantiated inside an `assert`, `assume` or ghost
@@ -1334,7 +1334,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 166 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 169 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
