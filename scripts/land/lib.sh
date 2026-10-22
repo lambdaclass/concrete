@@ -10,8 +10,11 @@
 # leg is abandoned while another is still running. LEGS_SUM is the sequential cost (the sum of the
 # legs' durations); the caller compares it with the wall time to record what pipelining saved.
 
+# "Already in the dev shell" means IN_NIX_SHELL AND the shell's toolchain: an inherited IN_NIX_SHELL
+# from some other shell (lean on PATH, no lake) made the hook refuse to build (2026-10-22).
 land_in_nix() {
-  if [ "${LAND_NO_NIX:-0}" = 1 ] || [ -n "${IN_NIX_SHELL:-}" ] || ! command -v nix >/dev/null 2>&1 \
+  if [ "${LAND_NO_NIX:-0}" = 1 ] || { [ -n "${IN_NIX_SHELL:-}" ] && command -v lake >/dev/null 2>&1; } \
+     || ! command -v nix >/dev/null 2>&1 \
      || [ ! -f "$(git rev-parse --show-toplevel)/flake.nix" ]; then
     "$@"
   else

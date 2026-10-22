@@ -131,14 +131,7 @@ state_get_soft() {
 
 # --- toolchain -----------------------------------------------------------------------------------
 # The pre-push hook builds the compiler, so pushes and checks run inside the dev shell.
-in_nix() { # cmd...
-  if [ "${LAND_NO_NIX:-0}" = 1 ] || [ -n "${IN_NIX_SHELL:-}" ] || ! command -v nix >/dev/null 2>&1 \
-     || [ ! -f "$ROOT/flake.nix" ]; then
-    "$@"
-  else
-    nix develop "$ROOT" --command "$@"
-  fi
-}
+in_nix() { land_in_nix "$@"; }   # scripts/land/lib.sh
 
 run_or_print() { # cmd... — executes, or prints under --dry-run
   if [ "$DRY" = 1 ]; then printf 'train (dry-run): would run:'; printf ' %q' "$@"; echo; return 0; fi
