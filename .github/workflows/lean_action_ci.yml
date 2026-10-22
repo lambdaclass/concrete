@@ -40,6 +40,10 @@ jobs:
       - name: "Landing script (trains resolve only generated views and ledgers; refusals hold)"
         run: bash scripts/tests/check_landing_script.sh
 
+      # Build-free: drives the status page generator, its sanitizer and the notifier with a fake gh.
+      - name: "Status page (generation from fixtures, public variant sanitized, notify dedup)"
+        run: bash scripts/tests/check_status_page.sh
+
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
 

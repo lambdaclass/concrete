@@ -150,7 +150,10 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 255 -> 256: check_landing_script.sh (R-0539 landing trains: conflict resolution and refusals in a
 #   throwaway repository), pinned in the same commit. Branch ci-tiering also moves this pin; the
 #   integration adds this one command on top of whatever that branch pins.
-EXPECTED_GATE_COMMANDS=256
+# 256 -> 257: check_status_page.sh (status page generator, public-variant sanitizer, notify dedup), pinned
+#   in the same commit. Like the landing gate, it adds exactly one command on top of whatever
+#   ci-tiering pins at integration.
+EXPECTED_GATE_COMMANDS=257
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
