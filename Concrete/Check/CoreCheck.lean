@@ -375,6 +375,14 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
   let env ← getEnv
   return env.enumDefs.find? fun ed => ed.name == name
 
+/-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
+    built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
+    `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
+    and the set is decided per instance after Mono, not here. -/
+private def capsDecidable (cs : CapSet) : Bool :=
+  let (names, vars) := cs.normalize
+  vars.isEmpty && names.all validCaps.contains
+
 /-- Does a value of type `got` fit a binder declared `declared`? The binder-agreement
     relation of bug 177, used at every place Core binds a value to a typed slot: a `let`,
     an assignment, a call argument, a struct or variant field, a store through a
@@ -398,14 +406,6 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
     covers the value's: a call through the binding is checked against the binder's type, so
     a narrower binder would erase the requirement. That comparison is made only between sets
     of built-in capability names; a set with a capability parameter or variable is deferred. -/
-/-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
-    built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
-    `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
-    and the set is decided per instance after Mono, not here. -/
-private def capsDecidable (cs : CapSet) : Bool :=
-  let (names, vars) := cs.normalize
-  vars.isEmpty && names.all validCaps.contains
-
 partial def bindTyAgrees (declared got : Ty) : Bool :=
   if declared == got then true else
   match declared, got with
