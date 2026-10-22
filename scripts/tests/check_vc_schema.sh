@@ -15,11 +15,14 @@ require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
+# Repeated pure reports on unchanged inputs come from the shared compile cache (R-0546,
+# scripts/tests/lib/compile_cache.sh); its key covers the binary, the input closure and std.
+source "$ROOT_DIR/scripts/tests/lib/compile_cache.sh"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 PASS=0; FAIL=0
 
 check_json(){ local label="$1" file="$2" expr="$3"
-  local out; out="$("$COMPILER" "$file" --report vcs --json 2>/dev/null)"
+  local out; out="$(ccache_run "$COMPILER" "$file" --report vcs --json 2>/dev/null)"
   if printf '%s' "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if ($expr) else 1)" 2>/dev/null; then
     echo "  ok   $label"; PASS=$((PASS+1));
   else echo "  FAIL $label — assertion failed: $expr"; FAIL=$((FAIL+1)); fi; }

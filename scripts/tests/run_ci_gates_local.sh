@@ -151,7 +151,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
 # 255 -> 256: check_heavy_slots.sh (R-0543 machine-wide heavy-run semaphore), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=256
+# 256 -> 257: check_compile_cache.sh (R-0546 shared compile-output cache), pinned in the same commit.
+EXPECTED_GATE_COMMANDS=257
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
