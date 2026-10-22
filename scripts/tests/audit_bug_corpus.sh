@@ -167,6 +167,7 @@ declare -A SKIP_BUGS=(
   [024]="recursive-struct infinite size -- covered by check_error_leaks.sh gate corpus"
   [025]="no-main linker leak -- covered by check_error_leaks.sh (no_main, empty_file cases)"
   [026]="huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)"
+  [178]="FIXED 2026-10-22 -- superlinear match lowering (compile time, not output). Regression vehicle is check_ssa_lowering_scaling.sh (lower-stage heartbeat and instructions:u slope <= 1.3 over 250-2000 arms), not a tests/programs fixture"
   [027]="EmitSSA O(n^2) rendering -- OPEN perf item; no .con regression (codegen perf, not correctness)"
   [028]="reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)"
   [030]="FIXED general (not trusted-only) -- error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule"

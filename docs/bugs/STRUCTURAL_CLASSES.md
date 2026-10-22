@@ -50,6 +50,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 | 16. Driver artifacts at paths no compile owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`); no roadmap stage yet |
+| 16. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -366,3 +367,31 @@ debugging.
 
 **Owner.** The compile driver (`Main.lean`, `privateIntermediate`); the concurrent-compile legs in
 `run_tests.sh` (file and project mode) enforce it. No roadmap stage owns the driver yet.
+
+## 16. Pass state in association lists and per-query recomputation
+
+**Bugs.** 026 (the parser built a `[v; N]` literal with `elems ++ [x]`), 027 (instruction lists in
+Lower and SSAVerify built by `acc ++ x`), 178 (a 1000-arm `match` spent 8.45 s in the `lower` stage:
+SSAVerify kept dominator sets as `List String` intersected by `filter`/`contains` and rebuilt every
+strict dominator's definitions per block, cubic in arms; SSACleanup and Lower added quadratic
+`find?`, list-membership and append terms; and on the same compile path the obligation walk's
+`assignedScalarsS` copied each nesting level's list into its parent's, cubic in `if` depth). The
+2026-07 O(n²) sweep (lexer `acc ++ [tok]`, dominator Jacobi passes, `collectAllUses`,
+`Mono.lookupFn`, reassignment chains) fixed earlier members before the class had a number.
+
+**Design cause.** Passes keep per-function state in association lists and sets as lists, build
+results by appending, and recompute derived relations (dominators, predecessors, definitions, phi
+sources) per block or per use rather than once per function. Each choice is linear per step, so a
+pass is quadratic, and two nested ones are cubic. No pass states its complexity envelope, and the
+older guard (`check_compiler_complexity.sh`) times wall clock at sizes up to 200, where these terms
+are still small.
+
+**Structural fix.** Index-based state (`HashMap`/`HashSet`/`Array`) for anything looked up by key,
+accumulate-then-reverse for anything built element by element, derived relations computed once
+per function with O(1) queries, and a per-stage envelope gate measured by a load-independent count
+(`check_ssa_lowering_scaling.sh`: lower-stage heartbeats and `instructions:u`, slope ≤ 1.3). The
+append ratchet (`check_no_quadratic_append.sh`) keeps the commonest spelling from returning.
+
+**Owner.** R-0422 (one owned queue for measured compiler performance defects, with explicit
+complexity envelopes gated per class). ROADMAP #5's structured Lower/SSA builder should own block
+and merge accumulation; R-0504's SSA validator should keep the O(1) dominance query.
