@@ -500,63 +500,77 @@ partial def isLitTrueExpr : Expr → Bool
   | .paren _ inner => isLitTrueExpr inner
   | _ => false
 
--- Can control leave the loop whose body this is through a `break` or a labelled
--- `continue`? Distinguishes a truly infinite `while true {}` from one that can
--- exit. An unlabelled `break` targets the innermost loop, so it counts only
--- outside nested loops; a labelled `break 'l` / `continue 'l` leaves this loop
--- unless `'l` names a loop nested inside it (`inner`), and `continue` to the
--- loop's own label (`own`) stays in it. Breaks inside `match` arms, value-`if`
--- branches and borrow blocks count (bug 176, Codex review: a `while let`, whose
--- `break` sits in the desugared match's fallback arm, was read as infinite, and
--- a labelled break from a nested loop was ignored; either way a loop that exits
--- was treated as one that never does, which exempts its locals from H9).
--- Over-counting is the safe direction: it can only make a block terminating.
+/-- Where the loop-exit search stands (bug 176). `own` is the loop's label; `inner`
+    the labels of loops nested inside it at this point; `direct` is false inside a
+    nested loop, where an unlabelled `break` targets that loop. `anyExit` picks the
+    question: true asks "can control leave this loop at all" (also to an enclosing
+    loop, through a labelled `break`/`continue`), false asks "can control reach the
+    statement after this loop" (only a `break` that targets it). -/
+structure LoopExitCtx where
+  own : Option String
+  inner : List String := []
+  direct : Bool := true
+  anyExit : Bool
+
+-- Does an exit of the kind `ctx.anyExit` asks for appear in a loop's body?
+-- Searches through `if` and value-`if` branches, `match` arms, borrow blocks,
+-- `let`-`else` and statement expressions (bug 176, Codex review: a `while let`,
+-- whose `break` sits in the desugared match's fallback arm, read as infinite, and
+-- a labelled `break` out of a nested loop was ignored, so a loop body that exits
+-- was taken as one that never ends and its locals were exempted from H9). Labels
+-- are resolved: an exit to a nested loop's label stays inside, a `continue` to
+-- the loop's own label stays in it.
 mutual
-partial def blockHasBreak (stmts : List Stmt) (own : Option String := none) : Bool :=
-  blockBreaksOut own [] true stmts
-partial def blockBreaksOut (own : Option String) (inner : List String) (direct : Bool)
-    (stmts : List Stmt) : Bool :=
-  stmts.any (stmtBreaksOut own inner direct)
-partial def stmtBreaksOut (own : Option String) (inner : List String) (direct : Bool) : Stmt → Bool
+partial def loopBlockExits (ctx : LoopExitCtx) (stmts : List Stmt) : Bool :=
+  stmts.any (loopStmtExits ctx)
+partial def loopStmtExits (ctx : LoopExitCtx) : Stmt → Bool
   | .break_ _ v lbl =>
-    (match lbl with
-     | none => direct
-     | some l => !inner.contains l) || (v.map (exprBreaksOut own inner direct)).getD false
+    let leaves := match lbl with
+      | none => ctx.direct
+      | some l => !ctx.inner.contains l && (ctx.anyExit || ctx.own == some l)
+    leaves || (match v with | some e => loopExprExits ctx e | none => false)
   | .continue_ _ lbl =>
     match lbl with
     | none => false
-    | some l => !inner.contains l && own != some l
+    | some l => ctx.anyExit && !ctx.inner.contains l && ctx.own != some l
   | .ifElse _ c t e =>
-    exprBreaksOut own inner direct c || blockBreaksOut own inner direct t
-      || (e.map (blockBreaksOut own inner direct)).getD false
+    loopExprExits ctx c || loopBlockExits ctx t
+      || (match e with | some es => loopBlockExits ctx es | none => false)
   | .while_ _ c body lbl =>
-    exprBreaksOut own inner direct c || blockBreaksOut own (lbl.toList ++ inner) false body
+    loopExprExits ctx c
+      || loopBlockExits { ctx with inner := lbl.toList ++ ctx.inner, direct := false } body
   | .forLoop _ init c step body lbl =>
-    let inner' := lbl.toList ++ inner
-    (init.map (stmtBreaksOut own inner direct)).getD false || exprBreaksOut own inner direct c
-      || (step.map (stmtBreaksOut own inner' false)).getD false
-      || blockBreaksOut own inner' false body
-  | .expr _ e _ => exprBreaksOut own inner direct e
-  | .letDecl _ _ _ _ v _ => exprBreaksOut own inner direct v
-  | .assign _ _ v => exprBreaksOut own inner direct v
-  | .return_ _ (some v) => exprBreaksOut own inner direct v
-  | .borrowIn _ _ _ _ _ body => blockBreaksOut own inner direct body
+    let ctx' : LoopExitCtx := { ctx with inner := lbl.toList ++ ctx.inner, direct := false }
+    (match init with | some s => loopStmtExits ctx s | none => false) || loopExprExits ctx c
+      || (match step with | some s => loopStmtExits ctx' s | none => false)
+      || loopBlockExits ctx' body
+  | .expr _ e _ => loopExprExits ctx e
+  | .letDecl _ _ _ _ v _ => loopExprExits ctx v
+  | .assign _ _ v => loopExprExits ctx v
+  | .return_ _ (some v) => loopExprExits ctx v
+  | .borrowIn _ _ _ _ _ body => loopBlockExits ctx body
   | .letDestructure _ _ _ _ v eb =>
-    exprBreaksOut own inner direct v || (eb.map (blockBreaksOut own inner direct)).getD false
+    loopExprExits ctx v || (match eb with | some b => loopBlockExits ctx b | none => false)
   | _ => false
-partial def exprBreaksOut (own : Option String) (inner : List String) (direct : Bool) : Expr → Bool
-  | .paren _ e => exprBreaksOut own inner direct e
-  | .match_ _ s arms =>
-    exprBreaksOut own inner direct s || arms.any (armBreaksOut own inner direct)
-  | .ifExpr _ c t e =>
-    exprBreaksOut own inner direct c || blockBreaksOut own inner direct t || blockBreaksOut own inner direct e
+partial def loopExprExits (ctx : LoopExitCtx) : Expr → Bool
+  | .paren _ e => loopExprExits ctx e
+  | .match_ _ s arms => loopExprExits ctx s || arms.any (loopArmExits ctx)
+  | .ifExpr _ c t e => loopExprExits ctx c || loopBlockExits ctx t || loopBlockExits ctx e
   | _ => false
-partial def armBreaksOut (own : Option String) (inner : List String) (direct : Bool) : MatchArm → Bool
-  | .mk _ _ _ _ _ body => blockBreaksOut own inner direct body
-  | .litArm _ _ _ body => blockBreaksOut own inner direct body
-  | .varArm _ _ _ body => blockBreaksOut own inner direct body
-  | .rangeArm _ _ _ _ _ body => blockBreaksOut own inner direct body
+partial def loopArmExits (ctx : LoopExitCtx) : MatchArm → Bool
+  | .mk _ _ _ _ _ body => loopBlockExits ctx body
+  | .litArm _ _ _ body => loopBlockExits ctx body
+  | .varArm _ _ _ body => loopBlockExits ctx body
+  | .rangeArm _ _ _ _ _ body => loopBlockExits ctx body
 end
+
+/-- Can control leave the loop whose body is `stmts` and whose label is `own`?
+    With `anyExit := false` (divergence: does the loop fall through to the next
+    statement) only a `break` targeting this loop counts; with `anyExit := true`
+    (H9: does the body's scope ever close) a labelled `break`/`continue` to an
+    enclosing loop counts too. -/
+def blockHasBreak (stmts : List Stmt) (own : Option String := none) (anyExit : Bool := false) : Bool :=
+  loopBlockExits { own, anyExit } stmts
 
 -- Control cannot fall off the end of this block — it returns, breaks, continues,
 -- `abort()`s, or loops forever (`while true {}` with no break). When true, a
@@ -604,9 +618,9 @@ partial def blockNonTerminating (stmts : List Stmt) : Bool :=
   | none => false
   | some s => stmtNonTerminating s
 partial def stmtNonTerminating : Stmt → Bool
-  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl (anyExit := true)
   | .forLoop _ _ cond step body lbl =>
-    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl (anyExit := true)
   | .ifElse _ _ t (some e) => blockNonTerminating t && blockNonTerminating e
   | .expr _ e _ => exprNonTerminating e
   | _ => false

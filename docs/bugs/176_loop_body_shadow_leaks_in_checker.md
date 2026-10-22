@@ -107,6 +107,14 @@ block count as terminating. Fixtures: `error_176_loop_body_leak_while_let.con`,
 `error_176_loop_body_leak_labelled_break.con` (E0208), and `spin_holding` in the regress fixture
 (accepted).
 
+Round 2 found that the one predicate answered two questions. H9 asks whether a body's scope can
+close; any exit from the loop, including a labelled `break`/`continue` to an enclosing loop,
+closes it. The if/match merge asks whether control can reach the statement after the loop; only a
+`break` that targets this loop does that. Counting `continue 'outer` as a fall-through refused a
+valid branch that consumed `r` and then left through it. `blockHasBreak` now takes `anyExit`:
+`stmtNonTerminating` (H9) passes true and `stmtDiverges` (merges) false. The regress fixture's
+`branch_exits_outer` covers this case.
+
 **Known limit, not changed here.** When every arm of a `match` diverges, the checker continues
 with the first arm's state. So a loop body ending in `match c { true => { abort(); }, false => {
 consume(r); continue; } }` still reports `r` as unconsumed. Before this fix, the function-end

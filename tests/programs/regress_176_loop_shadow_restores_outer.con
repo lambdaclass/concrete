@@ -133,6 +133,30 @@ mod m {
         return 0;
     }
 
+    fn consume(r: Res) -> i32 {
+        let Res { v } = r;
+        return v;
+    }
+
+    // A branch that leaves through `continue 'outer` from an inner `while true`
+    // never reaches the code after the `if`, so consuming `r` on both paths is
+    // valid (Codex review round 2: the loop-exit search must tell "leaves the
+    // inner loop" from "falls through to the statement after it").
+    fn branch_exits_outer() -> i32 {
+        let mut i: i32 = 0;
+        let mut s: i32 = 0;
+        'outer: while i < 3 {
+            i = i + 1;
+            let r: Res = Res { v: i };
+            if i == 2 {
+                s = s + consume(r);
+                while true { continue 'outer; }
+            }
+            s = s + consume(r);
+        }
+        return s;                                   // 6
+    }
+
     fn main() -> Int {
         let mut ok: i32 = 0;
         if while_mutability() == 1 { ok = ok + 1; }
@@ -143,7 +167,8 @@ mod m {
         if labelled() == 6 { ok = ok + 1; }
         if for_scopes() == 43 { ok = ok + 1; }
         if for_forms() == 3 { ok = ok + 1; }
-        if ok == 8 { return 42; }
+        if branch_exits_outer() == 6 { ok = ok + 1; }
+        if ok == 9 { return 42; }
         return ok as Int;
     }
 }
