@@ -290,7 +290,7 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
 - **Dry run.** `--dry-run` prints the ready list, the order and the train, and changes nothing on
   the remotes or in the bot's state.
 - **main.** main is pushed only by `train.sh land`, as a fast-forward.
-- **Notification.** Every event calls `scripts/land/notify.sh <event> <message>` when that file
+- **Notification.** Every event calls `scripts/land/notify.sh <level> "landing bot: <event>" <message>` when that file
   exists (`BOT_NOTIFY` overrides). A notifier that fails never stops the bot.
 
 **Running it.** The bot needs a **dedicated clone**, because it checks out trains there. The

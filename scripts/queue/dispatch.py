@@ -175,12 +175,13 @@ class Q:
             self.state["flags"][name] = bool(on)
             self.event(kind if on else kind + "_cleared", **kw)
             if on:
-                self.notify(f"queue: {kind}", json.dumps(kw, sort_keys=True))
+                self.notify(f"queue: {kind}", json.dumps(kw, sort_keys=True), level="warn")
 
-    def notify(self, title, body):
+    def notify(self, title, body, level="info"):
+        """scripts/land/notify.sh <info|success|warn|error> <title> <body> (the status page's notifier)."""
         cmd = self.cfg["notify"]
         if not cmd:
-            for rel in ("scripts/status/notify.sh", "scripts/notify.sh"):
+            for rel in ("scripts/land/notify.sh",):
                 p = os.path.join(self.source_root(), rel)
                 if os.path.isfile(p):
                     cmd = p
@@ -188,7 +189,7 @@ class Q:
         if not cmd:
             return
         try:
-            subprocess.run(["bash", cmd, title, body], timeout=60, capture_output=True)
+            subprocess.run(["bash", cmd, level, title, body], timeout=60, capture_output=True)
         except (OSError, subprocess.SubprocessError) as e:
             self.event("notify_failed", error=str(e)[:200])
 
@@ -383,7 +384,7 @@ class Q:
         t.pop("pid", None)
         self.event("released", tid, reason=why, status=t["status"], attempts=t.get("attempts", 0))
         if t["status"] == "abandoned":
-            self.notify(f"queue: {tid} abandoned", f"{why}; {t.get('attempts')} failed attempts; needs a human")
+            self.notify(f"queue: {tid} abandoned", f"{why}; {t.get('attempts')} failed attempts; needs a human", level="error")
 
     def close_run(self, t, t_now, rc, hit, cost, tokens, known):
         for r in reversed(self.state["runs"]):
@@ -454,7 +455,7 @@ class Q:
                 s = t["slot"]
                 self.state["slots"].setdefault(s, {})["limited_at"] = t_now
                 self.event("usage_limit", tid, slot=s)
-                self.notify(f"queue: slot {s} hit its usage limit", f"{tid} released; slot rests 1 h")
+                self.notify(f"queue: slot {s} hit its usage limit", f"{tid} released; slot rests 1 h", level="warn")
                 self.release(tid, t, f"usage limit on slot {s}", charge=False)
                 return
             t["status"] = "exited"
@@ -469,7 +470,7 @@ class Q:
                     self.mark_done(tid, t)
                     return
             if rc != 0:
-                self.notify(f"queue: {tid} failed", f"agent exited {rc}; log {t['run_dir']}/agent.log")
+                self.notify(f"queue: {tid} failed", f"agent exited {rc}; log {t['run_dir']}/agent.log", level="warn")
                 self.release(tid, t, f"agent exited {rc}", charge=True)
                 return
         sha = self.remote_sha(t["wip_ref"])
@@ -492,7 +493,7 @@ class Q:
                 return
             self.event("stuck", tid, minutes=self.cfg["stuck_minutes"], last_sha=t.get("last_sha", ""))
             self.notify(f"queue: {tid} stuck",
-                        f"no push to {t['wip_ref']} for {self.cfg['stuck_minutes']:g} min; released")
+                        f"no push to {t['wip_ref']} for {self.cfg['stuck_minutes']:g} min; released", level="warn")
             self.release(tid, t, "stuck: no wip push", charge=True, t_now=t_now)
 
     def stop_done(self, tid, t, t_now):
@@ -511,7 +512,7 @@ class Q:
         t["status"] = "done"
         t["done"] = utc()
         self.event("done", tid, sha=t["last_sha"], branch=t["wip_ref"])
-        self.notify(f"queue: {tid} ready to land", f"{t['wip_ref']} at {t['last_sha']}")
+        self.notify(f"queue: {tid} ready to land", f"{t['wip_ref']} at {t['last_sha']}", level="success")
 
     def landed(self, tid):
         """A done task's work is on the base branch (the landing bot merged it)."""

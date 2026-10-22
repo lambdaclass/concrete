@@ -256,8 +256,9 @@ These files live under `~/.local/state/concrete-queue/`:
   copied to `QUEUE_STATUS_JSON` when that is set.
 - `runs/<task>.<n>/` holds `agent.log`, `exit`, `command.json` and `settings.json`.
 
-**Notifications** go to `QUEUE_NOTIFY`, or to `scripts/status/notify.sh` or `scripts/notify.sh` in
-the source checkout. The call is `notify.sh "<title>" "<body>"`. The dispatcher notifies on:
+**Notifications** go to `QUEUE_NOTIFY`, or to `scripts/land/notify.sh` in the source checkout. The
+call is the status page's signature, `notify.sh <info|success|warn|error> "<title>" "<body>"`. The
+dispatcher notifies on:
 
 - done;
 - failure;

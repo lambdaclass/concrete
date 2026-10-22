@@ -91,8 +91,13 @@ fi
 EOF
 cat > "$TMP/notify.sh" <<'EOF'
 #!/usr/bin/env bash
-printf '%s|%s\n' "$1" "$2" >> "$FAKE_GH_DIR/notify.log"
-[ "$1" = bisecting ] && [ -f "$FAKE_GH_DIR/pause-on-bisect" ] && touch "$BOT_PAUSE_FILE"
+# The real notify.sh signature: <info|success|warn|error> <title> <body>; the bot's title is
+# "landing bot: <event>". The log keeps <event>|<body> so the assertions read the event.
+[ "$#" -eq 3 ] || { echo "notify.sh called with $# arguments" >> "$FAKE_GH_DIR/notify.log"; exit 2; }
+case "$1" in info|success|warn|error) ;; *) echo "bad level $1" >> "$FAKE_GH_DIR/notify.log"; exit 2 ;; esac
+ev="${2#landing bot: }"
+printf '%s|%s\n' "$ev" "$3" >> "$FAKE_GH_DIR/notify.log"
+[ "$ev" = bisecting ] && [ -f "$FAKE_GH_DIR/pause-on-bisect" ] && touch "$BOT_PAUSE_FILE"
 exit 0
 EOF
 cat > "$TMP/train-nobisect.sh" <<EOF

@@ -62,7 +62,7 @@ QUEUE_STUCK_MINUTES=60
 QUEUE_MAX_ATTEMPTS=2
 # QUEUE_FUZZ_DIR=\$HOME/fuzz-farm/findings
 # QUEUE_STATUS_JSON=\$HOME/status/queue.json
-# QUEUE_NOTIFY=                  # default: scripts/status/notify.sh in the source checkout
+# QUEUE_NOTIFY=                  # default: scripts/land/notify.sh in the source checkout
 EOF
   chmod 600 "$CONFDIR/concrete-queue/env"
 fi

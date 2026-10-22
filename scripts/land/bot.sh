@@ -27,7 +27,8 @@
 # not rebased), BOT_MAX_TRAINS (4 per tick), BOT_WATCH_INTERVAL (60), BOT_CHECK_ARGS (extra
 # `train.sh check` arguments; the bot always passes --no-review, members were reviewed at their
 # heads, unless BOT_TRAIN_REVIEW=1), BOT_NO_REBASE=1, BOT_NOTIFY (default scripts/land/notify.sh,
-# called as `notify.sh <event> <message>` when present), BOT_NOW (test seam: epoch seconds).
+# called as `notify.sh <level> "landing bot: <event>" <message>` when present, the status page's
+# signature), BOT_NOW (test seam: epoch seconds).
 # LAND_* variables pass through to train.sh.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,8 +87,15 @@ event() { # kind message — logged, printed, and handed to notify.sh when it ex
   mkdir -p "$STATE_DIR"
   printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$kind" "$(printf '%s' "$msg" | tr '\t\n' '  ')" >> "$EVENTS"
   if [ -f "$NOTIFY" ]; then
-    if command -v timeout >/dev/null 2>&1; then timeout 60 bash "$NOTIFY" "$kind" "$msg" || true
-    else bash "$NOTIFY" "$kind" "$msg" || true; fi
+    # notify.sh <info|success|warn|error> <title> <body> (scripts/land/notify.sh, wip/status-page).
+    local level=info
+    case "$kind" in
+      landed) level=success ;;
+      blocked|blocked-still) level=error ;;
+      ejected|ci-failed|rebase-conflict|rebase-failed|dispatch-unknown|watch-incomplete) level=warn ;;
+    esac
+    if command -v timeout >/dev/null 2>&1; then timeout 60 bash "$NOTIFY" "$level" "landing bot: $kind" "$msg" || true
+    else bash "$NOTIFY" "$level" "landing bot: $kind" "$msg" || true; fi
   fi
 }
 
