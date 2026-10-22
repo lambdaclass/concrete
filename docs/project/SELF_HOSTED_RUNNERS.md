@@ -63,16 +63,20 @@ because a pull request can run arbitrary code on them. We use them anyway, under
    running fork pull request workflows from contributors", choose "Require approval for all outside
    collaborators". Before approving a fork PR's run, read its diff to `.github/workflows/`. A
    changed `runs-on`, a new job, or a new trigger is a reason not to approve.
-3. **Ephemeral runners are recommended** (`./config.sh ... --ephemeral`). An ephemeral runner takes
-   exactly one job and then unregisters, so nothing a job leaves behind (files, processes, cron
-   entries, a modified `~/.bashrc` or toolchain) reaches the next job. Re-registering needs a fresh
-   registration token per runner. Automate that with a supervisor loop that calls
-   `gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token` with a
-   token that has admin rights on the repo, or with actions-runner-controller. Persistent runners
-   are acceptable only with rule 2, the cleanup hook below and a dedicated low-privilege user.
+3. **Ephemeral runners in throwaway VMs or containers are recommended.** `./config.sh ...
+   --ephemeral` only makes the runner take one job and then unregister. **It does not erase
+   anything:** files, surviving processes, cron entries, a modified `~/.bashrc` or toolchain all
+   stay on the machine. Isolation comes from destroying the VM or container after each job and
+   starting a fresh one from a clean image, which registers a new ephemeral runner. Automate that
+   with actions-runner-controller, or with a supervisor **outside** the job's VM or container that
+   calls `gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token`.
+   The supervisor's admin token must never be readable from inside a job. Persistent runners (or
+   `--ephemeral` re-registered on the same machine, which is the same thing) are acceptable only
+   with rule 2, the cleanup hook below and a dedicated low-privilege user, and with the
+   understanding that one job can leave state for the next.
 4. **Dedicated, unprivileged users and hosts.** Use one Unix user per runner, with no SSH keys,
-   cloud credentials or other repositories' secrets readable. Don't run other services on the
-   host. The only sudo the jobs need is `apt-get`, and only when a package is missing (below).
+   cloud credentials or other repositories' secrets readable, and **no sudo**. Don't run other
+   services on the host.
 5. The triggers that do reach self-hosted runners are `push` to `main`, `push` to other branches
    (branch health), `workflow_dispatch` and `schedule`. All of them need write access to the
    repository.
@@ -91,8 +95,9 @@ because a pull request can run arbitrary code on them. We use them anyway, under
 
 ### Packages to preinstall
 
-The workflow installs `clang` (and `valgrind` for the examples job) with `sudo apt-get` **only when
-the tool is missing on a self-hosted runner**. Preinstall everything so no job needs sudo:
+The workflow installs `clang` (and `valgrind` for the examples job) with `sudo apt-get` on
+GitHub-hosted runners. On a self-hosted runner it does so **only when the tool is missing**, and the
+runner users have no sudo (see below). So preinstall everything:
 
 ```sh
 sudo apt-get update
@@ -117,10 +122,11 @@ sudo apt-get install -y git curl ca-certificates build-essential clang valgrind 
   treat those as skip-if-absent, so installing them makes a self-hosted run execute legs that the
   GitHub-hosted reference run skips, and the two runs no longer agree. The provers come from the
   Nix shell in the one job that uses them.
-- Passwordless sudo for `apt-get` is needed **only** if a listed package is missing. To allow it,
-  restricted to apt, add `/etc/sudoers.d/runner-apt`:
-  `runner1 ALL=(root) NOPASSWD: /usr/bin/apt-get`. With every package preinstalled, give the
-  runner users no sudo at all.
+- **No sudo.** On a self-hosted runner, the `Install clang` steps run `sudo apt-get` only when
+  the tool is missing. Without sudo, that step fails and names the problem, which is the intended
+  result: install the package on the host. Do **not** grant passwordless `sudo apt-get`.
+  Unrestricted apt arguments give root (apt hooks, `-o` options, local packages), and that defeats
+  the per-runner user boundary.
 
 ### Installing a runner
 
@@ -156,8 +162,8 @@ already handles, and what the host has to handle.
   restores `.lake/build`. The weekly proof replay's "no build caches" property holds for the same
   reason.
 - **`$RUNNER_TEMP`** is emptied by the runner for every job. The workflow's own temporary files
-  (the LL(1) checker binaries, the trust-gate log, the checker acceptance evidence, the mutation
-  shard records) live there.
+  live there: the LL(1) checker binaries, the trust-gate log, the thesis-demo reports, the example
+  outputs, the checker acceptance evidence and the mutation shard records.
 - **`/tmp` is NOT cleaned, and many gates write fixed `/tmp/...` paths.** Two runners on one host
   would overwrite each other's files, and a stale file from an earlier job could be read by a later
   one. Give every runner service a private `/tmp`, and empty it when each job starts:

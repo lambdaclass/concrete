@@ -1744,22 +1744,22 @@ jobs:
         run: |
           BIN=".lake/build/bin/concrete"
 
-          "$BIN" examples/thesis_demo/src/main.con --report effects | tee /tmp/effects.txt
-          grep -q 'Evidence: 2 proved' /tmp/effects.txt
-          grep -q 'evidence: proved' /tmp/effects.txt
+          "$BIN" examples/thesis_demo/src/main.con --report effects | tee "$RUNNER_TEMP/effects.txt"
+          grep -q 'Evidence: 2 proved' "$RUNNER_TEMP/effects.txt"
+          grep -q 'evidence: proved' "$RUNNER_TEMP/effects.txt"
 
-          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee /tmp/proof-status.txt
-          grep -q '2 proved' /tmp/proof-status.txt
-          grep -q 'proof matches current body' /tmp/proof-status.txt
+          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee "$RUNNER_TEMP/proof-status.txt"
+          grep -q '2 proved' "$RUNNER_TEMP/proof-status.txt"
+          grep -q 'proof matches current body' "$RUNNER_TEMP/proof-status.txt"
 
           # The thesis demo intentionally has a predictable core and an I/O entrypoint.
           set +e
-          "$BIN" examples/thesis_demo/src/main.con --check predictable > /tmp/predictable.txt
+          "$BIN" examples/thesis_demo/src/main.con --check predictable > "$RUNNER_TEMP/predictable.txt"
           rc=$?
           set -e
           test "$rc" -eq 1
-          grep -q 'predictable profile: FAIL' /tmp/predictable.txt
-          grep -q 'may block' /tmp/predictable.txt
+          grep -q 'predictable profile: FAIL' "$RUNNER_TEMP/predictable.txt"
+          grep -q 'may block' "$RUNNER_TEMP/predictable.txt"
 
   examples:
     name: Examples (manifest coverage)
@@ -1812,7 +1812,7 @@ jobs:
         # skip). A skip must name an owning gate CI runs that references the
         # file, and a reason; the gate's negative controls prove an unowned skip
         # and an unlisted .con both fail.
-        run: EXAMPLES_OUT_DIR=/tmp/concrete_examples_out bash ./scripts/tests/check_examples.sh
+        run: EXAMPLES_OUT_DIR=${RUNNER_TEMP:-/tmp}/concrete_examples_out bash ./scripts/tests/check_examples.sh
 
       - name: Check example outputs (native and interpreter)
         # Replaces the old smoke step, which ran binaries with no input, failed
@@ -1981,7 +1981,7 @@ jobs:
       # source and needs two extra rebuilds. Opt-in plus label-gated meant approximately
       # never. Scheduled runs can afford it, so that is where it lives.
       - name: Multi-kernel mutation coverage (scheduled only — mutates source, 2 rebuilds)
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+        if: (github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
         env:
           MULTI_KERNEL_MUTATE: "1"
         run: nix develop .#provers --command bash ./scripts/tests/check_multi_kernel.sh

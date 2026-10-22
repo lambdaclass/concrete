@@ -65,7 +65,7 @@ STEP_CONDITIONS = {
     # The campaign tier's step condition (the multi-kernel mutation coverage). A qualification run is a
     # dispatch with campaign=true, so the step is required; a dispatch without it skips the campaign
     # JOBS too, and those skipped jobs already refuse the verdict.
-    "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.campaign)": "required",
+    "(github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)": "required",
     "false": "optional",
     "failure()": "optional",
     "steps.lean_install.outcome == 'failure'": "optional",
