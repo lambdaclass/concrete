@@ -9,7 +9,8 @@
 #                        larger than repro.con, and the linearity pair-minimizer keeps the
 #                        planted `pass(` step while collapsing the rest
 #   D  notify            one notify.sh call per NEW silent/crash/unsound signature, none else
-#   E  re-check          against a "fixed" compiler the silent finding becomes
+#   E  re-check          a main that now refuses the program keeps it open (refused-on-main);
+#                        against a "fixed" compiler the silent finding becomes
 #                        `fixed-on-main <sha>`; the still-crashing one stays open; a repeat
 #                        after the fix reopens it
 #   F  promote           byte-exact against tests/fixtures/fuzz_farm/promote.golden, and --write
@@ -117,6 +118,16 @@ grep -q "^error|fuzz-farm: NEW silent" "$TMP/notify.log" 2>/dev/null && ok "sile
   || no "silent notification missing or wrong level"
 
 echo "=== E: re-check against a fixed main ==="
+FARM_HOME="$H" FAKE_REJECT_ALL=1 $FARM recheck --compiler "$CC" --sha 1500000 > "$TMP/recheck0.log" 2>&1
+python3 - "$H" <<'PY' > "$TMP/e0.txt"
+import json, os, sys
+idx = json.load(open(os.path.join(sys.argv[1], "findings", "findings.json")))
+st = {e["class"]: e for e in idx["signatures"].values()}
+s = st.get("silent", {})
+print(("OK " if s.get("status") == "open" and s.get("last_recheck", {}).get("refused_on_main") else "NO ")
+      + f"a main that now REFUSES the program does not mark it fixed -> {s.get('status')} {s.get('last_recheck')}")
+PY
+while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; done < "$TMP/e0.txt"
 FARM_HOME="$H" FAKE_FIXED=1 $FARM recheck --compiler "$CC" --sha 2222222 > "$TMP/recheck.log" 2>&1
 python3 - "$H" <<'PY' > "$TMP/e.txt"
 import json, os, sys

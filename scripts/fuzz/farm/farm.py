@@ -237,10 +237,16 @@ def run_cmd(argv, timeout, cwd, env=None):
         return (rc, out, err, timed_out)
 
 
-NO_RETRY = {"on": False}  # set while minimizing: one oracle run stays within its base timeouts
+# While minimizing (not a timeout finding): no 4x retry, and every subprocess timeout is clamped
+# to the minimization deadline, so one oracle run cannot carry the worker past it. A timeout
+# finding keeps the discovery criterion (retry included), or a slow-but-finishing candidate
+# would pass the minimizer and fail every later confirmation.
+NO_RETRY = {"on": False, "deadline": None}
 
 
 def run_retry(argv, timeout, cwd):
+    if NO_RETRY["on"] and NO_RETRY["deadline"] is not None:
+        timeout = max(1.0, min(timeout, NO_RETRY["deadline"] - time.time()))
     r = run_cmd(argv, timeout, cwd)
     if r[3] and not NO_RETRY["on"]:  # a hang under load is re-run with a larger budget first
         r = run_cmd(argv, timeout * TIMEOUT_RETRY_FACTOR, cwd)
@@ -659,14 +665,18 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
     budget = Budget(seconds, max_tests, hard_deadline, pause_flag)
     cwd = os.path.join(wd, "min")
 
+    def oracle_run(o, src, prm):
+        NO_RETRY["on"] = res.cls != "timeout"
+        NO_RETRY["deadline"] = budget.deadline
+        try:
+            return classify(o, src, prm, compiler, cwd)
+        finally:
+            NO_RETRY["on"], NO_RETRY["deadline"] = False, None
+
     def holds(src):
         if not src.strip():
             return False
-        NO_RETRY["on"] = True
-        try:
-            r = classify(oracle, src, params, compiler, cwd)
-        finally:
-            NO_RETRY["on"] = False
+        r = oracle_run(oracle, src, params)
         return r.cls is not None and r.presig(oracle) == target
 
     if oracle == "lin":
@@ -675,7 +685,8 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
             okp = dict(params, must_compile=True, kind="consume-once")
 
             def holds_ok(src):
-                return classify("lin", src, okp, compiler, cwd).cls is None
+                # the twin must positively compile: a resource-limited run proves nothing
+                return budget.ok() and oracle_run("lin", src, okp).outcome == "ok"
 
             out, _ = minimize_lin(split, holds, holds_ok, budget)
             return out, budget.tests
@@ -688,9 +699,10 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
         meta = os.path.join(wd, "pred_meta.json")
         save_json(meta, {"oracle": oracle, "params": params, "presig": target,
                          "compiler": compiler, "pause_flag": pause_flag})
-        left = min(seconds / 2, 600, budget.deadline - time.time())
-        if budget.ok() and left >= 30:
-            red = lean_reduce(compiler, src, meta, wd, left)
+        if budget.ok() and min(seconds / 2, 600, budget.deadline - time.time()) >= 30:
+            # computed AFTER ok(): ok() may have slept through a pause
+            red = lean_reduce(compiler, src, meta, wd,
+                              min(seconds / 2, 600, budget.deadline - time.time()))
             if red and len(red) < len(src) and budget.ok() and holds(red):
                 src = red
     return minimize_text(src, holds, budget, res.cls == "crash"), budget.tests
@@ -986,7 +998,7 @@ def recheck(args):
         meta = load_json(os.path.join(d, "meta.json"), None)
         if not meta:
             continue
-        repro, inconclusive = False, False
+        repro, inconclusive, refused = False, False, False
         for name in ("minimized.con", "repro.con"):
             fp = os.path.join(d, name)
             if not os.path.exists(fp):
@@ -997,8 +1009,26 @@ def recheck(args):
             if r.cls is not None and r.presig(meta["oracle"]) == meta["presig"]:
                 repro = True
                 break
-            if r.outcome in ("resource", "pending"):
+            if r.outcome in ("resource", "pending", "timeout") or r.cls == "timeout":
                 inconclusive = True
+            elif r.cls == "refusal" and meta["class"] != "refusal":
+                # Main now REJECTS the program (a new rule, or a backend failure such as a
+                # killed clang, which surfaces only as "clang compilation failed"). Neither
+                # shows the bug is fixed: record it, keep the finding open.
+                refused = True
+        if not repro and refused and not inconclusive:
+            with locked(p):
+                idx = load_json(p["index"], empty_index())
+                e = idx["signatures"].get(sig)
+                if e:
+                    e["last_recheck"] = {"sha": args.sha, "at": now_iso(), "reproduces": False,
+                                         "refused_on_main": True}
+                    save_json(p["index"], idx)
+            with open(os.path.join(d, "log"), "a") as fh:
+                fh.write(f"{now_iso()} recheck at {args.sha}: main now refuses the program; "
+                         "kept open (refused-on-main), not fixed\n")
+            still += 1
+            continue
         if not repro and inconclusive:  # never close a finding on a run that proved nothing
             with open(os.path.join(d, "log"), "a") as fh:
                 fh.write(f"{now_iso()} recheck at {args.sha}: inconclusive (resource limit); retried next track\n")
