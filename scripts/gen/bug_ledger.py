@@ -253,7 +253,12 @@ def class_rows(block, path):
     def rows_of(text):
         out = []
         for ln in text.split("\n"):
-            if not ln.startswith("|") or ln in ("| class | bugs | structural owner |", "|---|---|---|"):
+            if not ln.strip() or ln.startswith((CLASS_BEGIN[:40], CLASS_END)):
+                continue
+            if not ln.startswith("|"):
+                die(f"{path}: the generated class table holds a line that is not a table row; move prose "
+                    f"outside the markers: {ln[:80]}")
+            if ln in ("| class | bugs | structural owner |", "|---|---|---|"):
                 continue
             m = CLASS_ROW.match(ln)
             if not m or m.group(4).count("|") or m.group(2).count("|"):
@@ -327,8 +332,8 @@ def views(root, recs):
     spans = [m.group(1) for m in EXIT_SPAN.finditer(base)]
     if len(set(spans)) != len(spans):
         die(f"{p}: an exit has two generated bug spans: {sorted(x for x in spans if spans.count(x) > 1)}")
-    if base.count("<!-- BEGIN GENERATED: exit ") != len(spans):
-        die(f"{p}: an exit bug span is missing its END marker")
+    if base.count("<!-- BEGIN GENERATED: exit ") != len(spans) or base.count("<!-- END GENERATED: exit ") != len(spans):
+        die(f"{p}: an exit bug span's BEGIN/END markers do not pair up (a missing, duplicated or orphan marker)")
     named = {x for r in recs.values() for x in r["facts"]["exit"]}
     if named - set(spans):
         die(f"records name exits with no generated bug span in ROADMAP.md: {', '.join(sorted(named - set(spans)))}")
