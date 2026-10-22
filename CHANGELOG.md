@@ -24,7 +24,9 @@ every capability of the fn value it holds. It is exact
 on scalars and on the shape of references, pointers, arrays and fn types, and defers only on
 named, generic and type-variable types, which stay Check's to decide. A `for` loop's
 step is now checked, and CoreCheck's own blocks close their scope. A pass-level test plants
-mismatched values in Core directly, so it stays meaningful after bug 176's fix. Record:
+mismatched values in Core directly, so it stays meaningful after bug 176's fix. The new check also found
+that Elab gave a struct or enum literal's field value an unexpanded alias as its expected type, so
+`S { a: 1 }` with `a: Id` (`type Id = i32`) stored an `Int` literal; field hints now expand aliases. Record:
 [bug 177](docs/bugs/177_corecheck_never_compared_binder_types.md).
 
 ### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)

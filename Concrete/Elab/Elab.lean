@@ -573,6 +573,14 @@ structure ElaboratedStmtV2 where
   core     : List CStmt
   evidence : Proof.EvidenceStmtV2
 
+/-- A declared field or payload type with the program's type aliases expanded (a type's own
+    parameters shadow them), as Core's field types are. Used as the expected type of the value
+    written into the field (bug 177), so a literal written for `a: Id` (`type Id = i32`) is an
+    `i32`, not an `Int` default. -/
+private def expandFieldAliases (typeParams : List String) (ty : Ty) : ElabM Ty := do
+  let aliases := (← getEnv).typeAliases.filter fun (n, _) => !typeParams.contains n
+  return expandAliasDeep aliases (aliases.length + 64) ty
+
 mutual
 
 partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedExprV2 := do
@@ -745,7 +753,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       for (fname, expr) in fields do
         match sd.fields.find? fun sf => sf.name == fname with
         | some sf =>
-          let fieldTy := substCapNamesTy (hintCapMap.getD []) (substTy mapping sf.ty)
+          -- Bug 177: the hint is the field's type with aliases expanded, as the struct's Core
+          -- field types are. An unexpanded alias (`a: Id` with `type Id = i32`) was no hint
+          -- for a literal, which defaulted to Int and was stored in the i32 field.
+          let fieldTy := substCapNamesTy (hintCapMap.getD [])
+            (substTy mapping (← expandFieldAliases sd.typeParams sf.ty))
           recordFieldUse sd sf.name
           let cExprEv ← elabExprEv expr (some fieldTy)
           cFields := cFields ++ [(sf.name, cExprEv.core)]
@@ -865,7 +877,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         let mut cFields : List (String × CExpr) := []
         let mut fieldEvsRev : List (String × Proof.EvidenceExprV2) := []
         for sf in ev.fields do
-          let fieldTy := substTy mapping sf.ty
+          -- aliases expanded, as for struct literal fields (bug 177)
+          let fieldTy := substTy mapping (← expandFieldAliases ed.typeParams sf.ty)
           match fields.find? fun (fn, _) => fn == sf.name with
           | some (_, expr) =>
             let cExprEv ← elabExprEv expr (some fieldTy)
@@ -1918,7 +1931,8 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
       | some f =>
         recordFieldUse sd field
         let mapping := sd.typeParams.zip tArgs
-        fieldTy := some (substTy mapping f.ty)
+        -- aliases expanded, as for struct literal fields (bug 177)
+        fieldTy := some (substTy mapping (← expandFieldAliases sd.typeParams f.ty))
         fieldOwner := sd.typeId?
       | none => pure ()
     | none => pure ()

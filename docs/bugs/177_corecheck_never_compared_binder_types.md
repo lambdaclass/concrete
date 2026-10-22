@@ -89,6 +89,19 @@ uses the same relation and keeps E0560. The `while` step is now checked, and `if
 value-`if`, `while` bodies, `for` steps, borrow blocks and literal/range match arms close their
 scope through `inCoreBlock`. A borrow block binds its reference inside that scope.
 
+### A disagreement the new check found in Elab
+
+The full gate set refused `check_type_alias.sh`'s alias program (`type Id = i32; struct S { a: Id,
+.. }` with `S { a: 1, .. }`): E0510, field `a` declared `i32`, value `Int`. Elab elaborated a
+struct-literal field's value with the field's DECLARED type as the hint, aliases unexpanded, so
+`.named "Id"` was no hint for the literal, which defaulted to `Int` while Core's field type is the
+expanded `i32`. Enum-literal payloads and field stores (`s.a = 1`) used the same unexpanded hint.
+Match-arm payload binders already expanded aliases (bug 096). All three sites now expand aliases
+through one helper (`expandFieldAliases`, the type's own parameters shadowing aliases), so the
+literal is an `i32`. The regression is `check_type_alias.sh` section 2, which compiles the
+program for its layout and fingerprint reports. This is the defence-in-depth check working: an
+Elab inconsistency that the backend tolerated is now a refusal, and it is fixed at its source.
+
 ## Structural cause
 
 CoreCheck was built as a consistency pass that trusted the front end's binder types: it recorded
