@@ -58,7 +58,7 @@ printf '%s' "$LEDGER" > "$TMP/ledger.json"
 # compiler's ledger: a manifest tag must be allowed for its code, and the ledger must say the same.
 declare -A SPEC_RULES=(
   [E0203]="REF-8@1" [E0204]="REF-8@1" [E0231]="REF-8@1" [E0232]="REF-8@1" [E0293]="REF-8@1"
-  [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1"
+  [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1" [E0305]="SCOPE-1@1"
   [E0234]="REF-6@1" [E0302]="REF-6@1" [E0303]="REF-6@1"
   [E0236]="REF-1@1, REF-2@1, REF-4@1" [E0239]="REF-3@1, REF-4@1"
   [E0238]="REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1"
@@ -119,6 +119,9 @@ validate_manifest() {
     runs=$(awk -F'\t' -v r="$r" '$1==r && $3 ~ /^run:/' "$m" | grep -c . || true)
     if [ "${runs:-0}" -eq 0 ]; then echo "    defect: semantic guarantee $r has no run row"; bad=1; fi
   done
+  # G4 (the renamed pattern binder) promises binary = --interp and a formatter round-trip
+  if ! awk -F'\t' '$1=="G4" && $3 ~ /^run:/ && $5 ~ /(^|,)binary(,|$)/ && $5 ~ /(^|,)interp(,|$)/ && $5 ~ /(^|,)fmt(,|$)/ {f=1} END {exit !f}' "$m"; then
+    echo "    defect: G4 has no run row with modes binary, interp and fmt"; bad=1; fi
   return $bad
 }
 
@@ -309,6 +312,8 @@ SIDECAR_SAVE="$SIDECAR"; SIDECAR="$TMP/badside.tsv"
 check_run SCOPE-3 tests/programs/regress_2i_scope1_087_renamed.con 42 model:087-bad > /dev/null \
   && no "N4e: a malformed negative model pattern passed" || ok "N4e: a malformed negative model pattern fails the row"
 SIDECAR="$SIDECAR_SAVE"
+awk -F'\t' '$1!="G4"' "$MANIFEST" > "$TMP/n4g.tsv"
+validate_manifest "$TMP/n4g.tsv" > /dev/null && no "N4g: dropping G4's run row went unnoticed" || ok "N4g: G4 without its binary/interp/fmt run row is refused"
 # N4f: a wrong final row with no trailing newline must still be executed (and fail).
 { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
 n4f_fail=$FAIL; n4f_pass=$PASS

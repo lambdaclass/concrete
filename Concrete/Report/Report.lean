@@ -6341,6 +6341,7 @@ def diagnosticCodesReport : String :=
     entryR "E0301" "check" "error" "a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)" "SCOPE-1@1",
     entryR "E0302" "check" "error" "a `let` binding holds a reference (references are scoped; exit 2i)" "REF-6@1",
     entryR "E0303" "check" "error" "a reference binding is assigned (references are never re-pointed; exit 2i)" "REF-6@1",
+    entryR "E0305" "check" "error" "a contract expression binds a name (contracts are binder-free propositions; exit 2i)" "SCOPE-1@1",
     entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",

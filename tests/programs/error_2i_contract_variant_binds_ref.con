@@ -1,0 +1,7 @@
+// Exit 2i (review round 5): a loop variant binds a reference. Contracts are binder-free: E0305.
+fn f(x: i32) -> i32 {
+    #[variant(if true { let r: &i32 = &x; 1 } else { 0 })]
+    while false { }
+    return x;
+}
+fn main() -> i32 { return f(42); }

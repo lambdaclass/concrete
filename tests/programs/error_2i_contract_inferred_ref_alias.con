@@ -1,0 +1,8 @@
+// Exit 2i (review round 5): a `requires` binds an inferred alias of a reference parameter, which a
+// syntactic test cannot type; contracts are binder-free, so it is E0305.
+#[requires(if true { let alias = r; true } else { true })]
+fn f(r: &i32) -> i32 { return *r; }
+fn main() -> i32 {
+    let x: i32 = 42;
+    return f(&x);
+}

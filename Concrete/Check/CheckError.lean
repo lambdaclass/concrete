@@ -279,6 +279,10 @@ inductive CheckError where
   -- erased before monomorphization, where a runtime `let` at `T := &Int` is re-checked, so it is
   -- refused here (exit 2i review).
   | ghostLetAtTypeParam (name : String) (tyName : String)
+  -- Exit 2i (review round 5): a contract expression (requires / ensures / invariant / variant)
+  -- binds a name. Contracts are propositions and, like spec bodies, binder-free, so no binding
+  -- rule (SCOPE-1, REF-6) needs a typed walk of erased contract code.
+  | contractBinds (fnName : String) (names : String)
   -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
   -- function, function type or reference instantiation would return a reference. The
   -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
@@ -420,6 +424,8 @@ def CheckError.message : CheckError → String
   | .assignsReferenceBinding name ty =>
     s!"a reference binding is never assigned: '{name}' has type '{ty}'"
   | .returnsReference msg _ => msg
+  | .contractBinds fnName names =>
+    s!"a contract of '{fnName}' binds name(s) {names}; contract expressions are binder-free propositions"
   | .ghostLetAtTypeParam name ty =>
     s!"a `ghost let` of a type-parameter type could hold a reference once instantiated: '{name}' has type '{ty}' (a ghost binding is erased before monomorphization re-checks it)"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
@@ -576,6 +582,7 @@ def CheckError.code : CheckError → String
   | .letBindsReference _ _ => "E0302"
   | .assignsReferenceBinding _ _ => "E0303"
   | .ghostLetAtTypeParam _ _ => "E0302"
+  | .contractBinds _ _ => "E0305"
   | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
@@ -588,6 +595,7 @@ def ruleSpecRef : String := "docs/language/MEMORY_SEMANTICS.md §15"
     that enforce another rule (`throwCheck (rule := ...)`). `none`: not a §15 rule. -/
 def CheckError.rule : CheckError → Option String
   | .shadowsVisibleBinding _ _ => some "SCOPE-1@1"
+  | .contractBinds _ _ => some "SCOPE-1@1"
   | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
   | .shadowsLiveLinear _ => some "SCOPE-1@1"
   | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"

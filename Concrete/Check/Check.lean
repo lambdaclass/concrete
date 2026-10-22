@@ -2898,7 +2898,14 @@ private partial def stmtHasBorrow : Stmt → Bool
   | .letStructDestructure _ _ _ v => exprHasBorrow v
   | .return_ _ v | .break_ _ v _ => (v.map exprHasBorrow).getD false
   | .borrowIn _ _ _ _ _ _ => true
-  | _ => true  -- any other statement form is treated as possibly borrowing (conservative)
+  | .ifElse _ c t e => exprHasBorrow c || t.any stmtHasBorrow || ((e.map (·.any stmtHasBorrow)).getD false)
+  | .while_ _ c b _ => exprHasBorrow c || b.any stmtHasBorrow
+  | .forLoop _ i c st b _ =>
+    ((i.map stmtHasBorrow).getD false) || exprHasBorrow c || ((st.map stmtHasBorrow).getD false) || b.any stmtHasBorrow
+  | .fieldAssign _ o _ v | .derefAssign _ o v => exprHasBorrow o || exprHasBorrow v
+  | .arrayIndexAssign _ a i v => exprHasBorrow a || exprHasBorrow i || exprHasBorrow v
+  | .letDestructure _ _ _ _ v e => exprHasBorrow v || ((e.map (·.any stmtHasBorrow)).getD false)
+  | .continue_ _ _ => false
 end
 
 private def isRefTySyn : Ty → Bool
@@ -3445,14 +3452,19 @@ def checkModule (m : Module) (summary : FileSummary)
   -- A contract's statement blocks get the SCOPE-1 walk (the function's parameters visible, and
   -- `result` in an `ensures`) and the syntactic REF-6 walk with every assignment refused; a spec
   -- fn's parameters get the duplicate-name test.
+  -- A contract (requires, ensures, loop invariant, loop variant) is a proposition, so like a spec
+  -- body it binds nothing (E0305): no reference binding and no reuse of a visible name can arise
+  -- in it, whatever the types. Assignments are refused too (E0303, `constRef6Expr true`).
   let exit2iContractDs : List Diagnostic :=
     (m.functions ++ m.implBlocks.flatMap (·.methods)).flatMap fun f =>
-      let vis : List ScopeBinder := f.params.reverse.map fun p => { name := p.name, span := f.span }
-      let one (vs : List ScopeBinder) (e : Expr) : List Diagnostic :=
-        ((scope1Expr vs e).run []).2 ++ constRef6Expr true e
-      f.requires.flatMap (one vis)
-        ++ f.ensures.flatMap (one ({ name := "result", span := f.span } :: vis))
-        ++ (f.loopContracts.flatMap (·.invariants)).flatMap (constRef6Expr true)
+      let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
+      clauses.flatMap fun e =>
+        let bs := (specBinders e).eraseDups
+        (if bs.isEmpty then [] else
+          let ce := CheckError.contractBinds f.name (", ".intercalate bs)
+          [{ severity := .error, message := ce.message, pass := "check", span := some f.span, hint := ce.hint,
+             code := ce.code, evidence := ruleEvidence ce.rule, nextAction := ce.rule.bind ruleNextAction }])
+        ++ ((constRef6Expr true e).filter (·.code == "E0303"))
   let exit2iSpecParamDs : List Diagnostic := m.specFns.flatMap fun sd =>
     let go : Scope1M Unit := do
       let mut vis : List ScopeBinder := []

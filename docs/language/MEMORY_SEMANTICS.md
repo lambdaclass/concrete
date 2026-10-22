@@ -1140,13 +1140,14 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
   and region names), so E0301 reports before E0292 and E0238, which stay as defense in depth. Every collision of a function is reported, each with the earlier binding as the related span.
   The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
-  Code `checkFn` never visits gets the same walk: constant initializers (`constInitDiagnostics`),
-  contract expressions (parameters visible, `result` in an `ensures`) and spec fn parameters. For
-  REF-6 those positions, which Check does not type, get a conservative syntactic test
+  Code `checkFn` never visits is covered too. Constant initializers get the same walk
+  (`constInitDiagnostics`) and, since Check does not type them, a conservative syntactic REF-6 test
   (`constRef6Expr`): a `let` declared with a reference type or whose initializer contains a borrow
-  anywhere, and any borrow block, are E0302; an assignment whose value contains a borrow is E0303,
-  and in a contract every assignment is. A constant may not borrow at all (E0602 at its use), so
-  this refuses no constant that could compile.
+  anywhere, and any borrow block, are E0302, and an assignment whose value contains a borrow is
+  E0303 (a constant may not borrow at all: E0602 at its use). Contract expressions (`requires`,
+  `ensures`, loop invariants and variants) are binder-free propositions, like spec bodies: any
+  binder in one is E0305 (`contractBinds`, tagged SCOPE-1@1) and any assignment E0303. Spec fn
+  parameters get the duplicate-name test.
   Fixtures: the twelve `error_2i_scope1_*.con` with their `_renamed` twins, and the 087 / 093 / 094
   / 107 shadowing fixtures and `error_borrow_shadow.con`, all rows of `tests/rules/exit_2i.tsv`
   (the two 107 fixtures report E0301, not E0302: the SCOPE-1 walk runs before any statement is
@@ -1266,7 +1267,7 @@ accepted fixtures, with the diagnostic text updated.
 | REF-6 | 1 | E0302 for (a) and E0303 for (b), at Check and after monomorphization; E0234 and E0238 kept as defense in depth | the 2026-10-21 decision, which replaced the draft's same-source comparison before any version of it landed; E0302/E0303 exit 2i; E0234 earlier; E0238 batch 2 |
 | REF-7 | 1 | E0238 | batch 2 (`a4ceab04`) |
 | REF-8 | 1 | E0204, E0203, E0231, E0232, E0293; E0238 | E0238 case batch 2 |
-| SCOPE-1 | 1 | E0301; E0292 kept as defense in depth (E0214 / E0215 no longer emitted) | exit 2i (closes G3) |
+| SCOPE-1 | 1 | E0301; E0305 for a binder in a contract expression; E0292 kept as defense in depth (E0214 / E0215 no longer emitted) | exit 2i (closes G3) |
 | SCOPE-3 | 1 | none: a semantics rule, pinned by fixtures comparing `--interp`, the binary and the extracted model | bug 087, batch 2 |
 
 **Diagnostic text.** For SCOPE-1:
@@ -1322,7 +1323,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 148 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 152 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
