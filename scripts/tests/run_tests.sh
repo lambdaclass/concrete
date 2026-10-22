@@ -7821,6 +7821,10 @@ run_err "$TESTDIR/error_176_while_shadow_ssa.con" "E0220"
 run_err "$TESTDIR/error_176_while_shadow_mut.con" "E0217"
 run_err "$TESTDIR/error_176_for_header_type.con" "E0220"
 run_err "$TESTDIR/error_176_loop_body_linear_leak.con" "was never consumed"
+# Codex review: a body ending in `while let`, or in an inner `while true` that a
+# nested labelled break leaves, terminates; its locals are not exempt from H9.
+run_err "$TESTDIR/error_176_loop_body_leak_while_let.con" "was never consumed"
+run_err "$TESTDIR/error_176_loop_body_leak_labelled_break.con" "was never consumed"
 # Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.

@@ -120,6 +120,19 @@ mod m {
         return v0;                                  // 3
     }
 
+    // Checked, never called: the loop body ends in an infinite `for (true)`, so
+    // its end is unreachable and the live `r` is not a leak (Codex review: the
+    // divergence predicate knew `while true` but not `for (true)`, so closing the
+    // body falsely refused this with E0208).
+    struct Res { v: i32 }
+    fn spin_holding(n: i32) -> i32 {
+        while n < 100 {
+            let r: Res = Res { v: n };
+            for (true) { }
+        }
+        return 0;
+    }
+
     fn main() -> Int {
         let mut ok: i32 = 0;
         if while_mutability() == 1 { ok = ok + 1; }

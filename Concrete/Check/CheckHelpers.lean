@@ -500,18 +500,62 @@ partial def isLitTrueExpr : Expr → Bool
   | .paren _ inner => isLitTrueExpr inner
   | _ => false
 
--- Does a `break` appear directly in this block (not inside a nested loop, whose
--- break targets that inner loop)? Distinguishes a truly infinite `while true {}`
--- from one that can exit. Labeled breaks to an outer loop are treated as inner
--- (conservative: at worst we under-report a leak, never false-positive).
+-- Can control leave the loop whose body this is through a `break` or a labelled
+-- `continue`? Distinguishes a truly infinite `while true {}` from one that can
+-- exit. An unlabelled `break` targets the innermost loop, so it counts only
+-- outside nested loops; a labelled `break 'l` / `continue 'l` leaves this loop
+-- unless `'l` names a loop nested inside it (`inner`), and `continue` to the
+-- loop's own label (`own`) stays in it. Breaks inside `match` arms, value-`if`
+-- branches and borrow blocks count (bug 176, Codex review: a `while let`, whose
+-- `break` sits in the desugared match's fallback arm, was read as infinite, and
+-- a labelled break from a nested loop was ignored; either way a loop that exits
+-- was treated as one that never does, which exempts its locals from H9).
+-- Over-counting is the safe direction: it can only make a block terminating.
 mutual
-partial def blockHasBreak (stmts : List Stmt) : Bool :=
-  stmts.any stmtHasBreak
-partial def stmtHasBreak : Stmt → Bool
-  | .break_ _ _ _ => true
-  | .ifElse _ _ t e => blockHasBreak t || (match e with | some es => blockHasBreak es | none => false)
-  | .while_ _ _ _ _ | .forLoop _ _ _ _ _ _ => false  -- break here targets the inner loop
+partial def blockHasBreak (stmts : List Stmt) (own : Option String := none) : Bool :=
+  blockBreaksOut own [] true stmts
+partial def blockBreaksOut (own : Option String) (inner : List String) (direct : Bool)
+    (stmts : List Stmt) : Bool :=
+  stmts.any (stmtBreaksOut own inner direct)
+partial def stmtBreaksOut (own : Option String) (inner : List String) (direct : Bool) : Stmt → Bool
+  | .break_ _ v lbl =>
+    (match lbl with
+     | none => direct
+     | some l => !inner.contains l) || (v.map (exprBreaksOut own inner direct)).getD false
+  | .continue_ _ lbl =>
+    match lbl with
+    | none => false
+    | some l => !inner.contains l && own != some l
+  | .ifElse _ c t e =>
+    exprBreaksOut own inner direct c || blockBreaksOut own inner direct t
+      || (e.map (blockBreaksOut own inner direct)).getD false
+  | .while_ _ c body lbl =>
+    exprBreaksOut own inner direct c || blockBreaksOut own (lbl.toList ++ inner) false body
+  | .forLoop _ init c step body lbl =>
+    let inner' := lbl.toList ++ inner
+    (init.map (stmtBreaksOut own inner direct)).getD false || exprBreaksOut own inner direct c
+      || (step.map (stmtBreaksOut own inner' false)).getD false
+      || blockBreaksOut own inner' false body
+  | .expr _ e _ => exprBreaksOut own inner direct e
+  | .letDecl _ _ _ _ v _ => exprBreaksOut own inner direct v
+  | .assign _ _ v => exprBreaksOut own inner direct v
+  | .return_ _ (some v) => exprBreaksOut own inner direct v
+  | .borrowIn _ _ _ _ _ body => blockBreaksOut own inner direct body
+  | .letDestructure _ _ _ _ v eb =>
+    exprBreaksOut own inner direct v || (eb.map (blockBreaksOut own inner direct)).getD false
   | _ => false
+partial def exprBreaksOut (own : Option String) (inner : List String) (direct : Bool) : Expr → Bool
+  | .paren _ e => exprBreaksOut own inner direct e
+  | .match_ _ s arms =>
+    exprBreaksOut own inner direct s || arms.any (armBreaksOut own inner direct)
+  | .ifExpr _ c t e =>
+    exprBreaksOut own inner direct c || blockBreaksOut own inner direct t || blockBreaksOut own inner direct e
+  | _ => false
+partial def armBreaksOut (own : Option String) (inner : List String) (direct : Bool) : MatchArm → Bool
+  | .mk _ _ _ _ _ body => blockBreaksOut own inner direct body
+  | .litArm _ _ _ body => blockBreaksOut own inner direct body
+  | .varArm _ _ _ body => blockBreaksOut own inner direct body
+  | .rangeArm _ _ _ _ _ body => blockBreaksOut own inner direct body
 end
 
 -- Control cannot fall off the end of this block — it returns, breaks, continues,
@@ -529,7 +573,9 @@ partial def stmtDiverges : Stmt → Bool
   | .return_ _ _ => true
   | .break_ _ _ _ => true
   | .continue_ _ _ => true
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
   | .ifElse _ _ t (some e) => blockDiverges t && blockDiverges e
   | .expr _ e _ => exprDiverges e
   | _ => false
@@ -558,7 +604,9 @@ partial def blockNonTerminating (stmts : List Stmt) : Bool :=
   | none => false
   | some s => stmtNonTerminating s
 partial def stmtNonTerminating : Stmt → Bool
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
   | .ifElse _ _ t (some e) => blockNonTerminating t && blockNonTerminating e
   | .expr _ e _ => exprNonTerminating e
   | _ => false

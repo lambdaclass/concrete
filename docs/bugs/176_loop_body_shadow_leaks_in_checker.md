@@ -84,6 +84,36 @@ blocks now close through `closeBlockScope` instead of their own filters. `if` wi
 `match` still restore from the snapshot, which is lexical and also discards the branch's effects
 on outer bindings, as their merge rules require.
 
+### Codex review, round 1
+
+Closing loop bodies made H9 depend on the divergence predicate (`blockNonTerminating`) at every
+loop body's end. Before, these locals reached the function-end check. The predicate's break
+detection (`blockHasBreak`) saw only direct `break`s and `if` branches, so:
+
+- a body ending in `while let`, whose `break` sits in the desugared `match`'s fallback arm, read
+  as infinite, and its unconsumed locals were exempted and then dropped (a per-iteration leak
+  that the function-end check used to refuse);
+- a labelled `break 'outer` inside a loop nested in an inner `while true` was ignored the same
+  way;
+- `for (true) { }` was not recognized as infinite at all, so a body ending in it was falsely
+  refused.
+
+`blockHasBreak` now finds every exit from the loop. That covers an unlabelled `break` outside
+nested loops, and a labelled `break`/`continue` whose label is not a nested loop's (a `continue`
+to the loop's own label stays in it). It looks through `match` arms, value-`if` branches, borrow
+blocks, `let`-`else` and statement expressions. `stmtDiverges` and `stmtNonTerminating` treat
+`for (true)` like `while true`. Over-counting exits is the safe direction: it can only make a
+block count as terminating. Fixtures: `error_176_loop_body_leak_while_let.con`,
+`error_176_loop_body_leak_labelled_break.con` (E0208), and `spin_holding` in the regress fixture
+(accepted).
+
+**Known limit, not changed here.** When every arm of a `match` diverges, the checker continues
+with the first arm's state. So a loop body ending in `match c { true => { abort(); }, false => {
+consume(r); continue; } }` still reports `r` as unconsumed. Before this fix, the function-end
+check refused the same body unless the function never terminates, so the only new refusal is in a
+non-terminating function. The precise rule is class 15's owner (R-0499, ownership along
+control-flow paths).
+
 ## Structural owner
 
 [Structural class](STRUCTURAL_CLASSES.md) 2, binder identity by name, not a `LocalId` (with 087,
