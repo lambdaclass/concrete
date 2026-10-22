@@ -656,6 +656,32 @@ def checkBlockLocalsConsumed
     if info.state == .consumed || info.state == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
 
+/-- Bug 176: the ONE lexical-scope discipline of Check's binding environment.
+    Closes a block opened when the environment's bindings were `outer`: every
+    binding the block introduced (by identity — a uid absent from `outer`) is
+    dropped, so an outer binding that an inner `let` shadowed is the visible one
+    again, with its own type and mutability. Outer bindings keep the states the
+    block left them in (a consume inside the block is not undone). Every block
+    construct closes through here: `if`/`else` branches (statement and value),
+    loop bodies, `for` headers and borrow blocks. -/
+def closeBlockScope (outer : List (String × VarInfo)) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
+
+/-- Bug 176: run `k`, which checks `body` as a lexical block nested in the current
+    environment, then apply H9 to the block's own bindings and close it
+    (`closeBlockScope`). Before this, a `while`/`for` body never closed: its
+    bindings stayed in the environment after the loop, so an inner `let v0: u8`
+    replaced the outer `v0: i32` for the rest of the function (the checker typed
+    and mutability-checked later code against a binding that no longer existed,
+    while Elab, the interpreter and the binary read the outer one). -/
+def inBlockScope {α : Type} (body : List Stmt) (span : Option Span) (k : CheckM α) : CheckM α := do
+  let outer := (← getEnv).vars
+  let r ← k
+  checkBlockLocalsConsumed outer (← getEnv).vars (blockNonTerminating body) span
+  closeBlockScope outer
+  return r
+
 -- ============================================================
 -- Type substitution for generics
 -- ============================================================

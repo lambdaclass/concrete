@@ -1,0 +1,136 @@
+// Bug 176 regression: a `let` inside a loop body that shadows an outer name is
+// scoped to the body in the CHECKER too. Pre-fix Check's `while`/`for` restored
+// only the loop depth and labels, so the inner binding outlived the loop: after
+// `while c { let v0: u8 = 7; }` the checker typed `v0` as an immutable u8 for the
+// rest of the function, while Elab, the interpreter and the binary read the
+// outer `let mut v0: i32`. Every helper below is a VALID program that the
+// pre-fix checker refused (E0217 assigning the outer mutable, E0233 borrowing it
+// mutably, E0220 using it at its own type) or typed wrongly. Each returns its
+// lexical answer; main returns 42 only if all of them are right, and run_tests.sh
+// requires `--interp` to agree with the binary.
+mod m {
+    enum Copy OptI { Some { value: i32 }, None {} }
+
+    fn next_val(n: i32) -> OptI {
+        if n > 0 { return OptI::Some { value: n }; }
+        return OptI::None {};
+    }
+
+    fn addv(r: &mut i32, d: i32) {
+        *r = *r + d;
+    }
+
+    // The fuzz-farm shape: outer `let mut v0: i32`, an immutable i32 shadow in
+    // the body; the outer must still be assignable after the loop (pre-fix E0217).
+    fn while_mutability() -> i32 {
+        let mut v0: i32 = 0;
+        let mut k: i32 = 0;
+        while k < 2 { let v0: i32 = 7; k = k + 1; }
+        v0 = 1;
+        return v0;                                  // 1
+    }
+
+    // Outer i32 shadowed by a u8 in the body: after the loop `v0` is the i32
+    // 300 again (pre-fix the checker typed it u8, so `v0 + 1` stored into an
+    // i32 was E0220 and `let y: u8 = v0` was accepted).
+    fn while_type() -> i32 {
+        let mut v0: i32 = 300;
+        let mut k: i32 = 0;
+        while k < 1 { let mut v0: u8 = 7; v0 = v0 + 1; k = k + 1; }
+        let w: i32 = v0 + 1;
+        return w;                                   // 301
+    }
+
+    // `&mut` of the outer after the loop (pre-fix E0233: the immutable shadow
+    // answered for it).
+    fn while_borrow_mut() -> i32 {
+        let mut v0: i32 = 10;
+        let mut k: i32 = 0;
+        while k < 1 { let v0: i32 = 0; k = k + v0 + 1; }
+        addv(&mut v0, 3);
+        return v0;                                  // 13
+    }
+
+    // `while let`: the shadow sits inside the desugared match arm.
+    fn while_let_shadow() -> i32 {
+        let mut v0: i32 = 5;
+        let mut i: i32 = 2;
+        while let OptI::Some { value } = next_val(i) {
+            let v0: u8 = 9;
+            i = i - value;
+        }
+        v0 = v0 + 1;
+        return v0;                                  // 6
+    }
+
+    // Nested loops, each body shadowing; both levels close.
+    fn nested() -> i32 {
+        let mut v0: i32 = 2;
+        let mut a: i32 = 0;
+        while a < 2 {
+            let v0: u8 = 1;
+            let mut b: i32 = 0;
+            while b < 2 { let v0: bool = true; b = b + 1; }
+            a = a + 1;
+        }
+        v0 = v0 * 10;
+        return v0;                                  // 20
+    }
+
+    // Labelled break and continue out of an inner body that shadows.
+    fn labelled() -> i32 {
+        let mut v0: i32 = 3;
+        let mut a: i32 = 0;
+        'outer: while a < 5 {
+            a = a + 1;
+            let v0: u8 = 200;
+            let mut b: i32 = 0;
+            while b < 3 {
+                let v0: bool = false;
+                b = b + 1;
+                if a == 1 { continue 'outer; }
+                if a == 3 { break 'outer; }
+            }
+        }
+        v0 = v0 + a;
+        return v0;                                  // 6
+    }
+
+    // C-style `for`: the body's shadow closes before the step, and the header's
+    // `i` closes after the loop (the outer `i` is a u8 again).
+    fn for_scopes() -> i32 {
+        let mut v0: i32 = 40;
+        let mut i: u8 = 2;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            let i: u8 = 9;
+            let v0: bool = true;
+        }
+        let j: u8 = i + 1;
+        v0 = v0 + (j as i32);
+        return v0;                                  // 43
+    }
+
+    // `for (cond)` and the infinite `for { }` with a break.
+    fn for_forms() -> i32 {
+        let mut v0: i32 = 1;
+        let mut k: i32 = 0;
+        for (k < 2) { let v0: u8 = 3; k = k + 1; }
+        for { let v0: bool = false; break; }
+        v0 = v0 + k;
+        return v0;                                  // 3
+    }
+
+    fn main() -> Int {
+        let mut ok: i32 = 0;
+        if while_mutability() == 1 { ok = ok + 1; }
+        if while_type() == 301 { ok = ok + 1; }
+        if while_borrow_mut() == 13 { ok = ok + 1; }
+        if while_let_shadow() == 6 { ok = ok + 1; }
+        if nested() == 20 { ok = ok + 1; }
+        if labelled() == 6 { ok = ok + 1; }
+        if for_scopes() == 43 { ok = ok + 1; }
+        if for_forms() == 3 { ok = ok + 1; }
+        if ok == 8 { return 42; }
+        return ok as Int;
+    }
+}

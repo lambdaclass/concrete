@@ -1,0 +1,13 @@
+// Bug 176: after `while c { let mut v0: u8 = 7; ... }` the visible `v0` is the
+// outer i32 holding 300. Pre-fix the checker still saw the body's u8, accepted
+// `let y: u8 = v0;`, and both the binary and `--interp` printed 300 from a u8.
+// Expected: E0220 at `let y`, exactly as without the loop.
+mod m {
+    fn main() with(Console) {
+        let mut v0: i32 = 300;
+        let mut k: i32 = 0;
+        while k < 1 { let mut v0: u8 = 7; v0 = v0 + 1; k = k + 1; }
+        let y: u8 = v0;
+        println(y);
+    }
+}

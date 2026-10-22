@@ -7803,6 +7803,24 @@ else
     echo "FAIL  bug 087: interp ($r087_interp) or extracted model is not lexical"
     FAIL=$((FAIL + 1))
 fi
+# Bug 176: a loop body (and a `for` header) is a lexical block in the CHECKER
+# too. Pre-fix Check's while/for restored only loop depth and labels, so a body
+# `let` shadowing an outer name replaced it for the rest of the function: valid
+# code was refused (E0217/E0233/E0220) and a u8 was typed over an i32 holding 300.
+run_ok "$TESTDIR/regress_176_loop_shadow_restores_outer.con" 42
+r176_interp=$($COMPILER "$TESTDIR/regress_176_loop_shadow_restores_outer.con" --interp 2>&1 || true)
+if [ "$r176_interp" = "42" ]; then
+    echo "  ok  bug 176: loop-body shadows close — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 176: loop-body shadows — interp gave '$r176_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+run_err "$TESTDIR/error_176_while_shadow_type.con" "E0220"
+run_err "$TESTDIR/error_176_while_shadow_ssa.con" "E0220"
+run_err "$TESTDIR/error_176_while_shadow_mut.con" "E0217"
+run_err "$TESTDIR/error_176_for_header_type.con" "E0220"
+run_err "$TESTDIR/error_176_loop_body_linear_leak.con" "was never consumed"
 # Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.

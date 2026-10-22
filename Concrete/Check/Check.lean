@@ -686,9 +686,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars
       (blockDiverges then_) (blockDiverges else_) (some e.getSpan)
     -- Drop branch-locals; restore the exit flag.
+    closeBlockScope envBefore.vars
     let envM ← getEnv
-    setEnv { envM with vars := envM.vars.filter fun (_, vi) => hasUid envBefore.vars vi.uid,
-                       inFnExitingBranch := envBefore.inFnExitingBranch }
+    setEnv { envM with inFnExitingBranch := envBefore.inFnExitingBranch }
     -- Both branches must agree on type
     if thenTy != elseTy && thenTy != .never && elseTy != .never then
       throwCheck (.ifBranchTypeMismatch (tyToString thenTy) (tyToString elseTy)) (some e.getSpan)
@@ -2182,9 +2182,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- names survive (their merged consumption states were applied above). Without
       -- this, else-branch locals leaked into the outer env (the accidental, lopsided
       -- way they used to be caught at function scope).
+      closeBlockScope envBefore.vars
       let env ← getEnv
-      setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid envBefore.vars vi.uid,
-                        inFnExitingBranch := envBefore.inFnExitingBranch }
+      setEnv { env with inFnExitingBranch := envBefore.inFnExitingBranch }
     | none =>
       -- No else branch: then branch must not consume any linear var
       -- Exception: if then-branch diverges, consumption is fine (control never falls through)
@@ -2211,29 +2211,36 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | some l => l :: env.loopLabels
       | none => env.loopLabels
     setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
-    checkStmts body retTy
+    -- Bug 176: the body is a lexical block. The loop used to restore only its
+    -- depth and labels, so the body's bindings outlived it and an inner
+    -- `let v0: u8` stood in for the outer `v0: i32` for the rest of the function.
+    inBlockScope body (some stmt.getSpan) (checkStmts body retTy)
     -- Restore loop depth and labels
     let env' ← getEnv
     setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
   | .forLoop _ init cond step body lbl =>
-    -- Init
-    match init with
-    | some initStmt => checkStmt initStmt retTy
-    | none => pure ()
-    -- Condition
-    let _condTy ← checkExpr cond
-    -- Body + step in loop scope, push label if present
-    let env ← getEnv
-    let labels := match lbl with
-      | some l => l :: env.loopLabels
-      | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
-    checkStmts body retTy
-    match step with
-    | some stepStmt => checkStmt stepStmt retTy
-    | none => pure ()
-    let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
+    -- Bug 176: two nested lexical blocks, as in Elab. The header (init, cond,
+    -- step) is scoped to the loop, and the body is a block inside it, so the
+    -- step sees the header's bindings and never the body's.
+    inBlockScope [stmt] (some stmt.getSpan) do
+      -- Init
+      match init with
+      | some initStmt => checkStmt initStmt retTy
+      | none => pure ()
+      -- Condition
+      let _condTy ← checkExpr cond
+      -- Body + step in loop scope, push label if present
+      let env ← getEnv
+      let labels := match lbl with
+        | some l => l :: env.loopLabels
+        | none => env.loopLabels
+      setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
+      inBlockScope body (some stmt.getSpan) (checkStmts body retTy)
+      match step with
+      | some stepStmt => checkStmt stepStmt retTy
+      | none => pure ()
+      let env' ← getEnv
+      setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv
@@ -2443,11 +2450,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       checkBlockLocalsConsumed envWithRef.vars env'.vars (blockNonTerminating body) (some stmt.getSpan)
       -- Drop the ref and the body's locals by identity, never by name: a
       -- name filter also deleted a body local named like the ref (bug 094).
-      let vars'' := (env'.vars.map fun (n, vi) =>
+      let vars'' := env'.vars.map fun (n, vi) =>
         if vi.uid == varInfo.uid then (n, { vi with state := savedState })
-        else (n, vi)).filter fun (_, vi) => hasUid env.vars vi.uid
+        else (n, vi)
       let cleanedRefs := env'.borrowRefs.filter (· != ref)
       setEnv { env' with vars := vars'', borrowRefs := cleanedRefs }
+      closeBlockScope env.vars
   | .break_ _ value lbl =>
     let env ← getEnv
     if env.loopDepth == 0 then

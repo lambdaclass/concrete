@@ -1,0 +1,14 @@
+// Bug 176, third effect: with `let z: u8 = y + 1;` added, the pre-fix compiler
+// passed the checker and then failed SSA verification (E0715, i32 vs u8
+// operands) while `--interp` printed 301. Expected: the checker refuses
+// `let y: u8 = v0;` (E0220), because `v0` is the outer i32 after the loop.
+mod m {
+    fn main() with(Console) {
+        let v0: i32 = 300;
+        let mut k: i32 = 0;
+        while k < 1 { let v0: u8 = 7; k = k + 1; }
+        let y: u8 = v0;
+        let z: u8 = y + 1;
+        println(z);
+    }
+}
