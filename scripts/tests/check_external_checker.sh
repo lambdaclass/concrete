@@ -39,6 +39,13 @@
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+# A pre-push hook in a linked worktree exports repository-local Git variables.
+# Without clearing them, `git -C "$tool" rev-parse HEAD` reads Concrete's HEAD,
+# falsely rejecting an already-built pinned tool (and misdirecting checkout).
+# All Git operations below address separate external-tool repositories.
+for git_local_var in $(git rev-parse --local-env-vars); do
+  unset "$git_local_var"
+done
 export LC_ALL=C
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
