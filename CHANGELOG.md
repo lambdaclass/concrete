@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
+
+The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
+the checker after the loop. The outer name took the inner binding's type and mutability, so valid
+code was refused (E0217, E0233), a `u8` binding held 300 natively and in `--interp`, and a checked
+program failed SSA verification. Every loop form had the defect, including `for` headers. Check's
+`while` and `for` restored only their depth and labels. `if`, `match` and borrow blocks each
+closed their scope by hand. Every block now closes through one helper (`closeBlockScope`, with
+`inBlockScope` applying the block-local consumption rule). A loop body's linear locals are
+therefore checked at the end of the body, which also catches a per-iteration leak in a
+non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
+
 ### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
 
 The landing page now exposes the existing Concrete compiler as WebAssembly in a

@@ -109,6 +109,9 @@ declare -A BUG_TEST_MAP=(
   [129]="regress_129_user_fn_named_malloc.con regress_129_extern_beside_same_named_fn.con regress_129_imported_extern_beside_fn.con regress_129_fn_value_extern.con regress_129_runtime_helper_beside_fn.con regress_129_generic_extern.con"
   # Bug 112: an #[intrinsic] declaration was refused as an undeclared foreign binding (E0116).
   [112]="regress_112_user_intrinsic.con"
+  # Bug 176: a loop body's / for header's shadowing let outlived the loop in Check (run_tests.sh
+  # also requires --interp == binary == 42 for the valid fixture).
+  [176]="regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type.con error_176_while_shadow_ssa.con error_176_while_shadow_mut.con error_176_for_header_type.con error_176_loop_body_linear_leak.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).
