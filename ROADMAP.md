@@ -518,8 +518,11 @@ when that run is red (R-0539). CI is split into two tiers that follow the stages
 - the **campaign tier** is the set of jobs that run only on schedule or dispatch, the mutation
   campaign among them. It is part of stage (c), so it gates qualification but not merges.
 
-A train's result is recorded against the train's own SHA, and each member's against the SHA it landed
-at. A member removed by bisection keeps its failed result. The landing tier never stands in for stage
+Every result is recorded against the SHA of the candidate that actually ran, which is the train or a
+bisection candidate. Attribution of a failure to a member is a separate field of that record. A
+member's own SHA receives a result only from a run at that SHA, and a landed member's record names
+the train candidate whose result it relies on. A member removed by bisection keeps the failure that
+was attributed to it. The landing tier never stands in for stage
 (c), and a stage (c) verdict still needs every job of one dispatch run. Passed, failed, skipped,
 cancelled and incomplete stay distinct throughout: a cancelled or incomplete train run is not a pass
 for any member.
