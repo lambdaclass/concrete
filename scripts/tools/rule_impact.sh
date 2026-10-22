@@ -4,7 +4,7 @@
 #
 # Both compilers compile ONE corpus (by default the base tree's): every standalone .con under
 # tests/ and examples/, every project (a directory with Concrete.toml) under tests/ and examples/,
-# std itself and each std module, and every Concrete program written inline in a gate script
+# std (one unit: lib.con with all its modules), and every Concrete program written inline in a gate script
 # (a heredoc in scripts/tests/*.sh or scripts/ci/*.sh whose body declares `fn`). Each unit is
 # compiled to LLVM IR (`--emit-llvm`, no linking), and its outcome is recorded: accept, refuse
 # (with its sorted set of diagnostic codes), crash, or timeout. The report lists every unit whose
@@ -31,7 +31,8 @@
 #               and untracked, not ignored, files), so builds never write into a checkout
 #     --only    comma list of unit kinds: file,project,std,inline (default all)
 #     --jobs    parallel compiles (default: nproc / 2, at most 32)
-# Output (DIR, default a temp dir, printed): base.tsv, candidate.tsv, diff.tsv, summary.txt.
+# Output (DIR, default a temp dir, printed): base.tsv, candidate.tsv, diff.tsv, summary.txt, and
+# logs/{base,candidate}/<unit with / as %>.err (the full diagnostics of every refusal).
 #   columns: kind  unit  outcome  codes  loc  first-error-line
 # Exit: 0 no difference, 1 differences found, 2 usage or setup error.
 set -uo pipefail
@@ -39,18 +40,13 @@ export LC_ALL=C
 
 # --- worker mode: compile one unit, print one TSV row -----------------------------------------
 if [ "${1:-}" = "__unit" ]; then
-  compiler="$2"; corpus="$3"; tmo="$4"; kind="$5"; unit="$6"
+  compiler="$2"; corpus="$3"; tmo="$4"; logs="$5"; kind="$6"; unit="$7"
   export CONCRETE_STD="$corpus/std"
   out=$(mktemp)
   case "$kind" in
     file|inline) (cd "$corpus" && timeout "$tmo" "$compiler" "$unit" --emit-llvm >/dev/null 2>"$out"); rc=$? ;;
     project) (cd "$corpus/$unit" && timeout "$tmo" "$compiler" build --emit-llvm >/dev/null 2>"$out"); rc=$? ;;
-    std) if [ "$unit" = "std/src/lib.con" ]; then
-           (cd "$corpus" && timeout "$tmo" "$compiler" std/src/lib.con --emit-llvm >/dev/null 2>"$out"); rc=$?
-         else
-           mod="std.${unit#std/src/}"; mod="${mod%.con}"
-           (cd "$corpus" && timeout "$tmo" "$compiler" std/src/lib.con --test --module "$mod" --emit-llvm >/dev/null 2>"$out"); rc=$?
-         fi ;;
+    std) (cd "$corpus" && timeout "$tmo" "$compiler" "$unit" --emit-llvm >/dev/null 2>"$out"); rc=$? ;;
   esac
   # Diagnostics render as `error[check]: (E0301) ...`; a code inside a hint is not the error's own.
   codes=$(grep -oE '(error|warning)[^:]*: \(E[0-9]{4}\)' "$out" | grep -oE 'E[0-9]{4}' | sort -u | paste -sd, -)
@@ -61,6 +57,8 @@ if [ "${1:-}" = "__unit" ]; then
   elif [ $rc -ge 128 ] || grep -qiE 'PANIC|INTERNAL PANIC|uncaught exception|stack overflow' "$out"; then outcome=crash
   else outcome=refuse; fi
   [ "$outcome" = accept ] && { codes=""; first=""; loc=""; }
+  # Keep every refusal's full diagnostics: a unit reports more than its first error.
+  [ "$outcome" = accept ] || cp "$out" "$logs/$(printf '%s' "$unit" | tr '/' '%').err"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$unit" "$outcome" "${codes:--}" "${loc:--}" "${first:--}"
   rm -f "$out"
   exit 0
@@ -148,10 +146,10 @@ want() { case ",$ONLY," in *",$1,"*) return 0 ;; esac; return 1; }
       [ $inproj = 0 ] && printf 'file\t%s\n' "$f"
     done
   fi
-  if want std && [ -f std/src/lib.con ]; then
-    printf 'std\tstd/src/lib.con\n'
-    find std/src -maxdepth 1 -name '*.con' ! -name lib.con | sort | sed 's/^/std\t/'
-  fi
+  # std is one compilation unit (lib.con resolves every module; `--test --module` links and runs
+  # tests, it does not select a module to check), so it is one unit whose full diagnostic list the
+  # summary prints.
+  if want std && [ -f std/src/lib.con ]; then printf 'std\tstd/src/lib.con\n'; fi
 ) >> "$UNITS"
 if want inline; then
   mkdir -p "$CDIR/_inline"
@@ -186,15 +184,16 @@ echo "rule_impact: $N units ($(cut -f1 "$UNITS" | sort | uniq -c | awk '{printf 
 
 # Workers get the fixed arguments first; xargs appends "<kind> <unit>".
 run_side() {
-  local compiler="$1" dest="$2"
+  local compiler="$1" dest="$2" logs="$3"
+  mkdir -p "$logs"
   while IFS=$'\t' read -r kind unit; do printf '%s\0%s\0' "$kind" "$unit"; done < "$UNITS" \
-    | xargs -0 -n2 -P "$JOBS" bash "$SELF" __unit "$compiler" "$CDIR" "$TMO" \
+    | xargs -0 -n2 -P "$JOBS" bash "$SELF" __unit "$compiler" "$CDIR" "$TMO" "$logs" \
     | sort -t$'\t' -k2,2 > "$dest"
 }
 echo "rule_impact: base      $BASE_DIR @ $(git -C "$BASE_DIR" rev-parse --short HEAD 2>/dev/null)" >&2
 echo "rule_impact: candidate $CAND_DIR @ $(git -C "$CAND_DIR" rev-parse --short HEAD 2>/dev/null)" >&2
-run_side "$BASE_DIR/.lake/build/bin/concrete" "$OUT/base.tsv"
-run_side "$CAND_DIR/.lake/build/bin/concrete" "$OUT/candidate.tsv"
+run_side "$BASE_DIR/.lake/build/bin/concrete" "$OUT/base.tsv" "$OUT/logs/base"
+run_side "$CAND_DIR/.lake/build/bin/concrete" "$OUT/candidate.tsv" "$OUT/logs/candidate"
 nb=$(wc -l < "$OUT/base.tsv" | tr -d ' '); nc=$(wc -l < "$OUT/candidate.tsv" | tr -d ' ')
 [ "$nb" = "$N" ] && [ "$nc" = "$N" ] || die "incomplete scan: $N units, base $nb rows, candidate $nc rows"
 
@@ -217,6 +216,13 @@ D=$(wc -l < "$OUT/diff.tsv" | tr -d ' ')
   echo "still refused, code set changed (base -> candidate):"
   awk -F'\t' '$3 != "accept" && $5 != "accept" { print $4 " -> " $6 }' "$OUT/diff.tsv" | sort | uniq -c | sed 's/^/  /'
   echo
+  coded() { [ -f "$1" ] && grep -oE '^[^ ]+\.con:[0-9]+:[0-9]+: error[^:]*: \(E[0-9]{4}\)' "$1" | sed -E 's/: error[^(]*\((E[0-9]{4})\)/ \1/' | sort -u; }
+  stdlog="std%src%lib.con.err"
+  if [ -f "$OUT/logs/candidate/$stdlog" ]; then
+    echo "std diagnostics under the candidate that the base does not report (file:line:col code):"
+    comm -13 <(coded "$OUT/logs/base/$stdlog") <(coded "$OUT/logs/candidate/$stdlog") | sed "s|^$CDIR/||; s/^/  /"
+    echo
+  fi
   echo "by kind:"
   cut -f1 "$OUT/diff.tsv" | sort | uniq -c | sed 's/^/  /'
   echo
