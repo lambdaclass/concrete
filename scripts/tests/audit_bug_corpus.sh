@@ -107,8 +107,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
-  # Bug 183: a raw-pointer comparison through a safe generic escaped E0229 (instances lost `trusted`).
-  [183]="error_183_generic_rawptr_eq_safe.con regress_183_generic_rawptr_eq_authority.con"
+  # Bug 185: a raw-pointer comparison through a safe generic escaped E0229 (instances lost `trusted`).
+  [185]="error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_authority.con"
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
   [134]="error_134_enum_eq.con error_134_struct_eq.con"

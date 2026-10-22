@@ -1,4 +1,4 @@
-// Bug 183, positive control: an instance carries its definition's authority. A trusted generic and
+// Bug 185, positive control: an instance carries its definition's authority. A trusted generic and
 // a generic declaring with(Unsafe) may compare raw pointers at any instantiation; the same generic
 // at a scalar compares as before. Exit 42.
 trusted fn same_t<T: Copy>(a: T, b: T) -> bool {

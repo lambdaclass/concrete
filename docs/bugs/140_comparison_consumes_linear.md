@@ -57,7 +57,7 @@ The comparison rule (user decision (b), 2026-10-21; normative text in
   `Concrete/Check/Verify.lean`, E0229, pass `post-mono`). A raw-pointer comparison
   reached through a `Copy`-bounded generic (`eq<T: Copy>` at `*const Int`) was accepted from safe
   code, because monomorphized instances did not carry their definition's `trusted` flag; that
-  known limit is [bug 183](183_generic_rawptr_compare_loses_authority.md), fixed by carrying the
+  known limit is [bug 185](185_generic_rawptr_compare_loses_authority.md), fixed by carrying the
   authority into each instance (Codex review).
 - Every comparable type is `Copy`, so a comparison never consumes an operand.
 

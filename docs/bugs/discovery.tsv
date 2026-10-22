@@ -40,7 +40,7 @@ date	kind	probe	effort	bugs	silent
 2026-10-21	semantics	second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes)	unrecorded	140,142,143,144	140,143,144
 2026-10-21	interp-coverage	interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary	unrecorded	150,152	150,152
 2026-10-21	review	Codex review of the interpreter-coverage pass	unrecorded	151	151
-2026-10-21	review	Codex review of the bug 140 comparison rule (a known limit, numbered 2026-10-23)	unrecorded	183	183
+2026-10-21	review	Codex review of the bug 140 comparison rule (a known limit, numbered 2026-10-23)	unrecorded	185	185
 2026-10-22	review	Codex reviews (rounds 4 and 5) of the symbol-name work (bug 129)	unrecorded	165,166	165,166
 2026-10-22	development	safety-eval2 work (a pre-existing limitation noted while fixing it)	unrecorded	175	-
 2026-10-22	review	Codex reviews of safety-eval2 (rule (c), bug 144 migration, bug 146, operand and exit-path checks)	unrecorded	145,146,147,148,149	149

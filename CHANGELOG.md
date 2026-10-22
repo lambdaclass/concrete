@@ -10,7 +10,7 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### A Monomorphized Instance Keeps Its Definition's Authority (bug 183, 2026-10-23)
+### A Monomorphized Instance Keeps Its Definition's Authority (bug 185, 2026-10-23)
 
 Raw pointers compare only in trusted code or a function declaring `with(Unsafe)` (bug 140). Through
 a safe `Copy`-bounded generic, `same::<*const Int>(p, q)` compiled in safe code: Mono built each
@@ -18,8 +18,8 @@ instance from a hand-picked field list that left out `isTrusted`, so the post-mo
 not tell an instance's authority and accepted every pointer comparison. Instances now carry
 `isTrusted` (and `trustedImplOrigin`) with their body and capabilities, and the re-check applies
 Check's predicate to them, so a safe generic at a raw pointer is E0229 while std's trusted generics
-and generics declaring `Unsafe` compile as before. Pinned by `error_183_generic_rawptr_eq_safe.con`
-and `regress_183_generic_rawptr_eq_authority.con`.
+and generics declaring `Unsafe` compile as before. Pinned by `error_185_generic_rawptr_eq_safe.con`
+and `regress_185_generic_rawptr_eq_authority.con`.
 
 ### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
 

@@ -1,4 +1,4 @@
-# Bug 183: a raw-pointer comparison through a safe generic escaped the authority rule
+# Bug 185: a raw-pointer comparison through a safe generic escaped the authority rule
 
 **Status:** FIXED (branch `soundness-holes-rawptr`, on top of `wip/train1`)
 **Found:** 2026-10-21, by the Codex review of the bug 140 comparison rule, which recorded it as a
@@ -63,8 +63,8 @@ be if written out by hand.
 
 ## Containment and regression
 
-- `tests/programs/error_183_generic_rawptr_eq_safe.con`: the reproducer, E0229 post-mono
+- `tests/programs/error_185_generic_rawptr_eq_safe.con`: the reproducer, E0229 post-mono
   (`run_err`). It compiled and exited 42 before the fix.
-- `tests/programs/regress_183_generic_rawptr_eq_authority.con`: a trusted generic and a generic
+- `tests/programs/regress_185_generic_rawptr_eq_authority.con`: a trusted generic and a generic
   declaring `with(Unsafe)`, each instantiated at `*const Int` (equal and unequal pointers) and at
   `Int`; exit 42 (`run_ok`).

@@ -1,4 +1,4 @@
-// Bug 183: raw pointers compare only in trusted code or a function declaring with(Unsafe)
+// Bug 185: raw pointers compare only in trusted code or a function declaring with(Unsafe)
 // (bug 140's rule, E0229). Written directly in safe code the comparison is refused by Check; reached
 // through a safe `Copy`-bounded generic it compiled, because monomorphized instances did not carry
 // their definition's `trusted` flag and the post-mono re-check could not tell their authority.

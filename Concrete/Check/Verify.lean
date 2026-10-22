@@ -392,7 +392,7 @@ private def comparisonTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) :
         -- instance carries its definition's authority (`isTrusted` and `capSet`, copied by
         -- Mono; the same predicate Check applies at the source), so a safe `Copy`-bounded generic instantiated at a raw
         -- pointer is refused here as the same comparison written directly is refused by
-        -- Check (bug 183).
+        -- Check (bug 185).
         | .ptrMut _ | .ptrConst _ => unsafeOk
         | t => isNumeric t
       if ok then none
