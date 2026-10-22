@@ -19,14 +19,20 @@ The classes and their order are documented in scripts/ci/ci_logs.py. What triage
         command when scripts/tests/select_gates.sh exists, the suspected commits, and the
         scripts/gen/new_bug.sh command when that script exists (printed, never run).
 
-A rerun is diagnostic only. Qualification (scripts/ci/qualification_record.py) reads the FIRST
-attempt of a run, so a green rerun never turns a red run into a qualified one.
+A rerun is diagnostic only. Qualification (scripts/ci/qualification_record.py) refuses any run
+whose attempt is not the first, so a green rerun never turns a red run into a qualified one.
+
+The mutation aggregate fails whenever a shard does. It is classified by its shards only when every
+refusal it printed names a shard job that failed or was cancelled (ci_logs.aggregate_explained);
+an independent refusal (foreign or unexpected shard evidence, a plan defect) is classified on the
+aggregate's own log, so an infra shard cannot hide it.
 
 Quarantine never turns red green: a quarantined gate still runs and its step still fails the job;
 triage lists it in its own section as `failed (quarantined until <date>)` and reruns it once.
 
 Exit: 0 nothing real (rerun requested, not needed, or a cancelled run); 1 a report was written;
-2 usage, input or ledger error; 3 the run has not completed.
+2 usage, input or ledger error (including a job log that cannot be read for a reason other than
+404/410: an unreadable log is not evidence); 3 the run has not completed.
 """
 import argparse
 import os
@@ -172,24 +178,33 @@ def main(argv):
         return 0
 
     results, aggregates = [], []
-    for j in bad:
-        if L.is_aggregate(j.get("name", "")):
-            aggregates.append(j)
-            continue
-        results.append(L.classify_job(j, L.job_log(j.get("databaseId"), repo), ledger))
-    # The mutation aggregate fails whenever a shard did: it is classified by its shards when any
-    # shard failed or was cancelled, and on its own log only when every shard succeeded.
-    shard_res = [r for r in results if L.is_shard(r["job"])]
-    for j in aggregates:
-        if shard_res:
-            worst = max(shard_res, key=lambda r: L.SEVERITY[r["class"]])
-            results.append({"job": j.get("name"), "job_id": j.get("databaseId"), "step": "-",
-                            "gate": "aggregate_mutation_shards.py", "command": None, "fail_lines": [],
-                            "fail_total": 0, "repro": None, "ledger": None, "outcome": worst["outcome"],
-                            "class": worst["class"],
-                            "reason": f"derived from {len(shard_res)} failed or cancelled shard job(s)"})
-        else:
+    try:
+        for j in bad:
+            if L.is_aggregate(j.get("name", "")):
+                aggregates.append(j)
+                continue
             results.append(L.classify_job(j, L.job_log(j.get("databaseId"), repo), ledger))
+        shard_res = [r for r in results if L.is_shard(r["job"])]
+        failed_shards = set()
+        for r in shard_res:
+            m = re.search(r"(\d+)$", r["job"])
+            if m:
+                failed_shards.add(int(m.group(1)))
+        for j in aggregates:
+            log = L.job_log(j.get("databaseId"), repo)
+            if log is not None and shard_res and L.aggregate_explained(log, failed_shards):
+                w = L.worst(shard_res)
+                results.append({"job": j.get("name"), "job_id": j.get("databaseId"), "step": "-",
+                                "gate": "aggregate_mutation_shards.py", "command": None, "fail_lines": [],
+                                "fail_total": 0, "repro": None, "ledger": None, "outcome": w["outcome"],
+                                "class": w["class"],
+                                "reason": f"derived: every refusal names one of {len(shard_res)} failed "
+                                          "or cancelled shard job(s)"})
+            else:
+                results.append(L.classify_job(j, log, ledger))
+    except L.GhError as e:
+        print(f"triage: cannot read a job log ({e}); refusing to classify without it", file=sys.stderr)
+        return 2
 
     counts = {c: sum(1 for r in results if r["class"] == c) for c in L.SEVERITY}
     print(f"triage: run {rid} ({run.get('headBranch')} @ {str(run.get('headSha'))[:12]}, attempt "

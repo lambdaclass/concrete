@@ -1,0 +1,40 @@
+﻿2026-10-22T03:32:02.8837754Z Current runner version: '2.338.0'
+2026-10-22T03:32:02.8857085Z ##[group]Runner Image Provisioner
+2026-10-22T03:32:02.8857745Z Hosted Compute Agent
+2026-10-22T03:34:12.7932505Z ##[group]Run SHARD="24/24" bash scripts/tests/check_gate_mutation_coverage.sh
+2026-10-22T03:34:12.7932838Z [36;1mSHARD="24/24" bash scripts/tests/check_gate_mutation_coverage.sh[0m
+2026-10-22T03:34:12.7985307Z shell: /usr/bin/bash -e {0}
+2026-10-22T03:34:12.7985472Z ##[endgroup]
+2026-10-22T03:34:13.1765325Z workspace sweep: reclaimed 0 abandoned workspace(s), left 1 in place
+2026-10-22T03:34:14.0313047Z === gate mutation coverage: 134 families ===
+2026-10-22T03:34:14.3872027Z selected by shard: 24/24 owns 7 of 134 families
+2026-10-22T03:34:14.6067116Z baseline: pristine workspace builds ... ok
+2026-10-22T03:34:14.6067838Z === clean-gate baseline: 7 distinct gates on the pristine workspace ===
+2026-10-22T03:42:45.5370657Z   [t] family=176s build=176s gate=0s
+2026-10-22T03:42:45.5371249Z   ok   copy-predicate KILLED (killed by check_copy_judgment.sh; reproduced red/green/red)
+2026-10-22T03:42:45.5630224Z --- family 4/134: capability-requirement (Concrete/Check/CoreCheck.lean -> check_capability_judgment.sh) ---
+2026-10-22T03:43:47.8952330Z   [t] family=62s build=61s gate=1s
+2026-10-22T03:43:47.8953101Z   FAIL capability-requirement (SURVIVED — gate stayed green)
+2026-10-22T03:43:47.9145258Z --- family 32/134: classification-justifies (Concrete/Proof/ClassificationTable.lean -> check_dependency_edges.sh) ---
+2026-10-22T03:48:05.3299715Z   [t] family=258s build=147s gate=111s
+2026-10-22T03:48:05.3300134Z   ok   classification-justifies KILLED (killed by check_dependency_edges.sh; reproduced red/green/red)
+2026-10-22T03:48:05.3562244Z --- family 63/134: manifest-surplus-refused (scripts/gen/attestation_manifest.sh -> check_attestation_manifest.sh) ---
+2026-10-22T03:53:32.1745297Z   [t] family=327s build=47s gate=280s
+2026-10-22T03:53:32.1745833Z   ok   manifest-surplus-refused KILLED (killed by check_attestation_manifest.sh; reproduced red/green/red)
+2026-10-22T03:53:32.1985575Z --- family 75/134: atomic-flip-entrance-refuses-inert-binding (Concrete/Proof/Proof.lean -> check_atomic_flip_entrance.sh) ---
+2026-10-22T03:53:32.1998923Z   FAIL atomic-flip-entrance-refuses-inert-binding: INVALID — check_atomic_flip_entrance.sh does not pass on the UNMUTATED workspace, so its failure
+2026-10-22T03:53:32.1999421Z        under mutation is not evidence. Fix the gate (or its fixtures/lock) first.
+2026-10-22T03:53:32.2157580Z --- family 134/134: mint-missing-result-refusal (scripts/tests/check_dependency_edges.sh -> check_mint_missing_result.sh) ---
+2026-10-22T03:54:59.7704918Z   [t] family=87s build=0s gate=87s
+2026-10-22T03:54:59.7705684Z   ok   mint-missing-result-refusal KILLED (killed by check_mint_missing_result.sh; reproduced red/green/red)
+2026-10-22T03:54:59.9247566Z --- working tree still builds clean (isolation left it untouched) ---
+2026-10-22T03:55:00.4414172Z 
+2026-10-22T03:55:00.4415096Z GATE-MUTATION-COVERAGE: REFUSED completed=1 qualified=0 killed=5 invalid=1 survived=1 could_not_apply=0 (of 134) gates_proven=5/134
+2026-10-22T03:55:00.4415939Z CAMPAIGN INTEGRITY REFUSED: families_unaccounted(gate=5 build=0 of 7)
+2026-10-22T03:55:00.4416729Z   These verdicts describe a tree that moved under the run, or a run with no durable record.
+2026-10-22T03:55:00.4419018Z summary written to .mutation-campaign-summary.candidate (completed=1)
+2026-10-22T03:55:00.4419500Z   the full-campaign record .mutation-campaign-summary was NOT touched by this partial run
+2026-10-22T03:55:01.1243690Z warning: refusing to remove '/tmp/concrete-mut.3186.f607XU' — owned by pid 3186, not 3255
+2026-10-22T03:55:01.6974728Z SUPERVISOR REFUSED QUALIFICATION:child_exit(1)
+2026-10-22T03:55:01.7046841Z ##[error]Process completed with exit code 1.
+2026-10-22T03:55:01.7083131Z ##[group]Run out="$RUNNER_TEMP/shard-out"; mkdir -p "$out"

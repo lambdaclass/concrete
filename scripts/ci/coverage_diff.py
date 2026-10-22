@@ -9,10 +9,13 @@ Each directory is a `gh run download <run>` of a campaign run: it holds
 missing or empty: the first night has nothing to compare against, which is said, not hidden.
 
 Reported: the aggregate counts side by side, families whose disposition changed, and families
-added or removed. A REGRESSION is a family that was killed and now is not, a family that is no
-longer discovered, or a drop in the discovered count; the exit status is 1 when there is one, so
-the nightly report job goes red on lost coverage even when the aggregate itself still qualifies.
-Exit 2 when CUR_DIR has no aggregate summary (the campaign did not produce one).
+added or removed. A REGRESSION is a family that was killed and now is not, ANY family that is no
+longer discovered (whatever its old disposition: a family dropped from the inventory is lost
+coverage even when another is added), or a drop in the discovered count; the exit status is 1 when
+there is one, so the nightly report job goes red on lost coverage even when the aggregate itself
+still qualifies. Exit 2 when the evidence is missing: CUR_DIR has no aggregate summary, or the
+previous night has per-family records and tonight has none (no family-level comparison is
+possible, and an absent record is not read as "unchanged").
 """
 import glob
 import os
@@ -80,13 +83,16 @@ def main(argv):
     for f in changed:
         if pf[f] == "killed" and cf[f] != "killed":
             regress.append(f"family {f}: killed -> {cf[f]}")
+    if pf and not cf:
+        print(f"\nThe previous night has {len(pf)} per-family records and this run has none: the shard "
+              "evidence is missing, so families cannot be compared. Evidence incomplete.")
+        return 2
     for f in removed:
-        if pf[f] == "killed":
-            regress.append(f"family {f}: killed last night, absent now")
+        regress.append(f"family {f}: {pf[f]} last night, no longer discovered")
     print("")
-    if not pf or not cf:
-        print(f"Per-family records: previous {len(pf)}, current {len(cf)} "
-              "(shard artifacts missing on one side; family-level diff limited).\n")
+    if not pf:
+        print(f"The previous night has no per-family records ({len(cf)} now): family-level diff "
+              "unavailable, counts only.\n")
     print(f"Families: {len(cf)} now, {len(pf)} before; {len(changed)} changed, {len(added)} added, "
           f"{len(removed)} removed.\n")
     for f in changed:

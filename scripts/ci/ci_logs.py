@@ -19,10 +19,17 @@ THE CLASSES. Every failed or cancelled job of a run gets exactly one:
                 known-flaky, or quarantined and not expired, whose `match` regex matches one of the
                 failure lines. Rerun once.
   real          everything else, including a job timeout WITHOUT an INCOMPLETE marker (a hang
-                cannot be told apart from a regression) and an expired quarantine.
+                cannot be told apart from a regression), an expired quarantine, and a failed step
+                whose log GitHub no longer has (nothing shows it was infra).
 
-The order is the order above, except that infra-defect is checked first: a lean4export build
-failure must never be absorbed as "network" or as a ledger flake.
+HOW. Infra-defect is checked first, over the whole log: a lean4export build failure must never be
+absorbed as "network" or as a ledger flake. Then every step that exited nonzero is classified on
+its own section (a continue-on-error step can fail and be tolerated before the step that failed
+the job), plus the step that was running when the job was cancelled or timed out; the job takes
+the most severe. A step is infra only with a positive infra signal (network, INCOMPLETE marker,
+cancellation) AND no failed assertion in it: a FAIL line or a nonzero FAIL= / failed: tally makes
+it real (or known-flaky through the ledger), whatever else the log says. A log that cannot be read
+for any reason other than 404/410 is an input error, never evidence.
 
 Outcome vocabulary for flake history (the promotion pipeline's): passed, failed, skipped,
 cancelled, incomplete. A timed-out step is incomplete, never passed.
@@ -69,6 +76,7 @@ NETWORK = [
 INCOMPLETE_RE = re.compile(r"^\s*INCOMPLETE:")
 # An assertion that failed. A tally line (`X: PASS=3 FAIL=0`) is not an assertion.
 ASSERT_FAIL_RE = re.compile(r"^\s*(FAIL|FAILED)\b(?!=)")
+TALLY_FAIL_RE = re.compile(r"\bFAIL(ED)?=[1-9]|^\s*failed: *[1-9]")
 FAILISH_RE = re.compile(
     r"^\s*(FAIL|FAILED)\b(?!=)|^\s*INCOMPLETE:|\bREFUSED\b|^\s*refusals:|^\s*error:|"
     r"\bFAIL=[1-9]|^##\[error\](?!Process completed)|^\s*[A-Z][A-Z0-9_ ()-]+: .*\bFAIL=[1-9]"
@@ -120,11 +128,15 @@ def run_record(run_id, repo):
 
 
 def job_log(job_id, repo):
-    """The job's log text, or None when GitHub has none (runner lost before upload, expired)."""
+    """The job's log text, or None when GitHub says it has none (404/410: the runner was lost before
+    the upload, or the log expired). Any other error (authentication, rate limit, an API outage)
+    raises GhError: an unreadable log is not evidence of anything, so the caller must not classify."""
     try:
         return gh(["api", f"repos/{repo}/actions/jobs/{job_id}/logs"])
-    except GhError:
-        return None
+    except GhError as e:
+        if re.search(r"HTTP (404|410)\b|Not Found", str(e)):
+            return None
+        raise
 
 
 # --------------------------------------------------------------------------------------- log reading
@@ -137,32 +149,42 @@ def clean_lines(text):
     return out
 
 
-def failing_section(lines):
-    """-> (command text, section lines) of the step that failed: the last `##[group]Run` block
-    before the first `Process completed with exit code` error. A job cancelled or timed out
-    mid-step has no such error: then it is the last `##[group]Run` block, to the end of the log
-    (the step that was running). (None, []) when the log has no step at all."""
-    err = next((i for i, l in enumerate(lines) if EXIT_ERR_RE.match(l)), None)
-    if err is None:
-        err = len(lines) - 1
-    start = None
-    for i in range(err, -1, -1):
-        if lines[i].startswith("##[group]Run "):
-            start = i
-            break
-    if start is None:
-        return None, lines[:err + 1] if any(EXIT_ERR_RE.match(l) for l in lines) else []
+def _block(lines, start, end):
+    """(command, body) of the `##[group]Run` block starting at `start`, body up to `end` inclusive."""
     cmd, j = [lines[start][len("##[group]Run "):]], start + 1
-    while j < err and not lines[j].startswith("##[endgroup]"):
+    while j < end and not lines[j].startswith("##[endgroup]"):
         cmd.append(lines[j])
         j += 1
-    if j >= err:  # no end of the command echo (a truncated log): the header line is the command
+    if j >= end:  # no end of the command echo (a truncated log): the header line is the command
         cmd, j = cmd[:1], start
     cmd = [c for c in cmd if not re.match(r"^\s*(shell|env):", c) and c.strip()]
     # The header line repeats the command's first line.
     if len(cmd) > 1 and cmd[0].strip() == cmd[1].strip():
         cmd = cmd[1:]
-    return "\n".join(cmd), lines[j:err + 1]
+    return "\n".join(cmd), lines[j:end + 1]
+
+
+def failing_sections(lines):
+    """-> [(command, section lines)] of EVERY step that exited nonzero, in log order: each is the
+    last `##[group]Run` block before a `Process completed with exit code` error. A step with
+    continue-on-error (the first Lean install) can fail and be tolerated, so the step that failed
+    the job is not necessarily the first one."""
+    out = []
+    for err, l in enumerate(lines):
+        if not EXIT_ERR_RE.match(l):
+            continue
+        start = next((i for i in range(err, -1, -1) if lines[i].startswith("##[group]Run ")), None)
+        out.append(_block(lines, start, err) if start is not None else (None, lines[:err + 1]))
+    return out
+
+
+def running_section(lines):
+    """(command, section) of the last `##[group]Run` block to the end of the log: the step that was
+    running when a job was cancelled, lost its runner or timed out. (None, []) when there is none."""
+    start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith("##[group]Run ")), None)
+    if start is None:
+        return None, []
+    return _block(lines, start, len(lines) - 1)
 
 
 def gate_of(command, fallback):
@@ -171,7 +193,12 @@ def gate_of(command, fallback):
     m = SCRIPT_RE.search(command or "")
     if not m:
         return fallback
-    return (os.path.basename(m.group(1)) + re.sub(r"\s+", " ", m.group(2))).strip()
+    flags = m.group(2).split()
+    # A flag followed by a value (`--plan "$X"`) is an argument, not part of the gate's name.
+    nxt = re.match(r"\s+(\S+)", (command or "")[m.end():])
+    if flags and nxt and not re.match(r"^([0-9]*[<>|&;]|\\$)", nxt.group(1)):
+        flags = flags[:-1]
+    return " ".join([os.path.basename(m.group(1))] + flags)
 
 
 def repro_command(command):
@@ -271,58 +298,154 @@ def ledger_match(rows, gate, lines):
 
 # --------------------------------------------------------------------------------------- classifier
 
-def classify_job(job, log_text, ledger_rows):
-    """Classify one failed/cancelled job. Returns a dict: class, reason, gate, step, command,
-    fail_lines, fail_total, repro, ledger (row or None), outcome (failed|cancelled|incomplete)."""
-    lines = clean_lines(log_text)
-    failed_steps = [s.get("name", "") for s in job.get("steps", [])
-                    if s.get("conclusion") in ("failure", "cancelled", "timed_out")]
-    step = failed_steps[0] if failed_steps else (job.get("name") or "")
-    command, section = failing_section(lines)
-    gate = gate_of(command, step)
+def _result(job, step, command, section, cls, reason, outcome="failed", ledger=None):
     fl, ftotal = fail_lines(section)
-    asserts = [l for l in section if ASSERT_FAIL_RE.match(l)]
-    whole = "\n".join(lines)
-    res = {"job": job.get("name", ""), "job_id": job.get("databaseId"), "step": step, "gate": gate,
-           "command": command, "fail_lines": fl, "fail_total": ftotal, "repro": repro_command(command),
-           "ledger": None, "outcome": "failed"}
+    return {"job": job.get("name", ""), "job_id": job.get("databaseId"), "step": step,
+            "gate": gate_of(command, step), "command": command, "fail_lines": fl, "fail_total": ftotal,
+            "repro": repro_command(command), "ledger": ledger, "class": cls, "reason": reason,
+            "outcome": outcome}
 
-    def done(cls, reason, outcome=None):
-        res.update({"class": cls, "reason": reason})
-        if outcome:
-            res["outcome"] = outcome
-        return res
 
-    for rx, why in INFRA_DEFECT:
-        if any(rx.search(l) for l in lines):
-            return done("infra-defect", why)
-    if JOB_TIMEOUT_RE.search(whole):
-        if any(INCOMPLETE_RE.match(l) for l in lines):
-            return done("infra", "job timed out after a bounded run reported INCOMPLETE", "incomplete")
-        return done("real", "job timed out with no INCOMPLETE marker: a hang is not distinguishable "
-                            "from a regression", "incomplete")
-    if job.get("conclusion") == "cancelled":
-        return done("infra", "job cancelled", "cancelled")
-    if log_text is None:
-        return done("infra", "no job log: the runner was lost before the log was uploaded")
-    for rx in RUNNER_LOST:
-        if rx.search(whole):
-            return done("infra", f"runner lost or job cancelled ({rx.pattern})", "cancelled")
-    if not asserts:
+def _assertion_failed(section):
+    """An assertion failed in this step: a FAIL line, or a nonzero failure tally."""
+    return any((ASSERT_FAIL_RE.match(l) or TALLY_FAIL_RE.search(l)) and not OK_RE.match(l) for l in section)
+
+
+def classify_section(job, step, command, section, ledger_rows, context=None):
+    """One failing (or interrupted) step. `context` is how the job ended when the step did not
+    exit on its own: 'timeout', 'cancelled' or None. Infra needs a positive infra signal AND no
+    failed assertion in the step."""
+    if not _assertion_failed(section):
         for rx in NETWORK:
             if any(rx.search(l) for l in section):
-                return done("infra", f"network, package mirror or cache service ({rx.pattern})")
+                return _result(job, step, command, section, "infra",
+                               f"network, package mirror or cache service ({rx.pattern})")
         if any(INCOMPLETE_RE.match(l) for l in section):
-            return done("infra", "a bounded run timed out twice and reported INCOMPLETE; no assertion failed",
-                        "incomplete")
+            return _result(job, step, command, section, "infra",
+                           "a bounded run timed out twice and reported INCOMPLETE; no assertion failed",
+                           "incomplete")
+        if context == "timeout":
+            return _result(job, step, command, section, "real",
+                           "job timed out with no INCOMPLETE marker: a hang is not distinguishable "
+                           "from a regression", "incomplete")
+        if context == "cancelled":
+            return _result(job, step, command, section, "infra",
+                           "the job was cancelled or lost its runner during this step", "cancelled")
+    gate = gate_of(command, step)
+    fl, _ = fail_lines(section)
     row, expired = ledger_match(ledger_rows, gate, fl or section)
     if row is not None:
-        res["ledger"] = row
         if expired:
-            return done("real", f"quarantine of {gate} expired {row['expires']} (owner {row['owner']})")
-        return done("known-flaky", f"{row['status']} in the flake ledger (owner {row['owner']}, "
-                                   f"line {row['line']})")
-    return done("real", "no infra signature and no ledger entry")
+            return _result(job, step, command, section, "real",
+                           f"quarantine of {gate} expired {row['expires']} (owner {row['owner']})", ledger=row)
+        return _result(job, step, command, section, "known-flaky",
+                       f"{row['status']} in the flake ledger (owner {row['owner']}, line {row['line']})",
+                       ledger=row)
+    if context == "timeout":
+        return _result(job, step, command, section, "real", "an assertion failed before the job timed out",
+                       "incomplete")
+    return _result(job, step, command, section, "real", "no infra signature and no ledger entry")
+
+
+def worst(results):
+    """The most severe result; among equals the LAST (the step that ended the job)."""
+    return max(enumerate(results), key=lambda ir: (SEVERITY[ir[1]["class"]], ir[0]))[1]
+
+
+def classify_job(job, log_text, ledger_rows):
+    """Classify one failed/cancelled job: the most severe of its failing steps, each classified on
+    its own section (classify_section), after the job-level signals. Returns a dict (class, reason,
+    gate, step, command, fail_lines, fail_total, repro, ledger, outcome) plus `sections`, the
+    per-step results in log order (flake history pairs them with the job's failed steps)."""
+    failed_steps = [s.get("name", "") for s in job.get("steps", [])
+                    if s.get("conclusion") in ("failure", "cancelled", "timed_out")]
+    running = [s.get("name", "") for s in job.get("steps", []) if s.get("conclusion") is None]
+    step0 = failed_steps[0] if failed_steps else (running[-1] if running else (job.get("name") or ""))
+    if log_text is None:
+        if any(s.get("conclusion") == "failure" for s in job.get("steps", [])):
+            r = _result(job, step0, None, [], "real",
+                        "the job log is unavailable (404) but a step concluded failure: it cannot be "
+                        "shown to be infra, so it is treated as real")
+        else:
+            r = _result(job, step0, None, [], "infra",
+                        "no job log and no step concluded: the runner was lost before the upload",
+                        "cancelled")
+        r["sections"] = [r]
+        return r
+    lines = clean_lines(log_text)
+    whole = "\n".join(lines)
+    for rx, why in INFRA_DEFECT:
+        if any(rx.search(l) for l in lines):
+            cands = failing_sections(lines) + [running_section(lines)]
+            c, sec = next(((c, sec) for c, sec in cands if any(rx.search(l) for l in sec)), cands[-1])
+            r = _result(job, step0, c, sec, "infra-defect", why)
+            r["sections"] = [r]
+            return r
+    context = None
+    if JOB_TIMEOUT_RE.search(whole):
+        context = "timeout"
+    elif job.get("conclusion") == "cancelled" or any(rx.search(whole) for rx in RUNNER_LOST):
+        context = "cancelled"
+    sections = failing_sections(lines)
+    names = failed_steps if len(failed_steps) == len(sections) else [step0] * len(sections)
+    results = [classify_section(job, n, c, sec, ledger_rows) for n, (c, sec) in zip(names, sections)]
+    if context:
+        c, sec = running_section(lines)
+        last_failed = sections[-1][0] if sections else object()
+        if c is not None and c != last_failed:
+            results.append(classify_section(job, failed_steps[-1] if failed_steps else step0, c, sec,
+                                            ledger_rows, context))
+        elif not results:
+            results.append(_result(job, step0, None, [], "infra" if context == "cancelled" else "real",
+                                   f"job ended ({context}) before any step ran",
+                                   "cancelled" if context == "cancelled" else "incomplete"))
+    if not results:
+        results.append(_result(job, step0, None, [], "real", "no failing step found in the log"))
+    r = dict(worst(results))
+    r["sections"] = results
+    return r
+
+
+AGGREGATE_CONSEQUENTIAL = (
+    "shard_job_", "shard_summary_keys", "shard_summary_missing", "shard_status_missing_or_mislabelled",
+    "shard_refusals", "shard_integrity", "shard_incomplete", "shard_missing", "shard_missing_families",
+    "shard_supervisor_refused", "shard_unexplained_exit", "shard_selected", "shard_executed",
+    "shard_reported", "families_in_no_shard",
+)
+
+
+def refusal_tokens(text):
+    """Split an aggregate `refusals:` value on spaces outside parentheses."""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch == " " and depth == 0:
+            if cur:
+                out.append(cur)
+            cur = ""
+            continue
+        depth += (ch == "(") - (ch == ")")
+        cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
+def aggregate_explained(log_text, failed_shards):
+    """True when every refusal the mutation aggregate printed is a consequence of a shard job that
+    failed or was cancelled (named by number), so the aggregate adds no failure of its own. False
+    when the log has no refusal line, or any refusal is independent of the failed shards (foreign
+    or unexpected shard evidence, a plan defect, a shard that succeeded)."""
+    lines = clean_lines(log_text)
+    ref = [l.split("refusals:", 1)[1].strip() for l in lines if l.strip().startswith("refusals:")]
+    if not ref or not failed_shards:
+        return False
+    for tok in refusal_tokens(ref[0]):
+        if not tok.startswith(AGGREGATE_CONSEQUENTIAL):
+            return False
+        m = re.match(r"^\w+\((\d+)\b", tok)
+        if m and int(m.group(1)) not in failed_shards:
+            return False
+    return True
 
 
 def is_aggregate(job_name):

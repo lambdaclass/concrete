@@ -11,12 +11,14 @@ summary (the job summary in CI):
   2. per-gate outcomes (flake_history.py record) and the gates that failed now but not in the
      previous nightly campaign run (`new-failures`);
   3. triage of the run when it did not succeed (scripts/ci/triage.py: infra and known flakes are
-     rerun once, real failures get a report; a rerun never changes the verdict of step 1, which
-     reads the first attempt);
+     rerun once, real failures get a report; a rerun never changes the verdict of step 1:
+     qualification_record.py refuses any attempt but the first, so the report on a rerun's
+     completion is red even when the rerun is green);
   4. the mutation-coverage diff against the previous nightly campaign run (coverage_diff.py).
 
-Exit 1 when triage reported a real failure, a new failure appeared or coverage regressed; 0
-otherwise (including a landing-tier run). The work directory keeps the outcomes TSV and triage
+Exit 1 when the run did not qualify, triage reported a real failure, a new failure appeared, or
+coverage regressed or its evidence is missing; 0 only for a qualified run with none of those (and
+for a landing-tier run, which is not reported on). The work directory keeps the outcomes TSV and triage
 reports for upload as artifacts.
 """
 import argparse
@@ -86,11 +88,11 @@ def main(argv):
     with open(summary, "a", encoding="utf-8") as fh:
         fh.write(f"## Nightly qualification: run {a.run_id} at `{sha[:12]}` (attempt {run.get('attempt')}, "
                  f"{run.get('conclusion')})\n\n### Stage (c) verdict\n\n```\n")
-    sh(py + [os.path.join(HERE, "qualification_record.py"), "--run", a.run_id, "--candidate", sha], summary)
+    bad = int(sh(py + [os.path.join(HERE, "qualification_record.py"), "--run", a.run_id,
+                       "--candidate", sha], summary) != 0)
     with open(summary, "a", encoding="utf-8") as fh:
         fh.write("```\n\n")
 
-    bad = 0
     prev = None
     try:
         prev = previous_campaign(run, a.repo)
@@ -132,8 +134,9 @@ def main(argv):
                 L.gh(["run", "download", rid, "-D", d, "-p", pat], a.repo)
             except L.GhError as e:
                 print(f"nightly_report: artifacts {pat} of run {rid}: {e}")
+    # Any nonzero is bad: 1 is lost coverage, 2 is missing evidence (no summary, no shard records).
     rc = sh(py + [os.path.join(HERE, "coverage_diff.py"), prev_dir if prev else "", cur_dir], summary)
-    bad |= rc == 1
+    bad |= rc != 0
     return 1 if bad else 0
 
 

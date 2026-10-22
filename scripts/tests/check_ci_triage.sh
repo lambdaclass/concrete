@@ -35,13 +35,20 @@ find_fx() { for d in "$GH_FX" "$GH_FIX"; do [ -f "$d/$1" ] && { cat "$d/$1"; ret
 case "$1 $2" in
   "run view")   find_fx "runs/$3.json" || { echo "HTTP 404: run $3 not found" >&2; exit 1; } ;;
   "run rerun")  echo "requested rerun of $3" ;;
-  "run list")   find_fx "runlist.json" || echo "[]" ;;
-  "run download") echo "no artifacts" >&2; exit 1 ;;
+  "run list")   case "$*" in *--event*) find_fx "runlist_dispatch.json" || echo "[]" ;;
+                                   *) find_fx "runlist.json" || echo "[]" ;; esac ;;
+  "run download") # gh run download <run> -D <dir> -p <pattern> [-R repo]: copy matching artifact dirs
+                 rid="$3"; shift 3; dir=""; pat="*"
+                 while [ $# -gt 0 ]; do case "$1" in -D) dir="$2"; shift 2;; -p) pat="$2"; shift 2;; *) shift;; esac; done
+                 n=0; mkdir -p "$dir"
+                 for a in "$GH_FX/artifacts/$rid"/$pat; do [ -d "$a" ] && cp -R "$a" "$dir/" && n=$((n+1)); done
+                 [ "$n" -gt 0 ] || { echo "no artifact matches $pat" >&2; exit 1; } ;;
   "repo view")  echo "o/r" ;;
   api*)
     p="$2"
     case "$p" in
       */actions/jobs/*/logs) j="${p%/logs}"; j="${j##*/}"
+                             if find_fx "logs/$j.err" >&2; then exit 1; fi
                              find_fx "logs/$j.txt" || { echo "HTTP 404: Not Found" >&2; exit 1; } ;;
       */compare/*)           find_fx "compare.json" || { echo "HTTP 404" >&2; exit 1; } ;;
       *)                     k="$(printf '%s' "$p" | sed 's#^repos/[^/]*/[^/]*/actions/##; s#[/?=&]#_#g')"
@@ -98,9 +105,13 @@ expect 9000000111 real check_tcpserve.sh 1 0 "a ledger gate failing with another
 expect 39802535363 real "Install Lean (via lean-action)" 1 0 "lean-action 'lake build failed' (compile error)"
 expect 9000000015 real proof_gate.sh 1 0 "job timeout without an INCOMPLETE marker"
 expect 39717336317 real check_gate_mutation_coverage.sh 1 0 "mutation shard red on the clean tree"
+expect 9000000077 real "Run examples" 1 0 "no job log (404) but a step concluded failure"
+expect 9000000019 real aggregate_mutation_shards.py 1 0 "aggregate refusal no failed shard explains"
+expect 9000000020 real check_linear_discard.sh 1 0 "tolerated install blip, then a real gate failure"
+expect 9000000021 real check_model_diff.sh 1 0 "INCOMPLETE beside a nonzero FAIL= tally"
 expect 9000000017 real check_linear_discard.sh 1 0 "a real failure beside an infra one (no rerun)"
 expect 9000000006 infra "Install clang" 0 1 "apt mirror unreachable"
-expect 9000000007 infra "Run examples" 0 1 "runner lost (no job log)"
+expect 9000000007 infra "Run examples" 0 1 "runner lost (no job log, no step concluded)"
 expect 9000000008 infra check_model_diff.sh 0 1 "bounded run INCOMPLETE, no assertion failed"
 expect 9000000115 infra proof_gate.sh 0 1 "job timeout after an INCOMPLETE marker"
 expect 9000000011 known-flaky check_tcpserve.sh 0 1 "known flake matching its ledger signature"
@@ -136,10 +147,17 @@ grep -q 'never rerun\|pinned external tool did not build' "$TMP/out/9000000005.m
 grep -q 'the ledger' <<<"$(triage 9000000005; echo "$OUT")" && no "infra defect matched the ledger" \
   || ok "the ledger's catch-all external-checker row does not absorb the infra defect"
 triage 39717336317
-grep -qE '^  real +failed +Gate mutation coverage \(aggregate verdict\) :: aggregate_mutation_shards.py -- derived from 1' <<<"$OUT" \
+grep -qE '^  real +failed +Gate mutation coverage \(aggregate verdict\) :: aggregate_mutation_shards.py -- derived: every refusal names one of 2' <<<"$OUT" \
   && ok "the mutation aggregate is classified by its shards" || no "aggregate not derived from shards"
 grep -q 'atomic-flip-entrance-refuses-pending: INVALID' "$TMP/out/39717336317.md" 2>/dev/null \
   && ok "shard report carries the INVALID family line" || no "shard report"
+
+triage 39799334352
+grep -qE '^  infra +cancelled +Gate mutation coverage \(aggregate verdict\) :: aggregate_mutation_shards.py -- derived' <<<"$OUT" \
+  && ok "a cancelled campaign's aggregate (every refusal a cancelled shard's) is infra" || no "cancelled aggregate not derived"
+triage 9000000078
+[ "$RC" = 2 ] && [ "$RERUNS" = 0 ] && grep -q 'rate limit' <<<"$OUT" \
+  && ok "an unreadable log (rate limit) is an input error, never evidence" || no "unreadable log (rc $RC)"
 
 echo "=== rerun once, never twice ==="
 triage 9000000006
@@ -311,12 +329,61 @@ mk_night "$TMP/n3" 3 2 a=killed b=survived d=killed
 [ "$rc" = 0 ] && grep -q 'No coverage regression' "$TMP/cd.out" && ok "unchanged coverage is not a regression" || no "coverage diff (same) rc $rc"
 "${CD[@]}" "$TMP/n2" "$TMP/n3" > "$TMP/cd.out"; rc=$?
 [ "$rc" = 1 ] && grep -q 'REGRESSION family b: killed -> survived' "$TMP/cd.out" \
-  && grep -q 'REGRESSION family c: killed last night, absent now' "$TMP/cd.out" \
+  && grep -q 'REGRESSION family c: killed last night, no longer discovered' "$TMP/cd.out" \
   && ok "a killed family that survives or disappears is a regression" || no "coverage regression not detected (rc $rc)"
 "${CD[@]}" "" "$TMP/n1" > "$TMP/cd.out"; rc=$?
 [ "$rc" = 0 ] && grep -q 'No previous nightly' "$TMP/cd.out" && ok "the first night says there is nothing to compare" || no "first night rc $rc"
 "${CD[@]}" "$TMP/n1" "$TMP/empty" > "$TMP/cd.out"; rc=$?
 [ "$rc" = 2 ] && ok "a run without a campaign summary is refused, not read as no change" || no "missing summary rc $rc"
+mk_night "$TMP/n4" 3 3 a=killed b=killed e=survived
+mk_night "$TMP/n5" 3 3 a=killed b=killed f=killed
+"${CD[@]}" "$TMP/n4" "$TMP/n5" > "$TMP/cd.out"; rc=$?
+[ "$rc" = 1 ] && grep -q 'REGRESSION family e: survived last night, no longer discovered' "$TMP/cd.out" \
+  && ok "dropping a non-killed family is a regression even when another is added" || no "uncovered removal (rc $rc)"
+mkdir -p "$TMP/n6"; cp -R "$TMP/n1/mutation-campaign-summary" "$TMP/n6/"
+"${CD[@]}" "$TMP/n1" "$TMP/n6" > "$TMP/cd.out"; rc=$?
+[ "$rc" = 2 ] && grep -q 'Evidence incomplete' "$TMP/cd.out" && ok "missing shard records tonight are incomplete evidence, not 'unchanged'" \
+  || no "missing shard records (rc $rc)"
+
+echo "=== the nightly report, end to end ==="
+# Tonight = run 7102 (its fmt gate newly red, coverage lost family c), previous night = run 7101.
+python3 -I - "$TMP/fx" "$(git -C "$ROOT_DIR" rev-parse HEAD)" <<'PY'
+import json, os, sys
+fx, head = sys.argv[1], sys.argv[2]
+def view(rid, created, concl):
+    plan = {"databaseId": rid * 100, "name": "Gate mutation plan (inventory, once)", "conclusion": "success",
+            "status": "completed", "steps": []}
+    lang = {"databaseId": rid * 10 + 1, "name": "Language-surface gates (Phase 5-6)", "conclusion": concl,
+            "status": "completed", "steps": [{"name": "Linear-discard gate (H6)", "conclusion": concl}]}
+    json.dump({"databaseId": rid, "attempt": 1, "headSha": head, "headBranch": "main", "event": "workflow_dispatch",
+               "status": "completed", "conclusion": concl, "workflowName": "CI", "url": "u", "createdAt": created,
+               "jobs": [plan, lang]}, open(os.path.join(fx, "runs", f"{rid}.json"), "w"))
+view(7101, "2026-10-21T03:23:00Z", "failure")
+view(7102, "2026-10-22T03:23:00Z", "failure")
+json.dump([{"databaseId": 7102, "createdAt": "2026-10-22T03:23:00Z"},
+           {"databaseId": 7101, "createdAt": "2026-10-21T03:23:00Z"}],
+          open(os.path.join(fx, "runlist_dispatch.json"), "w"))
+PY
+mkdir -p "$TMP/fx/artifacts"
+mk_night "$TMP/fx/artifacts/7101" 3 3 a=killed b=killed c=killed
+mk_night "$TMP/fx/artifacts/7102" 3 2 a=killed b=killed d=killed
+NR=(python3 -I "$ROOT_DIR/scripts/ci/nightly_report.py")
+"${NR[@]}" 7102 --repo o/r --work "$TMP/nightly" --summary "$TMP/nightly.md" --no-rerun > "$TMP/nr.out" 2>&1; rc=$?
+if [ "$rc" = 1 ] \
+   && grep -q '^## Nightly qualification: run 7102' "$TMP/nightly.md" \
+   && grep -q 'verdict=' "$TMP/nightly.md" \
+   && grep -q '^new failure: check_concrete_fmt.sh (previous run 7101: passed)' "$TMP/nightly.md" \
+   && grep -q '^### Triage of run 7102' "$TMP/nightly.md" \
+   && grep -q 'REGRESSION family c: killed last night, no longer discovered' "$TMP/nightly.md" \
+   && [ -s "$TMP/nightly/outcomes-7102.tsv" ]; then
+  ok "nightly report: verdict, new failures, triage and coverage diff in the summary; exit 1"
+else
+  no "nightly report (rc $rc)"; sed 's/^/        /' "$TMP/nr.out" | awk 'NR<=20'; sed 's/^/        /' "$TMP/nightly.md" 2>/dev/null | awk 'NR<=30'
+fi
+grep -q '^verdict=qualified' "$TMP/nightly.md" && no "a hostile nightly record qualified" \
+  || ok "the stage (c) verdict of an incomplete campaign record is not qualified, and the report is red"
+"${NR[@]}" 9000000018 --repo o/r --work "$TMP/nightly2" --summary "$TMP/nightly2.md" > "$TMP/nr2.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && grep -q 'landing-tier dispatch' "$TMP/nr2.out" && ok "a landing-tier run is not reported on" || no "landing-tier run (rc $rc)"
 
 echo "=== the nightly workflow ==="
 NW="$ROOT_DIR/.github/workflows/nightly.yml"

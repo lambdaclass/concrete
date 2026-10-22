@@ -52,6 +52,29 @@
    ]
   },
   {
+   "databaseId": 119622556486,
+   "name": "Gate mutation shard 24",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Gate mutation coverage shard (heavy; rebuilds per mutation)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  },
+  {
    "databaseId": 119643688385,
    "name": "Gate mutation coverage (aggregate verdict)",
    "conclusion": "failure",

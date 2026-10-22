@@ -37,6 +37,7 @@ Commands:
 import argparse
 import os
 import re
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,27 +56,46 @@ def die(msg, code=2):
     sys.exit(code)
 
 
-def step_gates(path=WORKFLOW):
+def step_gates(text):
     """[(job-name regex, step name, gate)] for every workflow step that runs a scripts/ gate."""
     try:
         import yaml
     except ImportError:
         die("PyYAML is required to read the workflow (python3-yaml)")
     try:
-        doc = yaml.safe_load(open(path, encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as e:
-        die(f"cannot read {path}: {e}")
+        doc = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        die(f"cannot parse the workflow: {e}")
     out = []
-    for jid, j in (doc.get("jobs") or {}).items():
+    for jid, j in ((doc or {}).get("jobs") or {}).items():
         name = str(j.get("name") or jid)
         rx = "^" + re.sub(r"\\\$\\\{\\\{.*?\\\}\\\}", ".+", re.escape(name)) + "$"
-        for s in j.get("steps") or []:
-            run = s.get("run")
+        for s_ in j.get("steps") or []:
+            run = s_.get("run")
             if not isinstance(run, str) or not L.SCRIPT_RE.search(run):
                 continue
-            sname = s.get("name") or ("Run " + run.splitlines()[0])
+            sname = s_.get("name") or ("Run " + run.splitlines()[0])
             out.append((re.compile(rx), sname, L.gate_of(run, sname)))
     return out
+
+
+_GMAPS = {}
+
+
+def gates_at(sha):
+    """The step-to-gate map of the workflow AT THIS RUN'S COMMIT (a renamed or moved step maps by
+    the workflow that ran it); the checked-out workflow when that commit is not available here."""
+    if sha not in _GMAPS:
+        try:
+            text = subprocess.run(["git", "-C", ROOT, "show", f"{sha}:.github/workflows/lean_action_ci.yml"],
+                                  capture_output=True, check=True).stdout.decode("utf-8")
+        except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+            try:
+                text = open(WORKFLOW, encoding="utf-8").read()
+            except OSError as e:
+                die(f"cannot read {WORKFLOW}: {e}")
+        _GMAPS[sha] = step_gates(text)
+    return _GMAPS[sha]
 
 
 def gate_for(gmap, job, step):
@@ -85,33 +105,54 @@ def gate_for(gmap, job, step):
     return None
 
 
-def record_run(run_id, repo, gmap, ledger):
+def record_run(run_id, repo, ledger):
+    """Outcome rows for every gate step of every attempt. A failed step is classified on its own
+    log section; a job that never ran its steps (skipped, or cancelled before starting) yields a
+    skipped/cancelled row for each gate the workflow puts in it, so a gate that stopped running
+    never keeps showing an old pass as its latest outcome."""
     run = L.gh_json(["api", f"repos/{repo}/actions/runs/{run_id}"])
+    gmap = gates_at(run.get("head_sha", ""))
     rows = []
+
+    def row(att, jname, step, gate, outcome, cls):
+        rows.append({"run_id": str(run_id), "attempt": str(att), "sha": run.get("head_sha", ""),
+                     "branch": run.get("head_branch", ""), "event": run.get("event", ""),
+                     "created": (run.get("created_at") or "")[:10], "job": jname,
+                     "step": step, "gate": gate, "outcome": outcome, "class": cls})
+
     for att in range(1, int(run.get("run_attempt") or 1) + 1):
         data = L.gh_json(["api", f"repos/{repo}/actions/runs/{run_id}/attempts/{att}/jobs?per_page=100"])
         for j in data.get("jobs", []):
-            jname = j.get("name", "")
-            failed_job_res = None
-            for s in j.get("steps", []):
-                concl = s.get("conclusion")
+            jname, steps = j.get("name", ""), j.get("steps") or []
+            if not steps:
+                concl = j.get("conclusion")
+                if concl in ("skipped", "cancelled", "timed_out", "failure"):
+                    for rx, sname, gate in gmap:
+                        if rx.match(jname):
+                            row(att, jname, sname, gate, "incomplete" if concl == "timed_out" else
+                                OUTCOME.get(concl, concl), "-")
+                continue
+            failed = [s_ for s_ in steps if s_.get("conclusion") == "failure"]
+            res = None
+            if failed:
+                job = {"name": jname, "databaseId": j.get("id"), "conclusion": j.get("conclusion"),
+                       "steps": steps}
+                res = L.classify_job(job, L.job_log(j.get("id"), repo), ledger)
+            secs = res["sections"] if res else []
+            for s_ in steps:
+                concl = s_.get("conclusion")
                 if concl is None:
                     continue
-                gate = gate_for(gmap, jname, s.get("name", ""))
+                gate = gate_for(gmap, jname, s_.get("name", ""))
                 if gate is None and concl != "failure":
                     continue
                 outcome, cls = OUTCOME.get(concl, concl), "-"
                 if concl == "failure":
-                    if failed_job_res is None:
-                        job = {"name": jname, "databaseId": j.get("id"), "conclusion": j.get("conclusion"),
-                               "steps": j.get("steps", [])}
-                        failed_job_res = L.classify_job(job, L.job_log(j.get("id"), repo), ledger)
-                    gate = gate or failed_job_res["gate"]
-                    outcome, cls = failed_job_res["outcome"], failed_job_res["class"]
-                rows.append({"run_id": str(run_id), "attempt": str(att), "sha": run.get("head_sha", ""),
-                             "branch": run.get("head_branch", ""), "event": run.get("event", ""),
-                             "created": (run.get("created_at") or "")[:10], "job": jname,
-                             "step": s.get("name", ""), "gate": gate, "outcome": outcome, "class": cls})
+                    k = failed.index(s_)
+                    r = secs[k] if len(failed) <= len(secs) else res
+                    gate = gate or r["gate"]
+                    outcome, cls = r["outcome"], r["class"]
+                row(att, jname, s_.get("name", ""), gate, outcome, cls)
     return rows
 
 
@@ -268,7 +309,6 @@ def main(argv):
         ledger, problems = L.load_ledger(LEDGER)
         if problems:
             die("ledger malformed: " + "; ".join(problems))
-        gmap = step_gates()
         try:
             if a.cmd == "record":
                 ids = a.run
@@ -279,7 +319,7 @@ def main(argv):
                        if r.get("status") == "completed" and re.match(a.branch_re, r.get("headBranch", ""))]
             rows = []
             for rid in ids:
-                rows += record_run(rid, repo, gmap, ledger)
+                rows += record_run(rid, repo, ledger)
         except L.GhError as e:
             die(str(e))
         if a.out and not os.path.exists(a.out):

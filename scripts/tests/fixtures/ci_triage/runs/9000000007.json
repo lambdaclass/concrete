@@ -46,8 +46,8 @@
     },
     {
      "name": "Run examples",
-     "conclusion": "failure",
-     "status": "completed"
+     "conclusion": null,
+     "status": "in_progress"
     }
    ]
   }
