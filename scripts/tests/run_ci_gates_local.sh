@@ -570,10 +570,26 @@ FAILLOG_DIR="$ROOT_DIR/.ci-gate-failures"
 rm -rf "$FAILLOG_DIR"; mkdir -p "$FAILLOG_DIR"
 faillog_name(){ printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_' | cut -c1-80; }
 
+# PER-GATE TIMINGS (R-0547). One TSV row per gate execution: start and end (epoch seconds, sub-second
+# where bash has EPOCHREALTIME), duration, stage and verdict. Stage is `first`, `seq`, `pool` or
+# `recheck`; a pool FAIL followed by a recheck PASS is the contention flake the summary names, and is
+# visible here rather than only as a count. Written for every run, green or red.
+GATE_TIMINGS="$ROOT_DIR/.ci-gate-timings.tsv"
+_now() { printf '%s' "${EPOCHREALTIME:-$(date +%s)}"; }
+_timing_row() { # start end stage verdict cmd
+  awk -v s="$1" -v e="$2" -v st="$3" -v v="$4" -v c="$5" \
+    'BEGIN{ printf "%.2f\t%.2f\t%.2f\t%s\t%s\t%s\n", s, e, e-s, st, v, c }' >> "$GATE_TIMINGS"
+}
+printf 'start\tend\tsecs\tstage\tverdict\tcmd\n' > "$GATE_TIMINGS"
+
 # ONE SEQUENTIAL VERDICT, used by the first stage, JOBS=1 and the parallel re-run alike.
-run_seq() { # cmd -> 0 pass / 1 fail; output kept only on failure
-  local _out="$FAILLOG_DIR/$(faillog_name "$1").log"
-  if eval "$1" >"$_out" 2>&1; then PASS=$((PASS+1)); rm -f "$_out"; return 0; fi
+run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
+  local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}"
+  _t0="$(_now)"
+  if eval "$1" >"$_out" 2>&1; then
+    PASS=$((PASS+1)); rm -f "$_out"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
+  fi
+  _timing_row "$_t0" "$(_now)" "$_st" FAIL "$1"
   FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})"
   return 1
 }
@@ -583,7 +599,7 @@ run_seq() { # cmd -> 0 pass / 1 fail; output kept only on failure
 # and folding it into one pool must not turn that into a failure reported after minutes of other gates.
 STOPPED_EARLY=0
 for (( _i=0; _i<RUN_FIRST_N; _i++ )); do
-  run_seq "${RUN_LIST[$_i]}" || { STOPPED_EARLY=1; break; }
+  run_seq "${RUN_LIST[$_i]}" first || { STOPPED_EARLY=1; break; }
 done
 REST=("${RUN_LIST[@]:$RUN_FIRST_N}")
 [ "$STOPPED_EARLY" = "1" ] && REST=()
@@ -600,8 +616,11 @@ else
     # throttle to JOBS concurrent
     while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
     idx=$((idx+1))
-    ( if eval "$cmd" >/dev/null 2>&1; then echo "OK" > "$RES/$idx"
-      else echo "FAIL $cmd" > "$RES/$idx"; fi ) &
+    # The pool's own output is kept on failure too (<name>.pool.log): a gate that fails only under
+    # load is a defect in the gate, and the sequential recheck's output cannot show why it failed.
+    ( _t0="$(_now)"; _pl="$FAILLOG_DIR/$(faillog_name "$cmd").pool.log"
+      if eval "$cmd" >"$_pl" 2>&1; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
+      else _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
   done
   LAUNCHED=$idx
   wait
@@ -635,7 +654,7 @@ else
     # The re-run's output is KEPT on failure, as in sequential mode. Parallel is the default, and it
     # discarded both runs' output — so the hook's fast surface checklist, whose own report names the
     # failing constituent, failed with nothing but its name.
-    if run_seq "$cmd"; then
+    if run_seq "$cmd" recheck; then
       RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
     fi
   done
