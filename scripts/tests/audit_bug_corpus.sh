@@ -217,7 +217,7 @@ if [ -n "$LEDGER_ROWS" ]; then
       "ledger block (fixtures: or coverage:) and delete it here"
     LEDGER_FAIL=1
   fi
-  while IFS=$'\t' read -r lnum lkind lval; do
+  while IFS=$'\t' read -r lnum lkind _lstatus lval; do
     [ -n "$lnum" ] || continue
     case "$lkind" in
       fixtures) BUG_TEST_MAP[$lnum]="$lval" ;;
@@ -340,6 +340,11 @@ fi
 
 echo
 echo "=== bug doc status agrees with the corpus (FIXED vs not) ==="
+if [ -n "$LEDGER_ROWS" ]; then
+  # ONE OWNER: since the migration the record's **Status:** line is the only status there is, and
+  # bug_ledger.py refuses a coverage line that restates it, so there is no second copy to compare.
+  echo "  ok   the record's **Status:** line is the only status (bug_ledger.py refuses a coverage line restating it)"
+else
 STATUS_CHECKED=0; STATUS_LEGACY=0; STATUS_BAD=0
 for doc in "$BUGS_DIR"/[0-9][0-9][0-9]_*.md; do
   [ -e "$doc" ] || continue
@@ -378,6 +383,7 @@ if [ "$STATUS_BAD" -eq 0 ]; then
   echo "  ok   every status-bearing entry agrees with its bug doc"
 else
   FAIL=$((FAIL+STATUS_BAD))
+fi
 fi
 
 FAIL=$((FAIL+LEDGER_FAIL))

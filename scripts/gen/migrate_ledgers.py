@@ -49,8 +49,8 @@ these parts:
 
 <!-- bug-ledger
 summary: the one line shown in the bug list below
-fixtures: regress_NNN_shape.con error_NNN_shape.con    (under tests/programs/, or a repo path)
-coverage: FIXED -- check_x.sh leg y covers it          (instead of fixtures, naming the gate)
+fixtures: regress_NNN_shape.con error_NNN_shape.con    (paths relative to tests/programs/)
+coverage: check_x.sh leg y covers it                   (instead of fixtures: the gate, never the status)
 class: 8 — optional note shown in STRUCTURAL_CLASSES.md's summary table
 silent: yes                                            (silent wrong code or unsound claim; no = loud)
 exit: 0b                                               (ROADMAP exits whose bug list names it)
@@ -186,14 +186,47 @@ for n, v in test_map.items():
         records[n]["fixtures"] = oneline(v)
     else:
         note(f"BUG_TEST_MAP names {n}, which has no record; dropped")
+STATUS_PREFIX = re.compile(r"^(?:FIXED|OPEN|HALF CLOSED|PARTIAL(?:LY)?(?: FIXED)?|CONTAINED)\b(.*?)\s+(?:--|—)\s+(.+)$", re.S)
+
+
+def strip_status(v):
+    """'FIXED 2026-10-20 (batch 2) -- rest' -> 'rest (2026-10-20 (batch 2))': the record's Status line owns
+    the status, and the qualifier after the word (dates, sites, task ids) is kept, not dropped."""
+    m = STATUS_PREFIX.match(v)
+    if not m:
+        if re.match(r"^(FIXED|OPEN|HALF CLOSED|PARTIAL|CONTAINED)\b", v):
+            note(f"a coverage rationale starts with a status word but has no ' -- ' after it: {v[:60]}; "
+                 "kept with the word lower-cased")
+            return v[0] + v[1:].split(" ", 1)[0].lower() + (" " + v.split(" ", 1)[1] if " " in v else "")
+        return v
+    qual, rest = m.group(1).strip(), m.group(2).strip()
+    return f"{rest} ({qual})" if qual else rest
+
+
 for n, v in skip_map.items():
     if n in records:
-        records[n]["coverage"] = oneline(v)
+        records[n]["coverage"] = oneline(strip_status(v))
     else:
         note(f"SKIP_BUGS names {n}, which has no record; dropped")
 for n, r in records.items():
     if "fixtures" not in r and "coverage" not in r:
         die(f"bug {n} has no coverage entry in {AUDIT}; file it before migrating (check_bug_filing_complete.sh)")
+
+SUMMARY_STATUS = re.compile(r"^(?:FIXED|OPEN)\b([^:]*):\s+(.+)$", re.S)
+
+
+def strip_summary_status(v):
+    """'FIXED (with 126): rest' -> 'rest (with 126)': the generated list files a bug under Fixed or Open
+    from its Status line, so the summary does not repeat it (and cannot go stale when the status moves)."""
+    m = SUMMARY_STATUS.match(v)
+    if not m:
+        if re.match(r"^(FIXED|OPEN)\b", v):
+            note(f"a README summary starts with a status word and no colon: {v[:60]}; the word is dropped")
+            return v.split(" ", 1)[1] if " " in v else v
+        return v
+    qual, rest = m.group(1).strip(), m.group(2).strip()
+    return f"{rest} ({qual})" if qual else rest
+
 
 # ------------------------------------------------------------------------------ the README lists
 README = "docs/bugs/README.md"
@@ -222,7 +255,7 @@ for section, start, end in (("fixed", fx.end(), op.start()), ("open", op.end(), 
         want = "open" if L.status_open(r["text"], r["path"]) else "fixed"
         # a bug listed twice keeps the line from the section its status puts it in
         if "summary" not in r or section == want:
-            r["summary"] = oneline(summ)
+            r["summary"] = oneline(strip_summary_status(summ))
 for n, r in records.items():
     if "summary" not in r:
         t = L.title_of(r["text"], n)

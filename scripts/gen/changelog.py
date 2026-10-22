@@ -105,6 +105,15 @@ def folded(body, frs):
     return body[:i] + "\n" + "\n\n".join(f[3] for f in frs) + "\n\n" + rest
 
 
+def ledgers_migrated(root):
+    """The ledger migration stamps CHANGELOG.md and gives every bug record a ledger block in one step, so
+    a record with a block says the stamp must be there: a deleted stamp is a failure, not 'not migrated'."""
+    for p in glob.glob(os.path.join(root, "docs", "bugs", "[0-9][0-9][0-9]_*.md")):
+        if "<!-- bug-ledger" in read(p):
+            return True
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
@@ -114,6 +123,8 @@ def main():
     a = ap.parse_args()
     path = os.path.join(a.root, "CHANGELOG.md")
     text = read(path)
+    if "changelog stamp:" in text and not STAMP.search(text):
+        die(f"{path} holds a damaged changelog stamp line; restore it with --restamp after reviewing the file")
     stamp, body = split(text, path)
     frs = fragments(a.root)
     if a.print:
@@ -127,6 +138,10 @@ def main():
         return 0
     if a.check:
         if stamp is None:
+            if ledgers_migrated(a.root):
+                print(f"changelog: {path} has lost its stamp, but the ledgers are migrated (the bug records carry "
+                      "ledger blocks); review the file and run --restamp", file=sys.stderr)
+                return 1
             print(f"changelog: not migrated yet ({path} has no stamp); {len(frs)} well-formed fragments")
             return 0
         if stamp != digest(body):

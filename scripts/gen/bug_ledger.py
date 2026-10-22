@@ -7,7 +7,8 @@
   bug_ledger.py --check      exit 1 when a view differs from the records (stale or hand-edited);
                              check_docs_drift.sh runs this
   bug_ledger.py corpus       print the regression-coverage map, one tab-separated row per bug:
-                             NNN<TAB>fixtures<TAB>a.con b.con   or   NNN<TAB>coverage<TAB>rationale;
+                             NNN<TAB>fixtures<TAB>open|fixed<TAB>a.con b.con   or
+                             NNN<TAB>coverage<TAB>open|fixed<TAB>rationale;
                              audit_bug_corpus.sh and check_bug_filing_complete.sh read it (it is never
                              committed, so it cannot conflict)
 
@@ -19,15 +20,16 @@ ONE OWNER PER FACT. A bug's facts live in its record, docs/bugs/NNN_*.md, and no
 
       <!-- bug-ledger
       summary: one line for the bug list (required)
-      fixtures: regress_175_x.con dir/src/main.con   (paths under tests/programs/, or repo paths)
+      fixtures: regress_175_x.con dir/src/main.con   (paths relative to tests/programs/)
       coverage: the rationale naming the gate or fixture that covers it, when there is no fixture
+                (it never restates the status: a leading FIXED/OPEN/... word is refused)
       class: 8 — optional note shown beside the bug in STRUCTURAL_CLASSES.md's summary table
       class: 12                                       (one line per class; table order picks primary)
       silent: yes | no                                (silent wrong code / unsound claim vs loud)
       exit: 0b                                        (ROADMAP exits whose generated bug list names it)
       -->
 
-  Exactly one of `fixtures` and `coverage` is required.
+  Exactly one of `fixtures` and `coverage` is required. A value is one line with no tab and no `-->`.
 
 THE GENERATED VIEWS (each between BEGIN/END GENERATED markers; never edit inside them):
 
@@ -133,6 +135,14 @@ def parse_block(body, name):
     if ("fixtures" in facts) == ("coverage" in facts):
         die(f"{name}: the ledger block needs exactly one of fixtures (a regression fixture) or coverage "
             "(the rationale naming the gate that covers it)")
+    if re.match(r"^(FIXED|OPEN)\b", facts["summary"]):
+        die(f"{name}: the summary restates the status ('{facts['summary'][:30]}...'); the **Status:** line owns "
+            "it and the generated list files the bug under Fixed or Open from it")
+    if re.match(r"^(FIXED|OPEN|HALF CLOSED|PARTIAL|PARTIALLY|CONTAINED)\b", facts.get("coverage", "")):
+        die(f"{name}: coverage restates the status ('{facts['coverage'][:30]}...'); the **Status:** line owns it, "
+            "so the coverage line names only the gate or fixture")
+    if any("\t" in v for k, v in facts.items() if isinstance(v, str)):
+        die(f"{name}: a ledger value holds a tab")
     if facts.get("silent", "yes") not in ("yes", "no"):
         die(f"{name}: silent must be yes or no, got '{facts['silent']}'")
     exits = re.split(r"[,\s]+", facts.get("exit", "").strip()) if "exit" in facts else []
@@ -223,27 +233,31 @@ def render_readme(recs):
     return "\n".join(out)
 
 
+def side(text, k):
+    """`text` with every conflict hunk replaced by its side k (1 ours, 2 theirs)."""
+    return HUNK.sub(lambda m: m.group(k), text)
+
+
 def class_rows(block, path):
-    """The (num, name, owner) rows of the class table, tolerant of a rebase conflict inside it."""
-    rows = {}
-    order = []
-    for ln in block.split("\n"):
-        if CONFLICT.match(ln):
-            continue
-        m = CLASS_ROW.match(ln)
-        if not m:
-            continue
-        num, name, _, owner = m.groups()
-        if num in rows:
-            if rows[num] != (name, owner):
-                die(f"{path}: class {num} appears twice with different name or owner cells (a conflict "
-                    "outside the generated column); resolve it by hand, then rerun --write")
-            continue
-        rows[num] = (name, owner)
-        order.append(num)
-    if not order or order != [str(i) for i in range(1, len(order) + 1)]:
+    """The (num, name, owner) rows of the class table. Inside a rebase conflict the two sides must agree
+    on every row's presence, order, name and owner (the class-owned cells); only the generated bugs
+    column may differ, and it is regenerated. Anything else is a real conflict, left for a human."""
+    def rows_of(text):
+        out = []
+        for ln in text.split("\n"):
+            m = CLASS_ROW.match(ln)
+            if m:
+                out.append((m.group(1), m.group(2), m.group(4)))
+        return out
+    ours, theirs = rows_of(side(block, 1)), rows_of(side(block, 2))
+    if ours != theirs:
+        die(f"{path}: the two sides of a conflict in the class table differ in a class row's presence, order, "
+            "name or owner (cells the class owns); resolve that by hand, then rerun --write")
+    if re.search(r"^(<{7}|>{7})", side(block, 1), re.M):
+        die(f"{path}: unbalanced conflict markers in the class table; resolve them by hand")
+    if not ours or [n for n, _, _ in ours] != [str(i) for i in range(1, len(ours) + 1)]:
         die(f"{path}: the generated class table must hold rows | N. class | bugs | owner | numbered 1..N")
-    return [(n, rows[n][0], rows[n][1]) for n in order]
+    return ours
 
 
 def render_classes(recs, rows):
@@ -325,7 +339,7 @@ def main():
         for r in recs.values() if migrated else []:
             f = r["facts"]
             kind = "fixtures" if "fixtures" in f else "coverage"
-            print(f"{r['num']}\t{kind}\t{f[kind]}")
+            print(f"{r['num']}\t{kind}\t{'open' if r['open'] else 'fixed'}\t{f[kind]}")
         return 0
     if not migrated:
         print("bug ledger: not migrated yet (no record carries a ledger block); the legacy views are "

@@ -29,7 +29,16 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "migrate_ledgers: the tree has uncommitted changes; run it on a clean checkout" >&2
   exit 2
 fi
+if [ -n "$(python3 -I scripts/gen/bug_ledger.py corpus)" ]; then
+  echo "migrate_ledgers: the bug records already carry ledger blocks; this tree is migrated" >&2
+  exit 2
+fi
+if [ -e scripts/tests/ci_gate_inventory.txt ]; then
+  echo "migrate_ledgers: scripts/tests/ci_gate_inventory.txt already exists; refusing to overwrite it" >&2
+  exit 2
+fi
 restore() {
+  # The tree was clean (checked above) and the inventory absent, so this undoes exactly this run.
   echo "migrate_ledgers: a step failed; restoring the tracked files" >&2
   git checkout -- . 2>/dev/null || true
   rm -f scripts/tests/ci_gate_inventory.txt

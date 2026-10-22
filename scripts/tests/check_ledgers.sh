@@ -46,34 +46,61 @@ if [ -f scripts/tests/ci_gate_inventory.txt ]; then
 fi
 
 # ----------------------------------------------------------------------------- the migrated copy
-C="$TMP/tree"
-make_copy() {
-  rm -rf "$C"; mkdir -p "$C/docs" "$C/scripts/tests" "$C/scripts/gen" "$C/.github/workflows"
-  cp -R docs/bugs "$C/docs/bugs"
-  cp ROADMAP.md CHANGELOG.md "$C/"
-  cp -R changelog.d "$C/changelog.d"
-  cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$C/scripts/gen/"
-  cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
-     scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$C/scripts/tests/"
-  [ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$C/scripts/tests/"
-  cp .github/workflows/lean_action_ci.yml "$C/.github/workflows/"
-  ln -s "$ROOT_DIR/tests" "$C/tests"
-  if [ -z "$(python3 -I "$BL" corpus)" ]; then
-    python3 -I "$C/scripts/gen/migrate_ledgers.py" "$C" > "$TMP/migrate.log" 2>&1 \
-      && python3 -I "$C/scripts/gen/bug_ledger.py" --write --root "$C" >> "$TMP/migrate.log" 2>&1 \
-      && python3 -I "$C/scripts/gen/changelog.py" --stamp-initial --root "$C" >> "$TMP/migrate.log" 2>&1
-  fi
-}
-make_copy
+# BASE is built once: a copy of the inputs, migrated by scripts/gen/migrate_ledgers.py when this tree
+# is not migrated yet, plus CONTROL RECORD 997, which every record-level control mutates. The controls
+# own their record instead of borrowing a real bug's, so fixing or reclassifying a real bug can never
+# break a control.
+BASE="$TMP/base"; C="$TMP/tree"
+mkdir -p "$BASE/docs" "$BASE/scripts/tests" "$BASE/scripts/gen" "$BASE/.github/workflows"
+cp -R docs/bugs "$BASE/docs/bugs"
+cp ROADMAP.md CHANGELOG.md "$BASE/"
+cp -R changelog.d "$BASE/changelog.d"
+cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
+cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
+   scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
+[ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$BASE/scripts/tests/"
+cp .github/workflows/lean_action_ci.yml "$BASE/.github/workflows/"
+ln -s "$ROOT_DIR/tests" "$BASE/tests"
 MIGRATED_HERE=0; [ -n "$(python3 -I "$BL" corpus)" ] && MIGRATED_HERE=1
+: > "$TMP/migrate.log"
+if [ "$MIGRATED_HERE" = 0 ]; then
+  python3 -I "$BASE/scripts/gen/migrate_ledgers.py" "$BASE" > "$TMP/migrate.log" 2>&1 \
+    && python3 -I "$BASE/scripts/gen/bug_ledger.py" --write --root "$BASE" >> "$TMP/migrate.log" 2>&1 \
+    && python3 -I "$BASE/scripts/gen/changelog.py" --stamp-initial --root "$BASE" >> "$TMP/migrate.log" 2>&1
+fi
 if [ "$MIGRATED_HERE" = 1 ]; then
   ok "the tree is migrated; the controls run on a copy of it"
-elif python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 && [ -n "$(python3 -I "$BL" corpus --root "$C")" ]; then
+elif python3 -I "$BL" --check --root "$BASE" >/dev/null 2>&1 && [ -n "$(python3 -I "$BL" corpus --root "$BASE")" ] \
+     && python3 -I "$CL" --check --root "$BASE" 2>/dev/null | grep -q 'matches its stamp'; then
   ok "the migration (scripts/gen/migrate_ledgers.py) runs on this tree and its result checks; the controls run on it"
 else
   no "the migration does not run cleanly on this tree (log below); scripts/gen/migrate_ledgers.sh would fail"
   sed 's/^/      /' "$TMP/migrate.log" | awk 'NR<=40'
 fi
+# The first generated exit span, if the roadmap has one; exit-span controls need it.
+EXIT_ID="$(grep -oE 'BEGIN GENERATED: exit [0-9][a-z] bugs' "$BASE/ROADMAP.md" | awk 'NR==1 {print $4}')"
+cat > "$BASE/docs/bugs/997_ledger_control.md" <<'EOF'
+# Bug 997 — the ledger gate's control record (scripts/tests/check_ledgers.sh)
+
+<!-- bug-ledger
+summary: control record
+coverage: control record, covered by scripts/tests/check_ledgers.sh
+class: 1 — control note
+silent: no
+-->
+
+**Status:** OPEN
+
+## Structural cause
+
+control
+
+## Structural owner
+
+control
+EOF
+python3 -I "$BL" --write --root "$BASE" >/dev/null 2>&1 || no "the control record 997 does not regenerate into the migrated copy"
+make_copy() { rm -rf "$C"; cp -RP "$BASE" "$C"; }
 
 edit() { # file (relative to the copy), python edit over s
   python3 -I - "$C/$1" "$2" <<'PY'
@@ -94,51 +121,64 @@ neg() { # name, file, python edit, expected exit
   if ! edit "$2" "$3"; then no "control $1: could not build its copy"; return; fi
   expect "$1" "$4" python3 -I "$BL" --check --root "$C"
 }
-REC124="$(cd docs/bugs && ls 124_*.md)"
-REC102="$(cd docs/bugs && ls 102_*.md)"
+R=docs/bugs/997_ledger_control.md
+add() { printf "old='summary: '; assert s.count(old)==1; s=s.replace(old, '%s\\\\nsummary: ')" "$1"; }
 
 echo "=== 2. hand edits, stale views and malformed records are refused ==="
+make_copy
+expect clean_copy_checks 0 python3 -I "$BL" --check --root "$C"
 neg readme_hand_edit docs/bugs/README.md "old='## Open Numbered Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [999_x.md](999_x.md) — added by hand\n')" 1
-neg class_cell_hand_edit docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn(r'^(\| 15\. [^|]*\| )', r'\g<1>999, ', s, flags=re.M); assert n==1" 1
-neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit 0b bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1
-neg status_changed_not_regenerated "docs/bugs/$REC124" "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" 1
-neg class_changed_not_regenerated "docs/bugs/$REC124" "import re; s,n=re.subn(r'^(class: 2\b)', 'class: 15\nclass: 2', s, count=1, flags=re.M); assert n==1" 1
-neg exit_changed_not_regenerated "docs/bugs/$REC124" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'exit: 0b\nsummary: ')" 1
-neg summary_changed_not_regenerated "docs/bugs/$REC102" "import re; s,n=re.subn(r'^summary: ', 'summary: CHANGED ', s, count=1, flags=re.M); assert n==1" 1
-neg unknown_key "docs/bugs/$REC124" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'severity: high\nsummary: ')" 2
-neg fixtures_and_coverage "docs/bugs/$REC102" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'coverage: also a gate\nsummary: ')" 2
-neg no_coverage_at_all "docs/bugs/$REC102" "import re; s,n=re.subn(r'^fixtures: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
-neg no_summary "docs/bugs/$REC124" "import re; s,n=re.subn(r'^summary: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
-neg record_without_block "docs/bugs/$REC124" "import re; s,n=re.subn(r'^<!-- bug-ledger\n.*?^-->\n', '', s, count=1, flags=re.M|re.S); assert n==1" 2
-neg unclosed_block "docs/bugs/$REC124" "import re; s,n=re.subn(r'^-->\n', '', s, count=1, flags=re.M); assert n==1" 2
-neg class_not_in_table "docs/bugs/$REC124" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'class: 99\nsummary: ')" 2
-neg exit_without_span "docs/bugs/$REC124" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'exit: 9z\nsummary: ')" 2
-neg silent_bad_value "docs/bugs/$REC124" "old='summary: '; assert s.count(old)==1; s=s.replace(old, 'silent: maybe\nsummary: ')" 2
+neg class_cell_hand_edit docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn(r'^(\| 1\. [^|]*\| )', r'\g<1>999, ', s, flags=re.M); assert n==1" 1
+neg status_changed_not_regenerated "$R" "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" 1
+neg class_removed_not_regenerated "$R" "import re; s,n=re.subn(r'^class: 1 .*\n', '', s, count=1, flags=re.M); assert n==1" 1
+neg class_note_changed_not_regenerated "$R" "old='control note'; assert s.count(old)==1; s=s.replace(old, 'another note')" 1
+neg summary_changed_not_regenerated "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: CHANGED')" 1
+neg unknown_key "$R" "$(add 'severity: high')" 2
+neg fixtures_and_coverage "$R" "$(add 'fixtures: bug_print_builtins.con')" 2
+neg no_coverage_at_all "$R" "import re; s,n=re.subn(r'^coverage: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
+neg no_summary "$R" "import re; s,n=re.subn(r'^summary: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
+neg key_given_twice "$R" "$(add 'silent: yes')" 2
+neg class_twice "$R" "$(add 'class: 1')" 2
+neg record_without_block "$R" "import re; s,n=re.subn(r'^<!-- bug-ledger\n.*?^-->\n', '', s, count=1, flags=re.M|re.S); assert n==1" 2
+neg unclosed_block "$R" "import re; s,n=re.subn(r'^-->\n', '', s, count=1, flags=re.M); assert n==1" 2
+neg two_blocks "$R" "s = s + '\n<!-- bug-ledger\nsummary: x\ncoverage: OPEN -- y.sh\n-->\n'" 2
+neg class_not_in_table "$R" "$(add 'class: 999')" 2
+neg exit_without_span "$R" "$(add 'exit: 9z')" 2
+neg silent_bad_value "$R" "import re; s,n=re.subn(r'^silent: no', 'silent: maybe', s, count=1, flags=re.M); assert n==1" 2
+neg status_word_unknown "$R" "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" 2
 neg readme_markers_missing docs/bugs/README.md "old='<!-- END GENERATED: bug list -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
 neg class_markers_missing docs/bugs/STRUCTURAL_CLASSES.md "old='<!-- END GENERATED: class table -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
-neg exit_span_unclosed ROADMAP.md "old='<!-- END GENERATED: exit 0b bugs -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
-neg duplicate_number docs/bugs/README.md "import shutil, os; d=os.path.dirname(p); shutil.copy(os.path.join(d, '$REC124'), os.path.join(d, '124_duplicate.md'))" 2
+neg summary_restates_status "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: OPEN: control record')" 2
+neg coverage_restates_status "$R" "old='coverage: control'; assert s.count(old)==1; s=s.replace(old, 'coverage: FIXED -- control')" 2
+neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
+if [ -n "$EXIT_ID" ]; then
+  neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1
+  neg exit_added_not_regenerated "$R" "$(add "exit: $EXIT_ID")" 1
+  neg exit_span_unclosed ROADMAP.md "old='<!-- END GENERATED: exit $EXIT_ID bugs -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
+else
+  ok "ROADMAP.md has no generated exit bug span; the exit-span controls have nothing to mutate"
+fi
 
 echo "=== 3. regeneration: a new record, rebase conflicts, fragments ==="
 make_copy
-cat > "$C/docs/bugs/998_control_bug.md" <<'EOF'
-# Bug 998 — a control record
+cat > "$C/docs/bugs/998_control_bug.md" <<EOF
+# Bug 998 — a second control record
 
 <!-- bug-ledger
 summary: control: a new open bug
-fixtures: bug_print_builtins.con
-class: 8 — the control's note
+coverage: control record, covered by scripts/tests/check_ledgers.sh
+class: 1 — the control's note
 silent: yes
-exit: 0b
+${EXIT_ID:+exit: $EXIT_ID}
 -->
 
 **Status:** OPEN
 EOF
 if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
    && grep -qF '[998_control_bug.md](998_control_bug.md) — control: a new open bug' "$C/docs/bugs/README.md" \
-   && grep -qE '^\| 8\. .*998 \(the control.s note\)' "$C/docs/bugs/STRUCTURAL_CLASSES.md" \
-   && grep -qE 'exit 0b bugs[^>]*-->[^<]*998' "$C/ROADMAP.md"; then
-  ok "positive control: a new record regenerates into all three views and checks"
+   && grep -qE '^\| 1\. .*998 \(the control.s note\)' "$C/docs/bugs/STRUCTURAL_CLASSES.md" \
+   && { [ -z "$EXIT_ID" ] || grep -qE "BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->[^<]*998" "$C/ROADMAP.md"; }; then
+  ok "positive control: a new record regenerates into every view and checks"
 else no "positive control: a new record did not regenerate into the README, class table and exit span"; fi
 # A rebase conflict inside the README block: both sides regenerated the list.
 make_copy
@@ -148,30 +188,56 @@ if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --ch
    && ! grep -qE '^(<{7}|>{7})' "$C/docs/bugs/README.md"; then
   ok "positive control: --write resolves a conflict inside the README's generated block"
 else no "positive control: --write left a README block conflict unresolved"; fi
-# A conflict confined to a ROADMAP exit span: the whole table row conflicts, the sides differ only there.
-make_copy
-edit ROADMAP.md "import re
-m = re.search(r'^\| 0b \|.*\n', s, re.M); row = m.group(0)
-ours = re.sub(r'(BEGIN GENERATED: exit 0b bugs[^>]*-->)', r'\g<1>997, ', row); theirs = re.sub(r'(BEGIN GENERATED: exit 0b bugs[^>]*-->)', r'\g<1>996, ', row)
+if [ -n "$EXIT_ID" ]; then
+  # A conflict confined to a ROADMAP exit span: the whole table row conflicts, the sides differ only there.
+  make_copy
+  edit ROADMAP.md "import re
+m = re.search(r'^.*BEGIN GENERATED: exit $EXIT_ID bugs.*\n', s, re.M); row = m.group(0)
+ours = re.sub(r'(BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>997, ', row); theirs = re.sub(r'(BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>996, ', row)
 s = s[:m.start()] + '<<<<<<< HEAD\n' + ours + '=======\n' + theirs + '>>>>>>> theirs\n' + s[m.end():]"
-if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
-   && ! grep -qE '^(<{7}|>{7})' "$C/ROADMAP.md"; then
-  ok "positive control: --write resolves a conflict confined to a ROADMAP exit span"
-else no "positive control: --write left an exit-span conflict unresolved"; fi
-# ...but a conflict that also differs OUTSIDE the span is a real one and is left for a human.
+  if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
+     && ! grep -qE '^(<{7}|>{7})' "$C/ROADMAP.md"; then
+    ok "positive control: --write resolves a conflict confined to a ROADMAP exit span"
+  else no "positive control: --write left an exit-span conflict unresolved"; fi
+  # ...but a conflict that also differs OUTSIDE the span is a real one and is left for a human.
+  make_copy
+  edit ROADMAP.md "import re
+m = re.search(r'^.*BEGIN GENERATED: exit $EXIT_ID bugs.*\n', s, re.M); row = m.group(0)
+other = row.replace('BEGIN GENERATED', 'OUTSIDE EDIT -->X<!-- BEGIN GENERATED', 1)
+s = s[:m.start()] + '<<<<<<< HEAD\n' + row + '=======\n' + other + '>>>>>>> theirs\n' + s[m.end():]"
+  python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 || true
+  if grep -qE '^<{7}' "$C/ROADMAP.md"; then
+    ok "control: a conflict outside the generated span is left in place for a human"
+  else no "control: --write silently resolved a conflict outside a generated span"; fi
+fi
+# A conflict in the class table whose sides disagree on a class-owned cell (one side drops the last
+# class row) is a real conflict: --write must refuse, not union the rows back.
 make_copy
-edit ROADMAP.md "import re
-m = re.search(r'^\| 0b \|.*\n', s, re.M); row = m.group(0)
-s = s[:m.start()] + '<<<<<<< HEAD\n' + row + '=======\n' + row.replace('| R-0482 |', '| R-0483 |', 1) + '>>>>>>> theirs\n' + s[m.end():]"
-python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 || true
-if grep -qE '^<{7}' "$C/ROADMAP.md"; then
-  ok "control: a conflict outside the generated span is left in place for a human"
-else no "control: --write silently resolved a conflict outside a generated span"; fi
+edit docs/bugs/STRUCTURAL_CLASSES.md "import re
+rows = [m for m in re.finditer(r'^\| \d+\. .*\n', s, re.M)]
+last = rows[-1]
+s = s[:last.start()] + '<<<<<<< HEAD\n' + last.group(0) + '=======\n' + '>>>>>>> theirs\n' + s[last.end():]"
+expect class_row_deleted_on_one_side 2 python3 -I "$BL" --write --root "$C"
+make_copy
+edit docs/bugs/STRUCTURAL_CLASSES.md "import re
+m = re.search(r'^\| 1\. ([^|]*)\| ([^|]*)\| (.*)\n', s, re.M); row = m.group(0)
+other = row.replace(m.group(2), m.group(2).rstrip() + ', 996 ', 1)
+s = s[:m.start()] + '<<<<<<< HEAD\n' + row + '=======\n' + other + '>>>>>>> theirs\n' + s[m.end():]"
+if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
+   && ! grep -qE '^(<{7}|>{7})' "$C/docs/bugs/STRUCTURAL_CLASSES.md"; then
+  ok "positive control: --write resolves a class-table conflict confined to the generated bugs column"
+else no "positive control: --write left a bugs-column conflict in the class table unresolved"; fi
 # Changelog: a stamped copy, a hand edit, malformed fragments, a fold.
 make_copy
 python3 -I "$CL" --check --root "$C" >/dev/null 2>&1 || python3 -I "$CL" --stamp-initial --root "$C" >/dev/null 2>&1
 edit CHANGELOG.md "old='## Major Milestones\n'; i=s.index(old); j=s.index('\n', i+len(old))+1; s=s[:j]+'\n### Added by hand (2099-01-01)\n\nx\n'+s[j:]"
 expect changelog_hand_edit 1 python3 -I "$CL" --check --root "$C"
+make_copy
+edit CHANGELOG.md "import re; s,n=re.subn(r'^<!-- changelog stamp: .*\n', '', s, flags=re.M); assert n==1"
+expect changelog_stamp_deleted 1 python3 -I "$CL" --check --root "$C"
+make_copy
+edit CHANGELOG.md "import re; s,n=re.subn(r'(<!-- changelog stamp: )[0-9a-f]{32}', r'\g<1>not-a-digest', s, flags=re.M); assert n==1"
+expect changelog_stamp_damaged 2 python3 -I "$CL" --check --root "$C"
 cl_neg() { # name, fragment file name, content
   make_copy
   python3 -I "$CL" --check --root "$C" >/dev/null 2>&1 || python3 -I "$CL" --stamp-initial --root "$C" >/dev/null 2>&1
@@ -210,11 +276,11 @@ if bash "$C/scripts/tests/audit_bug_corpus.sh" >/dev/null 2>&1; then ok "audit_b
 else no "audit_bug_corpus.sh fails on the migrated copy"; fi
 if bash "$C/scripts/tests/check_bug_filing_complete.sh" >/dev/null 2>&1; then ok "check_bug_filing_complete.sh passes on the migrated copy"
 else no "check_bug_filing_complete.sh fails on the migrated copy"; fi
-edit "docs/bugs/$REC102" "import re; s,n=re.subn(r'^fixtures: ', 'fixtures: no_such_fixture_999.con ', s, count=1, flags=re.M); assert n==1"
+edit "$R" "import re; s,n=re.subn(r'^coverage: .*', 'fixtures: no_such_fixture_999.con', s, count=1, flags=re.M); assert n==1"
 expect audit_missing_fixture 1 bash "$C/scripts/tests/audit_bug_corpus.sh"
 expect filing_missing_fixture 1 bash "$C/scripts/tests/check_bug_filing_complete.sh"
 make_copy
-edit scripts/tests/audit_bug_corpus.sh "old='declare -A SKIP_BUGS=(\n'; assert s.count(old)==1; s=s.replace(old, old+'  [124]=\"OPEN -- a legacy entry left behind\"\n')"
+edit scripts/tests/audit_bug_corpus.sh "old='declare -A SKIP_BUGS=(\n'; assert s.count(old)==1; s=s.replace(old, old+'  [996]=\"OPEN -- a legacy entry left behind\"\n')"
 expect audit_legacy_entry_left 1 bash "$C/scripts/tests/audit_bug_corpus.sh"
 
 echo

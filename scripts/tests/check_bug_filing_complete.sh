@@ -24,7 +24,8 @@ no() { echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 AUDIT="scripts/tests/audit_bug_corpus.sh"
 [ -f "$AUDIT" ] || { echo "error: $AUDIT missing" >&2; exit 2; }
-# The records' coverage rows (empty before the ledger migration): NNN<TAB>fixtures|coverage<TAB>value.
+# The records' coverage rows (empty before the ledger migration):
+# NNN<TAB>fixtures|coverage<TAB>open|fixed<TAB>value.
 if ! LEDGER_ROWS="$(python3 -I scripts/gen/bug_ledger.py corpus)"; then
   echo "error: scripts/gen/bug_ledger.py corpus failed; the bug records' ledger blocks cannot be read" >&2
   exit 2
@@ -32,7 +33,9 @@ fi
 # Both sources as legacy-shaped lines, so every leg below reads one form: `[NNN]="value"`.
 ledger_lines() { # fixtures|coverage
   [ -n "$LEDGER_ROWS" ] || return 0
-  awk -F'\t' -v k="$1" '$2 == k { printf "  [%s]=\"%s\"\n", $1, $3 }' <<<"$LEDGER_ROWS"
+  # An open bug's coverage line may name no gate yet (its status is the rationale, as an "OPEN" prefix
+  # was before the migration); the status column says so, from the record's own Status line.
+  awk -F'\t' -v k="$1" '$2 == k { printf "  [%s]=\"%s%s\"\n", $1, ($3 == "open" ? "OPEN (record status) " : ""), $4 }' <<<"$LEDGER_ROWS"
 }
 
 docs=0; missing=""
