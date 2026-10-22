@@ -85,7 +85,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh|scripts/dev/seed-lake\.sh' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -147,7 +147,12 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
-EXPECTED_GATE_COMMANDS=255
+# 255 -> 256: check_build_cache.sh (R-0546 build cache: key computation, refusal on toolchain or
+#   manifest mismatch, seeding never replaces lake build), pinned in the same commit.
+#   scripts/dev/seed-lake.sh is excluded from the inventory: the workflow runs it on self-hosted
+#   runners to seed .lake from the server's cache. It is a build accelerator, not a gate, and run
+#   locally it would only copy a build.
+EXPECTED_GATE_COMMANDS=256
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
