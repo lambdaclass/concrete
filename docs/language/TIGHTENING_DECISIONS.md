@@ -470,10 +470,10 @@ in the unit itself. A compile that cannot run (status 125 – 127) makes the who
 error, never a "no difference" report. A run over the whole corpus takes about 1 – 3 min with 16
 jobs on the OVH server.
 
-**Validation: train3 `949d79e9` against main `185d998c`.** The corpus was main's: 1 914 units,
-made of 1 489 files, 250 inline programs, 174 projects and std. The scanner found 297 units whose
-outcome or codes changed. One of them, `examples/hmac_sha256`, is a base timeout at 120 s under
-server load, which the report keeps distinct from a refusal. Run with the same compiler on both
+**Validation: train3 `949d79e9` against main `185d998c`.** The corpus was main's: 1 907 units,
+made of 1 489 files, 243 inline programs, 174 projects and std. The scanner found 297 units whose
+outcome or codes changed. A unit that times out (120 s) under server load is reported as `timeout`,
+distinct from a refusal; one earlier run had a base timeout on `examples/hmac_sha256`. Run with the same compiler on both
 sides, the scanner reports no difference (exit 0).
 
 - **Newly refused by exit 2i's codes:**
