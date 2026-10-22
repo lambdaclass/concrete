@@ -43,7 +43,6 @@ T_COMPILE = float(os.environ.get("FARM_T_COMPILE", "60"))
 T_RUN = float(os.environ.get("FARM_T_RUN", "10"))
 T_INTERP = float(os.environ.get("FARM_T_INTERP", "30"))
 TIMEOUT_RETRY_FACTOR = 4
-MAX_VARIANTS_PER_PRESIG = 50    # distinct minimized structures kept per pre-signature
 RESAMPLE_EVERY = 25             # re-minimize every Nth repeat of a known pre-signature
 MAX_OCCURRENCES = 50            # seeds remembered per signature
 LINEARITY_CODES = ["E0205", "E0206", "E0207", "E0208", "E0209", "E0210", "E0211",
@@ -183,7 +182,9 @@ class ResourceLimit(Exception):
     """A case hit the farm's own per-process limits (output cap, OOM kill): not a finding."""
 
 
-OUTPUT_CAP = 8 << 20  # bytes per stream; RLIMIT_FSIZE makes a runaway printer die (SIGXFSZ)
+# RLIMIT_FSIZE bounds every file a case writes (captured streams, IR, objects, the binary): a
+# runaway printer dies of SIGXFSZ. 64 MiB is far above any artifact of a generated program.
+OUTPUT_CAP = 64 << 20
 # Under `concrete reduce` (predicate mode) children stay in the reducer's process group, so the
 # reducer's timeout kill reaches every nested compiler (FARM_NO_SETSID=1).
 NEW_SESSION = os.environ.get("FARM_NO_SETSID") != "1"
@@ -222,14 +223,26 @@ def run_cmd(argv, timeout, cwd, env=None):
                     p.kill()
             p.wait()
             rc, timed_out = None, True
+        if NEW_SESSION:  # descendants left behind after a normal exit (a killed predicate's clang)
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(p.pid, signal.SIGKILL)
         if rc in (-signal.SIGXFSZ, -signal.SIGKILL):
             raise ResourceLimit(f"{os.path.basename(argv[0])} killed by signal {-rc}")
-        return (rc, _read_capped(fo), _read_capped(fe), timed_out)
+        if os.fstat(fo.fileno()).st_size >= OUTPUT_CAP or os.fstat(fe.fileno()).st_size >= OUTPUT_CAP:
+            raise ResourceLimit(f"{os.path.basename(argv[0])} hit the output cap")
+        out, err = _read_capped(fo), _read_capped(fe)
+        # a child that hit the cap or was OOM-killed surfaces as an ordinary failure of the parent
+        if re.search(r"File too large|EFBIG|Killed|out of memory|std::bad_alloc|Cannot allocate memory", err):
+            raise ResourceLimit(f"{os.path.basename(argv[0])} reported resource exhaustion")
+        return (rc, out, err, timed_out)
+
+
+NO_RETRY = {"on": False}  # set while minimizing: one oracle run stays within its base timeouts
 
 
 def run_retry(argv, timeout, cwd):
     r = run_cmd(argv, timeout, cwd)
-    if r[3]:  # a hang under load is re-run with a larger budget before it counts
+    if r[3] and not NO_RETRY["on"]:  # a hang under load is re-run with a larger budget first
         r = run_cmd(argv, timeout * TIMEOUT_RETRY_FACTOR, cwd)
     return r
 
@@ -649,7 +662,11 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
     def holds(src):
         if not src.strip():
             return False
-        r = classify(oracle, src, params, compiler, cwd)
+        NO_RETRY["on"] = True
+        try:
+            r = classify(oracle, src, params, compiler, cwd)
+        finally:
+            NO_RETRY["on"] = False
         return r.cls is not None and r.presig(oracle) == target
 
     if oracle == "lin":
@@ -670,11 +687,12 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
     if use_lean and oracle == "diff" and res.cls != "refusal":
         meta = os.path.join(wd, "pred_meta.json")
         save_json(meta, {"oracle": oracle, "params": params, "presig": target,
-                         "compiler": compiler})
-        red = lean_reduce(compiler, src, meta, wd,
-                          max(1, min(seconds / 2, 600, budget.deadline - time.time())))
-        if red and len(red) < len(src) and holds(red):
-            src = red
+                         "compiler": compiler, "pause_flag": pause_flag})
+        left = min(seconds / 2, 600, budget.deadline - time.time())
+        if budget.ok() and left >= 30:
+            red = lean_reduce(compiler, src, meta, wd, left)
+            if red and len(red) < len(src) and budget.ok() and holds(red):
+                src = red
     return minimize_text(src, holds, budget, res.cls == "crash"), budget.tests
 
 
@@ -715,11 +733,11 @@ def record(p, case, res, ctx, wd, log):
         # never treated as bug identity: every RESAMPLE_EVERY-th hit is re-minimized, without a
         # permanent cap, and so is any hit once every known variant is fixed. Other hits are
         # attributed to the newest open variant (count = attributed occurrences).
-        resample = (not open_known or hits % RESAMPLE_EVERY == 0) and len(known) < MAX_VARIANTS_PER_PRESIG
+        resample = not open_known or hits % RESAMPLE_EVERY == 0
         if (known and not resample) or (pend and time.time() - pend < 3600):
             sig = (open_known or known or [None])[-1]
             if sig:
-                bump(idx, sig, occ, ctx)
+                bump(idx, sig, occ, p)
             save_json(p["index"], idx)
             return sig, False
         idx["pending"][pre] = time.time()
@@ -740,7 +758,7 @@ def record(p, case, res, ctx, wd, log):
         idx = load_json(p["index"], empty_index())
         idx["pending"].pop(pre, None)
         if sig in idx["signatures"]:
-            bump(idx, sig, occ, ctx)
+            bump(idx, sig, occ, p)
             save_json(p["index"], idx)
             return sig, False
         d = os.path.join(p["findings"], sig)
@@ -788,7 +806,7 @@ def current_sha(p):
         return None
 
 
-def bump(idx, sig, occ, ctx):
+def bump(idx, sig, occ, p):
     e = idx["signatures"][sig]
     e["count"] += 1
     e["last_seen"] = occ["at"]
@@ -796,7 +814,7 @@ def bump(idx, sig, occ, ctx):
     e["occurrences"] = (e.get("occurrences", []) + [occ])[-MAX_OCCURRENCES:]
     # Only an occurrence on the CURRENT main reopens a fixed finding: a worker still running an
     # older snapshot reproduces what the newer main already fixed.
-    cur = ctx.get("current_sha")
+    cur = current_sha(p)  # read now, under the index lock, not when the case started
     if e["status"].startswith("fixed-on-main") and (cur is None or occ["sha"] == cur):
         e["status"] = "open"
         e["reopened"] = occ["at"]
@@ -885,7 +903,6 @@ def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
                 if res.cls == "refusal":
                     refusals.append((case, res))
                 elif res.cls:
-                    ctx["current_sha"] = current_sha(p)
                     sig, new = record(p, case, res, ctx, wd, [])
                     if new:
                         stats.data["new"][res.cls] = stats.data["new"].get(res.cls, 0) + 1
@@ -901,7 +918,6 @@ def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
                       flush=True)
             else:
                 drift_clear(p, gen, args.sha, compared, rate)
-            ctx["current_sha"] = current_sha(p)
             for case, res in refusals:
                 if time.time() >= deadline:  # low priority: never overrun the window for them
                     break
@@ -954,7 +970,7 @@ def recheck(args):
         meta = load_json(os.path.join(d, "meta.json"), None)
         if not meta:
             continue
-        repro = False
+        repro, inconclusive = False, False
         for name in ("minimized.con", "repro.con"):
             fp = os.path.join(d, name)
             if not os.path.exists(fp):
@@ -965,6 +981,12 @@ def recheck(args):
             if r.cls is not None and r.presig(meta["oracle"]) == meta["presig"]:
                 repro = True
                 break
+            if r.outcome in ("resource", "pending"):
+                inconclusive = True
+        if not repro and inconclusive:  # never close a finding on a run that proved nothing
+            with open(os.path.join(d, "log"), "a") as fh:
+                fh.write(f"{now_iso()} recheck at {args.sha}: inconclusive (resource limit); retried next track\n")
+            continue
         with locked(p):
             idx = load_json(p["index"], empty_index())
             e = idx["signatures"].get(sig)
@@ -1154,6 +1176,10 @@ def cmd_predicate(args):
     meta = load_json(args.meta, None)
     with open(args.candidate) as fh:
         src = fh.read()
+    flag = meta.get("pause_flag")
+    while flag and os.path.exists(flag):  # the reducer's own timeout still bounds the wait
+        time.sleep(5)
+    NO_RETRY["on"] = True
     wd = tempfile.mkdtemp(prefix="farm_pred_")
     try:
         r = classify(meta["oracle"], src, meta["params"], meta["compiler"], wd)

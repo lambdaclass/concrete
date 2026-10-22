@@ -78,12 +78,15 @@ leased() {  # leased <snapdir>: a live campaign worker still uses this snapshot
 
 snapshot() {  # snapshot <sha>: copy the built compiler + generators out of the clone
   local sha="$1" s="$FARM_HOME/snap/$1" src="$FARM_HOME/src"
+  exec 7>"$STATE/snap.lock"; flock 7   # leases and pruning are decided under this lock
+  if [ ! -f "$s/SHA" ]; then           # an existing complete snapshot of this SHA is reused, never replaced
   rm -rf "$s.tmp"; mkdir -p "$s.tmp/bin" "$s.tmp/gen" "$s.tmp/scripts/land"
-  cp "$src/.lake/build/bin/concrete" "$s.tmp/bin/" || return 1
-  cp "$src/scripts/tests/fuzz_differential.py" "$src/scripts/tests/fuzz_linearity.py" "$s.tmp/gen/" || return 1
+  cp "$src/.lake/build/bin/concrete" "$s.tmp/bin/" || { flock -u 7; return 1; }
+  cp "$src/scripts/tests/fuzz_differential.py" "$src/scripts/tests/fuzz_linearity.py" "$s.tmp/gen/" || { flock -u 7; return 1; }
   [ -f "$src/scripts/land/notify.sh" ] && cp "$src/scripts/land/notify.sh" "$s.tmp/scripts/land/"
   echo "$sha" > "$s.tmp/SHA"
   rm -rf "$s"; mv "$s.tmp" "$s"
+  fi
   ln -sfn "$s" "$FARM_HOME/current.tmp" && mv -T "$FARM_HOME/current.tmp" "$FARM_HOME/current"
   # prune old snapshots: never the current one, never one a running worker holds a lease on
   ls -1dt "$FARM_HOME"/snap/*/ 2>/dev/null | tail -n +"$((KEEP_SNAPSHOTS + 1))" | while read -r d; do
@@ -91,6 +94,7 @@ snapshot() {  # snapshot <sha>: copy the built compiler + generators out of the 
     [ "$(readlink -f "$d")" = "$(readlink -f "$FARM_HOME/current")" ] && continue
     leased "$d" || rm -rf "$d"
   done
+  flock -u 7
 }
 
 track() {
@@ -173,7 +177,12 @@ run() {
   trap '[ -n "$mon" ] && kill "$mon" 2>/dev/null; kill $(jobs -p) 2>/dev/null; set_state stopped; exit 0' INT TERM
   while :; do
     local snap sha secs="$CAMPAIGN_SECONDS" pids=()
+    # resolve the snapshot and take the driver's lease on it atomically against pruning
+    exec 7>"$STATE/snap.lock"; flock 7
     snap="$(readlink -f "$FARM_HOME/current")"; sha="$(cat "$snap/SHA")"
+    rm -f "$FARM_HOME"/snap/*/.lease-$$
+    : > "$snap/.lease-$$"
+    flock -u 7
     if [ "$end" -gt 0 ]; then
       secs=$(( end - $(date +%s) )); [ "$secs" -le 0 ] && break
       [ "$secs" -gt "$CAMPAIGN_SECONDS" ] && secs="$CAMPAIGN_SECONDS"
