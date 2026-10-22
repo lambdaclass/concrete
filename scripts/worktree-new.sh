@@ -78,6 +78,8 @@ git worktree add "$DEST" -b "$NAME" "$BASE_SHA" || exit 1
 echo ""
 echo "worktree-new: ready. cd $DEST"
 echo "worktree-new: run all commands from there — do NOT cd back to $(basename "$ROOT_DIR")."
+echo "worktree-new: warm start: nix develop -c bash scripts/dev/seed-lake.sh --build"
+echo "             (copies the main checkout's .lake/build when toolchain, manifest and lean match; lake build still runs)"
 
 # DELIBERATELY NOT WARNING about other processes in the tree. Two attempts were
 # measured and both cried wolf:
