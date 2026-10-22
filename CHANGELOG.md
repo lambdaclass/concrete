@@ -100,6 +100,19 @@ generator refuses a bug record with no discovery batch or with a status outside 
 missed). A quiet probe batch counts toward exit 2m only with a recorded effort of at least four
 hours or ten programs.
 
+### A Match Whose Arms All Diverge Closes Its Merge (bug 175, 2026-10-22)
+
+A `match` inside a loop whose arms all end in `break`, `continue` or `return` now compiles. Before
+this fix it was refused at SSA verification (E0708) even though `--interp` ran it. Every arm
+diverged, so no arm reached the match's merge block, but `Lower` left that block open whenever
+the match was unit-typed. The early return in the result handling made the `unreachable`
+termination dead code. The statements after the match were lowered into the unreachable block,
+and in a loop that block fed the header phi. Under an `if`, the same defect gave bug 078's E0703.
+Bug 078 fixed this for the two `if` forms, and its record wrongly said that `match` already
+handled it. The merge is now terminated as soon as no arm reaches it. The defect failed closed.
+It is pinned by `regress_175_match_arms_all_diverge.con` (five shapes, binary equal to
+`--interp`) and four `check_divergence_detection.sh` rows.
+
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
 A borrow of a local is the address of its slot whatever the local's type. A local holding a raw

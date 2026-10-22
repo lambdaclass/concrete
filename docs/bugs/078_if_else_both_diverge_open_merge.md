@@ -33,8 +33,9 @@ the statements after the `if` were lowered into an unreachable block and an encl
 then-branch that fell through. Its merge then took the unreachable block as a phi source, and the
 verifier rejected the use (a block unreachable from `entry` is not dominated by it).
 
-Match lowering already terminated its merge with `unreachable` when every arm diverged; the two
-`if` forms did not.
+The record said that match lowering already terminated its merge with `unreachable` when every
+arm diverged. The code was there, but an early return made it unreachable, so `match` had the
+same defect; that is bug 175, fixed 2026-10-22.
 
 ## Fix
 

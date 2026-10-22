@@ -1345,11 +1345,19 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         setState { st with vars := cleaned }
       | _ => pure ()
     else
-      -- All arms terminated; merge is unreachable. Restore vars so any
-      -- accidental downstream read sees the pre-match state instead of
-      -- the last arm's leaked bindings.
+      -- Bug 175: every arm diverged (return/break/continue), so nothing reaches
+      -- the merge. Restore the pre-match vars and terminate it HERE, before the
+      -- result handling below: that handling returns early for a unit-typed
+      -- match (or one with no real results), which used to leave the merge open.
+      -- An open merge looked like a fall-through, so the statements after the
+      -- match were lowered into an unreachable block, and inside a loop that
+      -- block branched to the header and fed the header phi a value its
+      -- definition cannot dominate (E0708). The same shape bug 078 closed for
+      -- the two `if` forms.
       let st ← getState
       setState { st with vars := preMatchVars }
+      terminateBlock .unreachable
+      return .unit
     -- Handle the match result value phi
     -- Filter out .unit values (arms that produce no result, e.g. side-effect blocks)
     let realPhiIncoming := phiIncoming.filter fun (v, _) => match v with | .unit => false | _ => true
@@ -1369,14 +1377,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       else
         emit (.phi mergeDst realPhiIncoming ty)
         return .reg mergeDst ty
-    else if realPhiIncoming.length == 1 then
+    else
+      -- Exactly one real incoming value (empty was handled above; an all-diverged
+      -- match terminated its merge before reaching here — bug 175).
       match realPhiIncoming with
       | [(val, _)] => return val
       | _ => return .unit
-    else
-      -- All arms terminated (e.g. all return) — merge is unreachable
-      terminateBlock .unreachable
-      return .unit
 
   | .borrow inner ty =>
     refuseBorrowInConstInit
@@ -1911,7 +1917,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       -- block looked like a fall-through: an enclosing `if` branched from it into
       -- its own merge and used the unreachable block as a phi source, which the
       -- verifier rejects (E0703, a use in a block its definition cannot dominate).
-      -- Terminate it, as match lowering does when every arm diverges, so the
+      -- Terminate it (match lowering does the same since bug 175), so the
       -- statements after it are skipped and enclosing constructs see a diverged arm.
       setState { (← getState) with vars := preIfVars }
       terminateBlock .unreachable

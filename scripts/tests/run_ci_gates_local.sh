@@ -49,6 +49,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"
 
+# GATES RUN IN A CLEAN GIT ENVIRONMENT. Git exports GIT_DIR (and friends) into hooks, so a
+# gate run from pre-push inherited them, and every `git -C <other repo>` inside a gate read
+# THIS repository instead: check_external_checker.sh compared lean4export's pinned SHA with
+# the pushed HEAD and reported "could not build lean4export" only under the hook (CI and a
+# hand run were green). Clearing the repository-local variables here makes a gate see the
+# same git that CI and a hand run see; git rediscovers this repository from the cwd.
+unset $(git rev-parse --local-env-vars)
+
 # ARGUMENTS ARE PARSED BEFORE THE LOCK, BUT JUDGED AFTER IT. Parsing is pure; an error found here is
 # only reported once the lock is held (so the invalidation record below is written by the holder),
 # except in --plan mode, which never takes the lock.

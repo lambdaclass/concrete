@@ -91,6 +91,24 @@ fn main() -> i32 { let a: [i32; 2] = [7, 8]; let mut i: i32 = 0; while i < 5 { i
 E
 accepted b078_loop 11 "break/return arms inside a loop"
 
+echo "=== bug 175: a match whose arms all diverge leaves no reachable merge ==="
+cat > "$TMPDIR/b175_break.con" <<'E'
+fn main() -> i32 { let mut n: i32 = 0; while n < 10 { n = n + 1; match n { 1 => { break; }, _ => { break; }, } } return n; }
+E
+accepted b175_break 1 "every arm breaks, inside a loop"
+cat > "$TMPDIR/b175_labelled.con" <<'E'
+fn main() -> i32 { let mut n: i32 = 0; 'outer: while true { while true { n = n + 1; match n { 1 => { break 'outer; }, _ => { break 'outer; }, } } } return n; }
+E
+accepted b175_labelled 1 "every arm breaks to an outer label"
+cat > "$TMPDIR/b175_mixed.con" <<'E'
+fn main() -> i32 { let a: [i32; 2] = [7, 8]; let mut m: i32 = 0; while true { m = m + 1; match m { 1 => { continue; }, 2 => { break; }, _ => { return 99; }, } } return a[0] + m; }
+E
+accepted b175_mixed 9 "continue/break/return arms, aggregate live across the loop"
+cat > "$TMPDIR/b175_return.con" <<'E'
+fn main() -> i32 { let a: [i32; 2] = [7, 8]; let c: i32 = 0; if c > 5 { match c { 6 => { return 1; }, _ => { return 2; }, } } return a[0]; }
+E
+accepted b175_return 7 "every arm returns inside a branch (the bug 078 shape)"
+
 echo "=== the same shapes without divergence stay refused ==="
 emit neg_plain 'fn main() -> i32 { let b: Bar = Bar { x: 1 }; if false { b.drop(); } b.drop(); return 0; }'
 rejected neg_plain "a then-branch that falls through"
