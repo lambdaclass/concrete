@@ -188,6 +188,16 @@ def validateLLVMIR (llPath : String) : IO Bool := do
     return false
   return true
 
+/-- The path of an intermediate artifact inside `dir`, a directory private to one compile (bug 179).
+    The file keeps the source's base name, so clang and llvm-as diagnostics still name the source.
+
+    STRUCTURAL RULE: an intermediate a compile writes and later reads (the `.ll` it validates and
+    links, the test binary it runs) lives in a fresh directory owned by that compile, never at a path
+    derived from the input or a clock. Two concurrent compiles of one source to different outputs
+    used to share `<input>.ll`: one removed or rewrote it while the other's clang read it. -/
+def privateIntermediate (dir : System.FilePath) (sourcePath : String) (suffix : String) : String :=
+  (dir / (((System.FilePath.mk sourcePath).fileName.getD "main.con") ++ suffix)).toString
+
 
 /-- Best-effort resident-set size in KB. Reads `/proc/self/statm` (Linux); returns
     `none` on any platform without it (e.g. macOS) — the telemetry field is
@@ -341,28 +351,28 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
       IO.eprintln "error[link]: no `main` function found; an executable needs an entry point — define `fn main() -> Int` in the root module"
       return 1
     let llvmIR := Pipeline.emit ssa
-    let llPath := inputPath ++ ".ll"
-    writeFile llPath llvmIR
     if emitLLVM then
+      -- `--emit-llvm` keeps its historical `<input>.ll` side file (docs/platform/ROCKSDB_SLICE1.md
+      -- calls it a wart; check_examples.sh cleans it up). No compile reads it back.
+      writeFile (inputPath ++ ".ll") llvmIR
       IO.println llvmIR
       return 0
-    -- Validate LLVM IR (if llvm-as available)
-    let llValid ← validateLLVMIR llPath
-    if !llValid then
-      IO.FS.removeFile ⟨llPath⟩
-      return 1
-    -- Compile with clang, linking the enclosing package's declared native libraries ([native], G1).
-    let some native ← fileModeNativeLinkFlags inputPath
-      | IO.FS.removeFile ⟨llPath⟩; return 1
-    let args ← clangArgs llPath outputPath native
-    let exitCode ← runCmd "clang" args
-    if exitCode != 0 then
-      IO.eprintln "clang compilation failed"
-      return exitCode
-    -- Clean up .ll file
-    IO.FS.removeFile ⟨llPath⟩
-    IO.println s!"Compiled {inputPath} -> {outputPath}"
-    return 0
+    -- The `.ll` is private to this compile and removed on every path (bug 179).
+    IO.FS.withTempDir fun dir => do
+      let llPath := privateIntermediate dir inputPath ".ll"
+      writeFile llPath llvmIR
+      -- Validate LLVM IR (if llvm-as available)
+      if !(← validateLLVMIR llPath) then return 1
+      -- Compile with clang, linking the enclosing package's declared native libraries ([native], G1).
+      let some native ← fileModeNativeLinkFlags inputPath
+        | return 1
+      let args ← clangArgs llPath outputPath native
+      let exitCode ← runCmd "clang" args
+      if exitCode != 0 then
+        IO.eprintln "clang compilation failed"
+        return exitCode
+      IO.println s!"Compiled {inputPath} -> {outputPath}"
+      return 0
 
 /-- Interpret a program via the source-level interpreter (no codegen). -/
 def interpProgram (inputPath : String) : IO UInt32 := do
@@ -417,8 +427,10 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
     return 1
   | .ok ssa =>
     let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-    let llPath := inputPath ++ ".test.ll"
-    let outPath := inputPath ++ ".test"
+    -- Private to this run (bug 179); kept for debugging when a step fails, removed on success.
+    let dir ← IO.FS.createTempDir
+    let llPath := privateIntermediate dir inputPath ".test.ll"
+    let outPath := privateIntermediate dir inputPath ".test"
     writeFile llPath llvmIR
     -- Validate LLVM IR (if llvm-as available)
     let llValid ← validateLLVMIR llPath
@@ -447,8 +459,7 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
       IO.eprintln s!"LLVM IR at: {llPath}"
       IO.eprintln s!"Binary at: {outPath}"
     else
-      IO.FS.removeFile ⟨llPath⟩
-      IO.FS.removeFile ⟨outPath⟩
+      IO.FS.removeDirAll dir
     return exitCode
 
 /-- Emit Core or SSA IR for inspection. Runs full pipeline including new passes. -/
@@ -3542,42 +3553,42 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
       return 1
     | .ok ssa =>
       let llvmIR := Pipeline.emit ssa
-      let llPath := mainPath ++ ".ll"
-      writeFile llPath llvmIR
       if emitLLVM then
+        -- Historical `<main>.ll` side file, as in file mode; no compile reads it back.
+        writeFile (mainPath ++ ".ll") llvmIR
         IO.println llvmIR
         return 0
-      -- Validate LLVM IR (if llvm-as available)
-      let llValid ← validateLLVMIR llPath
-      if !llValid then
-        IO.FS.removeFile ⟨llPath⟩
-        return 1
-      -- Determine output path
-      let outPath := match outputPath with
-        | some p => p
-        | none =>
-          -- Extract package name from Concrete.toml
-          let nameLines := tomlContent.splitOn "\n" |>.filter (·.trimAscii.toString.startsWith "name")
-          match nameLines with
-          | l :: _ =>
-            match l.splitOn "\"" with
-            | _ :: n :: _ => n
+      -- The `.ll` is private to this build and removed on every path (bug 179).
+      IO.FS.withTempDir fun dir => do
+        let llPath := privateIntermediate dir mainPath ".ll"
+        writeFile llPath llvmIR
+        -- Validate LLVM IR (if llvm-as available)
+        if !(← validateLLVMIR llPath) then return 1
+        -- Determine output path
+        let outPath := match outputPath with
+          | some p => p
+          | none =>
+            -- Extract package name from Concrete.toml
+            let nameLines := tomlContent.splitOn "\n" |>.filter (·.trimAscii.toString.startsWith "name")
+            match nameLines with
+            | l :: _ =>
+              match l.splitOn "\"" with
+              | _ :: n :: _ => n
+              | _ => "a.out"
             | _ => "a.out"
-          | _ => "a.out"
-      let some native ← nativeLinkFlags ctx
-        | IO.FS.removeFile ⟨llPath⟩; return 1
-      let args ← clangArgs llPath outPath native
-      let exitCode ← runCmd "clang" args
-      if exitCode != 0 then
-        IO.eprintln "clang compilation failed"
-        nativeLinkFailureNote ctx
-        return exitCode
-      IO.FS.removeFile ⟨llPath⟩
-      if !quiet then
-        IO.println s!"Built {outPath}"
-        -- Print proof summary line (user package only)
-        IO.println (Report.proofSummaryLine (pc.scopeToUser depNames))
-      return 0
+        let some native ← nativeLinkFlags ctx
+          | return 1
+        let args ← clangArgs llPath outPath native
+        let exitCode ← runCmd "clang" args
+        if exitCode != 0 then
+          IO.eprintln "clang compilation failed"
+          nativeLinkFailureNote ctx
+          return exitCode
+        if !quiet then
+          IO.println s!"Built {outPath}"
+          -- Print proof summary line (user package only)
+          IO.println (Report.proofSummaryLine (pc.scopeToUser depNames))
+        return 0
 
 /-- Run tests for a project from Concrete.toml. Like compileBuild but in test mode. -/
 partial def compileTestBuild (projectRoot : String) (moduleFilter : Option String := none) : IO UInt32 := do
@@ -3610,8 +3621,10 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       return 1
     | .ok ssa =>
       let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-      let llPath := mainPath ++ ".test.ll"
-      let outPath := "/tmp/concrete_test_" ++ toString (← IO.monoMsNow)
+      -- Private to this run (bug 179); kept for debugging when a step fails, removed on success.
+      let dir ← IO.FS.createTempDir
+      let llPath := privateIntermediate dir mainPath ".test.ll"
+      let outPath := privateIntermediate dir mainPath ".test"
       writeFile llPath llvmIR
       -- Validate LLVM IR (if llvm-as available)
       let llValid ← validateLLVMIR llPath
@@ -3640,8 +3653,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
         IO.eprintln s!"LLVM IR at: {llPath}"
         IO.eprintln s!"Binary at: {outPath}"
       else
-        IO.FS.removeFile ⟨llPath⟩
-        try IO.FS.removeFile ⟨outPath⟩ catch _ => pure ()
+        try IO.FS.removeDirAll dir catch _ => pure ()
       return testExit
 
 /-- `concrete prove --help=agent`: the agent entrypoint. Prints the
@@ -3817,26 +3829,24 @@ def main (args : List String) : IO UInt32 := do
   -- concrete run [-- args...]
   if args.head? == some "run" then
     return ← withProjectRoot fun root => do
-      -- Build to a temporary path
-      let tmpBin := "/tmp/concrete_run_" ++ toString (← IO.monoMsNow)
-      let buildResult ← compileBuild root (some tmpBin) (emitLLVM := false) (quiet := true)
-      if buildResult != 0 then return buildResult
-      -- Extract user args after "--"
-      let userArgs := match args.dropWhile (· != "--") with
-        | _ :: rest => rest
-        | [] => []
-      -- Run the built binary
-      let child ← IO.Process.spawn {
-        cmd := tmpBin
-        args := userArgs.toArray
-        stdin := .inherit
-        stdout := .inherit
-        stderr := .inherit
-      }
-      let exitCode ← child.wait
-      -- Clean up temp binary
-      try IO.FS.removeFile ⟨tmpBin⟩ catch _ => pure ()
-      return exitCode
+      -- Build into a directory private to this run (bug 179: not a clock-derived shared path).
+      IO.FS.withTempDir fun dir => do
+        let tmpBin := (dir / "concrete_run").toString
+        let buildResult ← compileBuild root (some tmpBin) (emitLLVM := false) (quiet := true)
+        if buildResult != 0 then return buildResult
+        -- Extract user args after "--"
+        let userArgs := match args.dropWhile (· != "--") with
+          | _ :: rest => rest
+          | [] => []
+        -- Run the built binary
+        let child ← IO.Process.spawn {
+          cmd := tmpBin
+          args := userArgs.toArray
+          stdin := .inherit
+          stdout := .inherit
+          stderr := .inherit
+        }
+        child.wait
   -- concrete test [--module <name>]
   if args.head? == some "test" then
     return ← withProjectRoot fun root => do

@@ -84,19 +84,19 @@ def evalPredicate (pred : Predicate) (source : String)
     -- whitespace so simple wrappers like
     --   "scripts/reduce/expect-error-code.sh E0708"
     -- work without escaping.
-    let stamp ← IO.monoMsNow
-    let tmpPath := s!"/tmp/concrete-reduce-{stamp}.con"
-    IO.FS.writeFile ⟨tmpPath⟩ source
-    let parts := cmd.splitOn " " |>.filter (fun p => !p.isEmpty)
-    let exitCode ← (do
-      match parts with
-      | [] => return 1
-      | exe :: args =>
-        let allArgs := (args ++ [tmpPath]).toArray
-        let result ← IO.Process.output { cmd := exe, args := allArgs }
-        return result.exitCode)
-    try IO.FS.removeFile ⟨tmpPath⟩ catch _ => pure ()
-    return exitCode == 0
+    -- A directory private to this candidate, not a clock-derived shared path (bug 179).
+    IO.FS.withTempDir fun dir => do
+      let tmpPath := (dir / "concrete-reduce.con").toString
+      IO.FS.writeFile ⟨tmpPath⟩ source
+      let parts := cmd.splitOn " " |>.filter (fun p => !p.isEmpty)
+      let exitCode ← (do
+        match parts with
+        | [] => return 1
+        | exe :: args =>
+          let allArgs := (args ++ [tmpPath]).toArray
+          let result ← IO.Process.output { cmd := exe, args := allArgs }
+          return result.exitCode)
+      return exitCode == 0
   | _ =>
     -- All other predicates need at least parsing to succeed
     match Pipeline.parse source with

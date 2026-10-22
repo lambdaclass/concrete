@@ -1594,6 +1594,40 @@ for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_bas
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 179 (FIXED): the compiler's intermediate LLVM file was `<input>.ll`, shared by every
+# compile of one source, so concurrent compiles to different outputs removed or rewrote it under
+# each other's llvm-as / clang (found when the loop above raced the run_ok worker on bug 102's
+# fixture). Each compile now owns a private temp directory. Eight concurrent compiles of one
+# source to distinct outputs, five rounds: every compile must succeed and every binary exit 42.
+run_ok  "$TESTDIR/regress_179_concurrent_compile.con" 42
+r179_src="$TESTDIR/regress_179_concurrent_compile.con"
+r179_dir="$TMPDIR/r179"
+mkdir -p "$r179_dir"
+r179_bad=""
+for r179_round in 1 2 3 4 5; do
+    r179_pids=()
+    for r179_i in 1 2 3 4 5 6 7 8; do
+        ( $COMPILER "$r179_src" -o "$r179_dir/bin_$r179_i" > "$r179_dir/log_$r179_i" 2>&1 ) &
+        r179_pids+=("$!")
+    done
+    for r179_i in 1 2 3 4 5 6 7 8; do
+        if ! wait "${r179_pids[$((r179_i - 1))]}"; then
+            r179_bad="$r179_bad round $r179_round compile $r179_i failed: $(awk 'NR<=2' "$r179_dir/log_$r179_i" | tr '\n' ' ');"
+            continue
+        fi
+        r179_rc=0
+        "$r179_dir/bin_$r179_i" >/dev/null 2>&1 || r179_rc=$?
+        [ "$r179_rc" = 42 ] || r179_bad="$r179_bad round $r179_round binary $r179_i exited $r179_rc;"
+    done
+    rm -f "$r179_dir"/bin_* "$r179_dir"/log_*
+done
+if [ -z "$r179_bad" ]; then
+    echo "  ok  regress_179_concurrent_compile: 40 concurrent compiles (8 x 5), every binary exits 42"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_179_concurrent_compile:$r179_bad"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
