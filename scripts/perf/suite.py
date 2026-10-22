@@ -419,7 +419,17 @@ class Run:
         if not self.want("run_tests"):
             return
         log("run_tests.sh")
-        w, rss, rc, ins = timed(["bash", "-c", self.suite["run_tests"]], self.repo, timeout=3 * 3600)
+        # The summary is read only if THIS run wrote it: remove any earlier one first, and pin its
+        # location so a TEST_SUMMARY_FILE inherited from the environment cannot redirect it.
+        summary = os.path.join(self.repo, ".test-summary")
+        try:
+            os.unlink(summary)
+        except OSError:
+            pass
+        env = dict(os.environ)
+        env["TEST_SUMMARY_FILE"] = summary
+        t_start = time.time()
+        w, rss, rc, ins = timed(["bash", "-c", self.suite["run_tests"]], self.repo, env=env, timeout=3 * 3600)
         # A red or timed-out suite is not a measurement: an early failure would read as a
         # speed-up and the fix as a slowdown. The run is marked partial instead. The one exception
         # is a run that COMPLETED (its .test-summary says completed=1) with a few failing tests:
@@ -427,9 +437,10 @@ class Run:
         done = None
         if rc not in (0, 124):
             try:
-                summ = open(os.path.join(self.repo, ".test-summary")).read()
-                m = re.search(r"completed=1\b.*?failed=(\d+)", summ, re.S)
-                done = int(m.group(1)) if m else None
+                if os.path.getmtime(summary) >= t_start:
+                    summ = open(summary).read()
+                    m = re.search(r"completed=1\b.*?failed=(\d+)", summ, re.S)
+                    done = int(m.group(1)) if m else None
             except OSError:
                 done = None
         if rc == 0 or done is not None:
@@ -547,11 +558,11 @@ def select_top(timings, top_n):
     return timings, top
 
 
-def write_gates(path, sha, machine, timings, top):
+def write_gates(path, sha, machine, timings, top, ctr=None):
     out = {"comment": "The most expensive passing CI gates (by instructions:u), measured once on the "
                       "perf machine by `suite.py discover-gates`. Editing this list is a suite change: "
                       "bump suite_version in suite.json.",
-           "discovered_on": sha, "machine": machine, "counter": counter(), "gates": top, "all": timings}
+           "discovered_on": sha, "machine": machine, "counter": ctr or counter(), "gates": top, "all": timings}
     with open(path, "w") as f:
         json.dump(out, f, indent=1)
         f.write("\n")
@@ -588,9 +599,20 @@ def cmd_merge_gates(a):
     if len(shas) != 1:
         log("shards were discovered on different commits: %s" % sorted(shas))
         return 2
+    ctrs = {p.get("counter") for p in parts}
+    machines = {p.get("machine") for p in parts}
+    if len(ctrs) != 1 or len(machines) != 1:
+        log("shards disagree on counter %s or machine %s" % (sorted(map(str, ctrs)), sorted(map(str, machines))))
+        return 2
     timings = [t for p in parts for t in p["all"]]
+    cmds = [t["cmd"] for t in timings]
+    dups = sorted({c for c in cmds if cmds.count(c) > 1})
+    if dups:
+        log("a gate appears in more than one shard (same shard passed twice?): %s" % dups[:3])
+        return 2
     timings, top = select_top(timings, a.top)
-    write_gates(a.out, shas.pop(), parts[0]["machine"], timings, top)
+    # Provenance comes from the shards, not from the host that merges them.
+    write_gates(a.out, shas.pop(), machines.pop(), timings, top, ctr=ctrs.pop())
     return 0
 
 

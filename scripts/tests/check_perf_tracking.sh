@@ -409,6 +409,26 @@ if suite.counter() == "instructions:u":
     child = suite.timed(["bash", "-c", "%s -c 'sum(range(3000000))'" % sys.executable], "/")[3]
     assert child and child > 0.9 * min(a), ("child instructions not counted", child, a)
 PY
+python3 -I - "$PERF" "$TMP" <<'PY' && ok "merge-gates: keeps the shards' counter, refuses a duplicated shard and mixed counters" || no "merge-gates"
+import json, os, subprocess, sys
+P, T = sys.argv[1], sys.argv[2]
+def shard(name, cmds, ctr="instructions:u"):
+    path = os.path.join(T, name)
+    json.dump({"discovered_on": "a" * 40, "machine": "m1", "counter": ctr, "gates": [],
+               "all": [{"cmd": "bash scripts/tests/%s.sh" % c, "wall_s": 1.0, "instr": i, "rc": 0} for c, i in cmds]},
+              open(path, "w"))
+    return path
+a = shard("s0.json", [("check_a", 9e9), ("check_b", 1e9)])
+b = shard("s1.json", [("check_c", 5e9)])
+w = shard("s2.json", [("check_d", 7e9)], ctr="wall")
+env = dict(os.environ, PERF_COUNTER="wall")   # the merging host cannot count: provenance must not change
+run = lambda *f: subprocess.run([sys.executable, P + "/suite.py", "merge-gates", "--top", "2", "--out", os.path.join(T, "m.json")] + list(f),
+                                capture_output=True, env=env).returncode
+assert run(a, b) == 0
+m = json.load(open(os.path.join(T, "m.json")))
+assert m["counter"] == "instructions:u" and [g["id"] for g in m["gates"]] == ["check_a", "check_c"], m
+assert run(a, a) == 2 and run(a, w) == 2
+PY
 python3 -I - "$PERF" "$TMP" <<'PY' && ok "timed(): a timeout kills the benchmark's whole process tree" || no "timed() timeout left a descendant running"
 import os, sys, time
 sys.path.insert(0, sys.argv[1])
