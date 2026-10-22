@@ -749,8 +749,8 @@ cmd_bisect() {
   local culprit="${list[0]}"
   verdict="$(subset_red "$name-bc" "$test" "$culprit")"
   if [ "$verdict" = paused ]; then
-    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before the culprit probe"
-    die "bisect: paused by $LAND_PAUSE_FILE before probing ${culprit%@*} alone; no culprit attributed"
+    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) during the culprit probe"
+    die "bisect: paused by $LAND_PAUSE_FILE while probing ${culprit%@*} alone; no culprit attributed"
   fi
   if bisect_paused; then
     log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before attribution"

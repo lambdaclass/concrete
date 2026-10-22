@@ -160,6 +160,8 @@ has " $names" " wip/a " && ok "a head with clean review and passing gates is rea
 for b in wip/nogates wip/findings wip/gatefail wip/stale wip/land-x other/x; do
   has " $names" " $b " && no "$b listed as ready" || ok "$b is not ready"
 done
+# The wip/land-x fixture has served; every wip/land-* ref after this point is the remote leg's.
+git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-x
 
 echo "=== ordering ==="
 [ "$names" = "wip/explicit wip/late wip/rule wip/a wip/checkonly " ] && ok "explicit orders (5, then 0800 read as decimal 800) before the rule change, then the rest by size" \
@@ -298,7 +300,7 @@ touch "$TMP/gh/pause-in-culprit-probe"   # the hook pulls the switch while check
 out="$(bot tick)"; rc=$?
 rm -f "$TMP/gh/pause-in-culprit-probe"
 blog="$(cat "$LAND_STATE_DIR"/bot/bisect-*.log 2>/dev/null)"
-has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$blog" "train: culprit:" && has "$blog" "before attribution" \
+has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$blog" "train: culprit:" && has "$blog" "while probing refs/bot/wip/qb alone" \
   && ok "a pause raised DURING the red culprit probe attributes nothing" || { no "pause in culprit probe"; echo "$out" | sed 's/^/      /'; echo "$blog" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE" "$LAND_STATE_DIR"/bot/bisect-*.log
 out="$(bot tick)"
