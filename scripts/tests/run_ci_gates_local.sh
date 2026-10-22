@@ -439,6 +439,14 @@ JOBS_DEFAULT=$(( CORES - 2 ))
 if command -v heavy_jobs_default >/dev/null 2>&1 && [ "$(heavy_slots_n)" -gt 1 ]; then
   JOBS_DEFAULT="$(heavy_jobs_default)"
 fi
+# A HOST DEFAULT (R-0547). concrete-remote sets CONCRETE_GATE_JOBS_DEFAULT on the CI server, where the
+# measured best width (docs/project/GATE_PROFILE.md) is far above the laptop rule. It is a DEFAULT,
+# not an explicit JOBS: an explicit JOBS still wins, and closure mode still forces JOBS=1 without
+# refusing, because the operator did not ask for this width.
+case "${CONCRETE_GATE_JOBS_DEFAULT:-}" in
+  ""|*[!0-9]*|0) ;;
+  *) JOBS_DEFAULT="$CONCRETE_GATE_JOBS_DEFAULT" ;;
+esac
 JOBS="${JOBS:-$JOBS_DEFAULT}"
 
 # ---------------------------------------------------------------------------
