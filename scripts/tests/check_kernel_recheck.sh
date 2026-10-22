@@ -191,7 +191,7 @@ if grep -q '^def _concreteIsNativeAxiom' <<<"$CLS"; then
   { printf 'import Lean\nimport Std.Tactic.BVDecide\n'; printf '%s\n' "$CLS"; cat <<'LEAN'
 theorem _t_nd : 2 + 2 = 4 := by native_decide
 theorem _t_dn : 3 * 3 = 9 := by decide +native
-theorem _t_bv (x : BitVec 8) : x &&& x = x := by bv_decide
+theorem _t_bv (x : BitVec 8) : (x &&& 0x0F) + (x &&& 0xF0) = x := by bv_decide
 theorem _t_std (p : Prop) : p ∨ ¬p := Classical.em p
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
@@ -199,7 +199,8 @@ open Lean Elab Command in
   IO.println s!"VERSION {Lean.versionString}"
   for t in [`_t_nd, `_t_dn, `_t_bv, `_t_std] do
     let axs ← liftCoreM <| Lean.collectAxioms t
-    IO.println s!"CASE {t} native={(axs.filter _concreteIsNativeAxiom).size} total={axs.size}"
+    let nat := axs.filter _concreteIsNativeAxiom
+    IO.println s!"CASE {t} native={nat.size} total={axs.size} {" ".intercalate (nat.toList.map toString)}"
   for (n, ci) in env.constants.toList do
     if let .axiomInfo _ := ci then
       unless n.toString.startsWith "_t_" do
@@ -218,10 +219,13 @@ LEAN
     local label=$1 want=$2; shift 2
     local out; out="$("$@" "$TMP/classifier_test.lean" 2>&1 || true)"
     local cases_ok=1 c
-    for c in _t_nd _t_dn _t_bv; do
-      grep -qE "^CASE $c native=[1-9][0-9]* " <<<"$out" || cases_ok=0
+    # Each proof's native axiom is the one nativeEqTrue mints for ITS tactic (the measured spelling on
+    # both toolchains), and is the only native axiom it rests on. A bv_decide goal its preprocessing
+    # closes mints none (x &&& x = x does), so this one reaches the SAT solver.
+    for c in _t_nd:native_decide _t_dn:decide _t_bv:bv_decide; do
+      grep -qE "^CASE ${c%%:*} native=1 total=[1-9][0-9]* ${c%%:*}\._native\.${c#*:}\.ax_[0-9_]+$" <<<"$out" || cases_ok=0
     done
-    grep -qE '^CASE _t_std native=0 total=[1-9]' <<<"$out" || cases_ok=0
+    grep -qE '^CASE _t_std native=0 total=3 ?$' <<<"$out" || cases_ok=0
     local native other legacy
     native="$(sed -n 's/^AXIOM \(.*\) native$/\1/p' <<<"$out" | sort)"
     other="$(sed -n 's/^AXIOM \(.*\) other$/\1/p' <<<"$out" | sort)"
@@ -236,7 +240,7 @@ LEAN
        && [ "$native" = "$declared" ] && [ "$legacy_ok" = 1 ]; then
       ok "$label ($(sed -n 's/^VERSION //p' <<<"$out")): native_decide, decide +native and bv_decide proofs read native, a classical one does not; the toolchain's axioms are exactly the classified set (native: $(echo ${native:-none}))"
     else
-      no "$label: classification moved — cases_ok=$cases_ok stray=[${stray}] native=[$(echo $native)] legacy=[$(echo $legacy)] want_legacy=$want: $(grep -vE '^(AXIOM|LEGACY|CASE|VERSION)' <<<"$out" | head -3 | tr '\n' ' ')"
+      no "$label: classification moved — cases=[$(grep '^CASE' <<<"$out" | tr '\n' ';')] cases_ok=$cases_ok stray=[${stray}] native=[$(echo $native)] legacy=[$(echo $legacy)] want_legacy=$want: $(grep -vE '^(AXIOM|LEGACY|CASE|VERSION)' <<<"$out" | head -3 | tr '\n' ' ')"
     fi
   }
   classify_on "Lean $(sed 's/^leanprover\/lean4://' lean-toolchain)" true lake env lean
