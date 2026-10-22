@@ -18,6 +18,7 @@
 #   K9  CONCRETE_COMPILE_CACHE=refresh recomputes
 #   K10 an entry is published whole: no temporary is left behind
 #   K11 an input edited and reverted while the compiler runs: the result is returned, not stored
+#   K12 a lake/lean launcher outside /nix/store (elan) is not cached: it cannot name its toolchain
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -58,6 +59,21 @@ chmod +x "$COMP"
 export CONCRETE_STD="$SB/std"
 export CONCRETE_COMPILE_CACHE_DIR="$TMP/cache"
 unset CONCRETE_COMPILE_CACHE CCACHE_REPORTS
+# The cache refuses lake/lean launchers outside /nix/store (an elan launcher's bytes do not name the
+# toolchain it selects), so on an elan host (CI) every probe would bypass. Probe with elan's launcher
+# directory off PATH; K12 checks the refusal itself with a deliberate unpinned launcher.
+_cc_pinned_path=""
+IFS=: read -ra _cc_dirs <<< "$PATH"
+for _d in "${_cc_dirs[@]}"; do
+  case "$_d" in */.elan/bin) continue ;; esac
+  _cc_pinned_path="${_cc_pinned_path:+$_cc_pinned_path:}$_d"
+done
+export PATH="$_cc_pinned_path"
+for _t in lake lean; do
+  _p="$(command -v "$_t" 2>/dev/null || true)"; [ -n "$_p" ] || continue
+  _p="$(realpath "$_p" 2>/dev/null || echo "$_p")"
+  case "$_p" in /nix/store/*) ;; *) echo "FATAL: $_t resolves to $_p, outside /nix/store and not an elan launcher dir; the cache would bypass every probe" >&2; exit 2 ;; esac
+done
 printf '[package]\nname = "probe"\n' > "$SB/proj/Concrete.toml"
 cat > "$SB/proj/src/main.con" <<'EOF'
 fn add(a: i32, b: i32) -> i32 {
@@ -139,6 +155,14 @@ bypass "a project with [dependencies]" "$F" --report audit
 printf '[package]\nname = "probe"\n' > "$SB/proj/Concrete.toml"
 mkdir -p "$TMP/outside"; cp "$F" "$TMP/outside/x.con"
 bypass "an input outside the binary's repository" "$TMP/outside/x.con" --report audit
+
+echo "=== K12: an unpinned lake/lean launcher on PATH is not cached ==="
+mkdir -p "$TMP/unpinned"; printf '#!/bin/sh\nexit 0\n' > "$TMP/unpinned/lake"; chmod +x "$TMP/unpinned/lake"
+_cc_saved_path="$PATH"; export PATH="$TMP/unpinned:$PATH"
+run_c "$F" --report audit
+[ "$CCACHE_LAST" = "bypass:toolchain-not-pinned(lake)" ] && ok "a lake launcher outside /nix/store bypasses the cache" \
+  || no "unpinned lake launcher: $CCACHE_LAST"
+export PATH="$_cc_saved_path"
 same_out_bypass() { run_c "$F" --report caps; run_f "$F" --report caps; same; }
 same_out_bypass && ok "a bypassed call still returns exactly what the compiler returns" || no "a bypassed call altered the output"
 
