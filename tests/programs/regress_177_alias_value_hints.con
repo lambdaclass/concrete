@@ -2,7 +2,8 @@
 // Elab sites that hinted a value with an UNEXPANDED alias. With `type B = u8;` a literal written
 // for a `B` field, payload, field store, return value or constant defaulted to Int while Core's
 // type is the expanded u8, and the program was refused (E0510/E0560). Every site below is such a
-// literal; compiled and --interp both exit 42.
+// literal; the binary exits 42.
+// (--interp cannot run it: module-level constants are open bug 117.)
 mod m {
     type B = u8;
     const K: B = 2;
