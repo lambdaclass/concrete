@@ -396,7 +396,16 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
     A `&mut T` value fits a `&T` binder, and `*mut T`/`*const T` pair as in
     `typesCompatible`. A fn value fits a fn binder only when the binder's capability set
     covers the value's: a call through the binding is checked against the binder's type, so
-    a narrower binder would erase the requirement. -/
+    a narrower binder would erase the requirement. That comparison is made only between sets
+    of built-in capability names; a set with a capability parameter or variable is deferred. -/
+/-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
+    built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
+    `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
+    and the set is decided per instance after Mono, not here. -/
+private def capsDecidable (cs : CapSet) : Bool :=
+  let (names, vars) := cs.normalize
+  vars.isEmpty && names.all validCaps.contains
+
 partial def bindTyAgrees (declared got : Ty) : Bool :=
   if declared == got then true else
   match declared, got with
@@ -416,8 +425,9 @@ partial def bindTyAgrees (declared got : Ty) : Bool :=
   | .fn_ ps dc r, .fn_ qs vc s =>
     -- The binder's capability set must cover the value's: an indirect call is checked
     -- against the binder's recorded type, so a narrower binder would erase a requirement.
+    -- Compared only when both sets are decidable here (`capsDecidable`).
     ps.length == qs.length && (ps.zip qs).all (fun (p, q) => bindTyAgrees p q) && bindTyAgrees r s
-      && capsContain dc vc
+      && (!(capsDecidable dc && capsDecidable vc) || capsContain dc vc)
   | _, _ => false
 
 /-- The declared field list of a struct, nominal types where the producer recorded them. -/
@@ -701,8 +711,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
           addCCError .matchNonEnumNoDefault
     for arm in arms do
       ccCheckMatchArm arm
-    -- A value `match` binds each arm's value to its own type, like a `let`.
-    if ty != .unit then
+    -- A value `match` binds each arm's value to its own type, like a `let` (not when typed
+    -- `never` or `()`, as for `if`).
+    if ty != .unit && ty != .never then
       for arm in arms do
         let body := match arm with
           | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => b
@@ -853,8 +864,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     inCoreBlock (for s in else_ do ccCheckStmt s)
-    -- A value `if` binds each branch's value to its own type, like a `let`.
-    if ty != .unit then
+    -- A value `if` binds each branch's value to its own type, like a `let`. An `if` typed
+    -- `never` (Elab takes an unhinted `if`'s type from its first branch, which may diverge)
+    -- or `()` is not compared.
+    if ty != .unit && ty != .never then
       if let some v := blockValue then_ then checkBinding "the value of an if branch" ty v
       if let some v := blockValue else_ then checkBinding "the value of an else branch" ty v
 

@@ -104,11 +104,12 @@ types. Secondary class 12, one fact kept in two places: the typing rule lives in
 held a weaker copy (`typesCompatible`) that had diverged from it.
 
 A second enumeration of binder positions exists: Elab's bug 096 walk (`tyAgreeStmts`,
-`checkCoreTypeAgreement`) lists call arguments, results, literal fields, field reads, `let`
-initializers and returns, and compares only the respelled type names in them, and only when a
+`checkCoreTypeAgreement`) lists call arguments, results, literal fields, field reads, field
+stores, `let` initializers and returns, and compares only the respelled type names in them, and only when a
 program has same-named types. `bindTyAgrees` and that walk are two producers of "the positions where
-Core asserts a type", with different coverage (the 096 walk has no assignments, stores, value
-branches or array elements; CoreCheck has no field reads or call results). Merging them into one
+Core asserts a type", with different coverage (the 096 walk has no variable assignments, stores
+through references, array element stores, value branches or array literal elements; CoreCheck
+has no field reads or call results). Merging them into one
 position enumerator with two relations is the follow-up, under the same owner.
 
 ## Structural owner
@@ -116,9 +117,18 @@ position enumerator with two relations is the follow-up, under the same owner.
 R-0499 (verified-pipeline S8, queue row 4): one authoritative checker over Core implements the
 typing and ownership rules, so binder agreement is a rule of that checker rather than a re-check
 that may or may not mirror Check. Until it lands, `bindTyAgrees` is the one binder-agreement
-relation in CoreCheck, and its deferrals (`.named`, unequal `.generic` heads, `.typeVar`) are the
-remaining gap: a confusion between two nominal types, or inside a generic body, is still Check's
-alone to catch before Mono. R-0492's `LocalId` (class 2, bug 176's owner) removes the trigger.
+relation in CoreCheck, and its deferrals are the remaining gap, each still Check's alone to catch
+before Mono:
+
+- `.named`, unequal `.generic` heads and `.typeVar`: a confusion between two nominal types, or
+  inside a generic body;
+- fn-type capability sets that mention a capability parameter or variable. A `<cap C>`
+  parameter reaches Core inside a fn type spelled as the concrete name `C` (Codex round 2), so
+  CoreCheck compares only sets of built-in capability names (`capsDecidable`); the indirect-call
+  check uses the binder's set, so a cap-variable requirement held in a narrower binder is not
+  refused here;
+- a value `if`/`match` typed `never`: Elab types an unhinted `if` by its first branch, which may
+  diverge (`if c { abort() } else { 1 }` is `never`), so its branches are not compared. R-0492's `LocalId` (class 2, bug 176's owner) removes the trigger.
 
 ## Regression tests
 
@@ -127,7 +137,9 @@ alone to catch before Mono. R-0492's `LocalId` (class 2, bug 176's owner) remove
   assignment, a call argument, a struct field and a `return` of a `-> u8` function, and requires
   `coreCheckProgram` to refuse it with E0510 (E0560 for the return) naming the binder. Codex
   round 1 added a value-`if` branch, an array literal element and a `with(Console)` fn value in a
-  capability-free fn binder. It feeds
+  capability-free fn binder. Round 2's corpus run showed that comparing every fn-type capability
+  set refused `std.io`'s `Writer` and every cap-polymorphic callback (`with(C)` spelled as a
+  concrete name), hence `capsDecidable`. It feeds
   CoreCheck directly, so it stays meaningful after bug 176's fix makes Check refuse the source
   shape first. On the previous compiler all eight cases were accepted.
 - `check_corecheck_boundary.sh` class 7: bug 176's program must not compile. On main it compiled and
