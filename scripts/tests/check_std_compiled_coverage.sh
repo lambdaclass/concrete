@@ -149,8 +149,8 @@ mod main {
         match at { Option::Some { value } => { if value != 1 { b.drop(); return 1; } }, Option::None => { b.drop(); return 1; } }
         match b.slice(2, 3) {
             Option::None => { b.drop(); return 1; },
-            Option::Some { value } => {
-                match value.to_string() {
+            Option::Some { value: sl } => {
+                match sl.to_string() {
                     Option::None => { b.drop(); return 1; },
                     Option::Some { value } => {
                         let want: String = "i";
