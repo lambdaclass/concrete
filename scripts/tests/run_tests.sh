@@ -1751,7 +1751,7 @@ run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
 run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
 # Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
-# fix on the lowering-bugs branch, E0291).
+# fix, E0291).
 run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
 # Bug 146: `*h` frees the cell it moves the value out of.
 run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0

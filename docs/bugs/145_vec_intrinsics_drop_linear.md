@@ -1,7 +1,7 @@
 # Bug 145 — `vec_set` and `vec_free` lost non-Copy elements without destroying them
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`, containment of `vec_free`; the `vec_set` half is
-bug 115's fix on branch `lowering-bugs`, `29f91b7b`)
+bug 115's fix, on main since `9757540e`)
 **Found:** 2026-10-22, by the Codex review of rule (c) on `safety-eval2` (the branch's claim that no
 safe store into, or drop of, an initialized non-Copy place exists without consuming it).
 **Severity:** skipped destruction in safe code: a non-Copy element overwritten in place, or left in
@@ -33,11 +33,8 @@ Fixed: `repro_free.con` is refused at the checker, natively and under `--interp`
 error[check]: (E0287) vec_free would drop the non-Copy elements of type 'String' still in the vector without destroying them
 ```
 
-`repro_set.con` is refused (E0291) by bug 115's fix on `lowering-bugs` (`29f91b7b`), which makes
-`vec_set` and `vec_get` Copy-only; this branch does not duplicate that check and picks it up when
-`lowering-bugs` lands. Until then, `check_example_outputs.sh`'s open-bug row for bug 115 fails on this branch: its
-reproducer ends with `vec_free::<String>(v)`, which this fix refuses, and `lowering-bugs` removes that
-row when it fixes 115. This branch is to be rebased onto `lowering-bugs` before it lands.
+`repro_set.con` is refused (E0291) by bug 115's fix (landed with `lowering-bugs`, main `9757540e`),
+which makes `vec_set` and `vec_get` Copy-only; this branch does not duplicate that check.
 
 ## Cause
 
@@ -52,7 +49,7 @@ Containment at the intrinsic: `vec_free` of a `Vec<T>` with non-Copy `T` is E028
 (`vecFreeDropsElements`) outside trusted code. A trusted function may release a buffer it has
 emptied (it vouches for that, as for any trusted operation); the builtin `Vec` has no other way to
 release an emptied buffer in a single-file program without std. Fixture `error_145_vec_free_linear.con` (`run_tests.sh`). The `vec_set`
-half: bug 115's fix (E0291, `lowering-bugs`). Migration: 2 test files (`test_alloca_loop_stress.con`,
+half: bug 115's fix (E0291, on main). Migration: 2 test files (`test_alloca_loop_stress.con`,
 `test_string_literal_in_loop.con` empty a `Vec<String>` and then release it through a trusted
 `free_emptied` helper).
 
