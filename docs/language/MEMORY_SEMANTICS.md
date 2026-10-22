@@ -1141,10 +1141,11 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   and region names), so E0301 reports before E0292 and E0238, which stay as defense in depth. Every collision of a function is reported, each with the earlier binding as the related span.
   The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
   Code `checkFn` never visits is covered too. Constant initializers get the same walk
-  (`constInitDiagnostics`) and, since Check does not type them, a conservative syntactic REF-6 test
-  (`constRef6Expr`): a `let` declared with a reference type or whose initializer contains a borrow
-  anywhere, and any borrow block, are E0302, and an assignment whose value contains a borrow is
-  E0303 (a constant may not borrow at all: E0602 at its use). Contract expressions (`requires`,
+  (`constInitDiagnostics`) and, since Check does not type them, one REF-6 test: a constant is a
+  value and may not borrow at all (E0602 at a use), so any borrow, borrow block or cast to a
+  reference type in its initializer is E0302 (`constBorrows`). With no borrow there is no source for
+  a reference in a constant: it has no parameters, no function returns one (REF-1) and none is
+  stored (REF-3). Contract expressions (`requires`,
   `ensures`, loop invariants and variants, in functions, inherent and trait-impl methods) are
   binder- and statement-free propositions, like spec bodies: a binder of any kind (a pattern
   binder included) or any statement other than a block's trailing value in one is E0305
@@ -1339,7 +1340,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 175 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 176 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
@@ -1385,7 +1386,7 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-6 | `error_2i_ref6_let_shared_ref.con` (new; `let r: &P = &w.p;`), `error_2i_ref6_let_inferred_alias.con` (new; `let s = r;` with `r` a parameter), `error_2i_ref6_let_mut_ref.con` (new; `let r: &mut Int = &mut x;`), `error_2i_ref6_let_ref_to_ref.con` (new; `let rr: & &Int = &r;`), `error_2i_ref6_generic_let_at_ref.con` (new; `let y: T = x;` in a generic called at `T := &Int`) | reject E0302 REF-6@1 |
 | REF-6 | `error_2i_ref6_param_repointed.con` (new; `r = q` with `&T` parameters, and the dead-slot `g`), `error_2i_ref6_mut_param_repointed.con` (new; a `&mut T` parameter re-pointed at a local, E0219 before exit 2i), `error_2i_ref6_borrow_binder_assigned.con` (new; `r = &y` inside `borrow x as r`), `error_2i_ref6_arm_binder_assigned.con` (new; an arm binder assigned in its arm), `error_2i_ref6_generic_assign_at_ref.con` (new; `x = y` in a generic called at `T := &Int`) | reject E0303 REF-6@1 |
 | REF-6 | `regress_2i_ref6_generic_assign_at_value.con` (new; the same generic called at `T := Int`) | run 42 |
-| REF-6 | `error_borrow_escape.con` † | reject E0302 REF-6@1 at its outer `let mut leaked: &Point` (E0234 today) |
+| REF-6 | `error_borrow_escape.con` † | reject E0302 REF-6@1 at its outer `let mut leaked: &Point` (E0234 before exit 2i) |
 | REF-6 | `regress_2i_ref6_place_each_use.con` (new; `f(&w.p); g(&w.p);`, the twin of `let_shared_ref`), `regress_2i_ref6_index_once.con` (new; `let i = index(); f(&a[i]); g(&a[i]);`), `regress_2i_ref6_borrow_block_projection.con` (new; `borrow w as rw in R { f(&rw.p); g(&rw.p); }`), `regress_2i_ref6_arm_binder_through_ref.con` (new; the `match o` shape of REF-5) | run 42 |
 | REF-7 | `error_091_norm_ref_write_through_ref.con` † | reject E0238 REF-7@1 |
 | REF-7 | `regress_2i_ref7_write_value_through_mut_ref.con` (new; `*slot = 42` with `slot: &mut Int`) | run 42 |
@@ -1403,7 +1404,7 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
 | REF-5 | `error_091_norm_if_projection.con` | reject E0238 REF-5@1 |
 | REF-5 | `regress_2i_ref5_bind_branch_first.con` (new; `let w = if c { a } else { b }; w.f`) | run 42 |
-| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`), `error_2i_ref6_borrow_block_paren_copy.con` (new; `= (r)`), `error_2i_ref6_borrow_block_cast_copy.con` (new; `= r as &Int`, G14) | reject E0302 REF-6@1 at the receiving `let` (E0234 today for the bare identifier only) |
+| REF-6 | `error_2i_ref6_borrow_block_copy.con` (new; `borrow x as r in R { let s: &Int = r; }`), `error_2i_ref6_borrow_block_paren_copy.con` (new; `= (r)`), `error_2i_ref6_borrow_block_cast_copy.con` (new; `= r as &Int`, G14) | reject E0302 REF-6@1 at the receiving `let` (E0234 before exit 2i, for the bare identifier only) |
 | REF-6 | `error_2i_ref6_borrow_block_reborrow_escape.con` (new; `out = &*r` where `out` borrowed another place) | reject E0302 REF-6@1 at `out`'s `let` (G14 on `main`) |
 | REF-5 | `error_2i_ref5_borrow_literal.con`, `error_2i_ref5_borrow_call_result.con`, `error_2i_ref5_borrow_aggregate_literal.con` (new; `&42`, `&mk()`, `&P { n: 1 }`) | reject E0238 REF-5@1 (G12) |
 | REF-1 | `error_2i_ref1_trait_decl_returns_ref.con` (new; `trait T { fn get(&self) -> &Int; }`) | reject E0236 REF-1@1 (G13) |
@@ -1411,8 +1412,8 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-8 / SCOPE-1 / REF-6 | `error_107_shadow_under_live_ref.con` †, `error_107_shadow_in_block_under_live_ref.con` † | reject E0302 REF-6@1 once REF-6 lands (their `let r = &x` precedes the shadowing `let`); otherwise E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before both. Bug 107's shadowing half keeps the SCOPE-1 rows |
 | SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
 | SCOPE-1 | `regress_2i_scope1_<shape>_renamed.con` (new), the migration twin of each fixture in the row above | run, binary = `--interp` |
-| SCOPE-1 | `error_borrow_shadow.con` | reject E0301 SCOPE-1@1 (E0214 today) |
-| SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 today) |
+| SCOPE-1 | `error_borrow_shadow.con` | reject E0301 SCOPE-1@1 (E0214 before exit 2i) |
+| SCOPE-1 | `error_093_shadowing_block_local_leak.con`, `error_093_shadowing_match_binder_leak.con`, `error_094_arm_binder_shadows_live.con`, `error_094_destructure_shadows_live.con`, `error_094_value_binder_shadows_live.con`, `error_094_borrow_block_shadow_leak.con`, `error_094_mut_ref_param_shadow_leak.con` | reject E0301 SCOPE-1@1 (E0208, E0209 or E0292 before exit 2i) |
 | SCOPE-1 | `regress_045_match_binder_shadow.con` | migrated to `Variant { value: inner }` (needs G4); run 42 |
 | SCOPE-2 | `regress_2i_scope2_sibling_branches.con`, `regress_2i_scope2_sibling_arms.con`, `regress_2i_scope2_consecutive_loops.con`, `regress_2i_scope2_loop_body_let.con`, `regress_2i_scope2_assign_rebind.con` (new); `regress_087_sibling_promoted.con`, `regress_087_unpromoted_sibling.con` | run 42, binary = `--interp` |
 | SCOPE-3 | `regress_087_let_block_shadow.con` | modes `binary,interp,model:087-lexical` (the sidecar row asserts lexical binders for `shadow_if`, `shadow_param` and `shadow_loop`): run 42 until SCOPE-1 lands; then reject E0301 SCOPE-1@1, paired with a renamed twin that runs 42 in modes `binary,interp,model:087-renamed` (its own sidecar row: the renamed inner binders appear under their new names, with no `.bN` suffix); the `087-lexical` assertion moves with the shadowing fixture to the E0301-disabled mutation leg |

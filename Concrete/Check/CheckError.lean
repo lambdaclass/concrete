@@ -283,6 +283,10 @@ inductive CheckError where
   -- binds a name. Contracts are propositions and, like spec bodies, binder-free, so no binding
   -- rule (SCOPE-1, REF-6) needs a typed walk of erased contract code.
   | contractBinds (fnName : String) (names : String)
+  -- Exit 2i (review round 14): a constant initializer borrows. Constants are values and may not
+  -- borrow (E0602 at a use); with no borrow, no reference can arise in one (no parameters, REF-1,
+  -- REF-3), so this one test is REF-6 for constant initializers.
+  | constBorrows (name : String)
   -- Exit 2i (review round 7): a generic instantiated to a reference inside erased code (an
   -- assert / assume condition or a ghost initializer). Elab drops the call, so Mono never builds
   -- the specialization and the post-mono REF-6 check never sees its body.
@@ -430,6 +434,8 @@ def CheckError.message : CheckError → String
   | .returnsReference msg _ => msg
   | .erasedRefInstantiation what p ty =>
     s!"{what}: '{p}' := '{ty}' inside erased code (an assert, assume or ghost initializer); the instantiated body is never monomorphized, so its reference bindings would never be re-checked"
+  | .constBorrows name =>
+    s!"constant '{name}' borrows in its initializer; a constant is a value and may not borrow, so no reference binding can arise in it"
   | .contractBinds fnName what =>
     s!"a contract of '{fnName}' contains {what}; a contract expression is a binder- and statement-free proposition"
   | .ghostLetAtTypeParam name ty =>
@@ -589,6 +595,7 @@ def CheckError.code : CheckError → String
   | .assignsReferenceBinding _ _ => "E0303"
   | .ghostLetAtTypeParam _ _ => "E0302"
   | .contractBinds _ _ => "E0305"
+  | .constBorrows _ => "E0302"
   | .erasedRefInstantiation _ _ _ => "E0302"
   | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
@@ -606,7 +613,7 @@ def CheckError.rule : CheckError → Option String
   | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
   | .shadowsLiveLinear _ => some "SCOPE-1@1"
   | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"
-  | .erasedRefInstantiation _ _ _ => some "REF-6@1"
+  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@1"
   | .referenceEscapesBorrowBlock _ => some "REF-6@1"
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"
