@@ -55,11 +55,11 @@ whatever their label.
   inside a borrow block whose owner has a pending `defer` is accepted
   (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines); `break`/`continue` likewise
   (`regress_149_break_in_borrow_with_defer.con`).
-- `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state unless a
-  `break value` moved it (`VarInfo.movedByBreak`, carried through branch and match merges, so a
-  `break free(h)` in every arm of a match is not a false E0208; that program then fails at SSA
-  verification, E0708, a pre-existing loud lowering defect of matches whose arms all `break` inside
-  a loop, not changed here). `Lower` now evaluates a `break value` operand in a
+- `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state.
+- The H14 one-level exemption (a `break value` could move a binding declared outside the loop) is
+  withdrawn: loops are statements since 6D, so the value is discarded anyway, and the move was
+  credited on paths that never ran it (`if c { break free(h); }` then `free(h)` after the loop
+  released `h` twice; `error_149_break_value_moves_outer.con`, E0207). `Lower` now evaluates a `break value` operand in a
   statement loop too (it was skipped when the loop had no result slot, although the checker
   credited its moves: `while true { break free(h); }` never released `h`;
   `regress_149_break_value_statement_loop.con`), and a non-Copy break value, which a statement
@@ -76,9 +76,8 @@ whatever their label.
   refused when the branch can `break`/`continue` out of the loop first (an earlier conditional
   `continue` repeated the consumption on the next iteration; `error_149_continue_in_exit_branch.con`,
   E0207), and a nested loop inside such a branch no longer drops the exemption for the statements
-  after it (`regress_149_nested_loop_in_exit_branch.con`). Known remaining limit, pre-existing and not changed here: a `break v` that
-  consumes an outer binding (the H14 one-level exemption) is credited on the condition-false path
-  too.
+  after it (`regress_149_nested_loop_in_exit_branch.con`). (The H14 break exemption, which this
+  relied on for `break v`, is withdrawn below.)
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted
   `newtype N = Num` with `type Num = i64` judged non-Copy; such a newtype cannot currently be
   constructed, CoreCheck refuses the cast, so this had no reachable effect).

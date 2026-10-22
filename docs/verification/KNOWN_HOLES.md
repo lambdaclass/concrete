@@ -643,7 +643,9 @@ one burn-down. Two were duplications (double-free class), three were leaks
   skip-unconsumed check so a loop-local moved out via break counts as
   consumed, and a value declared immediately outside the broken loop is
   exempt from the loop-depth rule (`breakDepthExempt` — a break fires at most
-  once per loop entry; deeper outer values stay E0207).
+  once per loop entry; deeper outer values stay E0207). The exemption was withdrawn on 2026-10-22
+  ([bug 149](../bugs/149_exit_paths_unchecked.md)): a break value may not move a binding declared
+  outside the loop (E0207), since the move was also credited on paths that never ran it.
 - **H15 (leak): `arr[i] = v` and `*r = v` (through `&mut`) leaked the
   overwritten value** — E0219 guarded only field assignment. Fixed: both now
   reject a non-Copy target (**E0291** `cannotOverwriteLinearPlace`).

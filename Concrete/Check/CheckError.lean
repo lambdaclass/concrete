@@ -73,10 +73,6 @@ structure VarInfo where
   -- Bug 149: the state a borrow block's owner had when the block froze it (read by the
   -- return check, which must see a pending `defer` through the freeze).
   frozenFrom : Option VarState := none
-  -- Bug 149: a `break value` moved this binding out of its loop (the H14 exemption): the only
-  -- outer-binding consumption inside a loop body that reaches the code after the loop. Kept on
-  -- the binding so it survives the branch and match merges.
-  movedByBreak : Bool := false
   deriving Repr
 
 structure TypeEnv where

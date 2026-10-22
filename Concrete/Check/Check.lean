@@ -515,17 +515,15 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     if st == .consumed || st == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
 
-/-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state unless a
-    `break value` moved it. Every other consumption of an outer binding inside the body is on a
-    path that leaves the function (the loop-depth rule refuses the rest), and the loop may run
-    zero times, so crediting it after the loop would accept a value that was never consumed. -/
+/-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state. The only
+    consumptions of an outer binding inside the body are on paths that leave the function (the
+    loop-depth rule refuses the rest), and the loop may run zero times, so crediting them after
+    the loop would accept a value that was never consumed. -/
 def restoreAfterLoop (before : TypeEnv) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     match lookupByUid before.vars vi.uid with
-    | some old =>
-      if old.state != vi.state && !(vi.movedByBreak && !old.movedByBreak) then (n, { vi with state := old.state })
-      else (n, { vi with movedByBreak := old.movedByBreak })
+    | some old => if old.state != vi.state then (n, { vi with state := old.state }) else (n, vi)
     | none => (n, vi) }
 
 /-- A named type that is one of the enclosing function's type parameters, read as that type
@@ -1748,7 +1746,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | some vars =>
           let vars' := envBefore.vars.map fun (n, vi) =>
             match lookupByUid vars vi.uid with
-            | some info => (n, { vi with state := info.state, movedByBreak := info.movedByBreak })
+            | some info => (n, { vi with state := info.state })
             | none => (n, vi)
           setEnv { envBefore with vars := vars' }
         | none => setEnv envBefore
@@ -1881,7 +1879,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | some vars =>
         let vars' := envBefore.vars.map fun (n, vi) =>
           match lookupByUid vars vi.uid with
-          | some info => (n, { vi with state := info.state, movedByBreak := info.movedByBreak })
+          | some info => (n, { vi with state := info.state })
           | none => (n, vi)
         setEnv { envBefore with vars := vars' }
       | none => setEnv envBefore
@@ -2751,20 +2749,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- value-mode checkExpr auto-consumes it. `breakConsumeExempt` grants
       -- the one-level loop-depth exemption (a break fires at most once per
       -- loop entry); restore the flag right after.
+      -- Bug 149 (Codex review): the H14 one-level exemption (a `break value` could move a binding
+      -- declared outside the loop) is withdrawn. Loops are statements since 6D, so the value is
+      -- discarded anyway, and the move was credited on paths that never ran it (the
+      -- condition-false path, and every path past a conditional `if c { break free(h); }`, which
+      -- then released `h` twice). A break value is checked like any expression in the loop body.
       let envB ← getEnv
-      setEnv { envB with breakConsumeExempt := true }
       let valTy ← checkExpr expr
-      modify fun envA => { envA with breakConsumeExempt := envB.breakConsumeExempt }
       -- Bug 149 (Codex review): loops are statements (value `while` was removed in 6D), so a
       -- break value is evaluated and discarded; a non-Copy one would be dropped.
       if !(← isCopyType valTy) then
         throwCheck (.discardedLinear (tyToString valTy)) (some stmt.getSpan)
-      -- Bug 149: remember what the break moved (see `restoreAfterLoop`).
-      let envM ← getEnv
-      setEnv { envM with vars := envM.vars.map fun (n, vi) =>
-        match lookupByUid envB.vars vi.uid with
-        | some old => if old.state != .consumed && vi.state == .consumed then (n, { vi with movedByBreak := true }) else (n, vi)
-        | none => (n, vi) }
+      let _ := envB
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
