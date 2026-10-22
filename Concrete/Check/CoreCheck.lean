@@ -482,6 +482,20 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     for arg in args do
       ccCheckExpr arg
 
+  -- A compiler-generated call to a runtime helper (`println`'s `print_int`, bug 165). Its
+  -- authority is the helper's intrinsic capability, never a program definition of the same
+  -- spelling: the call cannot reach one.
+  | .call (.runtime helper) _typeArgs args _ty =>
+    let env ← getEnv
+    match lookupBuiltinCap helper with
+    | some calleeCaps =>
+      let capD := Capabilities.decideCall env.currentCapSet calleeCaps
+      if !capD.satisfied then
+        addCCError (.insufficientCapabilities helper (capSetToString capD.required) (capSetToString capD.callerHas))
+    | none => pure ()
+    for arg in args do
+      ccCheckExpr arg
+
   | .call (.direct fn) _typeArgs args _ty =>
     -- TRUST EDGES, emitted on the same visit as the capability decision below. A callee
     -- that is both (an `extern` declared `trusted`) yields both facts, because they are

@@ -76,6 +76,20 @@ and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_
 `check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
 (heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
 
+### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
+
+`println`, `print` and the variadic `append` reach the runtime helpers whatever the module
+defines. Elab desugared them into calls spelled `print_int`, `print_string`, `string_append` and
+so on, and every later pass bound a call by its spelling, so a module that defined its own
+`fn print_int` had it called by each `println` (the reproducer aborted). Core now has a third
+callee form, `Callee.runtime`, built by those desugarings. CoreCheck charges the helper's
+intrinsic capability, Lower emits the helper's reserved `_C$rt.` symbol, the interpreter
+dispatches to its builtin, and none of them resolves the spelling. The call collector is one
+walk with views by callee form (the direct and indirect walks were two copies), so a runtime
+call adds no call-graph edge to a same-named definition and still explains which intrinsic
+supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
+`regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered

@@ -58,7 +58,7 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
     (f : CFnDef) (cap : String) (aliases : List (String × String) := []) : List CapSupplier :=
   -- An import alias (`helper_a as ha`) names its target through the calling module's linker
   -- aliases, exactly as the summary resolves it; the explanation shows the spelling written.
-  (collectCallsStmts f.body).eraseDups.filterMap fun written =>
+  let spelled := (collectCallsStmts f.body).eraseDups.filterMap fun written =>
     let c := (aliases.lookup written).getD written
     if (lookup.find? (·.1 == c)).isSome then
       match lookupCalleeCap lookup c with
@@ -72,6 +72,14 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
       else match lookupCalleeCap lookup c with
         | some cs => if Capabilities.capSetHas cs cap then some { callee := written, kind := "intrinsic" } else none
         | none => none
+  -- A compiler-generated runtime call (`println`'s `print_int`) is its intrinsic, never a
+  -- program definition of the same spelling (bug 165).
+  let generated := (collectRuntimeCallsStmts f.body).eraseDups.filterMap fun h =>
+    match resolveIntrinsic h with
+    | some iid =>
+      if iid.capability == some cap then some ({ callee := h, kind := "intrinsic" } : CapSupplier) else none
+    | none => none
+  spelled ++ generated.filter fun g => !spelled.any (·.callee == g.callee)
 
 def CapSupplier.render (s : CapSupplier) : String :=
   match s.kind, s.targets with

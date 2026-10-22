@@ -1,0 +1,45 @@
+// Bug 165: `println` / `print` / `append` are desugared by Elab into calls of runtime helpers
+// (`print_int`, `print_string`, `print_bool`, `print_char`, `string_append`, ...). Those calls
+// were spelled, so a module that defines its own function under a helper's name got it called by
+// every `println` in the module (the reproducer aborted). The generated call now carries the
+// helper's identity (`Callee.runtime`). An EXPLICIT call of the user's function still reaches the
+// user's function. Expected stdout: `7 hi true x` then `n=hi ok`; exit code 42.
+
+fn print_int(x: Int) -> Int {
+    return x + 35;
+}
+
+fn print_string(x: Int) -> Int {
+    return x;
+}
+
+fn print_bool(b: bool) -> Int {
+    if b { return 1; }
+    return 0;
+}
+
+fn print_char(c: Int) -> Int {
+    return c;
+}
+
+fn string_append(x: Int) -> Int {
+    return x;
+}
+
+fn string_append_int(x: Int) -> Int {
+    return x;
+}
+
+fn main() with(Console, Alloc) -> Int {
+    let s: String = "hi";
+    print(7, " ", &s);
+    println(" ", true, " ", 'x');
+    let mut out: String = "";
+    append(&mut out, "n=", &s, " ok");
+    println(&out);
+    drop_string(out);
+    drop_string(s);
+    let a: Int = print_int(7);
+    let b: Int = string_append(0) + string_append_int(0) + print_string(0) + print_char(0);
+    return a + b + print_bool(false);
+}

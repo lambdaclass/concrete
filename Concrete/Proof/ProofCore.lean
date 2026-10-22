@@ -568,6 +568,9 @@ private partial def fingerprintExpr : CExpr → String
   -- Distinct prefix: a direct call and an indirect call through a same-named
   -- local are different programs, so they must not fingerprint alike.
   | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b} {fingerprintExprs args})"
+  -- A compiler-generated runtime-helper call (bug 165) is not a call of a program definition
+  -- of the same spelling, so it does not fingerprint like one.
+  | .call (.runtime h) _ args _ => s!"(rtcall {h} {fingerprintExprs args})"
   | .structLit name _ fields _ =>
     let fs := fields.map fun (n, e) => s!"{n}={fingerprintExpr e}"
     s!"(struct {name} {" ".intercalate fs})"

@@ -1733,22 +1733,22 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
         let cArg := cArgEv.core
         let printCall := match cArg.ty with
           | .string =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.borrow cArg (.ref .string)] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.borrow cArg (.ref .string)] .unit) false
           | .ref .string | .refMut .string =>
-            CStmt.expr (CExpr.call "print_string" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [cArg] .unit) false
           | .int =>
-            CStmt.expr (CExpr.call "print_int" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_int") [] [cArg] .unit) false
           | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-            CStmt.expr (CExpr.call "print_int" [] [CExpr.cast cArg .int] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_int") [] [CExpr.cast cArg .int] .unit) false
           | .bool =>
-            CStmt.expr (CExpr.call "print_bool" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_bool") [] [cArg] .unit) false
           | .char =>
-            CStmt.expr (CExpr.call "print_char" [] [CExpr.cast cArg .int] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.cast cArg .int] .unit) false
           | _ =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.strLit "<unprintable>"] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.strLit "<unprintable>"] .unit) false
         stmts := stmts ++ [printCall]
       if fnName == "println" then
-        stmts := stmts ++ [CStmt.expr (CExpr.call "print_char" [] [CExpr.intLit 10 .int] .unit) false]
+        stmts := stmts ++ [CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.intLit 10 .int] .unit) false]
       return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
     -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
     -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
@@ -1767,17 +1767,17 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
           let cArg := cArgEv.core
           let call ← match cArg.ty with
             | .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append") [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit) false)
             | .ref .string | .refMut .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append") [] [cBuf, cArg] .unit) false)
             | .int =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_int") [] [cBuf, cArg] .unit) false)
             | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, CExpr.cast cArg .int] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_int") [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | .bool =>
-              pure (CStmt.expr (CExpr.call "string_append_bool" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_bool") [] [cBuf, cArg] .unit) false)
             | .char =>
-              pure (CStmt.expr (CExpr.call "string_push_char" [] [cBuf, CExpr.cast cArg .int] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_push_char") [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | _ =>
               throw [{ severity := .error
                      , message := s!"append() argument has unsupported type; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
@@ -2255,6 +2255,7 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     let callee' := match callee with
       | .direct name => Callee.direct (rmap.lookup name |>.getD name)
       | .indirect binding => Callee.indirect binding
+      | .runtime helper => Callee.runtime helper
     .call callee' targs (args.map (renameFnExpr rmap)) ty
   | .fnRef name ty =>
     let name' := rmap.lookup name |>.getD name
@@ -3582,7 +3583,7 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
           (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'", f.typeParams))
           ++ inner
       | none => inner
-    | .indirect _ => inner
+    | .indirect _ | .runtime _ => inner
   | .fnRef n t =>
     match c.fns n with
     | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]

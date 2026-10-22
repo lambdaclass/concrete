@@ -143,6 +143,7 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
     -- it has no impl to name, and the unresolved callee fails loudly downstream.
     let callee' := match callee with
       | .indirect binding => Callee.indirect binding
+      | .runtime helper => Callee.runtime helper
       | .direct name => Callee.direct (match splitTraitParamCallee name with
           | some (p, m) => match nameMap.lookup p with
             | some c =>
@@ -211,7 +212,7 @@ partial def injectTypeArgsExpr (genericNames : List String) (typeArgs : List Ty)
     | .direct name =>
       if genericNames.contains name then .call callee typeArgs args' ty
       else .call callee [] args' ty
-    | .indirect _ => .call callee [] args' ty
+    | .indirect _ | .runtime _ => .call callee [] args' ty
   | .call callee ta args ty => .call callee ta (args.map (injectTypeArgsExpr genericNames typeArgs)) ty
   | .binOp op l r ty => .binOp op (injectTypeArgsExpr genericNames typeArgs l) (injectTypeArgsExpr genericNames typeArgs r) ty
   | .unaryOp op inner ty => .unaryOp op (injectTypeArgsExpr genericNames typeArgs inner) ty
@@ -542,6 +543,10 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
     -- named `f`. Only the arguments are monomorphized.
     let args' ← args.mapM monoExpr
     return .call (.indirect binding) typeArgs args' ty
+  -- A runtime helper call (bug 165) names no program definition: nothing to resolve.
+  | .call (.runtime helper) typeArgs args ty =>
+    let args' ← args.mapM monoExpr
+    return .call (.runtime helper) typeArgs args' ty
   | .call (.direct fn) typeArgs args ty =>
     if fn == destroyDispatchCallee then return ← monoDestroyDispatch args ty
     if let some (c, m) := splitTraitDispatchSpelling fn then

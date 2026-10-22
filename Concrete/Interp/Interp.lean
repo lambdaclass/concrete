@@ -2248,6 +2248,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | .indirect binding => match envGetLocal env binding with
         | some (.fnPtr real _) => if real.startsWith externPtrPrefix then some (real.drop externPtrPrefix.length).toString else none
         | _ => none
+      -- A compiler-generated runtime call is its builtin, never a program definition (bug 165).
+      | .runtime helper => some (runtimeHelperPrefix ++ helper)
     let externSym : Option String := match foreign with
       | some decl => if decl.startsWith runtimeHelperPrefix then none else some ((cx.externLinks.lookup decl).getD decl)
       | none => none
@@ -2272,6 +2274,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
           pure (real, t)
         | some _ => fail s!"interp: '{binding}' is not a function pointer"
         | none => fail s!"interp: unbound fn-pointer local '{binding}'"
+      -- Unreachable: `foreign` is always `some` for a runtime callee (above).
+      | .runtime helper => pure (helper, none)
     match target with
     | some (fdef, calleeScope) =>
       if fdef.params.length != argVals.length then

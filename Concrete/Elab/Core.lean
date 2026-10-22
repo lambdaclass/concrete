@@ -44,6 +44,12 @@ inductive Callee where
   | direct (name : String)
   /-- A call through a fn-typed local/parameter, named by that binding. -/
   | indirect (binding : String)
+  /-- A call the COMPILER generated to one of its runtime helpers (`print_int` for `println`,
+      `Symbols.runtimeHelperNames`), by the helper's name. Never resolved against the
+      program's definitions: a module that defines its own `fn print_int` keeps it, and
+      `println` still reaches the helper (bug 165). The Core counterpart of
+      `SCallee.foreign`; Lower emits it as the helper's reserved `_C$rt.` symbol. -/
+  | runtime (helper : String)
 deriving BEq, Repr, Inhabited, DecidableEq
 
 instance : Coe String Callee := ⟨Callee.direct⟩
@@ -57,16 +63,19 @@ namespace Callee
 def spelling : Callee → String
   | .direct n => n
   | .indirect b => b
+  | .runtime h => h
 
 def isIndirect : Callee → Bool
   | .direct _ => false
   | .indirect _ => true
+  | .runtime _ => false
 
 /-- The definition name, when this call has one. `none` for indirect calls,
     which have no global definition to name. -/
 def directName? : Callee → Option String
   | .direct n => some n
   | .indirect _ => none
+  | .runtime _ => none
 
 end Callee
 
