@@ -32,3 +32,8 @@ root = "Main"
 [[lean_exe]]
 name = "pipeline-test"
 root = "Concrete.Pipeline.PipelineTest"
+
+# Optional browser adapter; excluded from defaultTargets and the native CLI.
+[[lean_exe]]
+name = "concrete-browser-native"
+root = "Browser"
