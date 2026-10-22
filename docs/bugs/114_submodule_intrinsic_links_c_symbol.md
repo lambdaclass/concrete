@@ -25,7 +25,7 @@ mod t {
 
 ## Observed
 
-`intrinsics::sizeof::<i32>()` against `mod intrinsics { #[intrinsic = "sizeof"] pub trusted fn sizeof<T>() -> u64; }` is not intercepted; the call is emitted as a call to the C symbol `sizeof`, and the link fails (`Undefined symbols ... "_sizeof"` on macOS, `undefined reference to sizeof` on Linux). The top-level form is blocked by bug 112.
+`intrinsics::sizeof::<i32>()` against `mod intrinsics { #[intrinsic = "sizeof"] pub trusted fn sizeof<T>() -> u64; }` is not intercepted; the call is emitted as a call to the C symbol `sizeof`, and the link fails (`Undefined symbols ... "_sizeof"` on macOS, `undefined reference to sizeof` on Linux, `undefined symbol: sizeof` under ld64.lld in the nix devshell). The top-level form is blocked by bug 112.
 
 ## Expected
 

@@ -182,7 +182,7 @@ examples/snippets/chars.con compile
 examples/snippets/check_errors.con expected-error
 examples/snippets/collatz.con compile
 examples/snippets/constants.con compile
-examples/snippets/direct_module_use.con known-bug 114 Undefined symbols || undefined reference
+examples/snippets/direct_module_use.con known-bug 114 Undefined symbols || undefined reference || undefined symbol: sizeof
 examples/snippets/enum_match.con compile
 examples/snippets/error_flow.con compile
 examples/snippets/fact.con compile
