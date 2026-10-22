@@ -206,7 +206,23 @@ Adopted by `check_vc_schema.sh`, `check_obligation_report_views.sh` and
 Lean sources. Each gate ran sequentially, while the machine had background load from other
 sessions (load average 7 to 25, recorded per run).
 
-MEASURED_TABLE
+| Gate | Before (original gate) | Cold cache (first run) | Warm cache (second run) | Warm vs before |
+|---|---|---|---|---|
+| `check_vc_schema.sh` | 356 s (load 12) | 44 s (load 27) | **26 s** (load 30) | 13.7× |
+| `check_obligation_report_views.sh` | 259 s (load 10) | 152 s (load 35) | **94 s** (load 13) | 2.8× |
+| `check_phase3_obligation_core.sh` | 774 s (load 25) | 558 s (load 40) | **348 s** (load 7) | 2.2× |
+
+The cold run is already faster, because the 20 identical HMAC compiles in `check_vc_schema.sh`
+collapse to one within the run. A single cached HMAC `--report vcs --json` replays in 0.5 s, against
+22 to 27 s fresh. Computing the key costs about 0.4 s, most of it hashing the 116 MB binary.
+
+All three gates meet R-0546's exit bound: with the compiler unchanged, the second run takes at most
+half the time of the original. The remaining time is in places the cache does not reach:
+
+- **`check_obligation_report_views.sh`:** about 75 s is the nested `check_snapshots.sh`.
+- **`check_phase3_obligation_core.sh`:** most of the remaining time is in sub-gates that have not
+  adopted the cache: `policy_views`, `prove_views`, `discharge_adapters` and two nested
+  `check_snapshots.sh` runs. Removing the umbrella duplication (cause 1) is the larger win there.
 
 ## Lean build seeding (R-0546 step 3)
 
