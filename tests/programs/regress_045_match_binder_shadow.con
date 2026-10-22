@@ -4,6 +4,9 @@
 // differential-blind). Also covers the sequential case (two matches after
 // one another) whose Core names must stay distinct in Lower's flat slot
 // table. Exit 42 = every read saw the right binder.
+// Exit 2i: same-named nested binders are now refused (SCOPE-1@1, E0301); the
+// inner binder is renamed with the labeled pattern `Option::Some { value: inner }`
+// (G4), and the outer `value` must still read 5 after the inner match.
 mod m {
     fn five() -> Option<u64> { return Option::<u64>::Some { value: 5 }; }
     fn seven() -> Option<u64> { return Option::<u64>::Some { value: 7 }; }
@@ -16,9 +19,9 @@ mod m {
             Option::Some { value } => {
                 match seven() {
                     Option::None => { return 2; },
-                    Option::Some { value } => {
-                        if value != 7 { return 3; }   // inner shadows
-                        acc = acc + value;            // +7
+                    Option::Some { value: inner } => {
+                        if inner != 7 { return 3; }   // the inner binder
+                        acc = acc + inner;            // +7
                     },
                 }
                 if value != 5 { return 4; }           // outer restored

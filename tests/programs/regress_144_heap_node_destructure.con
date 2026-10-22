@@ -1,0 +1,36 @@
+struct R { id: Int, log: *mut Int }
+trusted fn bump(p: *mut Int, id: Int) { *p = *p * 10 + id; }
+impl Destroy for R { fn destroy(&self) { bump(self.log, self.id); } }
+fn mk(id: Int, log: *mut Int) -> R { return R { id: id, log: log }; }
+// Bug 144 positive control: a heap node with a linear field is taken apart by moving it out of
+// its cell (`*h`, which frees the cell) and destructuring it, or by binding the pointee `free(h)`
+// hands back; `free` of a cell whose pointee is Copy stays a plain statement. Both destructors run
+// (the log is 12) and the Copy fields survive (3 + 4): prints `12 7`.
+struct Node { r: R, n: Int }
+struct Copy P { x: Int }
+
+fn take_deref(h: Heap<Node>) with(Alloc) -> Int {
+    let Node { r, n } = *h;
+    destroy(r);
+    return n;
+}
+
+fn take_free(h: Heap<Node>) with(Alloc) -> Int {
+    let node: Node = free(h);
+    let Node { r, n } = node;
+    destroy(r);
+    return n;
+}
+
+fn main() with(Unsafe, Alloc, Console) -> Int {
+    let mut cnt: Int = 0;
+    let p: *mut Int = &mut cnt as *mut Int;
+    let a: Int = take_deref(alloc(Node { r: mk(1, p), n: 3 }));
+    let b: Int = take_free(alloc(Node { r: mk(2, p), n: 4 }));
+    let q: Heap<P> = alloc(P { x: 0 });
+    free(q);
+    print_int(cnt);
+    print_char(32);
+    print_int(a + b);
+    return 0;
+}

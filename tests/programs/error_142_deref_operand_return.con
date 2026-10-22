@@ -1,0 +1,6 @@
+// Bug 142 (Codex): a dereference, borrow or projection operand is protected too (E0278).
+trusted fn main() -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    return *(if true { return 7; } else { p });
+}

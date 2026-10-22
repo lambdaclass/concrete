@@ -1,0 +1,26 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): an arm binder through a borrowed scrutinee, used (not assigned) in its arm; also the twin of the parameter and arm re-pointing rows (use the other reference directly). Run 42, binary = --interp.
+struct P { n: Int }
+struct W { p: P, q: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn f(o: &Option<P>, q: &P) -> Int {
+    match o {
+        Option::Some { value } => { return get(value) + get(q); },
+        Option::None => { return get(q); }
+    }
+}
+
+fn main() -> Int {
+    let o: Option<P> = Option::Some { value: P { n: 20 } };
+    let q: P = P { n: 22 };
+    let out: Int = f(&o, &q);
+    match o {
+        Option::Some { value: inner } => { let P { n } = inner; },
+        Option::None => {}
+    }
+    let P { n: m } = q;
+    return out + m * 0;
+}

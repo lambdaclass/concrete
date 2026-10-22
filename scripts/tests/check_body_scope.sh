@@ -84,11 +84,16 @@ def sameFrame : BodyScope := ({} : BodyScope).push ["x", "w", "x"]
   a "an assignment binds NOTHING — it is not a declaration"
     (stmtBinders (.assign default "v" (.intLit default 1)) == [])
   a "destructuring contributes every binding, in order"
-    (stmtBinders (.letStructDestructure default "S" ["p", "q"] (.intLit default 1))
+    (stmtBinders (.letStructDestructure default "S" (["p", "q"].map PatBind.short)
+        (.intLit default 1))
       == ["p", "q"])
   a "a match arm's pattern bindings are its frame"
-    (armBinders (.mk default "E" "V" ["u", "v"] none []) == ["u", "v"]
+    (armBinders (.mk default "E" "V" (["u", "v"].map PatBind.short) none []) == ["u", "v"]
       && armBinders (.litArm default (.intLit default 0) none []) == [])
+  -- A renamed field (`V { u: inner }`) binds the INNER name, never the field label.
+  a "a renamed pattern field binds its inner name, not the field"
+    (armBinders (.mk default "E" "V" [{ field := some "u", name := "inner" }] none [])
+      == ["inner"])
 
   -- PROGRESSIVE SCOPE. A let is not in scope in its own initializer, and a later
   -- let is not in scope earlier in the block. Encoding a block against its FINAL

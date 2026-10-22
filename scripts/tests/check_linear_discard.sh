@@ -12,7 +12,9 @@
 #      payload is fine) and consume/hand off the parts.
 # Legitimate forms still compile:
 #   - exhaustive `match e { V1 { _ } => {}, V2 => {} }` where the payloads are Copy;
-#   - `free(box);` is the free-and-drop idiom (free IS the consumption);
+#   - `free(box);` releases a heap cell whose pointee is Copy; for a non-Copy pointee `free`
+#     hands the value back and it must be consumed (`let Token { x } = free(box);`), since
+#     dropping it is itself a silent discard (E0287, bug 144);
 #   - a consumed value (passed on / returned / destructured-and-destroyed) compiles;
 #   - discarding a Copy value as a bare statement compiles.
 
@@ -73,7 +75,7 @@ reject "wildcard arm/Option over linear payload" E0288 'fn main() -> Int { let o
 reject "value wildcard/Heap (non-enum non-Copy)" E0288 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { _ => { } } return 0; }'
 
 echo "=== non-enum value patterns move non-Copy scrutinees ==="
-reject "value pattern then original reuse" E0205 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } free(h); return 0; }'
+reject "value pattern then original reuse" E0205 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { let Token { x } = free(y); } } free(h); return 0; }'
 reject "value pattern binding unconsumed" E0208 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { } } return 0; }'
 reject "array literal then element reuse" E0205 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; destroy(a); destroy(b); return 0; }'
 reject "partial linear struct destructure" E0252 'fn main() -> Int { let p: Pair = Pair { f: make_file(1), g: make_file(2) }; let Pair { f } = p; return sink_file(f); }'
@@ -82,18 +84,23 @@ echo "=== legitimate forms still compile ==="
 accept "exhaustive, Copy payloads ignored" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { Option::Some { _ } => { }, Option::None => { } } return 0; }'
 accept "wildcard arm/Option<i32> (conditionally Copy)" 'fn main() -> Int { let o: Option<i32> = maybe(); match o { _ => { } } return 0; }'
 accept "wildcard payload (Copy field)"     'fn f(d: Data) -> Int { match d { Data::A { _ } => { }, Data::B {} => { } } return 0; } fn main() -> Int { return f(Data::B {}); }'
-accept "value pattern consumes Heap once" 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { free(y); } } return 0; }'
+accept "value pattern consumes Heap once" 'fn main() with(Alloc) -> Int { let h: Heap<Token> = boxed(); match h { y => { let Token { x } = free(y); } } return 0; }'
 accept "linear struct destructure moves field" 'fn main() -> Int { let w: Wrap = make_wrap(); let Wrap { f } = w; return sink_file(f); }'
 # H17 consequence: an owned [linear; N] cannot be discharged until array
 # destructure lands (KNOWN_HOLES H11 note) — asserts the honest E0208.
 reject "array of linears is undischargeable" E0208 'fn main() -> Int { let a: File = make_file(1); let b: File = make_file(2); let arr: [File; 2] = [a, b]; return 0; }'
-accept "free(box)"          'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); free(b); return 0; }'
+accept "free(box) consumed"  'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); let Token { x } = free(b); return 0; }'
+accept "free(box) Copy"      'fn main() with(Alloc) -> Int { let b: Heap<Int> = alloc(1); free(b); return 0; }'
+reject "free(box) drops linear pointee" E0287 'fn main() with(Alloc) -> Int { let b: Heap<Token> = boxed(); free(b); return 0; }'
 accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return sink(t); }'
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'
 
 echo "=== H16: shadowing a still-live linear binding is rejected (would leak) ==="
-reject "let f=..; let f=..; (live shadow)" E0292 'fn main() -> Int { let f: File = make_file(1); let f: File = make_file(2); return sink_file(f); }'
-accept "let s = transform(s) (consumed first)" 'fn grow(f: File) -> File { return f; } fn main() -> Int { let f: File = make_file(1); let f: File = grow(f); return sink_file(f); }'
+reject "let f=..; let f=..; (live shadow; SCOPE-1@1 first)" E0301 'fn main() -> Int { let f: File = make_file(1); let f: File = make_file(2); return sink_file(f); }'
+# Exit 2i: `let s = transform(s)` is a second binding of a visible name (SCOPE-1@1, E0301) even
+# though its initializer consumed the first; the rewrite is the assignment rebind.
+reject "let s = transform(s) (SCOPE-1@1)" E0301 'fn grow(f: File) -> File { return f; } fn main() -> Int { let f: File = make_file(1); let f: File = grow(f); return sink_file(f); }'
+accept "s = transform(s) (assignment rebind, consumed first)" 'fn grow(f: File) -> File { return f; } fn main() -> Int { let mut f: File = make_file(1); f = grow(f); return sink_file(f); }'
 
 echo "=== H17: params (incl. by-value self) are owned locals — must be consumed ==="
 reject "fn drop_it(f: File) {} (silent-drop escape)" E0208 'fn drop_it(f: File) -> Int { return 0; } fn main() -> Int { return drop_it(make_file(1)); }'

@@ -1,5 +1,5 @@
 // Test: basic heap allocation, arrow access, and free
-struct Point { x: Int, y: Int }
+struct Copy Point { x: Int, y: Int }
 
 fn main() with(Std) -> Int {
     let p: Heap<Point> = alloc(Point { x: 10, y: 20 });

@@ -643,7 +643,9 @@ one burn-down. Two were duplications (double-free class), three were leaks
   skip-unconsumed check so a loop-local moved out via break counts as
   consumed, and a value declared immediately outside the broken loop is
   exempt from the loop-depth rule (`breakDepthExempt` — a break fires at most
-  once per loop entry; deeper outer values stay E0207).
+  once per loop entry; deeper outer values stay E0207). The exemption was withdrawn on 2026-10-22
+  ([bug 149](../bugs/149_exit_paths_unchecked.md)): a break value may not move a binding declared
+  outside the loop (E0207), since the move was also credited on paths that never ran it.
 - **H15 (leak): `arr[i] = v` and `*r = v` (through `&mut`) leaked the
   overwritten value** — E0219 guarded only field assignment. Fixed: both now
   reject a non-Copy target (**E0291** `cannotOverwriteLinearPlace`).
@@ -713,10 +715,13 @@ assignment targets, and auto-borrowed method receivers *as places* — so `w.f.g
 (outermost read decides), `w.f.method()` on `&self`/`&mut self`, `arr[i] = v`,
 and `&w.f` all stay legal. A by-value `self` method on a projection
 (`w.f.destroy()`) is rejected; newtype `.0` unwrap on an ident stays a
-whole-owner move. Explicitly **excluded**: heap-shell field reads (`h.next`; spelled `h->next` pre-6D#3) — that +
-`free(h)` is the blessed heap-node destructure (free() only frees the shell) and
-`Heap<T>` interiors are not linearity-tracked (that is a separate, disclosed
-design point, not a silent hole). Fallout was 2 std sites (`HashSet.drop`,
+whole-owner move. Heap-shell field reads (`h.next`; spelled `h->next` pre-6D#3) were
+explicitly **excluded** until 2026-10-21 ("`Heap<T>` interiors are not linearity-tracked",
+for the `h.next` + `free(h)` destructure). That exclusion was a hole, not a design point: it
+allowed a double free and a silent drop of a linear interior in safe code
+([bug 144](../bugs/144_heap_interior_untracked.md)). It is **withdrawn**: heap-shell reads
+follow this rule (E0290), `free(h)` of a non-Copy pointee is E0287, and the destructure is
+`let n = *h;` plus a pattern. Fallout was 2 std sites (`HashSet.drop`,
 `OrderedSet.drop` — now destructure) and 3 test fixtures.
 
 ```concrete pseudocode

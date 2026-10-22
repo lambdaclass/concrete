@@ -310,14 +310,16 @@ echo "=== bounds: shadowing is sized from the binding actually IN EFFECT ==="
 # The assertions below pin the PROPERTY (the right bound, and refutation) rather than the
 # mechanism, because step 2's assertions failed on step 3 -- they had encoded "refuses to
 # answer" as if that were the goal.
+# Since exit 2i SCOPE-1 (E0301) a binder may not reuse a visible name, so the two bindings of one
+# name live in sibling blocks: a flat or first-match map still conflates them.
 if [ -n "${TMPD:-}" ]; then
   cat > "$TMPD/shadow.con" <<'CON'
 mod shadowbounds {
     fn shadow() -> i32 {
-        let a: [i32; 16] = [0; 16];
-        let b: i32 = a[0];
-        let a: [i32; 4] = [7; 4];
-        return a[10] + b;
+        let mut b: i32 = 0;
+        if true { let a: [i32; 16] = [0; 16]; b = a[0]; }
+        if true { let a: [i32; 4] = [7; 4]; return a[10] + b; }
+        return b;
     }
 }
 CON
@@ -336,8 +338,8 @@ CON
   cat > "$TMPD/scope.con" <<'CON'
 mod scopebounds {
     fn nested_shadow(i: i32) -> i32 {
-        let a: [i32; 16] = [0; 16];
         if i > 0 { let a: [i32; 8] = [0; 8]; return a[i]; }
+        let a: [i32; 16] = [0; 16];
         return a[i];
     }
 }
@@ -420,10 +422,9 @@ if [ -n "${TMPD:-}" ]; then
   cat > "$TMPD/shiftshadow.con" <<'CON'
 mod shiftwidth {
     fn certified_bad() -> i8 {
-        let x: i64 = 1;
-        let a: i64 = x << 3;
-        let x: i8 = 1;
-        let b: i8 = x << 40;
+        let mut b: i8 = 0;
+        if true { let x: i64 = 1; let a: i64 = x << 3; }
+        if true { let x: i8 = 1; b = x << 40; }
         return b;
     }
 }
@@ -443,8 +444,7 @@ CON
 mod ovfwidth {
     #[overflow_checked]
     fn shadowed(n: i8) -> i8 {
-        let x: i64 = 0;
-        let a: i64 = x + 1;
+        if true { let x: i64 = 0; let a: i64 = x + 1; }
         let x: i8 = 100;
         return x + n;
     }

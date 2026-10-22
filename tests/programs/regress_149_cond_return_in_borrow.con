@@ -1,0 +1,12 @@
+// Bug 149 (Codex review): a conditional return inside a borrow block whose owner has a pending
+// `defer` is accounted for (exit 1).
+fn main() with(Alloc) -> Int {
+  let h: Heap<Int> = alloc(42);
+  defer free(h);
+  borrow h as r in R {
+    if true {
+      return 1;
+    }
+  }
+  return 0;
+}

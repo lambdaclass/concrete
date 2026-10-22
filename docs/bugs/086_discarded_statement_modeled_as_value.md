@@ -36,9 +36,11 @@ was modeled as `id(3) + 1`.
 
 ## Prevention
 
-`check_model_diff.sh` leg T pins `tests/regressions/bug086_discarded_tail/repro.con`: `g`, `letret` and
-`argret` must not be extracted at all, and the exact shapes (`tailmatch`, `tailif`) agree on every input
-and are pinned to their runtime values. With the old extractor the fixture reports 25 mismatches.
+`check_model_diff.sh` leg T pins `tests/regressions/bug086_discarded_tail/repro.con`: `g` and `letret`
+must not be extracted at all, and the exact shapes (`tailmatch`, `tailif`) agree on every input and
+are pinned to their runtime values. With the old extractor the fixture reports 25 mismatches. (A
+third refused shape, `argret`, a `return` inside a call argument, left the fixture on 2026-10-21:
+the language itself refuses it since [bug 142](142_exit_in_operand_leaks.md), E0278.)
 
 ## Limits
 

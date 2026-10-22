@@ -1,0 +1,6 @@
+// Bug 147: a `ghost let` is erased too, so it may not move a runtime value (E0243).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    ghost let x: Int = *h;
+    return 0;
+}

@@ -1,0 +1,14 @@
+// Bug 148 positive control: short-circuit operands may read and borrow; a move happens before.
+struct T { id: Int }
+fn peek(t: &T) -> bool { return t.id > 0; }
+fn take(t: T) -> bool { let T { id } = t; return id > 0; }
+
+fn main() -> Int {
+    let t: T = T { id: 1 };
+    let n: Int = 3;
+    let a: bool = n > 2 && peek(&t);
+    let c: bool = take(t);
+    let d: bool = a || c;
+    if d { return 0; }
+    return 1;
+}

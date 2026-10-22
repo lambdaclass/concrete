@@ -1,0 +1,7 @@
+// Bug 149: a loop condition runs on every iteration; moving an outer binding there is E0207.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    while *h == 0 {
+    }
+    return 0;
+}

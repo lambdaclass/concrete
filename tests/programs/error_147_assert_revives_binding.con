@@ -1,0 +1,10 @@
+// Bug 147 (Codex): an erased statement may not change a runtime binding's state in either
+// direction: an assignment inside `assert` made the freed `h` live again for the checker, and the
+// later `free(h)` released the same cell twice. E0243.
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<Int> = alloc(42);
+    free(h);
+    assert(if true { h = alloc(43); true } else { h = alloc(44); true });
+    free(h);
+    return 0;
+}

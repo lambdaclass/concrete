@@ -1,0 +1,7 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a `let` reuses a name bound earlier in the same block. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_same_block_let_renamed.con.
+fn main() -> Int {
+    let x: Int = 1;
+    let x: Int = x + 41;
+    return x;
+}

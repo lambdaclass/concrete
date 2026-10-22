@@ -1,11 +1,15 @@
 // Bug 123 review: a local shadows a module constant of the same name in Check too, with its own
-// type (Check typed `X` as the constant's Int and refused `&X` as `&bool`).
+// type (Check typed `X` as the constant's Int and refused `&X` as `&bool`). Exit 2i: `&X` is a
+// call argument (a `let` may not bind a reference, REF-6@1).
 const X: Int = 42;
+
+fn read(r: &bool) -> bool {
+    return *r;
+}
 
 fn main() with(Std) -> Int {
     let X: bool = true;
-    let r: &bool = &X;
-    if *r {
+    if read(&X) {
         print_int(1);
     } else {
         print_int(0);

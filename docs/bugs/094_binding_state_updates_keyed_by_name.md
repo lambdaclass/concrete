@@ -74,3 +74,7 @@ The function scope-exit check exempted `&mut` parameters by NAME, so an owned lo
 consumed `&mut` parameter (`let p: Heap<Int> = alloc(n);`) was exempt too and leaked. The exemption
 now names the parameter bindings by identity. `error_094_mut_ref_param_shadow_leak.con` (E0208)
 compiled before (Codex round 2).
+
+## Exit 2i (2026-10-21)
+
+SCOPE-1@1 (exit 2i, E0301) now refuses every shadowing shape of this bug at the source; the identity-keyed state updates stay as defense in depth.

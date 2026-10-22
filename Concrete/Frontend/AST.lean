@@ -178,6 +178,46 @@ structure Param where
   ty : Ty
   deriving Repr
 
+/-- One binder of a pattern's field list (`Variant { value }`, `Variant { value: inner }`,
+    `let S { a, b: y } = ...`). `field` is the explicit field label when the source wrote
+    `field: name` (exit 2i G4, MEMORY_SEMANTICS §15.4: the renamed pattern binder SCOPE-1 needs
+    for nested `Option`/`Result` patterns); `none` for the shorthand `name`. -/
+structure PatBind where
+  field : Option String := none
+  name : String
+  -- Set by `desugarStmts` on the binders of a destructuring `let` (which becomes a match
+  -- arm): it is a `let` binder, so REF-6@1 (a) refuses it a reference type even though the
+  -- arm form would allow one (exit 2i).
+  letBound : Bool := false
+  deriving Repr, BEq, Inhabited
+
+/-- The binder names of a pattern's field list, in source order. -/
+def PatBind.names (bs : List PatBind) : List String := bs.map (·.name)
+
+/-- A shorthand binder (no field label). -/
+def PatBind.short (name : String) : PatBind := { name }
+
+/-- The field a struct-destructure binder takes: its label, or (shorthand) its own name. -/
+def PatBind.fieldName (b : PatBind) : String := b.field.getD b.name
+
+/-- An enum pattern's binders in the variant's FIELD order (exit 2i G4). Without labels the
+    list is positional, as it always was. With any label, every entry names its field (a
+    shorthand `value` names field `value`), each field appears exactly once, and every field
+    is listed (`field: _` ignores a Copy field). Error: a human message. -/
+def PatBind.resolveEnum (fieldNames : List String) (bs : List PatBind) : Except String (List String) :=
+  if bs.all (·.field.isNone) then .ok (PatBind.names bs)
+  else
+    let keys := bs.map PatBind.fieldName
+    match keys.find? (fun k => !fieldNames.contains k) with
+    | some k => .error s!"pattern names field '{k}', which the variant does not have"
+    | none =>
+      match keys.find? (fun k => (keys.filter (· == k)).length > 1) with
+      | some k => .error s!"pattern binds field '{k}' more than once"
+      | none =>
+        match fieldNames.find? (fun f => !keys.contains f) with
+        | some f => .error s!"a labeled pattern must list every field; '{f}' is missing (write `{f}: _` to ignore a Copy field)"
+        | none => .ok (fieldNames.map fun f => ((bs.find? (·.fieldName == f)).map (·.name)).getD "_")
+
 mutual
 inductive Expr where
   | intLit (span : Span) (val : Int)
@@ -212,7 +252,7 @@ inductive Expr where
 -- `guard` is an optional `if <cond>` tested after the pattern matches (and its
 -- bindings are in scope); if it is false, matching falls through to the next arm.
 inductive MatchArm where
-  | mk (span : Span) (enumName : String) (variant : String) (bindings : List String) (guard : Option Expr) (body : List Stmt)
+  | mk (span : Span) (enumName : String) (variant : String) (bindings : List PatBind) (guard : Option Expr) (body : List Stmt)
   | litArm (span : Span) (value : Expr) (guard : Option Expr) (body : List Stmt)           -- literal pattern: 0 [if g] -> ...
   | varArm (span : Span) (binding : String) (guard : Option Expr) (body : List Stmt)        -- variable pattern: n [if g] -> ...
   | rangeArm (span : Span) (lo : Expr) (hi : Expr) (inclusive : Bool) (guard : Option Expr) (body : List Stmt)  -- range: lo..=hi [if g] -> ...
@@ -249,9 +289,9 @@ inductive Stmt where
   | assume_ (span : Span) (cond : Expr)
   | borrowIn (span : Span) (var : String) (ref : String) (region : String) (isMut : Bool) (body : List Stmt)
   -- let...else and irrefutable destructuring let (desugared to match before Elab)
-  | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List String) (value : Expr) (elseBody : Option (List Stmt))
+  | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List PatBind) (value : Expr) (elseBody : Option (List Stmt))
   -- struct destructuring let (desugared to field-access lets before Elab)
-  | letStructDestructure (span : Span) (structName : String) (bindings : List String) (value : Expr)
+  | letStructDestructure (span : Span) (structName : String) (bindings : List PatBind) (value : Expr)
 end
 
 def Expr.getSpan : Expr → Span
@@ -629,7 +669,7 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
     collectFreeVarsExpr scrutinee bound ++
     arms.flatMap (fun arm => match arm with
       | .mk _ _ _ bindings guard body =>
-        let newBound := bound ++ bindings
+        let newBound := bound ++ PatBind.names bindings
         (guard.map (collectFreeVarsExpr · newBound)).getD [] ++ collectFreeVarsStmts body newBound
       | .litArm _ _ guard body =>
         (guard.map (collectFreeVarsExpr · bound)).getD [] ++ collectFreeVarsStmts body bound
@@ -705,9 +745,9 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
         let elseFree := match elseBody with
           | some body => collectFreeVarsStmts body bound
           | none => []
-        (valueFree ++ elseFree, bindings ++ bound)
+        (valueFree ++ elseFree, PatBind.names bindings ++ bound)
       | .letStructDestructure _ _ bindings value =>
-        (collectFreeVarsExpr value bound, bindings ++ bound)
+        (collectFreeVarsExpr value bound, PatBind.names bindings ++ bound)
       | .assert_ _ cond | .assume_ _ cond =>
         (collectFreeVarsExpr cond bound, bound)
     freeVars ++ collectFreeVarsStmts rest newBound
@@ -716,31 +756,101 @@ end
 def collectFreeVars (stmts : List Stmt) (paramNames : List String) : List String :=
   (collectFreeVarsStmts stmts paramNames).eraseDups
 
+/-- Does a desugared continuation end with the block's value (a trailing expression, no `;`)?
+    Then the match a destructuring `let` becomes is that value (exit 2i review: it was always a
+    discarded statement, so a destructure in a value block lost the block's value). -/
+def endsWithValue (stmts : List Stmt) : Bool :=
+  match stmts.getLast? with
+  | some (.expr _ _ true) => true
+  | _ => false
+
+mutual
 /-- Desugar destructuring let statements into match/field-access.
-    Must be applied before Check and Elab, since both pattern-match on Stmt. -/
+    Must be applied before Check and Elab, since both pattern-match on Stmt.
+    Recursive (exit 2i review): a destructuring `let` inside any nested block — an `if` or loop
+    body, a borrow block, a match arm, an if-expression, a `let` initializer, an else body — is
+    desugared too; before, only a function's top-level statements were, so a nested one reached
+    Check unchanged (skipped; its binders undeclared, E0201) and Elab as an internal error. -/
 partial def desugarStmts : List Stmt → List Stmt
   | [] => []
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings none continuation
-    let wildcardArm := MatchArm.varArm sp "_" none elseBody
-    [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm]) false]
+    let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
+    let wildcardArm := MatchArm.varArm sp "_" none (desugarStmts elseBody)
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm, wildcardArm]) (endsWithValue continuation)]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings none continuation
-    [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
+    let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
+    [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm]) (endsWithValue continuation)]
   -- NOTE: `letStructDestructure` is intentionally NOT desugared here. Desugaring it
   -- to `let __destr = value; let a = __destr.a; …` is unsound for a LINEAR struct —
   -- field access does not move, so `__destr` is left unconsumed (E0208) and the
   -- fields would alias it. Instead it is linearity-checked natively in Check
   -- (consume the source, move each field out) and expanded to the temp+field form
   -- only at Elab time, past the linear checker. See docs/language/OWNERSHIP_MODEL.md.
-  | s :: rest => s :: desugarStmts rest
+  | s :: rest => desugarStmt s :: desugarStmts rest
+
+/-- One non-destructuring statement, with its nested blocks and expressions desugared. -/
+partial def desugarStmt : Stmt → Stmt
+  | .letDecl sp n m t v g => .letDecl sp n m t (desugarExpr v) g
+  | .assign sp n v => .assign sp n (desugarExpr v)
+  | .return_ sp v => .return_ sp (v.map desugarExpr)
+  | .expr sp e isV => .expr sp (desugarExpr e) isV
+  | .ifElse sp c t e => .ifElse sp (desugarExpr c) (desugarStmts t) (e.map desugarStmts)
+  | .while_ sp c b l => .while_ sp (desugarExpr c) (desugarStmts b) l
+  | .forLoop sp i c st b l =>
+    .forLoop sp (i.map desugarStmt) (desugarExpr c) (st.map desugarStmt) (desugarStmts b) l
+  | .fieldAssign sp o f v => .fieldAssign sp (desugarExpr o) f (desugarExpr v)
+  | .derefAssign sp t v => .derefAssign sp (desugarExpr t) (desugarExpr v)
+  | .arrayIndexAssign sp a i v => .arrayIndexAssign sp (desugarExpr a) (desugarExpr i) (desugarExpr v)
+  | .break_ sp v l => .break_ sp (v.map desugarExpr) l
+  | .defer sp b => .defer sp (desugarExpr b)
+  | .borrowIn sp v r rg m b => .borrowIn sp v r rg m (desugarStmts b)
+  | .letStructDestructure sp sn bs v => .letStructDestructure sp sn bs (desugarExpr v)
+  | .assert_ sp c => .assert_ sp (desugarExpr c)
+  | .assume_ sp c => .assume_ sp (desugarExpr c)
+  | s => s
+
+partial def desugarExpr : Expr → Expr
+  | .binOp sp op l r => .binOp sp op (desugarExpr l) (desugarExpr r)
+  | .unaryOp sp op x => .unaryOp sp op (desugarExpr x)
+  | .call sp f ta args => .call sp f ta (args.map desugarExpr)
+  | .paren sp x => .paren sp (desugarExpr x)
+  | .structLit sp n ta fs b => .structLit sp n ta (fs.map fun (k, e) => (k, desugarExpr e)) (b.map desugarExpr)
+  | .fieldAccess sp o f => .fieldAccess sp (desugarExpr o) f
+  | .enumLit sp en v ta fs => .enumLit sp en v ta (fs.map fun (k, e) => (k, desugarExpr e))
+  | .match_ sp scr arms => .match_ sp (desugarExpr scr) (arms.map desugarArm)
+  | .borrow sp x => .borrow sp (desugarExpr x)
+  | .borrowMut sp x => .borrowMut sp (desugarExpr x)
+  | .deref sp x => .deref sp (desugarExpr x)
+  | .arrayLit sp es => .arrayLit sp (es.map desugarExpr)
+  | .arrayIndex sp a i => .arrayIndex sp (desugarExpr a) (desugarExpr i)
+  | .cast sp x t => .cast sp (desugarExpr x) t
+  | .methodCall sp o m ta args => .methodCall sp (desugarExpr o) m ta (args.map desugarExpr)
+  | .staticMethodCall sp tn m ta args => .staticMethodCall sp tn m ta (args.map desugarExpr)
+  | .allocCall sp i a => .allocCall sp (desugarExpr i) (desugarExpr a)
+  | .ifExpr sp c t e => .ifExpr sp (desugarExpr c) (desugarStmts t) (desugarStmts e)
+  | e => e
+
+partial def desugarArm : MatchArm → MatchArm
+  | .mk sp en v bs g b => .mk sp en v bs (g.map desugarExpr) (desugarStmts b)
+  | .litArm sp v g b => .litArm sp v (g.map desugarExpr) (desugarStmts b)
+  | .varArm sp n g b => .varArm sp n (g.map desugarExpr) (desugarStmts b)
+  | .rangeArm sp lo hi inc g b => .rangeArm sp lo hi inc (g.map desugarExpr) (desugarStmts b)
+end
 
 /-- Apply desugaring to all function bodies in a module. -/
 partial def desugarModule (m : Module) : Module :=
   { m with
     functions := m.functions.map fun f => { f with body := desugarStmts f.body }
+    constants := m.constants.map fun c => { c with value := desugarExpr c.value }
+    -- Methods too (found by exit 2i's review): a `let ... else` / irrefutable enum destructure
+    -- in an impl or trait-impl method was left undesugared, so Check skipped it and the binders
+    -- were undeclared (E0201) — and REF-6@1's destructuring-let check never saw it.
+    implBlocks := m.implBlocks.map fun ib =>
+      { ib with methods := ib.methods.map fun f => { f with body := desugarStmts f.body } }
+    traitImpls := m.traitImpls.map fun tb =>
+      { tb with methods := tb.methods.map fun f => { f with body := desugarStmts f.body } }
     submodules := m.submodules.map desugarModule }
 
 /-- Apply desugaring to all modules. -/

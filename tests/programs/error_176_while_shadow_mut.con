@@ -1,0 +1,14 @@
+// Bug 176: the loop body's `let mut v0` must not lend its mutability to the
+// outer, immutable `v0`. Pre-fix the checker accepted `v0 = 1;` after the loop
+// (the body's binding answered for the name), assigning an immutable binding.
+// Bug-176 fix alone: E0217. Since exit 2i the body's `v0` shadows the visible
+// outer `v0`, which SCOPE-1@1 refuses first. Expected: E0301.
+mod m {
+    fn main() with(Console) {
+        let v0: i32 = 0;
+        let mut k: i32 = 0;
+        while k < 2 { let mut v0: i32 = 7; v0 = v0 + k; k = k + 1; }
+        v0 = 1;
+        println(v0);
+    }
+}

@@ -341,7 +341,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
       | .mk _ _ _ bindings guard body =>
         let ctx := pushScope ctx
         -- `_` is a wildcard field binding: positional, but not added to scope.
-        let ctx := bindings.foldl (fun ctx b => if b == "_" then ctx else addLocal ctx b (.var none false)) ctx
+        let ctx := (PatBind.names bindings).foldl (fun ctx b => if b == "_" then ctx else addLocal ctx b (.var none false)) ctx
         let ctx := resolveGuard ctx guard
         let ctx := resolveStmts ctx body
         popScope ctx
@@ -453,10 +453,10 @@ partial def resolveStmt (ctx : ResolveCtx) (stmt : Stmt) : ResolveCtx :=
     let ctx := match elseBody with
       | some body => resolveStmts ctx body
       | none => ctx
-    bindings.foldl (fun c b => addLocal c b (.var none false)) ctx
+    (PatBind.names bindings).foldl (fun c b => addLocal c b (.var none false)) ctx
   | .letStructDestructure _ _ bindings value =>
     let ctx := resolveExpr ctx value
-    bindings.foldl (fun c b => addLocal c b (.var none false)) ctx
+    (PatBind.names bindings).foldl (fun c b => addLocal c b (.var none false)) ctx
   | .assert_ _ cond | .assume_ _ cond => resolveExpr ctx cond
 end
 

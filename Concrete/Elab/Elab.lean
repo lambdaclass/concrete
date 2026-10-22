@@ -908,10 +908,15 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           -- scope. Lazy: an arm with no bindings materializes no frame.
           openScope
           match arm with
-          | .mk _ _armEnum armVariant bindings guard body =>
+          | .mk _ _armEnum armVariant patBinds guard body =>
             let ev ← match ed.variants.find? fun v => v.name == armVariant with
               | some ev => pure ev
               | none => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
+            -- Labeled binders (`value: inner`, exit 2i G4) in the variant's field order;
+            -- Check already refused a mismatched list (E0304).
+            let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
+              | .ok bs => pure bs
+              | .error _ => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
             recordVariantUse ed armVariant
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let mut typedBindings : List (String × Ty) := []
@@ -1086,6 +1091,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .ref t => t | .refMut t => t
       | .ptrMut t => t | .ptrConst t => t | .heap t => t
       | _ => .placeholder
+    -- Bug 146: `*h` on an owned heap shell moves the value out AND frees the cell
+    -- (MEMORY_SEMANTICS §8; Check consumes `h`). A plain `CExpr.deref` only loads, so the cell
+    -- leaked. It is the `free` intrinsic, which loads the value and then frees. The evidence
+    -- node stays the dereference: the surface operation is unchanged.
+    match cInner.ty with
+    | .heap t =>
+      return ElaboratedExprV2.mk (CExpr.call "free" [] [cInner] t) (Proof.evDeref cInnerEv.evidence)
+    | _ =>
     return ElaboratedExprV2.mk (CExpr.deref cInner resultTy) (Proof.evDeref cInnerEv.evidence)
 
   | .arrayLit _ elems =>
@@ -2017,7 +2030,7 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     let tmpName := "__destr_" ++ structName
     let tmpLet := Stmt.letDecl sp tmpName false none value false
     let fieldLets := bindings.map fun b =>
-      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b) false
+      Stmt.letDecl sp b.name false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b.fieldName) false
     -- A destructure desugars to several statements; evidence keeps them as ONE block so
     -- the tree mirrors the source construct rather than the desugaring.
     let parts ← elabStmtsEv ([tmpLet] ++ fieldLets)

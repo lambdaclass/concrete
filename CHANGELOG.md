@@ -10,6 +10,40 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
+
+The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
+the checker after the loop. The outer name took the inner binding's type and mutability, so valid
+code was refused (E0217, E0233), a `u8` binding held 300 natively and in `--interp`, and a checked
+program failed SSA verification. Every loop form had the defect, including `for` headers. Check's
+`while` and `for` restored only their depth and labels. `if`, `match` and borrow blocks each
+closed their scope by hand. Every block now closes through one helper (`closeBlockScope`, with
+`inBlockScope` applying the block-local consumption rule). A loop body's linear locals are
+therefore checked at the end of the body, which also catches a per-iteration leak in a
+non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
+
+### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
+
+The landing page now exposes the existing Concrete compiler as WebAssembly in a
+worker, with Core, specialized Core, SSA and LLVM views, real diagnostics,
+source-declaration selection, and downloadable results. Completed stages remain
+available on downstream failure. A redesigned responsive landing page introduces
+the language and integrates this live explorer.
+
+The compiler loads on demand with download progress, digest-versioned HTTP cache
+keys and a Wasm integrity check. Cancellation terminates the worker; editing
+source invalidates results. Compiler build identity and the actual LLVM output
+target are visible. Arithmetic, generics, structs, capabilities and a type-error
+example are included. Build instructions and native/Wasm, loader and UI checks
+live in [scripts/browser](scripts/browser/README.md); the tested asset snapshot is
+versioned for ordinary site deployment.
+
+This is a bounded single-file prototype, not a Concrete-to-Wasm backend, a program
+runner, or an independent verifier. Standard-library/file loading and full
+transformation tracing remain outside this scope. R-0275/R-0353 retain ownership
+of independent checking; successful compilation is not proof verification.
+
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
@@ -112,27 +146,51 @@ Bug 078 fixed this for the two `if` forms, and its record wrongly said that `mat
 handled it. The merge is now terminated as soon as no arm reaches it. The defect failed closed.
 It is pinned by `regress_175_match_arms_all_diverge.con` (five shapes, binary equal to
 `--interp`) and four `check_divergence_detection.sh` rows.
-### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
 
-The landing page now exposes the existing Concrete compiler as WebAssembly in a
-worker, with Core, specialized Core, SSA and LLVM views, real diagnostics,
-source-declaration selection, and downloadable results. Completed stages remain
-available on downstream failure. A redesigned responsive landing page introduces
-the language and integrates this live explorer.
+### Silent Safety Defects From The Second Semantics Evaluation Closed (2026-10-21)
 
-The compiler loads on demand with download progress, digest-versioned HTTP cache
-keys and a Wasm integrity check. Cancellation terminates the worker; editing
-source invalidates results. Compiler build identity and the actual LLVM output
-target are visible. Arithmetic, generics, structs, capabilities and a type-error
-example are included. Build instructions and native/Wasm, loader and UI checks
-live in [scripts/browser](scripts/browser/README.md); the tested asset snapshot is
-versioned for ordinary site deployment.
+The second semantics evaluation (EVALUATION2) found safe programs the checker accepted and the
+binary then ran wrongly. Fixed here, each with a rejection fixture and a positive control:
 
-This is a bounded single-file prototype, not a Concrete-to-Wasm backend, a program
-runner, or an independent verifier. Standard-library/file loading and full
-transformation tracing remain outside this scope. R-0275/R-0353 retain ownership
-of independent checking; successful compilation is not proof verification.
-
+- **Comparisons (bugs 134 and 140).** `==`, `!=`, `<`, `<=`, `>`, `>=` are defined on integers,
+  floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code; everything else is
+  E0229. A comparison never consumes an operand (it used to move linear operands: `Heap == Heap`
+  compared addresses and leaked both cells), references have no comparison (the binary compared
+  addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
+  `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
+  is [ARITHMETIC_POLICY §8a](docs/language/ARITHMETIC_POLICY.md#8a-comparison-operators).
+  Migration: 2 sites (`examples/hexdump`, `examples/png_chunks` discarded a Copy error through
+  `error == error`).
+- **No exit inside an operand (bug 142).** `return`, `break` and `continue` may not occur inside a
+  call argument, a struct/enum/array literal element or an operator operand (E0278): a `return` in
+  a later field after an owned value was moved into the literal leaked that value. Exits stay legal
+  in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
+  [STATEMENT_EXPRESSION_MODEL](docs/language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
+  Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
+- **`defer` reserves by place (bug 143).** A deferred call's arguments are locals, borrows of
+  locals or constants (E0279). A local passed by value is reserved, a local passed by borrow is
+  pinned: neither may be moved or consumed before the deferred call runs (E0206), a later `defer`
+  included. `defer pb(&h); free(h);` was a use after free. Ownership is not taken at registration,
+  so `let f = open(); defer close(f); read(&f);` is unchanged. Arguments bind by binding identity
+  (a later shadowing `let` is a different binding, already true since bug 087). DEFER.md states the
+  rule, and no longer claims `defer obj.method();` is accepted (it is E0282). Migration: 0 sites.
+- **Heap interiors are linearity-tracked (bug 144).** A by-value read of a non-Copy field of a
+  `Heap<T>` is E0290, and `free(h)` (or `defer free(h)`) of a non-Copy pointee is E0287: `let a =
+  h.s; let b = h.s;` double-freed a `String`, and `free(h)` dropped a live linear value. The
+  heap-node destructure is `let n = *h;` plus a pattern. KNOWN_HOLES H11's "heap interiors are not
+  tracked" exclusion is withdrawn. Migration: 22 test files (19 plain-data pointees declared
+  `struct Copy`, 3 node destructures), 0 in `std` and `examples`.
+- **Found in review (bugs 145, 146).** The raw `vec_free` intrinsic dropped non-Copy elements
+  (now E0287 unless the element is Copy; `Vec::drop` is the linear form; the matching `vec_set`
+  overwrite is bug 115's fix), and `*h` loaded a heap value without freeing its cell (it
+  now frees, as MEMORY_SEMANTICS always said, and is never a place: `(*h).f` is E0290, `h.f` is the
+  spelling). A move inside an erased `assert`, `assume` or `ghost let` is E0243 (bug 147): the
+  statement is erased, so the move never ran. A move inside the right operand of `&&` / `||` is
+  E0244 (bug 148): that operand runs only when the left one does not decide the result. Loop
+  conditions are checked inside their loop, every `return` must account for each live owned
+  value, and a labelled `break`/`continue` checks every loop it exits (bug 149).
+- **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
+  `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
@@ -252,6 +310,69 @@ gap, and two more (`u64` division, remainder and bitwise operators, which keep s
 out of reach, and `Bytes` reads that
 extract to calls no proof table models), are recorded with their exact refusals in
 [PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
+
+### Second-Class References And One Binding Per Visible Name Are Enforced (exit 2i, 2026-10-21)
+
+The reference and lexical-binding rules of [MEMORY_SEMANTICS §15](docs/language/MEMORY_SEMANTICS.md)
+are enforced with versioned migration diagnostics. **SCOPE-1@1** (E0301): a binder may not reuse
+the name of a visible local binding (parameters, two parameters of one function included, `let`,
+destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
+and region names); sibling scopes, loop bodies and assignment are not collisions. Duplicate
+parameters used to reach `llvm-as` (bug 124, closed). **REF-6@1**: no `let` binds a reference
+(E0302) and no reference binding is ever assigned (E0303), at Check and again after
+monomorphization (a generic `let y: T = x` or `x = y` at `T := &Int`). A reference now exists only
+as a parameter, a call argument, a borrow-block binder or an arm binder through a borrowed
+scrutinee. Nested patterns rename a binder with **`Variant { value: inner }`** (also in `if let`,
+`while let` and destructuring `let`; E0304 for a field list that does not match). Every
+reference/binding diagnostic names its rule and version (`rule: REF-6@1`, `spec: ...§15`) and gives
+the mechanical rewrite in `next:`; the `--report diagnostic-codes` ledger names each code's rules;
+the front-end "may not return a reference" rejections now carry E0236. The acceptance manifest
+`tests/rules/exit_2i.tsv` (179 rows) is checked by `scripts/tests/check_rules_2i.sh`. Migration:
+std 16 binders, examples 17 sites (one a `let`-bound reference), tests about 70 fixtures (renamed,
+rewritten, or re-expecting E0301 / E0302 / E0303). Found on the way: a shared borrow-block binder over
+a `Heap` passed to `&Heap<T>` read through the slot (bug 126's third form, fixed with bug 126), and a destructuring
+`let` was desugared only at a function's top level (a nested one, or one in a method, had
+undeclared binders); it is now desugared in every nested block, `assert` / `assume` condition and
+method, keeping a value block's value (a `for` header destructure is refused explicitly).
+
+### The Interpreter Runs More Real Programs, And Found A NaN Miscompile (2026-10-21)
+
+`--interp` is the independent oracle for exit 2c, and it could not run much of the example corpus.
+This pass closes interpreter gaps so the interpreter and the binary are compared on more programs.
+Module constants work (bug 117): the initializer is evaluated at the use, in its own frame, and a
+name two modules define is refused, as Lower refuses it. A function imported from a nested module
+can be called (bug 118). A call spelling now resolves per calling module the way the backend
+resolves it, and any ambiguity is refused instead of being settled by list order. Floats are
+modelled in IEEE `f64`/`f32` (bug 128). An integer-to-float cast rounds to nearest-even, a
+float-to-integer cast is the checked conversion, and `%` is C `fmod`. `return` from a call argument
+or a struct-literal field now leaves the function, as it does natively (D4). A trapping run's
+stdout can now be compared (D13): the interpreter models the C library's stdout buffer, which
+`abort` flushes on Darwin and glibc does not, and orders `write(1, ..)` output ahead of
+still-buffered `print_*` output as the binary does. The first float programs
+exposed bug 150, silent wrong code in the binary: SSA cleanup folded `x != x` to false and
+`x == x` to true for a float `x`, because its float guard read the comparison's `bool` result type
+instead of the operand type. That fold is fixed. New differential legs in
+`check_codegen_differential.sh` (`float_semantics`, `return_in_value_position`, and
+`print_then_trap`, which compares the output before the trap). Four examples move to
+`interp=yes`: `constants`, `floats`, `import` and `project`.
+
+The interpreter now has a typed heap. It covers `alloc`/`free`/`Heap<T>`, `malloc`/`realloc`/`free`
+and raw pointers with element-sized arithmetic. A pointer cast to an integer stays a symbolic
+address: offset arithmetic works on it, and any other use is refused. `String` is the runtime's
+`{ptr, len, cap}` struct over a heap buffer, and each string builtin follows its `EmitBuiltins`
+code. A fixed table models the C functions the corpus calls: memory functions, stdio, `FILE *`
+over an in-run overlay (the host's files are read but never written), argv, stdin, `getenv` and a
+few libm functions. Any other foreign function is refused. So are uninitialized or reinterpreted
+memory, use after free and host values such as the clock: the interpreter never makes up a value
+for them. On a project's entry point, `concrete src/main.con --interp -- args` interprets the
+whole module graph `concrete build` compiles, std included, with the program's arguments and
+stdin. `check_example_outputs.sh` runs the interpreter with each case's arguments and stdin, in its
+own scratch copy of the example. Interpreter/native agreement on the example manifest went from 89
+of 151 cases to 146. The remaining five are refused for a stated reason: four read the clock, and
+one reads a union through an inactive field. Two more native defects surfaced. Bug 152 (fixed):
+`string_trim("")` returned a one-byte string holding the byte past its source. Bug 151: `a.b_f` and `a_b.f`
+flattened to one name, and the binary's `a_b::f()` ran the other function. The interpreter refused
+that call, and main's E0299 containment for bugs 097/098 now refuses the program too.
 
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 

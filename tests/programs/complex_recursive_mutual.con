@@ -5,19 +5,18 @@ struct Company {
     manager: Heap<Manager>
 }
 
-struct Manager {
+struct Copy Manager {
     salary: Int,
     bonus: Int
 }
 
+// Heap interiors are linearity-tracked (bug 144): move the company out of its cell and destructure.
 fn total_cost(c: Heap<Company>) with(Alloc) -> Int {
-    let rev: Int = c.revenue;
-    let mgr: Heap<Manager> = c.manager;
-    let sal: Int = mgr.salary;
-    let bon: Int = mgr.bonus;
-    free(mgr);
-    free(c);
-    return rev - sal - bon;
+    let Company { revenue, manager } = *c;
+    let sal: Int = manager.salary;
+    let bon: Int = manager.bonus;
+    free(manager);
+    return revenue - sal - bon;
 }
 
 fn main() with(Std) -> Int {

@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_if_let.con: an `if let` binder reuses a parameter, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn f(v: Int, o: Option<Int>) -> Int {
+    if let Option::Some { value: got } = o {
+        return got + v;
+    }
+    return v;
+}
+
+fn main() -> Int {
+    return f(0, Option::Some { value: 42 });
+}

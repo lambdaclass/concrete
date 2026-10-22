@@ -82,8 +82,9 @@ fn generic_case() with(Alloc) -> Int {
     set_val::<Int>(&mut h, 99);
     let t: Int = get_tag::<Int>(&h);
     let x: Int = h.val;
-    free(h);
-    if x == 99 && t == 8 { return 8; }
+    // Bug 144: Cell<Int> is not Copy, so the pointee is taken back from free and destructured.
+    let Cell { val, tag } = free(h);
+    if x == 99 && t == 8 && val == 99 && tag == 8 { return 8; }
     return 0;
 }
 
@@ -97,13 +98,13 @@ fn nested_case() with(Alloc) -> Int {
     return 0;
 }
 
-// A `&h` held in a binding (not a call argument) is the same slot.
+// A `&h` held in a binding (not a call argument) is the same slot. Exit 2i: a `let` may not bind a
+// reference (REF-6@1), so the named reference is a borrow-block binder (bug 126's third form).
 fn binding_case() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 20, w: 0 });
     bump(&mut h);
     let mut seen: Int = 0;
-    if true {
-        let r: &Heap<B> = &h;
+    borrow h as r in R {
         seen = r.v + peek(r);
     }
     free(h);

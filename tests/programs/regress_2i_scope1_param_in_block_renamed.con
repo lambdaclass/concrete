@@ -1,0 +1,13 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_param_in_block.con: a `let` in a block reuses a parameter, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn f(a: Int) -> Int {
+    if a > 0 {
+        let seven: Int = 7;
+        if seven != 7 { return 0; }
+    }
+    return a;
+}
+
+fn main() -> Int {
+    return f(42);
+}

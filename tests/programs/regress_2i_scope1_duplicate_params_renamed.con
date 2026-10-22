@@ -1,0 +1,9 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_duplicate_params.con: two parameters of one function share a name (bug 124: this passed the checker and failed in `llvm-as`), with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn f(a: Int, b: Int) -> Int {
+    return b;
+}
+
+fn main() -> Int {
+    return f(40, 42);
+}

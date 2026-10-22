@@ -1,0 +1,7 @@
+// Bug 142 (Codex): an assignment's destination is an operand too: a `return` in the index of an
+// indexed assignment is refused (E0278), as it is in an index read.
+fn main() -> Int {
+    let mut a: [Int; 1] = [0];
+    a[if true { return 7; } else { 0 }] = 2;
+    return a[0];
+}

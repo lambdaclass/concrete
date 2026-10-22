@@ -141,12 +141,20 @@ else
   ok "the arm's pattern bindings did not leak past its failed guard"
 fi
 
-# 6. BINDER-FRAME RESTORATION, measured rather than inspected.
+# 6. BINDER-FRAME RESTORATION.
 #
 #    The arm-local leg above cannot see a leak: the next arm rebinds the same name, so
 #    a leaked binding is shadowed and invisible. Leaking the whole arm environment
-#    survived that leg. The observable case is a fallback that READS the name WITHOUT
-#    binding it — then a leaked payload wins over the outer variable.
+#    survived that leg. The observable case was a fallback that READS the name WITHOUT
+#    binding it, while an OUTER binding of that name is visible — then a leaked payload
+#    wins over the outer variable.
+#
+#    Exit 2i SCOPE-1@1 (E0301) makes that shape illegal: a pattern binder may not reuse a
+#    visible name. Without the outer binding the fallback cannot read the name at all
+#    (unbound), and with a rebinding the newest binding wins regardless of a leak, so the
+#    leak is no longer observable in any legal program. The leg is therefore PINNED as a
+#    refusal (the exact code, on both the compile and the interpreter path), plus the
+#    closest legal controls below.
 cat > "$T/restore.con" <<'EOF'
 mod g {
     enum Copy E { A { v: Int }, B { v: Int } }
@@ -163,24 +171,55 @@ mod g {
     }
 }
 EOF
-differential restore "a failed arm's binding does not shadow the outer variable (expect 1 then 5)"
-rout="$( { "$CC" "$T/restore.con" --interp 2>&1 || true; } | sed '$d' | tr '\n' ',')"
-if [ "$rout" = "1,5," ]; then
-  ok "binder frame restored: outer x=1 survives, and the failed guard's outer mutation=5 persists"
-elif [ "$rout" = "99,5," ]; then
-  no "the failed arm's payload LEAKED — x read as 99 instead of the outer 1"
+rc_out="$( { "$CC" "$T/restore.con" -o "$T/restore.bin" 2>&1 && echo "__ACCEPTED__"; } || true)"
+ri_out="$( { "$CC" "$T/restore.con" --interp 2>&1 && echo "__ACCEPTED__"; } || true)"
+if grep -qF "(E0301)" <<<"$rc_out" && ! grep -qF "__ACCEPTED__" <<<"$rc_out"; then
+  ok "PINNED: a pattern binder shadowing an outer local is refused with E0301 (compile)"
 else
-  no "restoration probe gave [$rout], expected [1,5,] — inconclusive"
+  no "the shadowing restoration probe is no longer refused with E0301 at compile — re-enable the leak leg [$(head -3 <<<"$rc_out" | tr '\n' ' ')]"
+fi
+if grep -qF "(E0301)" <<<"$ri_out" && ! grep -qF "__ACCEPTED__" <<<"$ri_out"; then
+  ok "PINNED: the interpreter refuses the same program with E0301 before running any arm"
+else
+  no "the interpreter did not refuse the shadowing probe with E0301 [$(head -3 <<<"$ri_out" | tr '\n' ' ')]"
 fi
 
-# CONTROL: when the fallback DOES bind the same spelling it must see its own payload,
-# so the leg above is testing restoration and not merely that x is always outer.
+# CLOSEST LEGAL CONTROL for the outer half: the failed arm binds a DIFFERENT name, its
+# guard mutates an outer variable, and the fallback reads the outer variable without
+# binding anything of that name. Outer x must read 1 and the guard's mutation must persist.
+cat > "$T/restore_legal.con" <<'EOF'
+mod g {
+    enum Copy E { A { v: Int }, B { v: Int } }
+    fn eff(o: &mut Int) -> Bool { *o = *o + 5; return false; }
+    pub fn main() with(Console) -> Int {
+        let x: Int = 1;
+        let mut outer: Int = 0;
+        let e: E = E::A { v: 99 };
+        match e {
+            E::A { y } if eff(&mut outer) => { return 0; },
+            E::A { w } => { print_int(x); print("\n"); print_int(outer); print("\n"); return 1; },
+            E::B { w } => { return 2; }
+        }
+    }
+}
+EOF
+differential restore_legal "a failed arm leaves the outer variable and its guard's outer mutation intact (expect 1 then 5)"
+rout="$( { "$CC" "$T/restore_legal.con" --interp 2>&1 || true; } | sed '$d' | tr '\n' ',')"
+if [ "$rout" = "1,5," ]; then
+  ok "outer x=1 survives the failed arm, and the failed guard's outer mutation=5 persists"
+else
+  no "restoration control gave [$rout], expected [1,5,]"
+fi
+
+# CONTROL for the inner half: sibling arms binding the SAME spelling (legal: sibling scopes,
+# no outer binding of that name). After the first arm's guard fails, the fallback must bind
+# and read its own payload. (Both arms bind the same payload, so this cannot tell a fresh 99
+# from a stale one; it pins that sibling same-name binders are legal and bind correctly.)
 cat > "$T/rebind.con" <<'EOF'
 mod g {
     enum Copy E { A { v: Int }, B { v: Int } }
     fn no1() -> Bool { return false; }
     pub fn main() with(Console) -> Int {
-        let x: Int = 1;
         let e: E = E::A { v: 99 };
         match e {
             E::A { x } if no1() => { return 0; },
@@ -190,10 +229,10 @@ mod g {
     }
 }
 EOF
-differential rebind "CONTROL: a rebinding fallback sees its OWN payload, not the outer value"
+differential rebind "CONTROL: a rebinding fallback in a sibling arm sees its OWN payload"
 bout="$( { "$CC" "$T/rebind.con" --interp 2>&1 || true; } | sed '$d' | tr -d '\n')"
 if [ "$bout" = "99" ]; then
-  ok "CONTROL: the rebinding arm reads 99, so the leg above is not vacuously reading outer"
+  ok "CONTROL: the rebinding arm reads its own payload 99"
 else
   no "CONTROL failed: rebinding arm read [$bout], expected 99"
 fi

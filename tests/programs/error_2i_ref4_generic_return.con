@@ -1,0 +1,10 @@
+// Exit 2i REF-4@1 (MEMORY_SEMANTICS §15.3): a generic whose type parameter occurs in its return type is instantiated to a reference (`wrap::<&Int>`). Rejected: E0236 at the call.
+fn wrap<R>(r: R) -> R {
+    return r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let y: Int = *wrap::<&Int>(&x);
+    return y;
+}

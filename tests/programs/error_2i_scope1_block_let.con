@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a `let` in an `if` block reuses an outer `let`. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_block_let_renamed.con.
+fn main() -> Int {
+    let x: Int = 1;
+    if true {
+        let x: Int = 100;
+        if x != 100 { return 0; }
+    }
+    return x + 41;
+}

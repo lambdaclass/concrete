@@ -161,8 +161,8 @@ mod cli {
                 if is_flag {
                     match self.find(&a) {
                         Option::None => { err = 1; },
-                        Option::Some { value } => {
-                            let fidx: u64 = value;
+                        Option::Some { value: found } => {
+                            let fidx: u64 = found;
                             if self.kinds.get_unchecked(fidx) == 0 {
                                 hits.set_unchecked(fidx, true);
                             } else {

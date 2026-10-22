@@ -27,9 +27,9 @@ fn volume(c: Config) -> Int {
 }
 
 fn main() -> Int {
-    let c: Config = new_config();
-    let c: Config = set_width(c, 3);
-    let c: Config = set_height(c, 4);
-    let c: Config = set_depth(c, 5);
+    let mut c: Config = new_config();
+    c = set_width(c, 3);
+    c = set_height(c, 4);
+    c = set_depth(c, 5);
     return volume(c);
 }

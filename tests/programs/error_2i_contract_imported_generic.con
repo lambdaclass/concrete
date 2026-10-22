@@ -1,0 +1,15 @@
+// Exit 2i (review round 12): a contract calls an IMPORTED generic function; erased, its
+// specialization would never be built or checked. E0305.
+mod lib {
+    pub fn probe<T: Copy>(x: T) -> bool {
+        let y: T = x;
+        return true;
+    }
+}
+import lib.{probe};
+#[requires(probe::<&i32>(r))]
+fn f(r: &i32) -> i32 { return 42; }
+fn main() -> i32 {
+    let n: i32 = 1;
+    return f(&n);
+}

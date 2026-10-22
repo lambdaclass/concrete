@@ -9,7 +9,7 @@ mod bound_moved {
         match BoundView::bind(a, 0, 3) {
             Result::Ok { value } => {
                 let w: BoundView = second(value);
-                let got: Int = match w.byte(1) { Option::Some { value } => value as Int, Option::None => 0 };
+                let got: Int = match w.byte(1) { Option::Some { value: inner } => inner as Int, Option::None => 0 };
                 destroy(w.release());
                 return got;                    // 13
             },

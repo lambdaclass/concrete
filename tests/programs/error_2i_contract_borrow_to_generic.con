@@ -1,0 +1,9 @@
+// Exit 2i (review round 7): a contract borrows a parameter to call a generic at `T := &i32`.
+// Contracts are erased before monomorphization, so they may not create or pass a reference: E0305.
+fn probe<T: Copy>(x: T) -> bool {
+    let y: T = x;
+    return true;
+}
+#[requires(probe::<&i32>(&x))]
+fn f(x: i32) -> i32 { return x; }
+fn main() -> i32 { return f(42); }

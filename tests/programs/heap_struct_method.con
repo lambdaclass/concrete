@@ -1,6 +1,6 @@
 // Test: call method on Heap<T> value
 // Expected: 30
-struct Point {
+struct Copy Point {
     x: Int,
     y: Int,
 }

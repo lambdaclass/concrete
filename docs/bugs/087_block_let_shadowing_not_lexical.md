@@ -156,3 +156,7 @@ it compares suffix-free names where that is injective.
   Elab renames shadows of visible names, so a re-declared Core name is always a dead one.
   Fixture `tests/programs/regress_087_unpromoted_sibling.con` (42 compiled and --interp;
   previously failed to build).
+
+## Exit 2i (2026-10-21)
+
+SCOPE-1@1 (exit 2i, E0301) now refuses the shadowing reproducers at the source; their lexical answers stay pinned by the renamed twins `regress_2i_scope1_087_renamed.con` and `regress_2i_scope1_087_borrow_renamed/` (binary, `--interp`, extracted model). Elab's alpha-renaming stays as defense in depth and still serves sibling reuse.

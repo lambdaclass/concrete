@@ -404,7 +404,11 @@ def getBuiltinFns : List LLVMFnDef × List LLVMGlobal × List LLVMFnDecl :=
     ], .br "trim_right"⟩,
     ⟨"trim_result", [
       .phi "tr_left" .i64 [(.reg "tl_i", "trim_left"), (.reg "tl_i", "trim_right"), (.reg "tl_i", "tr_check")],
-      .phi "tr_right_raw" .i64 [(.intLit 0, "trim_left"), (.reg "tl_i", "trim_right"), (.reg "tr_i", "tr_check")],
+      -- Bug 144: when the left scan consumed everything (an empty or all-whitespace string)
+      -- the result is empty, so the right end is "before index 0": -1, making `tr_right` 0.
+      -- It was 0 (so `tr_right` 1), which made `string_trim("")` a one-byte string holding the
+      -- byte past the end of its source.
+      .phi "tr_right_raw" .i64 [(.intLit (-1), "trim_left"), (.reg "tl_i", "trim_right"), (.reg "tr_i", "tr_check")],
       .binOp "tr_right" .add .i64 (.reg "tr_right_raw") (.intLit 1),
       .binOp "tr_empty" .icmpUge .i64 (.reg "tr_left") (.reg "tr_right")
     ], .condBr (.reg "tr_empty") "trim_empty" "trim_copy"⟩,

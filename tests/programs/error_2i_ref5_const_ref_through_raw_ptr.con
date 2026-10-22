@@ -1,0 +1,7 @@
+// Exit 2i REF-5@1 (review round 15): a constant initializer reads a reference out of storage
+// behind a raw pointer. Constant initializers are type-checked now: E0238.
+const X: i32 = if true {
+    let r = *(0 as *const &i32);
+    42
+} else { 0 };
+fn main() -> i32 { return X; }

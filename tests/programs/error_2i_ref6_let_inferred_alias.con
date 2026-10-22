@@ -1,0 +1,19 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` copies a reference parameter (its type is inferred). Rejected: E0302.
+struct P { n: Int }
+struct W { p: P, q: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn twice(r: &P) -> Int {
+    let s = r;
+    return get(s) + get(r);
+}
+
+fn main() -> Int {
+    let p: P = P { n: 21 };
+    let out: Int = twice(&p);
+    let P { n } = p;
+    return out + n * 0;
+}

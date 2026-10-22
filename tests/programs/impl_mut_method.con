@@ -6,8 +6,8 @@ impl A {
     }
 }
 
-fn consume_a(a: A) -> Int {
-    let A { a, b } = a;
+fn consume_a(s: A) -> Int {
+    let A { a, b } = s;
     return a;
 }
 

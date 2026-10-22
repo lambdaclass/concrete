@@ -1,0 +1,12 @@
+// Bug 149 (Codex review): a labelled break naming a loop inside a returning branch does not leave
+// the branch, so the branch keeps its consume-inside-loop exemption. Exit 0.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(1);
+    while true {
+        if true {
+            free(h);
+            'inner: while true { break 'inner; }
+            return 0;
+        }
+    }
+}

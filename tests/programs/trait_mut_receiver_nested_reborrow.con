@@ -1,18 +1,21 @@
 // Bug 091 round 3 (Codex review, tenth pass): using an exclusive reborrow `s = &mut *r` while
 // its parent `r` is merely held (not used) is valid; d105bc7c counted the older parent as a
 // conflicting borrow (false E0232). Expected (compiled AND --interp): 4.
+// Exit 2i: a `let` may not bind a reference (REF-6@1), so the parent is a borrow-block binder
+// and the reborrow is passed straight down (`bump2(&mut *r)`).
 mod m {
     struct P { n: i64 }
     impl P {
         fn bump(&mut self) { self.n = self.n + 1; }
     }
+    fn bump2(s: &mut P) {
+        s.bump();
+        P::bump(s);
+    }
     fn main() with(Std) -> Int {
         let mut p: P = P { n: 1 };
-        if true {
-            let r: &mut P = &mut p;
-            let s: &mut P = &mut *r;
-            s.bump();
-            P::bump(s);
+        borrow mut p as r in R {
+            bump2(&mut *r);
             P::bump(r);
         }
         let P { n } = p;

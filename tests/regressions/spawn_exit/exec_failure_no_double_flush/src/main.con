@@ -28,7 +28,7 @@ fn main() with(File, Process, Alloc, Unsafe) -> i32 {
             let child: Child = value;
             // 127 proves the child took the exec-failure path this test is about.
             match child.wait() {
-                Result::Ok { value } => match value {
+                Result::Ok { value: inner } => match inner {
                     ExitStatus::Exited { code } => if code == 127 { 0 } else { 5 },
                     ExitStatus::Signaled { raw } => 6,
                 },

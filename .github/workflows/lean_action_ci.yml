@@ -1125,6 +1125,9 @@ jobs:
       - name: "View lifetime (R-0483 — borrowed access cannot outlive its owner, and validation cannot outlive its bytes)"
         run: bash scripts/tests/check_view_lifetime.sh
 
+      - name: "Exit 2i rules (MEMORY_SEMANTICS §15 — second-class references and one binding per visible name, with versioned migration diagnostics)"
+        run: bash scripts/tests/check_rules_2i.sh
+
       - name: "Effect opacity (R-0484 — an empty capability set is not a claim of purity)"
         run: bash scripts/tests/check_effect_opacity.sh
 

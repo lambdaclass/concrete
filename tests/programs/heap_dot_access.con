@@ -1,7 +1,7 @@
 // 6D#3: `.field` on Heap<T> auto-derefs one layer (the old `->` semantics
 // folded into `.`). This was the E0255 negative ("use '->'"); it is now the
 // positive. Expected: 1
-struct Point { x: Int, y: Int }
+struct Copy Point { x: Int, y: Int }
 
 fn main() with(Std) -> Int {
     let p: Heap<Point> = alloc(Point { x: 1, y: 2 });

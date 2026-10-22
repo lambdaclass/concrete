@@ -1,0 +1,10 @@
+// Bug 148: likewise for `||` (the right operand runs only when the left one is false). E0244.
+struct T { id: Int }
+fn take(t: T) -> bool { let T { id } = t; return id > 0; }
+
+fn main() -> Int {
+    let t: T = T { id: 1 };
+    let b: bool = true || take(t);
+    if b { return 1; }
+    return 0;
+}

@@ -1,0 +1,17 @@
+// Bug 176: a loop body is a lexical block, so a linear value declared in it
+// must be consumed before the body ends (H9), like an `if` branch's. Pre-fix the
+// body's bindings leaked into the function scope and were checked only at the
+// function's end, which a non-terminating function skips: this server-shaped
+// loop dropped one `Res` per iteration and was accepted.
+// Expected: "was never consumed" (E0208) for `r`.
+mod m {
+    struct Res { v: i32 }
+
+    fn main() -> Int {
+        let mut n: i32 = 0;
+        while true {
+            let r: Res = Res { v: n };
+            n = n + 1;
+        }
+    }
+}

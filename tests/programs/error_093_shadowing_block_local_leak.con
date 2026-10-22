@@ -1,7 +1,9 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0208). The check below it stays as defense in depth.
 // Bug 093: a block-local that shadows a (consumed) outer name escaped the
 // never-consumed check, because block locals were found by NAME and `r`
 // existed before the block. The inner heap allocation leaked. E0208.
-struct B { v: Int }
+struct Copy B { v: Int }
 fn work(k: Int) with(Alloc) -> Int {
     let r: Heap<B> = alloc(B { v: k });
     free(r);

@@ -1,0 +1,10 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a generic binds its `T` argument with `let`, called at `T := &Int`; Check sees an opaque `T`. Rejected after monomorphization: E0302 (pass post-mono).
+fn keep<T: Copy>(x: T, k: Int) -> Int {
+    let y: T = x;
+    return k;
+}
+
+fn main() -> Int {
+    let v: Int = 1;
+    return keep::<&Int>(&v, 42);
+}

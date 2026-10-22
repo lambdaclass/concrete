@@ -1,6 +1,6 @@
 # Bug 134 — `==` on an enum or struct passes the checker and fails in `llvm-as`
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (branch `safety-eval2`, with [bug 140](140_comparison_consumes_linear.md))
 **Found:** 2026-10-21, by the std ownership-on-failure work (a std test compared an error enum with
 `==`); the semantics evaluation (EVALUATION2 D8) had found the same class across struct, enum,
 array, fn-pointer, `String` and aggregate-instantiated generic comparisons, without filing it.
@@ -48,6 +48,24 @@ The checker admits `==`/`!=` on operands of any equal type, and the backend lowe
 to a scalar `icmp` at a default width, so an aggregate operand (an enum held as its union struct, a
 struct passed by pointer) produces ill-typed IR. The interpreter has no case for the comparison.
 
+## Fix
+
+The comparison rule (user decision (b), 2026-10-21; [ARITHMETIC_POLICY
+§8a](../language/ARITHMETIC_POLICY.md#8a-comparison-operators)): comparison operators are defined on
+integers, floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code. Both
+reproducers are now refused at the checker, natively and under `--interp`:
+
+```
+error[check]: (E0229) comparison '==' is not defined on 'E': comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)
+```
+
+A `Copy`-bounded generic comparison is accepted at its definition and re-checked per instantiation
+after monomorphization (`verifyComparisonTypes`, E0229), so `same<T: Copy>` at a struct is also a
+diagnostic rather than an `llvm-as` failure. Rejection fixtures `error_134_enum_eq.con` and
+`error_134_struct_eq.con` (`run_tests.sh`); the open-bug reproducer rows in
+`check_example_outputs.sh` are dropped. Migration: 0 sites. Bug 140 records the silent half
+(linear operands consumed, references compared by address).
+
 ## Structural cause
 
 A documented-rule gap with no enforcing site ([structural class](STRUCTURAL_CLASSES.md) 13): no rule
@@ -61,9 +79,9 @@ The rule (EVALUATION2 D8): comparison operators are defined on integers, floats,
 in trusted or `Unsafe` code, raw pointers; a generic comparison needs a bound that provides it. Its
 normative home is VALUE_MODEL under R-0500 (exit 2j/2k), the enforcing check is R-0499 (S8), and
 R-0504 (S12) validates the IR. The repair belongs to exit 2c (loud failures that keep valid programs
-out of the interpreter/native comparison). Reproduction is pinned by `check_example_outputs.sh`
-(open-bug reproducers leg, compile-fails).
+out of the interpreter/native comparison); it landed with bug 140's containment.
 
-## Workaround
+## Workaround (historical)
 
-Compare with `match` on the variants, or a named function over the fields.
+Compare with `match` on the variants, or a named function over the fields (still the way to
+compare aggregates).

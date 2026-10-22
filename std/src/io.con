@@ -498,8 +498,8 @@ mod io {
         path.drop();
         match result {
             Result::Err { error } => { return 0; },
-            Result::Ok { value } => {
-                let f: TextFile = value;
+            Result::Ok { value: opened } => {
+                let f: TextFile = opened;
                 let data: String = "buffered";
                 f.write(&data);
                 data.drop();

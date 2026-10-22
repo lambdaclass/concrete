@@ -61,6 +61,18 @@ structure VarInfo where
   -- env snapshots by this id, never by name. Assigned by `addVar` from
   -- `TypeEnv.nextVarUid`.
   uid : Nat := 0
+  -- Defer rule (a) (bug 143): a pending deferred call BORROWS this binding (`defer
+  -- peek(&t);`). The borrow discharges nothing, so the binding must still be consumed,
+  -- but nothing may move or consume it before the deferred call runs at the exit of the
+  -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
+  -- the only way left). Lifted when that block ends (`checkStmts`).
+  pinnedByDefer : Bool := false
+  -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
+  -- may consume it (no runtime obligation is discharged).
+  isGhost : Bool := false
+  -- Bug 149: the state a borrow block's owner had when the block froze it (read by the
+  -- return check, which must see a pending `defer` through the freeze).
+  frozenFrom : Option VarState := none
   deriving Repr
 
 structure TypeEnv where
@@ -82,12 +94,20 @@ structure TypeEnv where
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
+  -- Bug 149: the loop depth each active label names (a labelled break/continue exits every loop
+  -- from the innermost one out to that depth, and must account for all of their locals).
+  loopLabelDepths : List (String × Nat) := []
   -- True while checking a branch/arm that EXITS THE FUNCTION (every path
   -- returns): consuming an outer linear there is safe even inside a loop —
   -- the loop can never re-iterate past a return. Reset on entering any new
   -- loop (a loop nested INSIDE the exiting branch iterates before the return,
   -- so it needs its own exiting branch).
   inFnExitingBranch : Bool := false
+  -- Exit 2i REF-6@1: > 0 while checking an expression Elab erases before monomorphization (a
+  -- `ghost let` initializer, an `assert` / `assume` condition). Post-mono re-checks runtime
+  -- bindings at `T := &Int`; erased ones never reach it, so inside them a `let` or assignment
+  -- whose type could become a reference by instantiation is refused here.
+  erasedDepth : Nat := 0
   -- Set to `some name` while checking the RHS of `name = RHS`: consuming
   -- `name` there is a REBIND (`acc = f(acc, x)` in a fold loop) — the
   -- assignment restores the binding before the next iteration, so the
@@ -97,6 +117,7 @@ structure TypeEnv where
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
+
   -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
   -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
   -- an id a sibling branch already used.
@@ -136,6 +157,11 @@ inductive CheckError where
   | cannotMoveLinearBorrowed (name : String)
   | variableUsedAfterMove (name : String)
   | variableReservedByDefer (name : String)
+  -- Defer rule (a) (bug 143): consuming a binding a pending deferred call borrows.
+  | variablePinnedByDefer (name : String)
+  -- Defer rule (a) (bug 143): a deferred call's argument is a local name, a borrow of a
+  -- local name, or a constant; anything else would be evaluated at the exit.
+  | deferArgNotPlace (arg : String)
   | cannotConsumeLinearInLoop (name : String)
   | linearVariableNeverConsumed (name : String)
   | matchConsumptionDisagreement (name : String)
@@ -164,6 +190,10 @@ inductive CheckError where
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
   | binOpOperandMismatch (op : String) (lhsTy : String) (rhsTy : String)
+  -- A comparison operator (`==`, `!=`, `<`, ...) on a type with no built-in comparison:
+  -- comparisons are defined on integers, floats, `bool`, `char` and (in trusted or
+  -- `Unsafe` code) raw pointers, and never consume an operand (bugs 134, 140).
+  | comparisonNotDefined (op : String) (ty : String) (why : String)
   -- arrayLiteralEmpty, cannotAssignThroughNonMutRef moved to CoreCheck
   -- Slice 3: Borrow/escape/freeze
   | cannotBorrowMoved (name : String)
@@ -217,6 +247,10 @@ inductive CheckError where
   | breakOutsideLoop
   | continueOutsideLoop
   | deferBodyNotCall
+  -- Rule (d) (bug 142): a `return`/`break`/`continue` inside a call argument, a literal
+  -- element or an operator operand would leave a construct whose evaluated operands were
+  -- already moved into it, and those values were never destroyed.
+  | exitInOperand (kw : String) (ctx : String)
   | reservedName (name : String)
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
@@ -231,6 +265,16 @@ inductive CheckError where
   -- error. Consume it (move/return it), destructure it, or `destroy()` it. (A pure
   -- *Copy* value silently discarded is E0294 `discardedPureValue`, not this.)
   | discardedLinear (tyName : String)
+  -- Bug 144: `free(h)` (statement or deferred) on a `Heap<T>` whose pointee is non-Copy
+  -- would drop that live value: heap interiors are linearity-tracked.
+  | freeDropsLinearInterior (tyName : String)
+  -- Bug 145: `vec_free` of a `Vec<T>` with non-Copy `T` drops the elements still in it.
+  | vecFreeDropsElements (elemTy : String)
+  -- Bug 147: an erased proof statement (`assert`, `assume`, `ghost let`) moved a runtime value.
+  | erasedConsumesRuntime (name : String)
+  -- Bug 148: the right operand of `&&` / `||` runs only when the left one does not decide the
+  -- result, so a move inside it may never happen.
+  | conditionalOperandConsumes (name : String) (op : String)
   -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
   -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
   -- used exactly once, so `_` may ignore ONLY a Copy value. To get rid of a non-Copy
@@ -256,6 +300,40 @@ inductive CheckError where
   -- drop the shadowed value (scope exit resolves names, so the older entry's
   -- obligation vanished). Consume the old value first, or use another name.
   | shadowsLiveLinear (name : String)
+  -- Exit 2i G4: a labeled pattern field list (`Variant { value: inner }`) names an unknown
+  -- field, names one twice, or omits one.
+  | patternFieldMismatch (pattern : String) (why : String)
+  -- Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a binder may not reuse the spelling of a
+  -- local value binding visible at its declaration (parameters, `let`, destructuring,
+  -- match/`if let`/`while let` binders, `for` header binders, borrow-block reference and
+  -- region names). `kind` names the new binder's form.
+  | shadowsVisibleBinding (name : String) (kind : String)
+  -- Exit 2i REF-6@1 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
+  -- reference, whether written, through an alias or inferred.
+  | letBindsReference (name : String) (tyName : String)
+  -- Exit 2i REF-6@1 (b): no reference binding (parameter, borrow-block binder, arm binder)
+  -- is the target of an assignment.
+  | assignsReferenceBinding (name : String) (tyName : String)
+  -- REF-6@1 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
+  -- erased before monomorphization, where a runtime `let` at `T := &Int` is re-checked, so it is
+  -- refused here (exit 2i review).
+  | ghostLetAtTypeParam (name : String) (tyName : String)
+  -- Exit 2i (review round 5): a contract expression (requires / ensures / invariant / variant)
+  -- binds a name. Contracts are propositions and, like spec bodies, binder-free, so no binding
+  -- rule (SCOPE-1, REF-6) needs a typed walk of erased contract code.
+  | contractBinds (fnName : String) (names : String)
+  -- Exit 2i (review round 14): a constant initializer borrows. Constants are values and may not
+  -- borrow (E0602 at a use); with no borrow, no reference can arise in one (no parameters, REF-1,
+  -- REF-3), so this one test is REF-6 for constant initializers.
+  | constBorrows (name : String)
+  -- Exit 2i (review round 7): a generic instantiated to a reference inside erased code (an
+  -- assert / assume condition or a ghost initializer). Elab drops the call, so Mono never builds
+  -- the specialization and the post-mono REF-6 check never sees its body.
+  | erasedRefInstantiation (what : String) (param : String) (tyName : String)
+  -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
+  -- function, function type or reference instantiation would return a reference. The
+  -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
+  | returnsReference (msg : String) (rule : String)
   -- #18 container-not-in-context enforcement: within ONE call's arguments
   -- (including the auto-borrowed method receiver), a variable may be borrowed
   -- at most once when any of its borrows is `&mut` — `f(&mut x, &mut x)` and
@@ -302,6 +380,8 @@ def CheckError.message : CheckError → String
   | .cannotMoveLinearBorrowed name => s!"cannot move linear variable '{name}': variable is borrowed"
   | .variableUsedAfterMove name => s!"linear variable '{name}' used after move"
   | .variableReservedByDefer name => s!"variable '{name}' is reserved by defer"
+  | .variablePinnedByDefer name => s!"variable '{name}' is borrowed by a pending defer: it may not be moved or consumed before the deferred call runs at the end of the block"
+  | .deferArgNotPlace arg => s!"a deferred call's argument must be a local name, a borrow of a local name (`&x`, `&mut x`) or a constant, not {arg}"
   | .cannotConsumeLinearInLoop name => s!"cannot consume linear variable '{name}' inside a loop (declared outside the loop)"
   | .linearVariableNeverConsumed name => s!"linear variable '{name}' was never consumed"
   | .matchConsumptionDisagreement name => s!"match arms disagree on consumption of '{name}'"
@@ -327,6 +407,7 @@ def CheckError.message : CheckError → String
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
   | .binOpOperandMismatch op lhsTy rhsTy => s!"operands of '{op}' have different numeric types '{lhsTy}' and '{rhsTy}'"
+  | .comparisonNotDefined op ty why => s!"comparison '{op}' is not defined on '{ty}': {why}"
   -- cannotAssignThroughNonMutRef, arrayLiteralEmpty moved to CoreCheck
   -- Slice 3
   | .cannotBorrowMoved name => s!"cannot borrow '{name}': already moved"
@@ -369,11 +450,16 @@ def CheckError.message : CheckError → String
   | .breakOutsideLoop => "break outside of loop"
   | .continueOutsideLoop => "continue outside of loop"
   | .deferBodyNotCall => "defer body must be a function call"
+  | .exitInOperand kw ctx => s!"`{kw}` may not occur inside {ctx}: an exit there leaves a call or literal whose earlier operands were already evaluated and moved into it"
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
+  | .conditionalOperandConsumes name op => s!"the right operand of '{op}' may not move or consume '{name}': it runs only when the left operand does not decide the result, so the move may never happen"
+  | .erasedConsumesRuntime name => s!"a proof-only statement (assert, assume, ghost let) may not move or consume '{name}': it is erased before code generation, so the move would never happen"
+  | .vecFreeDropsElements elemTy => s!"vec_free would drop the non-Copy elements of type '{elemTy}' still in the vector without destroying them"
+  | .freeDropsLinearInterior tyName => s!"free() would drop the live non-Copy value of type '{tyName}' inside the heap cell"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .discardedPureValue tyName => s!"pure value of type '{tyName}' is computed and then discarded — this is a dead computation with no effect"
   | .newtypeConstructPrivate name => s!"newtype '{name}' cannot be constructed here: direct construction is private to its defining module"
@@ -385,6 +471,22 @@ def CheckError.message : CheckError → String
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
   | .cannotOverwriteLinearPlace desc tyName => s!"cannot overwrite non-Copy {desc} of type '{tyName}' — overwriting would leak the old value"
   | .shadowsLiveLinear name => s!"shadowing '{name}' would silently drop its still-live non-Copy value"
+  | .patternFieldMismatch pat why => s!"pattern {pat}: {why}"
+  | .shadowsVisibleBinding name kind =>
+    s!"'{name}' is already bound in this scope or an enclosing one; a new binding ({kind}) may not reuse a visible name"
+  | .letBindsReference name ty =>
+    s!"a `let` binding may not hold a reference: '{name}' has type '{ty}'"
+  | .assignsReferenceBinding name ty =>
+    s!"a reference binding is never assigned: '{name}' has type '{ty}'"
+  | .returnsReference msg _ => msg
+  | .erasedRefInstantiation what p ty =>
+    s!"{what}: '{p}' := '{ty}' inside erased code (an assert, assume or ghost initializer); the instantiated body is never monomorphized, so its reference bindings would never be re-checked"
+  | .constBorrows name =>
+    s!"constant '{name}' borrows in its initializer; a constant is a value and may not borrow, so no reference binding can arise in it"
+  | .contractBinds fnName what =>
+    s!"a contract of '{fnName}' contains {what}; a contract expression is a binder- and statement-free proposition"
+  | .ghostLetAtTypeParam name ty =>
+    s!"a `ghost let` of a type-parameter type could hold a reference once instantiated: '{name}' has type '{ty}' (a ghost binding is erased before monomorphization re-checks it)"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
@@ -426,7 +528,15 @@ def CheckError.hint : CheckError → Option String
   | .importBindingCollision name _ => some s!"a name has one binding per module: rename the import (`import m.\{{name} as other_name}`) or the local definition, or call it qualified as `module::{name}`"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
+  | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
+  | .variablePinnedByDefer name => some s!"register the consuming `defer` BEFORE the one that borrows '{name}' (deferred calls run in reverse order), or consume '{name}' after the block that holds the borrowing `defer`"
+  | .deferArgNotPlace _ => some "the arguments are bound when the `defer` registers and read when it runs; compute a value in a `let` first, or move the computation into a named cleanup function that takes the local (or a borrow of it)"
+  | .conditionalOperandConsumes name _ => some s!"compute the right operand first in a `let` (consuming '{name}' on every path), or use an `if` whose branches both account for it"
+  | .erasedConsumesRuntime name => some s!"state the property over a borrow or a Copy reading (`h.f`, `*r` for a Copy pointee) that leaves '{name}' owned"
+  | .vecFreeDropsElements _ => some "use `v.drop()`, which runs the elements' destructors; or move every element out and release the emptied buffer in a trusted function"
+  | .freeDropsLinearInterior _ => some "move the value out with `let v = *h;` (which also frees the cell) and consume it, or bind the result of `free(h)`: `let v = free(h);`"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
+  | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
   | .ifBranchTypeMismatch thenTy elseTy =>
     if thenTy == "()" || elseTy == "()" then
       some "a branch whose last item is a statement or `expr;` has value `()`; end the branch with a trailing expression (no `;`) to give it a value"
@@ -453,6 +563,8 @@ def CheckError.code : CheckError → String
   | .cannotMoveLinearBorrowed _ => "E0204"
   | .variableUsedAfterMove _ => "E0205"
   | .variableReservedByDefer _ => "E0206"
+  | .variablePinnedByDefer _ => "E0206"
+  | .deferArgNotPlace _ => "E0279"
   | .cannotConsumeLinearInLoop _ => "E0207"
   | .linearVariableNeverConsumed _ => "E0208"
   | .matchConsumptionDisagreement _ => "E0209"
@@ -478,6 +590,7 @@ def CheckError.code : CheckError → String
   | .breakTypeMismatch _ _ => "E0226"
   | .intLiteralOutOfRange _ _ _ _ => "E0227"
   | .binOpOperandMismatch _ _ _ => "E0228"
+  | .comparisonNotDefined _ _ _ => "E0229"
   -- Slice 3: Borrow/escape (E0230–E0239)
   | .cannotBorrowMoved _ => "E0230"
   | .cannotBorrowMutablyBorrowed _ => "E0231"
@@ -516,11 +629,16 @@ def CheckError.code : CheckError → String
   | .breakOutsideLoop => "E0280"
   | .continueOutsideLoop => "E0281"
   | .deferBodyNotCall => "E0282"
+  | .exitInOperand _ _ => "E0278"
   | .reservedName _ => "E0283"
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"
   | .discardedMustUse _ => "E0286"
   | .discardedLinear _ => "E0287"
+  | .freeDropsLinearInterior _ => "E0287"
+  | .vecFreeDropsElements _ => "E0287"
+  | .erasedConsumesRuntime _ => "E0243"
+  | .conditionalOperandConsumes _ _ => "E0244"
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
   | .nonCopyProjection _ _ => "E0290"
@@ -534,13 +652,68 @@ def CheckError.code : CheckError → String
   | .fieldAccessPrivate _ _ => "E0298"
   | .guardMovesLinear _ => "E0300"
   | .mainHasParams _ => "E0310"
+  | .patternFieldMismatch _ _ => "E0304"
+  | .shadowsVisibleBinding _ _ => "E0301"
+  | .letBindsReference _ _ => "E0302"
+  | .assignsReferenceBinding _ _ => "E0303"
+  | .ghostLetAtTypeParam _ _ => "E0302"
+  | .contractBinds _ _ => "E0305"
+  | .constBorrows _ => "E0302"
+  | .erasedRefInstantiation _ _ _ => "E0302"
+  | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 
+/-- The normative statement every rule tag points at (MEMORY_SEMANTICS §15.5). -/
+def ruleSpecRef : String := "docs/language/MEMORY_SEMANTICS.md §15"
+
+/-- The exit 2i rule (with its version) a diagnostic enforces, MEMORY_SEMANTICS §15.5 item 2.
+    A code that serves several rules (E0238) has a default here and is overridden at the sites
+    that enforce another rule (`throwCheck (rule := ...)`). `none`: not a §15 rule. -/
+def CheckError.rule : CheckError → Option String
+  | .shadowsVisibleBinding _ _ => some "SCOPE-1@1"
+  | .contractBinds _ _ => some "SCOPE-1@1"
+  | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
+  | .shadowsLiveLinear _ => some "SCOPE-1@1"
+  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"
+  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@1"
+  | .referenceEscapesBorrowBlock _ => some "REF-6@1"
+  | .returnsReference _ r => some r
+  | .refStoredInAggregate _ _ => some "REF-3@1"
+  | .untraceablePlace _ _ => some "REF-5@1"
+  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
+  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
+  | .conflictingCallBorrows _ => some "REF-8@1"
+  | _ => none
+
+/-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
+    rendered as `next:` / `next_action`. Keyed by the rule tag so a site override gets the
+    rewrite of the rule it enforces. -/
+def ruleNextAction (rule : String) : Option String :=
+  match rule with
+  | "SCOPE-1@1" => some "give the new binding its own name; for a pattern field write `Variant { value: inner }`; to replace the value of a `mut` binding, assign instead (`value = ...`)"
+  | "REF-1@1" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
+  | "REF-2@1" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
+  | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
+  | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
+  | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
+  | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
+  | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
+  | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | _ => none
+
+/-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
+def ruleEvidence (rule : Option String) : List (String × String) :=
+  match rule with
+  | some r => [("rule", r), ("spec", ruleSpecRef)]
+  | none => []
+
 def throwCheck (e : CheckError) (span : Option Span := none)
-    (related : List (Span × String) := []) : CheckM α :=
+    (related : List (Span × String) := []) (rule : Option String := none) : CheckM α :=
+  let r := rule.orElse (fun _ => e.rule)
   throw [{ severity := .error, message := e.message, pass := "check", span := span,
            hint := e.hint, code := e.code, expected := e.expected, actual := e.actual,
-           related := related }]
+           related := related, evidence := ruleEvidence r,
+           nextAction := r.bind ruleNextAction }]
 
 end Concrete

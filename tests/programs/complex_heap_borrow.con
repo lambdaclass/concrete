@@ -1,5 +1,5 @@
 // Complex: heap allocation + arrow access + struct methods + free
-struct Pair { a: Int, b: Int }
+struct Copy Pair { a: Int, b: Int }
 
 impl Pair {
     fn sum(&self) -> Int {

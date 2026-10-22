@@ -1,0 +1,11 @@
+// Bug 142: a `return` in an array-literal element after an owned element was moved in (c05).
+// Refused (E0278).
+struct T { id: Int }
+
+fn f(n: Int) -> Int {
+    let a: T = T { id: 1 };
+    let arr: [T; 2] = [a, if n > 0 { return 7; } else { T { id: 2 } }];
+    return 0;
+}
+
+fn main() -> Int { return f(1); }

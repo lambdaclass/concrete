@@ -24,14 +24,17 @@
 #   - exit code exactly N.
 # <dir> is the project root, else the source's directory (minus a trailing src/).
 #
-# interp=yes: `concrete <src> --interp` must exit 0 and print the expected stdout
-# followed by the line `<V>` when ret=V is given (the interpreter prints main's
-# return value; the binary exits with it modulo 256, so V mod 256 must equal N).
-# Without ret=, main returns Unit and N must be 0. interp=yes cannot be combined
-# with args or stdin: the interpreter takes neither.
+# interp=yes: `concrete <src> --interp -- <args...>` (with the same stdin, in its own
+# scratch copy of the example directory) must print the expected stdout, followed by
+# the line `<V>` when ret=V is given (the interpreter prints main's return value; the
+# binary exits with it modulo 256, so V mod 256 must equal N), and must exit 0 with
+# ret=, or N without it (a Unit main exits 0; a program that calls exit(N) exits N).
+# A project unit is interpreted from its src/main.con with the project's whole module
+# graph, std included, as `concrete build` compiles it.
 # interp=fails:<marker>: the interpreter must FAIL with <marker> in its output.
-# When it starts running the program, this gate fails until the rule is promoted
-# to interp=yes — a disagreement is never silently tolerated.
+# When it starts running the program and agrees with the binary, this gate fails
+# until the rule is promoted to interp=yes; when it exits 0 with other output, that
+# is a disagreement and fails too — a disagreement is never silently tolerated.
 #
 # oracle= says what independently checks the expected output (exit code and stdout). A golden
 # recorded from the binary's own output proves only that the output does not change: bug 121's
@@ -58,7 +61,7 @@
 #
 # Negative controls (temporary manifest copies, one small unit) run at the end:
 # a wrong exit code, a wrong interpreter value, a wrong stdout, interp=fails on a
-# program the interpreter runs, a missing rule, interp=yes with args and an
+# program the interpreter runs, a missing rule and an
 # inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
 # interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
 # pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
@@ -259,10 +262,6 @@ while IFS= read -r line; do
     no "$label: ret=$ret is inconsistent with exit=$exit_want (the binary exits with main's value modulo 256)"
     continue
   fi
-  if [ -z "$ret" ] && [ "$exit_want" -ne 0 ] && [ "$interp" = yes ]; then
-    no "$label: exit=$exit_want with interp=yes needs ret=<main's value> (only a Unit main exits 0 without one)"
-    continue
-  fi
   # The golden's independent check (see the header).
   case "$oracle" in
     "")
@@ -339,24 +338,32 @@ while IFS= read -r line; do
   rm -rf "$work"
 
   # Interpreter.
-  isrc="$u"; idir="."
-  case "$u" in */) isrc="src/main.con"; idir="${u%/}" ;; esac
-  (cd "$idir" && bounded_run -i /dev/null "$INTERP_TIMEOUT" -- env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C "$COMPILER" "$isrc" --interp > "$TMP/int_$n.out" 2> "$TMP/int_$n.err")
+  # Its own scratch copy: the interpreter reads the same fixtures and must not see what the
+  # native run wrote.
+  isrc="$ROOT_DIR/$u"
+  case "$u" in */) isrc="$ROOT_DIR/${u%/}/src/main.con" ;; esac
+  iwork="$TMP/iwork_$n"
+  cp -R "$base" "$iwork"
+  iin="/dev/null"; [ -n "$stdin_rel" ] && iin="$iwork/$stdin_rel"
+  # shellcheck disable=SC2086
+  (cd "$iwork" && bounded_run -i "$iin" "$INTERP_TIMEOUT" -- env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C "$COMPILER" "$isrc" --interp -- $args > "$TMP/int_$n.out" 2> "$TMP/int_$n.err")
   irc=$?
+  rm -rf "$iwork"
   if bounded_is_incomplete "$irc"; then
     inc "$label: the interpreter timed out twice (${INTERP_TIMEOUT}s, then alone): no observation"
     continue
   fi
+  iexit_want=0; [ -z "$ret" ] && iexit_want="$exit_want"
   case "$interp" in
     yes)
-      if [ -n "$args" ] || [ -n "$stdin_rel" ]; then
-        no "$label: interp=yes with args or stdin — the interpreter takes neither; use interp=fails:<marker>"
-        continue
-      fi
       cp "$exp" "$TMP/int_$n.want"
       [ -n "$ret" ] && echo "$ret" >> "$TMP/int_$n.want"
-      if [ "$irc" -ne 0 ]; then
-        no "$label: interpreter exited $irc"
+      # An interpreter refusal or trap (an `interp:` diagnostic) is never agreement, even when
+      # its status happens to equal the program's expected exit status.
+      if grep -q '^interp: ' "$TMP/int_$n.err"; then
+        no "$label: the interpreter failed: $(grep '^interp: ' "$TMP/int_$n.err" | awk 'NR==1')"
+      elif [ "$irc" -ne "$iexit_want" ]; then
+        no "$label: interpreter exited $irc, expected $iexit_want"
         cat "$TMP/int_$n.err" "$TMP/int_$n.out" | awk 'NR<=3'
       elif ! cmp -s "$TMP/int_$n.want" "$TMP/int_$n.out"; then
         no "$label: interpreter output differs (expected stdout + main's value)"
@@ -370,8 +377,11 @@ while IFS= read -r line; do
       marker="${interp#fails:}"
       marker="${marker//\~/ }"   # '~' stands for a space (rules are whitespace-split)
       if [ -z "$marker" ]; then no "$label: interp=fails: needs a marker"; continue; fi
-      if [ "$irc" -eq 0 ]; then
-        no "$label: interp=fails:$marker but the interpreter now runs it (exit 0) — promote the rule to interp=yes"
+      # A recorded failure is the interpreter REFUSING (an `interp:` diagnostic). A run to
+      # completion (exit 0, or the program's own exit status) means the rule must become
+      # interp=yes, which then compares the output: a disagreement is filed, never kept here.
+      if [ "$irc" -eq 0 ] || ! grep -q '^interp: ' "$TMP/int_$n.err"; then
+        no "$label: interp=fails:$marker but the interpreter now runs it (exit $irc) — promote the rule to interp=yes"
       elif ! grep -qF -- "$marker" "$TMP/int_$n.out" "$TMP/int_$n.err"; then
         no "$label: the interpreter fails, but not with '$marker':"
         cat "$TMP/int_$n.err" "$TMP/int_$n.out" | awk 'NR<=3'
@@ -392,7 +402,7 @@ done < <(awk '$1 == "@run"' "$RULES")
 
 # --- 5. Open-bug reproducers still reproduce. ---
 # Bugs the examples exposed (docs/bugs/108-120, 122), the exit 2i specification found
-# (123-124) the semantics probes found (127-131), bug 134 and bugs 136-137, pinned the way check_bug077_contained.sh
+# (123-124) the semantics probes found (127-131) and bugs 136-137, pinned the way check_bug077_contained.sh
 # pins 077: each reproducer must still show its recorded failure. When one stops (the
 # bug was fixed), this leg fails until the bug doc, the audit_bug_corpus.sh entry and
 # this table are updated together — a fix cannot leave the ledger reading OPEN.
@@ -482,13 +492,7 @@ open_bug_reproducers() {
     esac
   done <<'TABLE'
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
-117|bug117_interp_module_const/repro.con|interp-fails|undefined variable 'K'
-118|bug118_interp_nested_module_import/repro.con|interp-fails|undefined function 'f'
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
-124|bug124_duplicate_parameter_names/repro.con|compile-fails|redefinition of argument
-128|bug128_interp_int_to_float_identity/repro.con|interp-prints|3
-134|bug134_aggregate_eq_invalid_ir/repro.con|compile-fails|but expected 'i64'
-134|bug134_aggregate_eq_invalid_ir/repro_struct.con|compile-fails|but expected 'i64'
 136|bug136_functional_update_base_reevaluated/repro.con|runs-exit|87
 137|bug137_enum_literal_field_order/repro.con|runs-exit|65
 165|bug165_generated_helper_call_binds_by_spelling/repro.con|signals|
@@ -522,7 +526,6 @@ run_controls() {
   control wrong_stdout "native stdout differs" "@run examples/hmac_sha256/src/main.con hmac exit=0 ret=0 interp=yes oracle=interp stdout=empty" "examples/hmac_sha256/src/main.con"
   control interp_now_runs "promote the rule to interp=yes" "@run $unit fib exit=55 ret=55 interp=fails:undefined oracle=unverified:control stdout=empty"
   control missing_rule "has no @run or @norun rule" ""
-  control interp_with_args "interp=yes with args or stdin" "@run $unit fib exit=55 ret=55 interp=yes oracle=interp stdout=empty -- extra"
   control inconsistent_ret "is inconsistent with exit=55" "@run $unit fib exit=55 ret=56 interp=yes oracle=interp stdout=empty"
   control norun_no_reason "has no reason=" "@norun $unit"
   # Oracles: an expected output counts only with an independent check.
@@ -610,7 +613,7 @@ run_controls() {
   if [ -z "$ires" ]; then echo "  ok   control: incomplete results are recognised (never a mutation kill) and zero counts are not"; PASS=$((PASS + 1))
   else no "control: lib/incomplete.sh: $(echo "$ires" | tr '\n' ';')"; fi
   # Positive control: a real unverified golden passes and is counted, not hidden.
-  local uunit="examples/snippets/constants.con"
+  local uunit="examples/snippets/union.con"
   if ! grep -qE "^@run $uunit .*oracle=unverified:" "$MANIFEST"; then
     no "positive control: $uunit no longer has an unverified rule; point this control at one that does"
   elif EXAMPLE_OUTPUTS_ONLY="$uunit" EXAMPLE_OUTPUTS_IS_CONTROL=1 bash "$0" > "$dir/positive_unverified.log" 2>&1 \

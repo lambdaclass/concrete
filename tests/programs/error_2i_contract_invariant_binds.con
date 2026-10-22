@@ -1,0 +1,8 @@
+// Exit 2i (review round 5): a loop invariant binds a name (here one a parameter already has).
+// Contracts are binder-free propositions: E0305 (SCOPE-1@1).
+fn f(x: i32) -> i32 {
+    #[invariant(if true { let x: i32 = 0; true } else { true })]
+    while false { }
+    return x;
+}
+fn main() -> i32 { return f(42); }

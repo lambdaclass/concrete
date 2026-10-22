@@ -1,0 +1,17 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` binds a shared reference to a projection. Rejected: E0302.
+struct P { n: Int }
+struct W { p: P, q: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn main() -> Int {
+    let w: W = W { p: P { n: 21 }, q: P { n: 0 } };
+    let r: &P = &w.p;
+    let out: Int = get(r) + get(r);
+    let W { p, q } = w;
+    let P { n } = p;
+    let P { n: m } = q;
+    return out + n * 0 + m;
+}

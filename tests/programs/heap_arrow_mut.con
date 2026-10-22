@@ -1,5 +1,5 @@
 // Test: write fields via -> on Heap<T>
-struct Box { value: Int }
+struct Copy Box { value: Int }
 
 fn main() with(Std) -> Int {
     let mut p: Heap<Box> = alloc(Box { value: 10 });

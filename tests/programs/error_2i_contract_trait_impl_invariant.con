@@ -1,0 +1,17 @@
+// Exit 2i (review round 6): a loop invariant in a trait-impl method binds a reference alias. E0305.
+struct S { n: i32 }
+trait T { fn f(&self, r: &i32) -> i32; }
+impl T for S {
+    fn f(&self, r: &i32) -> i32 {
+        #[invariant(if true { let alias = r; true } else { true })]
+        while false { }
+        return *r + self.n;
+    }
+}
+fn main() -> i32 {
+    let s: S = S { n: 0 };
+    let x: i32 = 42;
+    let out: i32 = s.f(&x);
+    let S { n } = s;
+    return out + n;
+}

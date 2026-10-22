@@ -1,0 +1,8 @@
+// Bug 145: vec_free released the buffer and dropped the non-Copy elements still in it without
+// destroying them. Refused (E0287); Vec::drop runs the element drop glue.
+fn main() with(Alloc) -> Int {
+    let mut v: Vec<String> = vec_new::<String>();
+    vec_push::<String>(&mut v, "kept");
+    vec_free::<String>(v);
+    return 0;
+}

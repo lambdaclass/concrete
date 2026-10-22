@@ -1,3 +1,7 @@
+// Bug 145: `vec_free` of a Vec<String> is refused in safe code (it would drop live elements); a
+// trusted helper vouches that the vector was emptied first.
+trusted fn free_emptied(v: Vec<String>) with(Alloc) { vec_free::<String>(v); }
+
 // Test: string literals inside loops must be properly materialized.
 // Previously produced invalid LLVM IR: store %struct.String @global, ptr %ssa
 fn main() with(Std) -> Int {
@@ -19,6 +23,6 @@ fn main() with(Std) -> Int {
         }
         si = si + 1;
     }
-    vec_free::<String>(strings);
+    free_emptied(strings);
     return slen;
 }

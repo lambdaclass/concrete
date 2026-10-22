@@ -22,7 +22,7 @@ mod handle_used_after_close {
                 let key: Bytes = Bytes::from_string(&k);
                 k.drop();
                 db.close();
-                match db.put(&wopts, &key, &key) { Result::Ok { value } => { discard(value); }, Result::Err { error } => { error.drop(); }, } // DEFECT
+                match db.put(&wopts, &key, &key) { Result::Ok { value: inner } => { discard(inner); }, Result::Err { error } => { error.drop(); }, } // DEFECT
                 key.drop();
                 wopts.destroy();
             },

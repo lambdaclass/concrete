@@ -1049,8 +1049,8 @@ mod numeric {
         b.push(10); b.push(20); b.push(30); b.push(40); b.push(50);
         let mut rc: i32 = 0;
         match ByteView::new(1, 3, &b) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 if !assert_eq::<u64>(v.off(), 1, "off should be 1") { rc = 1; }
                 if !assert_eq::<u64>(v.len(), 3, "len should be 3") { rc = 1; }
                 match v.byte(&b, 0) {
@@ -1118,8 +1118,8 @@ mod numeric {
         other.push(7); other.push(7); other.push(7); other.push(7);   // len 4, different bytes
         let mut rc: i32 = 0;
         match ByteView::new(0, 2, &a) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 match v.cursor(&a) {
                     Option::Some { value } => {},
                     Option::None => { rc = 1; }
@@ -1233,8 +1233,8 @@ mod numeric {
         c.push(90);
         let mut rc: i32 = 0;
         match ByteView::new(1, 2, &a) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 if !assert_true(v.fits(&a), "fits its own buffer") { rc = 1; }
                 if !assert_true(!v.fits(&c), "does not fit a shorter buffer") { rc = 1; }
                 match v.byte(&c, 0) {
@@ -1258,11 +1258,11 @@ mod numeric {
         b.push(65); b.push(66); b.push(67);
         let mut rc: i32 = 0;
         match ByteView::new(0, 3, &b) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 match v.to_text(&b) {
-                    Option::Some { value } => {
-                        let t: Text = value;
+                    Option::Some { value: text } => {
+                        let t: Text = text;
                         b.set(1, 0xFF);           // would have poisoned a borrowed Text
                         match t.byte(1) {
                             Option::Some { value } => {
@@ -1288,8 +1288,8 @@ mod numeric {
         b.push(99); b.push(97); b.push(102); b.push(195); b.push(169); b.push(33);
         let mut rc: i32 = 0;
         match ByteView::new(0, 5, &b) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 match v.to_text(&b) {
                     Option::Some { value } => {
                         if !assert_eq::<u64>(value.len(), 5, "text is 5 bytes") { rc = 1; }
@@ -1301,8 +1301,8 @@ mod numeric {
             Option::None => { rc = 1; }
         }
         match ByteView::new(0, 4, &b) {
-            Option::Some { value } => {
-                let v: ByteView = value;
+            Option::Some { value: view } => {
+                let v: ByteView = view;
                 match v.to_text(&b) {
                     Option::Some { value } => { value.drop(); rc = 1; }, // split codepoint must reject
                     Option::None => {}

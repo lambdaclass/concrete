@@ -1,0 +1,15 @@
+// Bug 142: a `return` in a later call argument after an owned value was passed in an earlier
+// one (EVALUATION2 c06): `a` was never destroyed. Refused (E0278).
+struct T { id: Int }
+fn drop_t(t: T) -> Int {
+    let T { id } = t;
+    return id;
+}
+fn take2(a: T, b: T) -> Int { return drop_t(a) + drop_t(b); }
+
+fn f(n: Int) -> Int {
+    let a: T = T { id: 1 };
+    return take2(a, if n > 0 { return 7; } else { T { id: 2 } });
+}
+
+fn main() -> Int { return f(1); }

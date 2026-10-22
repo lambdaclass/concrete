@@ -1,0 +1,14 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` copies a borrow-block reference through an identity cast (gap G14). Rejected: E0302.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let mut out: Int = 0;
+    borrow x as r in R {
+        let s = r as &Int;
+        out = read(s);
+    }
+    return out;
+}

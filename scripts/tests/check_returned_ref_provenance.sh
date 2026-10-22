@@ -58,7 +58,7 @@ fn main() -> i64 { return 0; }' \
 
 reject generic_ref_in_return \
 'fn wrap<R>(r: R) -> R { return r; }
-fn main() -> i64 { let x: i64 = 42; let r: &i64 = wrap::<&i64>(&x); return *r; }' \
+fn main() -> i64 { let x: i64 = 42; return *wrap::<&i64>(&x); }' \
 'instantiated to a reference'
 
 echo "=== the registered negative fixture is rejected ==="

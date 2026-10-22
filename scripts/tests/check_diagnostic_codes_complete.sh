@@ -22,7 +22,8 @@ for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean; do
   codes="$(grep -oE '=> "E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
   [ -z "$codes" ] && { no "$f: extracted no codes (pattern drift?)"; continue; }
   while IFS= read -r c; do
-    if ! grep -q "entry \"$c\"" Concrete/Report/Report.lean; then
+    # `entryR` is an entry that also names the exit 2i rules the code enforces (§15.5)
+    if ! grep -qE "entryR? \"$c\"" Concrete/Report/Report.lean; then
       no "$c (emitted by $f) has no entry in Report.lean diagnostic-codes"
       missing=1
     fi

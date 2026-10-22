@@ -1,0 +1,7 @@
+// Bug 146 (Codex round 3): projecting a Copy field out of `*h` dropped the moved-out value's
+// non-Copy sibling field. `*h` is not a projection base (E0290); bind `let v = *h;` and destructure.
+struct P { s: String, x: Int }
+fn main() with(Alloc) -> Int {
+    let h: Heap<P> = alloc(P { s: "abc", x: 42 });
+    return (*h).x;
+}

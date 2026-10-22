@@ -1,0 +1,37 @@
+// Exit 2i (MEMORY_SEMANTICS §15.6): the SCOPE-1@1 migration twin of
+// regress_087_borrow_shadow_uaf (bug 087). There an `if` body's `let r` shadowed the borrow-block
+// reference `r`; the shadow is now refused (E0301), and this is the same program with the inner
+// binder renamed and passed straight to the call (a `let` may not bind a reference, REF-6@1). The
+// later `r` is the borrow of `base` after `s` was dropped and its buffer reused: exit 0 = the outer
+// `r` still reads "outer".
+mod main {
+    fn is_outer(r: &String) -> bool {
+        if r.len() != 5 { return false; }
+        if r.get_unchecked(0) != 111 { return false; }   // 'o'
+        if r.get_unchecked(4) != 114 { return false; }   // 'r'
+        return true;
+    }
+    fn len_of(inner_r: &String) -> Int {
+        return inner_r.len() as Int;
+    }
+    fn main() with(Std) -> i32 {
+        let base: String = "outer";
+        let mut s: String = "";
+        let mut k: Int = 0;
+        while k < 40 { s.push_char('A'); k = k + 1; }
+        let mut rc: i32 = 0;
+        borrow base as r in R {
+            if true {
+                if len_of(&s) != 40 { rc = 1; }
+            }
+            s.drop();
+            let mut t: String = "";
+            let mut j: Int = 0;
+            while j < 40 { t.push_char('Z'); j = j + 1; }
+            if !is_outer(r) { rc = 2; }
+            t.drop();
+        }
+        base.drop();
+        return rc;
+    }
+}

@@ -146,7 +146,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .indexingNonArray ty => s!"type mismatch: indexing into non-array type {ty}"
   | .cannotCast fromTy toTy => s!"cannot cast {fromTy} to {toTy}"
   | .cannotDerefNonRef ty => s!"cannot dereference non-reference type {ty}"
-  | .cannotAssignThroughNonMutRef ty => s!"cannot assign through non-mutable reference type {ty}"
+  | .cannotAssignThroughNonMutRef ty => s!"cannot assign through '{ty}': `*p = v` stores only through `&mut T` or `*mut T`"
   | .returnTypeMismatch expected got => s!"return type mismatch: expected {expected}, got {got}"
   | .copyDestroyConflict typeName => s!"type '{typeName}' implements Destroy and cannot be Copy"
   | .copyFieldNotCopy structName fieldName => s!"Copy struct '{structName}' contains non-copy field '{fieldName}'"
@@ -181,6 +181,10 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
     some s!"declare 'with({implCaps})' on '{methodName}' in trait '{traitName}' (every generic caller must then hold it), or remove the effect from the impl"
   | .traitMethodSigMismatch _ _ _ _ => some "an impl method must have exactly the trait method's receiver, parameters and generics"
+  | .cannotAssignThroughNonMutRef ty =>
+    if ty.startsWith "Heap<" then
+      some "a heap shell is not a place to store through: write a Copy field (`h.f = v`), or move the value out with `let v = *h;` (which frees the cell) and allocate the new one"
+    else some "take a `&mut` borrow of the place to write through it"
   | .insufficientCapabilities _ required _ => some s!"add 'with({required})' to the calling function, or wrap the call in a trusted function"
   | .missingCapability callee cap _ =>
     match callee with
@@ -817,7 +821,9 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
       addTrustEdge .containsRawOp "*raw_ptr="
       if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "*raw_ptr=" "Unsafe" "")
-    | _ => addCCError (.cannotAssignThroughNonMutRef (toString (repr target.ty)))
+    -- EVALUATION2 D14: the message names the type in source spelling, not the internal
+    -- `Concrete.Ty` term (`Concrete.Ty.heap (Concrete.Ty.named "R")`).
+    | _ => addCCError (.cannotAssignThroughNonMutRef (tyToStr target.ty))
 
   | .arrayIndexAssign arr index value =>
     ccCheckExpr arr

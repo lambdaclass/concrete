@@ -91,8 +91,8 @@ end BodyScope
     made ghost-named invariants read as free identifiers. -/
 def stmtBinders : Stmt → List String
   | .letDecl _ n _ _ _ _        => [n]
-  | .letDestructure _ _ _ bs _ _ => bs
-  | .letStructDestructure _ _ bs _ => bs
+  | .letDestructure _ _ _ bs _ _ => PatBind.names bs
+  | .letStructDestructure _ _ bs _ => PatBind.names bs
   | .borrowIn _ v _ _ _ _       => [v]
   | .assign _ _ _               => []
   | .return_ _ _                => []
@@ -112,7 +112,7 @@ def stmtBinders : Stmt → List String
 /-- Binders a match arm's PATTERN introduces, in source order. The arm's body and
     guard are both encoded with these in scope, since a guard may read them. -/
 def armBinders : MatchArm → List String
-  | .mk _ _ _ bs _ _      => bs
+  | .mk _ _ _ bs _ _      => PatBind.names bs
   | .varArm _ b _ _       => [b]
   | .litArm _ _ _ _       => []
   | .rangeArm _ _ _ _ _ _ => []

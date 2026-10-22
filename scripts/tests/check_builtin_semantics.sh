@@ -219,25 +219,21 @@ grep -oE '\| "[a-z_0-9]+"' Concrete/Interp/Interp.lean | grep -oE '"[a-z_0-9]+"'
 grep -oE 'name := "[a-z_0-9]+"' Concrete/Backend/EmitBuiltins.lean | grep -oE '"[a-z_0-9]+"' | tr -d '"' | LC_ALL=C sort -u > "$TMP/backend.txt"
 # Backend-only = interp-PENDING: the EXPLICIT list. A new backend builtin
 # missing from interp must be added here (deliberately) or implemented.
+# (2026-10-22, interpreter coverage: the string builtins, bool_to_string and putchar are
+# modelled; clock_monotonic_ns is refused, the clock being a value the interpreter cannot know;
+# float_to_string's `%g` formatting is not modelled.)
 cat > "$TMP/pending_expected.txt" <<'EOF'
 __concrete_check_oom
-bool_to_string
 clock_gettime
 clock_monotonic_ns
 float_to_string
-putchar
-string_append_bool
-string_append_int
-string_reserve
-string_substr
-string_to_int
 EOF
 # The pinned list is re-sorted under the SAME collation rather than trusted to be in order, so the
 # heredoc above can be maintained in whatever order reads best without silently breaking the compare.
 LC_ALL=C sort -u "$TMP/pending_expected.txt" -o "$TMP/pending_expected.txt"
 LC_ALL=C comm -13 "$TMP/interp.txt" "$TMP/backend.txt" > "$TMP/pending_actual.txt"
 if diff -q "$TMP/pending_expected.txt" "$TMP/pending_actual.txt" >/dev/null; then
-  ok "interp-PENDING list is exactly the documented 11 (new builtins must land on both sides or extend this pin)"
+  ok "interp-PENDING list is exactly the documented 4 (new builtins must land on both sides or extend this pin)"
 else
   no "interp-PENDING drift:"; diff "$TMP/pending_expected.txt" "$TMP/pending_actual.txt" | sed 's/^/       /'
 fi

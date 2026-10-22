@@ -1,0 +1,13 @@
+// Bug 143 (Codex): a defer as the last statement of a match arm runs when the arm ends; the
+// local it reserved is consumed then, so reading it after the match is E0205.
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn main() with(Console) -> Int {
+    let t: T = T { id: 7 };
+    match 0 {
+        _ => { defer kill(t); },
+    }
+    peek(&t);
+    return 0;
+}

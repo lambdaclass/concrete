@@ -1,0 +1,17 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143: a defer registered in an inner block runs when that block ends; the local it reserved
+// is consumed then, and a later read is a use after move (E0205), not a read of a destroyed value.
+fn main() with(Console) -> Int {
+    let t: T = T { id: 1 };
+    let c: bool = true;
+    if c {
+        defer kill(t);
+    } else {
+        kill(t);
+    }
+    peek(&t);
+    return 0;
+}

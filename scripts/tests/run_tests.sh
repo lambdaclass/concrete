@@ -1503,7 +1503,7 @@ run_err "$TESTDIR/error_091_mut_receiver_through_ref_projection.con" "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_in_ref_self.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable.con"              "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable_concrete.con"     "(E0233)"
-run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0302)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_deref.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_borrow.con"           "(E0237)"
 run_err "$TESTDIR/error_091_receiver_deref_borrow_moved.con"         "(E0290)"
@@ -1515,7 +1515,7 @@ run_err "$TESTDIR/error_091_mut_receiver_deref_if_ref.con"           "(E0238)"
 # temporaries remain legal `&mut self` receivers, compiled and under --interp.
 run_err "$TESTDIR/error_091_destroy_newtype_through_ref.con"               "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_reborrow_shared.con"              "(E0237)"
-run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E0302)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_through_ref.con"           "(E0237)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_paren_immutable.con"       "(E0233)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_projection_through_ref.con" "(E0237)"
@@ -1524,8 +1524,8 @@ run_err "$TESTDIR/error_091_norm_temporaries.con" "(E0238)"
 # of `(&p)` and `&w.p`, and an owned `if` under a projection.
 run_err "$TESTDIR/error_091_destroy_defname_deref_arg.con"          "(E0290)"
 run_err "$TESTDIR/error_091_destroy_defname_paren_arg.con"          "(E0205)"
-run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0232)"
-run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0302)"
 run_err "$TESTDIR/error_091_deref_ref_by_value.con"                 "(E0290)"
 run_err "$TESTDIR/error_091_paren_call_arg_not_consumed.con"        "(E0205)"
 run_err "$TESTDIR/error_091_norm_if_projection.con" "(E0238)"
@@ -1534,18 +1534,18 @@ run_err "$TESTDIR/error_091_norm_if_projection.con" "(E0238)"
 # bindings are refused, and a block-local owned tail is an owned temporary.
 run_err "$TESTDIR/error_091_destroy_deref_borrow_mut.con"              "(E0290)"
 run_err "$TESTDIR/error_091_match_deref_ref_payload.con"               "(E0290)"
-run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0232)"
-run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0302)"
+run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0302)"
 run_err "$TESTDIR/error_091_norm_if_local_binding.con" "(E0238)"
 # Codex review of round 3 (fifth pass): a `&mut` receiver reached through `&`, an exclusive
 # reference used under a live reborrow, provenance at reassignment, local-binding chains.
-run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0238)"
-run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0232)"
-run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0302)"
 run_err "$TESTDIR/error_091_norm_if_local_chain.con" "(E0238)"
 # Codex review of round 3 (sixth pass): re-pointing a reference in a branch, parenthesized and
 # dereferenced argument borrows against the receiver, owned match binders under a projection.
-run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0238)"
+run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0302)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_arg.con"     "(E0293)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_reborrow_arg.con"   "(E0293)"
 run_err "$TESTDIR/error_091_norm_match_owned_binder.con" "(E0238)"
@@ -1562,8 +1562,8 @@ run_err "$TESTDIR/error_091_heap_field_through_ref.con"           "(E0290)"
 run_ok  "$TESTDIR/trait_destroy_newtype_payload_paren.con" "1" 0
 # Codex review of round 3 (ninth pass): block-local reborrows in `if` arguments, and a `&self`
 # receiver read through a reference under a live exclusive reborrow.
-run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0238)"
-run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0231)"
+run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0302)"
+run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0302)"
 run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 # The normalized place rule (bug 091 round 3, structural fix): Codex's last three open
 # shapes are rejected, and one table records what every spelling of the bug-091 corpus now
@@ -1578,16 +1578,18 @@ run_ok  "$TESTDIR/regress_105_ref_valued_branch_generic.con" 111
 # (FIXED): `&h` / `&mut h` on a Heap<S> local is h's slot and a field access through
 # `&Heap<S>` / `&mut Heap<S>` dereferences twice (MEMORY_SEMANTICS §5 one-hop rule).
 run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 63
-# Two distinct zero-sized places may share an address natively; the interpreter refuses to
-# compare them rather than answer from paths (Codex review of bug 102).
+# Two distinct elements of an array of a zero-sized type share one address natively. The
+# interpreter (interpreter-coverage pass) knows the element size from the layout, so it
+# answers 1 as the binary does; pointers to zero-sized values in different storage are
+# still refused (the stack layout decides).
 run_ok  "$TESTDIR/regress_102_zero_sized_ptr_eq.con" 1
 run_ok  "$TESTDIR/regress_102_ptr_eq_through_raw_base.con" 3
 r102_z=$($COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 || true)
-if grep -qF "distinct zero-sized places is not modelled" <<< "$r102_z"; then
-    echo "  ok  regress_102_zero_sized_ptr_eq: --interp refuses the comparison"
+if [ "$r102_z" = "1" ]; then
+    echo "  ok  regress_102_zero_sized_ptr_eq: --interp == binary (1)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp did not refuse the zero-sized pointer comparison"
+    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp gave '$r102_z', binary exits 1"
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/regress_126_heap_ref_one_hop.con" 255
@@ -1620,9 +1622,12 @@ done
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
-# Bugs 119 and 120 (fixed by batch 2's interpreter changes): the interpreter agrees with the
-# binary on both examples-health reproducers.
-for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref; do
+# Bugs 119 and 120 (fixed by batch 2's interpreter changes) and 117, 118, 128 and 139 (the
+# interpreter-coverage pass, with 144): the interpreter agrees with the binary on each reproducer.
+for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref \
+            bug117_interp_module_const bug118_interp_nested_module_import \
+            bug128_interp_int_to_float_identity bug150_float_self_compare_fold \
+            bug152_string_trim_empty; do
     r119_src="tests/regressions/$r119/repro.con"
     r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
     r119_n=""
@@ -1713,8 +1718,7 @@ for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported
 done
 # Bug 123: a module constant of reference type is refused at the declaration (E0239), and a
 # borrow rooted at a module constant (explicit, field, index or implicit `&self`) is refused
-# (E0238) until constants have storage; a copy into a local is the working spelling (native
-# only: the interpreter does not bind module constants, bug 117).
+# (E0238) until constants have storage; a copy into a local is the working spelling.
 run_err "$TESTDIR/error_123_const_ref_type.con"          "(E0239)"
 run_err "$TESTDIR/error_123_const_borrow_in_body.con"    "(E0238)"
 run_err "$TESTDIR/error_123_const_field_borrow.con"      "(E0238)"
@@ -1725,11 +1729,13 @@ run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
 run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
 # A constant's initializer is lowered with the caller's locals hidden: no borrow of a constant
 # inside it (E0602 at Lower), and no capture of a local shadowing a constant it names.
-run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0602)"
+# Exit 2i: a borrow in a constant initializer is refused at Check (REF-6@1, E0302 constBorrows)
+# before Elab's E0602, which stays as defense in depth.
+run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
-run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0602)"
-run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0602)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0405)"
+run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0302)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0201)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
@@ -1763,15 +1769,199 @@ for r127_case in "$TESTDIR/regress_127_struct_literal_source_order.con:42" \
     fi
 done
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
-run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
-run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"
-run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
-run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
-run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
-run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0238)"
+# Exit 2i REF-6@1: a reference binding is never assigned (E0303), and a `let` never binds a
+# reference (E0302), so the 091/104/131 shapes that named a reference across statements are
+# refused at that `let` or assignment; the E0238/E0231/E0232/E0204 checks they used to reach stay
+# as defense in depth for borrow-block, arm and argument references (MEMORY_SEMANTICS §15.3).
+run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0303)"
+run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0303)"
+run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0302)"
+run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0302)"
+run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0301)"
+run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0301)"
+# Bugs 134 and 140: comparison operators are defined on integers, floats, bool and char (raw
+# pointers in trusted/Unsafe code), never consume an operand, and refuse references (E0229);
+# a Copy-bounded generic comparison is re-checked per instantiation after Mono.
+run_err "$TESTDIR/error_134_enum_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_134_struct_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_heap_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_140_linear_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_ref_eq.con"                    "(E0229)"
+run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
+run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
+run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
+# Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
+# fix, E0291).
+run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
+run_ok  "$TESTDIR/regress_145_vec_free_copy_param.con" "" 0
+run_ok  "$TESTDIR/regress_145_vec_free_nested_copy_param.con" "" 0
+# Bug 146: `*h` frees the cell it moves the value out of.
+run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0
+run_err "$TESTDIR/error_146_deref_heap_place_write.con" "(E0290)"
+run_err "$TESTDIR/error_146_deref_heap_field_read.con"  "(E0290)"
+r146_ssa=$($COMPILER tests/regressions/bug146_heap_deref_does_not_free/repro.con --emit-ssa 2>&1 || true)
+if [[ "$r146_ssa" == *"call void @free("* ]]; then
+    echo "  ok  bug146 repro: *h emits the free of the cell"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug146 repro: *h emits no free (the cell leaks)"
+    FAIL=$((FAIL + 1))
+fi
+run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+# Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
+# operator operand (E0278); exits in statement position, tails and let initializers stay legal.
+run_err "$TESTDIR/error_142_struct_field_return.con"   "(E0278)"
+run_err "$TESTDIR/error_142_call_arg_return.con"       "(E0278)"
+run_err "$TESTDIR/error_142_array_elem_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_enum_field_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_operand_return.con"        "(E0278)"
+run_err "$TESTDIR/error_142_method_arg_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_break_in_arg.con"          "(E0278)"
+run_err "$TESTDIR/error_142_deref_operand_return.con"  "(E0278)"
+run_err "$TESTDIR/error_142_for_cond_break.con"        "(E0278)"
+run_err "$TESTDIR/error_142_assign_index_return.con"   "(E0278)"
+run_ok  "$TESTDIR/regress_142_exits_allowed.con" "1 4 5 2 0" 0
+r142_i=$($COMPILER "$TESTDIR/regress_142_exits_allowed.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r142_i" = "1 4 5 2 00" ]; then
+    echo "  ok  regress_142_exits_allowed.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_142_exits_allowed.con: --interp printed '$r142_i'"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 143, defer rule (a), reserve by place: deferred arguments are locals, borrows of locals or
+# constants (E0279); a borrowed local is pinned until the deferred call runs (E0206).
+run_err "$TESTDIR/error_143_defer_borrow_then_free.con"          "(E0206)"
+run_err "$TESTDIR/error_143_defer_borrow_then_consume.con"       "(E0206)"
+run_err "$TESTDIR/error_143_defer_observer_before_consumer.con"  "(E0206)"
+run_err "$TESTDIR/error_143_defer_field_arg.con"                 "(E0279)"
+run_err "$TESTDIR/error_143_defer_call_arg.con"                  "(E0279)"
+run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
+run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
+run_err "$TESTDIR/error_143_defer_last_in_match_arm.con"         "(E0205)"
+run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5 " 0
+run_err "$TESTDIR/error_143_defer_shadow_refused.con"            "(E0301)"
+run_ok  "$TESTDIR/regress_143_defer_sibling_scopes.con" "1 7 70 " 0
+r143s_i=$($COMPILER "$TESTDIR/regress_143_defer_sibling_scopes.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r143s_i" = "1 7 70 0" ]; then
+    echo "  ok  regress_143_defer_sibling_scopes.con: --interp prints what the binary prints"; PASS=$((PASS+1))
+else
+    echo "FAIL  regress_143_defer_sibling_scopes.con: --interp printed '$r143s_i'"; FAIL=$((FAIL+1))
+fi
+r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then
+    echo "  ok  regress_143_defer_reserve_by_place.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_143_defer_reserve_by_place.con: --interp printed '$r143_i'"
+    FAIL=$((FAIL + 1))
+fi
+for r143 in tests/regressions/bug143_defer_borrow_unpinned/repro.con tests/regressions/bug143_defer_borrow_unpinned/repro_order.con; do
+    r143_i=$($COMPILER "$r143" --interp 2>&1 || true)
+    r143_n=$($COMPILER "$r143" -o "$TESTDIR/.r143_bin" 2>&1 || true)
+    if [[ "$r143_i" == *"(E0206)"* && "$r143_n" == *"(E0206)"* ]]; then
+        echo "  ok  $r143: refused with E0206 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r143: not refused with E0206 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r143_bin"
+done
+# EVALUATION2 D14: E0555 names the type in source spelling, not the internal Ty term.
+run_err "$TESTDIR/error_d14_heap_deref_assign.con" "cannot assign through 'Heap<Int>'"
+# Bug 144: heap interiors are linearity-tracked: a by-value non-Copy heap-field read is E0290,
+# free(h) of a non-Copy pointee is E0287.
+run_err "$TESTDIR/error_144_heap_field_read_twice.con"      "(E0290)"
+run_err "$TESTDIR/error_144_free_drops_linear.con"          "(E0287)"
+run_err "$TESTDIR/error_144_defer_free_drops_linear.con"    "(E0287)"
+run_err "$TESTDIR/error_144_heap_newtype_unwrap.con"        "(E0290)"
+# Bug 147: proof-only statements (assert, assume, ghost let) may not move a runtime value (E0243).
+run_err "$TESTDIR/error_147_assert_consumes_heap.con"       "(E0243)"
+run_err "$TESTDIR/error_147_ghost_let_consumes_heap.con"    "(E0243)"
+run_ok  "$TESTDIR/regress_147_assert_reads.con" "" 0
+run_err "$TESTDIR/error_147_assert_revives_binding.con"     "(E0243)"
+run_ok  "$TESTDIR/regress_147_ghost_consumes_ghost.con" "" 0
+# Bug 148: the right operand of && / || may not move a value (it may not run). E0244.
+run_err "$TESTDIR/error_148_and_operand_consumes.con"       "(E0244)"
+run_err "$TESTDIR/error_148_or_operand_consumes.con"        "(E0244)"
+run_ok  "$TESTDIR/regress_148_short_circuit_reads.con" "" 0
+# Bug 149: loop conditions, returns in nested blocks and labelled exits account for owned values.
+run_err "$TESTDIR/error_149_loop_cond_moves_outer.con"          "(E0207)"
+run_err "$TESTDIR/error_149_return_after_unreached_defer.con"   "(E0208)"
+run_err "$TESTDIR/error_149_return_in_borrow_block.con"         "(E0208)"
+run_err "$TESTDIR/error_149_labelled_break_skips.con"           "(E0210)"
+run_err "$TESTDIR/error_149_labelled_continue_skips.con"        "(E0211)"
+run_ok  "$TESTDIR/regress_149_exits_accounted.con" "9" 0
+run_ok  "$TESTDIR/regress_149_labelled_exit_runs_defers.con" "3" 0
+run_ok  "$TESTDIR/regress_149_return_in_borrow_with_defer.con" "42" 0
+run_ok  "$TESTDIR/regress_149_break_in_borrow_with_defer.con" "1" 0
+run_err "$TESTDIR/error_149_diverging_branches_in_loop.con"     "(E0208)"
+run_err "$TESTDIR/error_149_loop_cond_in_exiting_branch.con"    "(E0207)"
+run_err "$TESTDIR/error_149_match_diverge_in_loop.con"          "(E0208)"
+run_ok  "$TESTDIR/regress_149_both_branches_return.con" "" 1
+run_ok  "$TESTDIR/regress_149_cond_return_in_borrow.con" "" 1
+run_err "$TESTDIR/error_149_continue_in_exit_branch.con"        "(E0207)"
+run_ok  "$TESTDIR/regress_149_nested_loop_in_exit_branch.con" "" 0
+run_ok  "$TESTDIR/regress_149_break_value_statement_loop.con" "" 0
+run_err "$TESTDIR/error_149_break_value_non_copy.con"           "(E0287)"
+run_err "$TESTDIR/error_149_break_value_moves_outer.con"        "(E0207)"
+run_err "$TESTDIR/error_149_loop_revives_consumed.con"          "(E0212)"
+run_err "$TESTDIR/error_149_rebinding_nested_loop.con"          "(E0207)"
+run_ok  "$TESTDIR/regress_149_inner_label_in_exit_branch.con" "" 0
+r149_ssa=$($COMPILER "$TESTDIR/regress_149_break_value_statement_loop.con" --emit-ssa 2>&1 || true)
+if [[ "$r149_ssa" == *"call void @free("* ]]; then
+    echo "  ok  regress_149_break_value_statement_loop.con: the break operand runs (emits @free)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_149_break_value_statement_loop.con: the break operand was not lowered"
+    FAIL=$((FAIL + 1))
+fi
+run_ok  "$TESTDIR/regress_146_heap_deref_cast.con" "42" 0
+run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
+for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
+    r144_i=$($COMPILER "$r144" --interp 2>&1 || true)
+    r144_n=$($COMPILER "$r144" -o "$TESTDIR/.r144_bin" 2>&1 || true)
+    if [[ "$r144_i" == *"error[check]"* && "$r144_n" == *"error[check]"* && ( "$r144_n" == *"(E0290)"* || "$r144_n" == *"(E0287)"* ) ]]; then
+        echo "  ok  $r144: refused at the checker natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r144: not refused at the checker by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r144_bin"
+done
+for r142 in tests/regressions/bug142_exit_in_operand/repro.con tests/regressions/bug142_exit_in_operand/repro_arg.con; do
+    r142_i=$($COMPILER "$r142" --interp 2>&1 || true)
+    r142_n=$($COMPILER "$r142" -o "$TESTDIR/.r142_bin" 2>&1 || true)
+    if [[ "$r142_i" == *"(E0278)"* && "$r142_n" == *"(E0278)"* ]]; then
+        echo "  ok  $r142: refused with E0278 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r142: not refused with E0278 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r142_bin"
+done
+# Both engines refuse the bug 140 reproducers at the checker (the interpreter used to fail at
+# run time on references, and the binary compared addresses).
+for r140 in tests/regressions/bug140_comparison_consumes_linear/repro.con tests/regressions/bug140_comparison_consumes_linear/repro_ref.con; do
+    r140_i=$($COMPILER "$r140" --interp 2>&1 || true)
+    r140_n=$($COMPILER "$r140" -o "$TESTDIR/.r140_bin" 2>&1 || true)
+    if [[ "$r140_i" == *"(E0229)"* && "$r140_n" == *"(E0229)"* ]]; then
+        echo "  ok  $r140: refused with E0229 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r140: not refused with E0229 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r140_bin"
+done
 run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
-run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"
+run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0302)"
 r091_table="
 error_091_destroy_through_ref:E0290
 error_091_destroy_concrete_through_ref:E0290
@@ -1793,26 +1983,26 @@ error_091_mut_receiver_through_ref_projection:E0237
 error_091_mut_receiver_in_ref_self:E0237
 error_091_mut_receiver_immutable:E0233
 error_091_mut_receiver_immutable_concrete:E0233
-error_091_mut_receiver_borrowed:E0232
+error_091_mut_receiver_borrowed:E0302
 error_091_mut_receiver_paren_deref:E0237
 error_091_mut_receiver_deref_borrow:E0237
 error_091_mut_receiver_deref_if_ref:E0238
 error_091_mut_receiver_reborrow_shared:E0237
-error_091_mut_receiver_paren_borrow_live:E0232
+error_091_mut_receiver_paren_borrow_live:E0302
 error_091_mut_borrow_explicit_through_ref:E0237
 error_091_mut_borrow_explicit_paren_immutable:E0233
 error_091_mut_borrow_explicit_projection_through_ref:E0237
-error_091_mut_receiver_paren_borrow_outer:E0232
-error_091_mut_receiver_projection_borrow_live:E0232
+error_091_mut_receiver_paren_borrow_outer:E0302
+error_091_mut_receiver_projection_borrow_live:E0302
 error_091_deref_ref_by_value:E0290
 error_091_paren_call_arg_not_consumed:E0205
 error_091_match_deref_ref_payload:E0290
-error_091_mut_receiver_deref_borrow_provenance:E0232
-error_091_borrow_provenance_unknown:E0238
-error_091_mut_receiver_ref_to_mut_ref:E0238
-error_091_mut_receiver_reborrowed_mut_ref:E0232
-error_091_mut_receiver_reassigned_ref:E0238
-error_091_ref_repointed_in_branch:E0238
+error_091_mut_receiver_deref_borrow_provenance:E0302
+error_091_borrow_provenance_unknown:E0302
+error_091_mut_receiver_ref_to_mut_ref:E0302
+error_091_mut_receiver_reborrowed_mut_ref:E0302
+error_091_mut_receiver_reassigned_ref:E0302
+error_091_ref_repointed_in_branch:E0302
 error_091_mut_receiver_paren_borrow_arg:E0293
 error_091_mut_receiver_deref_reborrow_arg:E0293
 error_091_newtype_payload_through_ref:E0290
@@ -1820,29 +2010,30 @@ error_091_mut_receiver_deref_field_arg:E0293
 error_091_mut_receiver_nested_reborrow_arg:E0293
 error_091_mut_receiver_if_reborrow_arg:E0238
 error_091_heap_field_through_ref:E0290
-error_091_mut_receiver_if_local_reborrow_arg:E0238
-error_091_ref_receiver_under_mut_reborrow:E0231
+error_091_mut_receiver_if_local_reborrow_arg:E0302
+error_091_ref_receiver_under_mut_reborrow:E0302
 error_091_norm_heap_deref_payload:E0290
 error_091_norm_conditional_receiver:E0238
-error_091_norm_deref_read_under_reborrow:E0231
+error_091_norm_deref_read_under_reborrow:E0302
 error_091_norm_temporaries:E0238
 error_091_norm_if_projection:E0238
 error_091_norm_if_local_binding:E0238
 error_091_norm_if_local_chain:E0238
 error_091_norm_match_owned_binder:E0238
 error_091_norm_cast_arg_overlap:E0293
-error_091_norm_parent_arg_under_reborrow:E0231
-error_091_norm_copied_mut_ref:E0231
-error_091_norm_double_deref_heap:E0238
-error_091_norm_field_write_under_reborrow:E0231
-error_091_norm_borrow_block_under_live_ref:E0232
-error_091_norm_paren_heap_load:E0205
-error_091_norm_assign_under_shared_ref:E0232
+error_091_norm_parent_arg_under_reborrow:E0302
+error_091_norm_copied_mut_ref:E0302
+error_091_norm_double_deref_heap:E0302
+error_091_norm_field_write_under_reborrow:E0302
+error_091_norm_borrow_block_under_live_ref:E0302
+error_091_norm_paren_heap_load:E0290
+error_091_norm_assign_under_shared_ref:E0302
 error_091_norm_heap_field_load:E0290
 error_091_norm_paren_array_write:E0217
 error_091_norm_double_deref_read:E0238
-error_091_norm_intrinsic_arg_under_reborrow:E0232
+error_091_norm_intrinsic_arg_under_reborrow:E0302
 error_091_norm_ref_array_overwrite:E0291
+error_091_norm_generic_ref_array_overwrite:E0291
 error_091_norm_catchall_binder_through_ref:E0290
 error_091_norm_enum_payload_ref:E0239
 error_091_norm_generic_field_ref_write:E0239
@@ -1859,8 +2050,8 @@ error_091_norm_generic_nested_alias_ref:E0239
 error_091_norm_ref_write_through_ref:E0238
 error_091_norm_generic_fn_mut_param:E0238
 error_091_norm_generic_transitive_ref:E0238
-error_091_norm_free_under_projected_borrow:E0204
-error_091_norm_field_write_under_projected_borrow:E0232
+error_091_norm_free_under_projected_borrow:E0302
+error_091_norm_field_write_under_projected_borrow:E0302
 trait_generic_fn_value_param:ok
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
@@ -1997,11 +2188,11 @@ run_ok "$TESTDIR/heap_dot_access.con" 1
 run_err "$TESTDIR/error_heap_leak.con"           "was never consumed"
 run_err "$TESTDIR/error_alloc_reserved.con"      "is a reserved identifier"
 # Phase 6: Borrow region errors
-run_err "$TESTDIR/error_borrow_escape.con"     "cannot escape its borrow block"
+run_err "$TESTDIR/error_borrow_escape.con"     "(E0302)"
 run_err "$TESTDIR/error_borrow_frozen.con"     "is frozen by borrow block"
-run_err "$TESTDIR/error_borrow_shadow.con"     "shadows existing name"
+run_err "$TESTDIR/error_borrow_shadow.con"     "(E0301)"
 run_err "$TESTDIR/error_borrow_mut_conflict.con" "is frozen by borrow block"
-run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
+run_err "$TESTDIR/error_named_ref_mut_conflict.con" "(E0302)"
 # Additional escape analysis errors
 run_err "$TESTDIR/error_escape_return.con"     "may not return a reference"
 # Bug 092: a struct field of reference type is no longer expressible, so the
@@ -2048,7 +2239,7 @@ run_err "$TESTDIR/error_mut_ref_call_then_deref.con" "used after move"
 run_err "$TESTDIR/error_mut_ref_use_after_call.con" "used after move"
 run_err "$TESTDIR/error_mut_ref_branch_disagree.con" "consumed in one branch"
 run_err "$TESTDIR/error_mut_ref_loop_consume.con" "inside a loop"
-run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "cannot escape"
+run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "(E0302)"
 run_err "$TESTDIR/error_mut_ref_method_on_borrow_ref.con" "used after move"
 # Memory regression checklist gap-closing tests
 run_err "$TESTDIR/error_continue_skip_linear.con" "continue would skip unconsumed linear"
@@ -7784,12 +7975,17 @@ run_ok "$TESTDIR/regress_041_match_binder_states.con" 42
 run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
+# Exit 2i: the nested binder is now renamed (`Option::Some { value: inner }`,
+# SCOPE-1@1 refuses the shadow); the outer `value` must still read 5.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # Bug 087: a block-scoped `let` shadowing an outer let/param (if, else,
 # value-if, while, for bodies) must vanish when its block closes. Pre-fix the
 # interpreter and binary disagreed (1 vs 100, 3 vs 7) and both leaked a loop
 # body's shadow; Elab now alpha-renames shadowing lets (x -> x.bN).
-run_ok "$TESTDIR/regress_087_let_block_shadow.con" 42
+# Exit 2i: the shadowing itself is refused (SCOPE-1@1, E0301); the renamed twin
+# keeps the lexical answers pinned on the binary, the interpreter and the model.
+run_err "$TESTDIR/regress_087_let_block_shadow.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_087_renamed.con" 42
 # Codex review: sibling branches reusing a DEAD name for a promoted aggregate
 # (`let mut x: [i32; 1]` in both arms) must each read their own storage; Lower's
 # promoted table appended, so the else arm read the then arm's (pre-fix 41).
@@ -7814,23 +8010,54 @@ else
     echo "FAIL  bug 087: unpromoted re-declaration — interp gave '$r087u_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
-# Same fixture, the other two consumers: the interpreter must agree with the
+# The renamed twin, the other two consumers: the interpreter must agree with the
 # binary (pre-fix it returned 2), and the extracted proof model must be the
 # lexical one — no branch `let` leaking into the continuation (pre-fix
-# `then let x = 100; x`), and the loop body's `let k` kept, not dead-let
-# eliminated into a read of the outer `k` (the alpha-strip capture).
-r087_interp=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --interp 2>&1 || true)
-r087_ext=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --report extraction 2>&1 || true)
+# `then let x = 100; x`), and the loop body's `let inner_k` kept under its own
+# name (no `.bN` suffix: nothing is alpha-renamed once nothing shadows).
+r087_interp=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --interp 2>&1 || true)
+r087_ext=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --report extraction 2>&1 || true)
 if [ "$r087_interp" = "42" ] \
    && grep -qF 'ProofCore: let x = 1; if (a > 0) then x else x' <<<"$r087_ext" \
    && grep -qF 'ProofCore: if (a > 0) then a else a' <<<"$r087_ext" \
-   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let k\.b[0-9]+ = 1000; [^}]*\(k\.b[0-9]+ \+ s\)' <<<"$r087_ext"; then
+   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let inner_k = 1000; [^}]*\(inner_k \+ s\).*\(k \+ s\)' <<<"$r087_ext" \
+   && ! grep -qE 'ProofCore: .*\.b[0-9]+' <<<"$r087_ext"; then
     echo "  ok  bug 087: interp == binary == lexical model (shadow_if/param/loop)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  bug 087: interp ($r087_interp) or extracted model is not lexical"
     FAIL=$((FAIL + 1))
 fi
+# Bug 176: a loop body (and a `for` header) is a lexical block in the CHECKER
+# too. Pre-fix Check's while/for restored only loop depth and labels, so a body
+# `let` shadowing an outer name replaced it for the rest of the function: valid
+# code was refused (E0217/E0233/E0220) and a u8 was typed over an i32 holding 300.
+# The regress fixture now reuses the body's names in LATER siblings (legal under
+# SCOPE-1); the H9 legs below are the leak the rule does not reach.
+run_ok "$TESTDIR/regress_176_loop_shadow_restores_outer.con" 42
+r176_interp=$($COMPILER "$TESTDIR/regress_176_loop_shadow_restores_outer.con" --interp 2>&1 || true)
+if [ "$r176_interp" = "42" ]; then
+    echo "  ok  bug 176: loop-body shadows close — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 176: loop-body shadows — interp gave '$r176_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Since exit 2i the shadowing trigger itself is SCOPE-1@1: these four are refused
+# with E0301 at the inner binding, before the type/mutability errors the bug-176
+# fix alone produces. The legal sibling-reuse shapes live in the regress fixture.
+run_err "$TESTDIR/error_176_while_shadow_type.con" "E0301"
+run_err "$TESTDIR/error_176_while_shadow_ssa.con" "E0301"
+run_err "$TESTDIR/error_176_while_shadow_mut.con" "E0301"
+run_err "$TESTDIR/error_176_for_header_type.con" "E0301"
+run_err "$TESTDIR/error_176_loop_body_linear_leak.con" "was never consumed"
+# Codex review: a body ending in `while let`, or in an inner `while true` that a
+# nested labelled break leaves, terminates; its locals are not exempt from H9.
+run_err "$TESTDIR/error_176_loop_body_leak_while_let.con" "was never consumed"
+# train1: `break 'outer` skipping the unconsumed `r` is E0210 first; the _mid
+# fixture keeps the H9 property with a labelled break that stays in r's scope.
+run_err "$TESTDIR/error_176_loop_body_leak_labelled_break.con" "E0210"
+run_err "$TESTDIR/error_176_loop_body_leak_labelled_break_mid.con" "was never consumed"
 # Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.
@@ -7857,6 +8084,12 @@ run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
 # Bug 175 (fails closed): a match whose arms all diverge left its merge block open, so a
 # loop around it failed SSA verification (E0708). --interp agreement: the r102 loop.
 run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
+# Bug 150: a float self-comparison is not folded (x != x is true for NaN).
+run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
+# Bug 152: string_trim("") is the empty string (it was one byte, read past the source).
+run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
+# Bug 151 (contained): two nested modules' functions with one flattened name are refused (E0299).
+run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
@@ -7900,23 +8133,137 @@ run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an
 # identity; the shadowing local must itself be consumed.
-run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "E0208"
-run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "E0208"
-run_ok "$TESTDIR/regress_093_shadowing_locals_consumed.con" 42
+# Exit 2i: every shape of bugs 093/094 shadows, so SCOPE-1@1 refuses it first
+# (E0301); the identity-keyed checks stay as defense in depth (MEMORY_SEMANTICS
+# §15.6: their mutation rows move to a leg that disables E0301, R-0498).
+run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "(E0301)"
+run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "(E0301)"
+run_err "$TESTDIR/regress_093_shadowing_locals_consumed.con" "(E0301)"
 # Bug 094: per-binding state updates (consume, use, reassign, borrow freeze,
 # defer) marked EVERY entry sharing the name, so a binder that shadowed a live
 # linear binding consumed it too (the outer value leaked). State updates now
 # match the binding by identity (arm binders stay arm-scoped and may shadow),
 # and a destructure binder refuses to shadow a live non-Copy binding (E0292).
-run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "E0209"
-run_err "$TESTDIR/error_094_destructure_shadows_live.con" "E0292"
-run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "E0208"
-run_ok "$TESTDIR/regress_094_shadowing_binders.con" 42
-run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
+run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_destructure_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadowing_binders.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadow_state_by_identity.con" "(E0301)"
 # A borrow-block body local named like the ref was dropped with it by name.
-run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "(E0301)"
 # A local shadowing a `&mut` parameter was exempt from the exit check by name.
-run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "(E0301)"
+# Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): one lexical name, one binding. Each binder kind
+# that reuses a visible name is E0301 (bug 124: duplicate parameters reached llvm-as); each
+# rejected shape has a renamed migration twin. SCOPE-2: sibling scopes, loop bodies and
+# assignment are not collisions. The full manifest is tests/rules/exit_2i.tsv
+# (scripts/tests/check_rules_2i.sh).
+run_err "$TESTDIR/error_2i_scope1_same_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_same_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_param_in_block.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_param_in_block_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_consuming_rebind.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_consuming_rebind_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_for_header.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_for_header_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_arm_binder.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_arm_binder_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_if_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_if_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_while_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_while_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_destructure.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_destructure_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_duplicate_params_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_borrow_ref.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_borrow_ref_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_region_name.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_region_name_renamed.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_branches.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_arms.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_consecutive_loops.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_loop_body_let.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_assign_rebind.con" 42
+run_ok "$TESTDIR/regress_2i_renamed_pattern_binder.con" 42
+# Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): no `let` binds a reference (E0302), no reference
+# binding is assigned (E0303); after monomorphization too (a generic `T` instantiated to `&Int`).
+run_err "$TESTDIR/error_2i_ref6_let_shared_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_inferred_alias.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_mut_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_ref_to_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_generic_let_at_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_paren_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_cast_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_reborrow_escape.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref8_free_under_projected_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref8_assign_under_shared.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_param_repointed.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_mut_param_repointed.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_borrow_binder_assigned.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_arm_binder_assigned.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_generic_assign_at_ref.con" "(E0303)"
+run_ok "$TESTDIR/regress_2i_ref6_generic_assign_at_value.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_place_each_use.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_index_once.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_borrow_block_projection.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_arm_binder_through_ref.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_write_through_param.con" 42
+run_err "$TESTDIR/error_2i_ref6_let_else_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_method_let_else.con" 42
+run_err "$TESTDIR/error_2i_ref6_nested_let_else_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_nested_let_destructure.con" 42
+run_err "$TESTDIR/error_2i_ref6_ghost_let_at_type_param.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_struct_destructure_through_ref.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_borrow_after_loop.con" 42
+run_err "$TESTDIR/error_2i_ref6_erased_assert_let.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_erased_assert_assign.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_ghost_initializer_let.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_ghost_ptr_and_fn_types.con" 42
+run_ok "$TESTDIR/regress_2i_value_block_destructure.con" 42
+run_err "$TESTDIR/error_2i_scope1_const_initializer.con" "(E0301)"
+run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
+run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_destructure_through_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_match_through_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_typed_ref_let.con" "(E0302)"
+run_err "$TESTDIR/error_2i_spec_body_generic_call.con" "(E0305)"
+run_err "$TESTDIR/error_2i_ref5_const_ref_through_raw_ptr.con" "(E0238)"
+run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0305)"
+run_err "$TESTDIR/error_2i_scope1_contract_let.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_invariant_binds.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_variant_binds_ref.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_inferred_ref_alias.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_wrapped_binder.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_trait_impl_invariant.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_place_assignment.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_borrow_to_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_generic_call.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_imported_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_scope1_extern_duplicate_params.con" "(E0301)"
+run_err "$TESTDIR/error_2i_scope1_trait_decl_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_contract_aliased_ref_param.con" 42
+run_ok "$TESTDIR/regress_2i_contract_ref_receiver.con" 42
+run_ok "$TESTDIR/regress_2i_contract_static_nongeneric_method.con" 42
+run_err "$TESTDIR/error_2i_spec_body_hidden_binder.con" "(E0305)"
+run_ok "$TESTDIR/regress_2i_contract_nongeneric_call_beside_generic_method.con" 42
+run_err "$TESTDIR/error_2i_contract_generic_method_mangled.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_generic_method_static.con" "(E0305)"
+run_err "$TESTDIR/error_2i_ref6_const_cast_to_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_aliased_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_contract_paren_ref_arg.con" 42
+run_err "$TESTDIR/error_2i_scope1_contracted_fn_shadow.con" "(E0301)"
+run_err "$TESTDIR/error_2i_ref6_erased_forwarded_generic.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_erased_generic_call.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_generic_call_outside_assert.con" 42
+run_ok "$TESTDIR/regress_2i_const_nested_if_statement.con" 42
+run_err "$TESTDIR/error_2i_scope1_spec_fn_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_contract_and_spec_params.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).
@@ -11652,19 +11999,22 @@ else
     interp_fail=$((interp_fail + 1))
 fi
 
-# 7. Unsupported construct produces clear diagnostic
+# 7. Unsupported construct produces clear diagnostic: a foreign function outside the
+# interpreter's C-function table is refused, never guessed (floats, the old example, are
+# modelled since the interpreter-coverage pass).
 cat > "$TMPDIR/interp_test_unsup.con" << 'TESTEOF'
-pub fn main() -> Int {
-    let x: f64 = 3.14;
+trusted extern fn getpid() with(Process) -> i32;
+pub fn main() with(Process) -> Int {
+    let p: i32 = getpid();
     return 0;
 }
 TESTEOF
 unsup_out=$("$COMPILER" "$TMPDIR/interp_test_unsup.con" --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
-if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not yet supported"; then
+if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not modelled"; then
     echo "  ok  interp: unsupported construct gives clear diagnostic"
     interp_pass=$((interp_pass + 1))
 else
-    echo "  FAIL interp: should fail with 'interp: ... not yet supported'"
+    echo "  FAIL interp: should fail with 'interp: ... not modelled'"
     interp_fail=$((interp_fail + 1))
 fi
 
@@ -11687,7 +12037,12 @@ else
     interp_fail=$((interp_fail + 1))
 fi
 
-# 9. Scope isolation: block-local let bindings must not leak out of if-branches
+# 9. Scope isolation: block-local let bindings must not leak out of if-branches.
+# The leak was observable only by shadowing an outer `x` inside the branch and reading
+# the outer one afterwards. Exit 2i SCOPE-1@1 (E0301) makes that shape illegal, and
+# without it a leaked binding cannot be named, so the leg is PINNED as an E0301 refusal
+# on the interpreter path, plus the closest legal control: sibling branches that bind
+# the same name each see their own value.
 cat > "$TMPDIR/interp_test_scope.con" << 'TESTEOF'
 pub fn main() -> Int {
     let x: i32 = 1;
@@ -11697,12 +12052,30 @@ pub fn main() -> Int {
 }
 TESTEOF
 scope_exit=0
-"$COMPILER" "$TMPDIR/interp_test_scope.con" --interp 2>/dev/null || scope_exit=$?
-if [ "$scope_exit" -eq 0 ]; then
-    echo "  ok  interp: if-branch let bindings do not leak to outer scope"
+scope_out=$("$COMPILER" "$TMPDIR/interp_test_scope.con" --interp 2>&1) || scope_exit=$?
+if [ "$scope_exit" -ne 0 ] && grep -qF "(E0301)" <<<"$scope_out"; then
+    echo "  ok  interp: an if-branch let shadowing an outer binding is refused (E0301)"
     interp_pass=$((interp_pass + 1))
 else
-    echo "  FAIL interp: scope leak — if-branch let binding visible after branch (exit=$scope_exit)"
+    echo "  FAIL interp: if-branch shadowing let not refused with E0301 (exit=$scope_exit)"
+    interp_fail=$((interp_fail + 1))
+fi
+cat > "$TMPDIR/interp_test_scope_sib.con" << 'TESTEOF'
+pub fn main() -> Int {
+    let mut r: i32 = 0;
+    if true { let x: i32 = 2; r = r + x; }
+    if true { let x: i32 = 30; r = r + x; }
+    if r == 32 { return 0; }
+    return 1;
+}
+TESTEOF
+scope_exit=0
+"$COMPILER" "$TMPDIR/interp_test_scope_sib.con" --interp 2>/dev/null || scope_exit=$?
+if [ "$scope_exit" -eq 0 ]; then
+    echo "  ok  interp: sibling if-branch let bindings of one name are independent"
+    interp_pass=$((interp_pass + 1))
+else
+    echo "  FAIL interp: sibling if-branch bindings of one name interfere (exit=$scope_exit)"
     interp_fail=$((interp_fail + 1))
 fi
 
@@ -11871,6 +12244,22 @@ for projdir in "$TESTDIR"/*/; do
         projname=$(basename "$projdir")
         # Skip adversarial policy projects — they are tested in the policy section
         case "$projname" in adversarial_policy_*) continue ;; esac
+        # Exit 2i: bug 087's borrow-block shadow is now refused at the source (SCOPE-1@1,
+        # E0301); its renamed twin regress_2i_scope1_087_borrow_renamed/ runs here instead.
+        if [ "$projname" = "regress_087_borrow_shadow_uaf" ]; then
+            if output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_proj_""$projname" 2>&1 ); then
+                echo "  FAIL $projname — now a SCOPE-1 rejection, but it COMPILED"
+                FAIL=$((FAIL + 1))
+            elif grep -qF "(E0301)" <<<"$output"; then
+                echo "  ok  $projname (rejected: E0301, SCOPE-1@1)"
+                PASS=$((PASS + 1))
+            else
+                echo "  FAIL $projname — rejected, but not with E0301"
+                FAIL=$((FAIL + 1))
+            fi
+            rm -f "$TMPDIR/test_proj_""$projname"
+            continue
+        fi
         # error_* projects are NEGATIVE fixtures: they must FAIL to build.
         case "$projname" in
         error_*)

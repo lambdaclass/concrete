@@ -1,0 +1,13 @@
+// Exit 2i: the twin of error_2i_ref6_erased_generic_call: the same generic called at runtime at
+// `T := Int` (a value), with the assertion over its result. Run 42, binary = --interp.
+fn probe<T: Copy>(x: T) -> bool {
+    let y: T = x;
+    return true;
+}
+
+fn main() -> Int {
+    let n: Int = 1;
+    let ok: bool = probe::<Int>(n);
+    assert(ok);
+    return 42;
+}

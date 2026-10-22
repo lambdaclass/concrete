@@ -1,0 +1,181 @@
+// Bug 176 regression: a `let` inside a loop body (or a `for` header) is scoped
+// to the body in the CHECKER too. Pre-fix Check's `while`/`for` restored only the
+// loop depth and labels, so the inner binding outlived the loop and answered for
+// its name for the rest of the function, while Elab, the interpreter and the
+// binary used the right binding.
+//
+// Since exit 2i (SCOPE-1@1, E0301) the original trigger, a body `let` shadowing a
+// VISIBLE outer name, is refused outright; the error_176_* shadow fixtures pin that
+// refusal. What the rule still admits is a dead name reused by a LATER sibling: a
+// body binds `v0`, the loop ends, and the code after it binds `v0` again at another
+// type or mutability. Every helper below is that shape: the binding after the loop
+// must be the one the checker types and mutability-checks (assignment, `&mut`
+// borrow, use at its own type). Each returns its lexical answer; main returns 42
+// only if all of them are right, and run_tests.sh requires `--interp` to agree
+// with the binary.
+mod m {
+    enum Copy OptI { Some { value: i32 }, None {} }
+
+    fn next_val(n: i32) -> OptI {
+        if n > 0 { return OptI::Some { value: n }; }
+        return OptI::None {};
+    }
+
+    fn addv(r: &mut i32, d: i32) {
+        *r = *r + d;
+    }
+
+    // An immutable i32 `v0` in the body; after the loop a MUTABLE `v0` must be
+    // assignable.
+    fn while_mutability() -> i32 {
+        let mut k: i32 = 0;
+        while k < 2 { let v0: i32 = 7; k = k + 1 + v0 - v0; }
+        let mut v0: i32 = 0;
+        v0 = 1;
+        return v0;                                  // 1
+    }
+
+    // A u8 `v0` in the body; after the loop `v0` is an i32 holding 300.
+    fn while_type() -> i32 {
+        let mut k: i32 = 0;
+        while k < 1 { let mut v0: u8 = 7; v0 = v0 + 1; k = k + 1; }
+        let v0: i32 = 300;
+        let w: i32 = v0 + 1;
+        return w;                                   // 301
+    }
+
+    // `&mut` of the binding after the loop; the body's was immutable.
+    fn while_borrow_mut() -> i32 {
+        let mut k: i32 = 0;
+        while k < 1 { let v0: i32 = 0; k = k + v0 + 1; }
+        let mut v0: i32 = 10;
+        addv(&mut v0, 3);
+        return v0;                                  // 13
+    }
+
+    // `while let`: the body's binding sits inside the desugared match arm.
+    fn while_let_shadow() -> i32 {
+        let mut i: i32 = 2;
+        while let OptI::Some { value } = next_val(i) {
+            let v0: u8 = 9;
+            i = i - value;
+        }
+        let mut v0: i32 = 5;
+        v0 = v0 + 1;
+        return v0;                                  // 6
+    }
+
+    // Nested loops, each body binding its own name; both levels close.
+    fn nested() -> i32 {
+        let mut a: i32 = 0;
+        while a < 2 {
+            let v0: u8 = 1;
+            let mut b: i32 = 0;
+            while b < 2 { let v1: bool = true; b = b + 1; }
+            let v1: u8 = 4;
+            a = a + 1;
+        }
+        let mut v0: i32 = 2;
+        let v1: i32 = 10;
+        v0 = v0 * v1;
+        return v0;                                  // 20
+    }
+
+    // Labelled break and continue out of inner bodies that bind names.
+    fn labelled() -> i32 {
+        let mut a: i32 = 0;
+        'outer: while a < 5 {
+            a = a + 1;
+            let v0: u8 = 200;
+            let mut b: i32 = 0;
+            while b < 3 {
+                let v1: bool = false;
+                b = b + 1;
+                if a == 1 { continue 'outer; }
+                if a == 3 { break 'outer; }
+            }
+        }
+        let mut v0: i32 = 3;
+        let v1: i32 = a;
+        v0 = v0 + v1;
+        return v0;                                  // 6
+    }
+
+    // C-style `for`: the step sees the header's `i`, the body's binding closes
+    // before the step, and the header's `i` closes after the loop (a u8 `i` and an
+    // i32 `v0` are then fresh).
+    fn for_scopes() -> i32 {
+        let mut acc: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) {
+            let v0: bool = true;
+            acc = acc + i;
+        }
+        let i: u8 = 2;
+        let j: u8 = i + 1;
+        let mut v0: i32 = 37 + acc;
+        v0 = v0 + (j as i32);
+        return v0;                                  // 43
+    }
+
+    // `for (cond)` and the infinite `for { }` with a break.
+    fn for_forms() -> i32 {
+        let mut k: i32 = 0;
+        for (k < 2) { let v0: u8 = 3; k = k + 1; }
+        for { let v0: bool = false; break; }
+        let mut v0: i32 = 1;
+        v0 = v0 + k;
+        return v0;                                  // 3
+    }
+
+    // Checked, never called: the loop body ends in an infinite `for (true)`, so
+    // its end is unreachable and the live `r` is not a leak (Codex review: the
+    // divergence predicate knew `while true` but not `for (true)`, so closing the
+    // body falsely refused this with E0208).
+    struct Res { v: i32 }
+    fn spin_holding(n: i32) -> i32 {
+        while n < 100 {
+            let r: Res = Res { v: n };
+            for (true) { }
+        }
+        return 0;
+    }
+
+    fn consume(r: Res) -> i32 {
+        let Res { v } = r;
+        return v;
+    }
+
+    // A branch that leaves through `continue 'outer` from an inner `while true`
+    // never reaches the code after the `if`, so consuming `r` on both paths is
+    // valid (Codex review round 2: the loop-exit search must tell "leaves the
+    // inner loop" from "falls through to the statement after it").
+    fn branch_exits_outer() -> i32 {
+        let mut i: i32 = 0;
+        let mut s: i32 = 0;
+        'outer: while i < 3 {
+            i = i + 1;
+            let r: Res = Res { v: i };
+            if i == 2 {
+                s = s + consume(r);
+                while true { continue 'outer; }
+            }
+            s = s + consume(r);
+        }
+        return s;                                   // 6
+    }
+
+    fn main() -> Int {
+        let mut ok: i32 = 0;
+        if while_mutability() == 1 { ok = ok + 1; }
+        if while_type() == 301 { ok = ok + 1; }
+        if while_borrow_mut() == 13 { ok = ok + 1; }
+        if while_let_shadow() == 6 { ok = ok + 1; }
+        if nested() == 20 { ok = ok + 1; }
+        if labelled() == 6 { ok = ok + 1; }
+        if for_scopes() == 43 { ok = ok + 1; }
+        if for_forms() == 3 { ok = ok + 1; }
+        if branch_exits_outer() == 6 { ok = ok + 1; }
+        if ok == 9 { return 42; }
+        return ok as Int;
+    }
+}

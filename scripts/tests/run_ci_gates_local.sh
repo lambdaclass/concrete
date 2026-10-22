@@ -176,7 +176,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   check_axiom_inventory.sh and check_claim_inventory.sh, which checker_acceptance_evidence.sh
 #   re-ran in the same workflow run; that step is now their only run and this runner includes it
 #   (-5 +1). 255 + 13 - 4 = 264.
-EXPECTED_GATE_COMMANDS=264
+# 264 -> 265: train 3 adds check_rules_2i.sh (exit 2i acceptance manifest tests/rules/exit_2i.tsv:
+#   REF-1..REF-8, SCOPE-1..SCOPE-3 and G4, with negative controls), from train 1b.
+EXPECTED_GATE_COMMANDS=265
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

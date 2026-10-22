@@ -1,0 +1,38 @@
+// D4 (semantics evaluation, 2026-10-21): `return` in value position leaves the function,
+// natively and in the interpreter. The `&mut` argument evaluated before the `return` keeps its
+// effect. Expected 96 (worked out per call below). The interpreter used to refuse the shape
+// ("unexpected return in value position"). Since rule (d) (bug 142, E0278) an exit may not occur
+// inside a call argument or a literal field, so the value position here is a `let` initializer's
+// branch, the form rule (d) keeps legal; the operand forms are refused (error_142_*.con).
+struct Copy P { a: Int, b: Int }
+
+fn bump(c: &mut Int) -> Int {
+    *c = *c + 1;
+    return *c;
+}
+
+fn add(x: Int, y: Int) -> Int {
+    return x + y;
+}
+
+fn f(n: Int, c: &mut Int) -> Int {
+    let a: Int = bump(c);
+    let b: Int = if n > 0 { return 7; } else { 2 };
+    let p: P = P { a: a, b: b };
+    return p.a + p.b;
+}
+
+fn g(n: Int, c: &mut Int) -> Int {
+    let x: Int = bump(c);
+    let y: Int = if n > 0 { return 40; } else { 1 };
+    return add(x, y);
+}
+
+fn main() -> Int {
+    let mut c: Int = 0;
+    let r1: Int = f(1, &mut c);   // c = 1, returns 7
+    let r2: Int = f(0, &mut c);   // c = 2, returns 2 + 2 = 4
+    let r3: Int = g(1, &mut c);   // c = 3, returns 40
+    let r4: Int = g(0, &mut c);   // c = 4, returns 4 + 1 = 5
+    return r1 + r2 * 10 + r3 + r4 + c;   // 7 + 40 + 40 + 5 + 4 = 96
+}

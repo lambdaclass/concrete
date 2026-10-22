@@ -88,8 +88,8 @@ Concrete does not have type inference beyond local let-binding inference. No HM-
 
 ### No lexical value shadowing
 
-**Status:** Decided (2026-07-25); enforcement pending
-[ROADMAP R-0435](../../ROADMAP.md).
+**Status:** Decided (2026-07-25); enforced by exit 2i (R-0500, superseding
+[ROADMAP R-0435](../../ROADMAP.md)): SCOPE-1@1, E0301, MEMORY_SEMANTICS §15.4.
 
 A new local value binding may not reuse the spelling of another local value
 binding visible along its lexical scope chain. The rule covers parameters,

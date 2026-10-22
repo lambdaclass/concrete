@@ -1,0 +1,43 @@
+// Exit 2i review: a destructuring `let` inside a nested block (an `if` body, a loop body, a match
+// arm) is desugared like a top-level one; before, it reached Check
+// unchanged and its binders were undeclared (E0201). Run 42, binary = --interp.
+enum Copy E { A { x: Int }, B {} }
+
+fn in_if(e: E) -> Int {
+    if true {
+        let E::A { x } = e else {
+            return 0;
+        };
+        return x;
+    }
+    return 0;
+}
+
+fn in_loop(n: Int) -> Int {
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let E::A { x } = E::A { x: 5 } else {
+            return 0;
+        };
+        total = total + x;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn in_arm(o: Option<Int>) -> Int {
+    match o {
+        Option::Some { value } => {
+            let E::A { x } = E::A { x: value } else {
+                return 0;
+            };
+            return x;
+        },
+        Option::None => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    return in_if(E::A { x: 10 }) + in_loop(2) + in_arm(Option::Some { value: 15 }) + 7;
+}

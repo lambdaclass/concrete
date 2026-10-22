@@ -1,0 +1,23 @@
+// Bug 176 (Codex review): a loop body ending in `while let` is NOT
+// non-terminating. `while let` desugars to `while true { match … { _ => break } }`,
+// and the break in the match arm was invisible to the divergence predicate, so the
+// body was read as never ending and its unconsumed `r` was exempted from H9 and
+// then dropped with the body's scope. Expected: "was never consumed" for `r`.
+mod m {
+    struct Res { v: i32 }
+    enum Copy OptI { Some { value: i32 }, None {} }
+
+    fn next_val(n: i32) -> OptI {
+        if n < 3 { return OptI::Some { value: 1 }; }
+        return OptI::None {};
+    }
+
+    fn main() -> Int {
+        let mut n: i32 = 0;
+        while n < 2 {
+            let r: Res = Res { v: n };
+            while let OptI::Some { value } = next_val(n) { n = n + value; }
+        }
+        return 0;
+    }
+}

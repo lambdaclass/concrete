@@ -1,0 +1,25 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): the rewrite of a `let`-bound projection borrow: borrow the place at each use (`f(&w.p); g(&w.p);`); also the twin of the inferred-alias and `&mut` rows. Run 42, binary = --interp.
+struct P { n: Int }
+struct W { p: P, q: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn twice(r: &P) -> Int {
+    return get(r) + get(r);
+}
+
+fn set(r: &mut Int) {
+    *r = 21;
+}
+
+fn main() -> Int {
+    let mut w: W = W { p: P { n: 0 }, q: P { n: 0 } };
+    set(&mut w.p.n);
+    let out: Int = get(&w.p) + twice(&w.q) + get(&w.p);
+    let W { p, q } = w;
+    let P { n } = p;
+    let P { n: m } = q;
+    return out + n * 0 + m;
+}

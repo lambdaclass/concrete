@@ -1,0 +1,13 @@
+// Bug 151: submodule functions are flattened to `<submodule>_<name>`, so `a.b_f` and
+// `a_b.f` are both `a_b_f` in Core and in the binary's symbol table. The qualified call
+// `a_b::f()` must return 3; the binary exits 1 (it calls `a.b_f`). `--interp` refuses the
+// call as ambiguous.
+mod root {
+    mod a {
+        pub fn b_f() -> Int { return 1; }
+    }
+    mod a_b {
+        pub fn f() -> Int { return 3; }
+    }
+    fn main() -> Int { return a_b::f(); }
+}

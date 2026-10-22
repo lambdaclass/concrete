@@ -1,0 +1,8 @@
+// Bug 144: a deferred `free(h)` discards the pointee too. E0287.
+struct S { s: String }
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<S> = alloc(S { s: "abc" });
+    defer free(h);
+    return 0;
+}

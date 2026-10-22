@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a `for` header binder reuses an outer `let`. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_for_header_renamed.con.
+fn main() -> Int {
+    let i: Int = 40;
+    let mut total: Int = 0;
+    for (let mut i: Int = 0; i < 2; i = i + 1) {
+        total = total + 1;
+    }
+    return i + total;
+}

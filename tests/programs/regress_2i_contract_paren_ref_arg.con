@@ -1,0 +1,9 @@
+// Exit 2i (review round 11): a contract may pass a reference parameter (in parentheses) to a
+// non-generic function. Run 42.
+fn probe(x: &i32) -> bool { return true; }
+#[requires(probe((x)))]
+fn f(x: &i32) -> i32 { return *x; }
+fn main() -> i32 {
+    let n: i32 = 42;
+    return f(&n);
+}

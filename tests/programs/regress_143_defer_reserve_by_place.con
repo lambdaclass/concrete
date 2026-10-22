@@ -1,0 +1,36 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143 positive control: reserve by place. The reserved and pinned local may be read, borrowed
+// and mutated in place; the observer registered after the consumer runs first (LIFO); a Copy
+// argument is read at the exit; a later binding is a different binding (bug 087; a
+// shadowing `let` is refused since exit 2i SCOPE-1, E0301), and a pin ends
+// with its block. Native and --interp print the same: 7 1 4 2 2 5 5 5.
+fn show(n: Int) with(Console) { print_int(n); print_char(32); }
+
+fn shadow() with(Console) {
+    let x: Int = 1;
+    defer show(x);
+    let y: Int = 7;
+    show(y);
+}
+
+fn main() with(Console) -> Int {
+    shadow();
+    let mut n: Int = 2;
+    defer show(n);
+    n = 5;
+    let mut t: T = T { id: 3 };
+    defer kill(t);
+    defer peek(&t);
+    setid(&mut t, 4);
+    peek(&t);
+    let u: T = T { id: 2 };
+    if true {
+        defer peek(&u);
+    }
+    kill(u);
+    t.id = 5;
+    return 0;
+}

@@ -1,0 +1,8 @@
+// Exit 2i (review round 5): a constant initializer with a nested statement `if` and no borrow is not
+// refused by the conservative REF-6 scan (it once treated every statement form as borrowing).
+// Run 42 natively; the interpreter has no module constants (bug 117).
+const X: i32 = if true {
+    let y: i32 = if true { if true { } 42 } else { 0 };
+    y
+} else { 0 };
+fn main() -> i32 { return X; }

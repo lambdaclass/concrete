@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_arm_binder.con: a match-arm payload binder reuses an outer `let`, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn main() -> Int {
+    let value: Int = 1;
+    let o: Option<Int> = Option::Some { value: 41 };
+    match o {
+        Option::Some { value: got } => { return got + value; },
+        Option::None => { return value; }
+    }
+}

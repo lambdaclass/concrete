@@ -1,0 +1,7 @@
+// Bug 147: an erased `assert` may not move a runtime value (E0243): `*h` inside it consumed `h`
+// in the checker, and the free never ran.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    assert(*h == 42);
+    return 0;
+}

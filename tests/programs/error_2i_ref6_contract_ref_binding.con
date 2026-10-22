@@ -1,0 +1,9 @@
+// Exit 2i (review round 4): a contract expression's block binds a reference and assigns it.
+// Contracts never reach checkFn and are erased, and are binder-free: refused, E0305.
+#[requires(if true {
+    let r: &i32 = &x;
+    r = &x;
+    true
+} else { true })]
+fn f(x: i32) -> i32 { return x; }
+fn main() -> i32 { return f(42); }

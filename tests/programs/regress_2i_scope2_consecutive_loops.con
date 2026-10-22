@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): the same `for` header binder in two consecutive loops is not a collision. Run 42, binary =
+// --interp.
+fn main() -> Int {
+    let mut total: Int = 0;
+    for (let mut i: Int = 0; i < 20; i = i + 1) {
+        total = total + 1;
+    }
+    for (let mut i: Int = 0; i < 22; i = i + 1) {
+        total = total + 1;
+    }
+    return total;
+}

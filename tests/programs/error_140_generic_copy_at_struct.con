@@ -1,0 +1,12 @@
+// Bug 140: a Copy-bounded generic comparison instantiated at a struct reached llvm-as as an
+// ill-typed icmp (bug 134's class). Each instantiation is held to the scalar rule after
+// monomorphization (E0229, post-mono).
+struct Copy P { x: Int }
+
+fn same<T: Copy>(a: T, b: T) -> bool { return a == b; }
+
+fn main() -> Int {
+    let p: P = P { x: 1 };
+    if same::<P>(p, p) { return 1; }
+    return 0;
+}

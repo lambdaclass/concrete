@@ -1,0 +1,13 @@
+// Bug 149 (Codex review): the reassignment exemption (`h = f(h)` may consume `h` inside a loop)
+// does not reach into a loop nested in the initializer, whose back edge would repeat the
+// consumption (E0207).
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<Int> = alloc(1);
+    h = if true {
+        let mut i: Int = 0;
+        while i < 2 { free(h); i = i + 1; }
+        alloc(2)
+    } else { h };
+    free(h);
+    return 0;
+}

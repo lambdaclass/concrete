@@ -1,0 +1,19 @@
+// Bug 149 (Codex review): a labelled `break 'outer` / `continue 'outer` from an inner loop runs the
+// deferred calls of every block it leaves, not only those inside the innermost loop. Each outer
+// iteration registers a deferred `note`; all three run. Prints 3 and returns 0.
+fn note(c: &mut Int) { *c = *c + 1; }
+
+fn main() with(Console) -> Int {
+    let mut count: Int = 0;
+    let mut i: Int = 0;
+    'outer: while i < 3 {
+        i = i + 1;
+        defer note(&mut count);
+        while true {
+            if i < 3 { continue 'outer; }
+            break 'outer;
+        }
+    }
+    print_int(count);
+    return 0;
+}

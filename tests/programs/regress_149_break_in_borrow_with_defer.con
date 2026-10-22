@@ -1,0 +1,20 @@
+// Bug 149 (Codex review): a break inside a borrow block whose owner has a pending `defer` is
+// accounted for (the deferred destroy runs as the loop body exits). Prints 1.
+struct Data { x: Int }
+impl Destroy for Data {
+    fn destroy(&self) { }
+}
+
+fn main() with(Console) -> Int {
+    let mut n: Int = 0;
+    while true {
+        let d: Data = Data { x: 1 };
+        defer destroy(d);
+        borrow d as r in R {
+            n = r.x;
+            break;
+        }
+    }
+    print_int(n);
+    return 0;
+}

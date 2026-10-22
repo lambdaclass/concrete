@@ -1,0 +1,16 @@
+// Bug 149 (Codex review): a nested loop inside a function-exiting branch keeps the branch's
+// exemption for the statements after it (h is consumed once on each exit path). Exit 0.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let mut i: Int = 0;
+    while i < 1 {
+        i = i + 1;
+        if i == 1 {
+            while false {}
+            free(h);
+            return 0;
+        }
+    }
+    free(h);
+    return 0;
+}

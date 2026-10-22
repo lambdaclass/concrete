@@ -1,0 +1,16 @@
+// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): the owner is freed inside a borrow block that freezes it. Rejected: E0203.
+struct B { v: Int }
+
+fn read(r: &Heap<B>) -> Int {
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 42 });
+    let mut out: Int = 0;
+    borrow h as r in R {
+        free(h);
+        out = read(r);
+    }
+    return out;
+}

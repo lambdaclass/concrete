@@ -102,9 +102,9 @@ mod rocksdb_kv {
                         m.drop();
                         ok = false;
                     },
-                    Option::Some { value } => {
-                        let got: Bytes = value.to_bytes();
-                        value.free();
+                    Option::Some { value: item } => {
+                        let got: Bytes = item.to_bytes();
+                        item.free();
                         if got.eq(&val) {
                             let mut line: String = "get: ";
                             line.append(&vs);
@@ -134,8 +134,8 @@ mod rocksdb_kv {
                         println(&m);
                         m.drop();
                     },
-                    Option::Some { value } => {
-                        value.free();
+                    Option::Some { value: inner } => {
+                        inner.free();
                         let m: String = "get-absent: unexpectedly present";
                         eprintln(&m);
                         m.drop();

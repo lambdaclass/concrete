@@ -1,0 +1,8 @@
+// Exit 2i SCOPE-1@1 (review round 11): a spec fn body hides a `let` reusing its parameter's name
+// inside a method-call receiver. Spec bodies are binder-free; the exhaustive walk finds it.
+struct S { n: i32 }
+impl S { fn probe(&self) -> bool { return true; } }
+spec fn s(x: i32) -> bool =
+    (if true { let x: i32 = 1; S { n: x } }
+     else { S { n: x } }).probe();
+fn main() -> i32 { return 42; }

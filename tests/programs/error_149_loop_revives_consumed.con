@@ -1,0 +1,12 @@
+// Bug 149 (Codex review): a loop may run zero times, so a binding consumed before it and given a
+// new value inside it has no single state after the loop (E0212).
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<Int> = alloc(1);
+    free(h);
+    let mut i: Int = 0;
+    while i < 1 {
+        h = alloc(2);
+        i = i + 1;
+    }
+    return 0;
+}

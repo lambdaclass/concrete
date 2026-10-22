@@ -1,0 +1,19 @@
+// Exit 2i REF-6@1 (review round 8): an `assert` in a generic forwards its opaque `T` to another
+// generic. At `wrapper::<&Int>` the inner specialization would bind a reference by `let`, but it is
+// erased and never monomorphized; inside erased code an instantiation must be closed and
+// reference-free. E0302.
+fn probe<T: Copy>(x: T) -> bool {
+    let y: T = x;
+    return true;
+}
+
+fn wrapper<T: Copy>(x: T) -> bool {
+    assert(probe::<T>(x));
+    return true;
+}
+
+fn main() -> Int {
+    let n: Int = 1;
+    discard(wrapper::<&Int>(&n));
+    return 42;
+}

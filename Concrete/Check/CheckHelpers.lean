@@ -135,6 +135,20 @@ partial def tyHoldsRefInAggregate : Ty → Bool
   | .generic _ args _ => args.any tyStoresRef
   | _ => false
 
+/-- Could `ty` hold a reference once the type parameters `tps` are instantiated (one of them to a
+    reference)? A bare type parameter can become one; so can an aggregate or generic argument
+    holding one (REF-3). A raw pointer or a function type stays what it is under substitution, so a
+    type parameter behind one does not count (exit 2i review). -/
+partial def tyMayHoldRefAt (tps : List String) : Ty → Bool
+  | .typeVar n => tps.contains n
+  | .named n => tps.contains n
+  | .ref _ | .refMut _ => true
+  | .ptrMut _ | .ptrConst _ | .fn_ _ _ _ => false
+  | .heap inner | .heapArray inner => tyMayHoldRefAt tps inner
+  | .array inner _ => tyMayHoldRefAt tps inner
+  | .generic _ args _ => args.any (tyMayHoldRefAt tps)
+  | _ => false
+
 /-- Does the named type parameter occur anywhere in this type? -/
 partial def tyParamOccursIn (name : String) : Ty → Bool
   | .typeVar n => n == name
@@ -201,7 +215,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then
-      throwCheckMsg s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)."
+      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@1")
     return .fn_ params' capSet retTy'
   | _ => return ty
 
@@ -231,11 +245,16 @@ def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
   for (pName, pTy0) in mapping do
     -- aliases resolved: `f::<R>` with `type R = &P` is a reference instantiation
     let pTy ← tryCatch (resolveType pTy0) (fun _ => pure pTy0)
+    -- inside erased code the instantiation must be closed and reference-free: an opaque
+    -- type parameter forwarded here could be a reference at the caller (review round 8)
+    let envE ← getEnv
+    if envE.erasedDepth > 0 && (tyContainsRef pTy || tyMayHoldRefAt envE.currentTypeParams pTy) then
+      throwCheck (.erasedRefInstantiation what pName (tyToString pTy))
     if tyContainsRef pTy && tyParamOccursIn pName retTy then
-      throwCheckMsg s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
     if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then
       throwCheck (.untraceablePlace s!"what the reference instantiating '{pName}' of {what} borrows"
-        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none
+        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none (rule := some "REF-4@1")
 
 /-- Type-variable substitution over surface types. Delegates to the one shared
     definition (`Layout.substTyVars`); the two were byte-for-byte equivalent
@@ -265,6 +284,14 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- cannot drift (they previously disagreed on typeVar/newtype).
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
+  -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
+  -- head alias of a newtype payload and of the type itself (a few levels; aliases are acyclic).
+  let deAlias : Ty → Ty := fun t =>
+    let step : Ty → Ty := fun t => match t with
+      | .named a => (env.typeAliases.lookup a).getD t
+      | t => t
+    step (step (step (step t)))
+  let ty := deAlias ty
   return Layout.isCopyTyGeneric
     (fun name =>
       match env.structs.find? fun sd => sd.name == name with
@@ -272,7 +299,7 @@ def isCopyType (ty : Ty) : CheckM Bool := do
       | none => match env.enums.find? fun ed => ed.name == name with
         | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap (fun v => v.fields.map (fun f => f.ty)))
         | none => none)
-    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => nt.innerTy))
+    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => deAlias nt.innerTy))
     (fun name => (((env.currentTypeBounds.find? fun b => b.1 == name).map Prod.snd).getD []).contains "Copy")
     ty
 
@@ -443,6 +470,9 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
     let activeRefs := activeBorrowRefs env name
     if activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
       throwCheck (.cannotMoveLinearBorrowed name) span
+    -- Defer rule (a) (bug 143): a pending deferred call borrows this binding.
+    if info.pinnedByDefer then
+      throwCheck (.variablePinnedByDefer name) span
     match info.state with
     | .consumed =>
       -- point the secondary span at where the value was moved (Phase 4 #11).
@@ -500,19 +530,77 @@ partial def isLitTrueExpr : Expr → Bool
   | .paren _ inner => isLitTrueExpr inner
   | _ => false
 
--- Does a `break` appear directly in this block (not inside a nested loop, whose
--- break targets that inner loop)? Distinguishes a truly infinite `while true {}`
--- from one that can exit. Labeled breaks to an outer loop are treated as inner
--- (conservative: at worst we under-report a leak, never false-positive).
+/-- Where the loop-exit search stands (bug 176). `own` is the loop's label; `inner`
+    the labels of loops nested inside it at this point; `direct` is false inside a
+    nested loop, where an unlabelled `break` targets that loop. `anyExit` picks the
+    question: true asks "can control leave this loop at all" (also to an enclosing
+    loop, through a labelled `break`/`continue`), false asks "can control reach the
+    statement after this loop" (only a `break` that targets it). -/
+structure LoopExitCtx where
+  own : Option String
+  inner : List String := []
+  direct : Bool := true
+  anyExit : Bool
+
+-- Does an exit of the kind `ctx.anyExit` asks for appear in a loop's body?
+-- Searches through `if` and value-`if` branches, `match` arms, borrow blocks,
+-- `let`-`else` and statement expressions (bug 176, Codex review: a `while let`,
+-- whose `break` sits in the desugared match's fallback arm, read as infinite, and
+-- a labelled `break` out of a nested loop was ignored, so a loop body that exits
+-- was taken as one that never ends and its locals were exempted from H9). Labels
+-- are resolved: an exit to a nested loop's label stays inside, a `continue` to
+-- the loop's own label stays in it.
 mutual
-partial def blockHasBreak (stmts : List Stmt) : Bool :=
-  stmts.any stmtHasBreak
-partial def stmtHasBreak : Stmt → Bool
-  | .break_ _ _ _ => true
-  | .ifElse _ _ t e => blockHasBreak t || (match e with | some es => blockHasBreak es | none => false)
-  | .while_ _ _ _ _ | .forLoop _ _ _ _ _ _ => false  -- break here targets the inner loop
+partial def loopBlockExits (ctx : LoopExitCtx) (stmts : List Stmt) : Bool :=
+  stmts.any (loopStmtExits ctx)
+partial def loopStmtExits (ctx : LoopExitCtx) : Stmt → Bool
+  | .break_ _ v lbl =>
+    let leaves := match lbl with
+      | none => ctx.direct
+      | some l => !ctx.inner.contains l && (ctx.anyExit || ctx.own == some l)
+    leaves || (match v with | some e => loopExprExits ctx e | none => false)
+  | .continue_ _ lbl =>
+    match lbl with
+    | none => false
+    | some l => ctx.anyExit && !ctx.inner.contains l && ctx.own != some l
+  | .ifElse _ c t e =>
+    loopExprExits ctx c || loopBlockExits ctx t
+      || (match e with | some es => loopBlockExits ctx es | none => false)
+  | .while_ _ c body lbl =>
+    loopExprExits ctx c
+      || loopBlockExits { ctx with inner := lbl.toList ++ ctx.inner, direct := false } body
+  | .forLoop _ init c step body lbl =>
+    let ctx' : LoopExitCtx := { ctx with inner := lbl.toList ++ ctx.inner, direct := false }
+    (match init with | some s => loopStmtExits ctx s | none => false) || loopExprExits ctx c
+      || (match step with | some s => loopStmtExits ctx' s | none => false)
+      || loopBlockExits ctx' body
+  | .expr _ e _ => loopExprExits ctx e
+  | .letDecl _ _ _ _ v _ => loopExprExits ctx v
+  | .assign _ _ v => loopExprExits ctx v
+  | .return_ _ (some v) => loopExprExits ctx v
+  | .borrowIn _ _ _ _ _ body => loopBlockExits ctx body
+  | .letDestructure _ _ _ _ v eb =>
+    loopExprExits ctx v || (match eb with | some b => loopBlockExits ctx b | none => false)
   | _ => false
+partial def loopExprExits (ctx : LoopExitCtx) : Expr → Bool
+  | .paren _ e => loopExprExits ctx e
+  | .match_ _ s arms => loopExprExits ctx s || arms.any (loopArmExits ctx)
+  | .ifExpr _ c t e => loopExprExits ctx c || loopBlockExits ctx t || loopBlockExits ctx e
+  | _ => false
+partial def loopArmExits (ctx : LoopExitCtx) : MatchArm → Bool
+  | .mk _ _ _ _ _ body => loopBlockExits ctx body
+  | .litArm _ _ _ body => loopBlockExits ctx body
+  | .varArm _ _ _ body => loopBlockExits ctx body
+  | .rangeArm _ _ _ _ _ body => loopBlockExits ctx body
 end
+
+/-- Can control leave the loop whose body is `stmts` and whose label is `own`?
+    With `anyExit := false` (divergence: does the loop fall through to the next
+    statement) only a `break` targeting this loop counts; with `anyExit := true`
+    (H9: does the body's scope ever close) a labelled `break`/`continue` to an
+    enclosing loop counts too. -/
+def blockHasBreak (stmts : List Stmt) (own : Option String := none) (anyExit : Bool := false) : Bool :=
+  loopBlockExits { own, anyExit } stmts
 
 -- Control cannot fall off the end of this block — it returns, breaks, continues,
 -- `abort()`s, or loops forever (`while true {}` with no break). When true, a
@@ -529,7 +617,9 @@ partial def stmtDiverges : Stmt → Bool
   | .return_ _ _ => true
   | .break_ _ _ _ => true
   | .continue_ _ _ => true
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
   | .ifElse _ _ t (some e) => blockDiverges t && blockDiverges e
   | .expr _ e _ => exprDiverges e
   | _ => false
@@ -558,7 +648,9 @@ partial def blockNonTerminating (stmts : List Stmt) : Bool :=
   | none => false
   | some s => stmtNonTerminating s
 partial def stmtNonTerminating : Stmt → Bool
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl (anyExit := true)
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl (anyExit := true)
   | .ifElse _ _ t (some e) => blockNonTerminating t && blockNonTerminating e
   | .expr _ e _ => exprNonTerminating e
   | _ => false
@@ -573,6 +665,152 @@ partial def armNonTerminating : MatchArm → Bool
   | .varArm _ _ _ body => blockNonTerminating body
   | .rangeArm _ _ _ _ _ body => blockNonTerminating body
 end
+
+-- Rule (d), the operand-escape rule (bug 142; EVALUATION2 D3/D15): a `return`, `break` or
+-- `continue` may not occur inside a call argument (receivers included), a struct, enum or
+-- array literal element, a functional-update base, or an operator operand (binary, unary,
+-- cast, index). Such an exit leaves a construct whose earlier operands were already
+-- evaluated and handed to it, so the values moved into it were never destroyed. An exit
+-- stays legal in statement position, in a tail, and in a let or assignment initializer's
+-- branch chain (`let v = match o { Some { value } => value, None => { return 1; } };`).
+-- `operandEscape? depth labels e` is the first exit in `e` that leaves `e`: a `return`, or a
+-- `break`/`continue` that is not bound by a loop entered inside `e` (`depth` such loops,
+-- `labels` their labels). The rule covers `break`/`continue` even while a `{ break; }`
+-- branch types as `()` (D15), so typing them as diverging later cannot reopen the hole.
+mutual
+partial def operandEscape? (depth : Nat) (labels : List String) : Expr → Option (String × Span)
+  | .binOp _ _ l r => firstOperandEscape? depth labels [l, r]
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => operandEscape? depth labels x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => firstOperandEscape? depth labels args
+  | .methodCall _ obj _ _ args => firstOperandEscape? depth labels (obj :: args)
+  | .structLit _ _ _ fields base => firstOperandEscape? depth labels (fields.map (·.2) ++ base.toList)
+  | .enumLit _ _ _ _ fields => firstOperandEscape? depth labels (fields.map (·.2))
+  | .arrayLit _ elems => firstOperandEscape? depth labels elems
+  | .arrayIndex _ a i => firstOperandEscape? depth labels [a, i]
+  | .allocCall _ inner a => firstOperandEscape? depth labels [inner, a]
+  | .ifExpr _ c t e =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      (stmtsEscape? depth labels t).orElse fun _ => stmtsEscape? depth labels e
+  | .match_ _ scr arms =>
+    (operandEscape? depth labels scr).orElse fun _ => armsEscape? depth labels arms
+  | _ => none
+partial def firstOperandEscape? (depth : Nat) (labels : List String) : List Expr → Option (String × Span)
+  | [] => none
+  | e :: es => (operandEscape? depth labels e).orElse fun _ => firstOperandEscape? depth labels es
+partial def armsEscape? (depth : Nat) (labels : List String) : List MatchArm → Option (String × Span)
+  | [] => none
+  | arm :: arms =>
+    let (guard, body) := match arm with
+      | .mk _ _ _ _ g b | .litArm _ _ g b | .varArm _ _ g b | .rangeArm _ _ _ _ g b => (g, b)
+    ((guard.bind (operandEscape? depth labels)).orElse fun _ => stmtsEscape? depth labels body).orElse
+      fun _ => armsEscape? depth labels arms
+partial def stmtsEscape? (depth : Nat) (labels : List String) : List Stmt → Option (String × Span)
+  | [] => none
+  | st :: sts => (stmtEscape? depth labels st).orElse fun _ => stmtsEscape? depth labels sts
+partial def stmtEscape? (depth : Nat) (labels : List String) : Stmt → Option (String × Span)
+  | .return_ sp _ => some ("return", sp)
+  | .break_ sp v lbl =>
+    let leaves := match lbl with
+      | none => depth == 0
+      | some l => !labels.contains l
+    if leaves then some ("break", sp) else v.bind (operandEscape? depth labels)
+  | .continue_ sp lbl =>
+    let leaves := match lbl with
+      | none => depth == 0
+      | some l => !labels.contains l
+    if leaves then some ("continue", sp) else none
+  | .while_ _ c body lbl =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      stmtsEscape? (depth + 1) (lbl.toList ++ labels) body
+  | .forLoop _ init c step body lbl =>
+    let labels' := lbl.toList ++ labels
+    -- The condition is evaluated outside the loop's scope (Check and Elab agree), so a
+    -- `break`/`continue` there does not target this loop (Codex review).
+    ((init.bind (stmtEscape? depth labels)).orElse fun _ => operandEscape? depth labels c).orElse fun _ =>
+      ((step.bind (stmtEscape? (depth + 1) labels')).orElse fun _ => stmtsEscape? (depth + 1) labels' body)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => operandEscape? depth labels v
+  | .ifElse _ c t e =>
+    (operandEscape? depth labels c).orElse fun _ =>
+      (stmtsEscape? depth labels t).orElse fun _ => e.bind (stmtsEscape? depth labels)
+  | .fieldAssign _ o _ v => firstOperandEscape? depth labels [o, v]
+  | .derefAssign _ t v => firstOperandEscape? depth labels [t, v]
+  | .arrayIndexAssign _ a i v => firstOperandEscape? depth labels [a, i, v]
+  | .borrowIn _ _ _ _ _ body => stmtsEscape? depth labels body
+  | .letDestructure _ _ _ _ v elseBody =>
+    (operandEscape? depth labels v).orElse fun _ => elseBody.bind (stmtsEscape? depth labels)
+end
+
+-- Bug 149: does this block contain a `break`/`continue` that can leave a loop enclosing it
+-- (an unlabelled one not inside a loop of its own, or a labelled one naming no loop inside it)? Such a
+-- block does not only exit the function, so it does not earn the consume-inside-loop
+-- exemption even when it ends in `return`.
+mutual
+partial def exprLeavesLoop (depth : Nat) (labels : List String) : Expr → Bool
+  | .binOp _ _ l r => exprLeavesLoop depth labels l || exprLeavesLoop depth labels r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => exprLeavesLoop depth labels x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.any (exprLeavesLoop depth labels)
+  | .methodCall _ obj _ _ args => (obj :: args).any (exprLeavesLoop depth labels)
+  | .structLit _ _ _ fields base => (fields.map (·.2) ++ base.toList).any (exprLeavesLoop depth labels)
+  | .enumLit _ _ _ _ fields => (fields.map (·.2)).any (exprLeavesLoop depth labels)
+  | .arrayLit _ elems => elems.any (exprLeavesLoop depth labels)
+  | .arrayIndex _ a i => exprLeavesLoop depth labels a || exprLeavesLoop depth labels i
+  | .allocCall _ inner a => exprLeavesLoop depth labels inner || exprLeavesLoop depth labels a
+  | .ifExpr _ c t e => exprLeavesLoop depth labels c || stmtsLeaveLoop depth labels t || stmtsLeaveLoop depth labels e
+  | .match_ _ scr arms => exprLeavesLoop depth labels scr || arms.any fun arm =>
+      match arm with
+      | .mk _ _ _ _ g b | .litArm _ _ g b | .varArm _ _ g b | .rangeArm _ _ _ _ g b =>
+        (g.map (exprLeavesLoop depth labels)).getD false || stmtsLeaveLoop depth labels b
+  | _ => false
+partial def stmtsLeaveLoop (depth : Nat) (labels : List String) (stmts : List Stmt) : Bool :=
+  stmts.any (stmtLeavesLoop depth labels)
+partial def stmtLeavesLoop (depth : Nat) (labels : List String) : Stmt → Bool
+  | .break_ _ v lbl =>
+    let leaves := match lbl with
+      | some l => !labels.contains l
+      | none => depth == 0
+    leaves || (v.map (exprLeavesLoop depth labels)).getD false
+  | .continue_ _ lbl =>
+    match lbl with
+    | some l => !labels.contains l
+    | none => depth == 0
+  | .while_ _ c body lbl => exprLeavesLoop depth labels c || stmtsLeaveLoop (depth + 1) (lbl.toList ++ labels) body
+  | .forLoop _ init c step body lbl =>
+    let labels' := lbl.toList ++ labels
+    (init.map (stmtLeavesLoop depth labels)).getD false || exprLeavesLoop depth labels c
+      || (step.map (stmtLeavesLoop (depth + 1) labels')).getD false || stmtsLeaveLoop (depth + 1) labels' body
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => exprLeavesLoop depth labels v
+  | .return_ _ v => (v.map (exprLeavesLoop depth labels)).getD false
+  | .ifElse _ c t e => exprLeavesLoop depth labels c || stmtsLeaveLoop depth labels t || (e.map (stmtsLeaveLoop depth labels)).getD false
+  | .fieldAssign _ o _ v => exprLeavesLoop depth labels o || exprLeavesLoop depth labels v
+  | .derefAssign _ t v => exprLeavesLoop depth labels t || exprLeavesLoop depth labels v
+  | .arrayIndexAssign _ a i v => exprLeavesLoop depth labels a || exprLeavesLoop depth labels i || exprLeavesLoop depth labels v
+  | .borrowIn _ _ _ _ _ body => stmtsLeaveLoop depth labels body
+  | .letDestructure _ _ _ _ v elseBody => exprLeavesLoop depth labels v || (elseBody.map (stmtsLeaveLoop depth labels)).getD false
+end
+
+/-- The operands of `e` that rule (d) protects, with a description of the construct. An
+    expression form not listed has no operand position (a match scrutinee, an `if`
+    condition and branch, and a block are statement-like). -/
+def protectedOperands : Expr → Option (String × List Expr)
+  | .call _ fn _ args => some (s!"an argument of '{fn}'", args)
+  | .staticMethodCall _ ty m _ args => some (s!"an argument of '{ty}::{m}'", args)
+  | .methodCall _ obj m _ args => some (s!"the receiver or an argument of '.{m}'", obj :: args)
+  | .structLit _ n _ fields base => some (s!"a field of the '{n}' literal", fields.map (·.2) ++ base.toList)
+  | .enumLit _ en v _ fields => some (s!"a field of the '{en}::{v}' literal", fields.map (·.2))
+  | .arrayLit _ elems => some ("an array literal element", elems)
+  | .binOp _ _ l r => some ("an operand of a binary operator", [l, r])
+  | .unaryOp _ _ x => some ("the operand of a unary operator", [x])
+  | .deref _ x => some ("the operand of a dereference", [x])
+  | .borrow _ x | .borrowMut _ x => some ("the operand of a borrow", [x])
+  | .fieldAccess _ x f => some (s!"the base of the field access '.{f}'", [x])
+  | .cast _ x _ => some ("the operand of a cast", [x])
+  | .arrayIndex _ a i => some ("an index expression", [a, i])
+  | .allocCall _ _ a => some ("an allocator argument", [a])
+  | _ => none
 
 -- Control leaves this block by EXITING THE FUNCTION: a `return` on every path
 -- (directly, or through an if/else or match whose arms all return). A
@@ -601,6 +839,13 @@ partial def armExitsFunction : MatchArm → Bool
   | .rangeArm _ _ _ _ _ body => blockExitsFunction body
 end
 
+/-- Bug 149: a branch earns the consume-inside-loop exemption only when it exits the function
+    and contains no `break`/`continue` that leaves the loop around it (an earlier conditional
+    `continue` would repeat the consumption on the next iteration; Codex review). -/
+def exemptExitBranch (stmts : List Stmt) : Bool :=
+  blockExitsFunction stmts && !stmtsLeaveLoop 0 [] stmts
+
+
 /-- A branch or arm that EXITS THE FUNCTION must have consumed every linear
     value that was live when it started — `if c { return 0; } … drop(s);`
     leaks `s` on the returning path even though the fall-through is fine.
@@ -616,10 +861,13 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     match infoBefore.ty with
     | .ref _ | .refMut _ => continue
     | _ => pure ()
-    if infoBefore.state == .consumed || infoBefore.state == .reserved then continue
+    -- Bug 149: a borrow block's frozen owner is judged by its state before the freeze.
+    let seen : VarInfo → VarState := fun i =>
+      if i.state == .frozen then i.frozenFrom.getD i.state else i.state
+    if seen infoBefore == .consumed || seen infoBefore == .reserved then continue
     let afterState := match lookupByUid after infoBefore.uid with
-      | some info => info.state
-      | none => infoBefore.state
+      | some info => seen info
+      | none => seen infoBefore
     -- `.consumed` = moved on this path; `.reserved` = a pending `defer` will
     -- consume it when this return unwinds — both are accounted for.
     if afterState != .consumed && afterState != .reserved then
@@ -655,6 +903,32 @@ def checkBlockLocalsConsumed
     if info.isCopy then continue
     if info.state == .consumed || info.state == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
+
+/-- Bug 176: the ONE lexical-scope discipline of Check's binding environment.
+    Closes a block opened when the environment's bindings were `outer`: every
+    binding the block introduced (by identity — a uid absent from `outer`) is
+    dropped, so an outer binding that an inner `let` shadowed is the visible one
+    again, with its own type and mutability. Outer bindings keep the states the
+    block left them in (a consume inside the block is not undone). Every block
+    construct closes through here: `if`/`else` branches (statement and value),
+    loop bodies, `for` headers and borrow blocks. -/
+def closeBlockScope (outer : List (String × VarInfo)) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
+
+/-- Bug 176: run `k`, which checks `body` as a lexical block nested in the current
+    environment, then apply H9 to the block's own bindings and close it
+    (`closeBlockScope`). Before this, a `while`/`for` body never closed: its
+    bindings stayed in the environment after the loop, so an inner `let v0: u8`
+    replaced the outer `v0: i32` for the rest of the function (the checker typed
+    and mutability-checked later code against a binding that no longer existed,
+    while Elab, the interpreter and the binary read the outer one). -/
+def inBlockScope {α : Type} (body : List Stmt) (span : Option Span) (k : CheckM α) : CheckM α := do
+  let outer := (← getEnv).vars
+  let r ← k
+  checkBlockLocalsConsumed outer (← getEnv).vars (blockNonTerminating body) span
+  closeBlockScope outer
+  return r
 
 -- ============================================================
 -- Type substitution for generics
@@ -859,7 +1133,7 @@ partial def inferMethodParamAndRetTys
   -- a generic backdoor to returning a reference). VALUE_MODEL.md.
   for (pName, pTy) in fullMapping do
     if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
-      throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
   refuseNestedRefInstantiation s!"method '{callName}'" fullMapping (sig.params.map (·.2)) sig.retTy
   -- 2. Infer capability-variable bindings: from the RECEIVER first (R-0484 — on
   --    `impl<cap C> Sink<C>`, `s.run(..)` with `s: &Sink<Console>` binds C := Console),

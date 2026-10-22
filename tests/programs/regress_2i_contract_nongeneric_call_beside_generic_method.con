@@ -1,0 +1,10 @@
+// Exit 2i (review round 10): a contract calling a non-generic function is accepted even when an
+// unrelated generic method shares its name. Run 42, binary = --interp.
+struct S { n: i32 }
+impl S {
+    fn probe<T: Copy>(x: T) -> bool { return true; }
+}
+fn probe(x: i32) -> bool { return true; }
+#[requires(probe(x))]
+fn f(x: i32) -> i32 { return x; }
+fn main() -> i32 { return f(42); }

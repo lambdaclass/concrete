@@ -1,0 +1,17 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): the same name in the two branches of an `if` is not a collision. Run 42, binary =
+// --interp.
+fn pick(c: bool) -> Int {
+    let mut out: Int = 0;
+    if c {
+        let x: Int = 40;
+        out = x;
+    } else {
+        let x: Int = 2;
+        out = x;
+    }
+    return out;
+}
+
+fn main() -> Int {
+    return pick(true) + pick(false);
+}

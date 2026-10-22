@@ -1,0 +1,23 @@
+// D13 (semantics evaluation, 2026-10-21): what a trapping run printed is part of its outcome.
+// The print builtins write through stdio, which buffers stdout; the trap calls abort(), which
+// flushes stdio on Darwin (the binary prints "5 7 ") and not on glibc (it prints nothing). The
+// interpreter models the stdio buffer and that platform difference; it used to print nothing
+// anywhere, because its stdout lived in the environment it lost with the failure.
+// check_codegen_differential.sh requires both sides to trap AND to have printed the same bytes.
+fn show(n: Int) with(Console) {
+    print_int(n);
+    print_char(32);
+}
+
+fn div(a: Int, b: Int) with(Console) -> Int {
+    defer show(9);
+    return a / b;
+}
+
+fn main() with(Console) -> Int {
+    let z: Int = 0;
+    defer show(8);
+    show(5);
+    show(7);
+    return div(1, z);
+}

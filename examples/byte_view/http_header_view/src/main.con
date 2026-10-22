@@ -54,8 +54,8 @@ mod http_header_view {
                 let nv: ByteView = value;
                 let value_view: Option<ByteView> = ByteView::new(vstart, buf.len() - vstart, buf);
                 match value_view {
-                    Option::Some { value } => {
-                        return Option::<Header>::Some { value: Header { name: nv, value: value } };
+                    Option::Some { value: inner } => {
+                        return Option::<Header>::Some { value: Header { name: nv, value: inner } };
                     },
                     Option::None => { return Option::<Header>::None; }
                 }

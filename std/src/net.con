@@ -275,10 +275,10 @@ mod net {
         let port: u16 = 39876;
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
-            Result::Ok { value } => {
-                // Move to a fresh name: nested Result matches bind their own
-                // field-named `value`, which collides in consumption accounting.
-                let listener: TcpListener = value;
+            Result::Ok { value: bound } => {
+                // Bind under its own name: nested Result matches bind their own
+                // field-named `value`, and one lexical name has one binding (SCOPE-1).
+                let listener: TcpListener = bound;
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
@@ -358,10 +358,10 @@ mod net {
         let port: u16 = 39877;
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
-            Result::Ok { value } => {
-                // Move to a fresh name: nested Result matches bind their own
-                // field-named `value`, which collides in consumption accounting.
-                let listener: TcpListener = value;
+            Result::Ok { value: bound } => {
+                // Bind under its own name: nested Result matches bind their own
+                // field-named `value`, and one lexical name has one binding (SCOPE-1).
+                let listener: TcpListener = bound;
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
@@ -565,11 +565,11 @@ mod net {
         let addr: String = "127.0.0.1";
         let result1: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49321);
         match result1 {
-            Result::<TcpListener, NetError>::Ok { value } => {
+            Result::<TcpListener, NetError>::Ok { value: first } => {
                 // Try to bind a second listener on the same port
                 let result2: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49321);
                 addr.drop();
-                let closed16: Result<u64, NetError> = value.close();
+                let closed16: Result<u64, NetError> = first.close();
                 discard(closed16.is_ok());
                 match result2 {
                     Result::<TcpListener, NetError>::Ok { value } => {

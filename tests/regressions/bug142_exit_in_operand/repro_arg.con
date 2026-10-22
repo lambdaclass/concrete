@@ -1,0 +1,6 @@
+// Bug 142: a `return` inside a call argument. The binary returned 3 from f (the call never ran)
+// while --interp refused the program at run time ("unexpected return in value position"). Now
+// E0278 in both.
+fn id(x: Int) -> Int { return x; }
+fn f(n: Int) -> Int { return id(if n > 0 { return 3; } else { 4 }) + 1; }
+fn main() -> Int { return f(1) * 10 + f(0); }

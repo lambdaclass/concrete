@@ -91,10 +91,10 @@ mod fs {
         let size: i64 = ftell(handle);
         fseek(handle, 0, 0); // SEEK_SET = 0
 
-        let buf: Bytes = Bytes::with_capacity(size as u64);
+        let fresh: Bytes = Bytes::with_capacity(size as u64);
 
         // Read into the buffer's backing memory
-        let mut buf: Bytes = buf;
+        let mut buf: Bytes = fresh;
         let n: u64 = fread(buf.raw_ptr(), 1, size as u64, handle);
         // Set the length to what was actually read (audited raw-fill setter)
         buf.set_len_unchecked(n);
@@ -222,7 +222,7 @@ mod fs {
         let wr: Result<u64, FsError> = write_file(&path, &data);
         data.drop();
         match wr {
-            Result::Ok { value } => {
+            Result::Ok { value: _ } => {
                 let rr: Result<Bytes, FsError> = read_file(&path);
                 path.drop();
                 match rr {
@@ -587,8 +587,8 @@ mod fs {
         path.drop();
         match result {
             Result::Err { error } => { return 0; },
-            Result::Ok { value } => {
-                let f: File = value;
+            Result::Ok { value: opened } => {
+                let f: File = opened;
                 let data: String = "buffered";
                 let n: u64 = f.write_bytes(data.raw_ptr() as *const u8, data.len());
                 data.drop();

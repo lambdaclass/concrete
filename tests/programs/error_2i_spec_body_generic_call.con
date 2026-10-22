@@ -1,0 +1,17 @@
+// Exit 2i (review round 16): a spec fn body calls a generic function at `T := &i32` (nested in an
+// if-expression); a spec body is erased like a contract, so that specialization would never be
+// checked. E0305.
+fn bad<T: Copy>(x: T) -> bool {
+    let y: T = x;
+    return true;
+}
+spec fn s(r: &i32) -> bool =
+    if true { bad::<&i32>(r) } else { true };
+
+#[requires(s(r))]
+fn f(r: &i32) -> i32 { return *r; }
+
+fn main() -> i32 {
+    let x: i32 = 42;
+    return f(&x);
+}

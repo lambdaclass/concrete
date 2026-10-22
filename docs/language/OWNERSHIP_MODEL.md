@@ -120,9 +120,10 @@ duplicating one would let it be freed twice. Concretely:
   (`&w.f`, `&mut arr[i]`), read Copy leaves (`w.f.fd`), or destructure the whole
   owner. Projection bases, borrow targets, assignment targets, and auto-borrowed
   receivers are checked *as places*, so `w.f.g`, `arr[i] = v`, and `&self` method
-  calls stay legal. Heap-shell reads are excluded: `h.next` + `free(h)` (pre-6D#3: `h->next`) is the
-  blessed heap-node destructure (`free` only frees the shell; `Heap<T>` interiors
-  are not linearity-tracked).
+  calls stay legal. Heap-shell reads follow the same rule (since 2026-10-21, bug 144): `Heap<T>`
+  interiors are linearity-tracked, so `h.next` by value is E0290 and `free(h)` of a non-Copy
+  pointee is E0287. A heap node is taken apart by moving it out of its cell (`let n = *h;`,
+  which frees the cell) and destructuring it.
 - **Struct destructure** `let Wrap { f } = w;` moves the source `w` out and each named
   field becomes an **owned** binding (must itself be consumed). It is checked natively
   (a `let __destr = w; let f = __destr.f` desugaring would be unsound for a linear

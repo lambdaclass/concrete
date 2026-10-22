@@ -5,6 +5,7 @@ import Concrete.Check.Layout
 import Concrete.Semantics.IntArith
 import Concrete.Proof.CallCollect
 import Concrete.Semantics.Capabilities
+import Concrete.Resolve.Shared
 
 namespace Concrete
 
@@ -319,7 +320,9 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
                    pass := "post-mono"
                    span := fn.declSpan
                    hint := some "see docs/language/VALUE_MODEL.md — references are second-class"
-                   code := "E0236" } : Diagnostic)]
+                   code := "E0236"
+                   evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+                   nextAction := some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code" } : Diagnostic)]
       else acc) ([] : Diagnostics)
     here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
 
@@ -366,6 +369,55 @@ partial def verifyLiteralRanges (modules : List CModule) : Diagnostics :=
     span := none
     hint := some "a literal must fit the type it is instantiated at; use a value within that range or an explicit `as` cast"
     code := "E0227"
+  }
+
+/-- The comparison rule after monomorphization (bugs 134, 140): every comparison operator
+    in an instance compares integers, floats, `bool`, `char` or raw pointers. Check accepts a
+    comparison at a `Copy`-bounded type parameter (it cannot consume an operand); this
+    re-asserts the scalar rule on each monomorphized copy, where the operand type is
+    concrete, so `max<T: Copy>` at a struct is a user error (E0229) instead of an ill-typed
+    `icmp` that only `llvm-as` rejected. `none` = not a refused comparison, keep walking. -/
+private def comparisonTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) : Option (List VerifyViolation) :=
+  match e with
+  | .binOp op lhs _ _ =>
+    let isCmp := match op with
+      | .eq | .neq | .lt | .gt | .leq | .geq => true
+      | _ => false
+    if !isCmp then none
+    else
+      let t := lhs.ty
+      let ok := match t with
+        | .bool | .char | .never | .placeholder => true
+        -- A raw pointer: Check decides the authority at the source (trusted or `Unsafe`).
+        -- Monomorphized instances do not carry their definition's `trusted` flag, so the
+        -- instance's own authority is not known here; a pointer comparison reached through a
+        -- `Copy`-bounded generic is therefore not re-checked (no memory effect: it compares
+        -- addresses). `unsafeOk` is kept for when instances carry their trust.
+        | .ptrMut _ | .ptrConst _ => unsafeOk || true
+        | t => isNumeric t
+      if ok then none
+      else some [{ fnName, message := s!"comparison is not defined on '{tyToStr t}' after monomorphization: comparison operators are defined on integers, floats, `bool` and `char`, and on raw pointers only in trusted or `Unsafe` code" }]
+  | _ => none
+
+/-- **Post-Mono comparison verifier** (bugs 134, 140): see `comparisonTypeHook`. Generic
+    definitions are skipped; only their instances are checked. -/
+partial def verifyComparisonTypes (modules : List CModule) : Diagnostics :=
+  let rec goModule (m : CModule) : List VerifyViolation :=
+    let noTy : Ty → Bool := fun _ => false
+    let fnVs := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc
+      else fn.body.foldl (fun acc2 st =>
+        acc2 ++ collectStmtViolations fn.name noTy "" st
+          (hook := comparisonTypeHook fn.name (Capabilities.capsAllowUnsafeOp fn.isTrusted fn.capSet))) acc) []
+    fnVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+  let violations := modules.foldl (fun acc m => acc ++ goModule m) []
+  violations.map fun v => {
+    severity := .error
+    message := s!"{v.fnName}: {v.message}"
+    pass := "post-mono"
+    span := none
+    hint := some "a generic comparison instantiated at an aggregate: compare through a named function over references, or instantiate at a scalar type"
+    code := "E0229"
   }
 
 /-- Bug 092 (post-mono): does a value of this type store a reference inside an
@@ -422,6 +474,10 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
     span := none
     hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/language/VALUE_MODEL.md)"
     code := "E0239"
+    -- exit 2i §15.5: an instantiation storing a reference is REF-4@1 (b); a constant is REF-3@1
+    evidence := [("rule", if v.message.startsWith "a reference stored in an aggregate after monomorphization in constant" then "REF-3@1" else "REF-4@1"),
+                 ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+    nextAction := some "instantiate the generic at a value type, or pass the reference directly as an argument"
   }
 
 /-- **Post-mono capability verifier** (bug 091, defense in depth). Capability
@@ -489,6 +545,88 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
           else acc ++ [{ fnName := f.name
                          message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
   violationsToDiagnostics "post-mono" violations
+/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@1, MEMORY_SEMANTICS §15.3)
+
+Check refuses every `let` of reference type (E0302) and every assignment to a reference binding
+(E0303) it can see. A generic body is checked once at its opaque `T`, so `let y: T = x;` and
+`x = y;` pass there and become a reference `let` / a reference re-pointing only when Mono
+instantiates `T := &Int`. This pass re-asks both questions on every specialized (non-generic)
+function after monomorphization, with the binding types Mono substituted. -/
+
+private def isRefTyPM : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | _ => false
+
+mutual
+private partial def refBindExpr (env : List (String × Ty)) : CExpr → List (String × String)
+  | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => refBindExpr env l ++ refBindExpr env r
+  | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
+    refBindExpr env x
+  | .call _ _ args _ | .arrayLit args _ => args.flatMap (refBindExpr env)
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (fun (_, e) => refBindExpr env e)
+  | .match_ s arms _ => refBindExpr env s ++ arms.flatMap (refBindArm env)
+  | .ifExpr c t e _ => refBindExpr env c ++ refBindStmts env t ++ refBindStmts env e
+  | _ => []
+
+private partial def refBindArm (env : List (String × Ty)) : CMatchArm → List (String × String)
+  | .enumArm _ _ bs g body =>
+    let env' := bs.reverse ++ env
+    (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
+  | .varArm b t g body =>
+    let env' := (b, t) :: env
+    (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
+  | .litArm v g body => refBindExpr env v ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
+  | .rangeArm lo hi _ g body =>
+    refBindExpr env lo ++ refBindExpr env hi ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
+
+private partial def refBindStmts (env : List (String × Ty)) : List CStmt → List (String × String)
+  | [] => []
+  | s :: rest =>
+    let (vs, env') := refBindStmt env s
+    vs ++ refBindStmts env' rest
+
+/-- One statement: its violations (code, message) and the bindings visible after it. -/
+private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (String × String) × List (String × Ty)
+  | .letDecl n _ ty v =>
+    -- `__destr_*` is Elab's struct-destructuring temporary (a `let S { .. } = s` through `&S`
+    -- binds it to the reference); it is not a source `let`, whose binders Check already saw.
+    (refBindExpr env v ++
+      (if isRefTyPM ty && !n.startsWith "__destr_" then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
+     (n, ty) :: env)
+  | .assign n v =>
+    (refBindExpr env v ++
+      (match env.lookup n with
+       | some t => if isRefTyPM t then [("E0303", s!"a reference binding is never assigned (after monomorphization): '{n}' has type '{tyToStr t}'")] else []
+       | none => []), env)
+  | .return_ v _ | .break_ v _ => ((v.map (refBindExpr env)).getD [], env)
+  | .expr e _ | .defer e => (refBindExpr env e, env)
+  | .ifElse c t e => (refBindExpr env c ++ refBindStmts env t ++ ((e.map (refBindStmts env)).getD []), env)
+  | .while_ c body _ step => (refBindExpr env c ++ refBindStmts env body ++ refBindStmts env step, env)
+  | .fieldAssign o _ v | .derefAssign o v => (refBindExpr env o ++ refBindExpr env v, env)
+  | .arrayIndexAssign a i v => (refBindExpr env a ++ refBindExpr env i ++ refBindExpr env v, env)
+  | .continue_ _ => ([], env)
+  | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref, refTy) :: env) body, env)
+end
+
+/-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
+    type became a reference by instantiating a type parameter. Generic originals are skipped
+    (their `T` is opaque; Check saw them). -/
+partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
+  | [] => []
+  | m :: ms =>
+    let here := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc else
+      acc ++ (refBindStmts fn.params.reverse fn.body).map fun (code, msg) =>
+        ({ severity := .error
+           message := s!"function '{fn.name}': {msg}"
+           pass := "post-mono"
+           span := fn.declSpan
+           hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/language/MEMORY_SEMANTICS.md §15, REF-6)"
+           code := code
+           evidence := [("rule", "REF-6@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+           nextAction := some "instantiate the generic at a value type, or restructure the generic so it passes its `T` argument on instead of binding or assigning it" } : Diagnostic)) ([] : Diagnostics)
+    here ++ verifyNoRefBindingsPostMono m.submodules ++ verifyNoRefBindingsPostMono ms
+
 /-- **Post-Mono verifier**: no `Ty.typeVar` survives monomorphization, Copy struct
     fields validate after instantiation, and no SAFE function exposes a
     reference-return type (references are second-class), and every integer
@@ -498,7 +636,8 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
-    ++ verifyCapsPostMono modules
+    ++ verifyComparisonTypes modules
+    ++ verifyCapsPostMono modules ++ verifyNoRefBindingsPostMono modules
 
 -- ============================================================
 -- Rendering
