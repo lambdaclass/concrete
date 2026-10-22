@@ -1,0 +1,1610 @@
+{
+ "comment": "The most expensive passing CI gates (by instructions:u), measured once on the perf machine by `suite.py discover-gates`. Editing this list is a suite change: bump suite_version in suite.json.",
+ "discovered_on": "185d998cd99ba0db767a6cc812227d01455744d3",
+ "machine": "concrete-ci-1",
+ "counter": "instructions:u",
+ "gates": [
+  {
+   "id": "check_mint_batch_accounting",
+   "cmd": "bash scripts/tests/check_mint_batch_accounting.sh",
+   "script": "scripts/tests/check_mint_batch_accounting.sh",
+   "discovered_instr": 5450419688390,
+   "discovered_wall_s": 530.3
+  },
+  {
+   "id": "check_claim_inventory",
+   "cmd": "bash scripts/tests/check_claim_inventory.sh",
+   "script": "scripts/tests/check_claim_inventory.sh",
+   "discovered_instr": 3133295828598,
+   "discovered_wall_s": 456.5
+  },
+  {
+   "id": "check_phase3_obligation_core",
+   "cmd": "bash scripts/tests/check_phase3_obligation_core.sh",
+   "script": "scripts/tests/check_phase3_obligation_core.sh",
+   "discovered_instr": 3081931882715,
+   "discovered_wall_s": 1059.9
+  },
+  {
+   "id": "check_replay_producer",
+   "cmd": "bash scripts/tests/check_replay_producer.sh",
+   "script": "scripts/tests/check_replay_producer.sh",
+   "discovered_instr": 2338043432848,
+   "discovered_wall_s": 241.5
+  },
+  {
+   "id": "check_phase2_vc",
+   "cmd": "bash scripts/tests/check_phase2_vc.sh",
+   "script": "scripts/tests/check_phase2_vc.sh",
+   "discovered_instr": 1660158826148,
+   "discovered_wall_s": 646.1
+  },
+  {
+   "id": "check_slice8_adversarial",
+   "cmd": "bash scripts/tests/check_slice8_adversarial.sh",
+   "script": "scripts/tests/check_slice8_adversarial.sh",
+   "discovered_instr": 1587379755863,
+   "discovered_wall_s": 233.1
+  },
+  {
+   "id": "run_tests",
+   "cmd": "./scripts/tests/run_tests.sh --trust-gate",
+   "script": "scripts/tests/run_tests.sh",
+   "discovered_instr": 1451029793085,
+   "discovered_wall_s": 337.0
+  },
+  {
+   "id": "check_receipt_consumption",
+   "cmd": "bash scripts/tests/check_receipt_consumption.sh",
+   "script": "scripts/tests/check_receipt_consumption.sh",
+   "discovered_instr": 1276793947859,
+   "discovered_wall_s": 277.2
+  },
+  {
+   "id": "check_vc_schema",
+   "cmd": "bash scripts/tests/check_vc_schema.sh",
+   "script": "scripts/tests/check_vc_schema.sh",
+   "discovered_instr": 1254794895856,
+   "discovered_wall_s": 529.3
+  },
+  {
+   "id": "check_obligation_report_views",
+   "cmd": "bash scripts/tests/check_obligation_report_views.sh",
+   "script": "scripts/tests/check_obligation_report_views.sh",
+   "discovered_instr": 1196429785439,
+   "discovered_wall_s": 375.3
+  }
+ ],
+ "all": [
+  {
+   "cmd": "bash scripts/tests/check_mint_batch_accounting.sh",
+   "wall_s": 530.3,
+   "instr": 5450419688390,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_claim_inventory.sh",
+   "wall_s": 456.5,
+   "instr": 3133295828598,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase3_obligation_core.sh",
+   "wall_s": 1059.9,
+   "instr": 3081931882715,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_replay_producer.sh",
+   "wall_s": 241.5,
+   "instr": 2338043432848,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase2_vc.sh",
+   "wall_s": 646.1,
+   "instr": 1660158826148,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_slice8_adversarial.sh",
+   "wall_s": 233.1,
+   "instr": 1587379755863,
+   "rc": 0
+  },
+  {
+   "cmd": "./scripts/tests/run_tests.sh --trust-gate",
+   "wall_s": 337.0,
+   "instr": 1451029793085,
+   "rc": 0
+  },
+  {
+   "cmd": "./scripts/tests/run_tests.sh",
+   "wall_s": 235.8,
+   "instr": 1358272106137,
+   "rc": 1
+  },
+  {
+   "cmd": "bash scripts/tests/check_receipt_consumption.sh",
+   "wall_s": 277.2,
+   "instr": 1276793947859,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_vc_schema.sh",
+   "wall_s": 529.3,
+   "instr": 1254794895856,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_report_views.sh",
+   "wall_s": 375.3,
+   "instr": 1196429785439,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_showcase.sh",
+   "wall_s": 320.0,
+   "instr": 1070646162023,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_identity_rows.sh",
+   "wall_s": 202.8,
+   "instr": 1040659743272,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/run_fast_surface_gates.sh --mutate",
+   "wall_s": 196.4,
+   "instr": 1017268480077,
+   "rc": 0
+  },
+  {
+   "cmd": "EXAMPLE_VALGRIND=1 bash scripts/tests/check_example_outputs.sh",
+   "wall_s": 257.2,
+   "instr": 962582144770,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_table_migration.sh",
+   "wall_s": 197.3,
+   "instr": 876684886810,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_attestation_manifest.sh",
+   "wall_s": 158.8,
+   "instr": 831392371723,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_core.sh",
+   "wall_s": 305.7,
+   "instr": 742851388657,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase1_contracts.sh",
+   "wall_s": 189.1,
+   "instr": 733019406984,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_vcgen_diff.sh",
+   "wall_s": 143.3,
+   "instr": 732272053001,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_contract_negatives.sh",
+   "wall_s": 171.2,
+   "instr": 679051289622,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_dependency_edges.sh",
+   "wall_s": 46.7,
+   "instr": 677315190390,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_prove_views.sh",
+   "wall_s": 126.5,
+   "instr": 644571032055,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_clean_checkout.sh",
+   "wall_s": 91.8,
+   "instr": 597408605004,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_identity_separation.sh",
+   "wall_s": 97.3,
+   "instr": 586809349508,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_checker_identity.sh",
+   "wall_s": 91.7,
+   "instr": 561796894675,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_subject_binding.sh",
+   "wall_s": 88.4,
+   "instr": 532520001850,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_artifact_fuzz.sh",
+   "wall_s": 188.7,
+   "instr": 524375569529,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_policy.sh",
+   "wall_s": 82.7,
+   "instr": 500477835736,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_mint_missing_result.sh",
+   "wall_s": 32.9,
+   "instr": 437579523844,
+   "rc": 0
+  },
+  {
+   "cmd": "EXAMPLES_OUT_DIR=${RUNNER_TEMP:-/tmp}/concrete_examples_out bash scripts/tests/check_examples.sh",
+   "wall_s": 108.3,
+   "instr": 422077177114,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_kernel_recheck.sh",
+   "wall_s": 49.6,
+   "instr": 413834905318,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_snapshots.sh",
+   "wall_s": 153.0,
+   "instr": 407091201952,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_std_compiled_coverage.sh",
+   "wall_s": 131.6,
+   "instr": 383775448417,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_stack_budget.sh",
+   "wall_s": 75.2,
+   "instr": 360744603971,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_receipt_issuance.sh",
+   "wall_s": 53.0,
+   "instr": 340974614885,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_checker_policy.sh",
+   "wall_s": 48.5,
+   "instr": 331069980715,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_shadow_body_v2.sh",
+   "wall_s": 57.4,
+   "instr": 317877284673,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_subject_coverage.sh",
+   "wall_s": 51.2,
+   "instr": 305232860931,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_ssa.sh",
+   "wall_s": 27.4,
+   "instr": 301966438499,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_model_diff.sh",
+   "wall_s": 115.3,
+   "instr": 301720053720,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proof_patterns.sh",
+   "wall_s": 47.8,
+   "instr": 259361065011,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_redteam.sh",
+   "wall_s": 108.7,
+   "instr": 253760739662,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_native_libs.sh",
+   "wall_s": 54.9,
+   "instr": 239763829096,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_evidence_corpus.sh",
+   "wall_s": 86.6,
+   "instr": 234220054412,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cli_plumbing.sh",
+   "wall_s": 68.5,
+   "instr": 207851180506,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_prove_cli.sh",
+   "wall_s": 37.6,
+   "instr": 207049692558,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_v2_migration_plan.sh",
+   "wall_s": 34.3,
+   "instr": 204108741211,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/run_fast_surface_gates.sh",
+   "wall_s": 50.3,
+   "instr": 203541515753,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_callable_identity.sh",
+   "wall_s": 82.0,
+   "instr": 200868331066,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_mutation_shard_aggregate.sh",
+   "wall_s": 77.2,
+   "instr": 183236392941,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_policy_views.sh",
+   "wall_s": 68.5,
+   "instr": 182056721875,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_view_lifetime.sh",
+   "wall_s": 35.6,
+   "instr": 168565544396,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_assumptions.sh",
+   "wall_s": 28.5,
+   "instr": 158728881169,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_div_migration.sh",
+   "wall_s": 54.4,
+   "instr": 154130860457,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_identity_overbinding.sh",
+   "wall_s": 52.2,
+   "instr": 153107424003,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_enum_union_layout.sh",
+   "wall_s": 11.6,
+   "instr": 150025631173,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_subject_facts.sh",
+   "wall_s": 64.1,
+   "instr": 149217655645,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proof_freshness.sh",
+   "wall_s": 19.6,
+   "instr": 124680968558,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bounds_migration.sh",
+   "wall_s": 42.8,
+   "instr": 124210629312,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_release_bundle.sh",
+   "wall_s": 25.3,
+   "instr": 117028182350,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_attestation_refs_order.sh",
+   "wall_s": 21.7,
+   "instr": 107025105221,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_assume_migration.sh",
+   "wall_s": 31.1,
+   "instr": 104299891320,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_effect_opacity.sh",
+   "wall_s": 24.8,
+   "instr": 103255135022,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cli_contract.sh",
+   "wall_s": 23.7,
+   "instr": 97701972720,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_migration_manifest.sh",
+   "wall_s": 15.5,
+   "instr": 93175129152,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_overflow_migration.sh",
+   "wall_s": 30.7,
+   "instr": 85385280132,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_qualification_record.sh",
+   "wall_s": 11.1,
+   "instr": 84361679827,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_redteam.sh",
+   "wall_s": 30.9,
+   "instr": 82368022625,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_purecore_proofs.sh",
+   "wall_s": 12.8,
+   "instr": 75559832212,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_vc_discharge_examples.sh",
+   "wall_s": 26.6,
+   "instr": 74804900064,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/ci/proof_gate.sh",
+   "wall_s": 11.6,
+   "instr": 73948319041,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_evidence_reproducibility.sh",
+   "wall_s": 12.2,
+   "instr": 73805274859,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_campaign_supervisor.sh",
+   "wall_s": 22.4,
+   "instr": 72669803179,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_compiler_ledger.sh",
+   "wall_s": 22.9,
+   "instr": 71079664046,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_discharge_adapters.sh",
+   "wall_s": 24.9,
+   "instr": 70678202500,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_loop_migration.sh",
+   "wall_s": 25.0,
+   "instr": 70555858644,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_descriptor_coverage.sh",
+   "wall_s": 16.5,
+   "instr": 69383899975,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_vc_examples.sh",
+   "wall_s": 24.3,
+   "instr": 65386178955,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_hashmap_probe_invariants.sh",
+   "wall_s": 13.7,
+   "instr": 64327535964,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_classification_freshness.sh",
+   "wall_s": 8.8,
+   "instr": 61217844060,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_assumption_summary.sh",
+   "wall_s": 11.6,
+   "instr": 60625803945,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_coverage_baseline.sh",
+   "wall_s": 10.2,
+   "instr": 59878573136,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cross_package_caps.sh",
+   "wall_s": 11.7,
+   "instr": 58672078253,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_examples.sh",
+   "wall_s": 19.8,
+   "instr": 54980825976,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_submodule_check_coverage.sh",
+   "wall_s": 19.9,
+   "instr": 51106858873,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_build_identity_freshness.sh",
+   "wall_s": 9.0,
+   "instr": 49670362797,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_trusted_boundaries.sh",
+   "wall_s": 9.9,
+   "instr": 49152432343,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_policy.sh",
+   "wall_s": 37.4,
+   "instr": 49109843056,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_contracts_ledger_parity.sh",
+   "wall_s": 15.4,
+   "instr": 48112319651,
+   "rc": 0
+  },
+  {
+   "cmd": "python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706",
+   "wall_s": 15.0,
+   "instr": 46076891739,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_gate_hygiene.sh",
+   "wall_s": 12.9,
+   "instr": 45923297411,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_concrete_test.sh",
+   "wall_s": 10.1,
+   "instr": 45892813362,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_call_site_migration.sh",
+   "wall_s": 16.5,
+   "instr": 45664859223,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_collections_copy_only.sh",
+   "wall_s": 9.6,
+   "instr": 45217738057,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bug077_contained.sh",
+   "wall_s": 9.8,
+   "instr": 43056523571,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cap_sibling_module.sh",
+   "wall_s": 8.8,
+   "instr": 42389004570,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_byte_view.sh",
+   "wall_s": 8.3,
+   "instr": 41360633071,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_multi_kernel.sh",
+   "wall_s": 13.7,
+   "instr": 40753970951,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cast_matrix.sh",
+   "wall_s": 11.9,
+   "instr": 38651903726,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_negatives.sh",
+   "wall_s": 15.3,
+   "instr": 36431149425,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_known_wrong_corpus.sh",
+   "wall_s": 12.2,
+   "instr": 36074175946,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_convergence_inventory.sh",
+   "wall_s": 6.1,
+   "instr": 35953066267,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_trusted_method.sh",
+   "wall_s": 7.1,
+   "instr": 35376470201,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_v1_fingerprint_golden.sh",
+   "wall_s": 5.8,
+   "instr": 34697611963,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase6c_observability.sh",
+   "wall_s": 8.0,
+   "instr": 32376749106,
+   "rc": 1
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase6d_surface_simplification.sh",
+   "wall_s": 9.4,
+   "instr": 32297293505,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_codegen_differential.sh",
+   "wall_s": 9.1,
+   "instr": 31457329805,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_capability_explanations.sh",
+   "wall_s": 5.9,
+   "instr": 30713199374,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cap_inference.sh",
+   "wall_s": 6.2,
+   "instr": 29881603410,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_project_model.sh",
+   "wall_s": 5.1,
+   "instr": 26435423665,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_path.sh",
+   "wall_s": 21.3,
+   "instr": 25245092227,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proofcore_callable_identity.sh",
+   "wall_s": 9.5,
+   "instr": 24376507230,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_operational_vc_auto_discharge.sh",
+   "wall_s": 4.3,
+   "instr": 23137335134,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_gate_registration.sh",
+   "wall_s": 6.2,
+   "instr": 23001012390,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_arith_redteam.sh",
+   "wall_s": 7.1,
+   "instr": 22854715497,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_prepush_record.sh",
+   "wall_s": 8.8,
+   "instr": 22496200906,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bool_kernel.sh",
+   "wall_s": 6.8,
+   "instr": 22012231770,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_io_writer.sh",
+   "wall_s": 4.4,
+   "instr": 21548266916,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_spawn_exit.sh",
+   "wall_s": 9.3,
+   "instr": 21128421487,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_differential_positions.sh",
+   "wall_s": 7.3,
+   "instr": 20573636869,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proof_admission.sh",
+   "wall_s": 4.0,
+   "instr": 19687027163,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_pattern_ergonomics.sh",
+   "wall_s": 4.9,
+   "instr": 18673197239,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_mutation_anchors.sh",
+   "wall_s": 4.5,
+   "instr": 17527464621,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_codegen_execution.sh",
+   "wall_s": 5.9,
+   "instr": 16800766702,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_smt_replay.sh",
+   "wall_s": 6.8,
+   "instr": 16524324586,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_wordfreq_differential.sh",
+   "wall_s": 2.8,
+   "instr": 15065593856,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_indirect_call_identity.sh",
+   "wall_s": 6.3,
+   "instr": 14464962334,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_transform_register.sh",
+   "wall_s": 4.8,
+   "instr": 13182412456,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cap_struct_cross_package.sh",
+   "wall_s": 2.8,
+   "instr": 13106286094,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_counterexample_reduction.sh",
+   "wall_s": 3.6,
+   "instr": 12338931689,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_tcpserve.sh",
+   "wall_s": 3.3,
+   "instr": 11691970091,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_httpget_differential.sh",
+   "wall_s": 2.6,
+   "instr": 11451606959,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_tar_list_differential.sh",
+   "wall_s": 2.7,
+   "instr": 11195512062,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_envcfg.sh",
+   "wall_s": 2.5,
+   "instr": 11191638444,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_hexdump_differential.sh",
+   "wall_s": 2.3,
+   "instr": 11029828510,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cli_helpers.sh",
+   "wall_s": 2.5,
+   "instr": 10945408543,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_defer.sh",
+   "wall_s": 2.3,
+   "instr": 10809238130,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_linear_conservation.sh",
+   "wall_s": 3.2,
+   "instr": 10639347199,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_type_agreement.sh",
+   "wall_s": 3.4,
+   "instr": 10610970486,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_wrong_code.sh",
+   "wall_s": 3.6,
+   "instr": 10574526957,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_golden.sh",
+   "wall_s": 2.8,
+   "instr": 10311375999,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/test_reducer_smoke.sh",
+   "wall_s": 2.2,
+   "instr": 10242259007,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_gate_vacuity.sh",
+   "wall_s": 4.1,
+   "instr": 10158121049,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_concrete_fmt.sh",
+   "wall_s": 2.0,
+   "instr": 10087524804,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_int_arith_semantics.sh",
+   "wall_s": 3.2,
+   "instr": 9934041907,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_pipeline_refactor_contract.sh",
+   "wall_s": 2.7,
+   "instr": 9265421220,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_divergence_detection.sh",
+   "wall_s": 2.9,
+   "instr": 9104174423,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_generic_enum_mono.sh",
+   "wall_s": 2.7,
+   "instr": 8841120759,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_float_literals.sh",
+   "wall_s": 1.4,
+   "instr": 8834894582,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_linear_discard.sh",
+   "wall_s": 2.7,
+   "instr": 8787310714,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_capability_judgment.sh",
+   "wall_s": 2.7,
+   "instr": 8738989135,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_callable_values.sh",
+   "wall_s": 2.8,
+   "instr": 8656577570,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_phase6_redteam.sh",
+   "wall_s": 1.9,
+   "instr": 8435375638,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_compiler_complexity.sh",
+   "wall_s": 1.7,
+   "instr": 8268866693,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_child_process_group.sh",
+   "wall_s": 3.0,
+   "instr": 8143430618,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bug_filing_complete.sh",
+   "wall_s": 2.7,
+   "instr": 7598843147,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_builtin_semantics.sh",
+   "wall_s": 2.3,
+   "instr": 7519132077,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_ownership_judgment.sh",
+   "wall_s": 4.1,
+   "instr": 7412088039,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_fnptr_values.sh",
+   "wall_s": 2.6,
+   "instr": 7294131397,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_scoped_collector.sh",
+   "wall_s": 3.5,
+   "instr": 6935287969,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proof_link_migration.sh",
+   "wall_s": 2.2,
+   "instr": 6919223594,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_checked_arith.sh",
+   "wall_s": 1.8,
+   "instr": 6844192453,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_identity_use_bytes.sh",
+   "wall_s": 2.8,
+   "instr": 6774867873,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_type_identity.sh",
+   "wall_s": 4.8,
+   "instr": 6631665208,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_report_arithmetic.sh",
+   "wall_s": 1.3,
+   "instr": 6471913219,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_contract_clause_migration.sh",
+   "wall_s": 2.2,
+   "instr": 6469456164,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_loop_control.sh",
+   "wall_s": 1.9,
+   "instr": 6466306335,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_lowering.sh",
+   "wall_s": 2.1,
+   "instr": 6118019512,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_match_guard_effects.sh",
+   "wall_s": 3.5,
+   "instr": 5860015028,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_float_cast.sh",
+   "wall_s": 3.0,
+   "instr": 5737415908,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_evidence_tree.sh",
+   "wall_s": 1.7,
+   "instr": 5437551889,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_foreign_assumptions_report.sh",
+   "wall_s": 1.1,
+   "instr": 5427372763,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_trap_inventory.sh",
+   "wall_s": 1.7,
+   "instr": 5244178361,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_rich_diagnostics.sh",
+   "wall_s": 1.3,
+   "instr": 5082807125,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_doc_snippets.sh",
+   "wall_s": 1.8,
+   "instr": 5049310868,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_axiom_inventory.sh",
+   "wall_s": 2.0,
+   "instr": 5035947464,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_returned_ref_provenance.sh",
+   "wall_s": 1.0,
+   "instr": 4995114009,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_nested_field_write.sh",
+   "wall_s": 1.7,
+   "instr": 4961001187,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_string_char_at.sh",
+   "wall_s": 1.5,
+   "instr": 4820418041,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_trailing_value_blocks.sh",
+   "wall_s": 3.3,
+   "instr": 4657826337,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_incremental_shadow.sh",
+   "wall_s": 1.1,
+   "instr": 4611995539,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_mixed_width_binops.sh",
+   "wall_s": 1.4,
+   "instr": 4572310852,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_cli_coherence.sh",
+   "wall_s": 1.1,
+   "instr": 4463895722,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_array_bounds.sh",
+   "wall_s": 1.4,
+   "instr": 4348802586,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_totality_judgment.sh",
+   "wall_s": 1.4,
+   "instr": 4346027665,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_evidence_build.sh",
+   "wall_s": 2.5,
+   "instr": 4247767138,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_error_leaks.sh",
+   "wall_s": 1.3,
+   "instr": 4143440175,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_ssa_verify_agreement.sh",
+   "wall_s": 1.3,
+   "instr": 3985561232,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_linear_nested_scope.sh",
+   "wall_s": 1.3,
+   "instr": 3902170052,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_source_maps.sh",
+   "wall_s": 1.1,
+   "instr": 3736875929,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_struct_field_layout.sh",
+   "wall_s": 1.2,
+   "instr": 3520297107,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_type_alias.sh",
+   "wall_s": 1.1,
+   "instr": 3450284356,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_binder_refs.sh",
+   "wall_s": 1.3,
+   "instr": 3432830604,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_numeric_literals.sh",
+   "wall_s": 1.1,
+   "instr": 3367380659,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_gate_lock.sh",
+   "wall_s": 62.6,
+   "instr": 3313183120,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_lean14576_reproducer.sh",
+   "wall_s": 1.3,
+   "instr": 3309639079,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_exit_codes.sh",
+   "wall_s": 1.1,
+   "instr": 3306846957,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_pass_hashes.sh",
+   "wall_s": 0.8,
+   "instr": 3248035058,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_ignored_result.sh",
+   "wall_s": 1.1,
+   "instr": 3169424735,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_raw_ptr_to_local.sh",
+   "wall_s": 1.1,
+   "instr": 3140828027,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_hole_status_consistency.sh",
+   "wall_s": 1.2,
+   "instr": 3110818364,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_external_checker.sh",
+   "wall_s": 1.1,
+   "instr": 2981499909,
+   "rc": 1
+  },
+  {
+   "cmd": "bash scripts/tests/check_body_scope.sh",
+   "wall_s": 1.2,
+   "instr": 2863329790,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_diagnostics_quality.sh",
+   "wall_s": 0.6,
+   "instr": 2588909881,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_gates_for_diff.sh",
+   "wall_s": 0.5,
+   "instr": 2587092147,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_partial_facts.sh",
+   "wall_s": 0.6,
+   "instr": 2477150028,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_saturating_arith.sh",
+   "wall_s": 1.9,
+   "instr": 2444013422,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_build_profiles.sh",
+   "wall_s": 0.6,
+   "instr": 2427054561,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_builtin_enum_owner.sh",
+   "wall_s": 0.8,
+   "instr": 2398354238,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proven_violation_enforcement.sh",
+   "wall_s": 0.8,
+   "instr": 2307650429,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_mono_name_collision.sh",
+   "wall_s": 0.7,
+   "instr": 2287040643,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_wrapping_arith.sh",
+   "wall_s": 0.7,
+   "instr": 2264014262,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_memory_model.sh",
+   "wall_s": 0.7,
+   "instr": 2169084164,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_copy_judgment.sh",
+   "wall_s": 0.6,
+   "instr": 2133917328,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_catches.sh",
+   "wall_s": 0.6,
+   "instr": 2104524934,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_no_tuples.sh",
+   "wall_s": 0.7,
+   "instr": 2069186168,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_contract_stability.sh",
+   "wall_s": 0.5,
+   "instr": 1978892214,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_lex_escapes.sh",
+   "wall_s": 1.0,
+   "instr": 1887518363,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_trace_pipeline.sh",
+   "wall_s": 0.7,
+   "instr": 1858133592,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_pipeline_contracts.sh",
+   "wall_s": 0.5,
+   "instr": 1835835757,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_nested_patterns.sh",
+   "wall_s": 1.2,
+   "instr": 1832412674,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_corecheck_boundary.sh",
+   "wall_s": 0.5,
+   "instr": 1829270233,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_struct_update.sh",
+   "wall_s": 0.7,
+   "instr": 1812208901,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_workflow_yaml.sh",
+   "wall_s": 0.3,
+   "instr": 1798828068,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_source_spans.sh",
+   "wall_s": 0.7,
+   "instr": 1636319132,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_wired_definitions.sh",
+   "wall_s": 0.5,
+   "instr": 1479409949,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_one_producer.sh",
+   "wall_s": 0.4,
+   "instr": 1464092544,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_pipeline_telemetry.sh",
+   "wall_s": 0.5,
+   "instr": 1436189752,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_iteration_protocol.sh",
+   "wall_s": 0.5,
+   "instr": 1338720213,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_error_conventions.sh",
+   "wall_s": 0.4,
+   "instr": 1281110297,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_capability_polymorphism_design.sh",
+   "wall_s": 0.4,
+   "instr": 1253140716,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_no_macros.sh",
+   "wall_s": 0.4,
+   "instr": 1237870993,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_vc_bridge_register.sh",
+   "wall_s": 0.4,
+   "instr": 938634921,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_std_hardening.sh",
+   "wall_s": 0.3,
+   "instr": 793419937,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_evidence_algebra.sh",
+   "wall_s": 0.3,
+   "instr": 643633290,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_generic_enum_inventory.sh",
+   "wall_s": 0.2,
+   "instr": 336316629,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_campaign_summary_golden.sh",
+   "wall_s": 0.2,
+   "instr": 330368086,
+   "rc": 1
+  },
+  {
+   "cmd": "bash scripts/tests/check_proof_namespace.sh",
+   "wall_s": 0.2,
+   "instr": 277720635,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_std_test.sh",
+   "wall_s": 0.2,
+   "instr": 262876412,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bytes_text_boundary.sh",
+   "wall_s": 0.1,
+   "instr": 260506989,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_identity_freeze.sh",
+   "wall_s": 0.2,
+   "instr": 249919121,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_stdlib_handoff.sh",
+   "wall_s": 0.3,
+   "instr": 239919447,
+   "rc": 0
+  },
+  {
+   "cmd": "python3 scripts/tests/fuzz_differential.py --n 500 --seed \"$SEED\" --depth 4",
+   "wall_s": 0.1,
+   "instr": 175528805,
+   "rc": 2
+  },
+  {
+   "cmd": "python3 scripts/tests/fuzz_differential.py --n 2000 --seed \"$SEED\" --depth 3",
+   "wall_s": 0.1,
+   "instr": 175360990,
+   "rc": 2
+  },
+  {
+   "cmd": "bash scripts/tests/check_absence_not_fact.sh",
+   "wall_s": 0.1,
+   "instr": 169319761,
+   "rc": 0
+  },
+  {
+   "cmd": "python3 scripts/tests/fuzz_linearity.py --n 400 --seed \"$SEED\"",
+   "wall_s": 0.1,
+   "instr": 165111763,
+   "rc": 2
+  },
+  {
+   "cmd": "python3 scripts/check_ll1.py grammar/concrete.ebnf",
+   "wall_s": 0.1,
+   "instr": 158038402,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_collections.sh",
+   "wall_s": 0.1,
+   "instr": 157905832,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_obligation_single_truth_source.sh",
+   "wall_s": 0.1,
+   "instr": 157638445,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_no_duplicate_obligation_walkers.sh",
+   "wall_s": 0.1,
+   "instr": 137649795,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_proofkit_arith.sh",
+   "wall_s": 0.1,
+   "instr": 99831173,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_builtin_layout_sizes.sh",
+   "wall_s": 0.1,
+   "instr": 78779012,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_no_example_registries.sh",
+   "wall_s": 0.1,
+   "instr": 58929481,
+   "rc": 0
+  },
+  {
+   "cmd": "bash scripts/tests/check_bv_certificates.sh",
+   "wall_s": 0.1,
+   "instr": 26741333,
+   "rc": 0
+  }
+ ]
+}
