@@ -1,0 +1,9 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_tcpserve.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_tcpserve.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   FAIL accept leg: wrong reply 'HTTP/1.0 500'
+2026-10-22T10:00:00.0000000Z TCPSERVE: PASS=15 FAIL=1
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

@@ -1,0 +1,11 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_external_checker.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_external_checker.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   ok   pins file names lean4export, con-leche and nanoda at full SHAs
+2026-10-22T10:00:00.0000000Z fatal: not a git repository: '/home/runner/work/concrete2/concrete2/.git/worktrees/x'
+2026-10-22T10:00:00.0000000Z   FAIL could not build lean4export at 3f6a1e2b9c0d4e5f60718293a4b5c6d7e8f90a1b
+2026-10-22T10:00:00.0000000Z EXTERNAL-CHECKER: PASS=1 FAIL=1
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

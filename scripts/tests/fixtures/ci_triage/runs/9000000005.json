@@ -1,0 +1,55 @@
+{
+ "databaseId": 9000000005,
+ "attempt": 1,
+ "headSha": "e7b1fac80000000000000000000000000000000e",
+ "headBranch": "wip/bug175",
+ "event": "workflow_dispatch",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/9000000005",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 9100000005,
+   "name": "External proof re-check (con-leche)",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "External-checker gate (proof evidence re-checked by con-leche)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

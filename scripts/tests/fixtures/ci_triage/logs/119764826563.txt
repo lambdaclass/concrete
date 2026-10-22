@@ -1,0 +1,34 @@
+﻿2026-10-22T10:17:26.3777499Z Current runner version: '2.338.0'
+2026-10-22T10:17:26.3798991Z ##[group]Runner Image Provisioner
+2026-10-22T10:17:26.3799772Z Hosted Compute Agent
+2026-10-22T10:18:13.0586537Z ##[group]Run set -o pipefail
+2026-10-22T10:18:13.0586928Z [36;1mset -o pipefail[0m
+2026-10-22T10:18:13.0587440Z [36;1m./scripts/tests/run_tests.sh --trust-gate 2>&1 | tee /tmp/trust-gate.log[0m
+2026-10-22T10:18:13.0646861Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:18:13.0647110Z ##[endgroup]
+2026-10-22T10:19:26.5623900Z   skip  136_functional_update_base_reevaluated (OPEN -- functional update S { f: e, ..base } evaluates base once per omitted field (Elab desugars each omitted field to base.field), where STATEMENT_EXPRESSION_MODEL rule 6 evaluates it exactly once after the explicit initializers; reproducer tests/regressions/bug136_functional_update_base_reevaluated/repro.con (599 natively and interpreted, 59 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:87); the run fixture lands with the fix u
+2026-10-22T10:19:26.5626984Z   skip  137_enum_literal_field_order (OPEN -- enum-variant literal fields are evaluated in the variant's declaration order (Elab walks the variant's fields) in both the binary and --interp, where STATEMENT_EXPRESSION_MODEL rule 4 is source order; reproducer tests/regressions/bug137_enum_literal_field_order/repro.con (65 in both, 56 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:65); the run fixture lands with the fix under queue exit 0b)
+2026-10-22T10:19:26.5629941Z   skip  165_generated_helper_call_binds_by_spelling (OPEN -- Elab desugars println into calls spelled print_int/print_char/print_string/print_bool that bind by spelling, so a module defining its own print_int gets it called by println (silent wrong code); reproducer tests/regressions/bug165_generated_helper_call_binds_by_spelling/repro.con, found by the Codex review of the symbol-name work 2026-10-22; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, signals); predates mangling (a 2026-10-18 build calls the same user definition))
+2026-10-22T10:19:26.5633893Z   skip  166_foreign_fn_value_abi (OPEN -- a foreign function taken as a value is called with the Concrete ABI: a small #[repr(C)] struct argument travels as a pointer through the fn value while C takes it in a register (silent wrong code at the C boundary); reproducer tests/regressions/bug166_foreign_fn_value_abi/repro.con (check-only), found by the Codex review of the symbol-name work 2026-10-22; pinned by run_tests.sh codegen section (bug 166 pin: the IR shows call i64 %f(ptr %p) beside declare i64 @take_pair(i64)))
+2026-10-22T10:19:26.5636362Z   warn  bug_064_aliased_imported_type.con -- not mapped to any numbered bug
+2026-10-22T10:19:26.5637165Z   warn  bug_arrow_assign_narrow_field.con -- not mapped to any numbered bug
+2026-10-22T10:19:26.5637817Z   warn  bug_field_assign_narrow_field.con -- not mapped to any numbered bug
+2026-10-22T10:19:26.5638915Z   FAIL a corpus key is assigned twice: 102 103 — bash keeps the LAST silently, so an entry is being discarded
+2026-10-22T10:19:26.5639788Z   FAIL 102: doc says 'FIXED' but the corpus says 'OPEN' — one of them is wrong
+2026-10-22T10:19:26.5640486Z   FAIL 103: doc says 'FIXED' but the corpus says 'OPEN' — one of them is wrong
+2026-10-22T10:19:26.5640968Z   skip:    82
+2026-10-22T10:19:26.5641489Z   FAIL bug corpus audit: 3 bug(s) missing regression coverage
+2026-10-22T10:19:26.5641818Z 
+2026-10-22T10:22:18.1600630Z   ok  scoping: require-proofs passes when user code needs no proofs
+2026-10-22T10:22:18.6180273Z   ok  scoping: require-proofs catches user-package missing proof
+2026-10-22T10:22:18.6200809Z   10 scoping tests passed
+2026-10-22T10:22:18.6202181Z 
+2026-10-22T10:22:18.6202305Z === Results ===
+2026-10-22T10:22:18.6202570Z   passed:  1694
+2026-10-22T10:22:18.6202828Z   failed:  1
+2026-10-22T10:22:18.6203095Z   mode:    trust-gate
+2026-10-22T10:22:18.6232710Z 
+2026-10-22T10:22:18.6233138Z   NOTE: This was a partial run. Use './scripts/tests/run_tests.sh --full' for complete coverage.
+2026-10-22T10:22:18.6259416Z 
+2026-10-22T10:22:18.6259844Z   summary written to /home/runner/work/concrete2/concrete2/.test-summary (completed=1 passed=1694 failed=1)
+2026-10-22T10:22:18.6302637Z ##[error]Process completed with exit code 1.

@@ -1,0 +1,55 @@
+{
+ "databaseId": 9000000003,
+ "attempt": 1,
+ "headSha": "26c409f80000000000000000000000000000000c",
+ "headBranch": "ci/lowering-bugs",
+ "event": "workflow_dispatch",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/9000000003",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 9100000003,
+   "name": "Language-surface gates (Phase 5-6)",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Concrete fmt gate (formatter round-trips)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

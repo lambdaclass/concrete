@@ -1,0 +1,7 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run SHARD="1/24" bash scripts/tests/check_gate_mutation_coverage.sh
+2026-10-22T10:00:00.0000000Z [36;1mSHARD="1/24" bash scripts/tests/check_gate_mutation_coverage.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[error]The operation was canceled.

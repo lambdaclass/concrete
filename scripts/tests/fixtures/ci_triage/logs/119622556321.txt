@@ -1,0 +1,31 @@
+﻿2026-10-22T03:32:02.5958254Z Current runner version: '2.338.0'
+2026-10-22T03:32:02.5984436Z ##[group]Runner Image Provisioner
+2026-10-22T03:32:02.5985282Z Hosted Compute Agent
+2026-10-22T03:34:50.6776281Z ##[group]Run SHARD="11/24" bash scripts/tests/check_gate_mutation_coverage.sh
+2026-10-22T03:34:50.6776883Z [36;1mSHARD="11/24" bash scripts/tests/check_gate_mutation_coverage.sh[0m
+2026-10-22T03:34:50.6842413Z shell: /usr/bin/bash -e {0}
+2026-10-22T03:34:50.6842921Z ##[endgroup]
+2026-10-22T03:34:51.1947089Z workspace sweep: reclaimed 0 abandoned workspace(s), left 1 in place
+2026-10-22T03:34:52.2090820Z === gate mutation coverage: 134 families ===
+2026-10-22T03:34:52.6559835Z selected by shard: 11/24 owns 6 of 134 families
+2026-10-22T03:34:52.8151429Z baseline: pristine workspace builds ... ok
+2026-10-22T03:34:52.8153158Z === clean-gate baseline: 6 distinct gates on the pristine workspace ===
+2026-10-22T03:59:52.1482424Z --- family 74/134: atomic-flip-entrance-refuses-pending (Concrete/Proof/Proof.lean -> check_atomic_flip_entrance.sh) ---
+2026-10-22T03:59:52.1499171Z   FAIL atomic-flip-entrance-refuses-pending: INVALID — check_atomic_flip_entrance.sh does not pass on the UNMUTATED workspace, so its failure
+2026-10-22T03:59:52.1500060Z        under mutation is not evidence. Fix the gate (or its fixtures/lock) first.
+2026-10-22T03:59:52.1697451Z --- family 93/134: mint-token-refuses-unreplayed (Concrete/Proof/Replay.lean -> check_replay_producer.sh) ---
+2026-10-22T04:13:40.0811325Z   [t] family=828s build=122s gate=706s
+2026-10-22T04:13:40.0813051Z   ok   mint-token-refuses-unreplayed KILLED (killed by check_replay_producer.sh; reproduced red/green/red)
+2026-10-22T04:13:40.1131192Z --- family 116/134: receipt-decode-binds-readable-identity (Concrete/Proof/Receipt.lean -> check_receipt_consumption.sh) ---
+2026-10-22T04:23:49.2860982Z   [t] family=609s build=59s gate=550s
+2026-10-22T04:23:49.2864366Z   ok   receipt-decode-binds-readable-identity KILLED (killed by check_receipt_consumption.sh; reproduced red/green/red)
+2026-10-22T04:23:49.4482464Z --- working tree still builds clean (isolation left it untouched) ---
+2026-10-22T04:23:50.0338651Z 
+2026-10-22T04:23:50.0340569Z GATE-MUTATION-COVERAGE: REFUSED completed=1 qualified=0 killed=5 invalid=1 survived=0 could_not_apply=0 (of 134) gates_proven=4/134
+2026-10-22T04:23:50.0341931Z CAMPAIGN INTEGRITY REFUSED: families_unaccounted(gate=4 build=1 of 6)
+2026-10-22T04:23:50.0344205Z   These verdicts describe a tree that moved under the run, or a run with no durable record.
+2026-10-22T04:23:50.0345217Z summary written to .mutation-campaign-summary.candidate (completed=1)
+2026-10-22T04:23:50.0346221Z   the full-campaign record .mutation-campaign-summary was NOT touched by this partial run
+2026-10-22T04:23:50.4567852Z warning: refusing to remove '/tmp/concrete-mut.3406.tOaPJ5' — owned by pid 3406, not 3475
+2026-10-22T04:23:51.0983511Z SUPERVISOR REFUSED QUALIFICATION:child_exit(1)
+2026-10-22T04:23:51.1072248Z ##[error]Process completed with exit code 1.

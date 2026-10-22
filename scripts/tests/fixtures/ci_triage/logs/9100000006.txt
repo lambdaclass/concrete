@@ -1,0 +1,11 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo ok; else sudo apt-get update && sudo apt-get install -y clang; fi
+2026-10-22T10:00:00.0000000Z [36;1mif [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo ok; else sudo apt-get update && sudo apt-get install -y clang; fi[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z Err:1 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-10-22T10:00:00.0000000Z   Temporary failure resolving 'azure.archive.ubuntu.com'
+2026-10-22T10:00:00.0000000Z E: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/pool/main/l/llvm-toolchain-18/clang-18_18.1.3-1_amd64.deb  Temporary failure resolving 'azure.archive.ubuntu.com'
+2026-10-22T10:00:00.0000000Z E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

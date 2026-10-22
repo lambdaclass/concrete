@@ -66,6 +66,9 @@ STEP_CONDITIONS = {
     # dispatch with campaign=true, so the step is required; a dispatch without it skips the campaign
     # JOBS too, and those skipped jobs already refuse the verdict.
     "(github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)": "required",
+    # The same step once CI lost its crons (the nightly is a campaign dispatch from nightly.yml).
+    # Both spellings stay: a candidate is judged by its OWN workflow, which may be either.
+    "github.event_name == 'workflow_dispatch' && inputs.campaign": "required",
     "false": "optional",
     "failure()": "optional",
     "steps.lean_install.outcome == 'failure'": "optional",

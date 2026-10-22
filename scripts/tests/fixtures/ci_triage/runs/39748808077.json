@@ -1,0 +1,78 @@
+{
+ "databaseId": 39748808077,
+ "attempt": 1,
+ "headSha": "8c8db85a0000000000000000000000000000000a",
+ "headBranch": "ci/symbols",
+ "event": "workflow_dispatch",
+ "status": "completed",
+ "conclusion": "cancelled",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/39748808077",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 119725877209,
+   "name": "Language-surface gates (Phase 5-6)",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Stack budget fails closed (an unbounded stack is never a number; bug 065)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 119761721170,
+   "name": "Gate mutation shard 3",
+   "conclusion": "cancelled",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Gate mutation coverage shard (heavy; rebuilds per mutation)",
+     "conclusion": "cancelled",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

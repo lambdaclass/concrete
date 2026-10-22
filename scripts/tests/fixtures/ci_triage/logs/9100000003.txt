@@ -1,0 +1,13 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_concrete_fmt.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_concrete_fmt.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   ok   fmt is idempotent on the corpus
+2026-10-22T10:00:00.0000000Z   FAIL the compiler reads 0 of 1124 float lexemes differently from Python (lexer, not formatter)
+2026-10-22T10:00:00.0000000Z   FAIL fmt changed the value of 1124 of 1124 float literals
+2026-10-22T10:00:00.0000000Z   ok   fmt prints each of 400 sampled doubles in its canonical shortest spelling
+2026-10-22T10:00:00.0000000Z 
+2026-10-22T10:00:00.0000000Z CONCRETE-FMT: PASS=11  FAIL=2
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

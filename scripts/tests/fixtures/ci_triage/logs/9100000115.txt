@@ -1,0 +1,9 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/ci/proof_gate.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/ci/proof_gate.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z INCOMPLETE: timed out twice (600s, then 1200s alone) or lost its runner: lake env lean x.lean
+2026-10-22T10:00:00.0000000Z ##[error]The job running on runner GitHub Actions 12 has exceeded the maximum execution time of 90 minutes.
+2026-10-22T10:00:00.0000000Z ##[error]The operation was canceled.
