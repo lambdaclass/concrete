@@ -8,8 +8,8 @@
 #   review  LAND_REVIEW_CMD or scripts/review/review.sh, with --base --head (it writes the review note)
 #   impact  scripts/land/impact_gates.sh over merge-base(<base>, HEAD)..HEAD
 #   remote  the full gate set via LAND_REMOTE_RUNNER (default ~/bin/concrete-remote) at <branch>
-# Then the gates note is published at HEAD: `gates: pass` only when impact and remote (if run)
-# passed. Exit 0 iff the head is ready (review note clean, gates pass). The wall time and the
+# Then the gates note is published at HEAD: `gates: pass` only when every leg that ran passed
+# (a failed review leg also fails it). Exit 0 iff the head is ready (review note clean, gates pass). The wall time and the
 # sequential sum of the legs go to <git-common-dir>/concrete-landing/ready.tsv.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,18 +73,23 @@ legs_wait
 wall=$(( $(date +%s) - t0 ))
 for leg in $LEGS_FAILED; do echo "ready: $leg leg FAILED; tail of $dir/$leg.log:"; tail -n 30 "$dir/$leg.log" || true; done
 
-gates=pass
-case " $LEGS_FAILED " in *" impact "*|*" remote "*) gates=fail ;; esac
-selected="$(sed -n 's/^selected: //p' "$dir/selected" 2>/dev/null || true)"
-bash "$SELF_DIR/notes.sh" put gates "$head" gates="$gates" selected="${selected:-unknown}" \
-  remote="$([ "$remote" = 1 ] && { case " $LEGS_FAILED " in *" remote "*) echo fail ;; *) echo pass ;; esac; } || echo skipped)" \
-  runner=ready.sh
-bash "$SELF_DIR/notes.sh" fetch
-verdict="$(bash "$SELF_DIR/notes.sh" get review "$head" verdict)"
-
+# The measurement first: it must survive a failure to publish the note below.
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$branch" "$head" "$LEGS_REPORT" "$wall" "$LEGS_SUM" \
   >> "$COMMON/concrete-landing/ready.tsv"
 echo "ready: legs $LEGS_REPORT"
 echo "ready: wall ${wall}s; run one after another they take ${LEGS_SUM}s (saved $(( LEGS_SUM - wall ))s)"
+
+# ANY failed leg publishes `gates: fail`, the review included: a review that fails without
+# writing a note must not leave an older `verdict: clean` making this head ready.
+gates=pass
+[ -z "$LEGS_FAILED" ] || gates=fail
+selected="$(sed -n 's/^selected: //p' "$dir/selected" 2>/dev/null || true)"
+rstate=skipped
+if [ "$remote" = 1 ]; then case " $LEGS_FAILED " in *" remote "*) rstate=fail ;; *) rstate=pass ;; esac; fi
+kv=(gates="$gates" selected="${selected:-unknown}" remote="$rstate" runner=ready.sh)
+[ -z "$LEGS_FAILED" ] || kv+=(reason="failed legs: $LEGS_FAILED")
+bash "$SELF_DIR/notes.sh" put gates "$head" "${kv[@]}"
+bash "$SELF_DIR/notes.sh" fetch
+verdict="$(bash "$SELF_DIR/notes.sh" get review "$head" verdict)"
 echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"
-[ "$gates" = pass ] && [ "$verdict" = clean ] && [ -z "$LEGS_FAILED" ]
+[ "$gates" = pass ] && [ "$verdict" = clean ]

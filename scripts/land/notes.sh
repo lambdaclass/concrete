@@ -54,21 +54,26 @@ put_note() { # kind sha key=value...
     msg="$msg${kv%%=*}: ${kv#*=}"$'\n'
   done
   msg="${msg}utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local try tip
+  # Each write is built on its OWN temporary ref, so writers sharing this clone (or its linked
+  # worktrees) never rewrite each other's local state; what is pushed is the captured commit.
+  local try tip tmp="refs/notes/tmp/concrete-$kind-$$-$RANDOM" new
+  trap 'git update-ref -d "'"$tmp"'" 2>/dev/null || true' RETURN
   for try in 1 2 3 4 5; do
     fetch_kind "$kind"
     tip="$(git rev-parse -q --verify "refs/notes/remote/concrete-$kind" || true)"
-    if [ -n "$tip" ]; then git update-ref "refs/notes/concrete-$kind" "$tip"
-    else git update-ref -d "refs/notes/concrete-$kind" 2>/dev/null || true; fi
-    git notes --ref="refs/notes/concrete-$kind" add -f -m "$msg" "$sha" 2>/dev/null
+    if [ -n "$tip" ]; then git update-ref "$tmp" "$tip"
+    else git update-ref -d "$tmp" 2>/dev/null || true; fi
+    git notes --ref="$tmp" add -f -m "$msg" "$sha" 2>/dev/null
+    new="$(git rev-parse "$tmp")"
     if [ "$DRY" = 1 ]; then
       echo "notes (dry-run): would publish refs/notes/concrete-$kind on $REMOTE: $sha"; printf '%s\n' "$msg" | sed 's/^/    /'
       return 0
     fi
     # Notes carry no source tree: the pre-push gates have nothing of theirs to validate, and this
-    # push is a fast-forward of a metadata ref, so it skips them by the documented switch.
-    if CONCRETE_SKIP_GATES=1 git push -q "$REMOTE" "refs/notes/concrete-$kind:refs/notes/concrete-$kind" 2>/dev/null; then
-      git update-ref "refs/notes/remote/concrete-$kind" "refs/notes/concrete-$kind"
+    # push is a fast-forward of a metadata ref (refused if anyone else moved it), so it skips them
+    # by the documented switch.
+    if CONCRETE_SKIP_GATES=1 git push -q "$REMOTE" "$new:refs/notes/concrete-$kind" 2>/dev/null; then
+      git update-ref "refs/notes/remote/concrete-$kind" "$new"
       return 0
     fi
     sleep "$try"

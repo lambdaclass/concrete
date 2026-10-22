@@ -83,8 +83,15 @@ EOF
 cat > "$TMP/notify.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s|%s\n' "$1" "$2" >> "$FAKE_GH_DIR/notify.log"
+[ "$1" = bisecting ] && [ -f "$FAKE_GH_DIR/pause-on-bisect" ] && touch "$BOT_PAUSE_FILE"
+exit 0
 EOF
-chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/notify.sh"
+cat > "$TMP/train-nobisect.sh" <<EOF
+#!/usr/bin/env bash
+[ "\$1" = bisect ] && { echo "bisect crashed before naming anyone"; exit 1; }
+exec bash "$ROOT_DIR/scripts/land/train.sh" "\$@"
+EOF
+chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/notify.sh" "$TMP/train-nobisect.sh"
 
 for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
 A="$TMP/agent"; W="$TMP/bot"
@@ -128,6 +135,7 @@ mk wip/rule "rule" Concrete/Check/Check.lean 'def e := "E0001 existing"
 def f := "E0999 new rule"'; mark wip/rule
 mk wip/checkonly "checkonly" Concrete/Elab/Elab.lean 'def x := "E0001 reused"'; mark wip/checkonly
 mk wip/explicit "explicit" src/big.txt "$(seq 1 50)"; mark wip/explicit clean pass order=5
+mk wip/late "late" src/late.txt late; mark wip/late clean pass order=0800
 out="$(bot list)"; rc=$?
 names="$(printf '%s\n' "$out" | awk '{print $3}' | tr '\n' ' ')"
 [ "$rc" = 0 ] && ok "list runs" || { no "list exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -137,7 +145,7 @@ for b in wip/nogates wip/findings wip/gatefail wip/stale wip/land-x other/x; do
 done
 
 echo "=== ordering ==="
-[ "$names" = "wip/explicit wip/rule wip/a wip/checkonly " ] && ok "explicit order, then the rule change, then the rest by size" \
+[ "$names" = "wip/explicit wip/late wip/rule wip/a wip/checkonly " ] && ok "explicit orders (5, then 0800 read as decimal 800) before the rule change, then the rest by size" \
   || { no "order: '$names'"; echo "$out" | sed 's/^/      /'; }
 has "$out" "language rule: new E0999" && ok "the rule branch is recognized by its new E-code" || no "rule reason missing"
 has "$(printf '%s\n' "$out" | grep wip/checkonly)" "ordinary" && ok "a Check/Elab edit reusing an existing E-code is not a rule change" || no "checkonly misclassified"
@@ -150,24 +158,38 @@ touch "$BOT_PAUSE_FILE"
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "paused" && [ "$(main_sha origin)" = "$BASE" ] && ok "the kill switch stops the tick" || { no "pause: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE"
+if command -v flock >/dev/null 2>&1; then
+  mkdir -p "$LAND_STATE_DIR/bot"; flock "$LAND_STATE_DIR/bot/lock.flock" sleep 60 & fl=$!; sleep 1
+  out="$(bot tick)"; rc=$?
+  [ "$rc" = 0 ] && has "$out" "another instance holds" && [ "$(main_sha origin)" = "$BASE" ] && ok "flock: a live holder stops a second instance" || { no "flock: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  kill "$fl" 2>/dev/null; wait "$fl" 2>/dev/null
+else
+  echo "  (flock is not installed here; the mkdir fallback below is the lock under test)"
+fi
+export BOT_LOCK_MODE=mkdir
 mkdir -p "$LAND_STATE_DIR/bot/lock"; sleep 60 & live=$!; echo "$live" > "$LAND_STATE_DIR/bot/lock/pid"
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "another instance (pid $live)" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live lock holder stops a second instance" || { no "live lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
 kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
+rm -f "$LAND_STATE_DIR/bot/lock/pid"
+out="$(bot tick)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "is starting" && [ "$(main_sha origin)" = "$BASE" ] && ok "a fresh lock without a pid (an instance starting) is respected" || { no "pid-less lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mkdir -p "$LAND_STATE_DIR/bot/lock.takeover"; touch -t 202001010000 "$LAND_STATE_DIR/bot/lock.takeover"
 sh -c 'exit 0' & dead=$!; wait "$dead"
 echo "$dead" > "$LAND_STATE_DIR/bot/lock/pid"
 
 echo "=== train: the tick lands every ready branch, in order, on both remotes ==="
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "[stale-lock] took over the lock of dead pid $dead" && ok "a dead holder's lock is taken over" || { no "stale lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-[ ! -d "$LAND_STATE_DIR/bot/lock" ] && ok "the lock is released at exit" || no "lock left behind"
-all=1; for b in wip/explicit wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
-[ "$all" = 1 ] && ok "all four ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
+[ ! -d "$LAND_STATE_DIR/bot/lock" ] && [ ! -d "$LAND_STATE_DIR/bot/lock.takeover" ] && ok "the lock is released at exit (a crashed takeover guard was expired)" || no "lock left behind"
+unset BOT_LOCK_MODE
+all=1; for b in wip/explicit wip/late wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
+[ "$all" = 1 ] && ok "all five ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
 [ "$(main_sha origin)" = "$(main_sha lambdaclass)" ] && ok "lambdaclass/main equals origin/main" || no "mirror differs"
 [ "$(main_sha fork)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
 for b in wip/nogates wip/findings wip/gatefail wip/stale; do in_main "$(sha_of "$b")" && no "$b landed"; done
 merges="$(git --git-dir="$TMP/origin.git" log --first-parent --reverse --format=%s "$BASE..refs/heads/main" | sed -n 's/.*merge refs\/bot\/\([^ ]*\) .*/\1/p' | tr '\n' ' ')"
-[ "$merges" = "wip/explicit wip/rule wip/a wip/checkonly " ] && ok "the train merged members in landing order" || no "merge order: '$merges'"
+[ "$merges" = "wip/explicit wip/late wip/rule wip/a wip/checkonly " ] && ok "the train merged members in landing order" || no "merge order: '$merges'"
 has "$(cat "$TMP/gh/notify.log" 2>/dev/null)" "landed|train bot-" && ok "notify.sh was called with the landing" || no "no landing notification"
 has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=idle" && ok "state is idle after landing" || no "state not idle"
 
@@ -191,6 +213,25 @@ out="$(bot tick)"; rc=$?
 in_main "$(sha_of wip/g3)" && ! in_main "$(sha_of wip/cired)" && has "$out" "[ejected] wip/cired" \
   && ok "CI-red member ejected, the rest landed" || { no "CI-red bisect"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== kill switch reaches bisection; a block waits for a human ==="
+mk wip/kb kb BAD kb; mark wip/kb
+mk wip/kg kg src/kg.txt kg; mark wip/kg
+KB="$(sha_of wip/kb)"
+touch "$TMP/gh/pause-on-bisect"
+out="$(bot tick)"; rc=$?
+rm -f "$TMP/gh/pause-on-bisect"
+has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=blocked" && ! in_main "$(sha_of wip/kg)" \
+  && ok "a pause during bisection stops it: nothing ejected, nothing landed, not blocked" || { no "pause in bisect"; echo "$out" | sed 's/^/      /'; }
+rm -f "$BOT_PAUSE_FILE"
+out="$(BOT_TRAIN="$TMP/train-nobisect.sh" bot tick)"; rc=$?
+has "$out" "gave no culprit" && has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=blocked" && ok "a bisection that names no culprit blocks the bot" || { no "block"; echo "$out" | sed 's/^/      /'; }
+out="$(bot tick)"; rc=$?
+has "$out" "blocked-still" && has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=blocked" && ! in_main "$(sha_of wip/kg)" \
+  && ok "the next tick keeps the block (no automatic retry)" || { no "block overwritten"; echo "$out" | sed 's/^/      /'; }
+bot reset >/dev/null
+out="$(bot tick)"; rc=$?
+in_main "$(sha_of wip/kg)" && ! in_main "$KB" && has "$out" "[ejected] wip/kb" && ok "after reset the culprit is ejected and the rest lands" || { no "after reset"; echo "$out" | sed 's/^/      /'; }
+
 echo "=== resume: a restart while the train is in CI does not dispatch again ==="
 mk wip/r r src/r.txt r; mark wip/r
 touch "$TMP/gh/pause-on-dispatch"
@@ -204,6 +245,20 @@ out="$(bot tick)"; rc=$?
 after="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
 has "$out" "watching it instead of dispatching again" && in_main "$(sha_of wip/r)" && [ $((after - before)) = 1 ] \
   && ok "the restarted bot resumed the run and landed with one dispatch" || { no "resume: dispatches $((after-before))"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== dispatch: a restart between dispatch and recording the run reconciles, never re-dispatches ==="
+mk wip/d1 d1 src/d1.txt d1; mark wip/d1
+touch "$TMP/gh/pause-on-dispatch"
+out="$(bot tick)"
+rm -f "$TMP/gh/pause-on-dispatch" "$BOT_PAUSE_FILE"
+T="$(sed -n 's/^train=//p' "$LAND_STATE_DIR/bot/bot.env" | tail -n 1)"
+sed -i.bak 's/^phase=ci$/phase=dispatching/' "$LAND_STATE_DIR/bot/bot.env"
+sed -i.bak '/^run_id=/d' "$LAND_STATE_DIR/$T/train.env"
+before="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
+out="$(bot tick)"; rc=$?
+after="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
+has "$out" "before the restart; watching it" && in_main "$(sha_of wip/d1)" && [ "$after" = "$before" ] \
+  && ok "the run was found by its head SHA and landed with no second dispatch" || { no "reconcile: dispatches $((after-before))"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== auto-rebase: skip rules, scratch worktree, refreshed notes, conflicts ==="
 mk wip/r1 r1 src/r1.txt r1; mark wip/r1
@@ -233,6 +288,19 @@ inprog=0; for p in rebase-merge rebase-apply MERGE_HEAD; do [ -e "$W/.git/$p" ] 
 out="$(bot rebase)"
 has "$out" "rebase-conflict" && no "the same conflict was retried" || ok "a tried (head, main) pair is not retried"
 unset BOT_NOW
+
+echo "=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ==="
+mk wip/rv rv src/rv.txt rv; mark wip/rv
+RV="$(sha_of wip/rv)"
+out="$(cd "$A" && LAND_REVIEW_CMD=false bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv 2>&1)"; rc=$?
+g="$(cd "$A" && bash "$NOTES" get gates "$RV")"
+[ "$rc" != 0 ] && has "$g" "gates: fail" && has "$g" "reason: failed legs: review" && has "$out" "run one after another" \
+  && ok "a failed review leg revokes readiness even over an older clean verdict" || { no "ready.sh review failure: exit $rc, note '$g'"; echo "$out" | sed 's/^/      /'; }
+has "$(bot list)" "wip/rv" && no "wip/rv still listed as ready" || ok "the bot no longer sees wip/rv as ready"
+mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
+out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] && has "$(bot list)" "wip/rv2" \
+  && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"

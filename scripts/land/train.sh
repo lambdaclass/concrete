@@ -313,8 +313,9 @@ cmd_build() {
 # Remote full gate set (R-0541). LAND_REMOTE_RUNNER is `<runner> <ref> <command>`: the laptop's
 # ~/bin/concrete-remote (the default), or scripts/land/run-at-ref.sh on the server; empty disables.
 # The runner must print `sha=<sha>` for the commit it ran; a run of any other SHA is no result.
-# With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name> (the hook's
-# backup tier) so a runner that fetches from the remote can see it, and deleted afterwards; the
+# With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name>-<sha>-<pid>-<n>
+# (the hook's backup tier) so a runner that fetches from the remote can see it, and deleted
+# afterwards; the
 # server's local runner fetches from this clone instead (LAND_REMOTE_PUSH=0, ref = the SHA).
 remote_runner() {
   local r="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
@@ -328,13 +329,16 @@ remote_leg() { # name head
   ref="$head"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     refuse_fork "$REMOTE"
-    ref="wip/land-$name"
-    git push -q --force "$REMOTE" "$head:refs/heads/$ref" || return 1
+    # One ref per run, created only if absent (no --force), so concurrent checks never share one.
+    ref="wip/land-$name-${head:0:12}-$$-$RANDOM"
+    git push -q "$REMOTE" "$head:refs/heads/$ref" || return 1
+    # Removed even when the leg is interrupted. A deletion publishes nothing, so it skips the gates
+    # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
+    trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
   fi
   local rc=0 out
   out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}" 2>&1)" || rc=$?
   printf '%s\n' "$out"
-  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then git push -q "$REMOTE" ":refs/heads/$ref" 2>/dev/null || true; fi
   case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
   return "$rc"
 }
@@ -700,6 +704,10 @@ cmd_bisect() {
   [ "${#list[@]}" -ge 2 ] || die "bisect: train $name has fewer than two members"
   local step=0 half verdict
   while [ "${#list[@]}" -gt 1 ]; do
+    # The landing bot's kill switch reaches between the steps (each --ci step dispatches a run).
+    if [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; then
+      log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE)"; die "bisect: paused by $LAND_PAUSE_FILE before step $((step+1))"
+    fi
     step=$((step+1)); half=$(( ${#list[@]} / 2 ))
     local first=("${list[@]:0:$half}") second=("${list[@]:$half}")
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"

@@ -12,9 +12,9 @@
 # whose head commit is not in main, carries `verdict: clean` in refs/notes/concrete-review AND
 # `gates: pass` in refs/notes/concrete-gates (scripts/land/notes.sh), and was not ejected at that SHA.
 #
-# ORDER: an explicit `order: N` in either note; else language-rule branches (they touch
-# Concrete/Check/ or Concrete/Elab/ AND add an E-code main does not have) get 100; everything else
-# 500. Ties: smaller diff first, then name.
+# ORDER: every explicit `order: N` (either note) first, by N; then language-rule branches (they touch
+# Concrete/Check/ or Concrete/Elab/ AND add an E-code main does not have); then everything
+# else. Ties: smaller diff first, then name.
 #
 # SAFETY: one instance (lock dir with a live-pid check); state in a file, so a restart resumes a
 # train that is in CI instead of dispatching again; `touch ~/.concrete-bot-paused` stops it before
@@ -94,25 +94,46 @@ event() { # kind message — logged, printed, and handed to notify.sh when it ex
 paused() { [ -e "$PAUSE" ]; }
 
 # --- single instance -----------------------------------------------------------------------------
-# A lock directory holding the owner's pid. A lock whose owner is dead is taken over, under a second
-# directory so that two starters cannot both take it over.
+# With flock(1) (the Linux server): an OS lock on $LOCK.flock held for the whole run; the kernel
+# releases it when the process dies, so there is nothing stale to recover. Without it (macOS): a
+# lock directory holding the owner's pid. A dead owner's lock, or a pid-less lock older than 60 s
+# (a crash between mkdir and the pid write), is taken over under a guard directory that is held
+# until the new owner's pid is written; a guard older than 60 s is itself a crashed takeover.
+# BOT_LOCK_MODE=mkdir forces the fallback (the gate tests both).
 LOCK="$STATE_DIR/lock"
-release_lock() { rm -rf "$LOCK"; }
+LOCK_HELD=0
+release_lock() { if [ "$LOCK_HELD" = 1 ]; then rm -rf "$LOCK"; fi; }
+age_of() { # seconds since the path's mtime
+  local m; m="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0)"
+  echo $(( $(date +%s) - m ))
+}
 acquire_lock() {
   mkdir -p "$STATE_DIR"
+  if [ "${BOT_LOCK_MODE:-}" != mkdir ] && command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK.flock"
+    flock -n 9 || { say "another instance holds $LOCK.flock; nothing to do"; exit 0; }
+    return 0
+  fi
+  if [ -d "$LOCK.takeover" ] && [ "$(age_of "$LOCK.takeover")" -gt 60 ]; then rmdir "$LOCK.takeover" 2>/dev/null || true; fi
   if ! mkdir "$LOCK" 2>/dev/null; then
     local pid; pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
-    if [ -z "$pid" ] || kill -0 "$pid" 2>/dev/null; then
-      say "another instance (pid ${pid:-starting}) holds $LOCK; nothing to do"; exit 0
-    fi
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then say "another instance (pid $pid) holds $LOCK; nothing to do"; exit 0; fi
+    if [ -z "$pid" ] && [ "$(age_of "$LOCK")" -le 60 ]; then say "another instance is starting ($LOCK has no pid yet)"; exit 0; fi
     mkdir "$LOCK.takeover" 2>/dev/null || { say "another instance is taking over $LOCK"; exit 0; }
+    # Re-read under the guard: the lock may have changed hands since the first look.
     pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then rmdir "$LOCK.takeover"; say "lock is live (pid $pid)"; exit 0; fi
-    rm -rf "$LOCK"; mkdir "$LOCK"; rmdir "$LOCK.takeover"
+    if { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } || { [ -z "$pid" ] && [ -d "$LOCK" ] && [ "$(age_of "$LOCK")" -le 60 ]; }; then
+      rmdir "$LOCK.takeover"; say "lock is live; nothing to do"; exit 0
+    fi
+    rm -rf "$LOCK"; mkdir "$LOCK"
+    echo "$$" > "$LOCK/pid"
+    LOCK_HELD=1; trap release_lock EXIT
+    rmdir "$LOCK.takeover"
     event stale-lock "took over the lock of dead pid ${pid:-?}"
+    return 0
   fi
   echo "$$" > "$LOCK/pid"
-  trap release_lock EXIT
+  LOCK_HELD=1; trap release_lock EXIT
 }
 
 # --- remote view ---------------------------------------------------------------------------------
@@ -137,11 +158,15 @@ ready_branches() {
     done
 }
 
-# "key<TAB>reason" for one ready head.
+# "category<TAB>rank<TAB>reason" for one ready head. Categories sort first, so every explicit order
+# precedes every rule change, whatever its value: 0 explicit (rank = N), 1 language rule, 2 ordinary.
 order_key() { # branch sha
   local sha="$2" o mb files codes c new=""
   o="$(bash "$NOTES" get review "$sha" order)"; [ -n "$o" ] || o="$(bash "$NOTES" get gates "$sha" order)"
-  case "$o" in ''|*[!0-9]*) ;; *) printf '%s\texplicit order: %s\n' "$o" "$o"; return 0 ;; esac
+  # Decimal, at most 9 digits; 10# keeps a leading zero ("08") from reading as octal.
+  case "$o" in ''|*[!0-9]*) ;; *)
+    if [ "${#o}" -le 9 ]; then printf '0\t%s\texplicit order: %s\n' "$((10#$o))" "$o"; return 0; fi ;;
+  esac
   mb="$(git merge-base "$REMOTE/main" "$sha")"
   files="$(git diff --name-only "$mb" "$sha" -- Concrete/Check Concrete/Elab | tr '\n' ' ')"
   if [ -n "$files" ]; then
@@ -149,18 +174,19 @@ order_key() { # branch sha
     for c in $codes; do
       if ! git grep -q -w "$c" "$REMOTE/main" -- Concrete; then new="$new $c"; fi
     done
-    if [ -n "$new" ]; then printf '100\tlanguage rule: new%s in %s\n' "$new" "${files% }"; return 0; fi
+    if [ -n "$new" ]; then printf '1\t0\tlanguage rule: new%s in %s\n' "$new" "${files% }"; return 0; fi
   fi
-  printf '500\tordinary\n'
+  printf '2\t0\tordinary\n'
 }
 
-# "key size branch sha reason", sorted: the landing order.
+# "key size branch sha reason", sorted: the landing order. key = <category>.<rank, 9 digits>.
 ordered_ready() {
-  local b sha k size
+  local b sha k cat rank reason size
   ready_branches | while read -r b sha; do
     k="$(order_key "$b" "$sha")"
+    IFS=$'\t' read -r cat rank reason <<< "$k"
     size="$(git diff --numstat "$(git merge-base "$REMOTE/main" "$sha")" "$sha" | awk '{n+=$1+$2} END{print n+0}')"
-    printf '%05d %08d %s %s %s\n' "${k%%$'\t'*}" "$size" "$b" "$sha" "${k#*$'\t'}"
+    printf '%s.%09d %08d %s %s %s\n' "$cat" "$rank" "$size" "$b" "$sha" "$reason"
   done | sort -k1,1 -k2,2 -k3,3
 }
 
@@ -210,6 +236,7 @@ rebase_in_scratch() { # branch sha main log — runs inside the scratch worktree
   bash "$IMPACT" --base "$main" --head "$new" --src-ref "refs/heads/$b" --dst-ref "refs/heads/ci/rebase-check" \
     --report "$log.selected" >> "$log" 2>&1 \
     || { event rebase-failed "$b: impact gates failed on the rebased head ${new:0:10}; branch left as is (log $log)"; return 1; }
+  if paused; then event paused "$b: rebased and gated as ${new:0:10}, NOT pushed (kill switch)"; return 2; fi
   # The lease: if the agent pushed in the meantime, the push is refused and the branch is left alone.
   git push -q --force-with-lease="refs/heads/$b:$sha" "$REMOTE" "$new:refs/heads/$b" >> "$log" 2>&1 \
     || { event rebase-skipped "$b moved while it was being rebased; left alone"; return 1; }
@@ -222,10 +249,11 @@ rebase_in_scratch() { # branch sha main log — runs inside the scratch worktree
 }
 
 rebase_pass() {
-  local main b sha age key slug wt
+  local main b sha age key slug wt rrc
   main="$(git rev-parse "$REMOTE/main")"
   while read -r b sha; do
     [ -n "$b" ] || continue
+    if paused; then say "rebase: paused; stopping the pass"; break; fi
     case "$b" in "$PREFIX"*) ;; *) say "rebase: $b is outside $PREFIX; never rewritten"; continue ;; esac
     if git merge-base --is-ancestor "$main" "$sha"; then continue; fi
     slug="$(printf '%s' "$b" | tr -c 'A-Za-z0-9._-' '_')"
@@ -240,17 +268,24 @@ rebase_pass() {
     git worktree prune
     git worktree add -q --detach "$wt" "$sha"
     if [ -d "$ROOT/.lake" ] && [ ! -e "$wt/.lake" ]; then cp -a "$ROOT/.lake" "$wt/.lake"; fi
-    ( cd "$wt" && rebase_in_scratch "$b" "$sha" "$main" "$wt.log" ) || true
+    rrc=0; ( cd "$wt" && rebase_in_scratch "$b" "$sha" "$main" "$wt.log" ) || rrc=$?
     git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
     git worktree prune
     land_assert_no_op "scratch cleanup"
-    st_set "rebased_$slug" "$key"
+    # A pass stopped by the kill switch (exit 2) is not a try: the pair is retried after a resume.
+    [ "$rrc" = 2 ] || st_set "rebased_$slug" "$key"
   done <<< "$(ready_branches)"
 }
 
 # --- trains --------------------------------------------------------------------------------------
 
 train_get() { sed -n "s/^$2=//p" "$LAND_ROOT/$1/train.env" 2>/dev/null | tail -n 1; }
+train_set() { # train key value — the same file and format as train.sh's state_set
+  local f="$LAND_ROOT/$1/train.env"
+  grep -v "^$2=" "$f" > "$f.tmp" || true
+  printf '%s=%s\n' "$2" "$3" >> "$f.tmp"
+  mv "$f.tmp" "$f"
+}
 last_result() { awk -F'\t' -v s="$2" '$3==s{r=$8} END{print r}' "$LAND_LOGS/$1.tsv" 2>/dev/null; }
 
 eject() { # branch sha reason
@@ -260,6 +295,7 @@ eject() { # branch sha reason
 }
 
 # Exit 10: retry with the rest. 20: stop this tick, nothing lost. 30: blocked, a human must look.
+# Bisection checks the kill switch between its steps (LAND_PAUSE_FILE), so a pause stops it too.
 bisect_and_eject() { # train mode(--ci|test command) why
   local name="$1" mode="$2" why="$3" members n out culprit ref sha verdict
   members="$(train_get "$name" members)"
@@ -267,12 +303,14 @@ bisect_and_eject() { # train mode(--ci|test command) why
   if [ "$n" -le 1 ]; then
     ref="${members%@*}"; sha="${members##*@}"; verdict=red
   else
+    if paused; then event paused "train $name is red ($why); bisection waits for the kill switch to clear"; return 20; fi
     event bisecting "train $name is red ($why); bisecting $n members"
-    if [ "$mode" = --ci ]; then out="$(bash "$TRAIN" bisect "$name" --ci 2>&1)" || true
-    else out="$(bash "$TRAIN" bisect "$name" --test "$mode" 2>&1)" || true; fi
+    if [ "$mode" = --ci ]; then out="$(LAND_PAUSE_FILE="$PAUSE" bash "$TRAIN" bisect "$name" --ci 2>&1)" || true
+    else out="$(LAND_PAUSE_FILE="$PAUSE" bash "$TRAIN" bisect "$name" --test "$mode" 2>&1)" || true; fi
     printf '%s\n' "$out" > "$STATE_DIR/bisect-$name.log"
     culprit="$(printf '%s\n' "$out" | sed -n 's/^train: culprit: \([^ ]*\) (\([0-9a-f]*\)) — alone it is \(.*\)$/\1 \2 \3/p' | tail -n 1)"
-    [ -n "$culprit" ] || { event blocked "bisect of $name gave no culprit (log $STATE_DIR/bisect-$name.log)"; st_set phase blocked; return 30; }
+    if [ -z "$culprit" ] && paused; then event paused "bisection of $name stopped by the kill switch"; return 20; fi
+    [ -n "$culprit" ] || { st_set phase blocked; event blocked "bisect of $name gave no culprit (log $STATE_DIR/bisect-$name.log)"; return 30; }
     read -r ref sha verdict <<< "$culprit"
   fi
   local b="${ref#refs/bot/}"
@@ -281,13 +319,19 @@ bisect_and_eject() { # train mode(--ci|test command) why
   return 10
 }
 
+# A step that ended a train leaves the phase idle, except a block, which waits for `bot.sh reset`.
+settle() { [ "$1" = 30 ] || st_set phase idle; return "$1"; }
+
 watch_and_land() { # train
   local name="$1" rc=0 res
   bash "$TRAIN" watch "$name" --interval "$WATCH_INTERVAL" > "$STATE_DIR/watch-$name.log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then
     res="$(last_result "$name" watch)"
     if [ "$res" = failed ]; then
-      bisect_and_eject "$name" --ci "CI landing tier failed"; return $?
+      # A paused bisection keeps the train in CI: the next tick re-reads the red run and resumes.
+      rc=0; bisect_and_eject "$name" --ci "CI landing tier failed" || rc=$?
+      [ "$rc" = 20 ] && return 20
+      settle "$rc"; return "$rc"
     fi
     event watch-incomplete "train $name: no verdict yet (${res:-unknown}); will look again next tick"
     return 20
@@ -303,6 +347,23 @@ watch_and_land() { # train
     4) st_set phase idle; event main-moved "train $name: main moved before landing; rebuilding"; return 10 ;;
     *) st_set phase blocked; event blocked "train $name: land failed (exit $rc; log $STATE_DIR/land-$name.log)"; return 30 ;;
   esac
+}
+
+# After a crash or a failure between dispatch and recording the run id, find the run for this exact
+# train head instead of dispatching a second one. Prints the run id, or nothing.
+reconcile_run() { # train
+  local name="$1" id head
+  id="$(train_get "$name" run_id)"
+  if [ -n "$id" ]; then echo "$id"; return 0; fi
+  head="$(train_get "$name" head)"
+  [ -n "$head" ] || return 0
+  "${LAND_GH:-gh}" run list -R "${LAND_REPO:-unbalancedparentheses/concrete2}" --workflow CI --branch "ci/$name" \
+      --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null | python3 -I -c '
+import json, sys
+try: runs = json.load(sys.stdin)
+except Exception: runs = []
+m = [r for r in runs if r.get("headSha") == sys.argv[1]]
+print(m[0]["databaseId"] if m else "")' "$head" || true
 }
 
 run_train() { # "branch sha"... (landing order)
@@ -326,18 +387,24 @@ run_train() { # "branch sha"... (landing order)
     st_set phase idle; return 10
   elif [ "$rc" != 0 ]; then
     [ -n "$(train_get "$name" members)" ] || { st_set phase blocked; event blocked "build of $name failed before recording members (log $STATE_DIR/build-$name.log)"; return 30; }
-    bisect_and_eject "$name" true "build failed"; rc=$?; st_set phase idle; return "$rc"
+    rc=0; bisect_and_eject "$name" true "build failed" || rc=$?
+    settle "$rc"; return "$rc"
   fi
+  if paused; then st_set phase idle; event paused "train $name built; not checked (kill switch)"; return 20; fi
   st_set phase check
   rc=0; bash "$TRAIN" check "$name" "${CHECK_ARGS[@]}" > "$STATE_DIR/check-$name.log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then
     local t
     t="bash $(printf '%q' "$TRAIN") check \"\$(git symbolic-ref --short HEAD | sed 's,^train/,,')\" ${CHECK_ARGS[*]}"
-    bisect_and_eject "$name" "$t" "check failed"; rc=$?; st_set phase idle; return "$rc"
+    rc=0; bisect_and_eject "$name" "$t" "check failed" || rc=$?
+    settle "$rc"; return "$rc"
   fi
   if paused; then st_set phase idle; event paused "train $name checked; CI not dispatched (kill switch)"; return 20; fi
+  # `dispatching` is persisted BEFORE the dispatch: a restart (or a failure to find the run) then
+  # reconciles with GitHub instead of dispatching the same candidate twice.
+  st_set phase dispatching
   rc=0; bash "$TRAIN" ci "$name" > "$STATE_DIR/ci-$name.log" 2>&1 || rc=$?
-  if [ "$rc" != 0 ]; then st_set phase idle; event ci-failed "train $name: could not push or dispatch CI (log $STATE_DIR/ci-$name.log)"; return 20; fi
+  if [ "$rc" != 0 ]; then event ci-failed "train $name: push, dispatch or run lookup failed; next tick reconciles (log $STATE_DIR/ci-$name.log)"; return 20; fi
   st_set phase ci
   watch_and_land "$name"
 }
@@ -359,6 +426,18 @@ cmd_tick() {
         event resume "train $train is in CI; watching it instead of dispatching again"
         rc=0; watch_and_land "$train" || rc=$?
         case "$rc" in 0|10) ;; *) return 0 ;; esac
+      fi ;;
+    dispatching)
+      local id=""
+      [ "$DRY" = 1 ] || id="$(reconcile_run "$train")"
+      if [ "$DRY" = 1 ]; then say "(dry-run) would reconcile the dispatch of train $train"
+      elif [ -n "$id" ]; then
+        train_set "$train" run_id "$id"; st_set phase ci
+        event resume "train $train was dispatched as run $id before the restart; watching it"
+        rc=0; watch_and_land "$train" || rc=$?
+        case "$rc" in 0|10) ;; *) return 0 ;; esac
+      else
+        event resume "train $train has no CI run at its head; discarding it and starting over"; st_set phase idle
       fi ;;
     build|check) event resume "train $train was interrupted at $phase; discarding it and starting over"; st_set phase idle ;;
   esac

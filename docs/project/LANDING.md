@@ -64,8 +64,10 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   gate command per line, which runs through `run_ci_gates_local.sh --first`.
 - **remote**: the full gate set (R-0541) through `LAND_REMOTE_RUNNER <ref> <command>`. The
   default runner is `~/bin/concrete-remote`; on the server it is `scripts/land/run-at-ref.sh`. A
-  runner that fetches from origin first gets the head published as `wip/land-<name>` (the hook's
-  backup tier), which is deleted afterwards. The run counts only if the runner reports
+  runner that fetches from origin first gets the head published under a ref unique to that run,
+  `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created without force and
+  deleted on exit with a lease on that SHA, so concurrent checks never share or delete each
+  other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.
   Exit 0 means clean, and a published `findings` note at the head fails the leg. `--no-review`
@@ -194,9 +196,10 @@ A branch is **ready** when all of the following hold:
 
 One `key: value` per line; when a key repeats, the last line wins. Either note may carry
 `order: N` to place the branch explicitly (lower first). `scripts/land/notes.sh` reads and
-writes the notes (`get`, `put`, `ready`). `put` replaces one commit's note on top of the remote's
-notes tip and pushes without force, retrying on a race, so concurrent writers never drop each
-other's notes.
+writes the notes (`get`, `put`, `ready`). `put` builds each write on its own temporary ref on top
+of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
+writers therefore never drop each other's notes, including writers that share one clone or its
+worktrees.
 
 **Decision: candidates are `wip/*` branches whose head carries both notes. There is no `ready/*`
 prefix.** The reasons:
@@ -211,8 +214,9 @@ prefix.** The reasons:
 
 To mark a branch ready, push it, then run `scripts/land/ready.sh wip/<name>` from a clean
 checkout at its head. It runs the review, the impact gates and the remote full set in parallel,
-then publishes the gates note (`gates: pass` only when the impact and remote legs passed). It
-exits 0 when the head is ready.
+then publishes the gates note: `gates: pass` only when every leg that ran passed. A failed review
+leg also publishes `gates: fail`, so an older clean verdict cannot keep the head ready. It exits 0
+when the head is ready.
 
 ## The landing bot
 
@@ -220,15 +224,17 @@ exits 0 when the head is ready.
 it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
 
 1. **Resume.** If the state file says a train is in CI, the bot watches that run instead of
-   dispatching again. A train interrupted while it was being built or checked is discarded and
+   dispatching again. The phase `dispatching` is written before the dispatch. A restart in
+   that phase, or a dispatch whose run could not be found, makes the bot look up the run at the
+   train's head SHA, and it dispatches again only if no such run exists. A train interrupted while it was being built or checked is discarded and
    rebuilt. A `blocked` state waits for a human (`bot.sh status`, then `bot.sh reset`).
 2. **Auto-rebase** (below).
 3. **Collect and order.** It lists the ready heads (`bot.sh list` shows them with their keys):
-   - an explicit `order: N` comes first;
-   - then **language-rule branches**, key 100. A rule branch touches `Concrete/Check/` or
+   - every explicit `order: N` comes first, whatever its value, in decimal order (`08` is 8);
+   - then **language-rule branches**. A rule branch touches `Concrete/Check/` or
      `Concrete/Elab/` (CoreCheck lives in Check) and adds an `E` code that main's `Concrete/`
      does not contain;
-   - then everything else, key 500;
+   - then everything else;
    - ties go to the smaller diff, then the name.
 
    Rule changes land first and small, so they break other branches' fixtures before those
@@ -245,18 +251,31 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
    the bot retries with the rest. A culprit that is green on its own is still ejected, and the
    event says it is an interaction. A new push of that branch makes it eligible again. A watch with
    no verdict keeps the train in CI for the next tick. A moved main rebuilds the train. A failed
-   land blocks the bot.
+   land, or a bisection that names no culprit, blocks the bot, and the block survives later ticks
+   until `bot.sh reset`.
 6. At most `BOT_MAX_TRAINS` (4) trains run per tick.
 
 **Safety.**
 
-- **One instance.** A lock directory holds the owner's pid. A dead owner's lock is taken over
-  under a second guard directory, and a live owner's lock makes the new instance exit 0.
+- **One instance.** With `flock` (the Linux server), an OS lock is held for the whole run and
+  released by the kernel when the process dies. Without it (macOS), a lock directory holds the
+  owner's pid:
+  - a live owner, or a pid-less lock younger than 60 s (an instance that is starting), makes the
+    new instance exit 0;
+  - a dead owner's lock is taken over under a guard directory, which is held until the new pid is
+    written;
+  - a guard older than 60 s counts as a crashed takeover and is removed.
 - **State in a file.** `<git-common-dir>/concrete-landing/bot/bot.env` holds the phase, the train
   and the ejected heads. `events.tsv` beside it is the event log.
-- **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage: no tick
-  starts, no CI is dispatched, and a green train waits in CI without landing. Remove the file to
-  resume; the train is picked up where it stopped.
+- **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage:
+  - no tick starts;
+  - no train is checked and no CI is dispatched;
+  - a green train waits in CI without landing;
+  - bisection stops between steps (`train.sh` reads `LAND_PAUSE_FILE`), and a red train in CI
+    waits there;
+  - the rebase pass stops before the next branch, and a gated rebase is not pushed.
+
+  Remove the file to resume; the train is picked up where it stopped.
 - **Dry run.** `--dry-run` prints the ready list, the order and the train, and changes nothing on
   the remotes or in the bot's state.
 - **main.** main is pushed only by `train.sh land`, as a fast-forward.
@@ -349,12 +368,18 @@ exactly when the checkout contains `BAD`. It covers:
 
 - ready detection: a stale note, a `findings` verdict, a failed gate, `wip/land-*` and a branch
   outside `wip/` are not ready;
-- ordering: explicit first, then a new E-code under Check/Elab; reusing an existing code is not a
-  rule change;
-- the dry run, the kill switch, a live lock and a dead lock;
+- ordering: explicit first (including `order: 0800`, above the old fixed keys), then a new E-code
+  under Check/Elab; reusing an existing code is not a rule change;
+- the dry run and the kill switch;
+- the locks: `flock` when installed; in mkdir mode, a live lock, a starting (pid-less) lock and a
+  dead lock, with a crashed takeover guard expired;
 - a four-member train landing in order on both remotes, with fork untouched;
 - red-check and red-CI bisection that ejects exactly the culprit and lands the rest;
-- resuming a train held in CI without a second dispatch;
+- the kill switch stopping a bisection; a culprit-less bisection blocking the bot until `reset`;
+- resuming a train held in CI without a second dispatch, and reconciling a `dispatching` restart
+  with the run at the train's head;
+- `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
+  passing legs making a head ready;
 - the auto-rebase skip rules, a clean rebase with carried notes, and a conflict notified with its
   files that leaves the branch and the clone untouched;
 - a static check that nothing under `scripts/land` force-pushes main.
