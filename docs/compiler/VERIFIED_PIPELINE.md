@@ -455,6 +455,34 @@ correctly; targeted mutations show checker consumption/block-local accounting, `
 theorem-table identity checks load-bearing; compile-fail controls cover artifact forgery and
 diagnostic-path bypass.
 
+**S5 slice contract 1 — sealed, certified artifacts (R-0497 slice 1, 2026-10-23).**
+- *Representation:* `ValidatedCore`, `MonomorphizedProgram`, `SSAProgram` and `ElaboratedProgram`
+  get private constructors. The first three carry erased `Prop` certificates about their exact
+  payload: `coreCheckProgram coreModules = .ok ()`; Mono's output equation over `source` plus
+  `verifyPostMono coreModules = []`; and the lowering chain from `source` plus
+  `ssaVerifyProgram ssaModules = .ok ()`. Each names the artifact it was produced from. Two
+  uncertified types are split off: `UnverifiedSSA`, the `ssa-unverified` debugging view, and
+  `CoreSubset`, modules drawn from a `ValidatedCore` with a `Sublist` proof. Proof extraction reads
+  a `CoreSubset`, and a whole program coerces to one.
+- *Invariant made structural:* a value of a certified type is exactly what its producer accepted.
+  Forging one, replacing its payload (`{ a with … }`), or passing an uncertified artifact where a
+  certificate is required is a compile error. Changing the payload needs a proof about the new
+  payload. The certificates are `Prop`s, so the compiled code is unchanged.
+- *Gates:* `check_pipeline_artifacts.sh`:
+  - P: the certificates read as their equations, the producer chain type-checks, and no `sorryAx`;
+  - F1–F7: forgery by `{…}`, `⟨…⟩` and `.mk`;
+  - U1–U4: payload replacement;
+  - D1–D4: `UnverifiedSSA` reaching `emit`, and a `CoreSubset` or `ElaboratedProgram` reaching Mono
+    or the verify gates;
+  - S: no `open private` of these constructors and no `sorry` in `Pipeline.lean`;
+  - B: bug 180, the class instance this slice found.
+
+  A public-constructor mutant turns F1–F3 and U1 red. The golden and snapshot gates show the
+  compiler's output unchanged. The exception is bug 180's intended report change.
+- *Not in this slice:* binding `ElaboratedProgram` to its resolved input; the identity half (R-0492);
+  stage types beyond SSA as their IRs land; a mutation family in `test_mutation.sh` (it moves the
+  pinned inventory count, so it waits for a landing train).
+
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
 evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
 specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width
