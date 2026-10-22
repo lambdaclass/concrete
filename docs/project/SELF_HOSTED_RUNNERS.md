@@ -15,7 +15,8 @@ runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED =
 - The repository variable `CONCRETE_SELF_HOSTED` routes the **landing tier** (build, test suites,
   trust, proof and evidence jobs, the language-surface jobs, multi-kernel) and branch health.
 - `CONCRETE_SELF_HOSTED_CAMPAIGN` routes the **campaign tier** (mutation plan, the 24 mutation
-  shards, the aggregate, the fuzz campaign, the weekly proof replay) on its own. Leave it unset
+  shards, the aggregate, the fuzz campaign, the proof replay) on its own, and the two light jobs of
+  the nightly workflow (`nightly.yml`: the dispatch and the report, which need `gh` and `python3`). Leave it unset
   unless the servers can absorb 24 shards of up to ~85 minutes each. Labels give no priority, so a
   campaign on self-hosted runners would queue landing runs behind it.
   The tiers are listed in ROADMAP.md, "Promotion pipeline", "CI tiers".
@@ -45,10 +46,11 @@ The variable is read when a run starts. Runs already queued keep the routing the
 **lambdaclass/concrete** is a separate repository. Variables and repository-level runners do not
 carry over: it stays on GitHub-hosted runners until it gets its own runners (registered against
 `https://github.com/lambdaclass/concrete`, or through an org runner group that grants that repo the
-`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The campaign crons run only there
-(`github.repository == 'lambdaclass/concrete'`), so `CONCRETE_SELF_HOSTED_CAMPAIGN` matters there
-for the nightly campaign. On concrete2 it only affects campaign runs you dispatch with
-`-f campaign=true`.
+`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The nightly campaign (`nightly.yml`,
+which dispatches CI with `campaign=true` on `main`) runs there, so `CONCRETE_SELF_HOSTED_CAMPAIGN`
+matters there for the nightly campaign. On concrete2 the nightly runs only when the variable
+`CONCRETE_NIGHTLY_QUALIFICATION` is `true`; otherwise the campaign variable only affects campaign
+runs you dispatch with `-f campaign=true`.
 
 ## Security rules (public repository)
 
@@ -79,7 +81,9 @@ because a pull request can run arbitrary code on them. We use them anyway, under
    services on the host.
 5. The triggers that do reach self-hosted runners are `push` to `main`, `push` to other branches
    (branch health), `workflow_dispatch` and `schedule`. All of them need write access to the
-   repository.
+   repository. The nightly report job is a `workflow_run` of CI that runs only for a
+   `workflow_dispatch` run on `main` (never for a pull request's run) and checks out the default
+   branch, so no pull request's code reaches it.
 
 ## Server setup
 
@@ -102,7 +106,7 @@ runner users have no sudo (see below). So preinstall everything:
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl ca-certificates build-essential clang valgrind \
-  python3 python3-pip python3-yaml xxd perl tar zstd ripgrep coreutils
+  python3 python3-pip python3-yaml xxd perl tar zstd ripgrep coreutils gh
 # Rust (rustc + cargo), per runner user, like the stable toolchain on GitHub-hosted images:
 sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
 ```
@@ -113,7 +117,9 @@ sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs 
   running the external-checker job with an empty `~/.cache/concrete-ext`. Rustup puts its tools in
   `~/.cargo/bin`, so install it before `./config.sh`, or add that directory to the runner's `.path`.
 - `python3-yaml` is used by the workflow, example and qualification gates, `xxd` and `curl` by
-  the workload differentials, and `zstd` by `actions/cache`.
+  the workload differentials, and `zstd` by `actions/cache`. `gh` (GitHub CLI; Ubuntu 24.04 ships
+  it as the `gh` package) is used by the nightly workflow's dispatch and report jobs, which run on
+  these runners under `CONCRETE_SELF_HOSTED_CAMPAIGN`.
 - **Lean (elan) is not preinstalled.** `leanprover/lean-action` installs elan into `~/.elan` on
   first use, and the `~/.elan` cache step restores the pinned toolchain. With one user per runner,
   each runner has its own `~/.elan`, so concurrent jobs never race on one toolchain directory.
@@ -166,7 +172,7 @@ already handles, and what the host has to handle.
 - **Workspace.** `actions/checkout@v4` (default `clean: true`) runs `git clean -ffdx` and
   `git reset --hard` on the existing checkout. That removes `.lake/`, `.mutation-evidence/`,
   leftovers of a cancelled mutation shard and any tracked file a gate mutated, before the cache
-  restores `.lake/build`. The weekly proof replay's "no build caches" property holds for the same
+  restores `.lake/build`. The proof replay's "no build caches" property holds for the same
   reason.
 - **`$RUNNER_TEMP`** is emptied by the runner for every job. The workflow's own temporary files
   live there: the LL(1) checker binaries, the trust-gate log, the thesis-demo reports, the example

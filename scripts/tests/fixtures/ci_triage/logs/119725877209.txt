@@ -1,0 +1,37 @@
+﻿2026-10-22T08:45:10.6726220Z Current runner version: '2.338.0'
+2026-10-22T08:45:10.6753746Z ##[group]Runner Image Provisioner
+2026-10-22T08:45:10.6754710Z Hosted Compute Agent
+2026-10-22T09:38:38.5084841Z ##[group]Run bash scripts/tests/check_stack_budget.sh
+2026-10-22T09:38:38.5085327Z [36;1mbash scripts/tests/check_stack_budget.sh[0m
+2026-10-22T09:38:38.5153689Z shell: /usr/bin/bash -e {0}
+2026-10-22T09:38:38.5153982Z ##[endgroup]
+2026-10-22T09:38:40.0137735Z === 1. the summary says unbounded ===
+2026-10-22T09:38:40.0161757Z   ok   summary is unbounded and names the unbounded functions: Max stack bound: unbounded (2 of 3 functions have no bound: main.depth, main.main)
+2026-10-22T09:38:40.0177247Z   ok   no numeric program maximum is printed
+2026-10-22T09:38:40.0203637Z   ok   lib/stack_bound.sh reads it as unbounded (rc 3)
+2026-10-22T09:38:40.0220010Z   ok   the bounded leaf keeps its exact row (unboundedness propagates to callers, not callees)
+2026-10-22T09:38:40.0221275Z === 2. budgets refuse it; the bundle marks it ===
+2026-10-22T09:38:43.9323530Z   ok   [policy] max_stack_bytes = 100000 is REFUSED, naming unboundedness
+2026-10-22T09:38:48.5642619Z   ok   [allocation] stack_max_bytes = 100000 is REFUSED, naming unboundedness
+2026-10-22T09:39:11.8744873Z   ok   release bundle publishes evidence.max_stack_bytes = "unbounded" (valid JSON)
+2026-10-22T09:39:11.8786873Z   ok   a missing or unparseable report yields "unknown", never a number or invalid JSON
+2026-10-22T09:39:11.8787925Z === 3. positive control: a bounded program keeps its exact number ===
+2026-10-22T09:39:11.8806049Z   ok   bounded summary: Max stack bound: 40 bytes (main)
+2026-10-22T09:39:15.8551182Z   ok   max_stack_bytes = 40 passes at exactly the bound
+2026-10-22T09:39:20.5989846Z   ok   stack_max_bytes = 40 passes at exactly the bound
+2026-10-22T09:39:24.5733568Z   ok   max_stack_bytes = 39 fails (the budget comparison is live)
+2026-10-22T09:39:47.6479288Z   ok   release bundle publishes evidence.max_stack_bytes = 40
+2026-10-22T09:39:47.6480013Z === 4. one reader of the summary line ===
+2026-10-22T09:39:47.6537211Z   ok   no script but lib/stack_bound.sh scrapes a number from 'Max stack bound:'
+2026-10-22T09:39:47.6538136Z === 5. an edge with no target frame is not a leaf ===
+2026-10-22T09:39:47.6930633Z   ok   extern: the callers of a frameless edge have no bound: Max stack bound: unbounded (2 of 2 functions have no bound: main.wrap, main.main)
+2026-10-22T09:39:47.6956992Z   ok   extern: lib/stack_bound.sh reads it as unbounded
+2026-10-22T09:39:47.7349478Z   ok   unresolved: the callers of a frameless edge have no bound: Max stack bound: unbounded (2 of 3 functions have no bound: main.total, main.main)
+2026-10-22T09:39:47.7375166Z   ok   unresolved: lib/stack_bound.sh reads it as unbounded
+2026-10-22T09:39:47.7763252Z   FAIL extern_intrinsic_name: expected unbounded naming main.wrap, main.main, got '<no summary line>'
+2026-10-22T09:39:47.7788090Z   FAIL extern_intrinsic_name: stack_max_bound read '' (rc 2)
+2026-10-22T09:39:47.8266353Z   ok   unresolved: the resolved leaf keeps its exact row
+2026-10-22T09:39:47.8701303Z   ok   positive control: a compiler intrinsic edge (print_int) keeps the bound: Max stack bound: 24 bytes (main)
+2026-10-22T09:39:47.8702735Z 
+2026-10-22T09:39:47.8703433Z STACK-BUDGET: PASS=20 FAIL=2
+2026-10-22T09:39:47.8796559Z ##[error]Process completed with exit code 1.

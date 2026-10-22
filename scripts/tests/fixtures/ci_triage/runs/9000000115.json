@@ -1,0 +1,55 @@
+{
+ "databaseId": 9000000115,
+ "attempt": 1,
+ "headSha": "aaaa000000000000000000000000000000000115",
+ "headBranch": "main",
+ "event": "push",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/9000000115",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 9100000115,
+   "name": "Proof evidence gate",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run proof evidence gate",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

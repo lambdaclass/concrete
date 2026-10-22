@@ -1,0 +1,37 @@
+{
+ "databaseId": 39802535363,
+ "attempt": 1,
+ "headSha": "aaaa000000000000000000000000000000000014",
+ "headBranch": "wip/train1",
+ "event": "push",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/39802535363",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 119907045750,
+   "name": "Fast surface gates",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Install Lean (via lean-action)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

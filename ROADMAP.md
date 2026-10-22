@@ -574,14 +574,45 @@ The CI workflow's jobs fall in two tiers. Every job runs somewhere; none was dro
   four of ~20 minutes), `Compiler-infra gates`, the two `Campaign gates` jobs (they test the campaign
   tooling with fixtures, not the campaign), `Thesis evidence smoke test`, `Examples`, `Extra gates`,
   and `Multi-kernel evidence` (on push, dispatch and schedule, and on a pull request labelled
-  `multi-kernel`). `External proof re-check` skips the nightly cron. The critical path is now `Build` then `Proof evidence gate` (~60 minutes), down
+  `multi-kernel`). The critical path is now `Build` then `Proof evidence gate` (~60 minutes), down
   from `Build` then the unsplit language job (~85 minutes).
-- The **campaign tier** is stage (c) evidence and gates qualification, not merges. It runs on its
-  cron on `main` of `lambdaclass/concrete` only, or on any ref with
-  `gh workflow run CI --ref <ref> -f campaign=true`. Its jobs: `Gate mutation plan`, the 24 `Gate
-  mutation shard N` jobs, `Gate mutation coverage (aggregate verdict)` and `Nightly differential
-  fuzz` (nightly cron), `Weekly clean-checkout proof replay` (weekly cron), and the `Multi-kernel
-  mutation coverage` step of the multi-kernel job (either cron, on `main` of `lambdaclass/concrete`, or a dispatch with `campaign=true`).
+- The **campaign tier** is stage (c) evidence and gates qualification, not merges. It runs only in a
+  dispatch with `campaign=true`: `gh workflow run CI --ref <ref> -f campaign=true` for a candidate,
+  and every night on `main` (below). Its jobs: `Gate mutation plan`, the 24 `Gate mutation shard N`
+  jobs, `Gate mutation coverage (aggregate verdict)`, `Nightly differential fuzz`, `Weekly
+  clean-checkout proof replay` (now nightly; the job keeps its name) and the `Multi-kernel mutation
+  coverage` step of the multi-kernel job. The CI workflow has no cron of its own.
+
+#### Nightly qualification, triage and flakes
+
+- **Nightly.** [`nightly.yml`](.github/workflows/nightly.yml) dispatches CI on `main` with
+  `campaign=true` at 03:23 UTC, on `lambdaclass/concrete`, and on `unbalancedparentheses/concrete2`
+  when the repository variable `CONCRETE_NIGHTLY_QUALIFICATION` is `true` (R-0468's opt-in). It
+  reuses CI's jobs, so nothing runs twice, and a campaign dispatch is the one event
+  `scripts/ci/qualification_record.py` accepts: every night yields a stage (c) verdict for `main`'s
+  tip. When the run completes, the report job (`scripts/ci/nightly_report.py`) writes to its job
+  summary the verdict, the gates that failed tonight but not last night, the triage of the run and
+  the mutation-coverage diff against the previous night (`scripts/ci/coverage_diff.py`: a killed
+  family that survives, or any family dropped, is a regression). The report is red unless the run
+  qualified with no new failure and no lost coverage. Its jobs route to self-hosted runners under
+  `CONCRETE_SELF_HOSTED_CAMPAIGN`, like the campaign jobs.
+- **Triage.** `scripts/ci/triage.sh <run-id>` classifies each failed job as infra (runner lost, a
+  cancellation, a network, apt or cache failure, or a bounded run's `INCOMPLETE` marker with no
+  failed assertion), infra-defect (our tooling cannot build a pinned tool, e.g. lean4export under a
+  leaked `GIT_DIR`: reported, never rerun, never a flake), known-flaky (a ledger row whose signature
+  matches) or real. It reruns the failed jobs once (`gh run rerun --failed`) only when every failure
+  is infra or known-flaky, never on attempt 2 and never for a run cancelled as a whole; otherwise it
+  writes `.triage/<run>.md` with the gate, its FAIL lines, a local reproduction, the impact-selected
+  command, the suspected commits and, when `scripts/gen/new_bug.sh` exists, the command to file a bug
+  skeleton (printed, not run). A rerun is diagnostic: qualification reads only a first attempt.
+- **Flakes.** `scripts/ci/flake_history.py` derives per-gate outcomes (passed, failed, skipped,
+  cancelled, incomplete) from GitHub's run records on demand, so nothing is committed per run; the
+  nightly keeps each reading as the `flake-history-<run>` artifact. A gate that failed and passed on
+  one SHA is a flake candidate (infra and infra-defect failures excluded). The ledger
+  [`docs/project/flaky_gates.tsv`](docs/project/flaky_gates.tsv) is committed and human-curated:
+  `known-flaky` and `quarantined` need an owner, a quarantine needs an expiry, and a quarantined
+  gate still runs and still fails its job; triage reports it separately as failed and reruns it
+  once, and after the expiry its failures are real again. `check_ci_triage.sh` pins all of this.
 
 Runners: every Ubuntu job runs on GitHub-hosted `ubuntu-latest` unless the repository variable
 `CONCRETE_SELF_HOSTED` (landing tier) or `CONCRETE_SELF_HOSTED_CAMPAIGN` (campaign tier) is `true`;

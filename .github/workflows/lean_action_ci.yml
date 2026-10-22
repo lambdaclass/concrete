@@ -16,18 +16,15 @@ on:
         type: boolean
         required: false
         default: false
-  schedule:
-    # Weekly clean-checkout proof replay (see the proof-replay job below).
-    # The regular jobs also run, giving a weekly full-CI signal.
-    - cron: "17 4 * * 1"
-    # Nightly differential fuzz campaign with a rotating (date-derived) seed
-    # (see the fuzz-campaign job below). Fixed CI seeds re-test the same
-    # programs forever; every fuzzer-found bug came from a fresh seed.
-    - cron: "23 3 * * *"
+  # NO SCHEDULE HERE. The nightly run is .github/workflows/nightly.yml, which dispatches this
+  # workflow on main with campaign=true: every job below, campaign tier included, in ONE run that
+  # the qualification_record tool under the CI scripts can qualify. The weekly and nightly crons that used to live
+  # here ran subsets of the same jobs (and could never qualify, scheduled runs being partial), so
+  # keeping them beside the dispatch would run the campaign twice.
 
 # Cancel a superseded push/PR run when a newer commit arrives — faster
-# feedback and less runner contention. NEVER cancel scheduled (cron) runs:
-# the weekly proof replay and nightly fuzz campaign must always complete.
+# feedback and less runner contention. NEVER cancel a dispatched run: the nightly campaign
+# must always complete.
 # A campaign dispatch gets its own group, so a landing-tier dispatch of the same ref neither waits
 # behind a multi-hour campaign run nor displaces a queued one.
 concurrency:
@@ -67,6 +64,13 @@ jobs:
 
       - name: Build-cache gate (seeding refuses a key mismatch and never replaces lake build)
         run: bash scripts/tests/check_build_cache.sh
+
+      # Build-free: the CI triage classifier, flake history and coverage diff (the triage, flake_history
+      # and coverage_diff tools under the CI scripts, and nightly.yml) against fixture logs and a stub gh.
+      - name: CI triage gate (failure classes, rerun once, flake ledger, quarantine, coverage diff)
+        run: |
+          python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+          bash scripts/tests/check_ci_triage.sh
 
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
@@ -282,11 +286,8 @@ jobs:
     name: Weekly clean-checkout proof replay
     # Fresh checkout with no build caches: rebuild everything and re-run the
     # proof/theorem gates so a stale cache can never produce a false green.
-    # Guarded to the WEEKLY cron so the nightly fuzz cron does not trigger it.
-    # Crons run ONLY on the canonical public repo (lambdaclass/concrete) —
-    # the working repo mirrors the tree, doubling nightly compute for nothing.
-    # CAMPAIGN TIER: the weekly cron on main of the canonical repo, or a dispatch with campaign=true.
-    if: ((github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -328,8 +329,7 @@ jobs:
     name: External proof re-check (con-leche)
     # The proof evidence re-checked by con-leche, an external Lean checker with a machine-checked
     # consistency proof, and by nanoda, an independent Rust checker, from a lean4export of this
-    # toolchain. Not on the nightly fuzz cron.
-    if: github.event_name != 'schedule' || github.event.schedule == '17 4 * * 1'
+    # toolchain.
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
@@ -388,8 +388,8 @@ jobs:
 
   fuzz-campaign:
     name: Nightly differential fuzz (rotating seed)
-    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
-    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -468,8 +468,8 @@ jobs:
   # foreign or overlapping shard makes it completed=0 and fails the job.
   mutation-plan:
     name: Gate mutation plan (inventory, once)
-    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
-    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     env:
       # THE ONE PLACE THE SHARD COUNT IS SET. The matrix below is derived from it.
@@ -2138,7 +2138,7 @@ jobs:
 
   # Independent-kernel evidence (Rocq + Isabelle). Deliberately NOT on every PR:
   # Isabelle is a multi-GB closure and cold proof runs cost ~30s/goal, so this job
-  # is opt-in — on demand, on the weekly schedule, or on a PR labelled
+  # is opt-in — on demand, on the nightly dispatch, or on a PR labelled
   # `multi-kernel`. Everything it checks is skip-if-absent in the default shell, so
   # the ordinary jobs stay fast and green without these tools.
   #
@@ -2162,7 +2162,6 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule' ||
       contains(github.event.pull_request.labels.*.name, 'multi-kernel')
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 90
@@ -2204,9 +2203,10 @@ jobs:
       # must not pass the release gate — are the strongest thing this suite checks, and they
       # were the least often run: MULTI_KERNEL_MUTATE=1 is opt-in because it mutates tracked
       # source and needs two extra rebuilds. Opt-in plus label-gated meant approximately
-      # never. Scheduled runs can afford it, so that is where it lives.
+      # never. Campaign runs can afford it, so that is where it lives (the nightly dispatch included).
+      # The step keeps its name: the qualification_record tool pins it as required.
       - name: Multi-kernel mutation coverage (scheduled only — mutates source, 2 rebuilds)
-        if: (github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+        if: github.event_name == 'workflow_dispatch' && inputs.campaign
         env:
           MULTI_KERNEL_MUTATE: "1"
         run: nix develop .#provers --command bash ./scripts/tests/check_multi_kernel.sh

@@ -1,0 +1,21 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run leanprover/lean-action@v1
+2026-10-22T10:00:00.0000000Z [36;1mleanprover/lean-action@v1[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z curl: (28) Connection timed out after 30000 milliseconds
+2026-10-22T10:00:00.0000000Z error: could not download https://github.com/leanprover/lean4/releases/x.tar.zst
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_linear_discard.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_linear_discard.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   ok   let _ = copy_value compiles
+2026-10-22T10:00:00.0000000Z   FAIL free(b) of a linear pointee: expected E0287, got ''
+2026-10-22T10:00:00.0000000Z   FAIL let Token { x } = free(b): expected to compile
+2026-10-22T10:00:00.0000000Z         error[E0207]: use of moved value
+2026-10-22T10:00:00.0000000Z LINEAR-DISCARD: PASS=29 FAIL=2
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

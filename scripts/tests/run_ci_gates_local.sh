@@ -173,7 +173,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=259
+EXPECTED_GATE_COMMANDS=260
 # 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
 #   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
@@ -197,6 +197,8 @@ fi
 #   scripts/dev/seed-lake.sh is excluded from the inventory: the workflow runs it on self-hosted
 #   runners to seed .lake from the server's cache. It is a build accelerator, not a gate, and run
 #   locally it would only copy a build.
+# 255 -> 256: check_ci_triage.sh (CI failure triage, flake ledger, nightly coverage diff), pinned in
+#   the same commit.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

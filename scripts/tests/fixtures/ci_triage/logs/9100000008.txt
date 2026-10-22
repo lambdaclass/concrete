@@ -1,0 +1,12 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_model_diff.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_model_diff.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   ok   bool signature compared
+2026-10-22T10:00:00.0000000Z Bounded runs: 0 recovered (timed out, then completed alone), 1 incomplete (timed out twice, or the runner failed):
+2026-10-22T10:00:00.0000000Z   incomplete 120s+240s concrete --interp big.con
+2026-10-22T10:00:00.0000000Z INCOMPLETE: 1 command(s) timed out twice or lost their runner: this run is incomplete, not passed
+2026-10-22T10:00:00.0000000Z MODEL-DIFF: PASS=14 FAIL=0
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

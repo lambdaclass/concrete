@@ -1,0 +1,20 @@
+# Flaky-gate ledger. Human-curated; read by scripts/ci/triage.py and scripts/ci/flake_history.py.
+# Per-run outcomes are NOT stored here: flake_history.py derives them from GitHub's run records and
+# the nightly workflow keeps each night's reading as the flake-history artifact. This file changes
+# only when a person records a decision, so concurrent runs never conflict over it.
+# Columns (tab-separated, every cell non-empty, "-" for none):
+#   gate        the gate as triage names it: script basename plus leading flags (run_tests.sh --trust-gate)
+#   first_seen  YYYY-MM-DD of the first fail-then-pass on one SHA
+#   count       distinct SHAs seen failing then passing (a lower bound; ledger --write raises it)
+#   owner       who fixes it; required for known-flaky and quarantined
+#   status      candidate (proposed by flake_history.py ledger --write; triage treats it as real)
+#             | known-flaky (confirmed; triage reruns a matching failure once)
+#             | quarantined (as known-flaky, reported in its own section, needs an expiry)
+#             | fixed (kept for history; inert)
+#   expires     YYYY-MM-DD, required for quarantined; after it the failure is real again
+#   match       a regex one FAIL line must match, or * for any failure of the gate
+#   note        why, with the run IDs
+# A quarantined gate still runs and its step still fails its job: quarantine changes triage's
+# response, never a result. No row may match an infra defect (a pinned tool that does not build):
+# those are reported, never rerun, never flakes (check-ledger refuses such a row).
+gate	first_seen	count	owner	status	expires	match	note

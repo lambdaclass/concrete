@@ -1,0 +1,33 @@
+﻿2026-10-22T15:12:16.6114654Z Current runner version: '2.338.0'
+2026-10-22T15:12:16.6141679Z ##[group]Runner Image Provisioner
+2026-10-22T15:12:16.6142573Z Hosted Compute Agent
+2026-10-22T15:12:35.2195409Z ##[group]Run : Lake Build
+2026-10-22T15:12:35.2195698Z [36;1m: Lake Build[0m
+2026-10-22T15:12:35.2196170Z [36;1m${GITHUB_ACTION_PATH}/scripts/lake_build.sh[0m
+2026-10-22T15:12:35.2247741Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-22T15:12:35.2248102Z env:
+2026-10-22T15:12:35.2248318Z   BUILD_ARGS: --log-level=warning
+2026-10-22T15:12:35.2248581Z ##[endgroup]
+2026-10-22T15:12:35.2342037Z ##[group]Lake Build Output
+2026-10-22T15:12:39.3991585Z ✔ [43/52] Built Concrete.Check.CheckError (4.1s)
+2026-10-22T15:12:40.3988347Z ✔ [45/53] Built Concrete.Check.CoreCheck (5.1s)
+2026-10-22T15:12:44.9061412Z ✔ [47/60] Built Concrete.Report.AssumptionSummary (4.5s)
+2026-10-22T15:12:46.5112260Z ✔ [52/83] Built Concrete.IR.Lower (11s)
+2026-10-22T15:12:46.9191455Z ✔ [65/84] Built Concrete.Check.CheckHelpers (7.4s)
+2026-10-22T15:12:47.4171266Z ✔ [67/216] Built Concrete.Check.Verify (2.5s)
+2026-10-22T15:12:47.4200927Z ✔ [68/216] Built Concrete.Report.TrustEdgeReport (892ms)
+2026-10-22T15:12:50.1271734Z ✔ [119/216] Built Concrete.Check.CheckError:c.o (2.7s)
+2026-10-22T15:12:53.7291320Z ✔ [120/216] Built Concrete.Elab.Elab (18s)
+2026-10-22T15:12:55.4371569Z ✔ [128/216] Built Concrete.Check.CoreCheck:c.o (7.0s)
+2026-10-22T15:12:58.3402020Z ✔ [136/216] Built Concrete.Check.Verify:c.o (2.9s)
+2026-10-22T15:13:03.9481293Z ✔ [164/216] Built Concrete.Check.CheckHelpers:c.o (13s)
+2026-10-22T15:13:08.7601189Z ✖ [189/242] Building Concrete.Check.Check (21s)
+2026-10-22T15:13:08.7605322Z trace: .> LEAN_PATH=/home/runner/work/concrete2/concrete2/.lake/build/lib/lean /home/runner/.elan/toolchains/leanprover--lean4---v4.34.1/bin/lean /home/runner/work/concrete2/concrete2/Concrete/Check/Check.lean -o /home/runner/work/concrete2/concrete2/.lake/build/lib/lean/Concrete/Check/Check.olean -i /home/runner/work/concrete2/concrete2/.lake/build/lib/lean/Concrete/Check/Check.ilean -c /home/runner/work/concrete2/concrete2/.lake/build/ir/Concrete/Check/Check.c --setup /home/runner/work/concrete2/concrete2/.lake/build/ir/Concrete/Check/Check.setup.json --json
+2026-10-22T15:13:08.7609441Z error: Concrete/Check/Check.lean:2275:9: Unknown identifier `isGhost`
+2026-10-22T15:13:17.0700462Z ✔ [239/242] Built Concrete.IR.Lower:c.o (23s)
+2026-10-22T15:13:24.7799718Z ✔ [240/242] Built Concrete.Elab.Elab:c.o (26s)
+2026-10-22T15:13:24.7800872Z error: build failed
+2026-10-22T15:13:24.7801599Z Some required targets logged failures:
+2026-10-22T15:13:24.7802188Z - Concrete.Check.Check
+2026-10-22T15:13:24.7893188Z ##[error] lake build failed
+2026-10-22T15:13:24.7895435Z ##[error]Process completed with exit code 1.

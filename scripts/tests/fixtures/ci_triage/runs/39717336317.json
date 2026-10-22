@@ -1,0 +1,101 @@
+{
+ "databaseId": 39717336317,
+ "attempt": 1,
+ "headSha": "29f91b7b0000000000000000000000000000000f",
+ "headBranch": "ci/lowering-bugs",
+ "event": "workflow_dispatch",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/39717336317",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 119622556321,
+   "name": "Gate mutation shard 11",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Gate mutation coverage shard (heavy; rebuilds per mutation)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 119622556486,
+   "name": "Gate mutation shard 24",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Gate mutation coverage shard (heavy; rebuilds per mutation)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 119643688385,
+   "name": "Gate mutation coverage (aggregate verdict)",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Aggregate (fails closed; exit 0 only when qualified)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+﻿2026-10-22T04:45:35.4993498Z Current runner version: '2.338.0'
+2026-10-22T04:45:35.5012036Z ##[group]Runner Image Provisioner
+2026-10-22T04:45:35.5012722Z Hosted Compute Agent
+2026-10-22T04:45:40.2204734Z ##[group]Run mkdir -p "$RUNNER_TEMP/mutation-shards"
+2026-10-22T04:45:40.2205169Z [36;1mmkdir -p "$RUNNER_TEMP/mutation-shards"[0m
+2026-10-22T04:45:40.2205744Z [36;1mfor d in "$RUNNER_TEMP"/mutation/mutation-shard-*; do [ ! -d "$d" ] || mv "$d" "$RUNNER_TEMP/mutation-shards/"; done[0m
+2026-10-22T04:45:40.2206203Z [36;1mpython3 -I scripts/tests/lib/aggregate_mutation_shards.py \[0m
+2026-10-22T04:45:40.2206564Z [36;1m  --plan "$RUNNER_TEMP/mutation/mutation-plan/plan.txt" \[0m
+2026-10-22T04:45:40.2206896Z [36;1m  --shards-dir "$RUNNER_TEMP/mutation-shards" \[0m
+2026-10-22T04:45:40.2207237Z [36;1m  --expect-head "29f91b7bb5ae63cb0f775dcc6007b119692b02f0" \[0m
+2026-10-22T04:45:40.2207580Z [36;1m  --out "$RUNNER_TEMP/mutation-campaign-summary.txt"[0m
+2026-10-22T04:45:40.2353209Z shell: /usr/bin/bash -e {0}
+2026-10-22T04:45:40.2353524Z ##[endgroup]
+2026-10-22T04:45:40.2959967Z GATE-MUTATION-COVERAGE (sharded): COMPLETE-NOT-QUALIFIED completed=1 integrity_ok=0 qualified=0 killed=131 invalid=2 survived=1 could_not_apply=0 (of 134, 24 shards)
+2026-10-22T04:45:40.2961363Z   refusals: shard_refusals(11:families_unaccounted(gate=4 build=1 of 6)) shard_integrity(11) shard_refusals(24:families_unaccounted(gate=5 build=0 of 7)) shard_integrity(24)
+2026-10-22T04:45:40.3006011Z ##[error]Process completed with exit code 1.

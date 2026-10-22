@@ -1,0 +1,95 @@
+name: Nightly qualification
+
+# THE NIGHTLY STAGE (c) RUN ON MAIN (ROADMAP promotion pipeline, "CI tiers", "Nightly").
+#
+# `dispatch` starts the CI workflow on main with campaign=true: the landing tier plus the campaign
+# tier (gate-mutation plan, 24 shards and aggregate, differential fuzz, clean-checkout proof replay,
+# multi-kernel mutation coverage). It reuses CI's jobs rather than copying them, and CI has no cron
+# of its own any more, so nothing runs twice. A campaign dispatch is the one event
+# scripts/ci/qualification_record.py accepts, so every night yields a qualification verdict, not
+# just a scheduled signal.
+#
+# `report` runs when that CI run completes (and on any later attempt of it): the stage (c) verdict,
+# per-gate outcomes against the previous night, triage of the failures (scripts/ci/triage.py:
+# infra and known flakes rerun once, real failures get a report) and the mutation-coverage diff
+# against the previous night, all in the job summary. It ignores landing-tier dispatches.
+#
+# Where it runs: main of lambdaclass/concrete, and main of unbalancedparentheses/concrete2 when the
+# repository variable CONCRETE_NIGHTLY_QUALIFICATION is 'true' (R-0468: the working repository can
+# opt in). The jobs here are light (gh and python); the campaign jobs they start route to
+# self-hosted runners under CONCRETE_SELF_HOSTED_CAMPAIGN, as these do.
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Report on this completed CI campaign run instead of dispatching a new one"
+        type: string
+        required: false
+        default: ""
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.event_name }}-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch the campaign tier on main
+    if: >-
+      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_id == '')) &&
+      github.ref == 'refs/heads/main' &&
+      (github.repository == 'lambdaclass/concrete' ||
+       (github.repository == 'unbalancedparentheses/concrete2' && vars.CONCRETE_NIGHTLY_QUALIFICATION == 'true'))
+    runs-on: ${{ vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - name: Dispatch CI with campaign=true on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run CI --repo "$GITHUB_REPOSITORY" --ref main -f campaign=true
+          echo "Dispatched CI on main with campaign=true; the report job runs when it completes." >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    name: Triage and coverage diff
+    if: >-
+      ((github.event_name == 'workflow_run' &&
+        github.event.workflow_run.event == 'workflow_dispatch' &&
+        github.event.workflow_run.head_branch == 'main') ||
+       (github.event_name == 'workflow_dispatch' && inputs.run_id != '')) &&
+      (github.repository == 'lambdaclass/concrete' ||
+       (github.repository == 'unbalancedparentheses/concrete2' && vars.CONCRETE_NIGHTLY_QUALIFICATION == 'true'))
+    runs-on: ${{ vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      # Full history: the stage (c) verdict reads the workflow at the run's own head SHA.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PyYAML (the verdict and the step map read workflows structurally)
+        run: python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet pyyaml
+
+      - name: Nightly report (verdict, new failures, triage, coverage diff)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: python3 -I scripts/ci/nightly_report.py "$RUN_ID" --work "$RUNNER_TEMP/nightly"
+
+      - name: Upload outcomes and triage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-history-${{ github.event.workflow_run.id || inputs.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/nightly/outcomes-*.tsv
+            ${{ runner.temp }}/nightly/triage
+          if-no-files-found: ignore

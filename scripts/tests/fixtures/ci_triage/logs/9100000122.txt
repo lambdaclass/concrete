@@ -1,0 +1,9 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run SHARD="6/24" bash scripts/tests/check_gate_mutation_coverage.sh
+2026-10-22T10:00:00.0000000Z [36;1mSHARD="6/24" bash scripts/tests/check_gate_mutation_coverage.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   FAIL copy-predicate (SURVIVED — gate stayed green)
+2026-10-22T10:00:00.0000000Z GATE-MUTATION-COVERAGE: REFUSED completed=1 qualified=0 killed=4 invalid=0 survived=1
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

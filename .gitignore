@@ -179,3 +179,6 @@ tests/regressions/*/*/*
 
 # Raw review output of scripts/review/review.sh (R-0544): .review/<sha>-<round>.md
 .review/
+
+# CI triage reports (scripts/ci/triage.sh writes .triage/<run>.md and rerun markers)
+/.triage/
