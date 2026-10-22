@@ -4,8 +4,8 @@
 **Found:** 2026-10-22, by the compiler perf tracking (`scripts/perf/` on `wip/perf-tracking`),
 measured on main 34f19e97 and confirmed on 185d998c.
 **Severity:** compile time only. Output was correct, but a 1000-arm `match` took 8.45 s in the
-`lower` stage and a 2000-arm one about 71 s. A 2000-deep nest of `if`s took about 100 s to
-compile for a separate cause on the same path (below).
+`lower` stage and a 2000-arm one about 71 s. A 2000-deep nest of `if`s took about 160 s in
+`lower` (the same cause) plus about 100 s in the obligation walk (a second cause, below).
 
 ## Observed
 
@@ -31,10 +31,13 @@ Growth exponent 2.60, 2.64, 2.98 between consecutive sizes. `--emit-ssa-unverifi
 1.11): almost all of it was in the two passes the trace reports as part of `lower`. `perf record`
 put 61% of the time in `List.elem` on strings, 15% in `List.reverseAux` and 15% in `memcmp`.
 
-The perf suite also reported `lower` growing about n^2.3 on deep `if` nesting. Profiling the whole
-`--emit-llvm` compile of that shape found the dominant cost somewhere the trace does not time:
-96% of 422.9 G instructions at depth 2000 was `Report.assignedScalarsS`, called by the obligation
-walk that runs on every compile (`enforceProvenRuntimeViolations`).
+The perf suite also reported `lower` growing superlinearly on deep `if` nesting
+(`if acc < k { acc = acc + 1; <rest> }`, n deep). On main that shape cost 4.07 G, 25.8 G, 188.2 G
+and 1555 G instructions at depth 250, 500, 1000 and 2000 (exponent 2.66, 2.87, 3.05), with
+`lower` at 160 s for depth 2000. With the dominance fix alone, `lower` fell to 0.3 s but the
+compile still cost 422.9 G instructions: 96% of it was `Report.assignedScalarsS`, called by the
+obligation walk that runs on every compile (`enforceProvenRuntimeViolations`) and that the trace
+does not time.
 
 ## Expected
 
@@ -107,11 +110,32 @@ ran when the scope was empty, where the answer cannot matter.
 - `--emit-trace-json` reports per-stage Lean heartbeats (`alloc_heartbeats`), a deterministic
   count of small allocations that does not depend on machine load.
 
-Emitted LLVM and SSA are unchanged: RESULT_DIFF.
+Emitted output is unchanged. `--emit-llvm` and `--emit-ssa` were run on every `.con` file under
+`tests/` and `examples/` (1684 files) and `concrete build --emit-llvm` in every `Concrete.toml`
+project, with main (185d998c) and this branch (5a4ec78e), comparing stdout, stderr and exit
+code: 0 files differ (1216 of the `--emit-llvm` runs succeed; the rest are rejection fixtures,
+whose diagnostics are identical too). No ordering was changed intentionally.
 
 After the fix (instructions, concrete-ci-1):
 
-RESULT_TABLE
+| shape, size | main | fixed | speedup |
+|---|---:|---:|---:|
+| match, 250 arms | 1.12 G | 0.221 G | 5.0x |
+| match, 500 | 6.78 G | 0.272 G | 25x |
+| match, 1000 | 42.2 G | 0.407 G | 104x |
+| match, 2000 | 334.1 G | 0.815 G | 410x |
+| nesting, depth 250 | 4.07 G | 0.280 G | 15x |
+| nesting, 500 | 25.8 G | 0.421 G | 61x |
+| nesting, 1000 | 188.2 G | 0.843 G | 223x |
+| nesting, 2000 | 1555 G | 2.21 G | 703x |
+
+Least-squares growth exponent over 250 – 2000 (whole `--emit-llvm` compile, instructions): match
+2.73 → 0.62, nesting 2.86 → 0.99 (pairwise 0.30 / 0.58 / 1.00 and 0.59 / 1.00 / 1.39; the low
+values reflect fixed start-up cost). The `lower` stage's heartbeats grow with slope 1.00 for both
+gate shapes. The `lower` stage of a 2000-arm match went from 78.4 s to 64 ms. `functions` and
+`statements` are unchanged (1.27 / 1.42 and 0.32 / 0.54 before and after, within noise).
+
+LARGE_EXAMPLES
 
 **Regression gate.** `scripts/tests/check_ssa_lowering_scaling.sh` compiles a value `match` and an
 assigning `match` with an unknown scrutinee at 250, 500, 1000 and 2000 arms, fits the log-log
