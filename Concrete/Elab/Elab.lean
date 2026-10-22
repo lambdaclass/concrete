@@ -2928,9 +2928,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
     -- feed it. Recorded rather than silent.
     -- The hint is the declared type with aliases resolved (bug 177, Codex round 4: `const X: Id
     -- = 1` elaborated its initializer as Int while every use reads X at the expanded i32).
-    let constResult := (do
-        let hintTy ← resolveTypeE c.ty
-        (·.core) <$> elabExprEv c.value (some hintTy)).run initEnv |>.run
+    let constElab : ElabM CExpr := do
+      let hintTy ← resolveTypeE c.ty
+      let ev ← elabExprEv c.value (some hintTy)
+      pure ev.core
+    let constResult := constElab.run initEnv |>.run
     match constResult with
     | ((.ok cExpr), _) => Except.ok (c.name, c.ty, cExpr)
     -- An initializer that does not elaborate is an error, never a silent 0 (bug 123 review: a
