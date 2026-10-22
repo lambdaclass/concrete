@@ -21,7 +21,7 @@ cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first" >&2; exit 2; }
 PASS=0; FAIL=0
-run(){ local l="$1"; shift; if "$@" >$GATE_TMP/6d_sub.log 2>&1; then echo "  ok   $l"; PASS=$((PASS+1)); else echo "  FAIL $l"; tail -3 $GATE_TMP/6d_sub.log | sed 's/^/       /'; FAIL=$((FAIL+1)); fi; }
+run(){ local l="$1"; shift; if "$@" >"$GATE_TMP/6d_sub.log" 2>&1; then echo "  ok   $l"; PASS=$((PASS+1)); else echo "  FAIL $l"; tail -3 "$GATE_TMP/6d_sub.log" | sed 's/^/       /'; FAIL=$((FAIL+1)); fi; }
 rejects(){ local l="$1" f="$2" pat="$3" out
   out="$("$COMPILER" "$f" 2>&1 || true)"
   if grep -q <<<"$out" "$pat"; then echo "  ok   $l"; PASS=$((PASS+1));
@@ -36,9 +36,9 @@ rejects "#2 value while…else removed + hint" tests/programs/error_while_expr_r
 rejects "#3 postfix -> removed + hint"       tests/programs/error_arrow_not_heap.con     "postfix \`->\` was removed"
 rejects "#4 postfix ? removed + hint"        tests/programs/error_postfix_question.con   "postfix \`?\` was removed"
 
-if rg -n '\.try_|\| try_|tryProp' Concrete >$GATE_TMP/6d_try_surface.log; then
+if rg -n '\.try_|\| try_|tryProp' Concrete >"$GATE_TMP/6d_try_surface.log"; then
   echo "  FAIL #4 propagation node survived below the parser"
-  sed -n '1,8p' $GATE_TMP/6d_try_surface.log | sed 's/^/       /'
+  sed -n '1,8p' "$GATE_TMP/6d_try_surface.log" | sed 's/^/       /'
   FAIL=$((FAIL+1))
 else
   echo "  ok   #4 no postfix-propagation node exists in AST/Core/evidence"
@@ -47,7 +47,7 @@ fi
 
 echo "=== migrated forms behave (loop results + heap dot corpus) ==="
 run "loop-control gate (stmt-form results)"  bash scripts/tests/check_loop_control.sh
-p(){ gate_selfprint_wrap "$1" $GATE_TMP/6d_w.con && "$COMPILER" $GATE_TMP/6d_w.con -o $GATE_TMP/6d.bin >/dev/null 2>&1 && $GATE_TMP/6d.bin; }
+p(){ gate_selfprint_wrap "$1" "$GATE_TMP/6d_w.con" && "$COMPILER" "$GATE_TMP/6d_w.con" -o "$GATE_TMP/6d.bin" >/dev/null 2>&1 && "$GATE_TMP/6d.bin"; }
 [ "$(p tests/programs/loop_break_result_basic.con)" = "5" ]  && { echo "  ok   loop_break_result_basic => 5"; PASS=$((PASS+1)); } || { echo "  FAIL loop_break_result_basic"; FAIL=$((FAIL+1)); }
 [ "$(p tests/programs/heap_dot_access.con)" = "1" ]          && { echo "  ok   heap_dot_access => 1"; PASS=$((PASS+1)); } || { echo "  FAIL heap_dot_access"; FAIL=$((FAIL+1)); }
 [ "$(p tests/programs/heap_arrow.con)" = "20" ]              && { echo "  ok   heap corpus (migrated) => 20"; PASS=$((PASS+1)); } || { echo "  FAIL heap corpus"; FAIL=$((FAIL+1)); }
@@ -58,8 +58,8 @@ run "ownership-judgment gate"   bash scripts/tests/check_ownership_judgment.sh
 run "trailing-value blocks"     bash scripts/tests/check_trailing_value_blocks.sh
 
 echo "=== unsafe stays visible via capability, not syntax ==="
-printf 'mod m { fn bad(p: *mut i32) -> i32 { return *p; } fn main() -> Int { return 0; } }' > $GATE_TMP/6d_raw.con
-rejects "raw deref without Unsafe still rejected (E052x)" $GATE_TMP/6d_raw.con "E052"
+printf 'mod m { fn bad(p: *mut i32) -> i32 { return *p; } fn main() -> Int { return 0; } }' > "$GATE_TMP/6d_raw.con"
+rejects "raw deref without Unsafe still rejected (E052x)" "$GATE_TMP/6d_raw.con" "E052"
 
 echo
 echo "PHASE-6D-SURFACE: PASS=$PASS FAIL=$FAIL"

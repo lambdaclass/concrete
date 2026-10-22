@@ -91,6 +91,10 @@ mutate_copy() { # -> prints the copy's root; nonzero when it could not be made f
   ( cd "$ROOT_DIR" && git ls-files -z | while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done \
       | tar --null -T - -cf - ) | tar -xf - -C "$tree" \
     || { echo "tar overlay failed" >> "$base/seed.log"; return 1; }
+  # ...and a tracked file deleted in this checkout is deleted in the copy, not resurrected from HEAD.
+  ( cd "$ROOT_DIR" && git ls-files -z --deleted ) | while IFS= read -r -d '' f; do
+    rm -f "$tree/$f" || { echo "could not apply deletion of $f" >> "$base/seed.log"; exit 1; }
+  done || return 1
   if [ -d "$ROOT_DIR/.lake" ]; then
     ( cd "$tree" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) >"$base/seed.log" 2>&1 || return 1
   fi

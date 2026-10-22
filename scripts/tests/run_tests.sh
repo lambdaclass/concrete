@@ -2458,136 +2458,136 @@ if section_active gatesmoke; then
 # historical reproductions. Cheap (a handful of small builds) and it guards a
 # memory-safety property, so it belongs in the fast loop rather than CI alone.
 echo "=== per-method trusted (two safety axes) ==="
-if bash "$ROOT_DIR/scripts/tests/check_trusted_method.sh" > $TMPDIR/tmeth.$$ 2>&1; then
-    _tm_pass=$(grep -c "^  ok  " $TMPDIR/tmeth.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_trusted_method.sh" > "$TMPDIR/tmeth.$$" 2>&1; then
+    _tm_pass=$(grep -c "^  ok  " "$TMPDIR/tmeth.$$" || true)
     echo "  ok  trusted-method gate ($_tm_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  trusted-method gate"
-    grep "^  FAIL" $TMPDIR/tmeth.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/tmeth.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/tmeth.$$
+rm -f "$TMPDIR/tmeth.$$"
 
 echo "=== cross-package capability enforcement (bug 071) ==="
-if bash "$ROOT_DIR/scripts/tests/check_cross_package_caps.sh" > $TMPDIR/xpkgcaps.$$ 2>&1; then
-    _xp_pass=$(grep -c "^  ok  " $TMPDIR/xpkgcaps.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_cross_package_caps.sh" > "$TMPDIR/xpkgcaps.$$" 2>&1; then
+    _xp_pass=$(grep -c "^  ok  " "$TMPDIR/xpkgcaps.$$" || true)
     echo "  ok  cross-package-caps gate ($_xp_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  cross-package-caps gate"
-    grep "^  FAIL" $TMPDIR/xpkgcaps.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/xpkgcaps.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/xpkgcaps.$$
+rm -f "$TMPDIR/xpkgcaps.$$"
 
 echo "=== capability headers bind across a sibling submodule ==="
-if bash "$ROOT_DIR/scripts/tests/check_cap_sibling_module.sh" > $TMPDIR/capsib.$$ 2>&1; then
-    _cs_pass=$(grep -c "^  ok  " $TMPDIR/capsib.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_cap_sibling_module.sh" > "$TMPDIR/capsib.$$" 2>&1; then
+    _cs_pass=$(grep -c "^  ok  " "$TMPDIR/capsib.$$" || true)
     echo "  ok  cap-sibling-module gate ($_cs_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  cap-sibling-module gate"
-    grep "^  FAIL" $TMPDIR/capsib.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/capsib.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/capsib.$$
+rm -f "$TMPDIR/capsib.$$"
 
 echo "=== absence is not a fact ==="
-if bash "$ROOT_DIR/scripts/tests/check_absence_not_fact.sh" > $TMPDIR/absence.$$ 2>&1; then
-    _an_pass=$(grep -c "^  ok  " $TMPDIR/absence.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_absence_not_fact.sh" > "$TMPDIR/absence.$$" 2>&1; then
+    _an_pass=$(grep -c "^  ok  " "$TMPDIR/absence.$$" || true)
     echo "  ok  absence-not-fact gate ($_an_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  absence-not-fact gate"
-    grep "^  FAIL" $TMPDIR/absence.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/absence.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/absence.$$
+rm -f "$TMPDIR/absence.$$"
 
 echo "=== cap-variable inference (bug 063) ==="
-if bash "$ROOT_DIR/scripts/tests/check_cap_inference.sh" > $TMPDIR/cap_inf.$$ 2>&1; then
-    _ci_pass=$(grep -c "^  ok  " $TMPDIR/cap_inf.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_cap_inference.sh" > "$TMPDIR/cap_inf.$$" 2>&1; then
+    _ci_pass=$(grep -c "^  ok  " "$TMPDIR/cap_inf.$$" || true)
     echo "  ok  cap-inference gate ($_ci_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  cap-inference gate"
-    grep "^  FAIL" $TMPDIR/cap_inf.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/cap_inf.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/cap_inf.$$
+rm -f "$TMPDIR/cap_inf.$$"
 
 echo "=== diff-to-gate mapping ==="
-if bash "$ROOT_DIR/scripts/tests/check_gates_for_diff.sh" > $TMPDIR/gates_map.$$ 2>&1; then
-    _gm_pass=$(grep -c "^  ok  " $TMPDIR/gates_map.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_gates_for_diff.sh" > "$TMPDIR/gates_map.$$" 2>&1; then
+    _gm_pass=$(grep -c "^  ok  " "$TMPDIR/gates_map.$$" || true)
     echo "  ok  diff-to-gate mapping gate ($_gm_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  diff-to-gate mapping gate"
-    grep "^  FAIL" $TMPDIR/gates_map.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/gates_map.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/gates_map.$$
+rm -f "$TMPDIR/gates_map.$$"
 
 echo "=== effect opacity (R-0484) ==="
-if bash "$ROOT_DIR/scripts/tests/check_effect_opacity.sh" > $TMPDIR/effect_opacity.$$ 2>&1; then
-    _eo_pass=$(grep -c "^  ok  " $TMPDIR/effect_opacity.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_effect_opacity.sh" > "$TMPDIR/effect_opacity.$$" 2>&1; then
+    _eo_pass=$(grep -c "^  ok  " "$TMPDIR/effect_opacity.$$" || true)
     echo "  ok  effect opacity gate ($_eo_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  effect opacity gate"
-    grep "^  FAIL" $TMPDIR/effect_opacity.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/effect_opacity.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/effect_opacity.$$
+rm -f "$TMPDIR/effect_opacity.$$"
 
 echo "=== inherited foreign assumptions in reports (R-0484 R10) ==="
-if bash "$ROOT_DIR/scripts/tests/check_foreign_assumptions_report.sh" > $TMPDIR/foreign_assum.$$ 2>&1; then
-    _fa_pass=$(grep -c "^  ok  " $TMPDIR/foreign_assum.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_foreign_assumptions_report.sh" > "$TMPDIR/foreign_assum.$$" 2>&1; then
+    _fa_pass=$(grep -c "^  ok  " "$TMPDIR/foreign_assum.$$" || true)
     echo "  ok  foreign-assumptions report gate ($_fa_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  foreign-assumptions report gate"
-    grep "^  FAIL" $TMPDIR/foreign_assum.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/foreign_assum.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/foreign_assum.$$
+rm -f "$TMPDIR/foreign_assum.$$"
 
 echo "=== capability parameters across packages (R-0484) ==="
-if bash "$ROOT_DIR/scripts/tests/check_cap_struct_cross_package.sh" > $TMPDIR/cap_struct_xp.$$ 2>&1; then
-    _cx_pass=$(grep -c "^  ok  " $TMPDIR/cap_struct_xp.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_cap_struct_cross_package.sh" > "$TMPDIR/cap_struct_xp.$$" 2>&1; then
+    _cx_pass=$(grep -c "^  ok  " "$TMPDIR/cap_struct_xp.$$" || true)
     echo "  ok  cap-struct cross-package gate ($_cx_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  cap-struct cross-package gate"
-    grep "^  FAIL" $TMPDIR/cap_struct_xp.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/cap_struct_xp.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/cap_struct_xp.$$
+rm -f "$TMPDIR/cap_struct_xp.$$"
 
 echo "=== spawn exec-failure flush (bug 072) ==="
-if bash "$ROOT_DIR/scripts/tests/check_spawn_exit.sh" > $TMPDIR/spawn_exit.$$ 2>&1; then
-    _se_pass=$(grep -c "^  ok  " $TMPDIR/spawn_exit.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_spawn_exit.sh" > "$TMPDIR/spawn_exit.$$" 2>&1; then
+    _se_pass=$(grep -c "^  ok  " "$TMPDIR/spawn_exit.$$" || true)
     echo "  ok  spawn exec-failure gate ($_se_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  spawn exec-failure gate"
-    grep "^  FAIL" $TMPDIR/spawn_exit.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/spawn_exit.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/spawn_exit.$$
+rm -f "$TMPDIR/spawn_exit.$$"
 
 echo "=== view lifetime (R-0483) ==="
-if bash "$ROOT_DIR/scripts/tests/check_view_lifetime.sh" > $TMPDIR/view_lifetime.$$ 2>&1; then
-    _vl_pass=$(grep -c "^  ok  " $TMPDIR/view_lifetime.$$ || true)
+if bash "$ROOT_DIR/scripts/tests/check_view_lifetime.sh" > "$TMPDIR/view_lifetime.$$" 2>&1; then
+    _vl_pass=$(grep -c "^  ok  " "$TMPDIR/view_lifetime.$$" || true)
     echo "  ok  view lifetime gate ($_vl_pass checks)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  view lifetime gate"
-    grep "^  FAIL" $TMPDIR/view_lifetime.$$ | awk "NR<=5"
+    grep "^  FAIL" "$TMPDIR/view_lifetime.$$" | awk "NR<=5"
     FAIL=$((FAIL + 1))
 fi
-rm -f $TMPDIR/view_lifetime.$$
+rm -f "$TMPDIR/view_lifetime.$$"
 
 echo "=== gate smoke (lex escapes, mixed-width, trailing values) ==="
 # THE CONSTITUENT'S OUTPUT IS RETAINED, NOT DISCARDED.
@@ -5939,12 +5939,12 @@ diff_baseline=$($COMPILER "$REGISTRY_DIR/test_proof_registry.con" --report diagn
 diff_stale=$($COMPILER "$STALE_DIR/test_proof_registry.con" --report diagnostics-json 2>/dev/null)
 diff_mixed=$($COMPILER "$TESTDIR/report_integration.con" --report diagnostics-json 2>/dev/null)
 
-echo "$diff_baseline" > $TMPDIR/concrete_diff_baseline.json
-echo "$diff_stale" > $TMPDIR/concrete_diff_stale.json
-echo "$diff_mixed" > $TMPDIR/concrete_diff_mixed.json
+echo "$diff_baseline" > "$TMPDIR/concrete_diff_baseline.json"
+echo "$diff_stale" > "$TMPDIR/concrete_diff_stale.json"
+echo "$diff_mixed" > "$TMPDIR/concrete_diff_mixed.json"
 
 # No changes: diff against itself
-diff_same=$($COMPILER diff $TMPDIR/concrete_diff_baseline.json $TMPDIR/concrete_diff_baseline.json 2>&1) && diff_same_exit=0 || diff_same_exit=$?
+diff_same=$($COMPILER diff "$TMPDIR/concrete_diff_baseline.json" "$TMPDIR/concrete_diff_baseline.json" 2>&1) && diff_same_exit=0 || diff_same_exit=$?
 if grep <<<"$diff_same" -q "No trust-relevant changes" && [ "$diff_same_exit" -eq 0 ]; then
     echo "  ok  diff: no changes when diffing against self"
     PASS=$((PASS + 1))
@@ -5955,7 +5955,7 @@ else
 fi
 
 # Proved → stale: trust weakened
-diff_stale_out=$($COMPILER diff $TMPDIR/concrete_diff_baseline.json $TMPDIR/concrete_diff_stale.json 2>&1) && diff_stale_exit=0 || diff_stale_exit=$?
+diff_stale_out=$($COMPILER diff "$TMPDIR/concrete_diff_baseline.json" "$TMPDIR/concrete_diff_stale.json" 2>&1) && diff_stale_exit=0 || diff_stale_exit=$?
 if grep <<<"$diff_stale_out" -q "TRUST WEAKENED" && \
    grep <<<"$diff_stale_out" -q "state: proved.*stale" && \
    [ "$diff_stale_exit" -eq 1 ]; then
@@ -5968,7 +5968,7 @@ else
 fi
 
 # JSON output mode
-diff_json=$($COMPILER diff $TMPDIR/concrete_diff_baseline.json $TMPDIR/concrete_diff_stale.json --json 2>&1) && true || true
+diff_json=$($COMPILER diff "$TMPDIR/concrete_diff_baseline.json" "$TMPDIR/concrete_diff_stale.json" --json 2>&1) && true || true
 if grep <<<"$diff_json" -q '"drift": "weakened"' && \
    grep <<<"$diff_json" -q '"category": "changed"'; then
     echo "  ok  diff: JSON output includes drift and category"
@@ -5980,7 +5980,7 @@ else
 fi
 
 # Different programs: detects added and changed facts
-diff_cross=$($COMPILER diff $TMPDIR/concrete_diff_baseline.json $TMPDIR/concrete_diff_mixed.json 2>&1) && true || true
+diff_cross=$($COMPILER diff "$TMPDIR/concrete_diff_baseline.json" "$TMPDIR/concrete_diff_mixed.json" 2>&1) && true || true
 if grep <<<"$diff_cross" -q '\[+\]' && \
    grep <<<"$diff_cross" -q '\[~\]'; then
     echo "  ok  diff: cross-program diff shows added and changed facts"
@@ -6034,7 +6034,7 @@ else
 fi
 
 # Clean up
-rm -f $TMPDIR/concrete_diff_baseline.json $TMPDIR/concrete_diff_stale.json $TMPDIR/concrete_diff_mixed.json
+rm -f "$TMPDIR/concrete_diff_baseline.json" "$TMPDIR/concrete_diff_stale.json" "$TMPDIR/concrete_diff_mixed.json"
 
 echo ""
 echo "=== Adversarial diff tests ==="
@@ -9959,11 +9959,11 @@ policy_ok() {
     local projname
     projname=$(basename "$projdir")
     local output
-    output=$( cd "$projdir" && "$ROOT_DIR_ABS/$COMPILER" build -o $TMPDIR/test_pol_"$projname" 2>&1 ) && build_ok=true || build_ok=false
+    output=$( cd "$projdir" && "$ROOT_DIR_ABS/$COMPILER" build -o "$TMPDIR/test_pol_""$projname" 2>&1 ) && build_ok=true || build_ok=false
     if $build_ok; then
         local run_result
-        run_result=$($TMPDIR/test_pol_"$projname" 2>&1) && run_exit=0 || run_exit=$?
-        rm -f $TMPDIR/test_pol_"$projname"
+        run_result=$("$TMPDIR/test_pol_""$projname" 2>&1) && run_exit=0 || run_exit=$?
+        rm -f "$TMPDIR/test_pol_""$projname"
         if [ "$run_exit" -eq 0 ]; then
             echo "  ok  policy: $label"
             pol_pass=$((pol_pass + 1))
@@ -10326,7 +10326,7 @@ fi
 # 15. Diff handles multiple diagnostics per function without duplicate key error
 tx_snap1=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
 tx_snap2=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
-tx_diff_out=$(echo "$tx_snap1" > $TMPDIR/tx_snap1.json && echo "$tx_snap2" > $TMPDIR/tx_snap2.json && $COMPILER diff $TMPDIR/tx_snap1.json $TMPDIR/tx_snap2.json 2>&1) || tx_diff_exit=$?
+tx_diff_out=$(echo "$tx_snap1" > "$TMPDIR/tx_snap1.json" && echo "$tx_snap2" > "$TMPDIR/tx_snap2.json" && $COMPILER diff "$TMPDIR/tx_snap1.json" "$TMPDIR/tx_snap2.json" 2>&1) || tx_diff_exit=$?
 if ! grep <<<"$tx_diff_out" -q "duplicate keys"; then
     echo "  ok  taxonomy: diff handles multiple diagnostics per function"
     tx_pass=$((tx_pass + 1))
@@ -10334,7 +10334,7 @@ else
     echo "  FAIL taxonomy: diff should handle multiple diagnostics per function"
     tx_fail=$((tx_fail + 1))
 fi
-rm -f $TMPDIR/tx_snap1.json $TMPDIR/tx_snap2.json
+rm -f "$TMPDIR/tx_snap1.json" "$TMPDIR/tx_snap2.json"
 
 echo "  $tx_pass taxonomy gates passed"
 PASS=$((PASS + tx_pass))
@@ -11518,7 +11518,7 @@ else
 fi
 
 # 2. Simple function call: add(2,3) == 5
-cat > $TMPDIR/interp_test_call.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_call.con" << 'TESTEOF'
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
@@ -11529,7 +11529,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 call_exit=0
-"$COMPILER" $TMPDIR/interp_test_call.con --interp 2>/dev/null || call_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_call.con" --interp 2>/dev/null || call_exit=$?
 if [ "$call_exit" -eq 0 ]; then
     echo "  ok  interp: function calls work (add 2 3 == 5)"
     interp_pass=$((interp_pass + 1))
@@ -11539,7 +11539,7 @@ else
 fi
 
 # 3. Array indexing in bounded loop
-cat > $TMPDIR/interp_test_arr.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_arr.con" << 'TESTEOF'
 pub fn main() -> Int {
     let arr: [i32; 4] = [10, 20, 30, 40];
     let mut acc: i32 = 0;
@@ -11551,7 +11551,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 arr_exit=0
-"$COMPILER" $TMPDIR/interp_test_arr.con --interp 2>/dev/null || arr_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_arr.con" --interp 2>/dev/null || arr_exit=$?
 if [ "$arr_exit" -eq 0 ]; then
     echo "  ok  interp: array indexing in bounded loop"
     interp_pass=$((interp_pass + 1))
@@ -11561,7 +11561,7 @@ else
 fi
 
 # 4. Struct creation and field access
-cat > $TMPDIR/interp_test_struct.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_struct.con" << 'TESTEOF'
 struct Copy Point {
     x: i32,
     y: i32,
@@ -11577,7 +11577,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 struct_exit=0
-"$COMPILER" $TMPDIR/interp_test_struct.con --interp 2>/dev/null || struct_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_struct.con" --interp 2>/dev/null || struct_exit=$?
 if [ "$struct_exit" -eq 0 ]; then
     echo "  ok  interp: struct creation and field access"
     interp_pass=$((interp_pass + 1))
@@ -11587,7 +11587,7 @@ else
 fi
 
 # 5. Enum match with field bindings
-cat > $TMPDIR/interp_test_enum.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_enum.con" << 'TESTEOF'
 enum Copy Result {
     Ok { val: i32 },
     Err { code: i32 },
@@ -11613,7 +11613,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 enum_exit=0
-"$COMPILER" $TMPDIR/interp_test_enum.con --interp 2>/dev/null || enum_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_enum.con" --interp 2>/dev/null || enum_exit=$?
 if [ "$enum_exit" -eq 0 ]; then
     echo "  ok  interp: enum match with field bindings"
     interp_pass=$((interp_pass + 1))
@@ -11623,7 +11623,7 @@ else
 fi
 
 # 6. XOR bitwise operation (used by parse_validate checksum)
-cat > $TMPDIR/interp_test_xor.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_xor.con" << 'TESTEOF'
 pub fn main() -> Int {
     let a: i32 = 1 ^ 2;
     if a != 3 { return 1; }
@@ -11635,7 +11635,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 xor_exit=0
-"$COMPILER" $TMPDIR/interp_test_xor.con --interp 2>/dev/null || xor_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_xor.con" --interp 2>/dev/null || xor_exit=$?
 if [ "$xor_exit" -eq 0 ]; then
     echo "  ok  interp: XOR bitwise operation"
     interp_pass=$((interp_pass + 1))
@@ -11645,13 +11645,13 @@ else
 fi
 
 # 7. Unsupported construct produces clear diagnostic
-cat > $TMPDIR/interp_test_unsup.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_unsup.con" << 'TESTEOF'
 pub fn main() -> Int {
     let x: f64 = 3.14;
     return 0;
 }
 TESTEOF
-unsup_out=$("$COMPILER" $TMPDIR/interp_test_unsup.con --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
+unsup_out=$("$COMPILER" "$TMPDIR/interp_test_unsup.con" --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
 if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not yet supported"; then
     echo "  ok  interp: unsupported construct gives clear diagnostic"
     interp_pass=$((interp_pass + 1))
@@ -11663,9 +11663,9 @@ fi
 # 8. Interpreter matches compiled binary for parse_validate (exit code AND stdout)
 # self-printing wrapper (MAIN_EXIT_MODEL stage 2): the compiled side prints its
 # result so stdout is comparable with interp's value print.
-gate_selfprint_wrap "$PV_SRC" $TMPDIR/interp_pv_wrapped.con
-if "$COMPILER" $TMPDIR/interp_pv_wrapped.con -o $TMPDIR/interp_pv_compiled 2>/dev/null; then
-    pv_compiled_out=$($TMPDIR/interp_pv_compiled 2>/dev/null) && pv_compiled_exit=0 || pv_compiled_exit=$?
+gate_selfprint_wrap "$PV_SRC" "$TMPDIR/interp_pv_wrapped.con"
+if "$COMPILER" "$TMPDIR/interp_pv_wrapped.con" -o "$TMPDIR/interp_pv_compiled" 2>/dev/null; then
+    pv_compiled_out=$("$TMPDIR/interp_pv_compiled" 2>/dev/null) && pv_compiled_exit=0 || pv_compiled_exit=$?
     pv_interp_out=$("$COMPILER" "$PV_SRC" --interp 2>/dev/null) && pv_interp_exit2=0 || pv_interp_exit2=$?
     if [ "$pv_interp_exit2" -eq "$pv_compiled_exit" ] && [ "$pv_interp_out" = "$pv_compiled_out" ]; then
         echo "  ok  interp: parse_validate interp matches compiled (exit=$pv_compiled_exit, stdout='$pv_compiled_out')"
@@ -11680,7 +11680,7 @@ else
 fi
 
 # 9. Scope isolation: block-local let bindings must not leak out of if-branches
-cat > $TMPDIR/interp_test_scope.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_scope.con" << 'TESTEOF'
 pub fn main() -> Int {
     let x: i32 = 1;
     if true { let x: i32 = 2; }
@@ -11689,7 +11689,7 @@ pub fn main() -> Int {
 }
 TESTEOF
 scope_exit=0
-"$COMPILER" $TMPDIR/interp_test_scope.con --interp 2>/dev/null || scope_exit=$?
+"$COMPILER" "$TMPDIR/interp_test_scope.con" --interp 2>/dev/null || scope_exit=$?
 if [ "$scope_exit" -eq 0 ]; then
     echo "  ok  interp: if-branch let bindings do not leak to outer scope"
     interp_pass=$((interp_pass + 1))
@@ -11699,7 +11699,7 @@ else
 fi
 
 # 10. Negative array index must error, not silently write element 0
-cat > $TMPDIR/interp_test_negidx.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_negidx.con" << 'TESTEOF'
 pub fn main() -> Int {
     let mut arr: [i32; 4] = [10, 20, 30, 40];
     arr[0 - 1] = 99;
@@ -11707,7 +11707,7 @@ pub fn main() -> Int {
     return 1;
 }
 TESTEOF
-negidx_out=$("$COMPILER" $TMPDIR/interp_test_negidx.con --interp 2>&1) && negidx_exit=0 || negidx_exit=$?
+negidx_out=$("$COMPILER" "$TMPDIR/interp_test_negidx.con" --interp 2>&1) && negidx_exit=0 || negidx_exit=$?
 if [ "$negidx_exit" -ne 0 ] && grep <<<"$negidx_out" -qi "negative\|out of bounds"; then
     echo "  ok  interp: negative array index produces error diagnostic"
     interp_pass=$((interp_pass + 1))
@@ -11717,12 +11717,12 @@ else
 fi
 
 # 11. Observable contract: interp should print return value and exit 0 (like compiled)
-cat > $TMPDIR/interp_test_contract.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_contract.con" << 'TESTEOF'
 pub fn main() -> Int {
     return 7;
 }
 TESTEOF
-contract_out=$("$COMPILER" $TMPDIR/interp_test_contract.con --interp 2>/dev/null)
+contract_out=$("$COMPILER" "$TMPDIR/interp_test_contract.con" --interp 2>/dev/null)
 contract_exit=$?
 if [ "$contract_exit" -eq 0 ] && grep <<<"$contract_out" -q "^7$"; then
     echo "  ok  interp: prints return value and exits 0 (matches compiled contract)"
@@ -11733,7 +11733,7 @@ else
 fi
 
 # 12. Match-arm mutations to outer variables must persist
-cat > $TMPDIR/interp_test_match_mut.con << 'TESTEOF'
+cat > "$TMPDIR/interp_test_match_mut.con" << 'TESTEOF'
 enum Copy E { A }
 pub fn main() -> Int {
     let e: E = E::A;
@@ -11745,7 +11745,7 @@ pub fn main() -> Int {
     return 1;
 }
 TESTEOF
-match_mut_out=$("$COMPILER" $TMPDIR/interp_test_match_mut.con --interp 2>/dev/null)
+match_mut_out=$("$COMPILER" "$TMPDIR/interp_test_match_mut.con" --interp 2>/dev/null)
 match_mut_exit=$?
 if [ "$match_mut_exit" -eq 0 ] && grep <<<"$match_mut_out" -q "^0$"; then
     echo "  ok  interp: match-arm mutations to outer variables persist"
@@ -11870,27 +11870,27 @@ for projdir in "$TESTDIR"/*/; do
         # error_* projects are NEGATIVE fixtures: they must FAIL to build.
         case "$projname" in
         error_*)
-            if ( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_proj_"$projname" ) >/dev/null 2>&1; then
+            if ( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_proj_""$projname" ) >/dev/null 2>&1; then
                 echo "  FAIL $projname — negative project fixture COMPILED"
                 FAIL=$((FAIL + 1))
             else
                 echo "  ok  $projname (rejected as required)"
                 PASS=$((PASS + 1))
             fi
-            rm -f $TMPDIR/test_proj_"$projname"
+            rm -f "$TMPDIR/test_proj_""$projname"
             continue ;;
         esac
-        output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_proj_"$projname" 2>&1 ) && build_ok=true || build_ok=false
+        output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_proj_""$projname" 2>&1 ) && build_ok=true || build_ok=false
         if $build_ok; then
             # Watchdog: a fixture that HANGS must fail, not stall the suite.
             # Bug 048 was exactly this shape — a probe loop that never returned —
             # and with no timeout anywhere in this script it would have taken the
             # whole run (and the CI job) down with it rather than reporting.
-            run_result=$($PROJ_TIMEOUT $TMPDIR/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
+            run_result=$($PROJ_TIMEOUT "$TMPDIR/test_proj_""$projname" 2>&1) && run_exit=0 || run_exit=$?
             if [ "$run_exit" -eq 124 ]; then
                 echo "  FAIL $projname — TIMED OUT (did not terminate)"
                 FAIL=$((FAIL + 1))
-                rm -f $TMPDIR/test_proj_"$projname"
+                rm -f "$TMPDIR/test_proj_""$projname"
                 continue
             fi
             if [ "$run_exit" -eq 0 ]; then
@@ -11904,7 +11904,7 @@ for projdir in "$TESTDIR"/*/; do
             echo "  FAIL $projname — build failed: $output"
             FAIL=$((FAIL + 1))
         fi
-        rm -f $TMPDIR/test_proj_"$projname"
+        rm -f "$TMPDIR/test_proj_""$projname"
     fi
 done
 
@@ -11919,7 +11919,7 @@ wf_fail=0
 PP_DIR="examples/proof_pressure"
 
 # 1. Build shows proof summary line
-wf_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_wf_pp 2>&1)
+wf_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_wf_pp" 2>&1)
 if grep <<<"$wf_build" -q "^Proofs:"; then
     echo "  ok  workflow: build shows proof summary line"
     wf_pass=$((wf_pass + 1))
@@ -11928,7 +11928,7 @@ else
     echo "    out: $(echo "$wf_build" | tail -3)"
     wf_fail=$((wf_fail + 1))
 fi
-rm -f $TMPDIR/test_wf_pp
+rm -f "$TMPDIR/test_wf_pp"
 
 # 2. Build summary mentions proved count
 if grep <<<"$wf_build" "^Proofs:" | grep -q "proved"; then
@@ -11950,7 +11950,7 @@ fi
 
 # 4. Build exit code is 0 (build succeeds despite stale proofs)
 wf_build_rc=0
-(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_wf_pp2 >/dev/null 2>&1) || wf_build_rc=$?
+(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_wf_pp2" >/dev/null 2>&1) || wf_build_rc=$?
 if [ "$wf_build_rc" -eq 0 ]; then
     echo "  ok  workflow: build succeeds despite stale proofs (exit 0)"
     wf_pass=$((wf_pass + 1))
@@ -11958,7 +11958,7 @@ else
     echo "  FAIL workflow: build should succeed despite stale proofs (got exit $wf_build_rc)"
     wf_fail=$((wf_fail + 1))
 fi
-rm -f $TMPDIR/test_wf_pp2
+rm -f "$TMPDIR/test_wf_pp2"
 
 # 5. Check command produces proof status report
 wf_check=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" check 2>&1) || true
@@ -12038,7 +12038,7 @@ sc_fail=0
 PP_DIR="examples/proof_pressure"
 
 # 1. Build summary counts only user functions (not 300+ stdlib)
-sc_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_sc_pp 2>&1)
+sc_build=$(cd "$PP_DIR" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_sc_pp" 2>&1)
 sc_summary=$(grep <<<"$sc_build" "^Proofs:")
 if grep <<<"$sc_summary" -qE "^Proofs: [0-9]+ proved, [0-9]+ stale, [0-9]+ missing, [0-9]+ blocked$"; then
     echo "  ok  scoping: build summary shows user-only counts"
@@ -12048,7 +12048,7 @@ else
     echo "    got: $sc_summary"
     sc_fail=$((sc_fail + 1))
 fi
-rm -f $TMPDIR/test_sc_pp
+rm -f "$TMPDIR/test_sc_pp"
 
 # 2. Build summary does not include large stdlib counts (total should be < 20)
 # SUMMED IN THE SHELL, not with `bc`. `bc` is not part of a base POSIX install and is absent from
@@ -12144,7 +12144,7 @@ pub fn main() -> Int {
 }
 CON
 sc_rp_rc=0
-sc_rp_out=$(cd "$SC_TMPDIR" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_sc_rp 2>&1) || sc_rp_rc=$?
+sc_rp_out=$(cd "$SC_TMPDIR" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_sc_rp" 2>&1) || sc_rp_rc=$?
 if [ "$sc_rp_rc" -eq 0 ]; then
     echo "  ok  scoping: require-proofs passes when user code needs no proofs"
     sc_pass=$((sc_pass + 1))
@@ -12153,7 +12153,7 @@ else
     echo "    out: $(echo "$sc_rp_out" | tail -5)"
     sc_fail=$((sc_fail + 1))
 fi
-rm -f $TMPDIR/test_sc_rp
+rm -f "$TMPDIR/test_sc_rp"
 rm -rf "$SC_TMPDIR"
 
 # 10. require-proofs still catches user-package violations
@@ -12177,7 +12177,7 @@ pub fn main() -> Int {
 }
 CON
 sc_rp2_rc=0
-sc_rp2_out=$(cd "$SC_TMPDIR2" && "$ROOT_DIR/$COMPILER" build -o $TMPDIR/test_sc_rp2 2>&1) || sc_rp2_rc=$?
+sc_rp2_out=$(cd "$SC_TMPDIR2" && "$ROOT_DIR/$COMPILER" build -o "$TMPDIR/test_sc_rp2" 2>&1) || sc_rp2_rc=$?
 if [ "$sc_rp2_rc" -ne 0 ] && grep <<<"$sc_rp2_out" -q "policy violation.*main\.add"; then
     echo "  ok  scoping: require-proofs catches user-package missing proof"
     sc_pass=$((sc_pass + 1))
@@ -12186,7 +12186,7 @@ else
     echo "    out: $(echo "$sc_rp2_out" | tail -5)"
     sc_fail=$((sc_fail + 1))
 fi
-rm -f $TMPDIR/test_sc_rp2
+rm -f "$TMPDIR/test_sc_rp2"
 rm -rf "$SC_TMPDIR2"
 
 if [ "$sc_fail" -gt 0 ]; then

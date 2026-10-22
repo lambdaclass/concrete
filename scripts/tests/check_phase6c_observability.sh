@@ -25,8 +25,8 @@ cd "$ROOT_DIR"
 PASS=0; FAIL=0
 run(){ # <label> <cmd...>
   local label="$1"; shift
-  if "$@" >$GATE_TMP/6c_sub.log 2>&1; then echo "  ok   $label"; PASS=$((PASS+1));
-  else echo "  FAIL $label"; sed 's/^/        /' $GATE_TMP/6c_sub.log | tail -4; FAIL=$((FAIL+1)); fi
+  if "$@" >"$GATE_TMP/6c_sub.log" 2>&1; then echo "  ok   $label"; PASS=$((PASS+1));
+  else echo "  FAIL $label"; sed 's/^/        /' "$GATE_TMP/6c_sub.log" | tail -4; FAIL=$((FAIL+1)); fi
 }
 
 echo "=== Phase 6C observability capstone ==="

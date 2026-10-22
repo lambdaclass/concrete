@@ -43,6 +43,15 @@ fi
 # missing status is a failure.
 EVIDENCE_GATES=("check_checker_identity.sh" "check_kernel_recheck.sh" "check_checker_policy.sh"
                 "check_axiom_inventory.sh" "check_claim_inventory.sh")
+# ONE LOCK FOR ALL FIVE. Three of them take the repository lock (require_fresh_binary), and a second
+# concurrent acquisition is refused; the lock taken here is inherited by every child (re-entrant).
+# shellcheck source=scripts/tests/lib/fresh.sh
+source "$ROOT_DIR/scripts/tests/lib/fresh.sh"
+require_fresh_binary || { echo "FAIL: could not take the repository lock / verify the compiler"; exit 1; }
+# NO STALE STATUS. A directory reused from an earlier run (or the runner's sequential re-run) must not
+# lend a dead worker its predecessor's exit status or inventory.
+for g in "${EVIDENCE_GATES[@]}"; do rm -f "$OUT/${g%.sh}.rc" "$OUT/${g%.sh}.log"; done
+rm -rf "$OUT/claim-inventory" "$OUT/claim-inventory.tsv" "$OUT/claim-inventory.diff" "$OUT/axiom-inventory.log"
 mkdir -p "$OUT/claim-inventory"
 for g in "${EVIDENCE_GATES[@]}"; do
   ( grc=0
