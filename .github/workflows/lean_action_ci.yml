@@ -76,6 +76,10 @@ jobs:
       - name: "Status page (generation from fixtures, public variant sanitized, notify dedup)"
         run: bash scripts/tests/check_status_page.sh
 
+      # Build-free: drives the work-queue dispatcher against a throwaway repository with stub agents.
+      - name: "Work queue (priority, area conflicts, budgets, slot rotation, stuck release, kill switch)"
+        run: bash scripts/tests/check_work_queue.sh
+
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
 
