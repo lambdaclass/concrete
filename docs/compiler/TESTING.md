@@ -25,6 +25,17 @@ is `make pre-push-full`, and CI runs it on every push regardless.
 Deliberate bypass is `CONCRETE_SKIP_GATES=1 git push`, which prints a warning
 saying you own the CI result.
 
+The hook selects by area name today, and that selection misses gates. On 2026-10-22
+it ran about 92 of 255 gates, and the stack-budget, trust-gate, float round-trip and
+linear-discard failures were first seen in CI. The
+[development throughput](../../ROADMAP.md#development-throughput) track plans to
+replace area selection with an impact map from source files and fixtures to the gates
+that exercise them. Under that plan a change runs every gate it can break, and an
+unmapped path runs the full set (R-0513). The targets are a median pre-push of at most
+10 minutes, and no gate failure first seen in CI over 20 consecutive landings. The same
+track plans landing trains on a landing CI tier (R-0539, R-0540). Its load rule applies
+now: at most 2 heavy local runs share one machine (R-0543).
+
 The hook resolves everything it selects — CI jobs, area filters, the fast
 surface checklist, the bug-filing check — into **one deduplicated list** via
 `run_ci_gates_local.sh --plan`, prints it, and runs each command once (the
