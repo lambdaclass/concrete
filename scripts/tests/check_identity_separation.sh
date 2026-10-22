@@ -279,6 +279,14 @@ C6_SCAN='
     }
     if ($c2 eq "/-") { $d = 1; $i += 2; $o .= " "; next }
     if ($c2 eq "--") { my $j = index($s, "\n", $i); $j = $n if $j < 0; $o .= " "; $i = $j; next }
+    # A CHARACTER LITERAL (a double quote between apostrophes, or an escape) is copied whole, so its
+    # quote cannot open a phantom string. An apostrophe right after an identifier character is part
+    # of the identifier (h-prime), not a literal. (No apostrophe may appear in this comment: the
+    # program is a single-quoted shell string; \x27 is used in the code instead.)
+    if ($c eq "\x27" && ($o eq "" || substr($o, -1) !~ /[A-Za-z0-9_\x27!?]/)
+        && substr($s, $i) =~ /\A(\x27(?:\\(?:u\{[0-9a-fA-F]+\}|x[0-9a-fA-F]{2}|.)|[^\\\x27\n])\x27)/) {
+      $o .= $1; $i += length $1; next;
+    }
     if ($c eq "\"") {
       my $j = $i + 1;
       while ($j < $n && substr($s, $j, 1) ne "\"") { $j += (substr($s, $j, 1) eq "\\") ? 2 : 1 }
@@ -315,12 +323,16 @@ def legacy := syntheticForModules x
 -- -/
 def/- c -/packageIdentityOf := 1
 def s := "--" ++ toString PackageIdentity
+def quote : Char := '"'
+-- " /-
+def legacy2 := packageIdentityOf x
+def h' := 1
 LEAN
 _c6_ctl="$(perl -0ne "$C6_SCAN" "$_c6_fx" 2>/dev/null | sed 's/^[^:]*: //' | tr '\n' ' ')"
 rm -f "$_c6_fx"
-[ "$_c6_ctl" = "PackageIdentity syntheticForModules packageIdentityOf PackageIdentity " ] \
-  && ok "CONTROL: the C6 scan flags code references (also after '-- /-', a glued block comment and a '--' string) and ignores noPackageIdentity and comments" \
-  || no "CONTROL: the C6 scan reported '$_c6_ctl' on its fixture (want: PackageIdentity syntheticForModules packageIdentityOf PackageIdentity)"
+[ "$_c6_ctl" = "PackageIdentity syntheticForModules packageIdentityOf PackageIdentity packageIdentityOf " ] \
+  && ok "CONTROL: the C6 scan flags code references (also after '-- /-', a glued block comment, a string holding --, and a quote character literal) and ignores noPackageIdentity and comments" \
+  || no "CONTROL: the C6 scan reported '$_c6_ctl' on its fixture (want: PackageIdentity syntheticForModules packageIdentityOf PackageIdentity packageIdentityOf)"
 
 echo ""
 echo "=== M: the old-to-new map ==="
