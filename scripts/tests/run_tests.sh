@@ -11984,7 +11984,12 @@ else
     interp_fail=$((interp_fail + 1))
 fi
 
-# 9. Scope isolation: block-local let bindings must not leak out of if-branches
+# 9. Scope isolation: block-local let bindings must not leak out of if-branches.
+# The leak was observable only by shadowing an outer `x` inside the branch and reading
+# the outer one afterwards. Exit 2i SCOPE-1@1 (E0301) makes that shape illegal, and
+# without it a leaked binding cannot be named, so the leg is PINNED as an E0301 refusal
+# on the interpreter path, plus the closest legal control: sibling branches that bind
+# the same name each see their own value.
 cat > /tmp/interp_test_scope.con << 'TESTEOF'
 pub fn main() -> Int {
     let x: i32 = 1;
@@ -11994,12 +11999,30 @@ pub fn main() -> Int {
 }
 TESTEOF
 scope_exit=0
-"$COMPILER" /tmp/interp_test_scope.con --interp 2>/dev/null || scope_exit=$?
-if [ "$scope_exit" -eq 0 ]; then
-    echo "  ok  interp: if-branch let bindings do not leak to outer scope"
+scope_out=$("$COMPILER" /tmp/interp_test_scope.con --interp 2>&1) || scope_exit=$?
+if [ "$scope_exit" -ne 0 ] && grep -qF "(E0301)" <<<"$scope_out"; then
+    echo "  ok  interp: an if-branch let shadowing an outer binding is refused (E0301)"
     interp_pass=$((interp_pass + 1))
 else
-    echo "  FAIL interp: scope leak — if-branch let binding visible after branch (exit=$scope_exit)"
+    echo "  FAIL interp: if-branch shadowing let not refused with E0301 (exit=$scope_exit)"
+    interp_fail=$((interp_fail + 1))
+fi
+cat > /tmp/interp_test_scope_sib.con << 'TESTEOF'
+pub fn main() -> Int {
+    let mut r: i32 = 0;
+    if true { let x: i32 = 2; r = r + x; }
+    if true { let x: i32 = 30; r = r + x; }
+    if r == 32 { return 0; }
+    return 1;
+}
+TESTEOF
+scope_exit=0
+"$COMPILER" /tmp/interp_test_scope_sib.con --interp 2>/dev/null || scope_exit=$?
+if [ "$scope_exit" -eq 0 ]; then
+    echo "  ok  interp: sibling if-branch let bindings of one name are independent"
+    interp_pass=$((interp_pass + 1))
+else
+    echo "  FAIL interp: sibling if-branch bindings of one name interfere (exit=$scope_exit)"
     interp_fail=$((interp_fail + 1))
 fi
 
