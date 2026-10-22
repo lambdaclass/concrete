@@ -2761,8 +2761,8 @@ Assignment introduces no binding.
 The walk is its own explicit scope chain over the (desugared) body rather than the
 ownership environment: `TypeEnv.vars` keeps a loop body's locals after the loop (the linear
 checker needs their states), so it is not the visible set. It runs before the body is
-checked, so E0301 reports first (before E0292 / E0214 / E0215 / E0238, which stay as defense
-in depth), and it reports every collision in the function, each with the earlier binding as
+checked, so E0301 reports first (before E0292 and E0238, which stay as defense in depth; E0214
+/ E0215 are no longer emitted), and it reports every collision in the function, each with the earlier binding as
 its related span. Elab's alpha-renaming (bug 087) stays mandatory (PRINCIPLES #12). -/
 
 /-- One visible binder: its spelling and where it was introduced. -/
@@ -3211,12 +3211,15 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
 
 /- What a contract expression may not contain (exit 2i review rounds 5-6): a binder of any kind (a
     match-pattern binder included) or any statement other than a block's trailing value. An
-    exhaustive walk over every `Expr` constructor, so a new constructor cannot hide one. -/
+    exhaustive walk over every `Expr` constructor, so a new constructor cannot hide one. Nor may
+    it create or pass a reference (a borrow, or a reference-typed parameter `refPs` as a call
+    argument): contracts are erased before monomorphization, so a generic called from one at a
+    reference type would never have its specialization checked (review round 7). -/
 mutual
-private partial def contractStmtsBad (ss : List Stmt) : List String :=
+private partial def contractStmtsBad (refPs : List String) (ss : List Stmt) : List String :=
   match ss with
   | [] => []
-  | [.expr _ e true] => contractExprBad e
+  | [.expr _ e true] => contractExprBad refPs e
   | s :: rest =>
     let what := match s with
       | .letDecl _ n _ _ _ _ => s!"`let {n}`"
@@ -3225,25 +3228,33 @@ private partial def contractStmtsBad (ss : List Stmt) : List String :=
       | .assign _ n _ => s!"an assignment to `{n}`"
       | .fieldAssign _ _ _ _ | .derefAssign _ _ _ | .arrayIndexAssign _ _ _ _ => "an assignment through a place"
       | _ => "a statement"
-    what :: contractStmtsBad rest
-private partial def contractArmBad : MatchArm → List String
+    what :: contractStmtsBad refPs rest
+private partial def contractArmBad (refPs : List String) : MatchArm → List String
   | .mk _ _ _ bs g b => (PatBind.names bs |>.filter (· != "_") |>.map fun n => s!"the pattern binder `{n}`")
-      ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
+      ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
   | .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
-      ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
-  | .litArm _ v g b => contractExprBad v ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
-  | .rangeArm _ lo hi _ g b => contractExprBad lo ++ contractExprBad hi ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
-private partial def contractExprBad : Expr → List String
+      ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+  | .litArm _ v g b => contractExprBad refPs v ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+  | .rangeArm _ lo hi _ g b => contractExprBad refPs lo ++ contractExprBad refPs hi ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+private partial def contractExprBad (refPs : List String) : Expr → List String
   | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _ | .ident _ _ | .fnRef _ _ => []
-  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => contractExprBad l ++ contractExprBad r
-  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x | .deref _ x
-  | .cast _ x _ => contractExprBad x
-  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap contractExprBad
-  | .methodCall _ o _ _ args => contractExprBad o ++ args.flatMap contractExprBad
-  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => contractExprBad e) ++ (b.map contractExprBad).getD []
-  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractExprBad e)
-  | .match_ _ s arms => contractExprBad s ++ arms.flatMap contractArmBad
-  | .ifExpr _ c t e => contractExprBad c ++ contractStmtsBad t ++ contractStmtsBad e
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => contractExprBad refPs l ++ contractExprBad refPs r
+  | .borrow _ _ | .borrowMut _ _ => ["a borrow"]
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x
+  | .cast _ x _ => contractExprBad refPs x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args =>
+    args.filterMap (fun a => match a with
+      | .ident _ n => if refPs.contains n then some s!"the reference `{n}` passed to a call" else none
+      | _ => none) ++ args.flatMap (contractExprBad refPs)
+  | .arrayLit _ args => args.flatMap (contractExprBad refPs)
+  | .methodCall _ o _ _ args =>
+    args.filterMap (fun a => match a with
+      | .ident _ n => if refPs.contains n then some s!"the reference `{n}` passed to a call" else none
+      | _ => none) ++ contractExprBad refPs o ++ args.flatMap (contractExprBad refPs)
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => contractExprBad refPs e) ++ (b.map (contractExprBad refPs)).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractExprBad refPs e)
+  | .match_ _ s arms => contractExprBad refPs s ++ arms.flatMap (contractArmBad refPs)
+  | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
 def checkModule (m : Module) (summary : FileSummary)
@@ -3495,8 +3506,11 @@ def checkModule (m : Module) (summary : FileSummary)
   let exit2iContractDs : List Diagnostic :=
     (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).flatMap fun f =>
       let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
+      let refPs := f.params.filterMap fun p => match p.ty with
+        | .ref _ | .refMut _ => some p.name
+        | _ => none
       clauses.flatMap fun e =>
-        match (contractExprBad e).eraseDups with
+        match (contractExprBad refPs e).eraseDups with
         | [] => []
         | bad =>
           let ce := CheckError.contractBinds f.name (", ".intercalate bad)

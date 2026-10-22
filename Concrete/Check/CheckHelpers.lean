@@ -245,6 +245,8 @@ def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
   for (pName, pTy0) in mapping do
     -- aliases resolved: `f::<R>` with `type R = &P` is a reference instantiation
     let pTy ← tryCatch (resolveType pTy0) (fun _ => pure pTy0)
+    if (← getEnv).erasedDepth > 0 && tyContainsRef pTy then
+      throwCheck (.erasedRefInstantiation what pName (tyToString pTy))
     if tyContainsRef pTy && tyParamOccursIn pName retTy then
       throwCheck (.returnsReference s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
     if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then

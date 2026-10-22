@@ -68,9 +68,10 @@ imports, and intrinsics are separate namespace decisions.
 **Compiler behavior (exit 2i):** `checkFn` walks every binder of a function over its
 lexical scope chain before the body is checked and reports each reuse of a visible name
 as E0301 (`shadowsVisibleBinding`), with the earlier binding as the related span, the
-`rule: SCOPE-1@1` evidence and the rewrite. E0292 (`.shadowsLiveLinear`), E0214 / E0215
-(`.borrowRefShadows`, `.borrowRegionShadows`) and E0238's shadowed-source guard stay as
-defense in depth. Nested patterns rename a binder with `Variant { value: inner }`
+`rule: SCOPE-1@1` evidence and the rewrite. E0292 (`.shadowsLiveLinear`) and E0238's
+shadowed-source guard stay as defense in depth; E0214 / E0215 (`.borrowRefShadows`,
+`.borrowRegionShadows`) remain as definitions only and are no longer emitted (E0301 covers
+them). Nested patterns rename a binder with `Variant { value: inner }`
 (`regress_045_match_binder_shadow.con` is migrated to that form). The fixtures and
 their renamed twins are rows of `tests/rules/exit_2i.tsv`.
 

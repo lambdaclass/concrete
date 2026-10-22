@@ -7983,6 +7983,9 @@ run_err "$TESTDIR/error_2i_contract_inferred_ref_alias.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_wrapped_binder.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_trait_impl_invariant.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_place_assignment.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_borrow_to_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_ref6_erased_generic_call.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_generic_call_outside_assert.con" 42
 run_ok "$TESTDIR/regress_2i_const_nested_if_statement.con" 42
 run_err "$TESTDIR/error_2i_scope1_spec_fn_duplicate_params.con" "(E0301)"
 run_ok "$TESTDIR/regress_2i_contract_and_spec_params.con" 42

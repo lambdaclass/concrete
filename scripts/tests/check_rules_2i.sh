@@ -85,7 +85,7 @@ validate_manifest() {
         if ! grep -qE "(^|, )${tag}(,|$)" <<<"${SPEC_RULES[$code]:-}"; then
           echo "    defect: row $fixture expects $tag from $code, which §15.5 does not assign to it"; bad=1; fi
         if [ -z "$pair" ] || [ "$pair" = "-" ]; then echo "    defect: reject row $fixture has no pair"; bad=1
-        elif ! awk -F'\t' -v p="$pair" '$4==p && $3 ~ /^run:/ {f=1} END {exit !f}' "$m"; then
+        elif ! awk -F'\t' -v p="$pair" '$1 !~ /^#/ && $4==p && $3 ~ /^run:/ {f=1} END {exit !f}' "$m"; then
           echo "    defect: reject row $fixture: pair '$pair' has no run row"; bad=1; fi ;;
       run:*)
         # a run row must execute something: `binary` always, every mode known, an exemption only
@@ -315,6 +315,9 @@ check_run SCOPE-3 tests/programs/regress_2i_scope1_087_renamed.con 42 model:087-
 SIDECAR="$SIDECAR_SAVE"
 awk -F'\t' '$1!="G4"' "$MANIFEST" > "$TMP/n4g.tsv"
 validate_manifest "$TMP/n4g.tsv" > /dev/null && no "N4g: dropping G4's run row went unnoticed" || ok "N4g: G4 without its binary/interp/fmt run row is refused"
+# N4h: a pair whose only run row is commented out has no run row.
+awk -F'\t' 'BEGIN{OFS="\t"} $4=="scope1-same_block_let" && $3 ~ /^run:/ {$1="#" $1} {print}' "$MANIFEST" > "$TMP/n4h.tsv"
+validate_manifest "$TMP/n4h.tsv" > /dev/null && no "N4h: a commented-out run row still satisfied its pair" || ok "N4h: a pair whose only run row is commented out is refused"
 # N4f: a wrong final row with no trailing newline must still be executed (and fail).
 { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
 n4f_fail=$FAIL; n4f_pass=$PASS
