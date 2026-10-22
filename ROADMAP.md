@@ -4351,10 +4351,17 @@ unexplained drop is rejected.
 **Status (2026-10-19): planned; after R-0473/R-0474.** Links R-0175 (frame inference) and R-0239
 (frame/flow contracts). Unsupported heap and reborrow shapes refuse explicitly.
 
-**Exit:** `old` and frame clauses on records and arrays are typed, generated against Core's
-two-state semantics and replayed; a contract omitting a mutated field is refused; ghost locals and
-parameters erase with a proved erasure lemma for the admitted forms; unsupported shapes report
-`unsupported` rather than `proved`.
+**Increment A:** `old` and frame clauses on records and arrays are typed, generated against Core's
+two-state semantics and replayed; a contract omitting a mutated field is refused. This increment
+can serve R-0486 before ghost support is complete.
+
+**Increment B:** ghost locals and parameters erase with a proved erasure lemma for the admitted
+forms. Ghost observations must not consume runtime linear resources, extend runtime borrows, or
+influence executable decisions. Logical definitions obey R-0526's totality/admissibility boundary;
+unsupported observations of moved values or reborrows refuse until their snapshot semantics exists.
+
+**Exit:** both increments accepted; unsupported shapes report `unsupported` rather than `proved`.
+Reference: [Dafny specifications and ghost code](https://dafny.org/latest/DafnyRef/DafnyRef.html).
 
 ### Task R-0525
 
@@ -5832,7 +5839,8 @@ pinned by a gate assertion written to flip when the gap closes:
   name bound only *after* the loop is admitted and reaches the VC.
 
 **Language boundary added:** purity alone is not the final contract-callable
-criterion. Define `spec fn`, checked `total fn`, ordinary runtime functions,
+criterion. R-0526 owns totality/admissibility for `spec fn` and checked `total fn`;
+this task consumes that boundary when distinguishing them from ordinary runtime functions
 and trusted functions. A `total fn` enters contracts only after effect freedom,
 termination, trap obligations, logical interpretation, and partial-operation
 preconditions close. Until that type exists, executable calls accepted by the
@@ -5868,20 +5876,12 @@ six fixtures while still storing the original name-based AST expression would le
 reconstruct exactly the unsafe information the record exists to eliminate — and R-0474 would
 inherit the problem intact.
 
-**Dependency correction (2026-08-07).** The plan as first written was circular: this task's record
-"must carry resolved identities", while binding identities were assigned to R-0474. A record
-cannot honestly retain identities that do not exist yet, and storing names now with a promise to
-swap them later is exactly the failure the boundary above forbids — the names would be in the
-record, and every consumer built against it.
-
-So **the identity substrate begins here**, even though capture-safe substitution stays in R-0474:
-
-1. introduce the internal lexical `BindingId`;
-2. assign it to parameters, locals, ghost bindings, loop variables, and `result`;
-3. resolve contract identifiers to a `BindingId` or a `CallableId`;
-4. build `CheckedContract` over resolved, typed expressions;
-5. *(R-0474)* implement identity-based substitution;
-6. *(R-0474)* delete name-based substitution once the evaluation-law gate passes.
+**Identity dependency (reconciled 2026-10-22):** R-0492 owns allocation of Resolve's
+`LocalId`/`DefId`. This task consumes those identities through checked adapters for parameters,
+locals, ghost bindings, loop binders, `result`, and callable references; it does not create a
+second identity allocator during elaboration. R-0474 owns identity-based substitution and retires
+name-based substitution after its evaluation-law gate passes. The `BindingId`/`CallableId` names
+below describe contract-reference roles, not independent identity authorities.
 
 The resolved reference must be a SUM, not a string with a companion type table — a string field
 is how the name survives in practice:
@@ -5897,8 +5897,8 @@ ResolvedContractRef
 ```
 
 `BindingId` here stays the *internal lexical* identity from `docs/language/BINDING_IDENTITY_DESIGN.md` —
-assigned during elaboration, regenerated every build, never serialized. It must not be conflated
-with stable evidence identity, which has to survive harmless source edits.
+supplied by R-0492's Resolve-owned identities and regenerated every build. It must not be serialized
+as stable evidence identity, which has to survive harmless source edits.
 
 **Boundary caveat on the closed gap 6.** It rejects capability-requiring calls, which is narrower
 than purity or totality: a capability-free function that traps, diverges, or is `#[trusted]` is
@@ -5918,7 +5918,7 @@ a contract defect can sit behind an unrelated earlier error. Until that mode exi
 defensible claim is "no unexpected rejection among the 964 files that reached contract checking",
 which is materially weaker than "the corpus is compatible".
 
-**Depends on:** nothing. **Blocks:** R-0474.
+**Depends on:** R-0492. **Blocks:** R-0474.
 
 ### Task R-0474
 
@@ -8269,6 +8269,24 @@ and required author assistance. The scenario does not reorder qualification, ide
 contract or independent-consumer prerequisites, or require a registry, new backend or
 general heap model.
 
+**Staged acceptance (2026-10-22; Dafny/Jasmin review):** use this same component at each
+checkpoint; partial results do not graduate the final exit or reorder prerequisite gates.
+
+| Checkpoint | Prerequisites and acceptance |
+|---|---|
+| Baseline | Record R-0150's proof/annotation burden and the declared FFI assumptions in the currently admitted fragment. Wrong-contract and stale-evidence controls run as their existing contract/identity/replay owners become available; unavailable checks remain explicitly pending. |
+| Compositional calls | After R-0473/R-0474, prove a caller using the exported contract. A separate negative control requests a fact true of the private body but not implied by the public contract: contract-only verification must not establish it. |
+| Mutation | After R-0524's frame increment, establish `old` and preservation of untouched parser state. Ghost state is not required merely to pass this checkpoint. |
+| Model and lemma | After the relevant R-0526/R-0060 support, connect the implementation to a small total specification model and reuse one lemma. Use existing loop obligations; claim termination only when its obligations close. |
+| Consumer | Complete the existing change-and-repair and non-author replay exit with R-0353. Every checkpoint names its theorem boundary and remaining backend/runtime trust; native transport is claimed only for the subset its existing owner has accepted. |
+
+The FFI inventory distinguishes export preconditions required of foreign callers from imported
+foreign guarantees. Each condition is checked at the boundary, established by evidence, or explicitly
+assumed/trusted. Body-derived safety conditions may suggest a contract but must not silently strengthen
+the published precondition or become accepted assumptions. Declared contracts remain authoritative;
+implementation revalidation establishes that they suffice. This does not pull R-0284's alignment
+surface into the queue. Reference: [Jasmin safety preconditions](https://jasmin-lang.readthedocs.io/en/latest/tools/safety_checker.html).
+
 **Exit:** a consumer relies on a public contract without inspecting private bodies;
 calls establish preconditions and use exported postconditions without inlining;
 frame/`old` semantics cover the admitted mutation fragment. A contract-preserving
@@ -9937,6 +9955,15 @@ regression cases and controls of these tasks transfer here unless the reason ret
  feel like debugging a minimized program, not reading a wall of theorem-state
  text. The fixture is evidence of failure only; it must never upgrade a claim
  to proof.
+
+**Bounded proof-cost diagnostics:** when R-0150's measurements on R-0486 expose expensive or
+unstable automation, isolate existing obligations without adding proof-language syntax. Report
+failure to establish a goal, timeout, resource exhaustion and unsupported fragments distinctly,
+using the existing artifact schema and R-0494 verdict authority rather than new verdict spellings.
+A timeout or failed proof search is neither proof nor a refutation. Retain per-obligation time
+and, where the solver supplies it, resource counts with the solver version/configuration; do not
+claim cross-solver or cross-version determinism. Isolated runs retain the same checked hypotheses
+and dependency closure. Reference: [Dafny verification optimization](https://dafny.org/latest/VerificationOptimization/VerificationOptimization).
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
