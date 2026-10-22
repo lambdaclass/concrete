@@ -78,7 +78,10 @@ whatever their label.
   refused when the branch can `break`/`continue` out of the loop first (an earlier conditional
   `continue` repeated the consumption on the next iteration; `error_149_continue_in_exit_branch.con`,
   E0207), and a nested loop inside such a branch no longer drops the exemption for the statements
-  after it (`regress_149_nested_loop_in_exit_branch.con`). (The H14 break exemption, which this
+  after it (`regress_149_nested_loop_in_exit_branch.con`); a labelled break naming a loop inside the
+  branch does not count as leaving it (`regress_149_inner_label_in_exit_branch.con`). The
+  reassignment exemption (`h = f(h)` consuming `h` inside a loop) does not reach into a loop nested
+  in the initializer (`error_149_rebinding_nested_loop.con`, E0207). (The H14 break exemption, which this
   relied on for `break v`, is withdrawn below.)
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted
   `newtype N = Num` with `type Num = i64` judged non-Copy; such a newtype cannot currently be

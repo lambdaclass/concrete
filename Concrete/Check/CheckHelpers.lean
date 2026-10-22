@@ -662,45 +662,53 @@ partial def stmtEscape? (depth : Nat) (labels : List String) : Stmt → Option (
 end
 
 -- Bug 149: does this block contain a `break`/`continue` that can leave a loop enclosing it
--- (an unlabelled one not inside a loop of its own, or any labelled one, conservatively)? Such a
+-- (an unlabelled one not inside a loop of its own, or a labelled one naming no loop inside it)? Such a
 -- block does not only exit the function, so it does not earn the consume-inside-loop
 -- exemption even when it ends in `return`.
 mutual
-partial def exprLeavesLoop (depth : Nat) : Expr → Bool
-  | .binOp _ _ l r => exprLeavesLoop depth l || exprLeavesLoop depth r
+partial def exprLeavesLoop (depth : Nat) (labels : List String) : Expr → Bool
+  | .binOp _ _ l r => exprLeavesLoop depth labels l || exprLeavesLoop depth labels r
   | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
-  | .deref _ x | .cast _ x _ => exprLeavesLoop depth x
-  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.any (exprLeavesLoop depth)
-  | .methodCall _ obj _ _ args => (obj :: args).any (exprLeavesLoop depth)
-  | .structLit _ _ _ fields base => (fields.map (·.2) ++ base.toList).any (exprLeavesLoop depth)
-  | .enumLit _ _ _ _ fields => (fields.map (·.2)).any (exprLeavesLoop depth)
-  | .arrayLit _ elems => elems.any (exprLeavesLoop depth)
-  | .arrayIndex _ a i => exprLeavesLoop depth a || exprLeavesLoop depth i
-  | .allocCall _ inner a => exprLeavesLoop depth inner || exprLeavesLoop depth a
-  | .ifExpr _ c t e => exprLeavesLoop depth c || stmtsLeaveLoop depth t || stmtsLeaveLoop depth e
-  | .match_ _ scr arms => exprLeavesLoop depth scr || arms.any fun arm =>
+  | .deref _ x | .cast _ x _ => exprLeavesLoop depth labels x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.any (exprLeavesLoop depth labels)
+  | .methodCall _ obj _ _ args => (obj :: args).any (exprLeavesLoop depth labels)
+  | .structLit _ _ _ fields base => (fields.map (·.2) ++ base.toList).any (exprLeavesLoop depth labels)
+  | .enumLit _ _ _ _ fields => (fields.map (·.2)).any (exprLeavesLoop depth labels)
+  | .arrayLit _ elems => elems.any (exprLeavesLoop depth labels)
+  | .arrayIndex _ a i => exprLeavesLoop depth labels a || exprLeavesLoop depth labels i
+  | .allocCall _ inner a => exprLeavesLoop depth labels inner || exprLeavesLoop depth labels a
+  | .ifExpr _ c t e => exprLeavesLoop depth labels c || stmtsLeaveLoop depth labels t || stmtsLeaveLoop depth labels e
+  | .match_ _ scr arms => exprLeavesLoop depth labels scr || arms.any fun arm =>
       match arm with
       | .mk _ _ _ _ g b | .litArm _ _ g b | .varArm _ _ g b | .rangeArm _ _ _ _ g b =>
-        (g.map (exprLeavesLoop depth)).getD false || stmtsLeaveLoop depth b
+        (g.map (exprLeavesLoop depth labels)).getD false || stmtsLeaveLoop depth labels b
   | _ => false
-partial def stmtsLeaveLoop (depth : Nat) (stmts : List Stmt) : Bool :=
-  stmts.any (stmtLeavesLoop depth)
-partial def stmtLeavesLoop (depth : Nat) : Stmt → Bool
-  | .break_ _ v lbl => lbl.isSome || depth == 0 || (v.map (exprLeavesLoop depth)).getD false
-  | .continue_ _ lbl => lbl.isSome || depth == 0
-  | .while_ _ c body _ => exprLeavesLoop depth c || stmtsLeaveLoop (depth + 1) body
-  | .forLoop _ init c step body _ =>
-    (init.map (stmtLeavesLoop depth)).getD false || exprLeavesLoop depth c
-      || (step.map (stmtLeavesLoop (depth + 1))).getD false || stmtsLeaveLoop (depth + 1) body
+partial def stmtsLeaveLoop (depth : Nat) (labels : List String) (stmts : List Stmt) : Bool :=
+  stmts.any (stmtLeavesLoop depth labels)
+partial def stmtLeavesLoop (depth : Nat) (labels : List String) : Stmt → Bool
+  | .break_ _ v lbl =>
+    let leaves := match lbl with
+      | some l => !labels.contains l
+      | none => depth == 0
+    leaves || (v.map (exprLeavesLoop depth labels)).getD false
+  | .continue_ _ lbl =>
+    match lbl with
+    | some l => !labels.contains l
+    | none => depth == 0
+  | .while_ _ c body lbl => exprLeavesLoop depth labels c || stmtsLeaveLoop (depth + 1) (lbl.toList ++ labels) body
+  | .forLoop _ init c step body lbl =>
+    let labels' := lbl.toList ++ labels
+    (init.map (stmtLeavesLoop depth labels)).getD false || exprLeavesLoop depth labels c
+      || (step.map (stmtLeavesLoop (depth + 1) labels')).getD false || stmtsLeaveLoop (depth + 1) labels' body
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
-  | .letStructDestructure _ _ _ v => exprLeavesLoop depth v
-  | .return_ _ v => (v.map (exprLeavesLoop depth)).getD false
-  | .ifElse _ c t e => exprLeavesLoop depth c || stmtsLeaveLoop depth t || (e.map (stmtsLeaveLoop depth)).getD false
-  | .fieldAssign _ o _ v => exprLeavesLoop depth o || exprLeavesLoop depth v
-  | .derefAssign _ t v => exprLeavesLoop depth t || exprLeavesLoop depth v
-  | .arrayIndexAssign _ a i v => exprLeavesLoop depth a || exprLeavesLoop depth i || exprLeavesLoop depth v
-  | .borrowIn _ _ _ _ _ body => stmtsLeaveLoop depth body
-  | .letDestructure _ _ _ _ v elseBody => exprLeavesLoop depth v || (elseBody.map (stmtsLeaveLoop depth)).getD false
+  | .letStructDestructure _ _ _ v => exprLeavesLoop depth labels v
+  | .return_ _ v => (v.map (exprLeavesLoop depth labels)).getD false
+  | .ifElse _ c t e => exprLeavesLoop depth labels c || stmtsLeaveLoop depth labels t || (e.map (stmtsLeaveLoop depth labels)).getD false
+  | .fieldAssign _ o _ v => exprLeavesLoop depth labels o || exprLeavesLoop depth labels v
+  | .derefAssign _ t v => exprLeavesLoop depth labels t || exprLeavesLoop depth labels v
+  | .arrayIndexAssign _ a i v => exprLeavesLoop depth labels a || exprLeavesLoop depth labels i || exprLeavesLoop depth labels v
+  | .borrowIn _ _ _ _ _ body => stmtsLeaveLoop depth labels body
+  | .letDestructure _ _ _ _ v elseBody => exprLeavesLoop depth labels v || (elseBody.map (stmtsLeaveLoop depth labels)).getD false
 end
 
 /-- The operands of `e` that rule (d) protects, with a description of the construct. An
@@ -754,7 +762,7 @@ end
     and contains no `break`/`continue` that leaves the loop around it (an earlier conditional
     `continue` would repeat the consumption on the next iteration; Codex review). -/
 def exemptExitBranch (stmts : List Stmt) : Bool :=
-  blockExitsFunction stmts && !stmtsLeaveLoop 0 stmts
+  blockExitsFunction stmts && !stmtsLeaveLoop 0 [] stmts
 
 
 /-- A branch or arm that EXITS THE FUNCTION must have consumed every linear

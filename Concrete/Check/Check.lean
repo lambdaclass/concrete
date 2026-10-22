@@ -2422,10 +2422,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Bug 149: the condition runs on every iteration, so it is checked at the loop's depth: a
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
-    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false }
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
     let _condTy ← checkExpr cond
     let envC ← getEnv
-    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
     let env ← getEnv
 
@@ -2435,11 +2435,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let labelDepths := match lbl with
       | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
       | none => env.loopLabelDepths
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false }
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false, rebindingVar := none }
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     restoreAfterLoop env0 (some stmt.getSpan)
   | .forLoop _ init cond step body lbl =>
     -- Init
@@ -2448,10 +2448,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none => pure ()
     -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
     let env0 ← getEnv
-    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false }
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
     let _condTy ← checkExpr cond
     let envC ← getEnv
-    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Body + step in loop scope, push label if present
     let env ← getEnv
 
@@ -2461,13 +2461,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let labelDepths := match lbl with
       | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
       | none => env.loopLabelDepths
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false }
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false, rebindingVar := none }
     checkStmts body retTy
     match step with
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     restoreAfterLoop env0 (some stmt.getSpan)
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
