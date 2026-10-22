@@ -8,32 +8,47 @@ decisions with fixtures.
 RECORD FORMAT (one JSON object per line in data/<machine>/records.jsonl on the
 `perf-data` branch, appended in the order origin/main commits were measured):
 
-  {"schema": "concrete.perf.record.v1",
+  {"schema": "concrete.perf.record.v2",
    "suite_version": <int>,           # bump when benchmark definitions change
    "harness": "<sha of the scripts/perf tooling that measured>",
    "machine": "<machine id>",         # results are never compared across machines
    "sha": "<40-hex measured commit>", "subject": "...", "commit_time": "<iso>",
    "measured_at": "<iso>", "status": "ok" | "build_failed" | "partial",
-   "contaminated": <bool>,            # foreign heavy work ran during the measurement
+   "counter": "instructions:u" | "wall",   # what the run could count
+   "comparable": <bool>,              # true only for instruction-count runs
+   "contaminated": <bool>,            # legacy; always false since instruction counting
    "host": {...}, "notes": [...],
-   "metrics": {"<name>": {"unit": "ms"|"kb"|"s"|"exp", "median": <num>,
+   "metrics": {"<name>": {"unit": "instr"|"kb"|"ms"|"s"|"exp", "median": <num>,
                           "lo": <num>, "hi": <num>, "n": <int>, "samples": [...]}}}
 
-A metric name is "<group>.<bench>.<quantity>", e.g. compile.lox.wall_ms,
-compile.lox.rss_kb, pass.hmac_sha256.lower_ms, lake.cold.wall_s,
-tests.run_tests.wall_s, gate.check_compiler_complexity.wall_s,
-growth.syn_match.time_exp. For every metric larger is worse.
+A metric name is "<group>.<bench>.<quantity>", e.g. compile.lox.instr, compile.lox.rss_kb,
+compile.lox.wall_ms, pass.hmac_sha256.lower_ms, lake.cold.instr, growth.syn_match.instr_exp.
+For every metric larger is worse.
+
+ALARMS are raised only on load-independent metrics (alarmable()): instruction counts, peak RSS,
+and growth exponents computed from instruction counts. Wall times, per-pass times and exponents
+computed from times are information. A record whose counter is not instructions:u (the wall-time
+fallback where perf is unavailable) is not comparable: never a baseline, never an alarm.
 """
 
 import json
 import math
 import re
 
-RECORD_SCHEMA = "concrete.perf.record.v1"
+RECORD_SCHEMA = "concrete.perf.record.v2"
+COUNTER = "instructions:u"
 SUMMARY_SCHEMA = "concrete.perf.summary.v1"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 METRIC_RE = re.compile(r"^[a-z]+\.[A-Za-z0-9_\-]+\.[a-z0-9_]+$")
-UNITS = {"ms", "s", "kb", "exp", "count"}
+UNITS = {"instr", "ms", "s", "kb", "exp", "count"}
+
+
+def alarmable(name, unit):
+    """Metrics that do not move with machine load: instructions, peak RSS, and exponents computed
+    from instructions. Everything timed is information only."""
+    if unit in ("instr", "kb"):
+        return True
+    return unit == "exp" and name.endswith("instr_exp")
 
 
 # ---------------------------------------------------------------- statistics
@@ -107,6 +122,12 @@ def validate_record(rec):
         errs.append("status %r unknown" % rec.get("status"))
     if not isinstance(rec.get("contaminated", False), bool):
         errs.append("contaminated is not a bool")
+    if rec.get("counter") not in (COUNTER, "wall"):
+        errs.append("counter %r unknown" % rec.get("counter"))
+    if not isinstance(rec.get("comparable"), bool):
+        errs.append("comparable is not a bool")
+    elif rec["comparable"] and rec.get("counter") != COUNTER:
+        errs.append("only an %s record can be comparable" % COUNTER)
     metrics = rec.get("metrics")
     if not isinstance(metrics, dict):
         errs.append("metrics is not an object")
@@ -171,18 +192,21 @@ DEFAULTS = {
     "window": 10,          # baseline = median of the last N comparable records
     "min_history": 3,      # no verdict until this many comparable records exist
     "noise_k": 3.0,        # noise band = noise_k * robust relative spread
-    "threshold": 0.05,     # X: flag when slower than baseline * (1 + band) * (1 + X)
-    "min_band": 0.02,      # a band is never assumed tighter than 2%
+    # X: flag when slower than baseline * (1 + band) * (1 + X). Chosen from the instruction-count
+    # noise measured on concrete-ci-1 (see scripts/perf/README in runner.sh's header).
+    "threshold": 0.01,
+    "min_band": 0.005,     # a band is never assumed tighter than 0.5%
     "max_band": 0.50,      # a metric noisier than this is reported, never alarmed on
-    # Absolute floors below which a change is never a regression (clock and
-    # allocator granularity): 25 ms, 0.5 s, 4 MB, 0.15 of a growth exponent.
-    "min_abs": {"ms": 25.0, "s": 0.5, "kb": 4096.0, "exp": 0.15, "count": 1.0},
+    # Absolute floors below which a change is never a regression: 5M instructions (~1-2 ms),
+    # 4 MB of RSS, 0.10 of a growth exponent; 25 ms / 0.5 s for the informational times.
+    "min_abs": {"instr": 5e6, "ms": 25.0, "s": 0.5, "kb": 4096.0, "exp": 0.10, "count": 1.0},
 }
 
 
 def comparable(rec, machine, suite_version):
     return (rec.get("machine") == machine and rec.get("suite_version") == suite_version
-            and rec.get("status") in ("ok", "partial") and not rec.get("contaminated", False))
+            and rec.get("status") in ("ok", "partial") and not rec.get("contaminated", False)
+            and rec.get("comparable") is True and rec.get("counter") == COUNTER)
 
 
 def detect(records, current, cfg=None):
@@ -200,12 +224,16 @@ def detect(records, current, cfg=None):
     prior = [r for r in records if r is not current and r.get("sha") != current["sha"]
              and comparable(r, machine, sv)]
     window = prior[-c["window"]:]
+    current_ok = current.get("comparable") is True and current.get("counter") == COUNTER
+    if not current_ok:
+        window = []      # a fallback record is never compared with anything
     entries = {}
     regressions = []
     improvements = []
     for name, e in sorted(current.get("metrics", {}).items()):
         hist = [r["metrics"][name]["median"] for r in window if name in r.get("metrics", {})]
-        ent = {"current": e["median"], "unit": e["unit"], "history_n": len(hist)}
+        ent = {"current": e["median"], "unit": e["unit"], "history_n": len(hist),
+               "alarmable": alarmable(name, e["unit"])}
         if len(hist) < c["min_history"]:
             ent["verdict"] = "insufficient_history"
             entries[name] = ent
@@ -224,12 +252,15 @@ def detect(records, current, cfg=None):
         ent["limit"] = round(limit, 3)
         if base > 0:
             ent["ratio"] = round(e["median"] / base, 4)
-        if band > c["max_band"]:
+        quiet_ok = not current.get("contaminated") and current_ok
+        if not ent["alarmable"]:
+            ent["verdict"] = "info_slower" if e["median"] > limit else "info"
+        elif band > c["max_band"]:
             ent["verdict"] = "too_noisy"
         elif e["median"] > limit:
-            # A contaminated record is reported, never alarmed on.
-            ent["verdict"] = "slower_contaminated" if current.get("contaminated") else "regression"
-            if not current.get("contaminated"):
+            # A contaminated or non-comparable record is reported, never alarmed on.
+            ent["verdict"] = "regression" if quiet_ok else "slower_not_comparable"
+            if quiet_ok:
                 regressions.append(name)
         elif e["median"] < base - delta:
             ent["verdict"] = "improvement"
@@ -242,9 +273,11 @@ def detect(records, current, cfg=None):
     # number is a signal, not silence, and stays one for the whole window, not only the first commit.
     seen = set()
     for r in window:
-        seen |= set(r["metrics"])
+        seen |= {n for n, m in r["metrics"].items() if alarmable(n, m["unit"])}
     missing = sorted(seen - set(current.get("metrics", {})))
-    if current.get("contaminated"):
+    if not current_ok:
+        verdict = "not_comparable"
+    elif current.get("contaminated"):
         verdict = "contaminated"
     elif regressions:
         verdict = "regression"

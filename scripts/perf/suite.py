@@ -3,7 +3,7 @@
 
   suite.py run --repo DIR --machine ID --out record.json [--only SECTION[,..]]
                [--bench NAME] [--repeats N] [--no-lake]
-  suite.py quiet [--wait SECONDS]          exit 0 once the machine is quiet
+  suite.py counter                          print the counter this host measures with
   suite.py discover-gates --repo DIR --out slow_gates.json [--top 10]
   suite.py gen FAMILY N                     print one synthetic program
 
@@ -11,14 +11,27 @@ SECTIONS: lake, compile, synthetic, tests, gates. The suite definition is
 suite.json next to this file; its suite_version is stamped into every record.
 The checkout must already be built (`lake build`) unless the lake section runs.
 
-Peak memory comes from /usr/bin/time (-v on Linux, -l on macOS); wall time from
-a monotonic clock around the child. Compile benchmarks repeat `repeats` times
-and keep every sample; the record stores the median and the range.
+WHAT IS MEASURED. No machine is ever quiet (CI runners, the fuzz farm and agents share the
+servers), so the primary metric is RETIRED USER-SPACE INSTRUCTIONS, counted by
+`perf stat -e instructions:u -x,` over the whole process tree. Instruction counts do not depend
+on load, frequency or scheduling, so they are comparable across runs on a busy machine. Every
+command is also run under /usr/bin/time (-v on Linux, -l on macOS) for peak RSS, the memory
+metric, which is mostly load-independent. Wall time is recorded as an informational column only
+and is never alarmed on.
 
-Contamination: while the suite runs a sampler watches for foreign heavy work
-(a GitHub Actions job, a gate runner or test suite outside this process tree,
-or many foreign runnable non-idle tasks). Any hit marks the record
-`contaminated`, and detection never compares against or alarms on such a record.
+  <group>.<bench>.instr    instructions:u        (alarmed)
+  <group>.<bench>.rss_kb   peak RSS              (alarmed)
+  <group>.<bench>.wall_ms / wall_s               (information only)
+  pass.<bench>.<pass>_ms   per-pass time from --emit-trace-json (information only; the compiler
+                           exposes no per-pass instruction count)
+  growth.<bench>.instr_exp           growth exponent of the front end (--emit-trace-json run)
+  growth.<bench>.compile_instr_exp   growth exponent of the full compile, both from instructions
+  growth.<bench>.worst_pass_ms_exp   per-pass exponent from times (information only)
+
+FALLBACK. Where `perf` cannot count instructions:u (macOS; Linux with a restrictive
+kernel.perf_event_paranoid), the record says counter "wall" and comparable false: its wall-time
+numbers are kept for reading but never become a baseline and never raise an alarm.
+PERF_COUNTER=wall forces the fallback.
 """
 
 import argparse
@@ -33,7 +46,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +54,7 @@ import perflib  # noqa: E402
 
 SUITE = os.path.join(HERE, "suite.json")
 IS_LINUX = platform.system() == "Linux"
+EVENT = "instructions:u"
 
 
 # ------------------------------------------------------------------ helpers
@@ -58,7 +71,7 @@ def git(repo, *args):
 
 def harness_sha():
     try:
-        # The harness is root-owned on the server; name it as safe so git does not refuse to read it.
+        # The harness may be root-owned; name it as safe so git does not refuse to read it.
         return subprocess.run(["git", "-c", "safe.directory=*", "-C", HERE, "rev-parse", "HEAD"],
                               capture_output=True, text=True, check=True).stdout.strip()
     except Exception:
@@ -68,28 +81,72 @@ def harness_sha():
 TIME_BIN = "/usr/bin/time" if os.path.exists("/usr/bin/time") else None
 
 
+def parse_perf_csv(text, event=EVENT):
+    """Instruction count from `perf stat -x,` output, or None when the event was not counted
+    (<not supported>, <not counted>, a paranoid refusal, or no line at all)."""
+    for line in text.splitlines():
+        parts = line.split(",")
+        if len(parts) >= 3 and parts[2].strip() == event:
+            v = parts[0].strip()
+            if re.match(r"^\d+$", v):
+                return int(v)
+            return None
+    return None
+
+
+def parse_rss(text):
+    m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", text)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(\d+)\s+maximum resident set size", text)
+    if m:
+        return int(m.group(1)) // 1024   # macOS reports bytes
+    return None
+
+
+_COUNTER = None
+
+
+def counter():
+    """'instructions:u' when perf can count it for this user, else 'wall'."""
+    global _COUNTER
+    if _COUNTER is None:
+        _COUNTER = "wall"
+        if os.environ.get("PERF_COUNTER", "") != "wall" and shutil.which("perf"):
+            try:
+                p = subprocess.run(["perf", "stat", "-e", EVENT, "-x,", "true"], capture_output=True,
+                                   text=True, timeout=30)
+                if p.returncode == 0 and parse_perf_csv(p.stderr):
+                    _COUNTER = EVENT
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    return _COUNTER
+
+
 def timed(cmd, cwd, env=None, timeout=None, stdout=None):
-    """Run cmd; return (wall_s, peak_rss_kb or None, returncode)."""
-    with tempfile.NamedTemporaryFile("r", suffix=".time", delete=False) as tf:
-        tpath = tf.name
+    """Run cmd; return (wall_s, peak_rss_kb or None, returncode, instructions or None).
+    Instructions are counted over the whole process tree (perf stat inherits)."""
+    tdir = tempfile.mkdtemp(prefix="perf-timed-")
+    tpath = os.path.join(tdir, "time")
+    ppath = os.path.join(tdir, "perf")
     try:
+        full = list(cmd)
         if TIME_BIN and IS_LINUX:
-            full = [TIME_BIN, "-v", "-o", tpath] + cmd
+            full = [TIME_BIN, "-v", "-o", tpath] + full
         elif TIME_BIN:
-            full = [TIME_BIN, "-l"] + cmd
-        else:
-            full = cmd
+            full = [TIME_BIN, "-l"] + full
+        if counter() == EVENT:
+            full = ["perf", "stat", "-e", EVENT, "-x,", "-o", ppath, "--"] + full
         err = open(tpath, "a") if (TIME_BIN and not IS_LINUX) else subprocess.DEVNULL
         t0 = time.monotonic()
-        # Own process group, so a timeout kills the benchmark's whole tree (shells, gates,
-        # test workers), not just /usr/bin/time.
+        # Own process group, so a timeout kills the benchmark's whole tree.
         p = subprocess.Popen(full, cwd=cwd, env=env, stdout=stdout or subprocess.DEVNULL,
                              stderr=err, start_new_session=True)
         try:
             rc = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            # TERM the whole group, give it a grace period, then KILL the group unconditionally:
-            # the leader (/usr/bin/time) exiting says nothing about a worker that ignored TERM.
+            # TERM the group, a grace period, then KILL the group unconditionally: the leader
+            # exiting says nothing about a worker that ignored TERM.
             try:
                 os.killpg(p.pid, signal.SIGTERM)
             except ProcessLookupError:
@@ -107,24 +164,17 @@ def timed(cmd, cwd, env=None, timeout=None, stdout=None):
         wall = time.monotonic() - t0
         if err is not subprocess.DEVNULL:
             err.close()
-        rss = None
-        try:
-            text = open(tpath, errors="replace").read()
-        except OSError:
-            text = ""
-        m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", text)
-        if m:
-            rss = int(m.group(1))
-        else:
-            m = re.search(r"(\d+)\s+maximum resident set size", text)
-            if m:
-                rss = int(m.group(1)) // 1024   # macOS reports bytes
-        return wall, rss, rc
+
+        def rd(path):
+            try:
+                return open(path, errors="replace").read()
+            except OSError:
+                return ""
+        rss = parse_rss(rd(tpath))
+        instr = parse_perf_csv(rd(ppath)) if counter() == EVENT else None
+        return wall, rss, rc, instr
     finally:
-        try:
-            os.unlink(tpath)
-        except OSError:
-            pass
+        shutil.rmtree(tdir, ignore_errors=True)
 
 
 # ------------------------------------------------------------------ synthetic programs
@@ -166,176 +216,6 @@ def gen(family, n):
     raise ValueError("unknown family %r" % family)
 
 
-# ------------------------------------------------------------------ contamination sampler
-
-FOREIGN_HEAVY = re.compile(r"Runner\.Worker|run_ci_gates_local\.sh|run_tests\.sh|test_mutation\.sh"
-                           r"|lake build|concrete-remote")
-
-
-def _proc_table():
-    # One row per THREAD on Linux (-L), so a multi-threaded foreign job counts every runnable
-    # thread, not one per process.
-    cols = ["pid=,ppid=,ni=,stat=,args="]
-    cmd = ["ps", "-eLo"] + cols if IS_LINUX else ["ps", "-eo"] + cols
-    p = subprocess.run(cmd, capture_output=True, text=True)
-    if p.returncode != 0:
-        raise RuntimeError("ps failed: %s" % p.stderr[-200:])
-    rows = []
-    for line in p.stdout.splitlines():
-        parts = line.split(None, 4)
-        if len(parts) < 4:
-            continue
-        pid, ppid, ni, stat = parts[:4]
-        args = parts[4] if len(parts) > 4 else ""
-        try:
-            rows.append((int(pid), int(ppid), ni, stat, args))
-        except ValueError:
-            continue
-    if not rows:
-        raise RuntimeError("ps listed no processes")
-    return rows
-
-
-def _ours(rows, root):
-    kids = {}
-    for pid, ppid, *_ in rows:
-        kids.setdefault(ppid, set()).add(pid)
-    seen, stack = set(), [root]
-    while stack:
-        p = stack.pop()
-        if p in seen:
-            continue
-        seen.add(p)
-        stack.extend(kids.get(p, ()))
-    # Our ancestors (the runner shell, systemd) are not foreign either.
-    parent = {pid: ppid for pid, ppid, *_ in rows}
-    p = root
-    while p in parent and p not in (0, 1):
-        p = parent[p]
-        seen.add(p)
-    return seen
-
-
-def snapshot(root_pid):
-    rows = _proc_table()
-    ours = _ours(rows, root_pid)
-    heavy, running, idle_running = set(), 0, 0
-    for pid, ppid, ni, stat, args in rows:
-        if pid in ours:
-            continue
-        m = FOREIGN_HEAVY.search(args)
-        if m and "grep" not in args:
-            heavy.add(m.group(0))
-        if stat.startswith("R"):
-            try:
-                nice = int(ni)
-            except ValueError:
-                nice = None   # "-": SCHED_IDLE or a realtime class
-            if nice is None or nice >= 19:
-                idle_running += 1
-            else:
-                running += 1
-    try:
-        load1 = os.getloadavg()[0]
-    except OSError:
-        load1 = None
-    return {"heavy": sorted(heavy), "running": running, "idle_running": idle_running, "load1": load1}
-
-
-def running_limit():
-    return max(4, (os.cpu_count() or 4) // 8)
-
-
-def contamination(samples, errors, limit):
-    """Pure verdict over sampler output. Contaminated when any sample saw foreign heavy work, when
-    any single sample had more than 2*limit foreign runnable non-idle threads (a burst), when the
-    mean exceeds limit, or when sampling itself failed or produced nothing (fail closed)."""
-    heavy = sorted({h for s in samples for h in s["heavy"]})
-    run = [s["running"] for s in samples]
-    mean_run = sum(run) / len(run) if run else 0.0
-    burst = max(run) if run else 0
-    reasons = []
-    if heavy:
-        reasons.append("foreign heavy work: " + ",".join(heavy))
-    if burst > 2 * limit:
-        reasons.append("burst of %d foreign runnable threads" % burst)
-    if mean_run > limit:
-        reasons.append("mean %.1f foreign runnable threads" % mean_run)
-    if errors:
-        reasons.append("%d sampling errors" % errors)
-    if not samples:
-        reasons.append("no samples")
-    return bool(reasons), reasons
-
-
-class Sampler(threading.Thread):
-    """Samples at start, every `period` seconds, and once more at finish (so even a short run has
-    at least two samples)."""
-
-    def __init__(self, period=2.0, limit=None):
-        super().__init__(daemon=True)
-        self.period = period
-        self.stop = threading.Event()
-        self.samples = []
-        self.errors = 0
-        self.limit = limit if limit is not None else running_limit()
-
-    def sample(self):
-        try:
-            self.samples.append(snapshot(os.getpid()))
-        except Exception:
-            self.errors += 1
-
-    def run(self):
-        self.sample()
-        while not self.stop.wait(self.period):
-            self.sample()
-
-    def finish(self):
-        self.stop.set()
-        self.join(timeout=30)
-        self.sample()
-
-    def verdict(self):
-        contaminated, reasons = contamination(self.samples, self.errors, self.limit)
-        run = [s["running"] for s in self.samples]
-        idle = [s["idle_running"] for s in self.samples]
-        loads = [s["load1"] for s in self.samples if s["load1"] is not None]
-        return contaminated, {
-            "samples": len(self.samples), "errors": self.errors, "reasons": reasons,
-            "foreign_heavy": sorted({h for s in self.samples for h in s["heavy"]}),
-            "foreign_running_mean": round(sum(run) / len(run), 2) if run else 0.0,
-            "foreign_running_max": max(run) if run else 0,
-            "idle_running_mean": round(sum(idle) / len(idle), 2) if idle else 0.0,
-            "load1_max": max(loads) if loads else None, "running_limit": self.limit,
-        }
-
-
-def wait_quiet(wait_s, settle=3, period=20):
-    """Return True once `settle` consecutive snapshots show no foreign heavy work and at most
-    running_limit() foreign runnable non-idle threads. Logs a busy line at most every 5 minutes."""
-    deadline = time.monotonic() + wait_s
-    limit = running_limit()
-    ok = 0
-    last_log = None
-    while True:
-        try:
-            s = snapshot(os.getpid())
-            quiet = not s["heavy"] and s["running"] <= limit
-        except Exception as ex:
-            s, quiet = {"error": str(ex)}, False
-        ok = ok + 1 if quiet else 0
-        if ok >= settle:
-            return True
-        if time.monotonic() > deadline:
-            log("machine never went quiet: %s" % json.dumps(s))
-            return False
-        if not quiet and (last_log is None or time.monotonic() - last_log > 300):
-            log("busy: %s" % json.dumps(s))
-            last_log = time.monotonic()
-        time.sleep(period if not quiet else 5)
-
-
 # ------------------------------------------------------------------ measurement sections
 
 class Run:
@@ -354,24 +234,30 @@ class Run:
         return self.bench is None or self.bench == name
 
     def put(self, name, samples, unit):
-        e = perflib.summarize(samples, unit)
+        e = perflib.summarize([s for s in samples if s is not None], unit)
         if e is not None:
             self.metrics[name] = e
+
+    def put_run(self, prefix, runs, wall_unit="ms"):
+        """runs: list of (wall_s, rss_kb, instr). Instructions and RSS are the metrics; wall is
+        information."""
+        scale = 1000.0 if wall_unit == "ms" else 1.0
+        self.put("%s.wall_%s" % (prefix, wall_unit), [w * scale for w, _, _ in runs], wall_unit)
+        self.put("%s.rss_kb" % prefix, [r for _, r, _ in runs], "kb")
+        self.put("%s.instr" % prefix, [i for _, _, i in runs], "instr")
 
     def lake(self):
         cfg = self.suite["lake"]
         if cfg.get("cold") and self.want("cold"):
             shutil.rmtree(os.path.join(self.repo, ".lake", "build"), ignore_errors=True)
             log("lake build (cold)")
-            w, rss, rc = timed(["lake", "build"], self.repo)
+            w, rss, rc, ins = timed(["lake", "build"], self.repo)
             if rc != 0:
                 self.failed.append("lake.cold")
                 return False
-            self.put("lake.cold.wall_s", [w], "s")
-            if rss:
-                self.put("lake.cold.rss_kb", [rss], "kb")
+            self.put_run("lake.cold", [(w, rss, ins)], "s")
         else:
-            w, rss, rc = timed(["lake", "build"], self.repo)
+            w, rss, rc, ins = timed(["lake", "build"], self.repo)
             if rc != 0:
                 self.failed.append("lake.build")
                 return False
@@ -388,25 +274,29 @@ class Run:
                 with open(path, "ab") as f:
                     f.write(b"\n-- perf incremental probe\n")
                 log("lake build (incremental, %s edited)" % rel)
-                w, rss, rc = timed(["lake", "build"], self.repo)
+                w, rss, rc, ins = timed(["lake", "build"], self.repo)
             finally:
                 with open(path, "wb") as f:
                     f.write(orig)
             if rc == 0:
-                self.put("lake.%s.wall_s" % bench, [w], "s")
+                self.put_run("lake.%s" % bench, [(w, rss, ins)], "s")
             else:
                 self.failed.append("lake." + bench)
             timed(["lake", "build"], self.repo)   # back to the committed tree's artifacts
         return True
 
-    def _trace(self, args, cwd):
-        p = subprocess.run([self.cc] + args + ["--emit-trace-json"], cwd=cwd, capture_output=True, text=True)
-        if p.returncode != 0:
-            return None
+    def _trace(self, path):
+        """One --emit-trace-json run: (instructions of the front end + lowering, per-pass ms)."""
+        out = os.path.join(self.tmp, "trace.json")
+        with open(out, "w") as f:
+            w, rss, rc, ins = timed([self.cc, path, "--emit-trace-json"], self.tmp, stdout=f)
+        if rc != 0:
+            return None, {}
         try:
-            return json.loads(p.stdout)
+            tr = json.load(open(out))
         except ValueError:
-            return None
+            return ins, {}
+        return ins, tr.get("timing_ms", {})
 
     def compile(self):
         n = self.repeats
@@ -419,23 +309,21 @@ class Run:
                 self.notes.append("project %s absent" % proj)
                 continue
             out = os.path.join(self.tmp, bench + ".bin")
-            walls, rsss, cwalls = [], [], []
+            runs, checks = [], []
             for _ in range(n):
-                w, rss, rc = timed([self.cc, "build", "-o", out], d)
+                w, rss, rc, ins = timed([self.cc, "build", "-o", out], d)
                 if rc != 0:
                     self.failed.append("compile." + bench)
                     break
-                walls.append(w * 1000)
-                rsss.append(rss)
-                w2, _, rc2 = timed([self.cc, "check"], d)
+                runs.append((w, rss, ins))
+                w2, rss2, rc2, ins2 = timed([self.cc, "check"], d)
                 if rc2 == 0:
-                    cwalls.append(w2 * 1000)
+                    checks.append((w2, rss2, ins2))
             if ("compile." + bench) in self.failed:
-                continue   # a build that failed once is not timed at all
-            log("compile %-28s %s ms" % (bench, perflib.median(walls)))
-            self.put("compile.%s.wall_ms" % bench, walls, "ms")
-            self.put("compile.%s.rss_kb" % bench, [r for r in rsss if r], "kb")
-            self.put("check.%s.wall_ms" % bench, cwalls, "ms")
+                continue   # a build that failed once is not measured at all
+            log("compile %-28s %s instr" % (bench, perflib.median([i for _, _, i in runs])))
+            self.put_run("compile.%s" % bench, runs)
+            self.put_run("check.%s" % bench, checks)
         for rel in self.suite["single_files"]:
             bench = (os.path.basename(os.path.dirname(os.path.dirname(rel)))
                      if rel.endswith("/src/main.con") else os.path.splitext(os.path.basename(rel))[0])
@@ -447,29 +335,30 @@ class Run:
                 continue
             self._single(bench, path, n)
 
-    def _single(self, bench, path, n, group="compile"):
+    def _single(self, bench, path, n, record=True):
         out = os.path.join(self.tmp, bench + ".bin")
-        walls, rsss, passes = [], [], {}
+        runs, fe, passes = [], [], {}
         for _ in range(n):
-            w, rss, rc = timed([self.cc, path, "-o", out], self.tmp)
+            w, rss, rc, ins = timed([self.cc, path, "-o", out], self.tmp)
             if rc != 0:
-                self.failed.append("%s.%s" % (group, bench))
+                self.failed.append("compile.%s" % bench)
                 return None
-            walls.append(w * 1000)
-            rsss.append(rss)
-            tr = self._trace([path], self.tmp)
-            if tr:
-                for k, v in tr.get("timing_ms", {}).items():
-                    passes.setdefault(k, []).append(v)
-        log("%s %-28s %s ms" % (group, bench, perflib.median(walls)))
-        self.put("%s.%s.wall_ms" % (group, bench), walls, "ms")
-        self.put("%s.%s.rss_kb" % (group, bench), [r for r in rsss if r], "kb")
-        for k, vs in passes.items():
-            q = re.sub(r"[^a-z0-9]+", "_", k.lower()).strip("_")
-            self.put("pass.%s.%s_ms" % (bench, q), vs, "ms")
-        return {"wall": perflib.median(walls),
-                "passes": {k: perflib.median(v) for k, v in passes.items()},
-                "total": perflib.median([sum(x) for x in zip(*passes.values())]) if passes else None}
+            runs.append((w, rss, ins))
+            fins, tm = self._trace(path)
+            fe.append(fins)
+            for k, v in tm.items():
+                passes.setdefault(k, []).append(v)
+        log("compile %-28s %s instr" % (bench, perflib.median([i for _, _, i in runs])))
+        if record:
+            self.put_run("compile.%s" % bench, runs)
+            self.put("frontend.%s.instr" % bench, fe, "instr")
+            for k, vs in passes.items():
+                q = re.sub(r"[^a-z0-9]+", "_", k.lower()).strip("_")
+                self.put("pass.%s.%s_ms" % (bench, q), vs, "ms")
+        return {"instr": perflib.median([i for _, _, i in runs if i is not None]),
+                "frontend_instr": perflib.median([x for x in fe if x is not None]),
+                "wall": perflib.median([w for w, _, _ in runs]),
+                "passes": {k: perflib.median(v) for k, v in passes.items()}}
 
     def synthetic(self):
         g = self.suite.get("growth_factor", 4)
@@ -483,22 +372,21 @@ class Run:
             small = os.path.join(self.tmp, "%s_%d.con" % (fam, small_n))
             open(big, "w").write(gen(fam, n))
             open(small, "w").write(gen(fam, small_n))
-            rb = self._single(bench, big, self.repeats, group="compile")
+            rb = self._single(bench, big, self.repeats)
             if rb is None:
                 continue
-            rs = self._single(bench + "_small", small, self.repeats, group="compile")
-            # The small size is only an input to the growth exponent; drop its own metrics.
-            for k in [k for k in self.metrics if (".%s_small." % bench) in k or k.startswith("pass.%s_small." % bench)]:
-                del self.metrics[k]
+            # The small size is only an input to the growth exponents.
+            rs = self._single(bench + "_small", small, self.repeats, record=False)
             if rs is None:
                 continue
             ratio = float(n) / small_n
 
             def exp(a, b):
                 return math.log(max(a, 1e-9) / max(b, 1e-9)) / math.log(ratio)
-            if rb["total"] and rs["total"] and rb["total"] >= 20:
-                self.put("growth.%s.frontend_exp" % bench, [exp(rb["total"], rs["total"])], "exp")
-            self.put("growth.%s.wall_exp" % bench, [exp(rb["wall"], rs["wall"])], "exp")
+            if rb["frontend_instr"] and rs["frontend_instr"]:
+                self.put("growth.%s.instr_exp" % bench, [exp(rb["frontend_instr"], rs["frontend_instr"])], "exp")
+            if rb["instr"] and rs["instr"]:
+                self.put("growth.%s.compile_instr_exp" % bench, [exp(rb["instr"], rs["instr"])], "exp")
             worst = None
             for k, vb in rb["passes"].items():
                 vs = rs["passes"].get(k)
@@ -508,21 +396,21 @@ class Run:
                 if worst is None or e > worst[1]:
                     worst = (k, e)
             if worst:
-                self.put("growth.%s.worst_pass_exp" % bench, [worst[1]], "exp")
-                self.notes.append("growth %s worst pass %s exp %.2f" % (bench, worst[0], worst[1]))
+                self.put("growth.%s.worst_pass_ms_exp" % bench, [worst[1]], "exp")
+                self.notes.append("growth %s worst pass (by time) %s exp %.2f" % (bench, worst[0], worst[1]))
 
     def tests(self):
         if not self.want("run_tests"):
             return
         log("run_tests.sh")
-        w, rss, rc = timed(["bash", "-c", self.suite["run_tests"]], self.repo, timeout=3 * 3600)
-        # A red or timed-out suite is not a timing: an early failure would read as a speed-up and
-        # the fix as a slowdown. The run is marked partial instead.
+        w, rss, rc, ins = timed(["bash", "-c", self.suite["run_tests"]], self.repo, timeout=3 * 3600)
+        # A red or timed-out suite is not a measurement: an early failure would read as a
+        # speed-up and the fix as a slowdown. The run is marked partial instead.
         if rc == 0:
-            self.put("tests.run_tests.wall_s", [w], "s")
+            self.put_run("tests.run_tests", [(w, rss, ins)], "s")
         else:
             self.failed.append("tests.run_tests")
-            self.notes.append("run_tests.sh exited %d after %.0fs; no timing recorded" % (rc, w))
+            self.notes.append("run_tests.sh exited %d after %.0fs; not measured" % (rc, w))
 
     def gates(self):
         path = os.environ.get("PERF_SLOW_GATES") or os.path.join(HERE, os.path.basename(self.suite["slow_gates_file"]))
@@ -537,12 +425,12 @@ class Run:
                 self.notes.append("gate %s absent at this commit" % g["id"])
                 continue
             log("gate %s" % g["id"])
-            w, rss, rc = timed(["bash", "-c", g["cmd"]], self.repo, timeout=2 * 3600)
+            w, rss, rc, ins = timed(["bash", "-c", g["cmd"]], self.repo, timeout=2 * 3600)
             if rc == 0:
-                self.put("gate.%s.wall_s" % g["id"], [w], "s")
+                self.put_run("gate.%s" % g["id"], [(w, rss, ins)], "s")
             else:
                 self.failed.append("gate." + g["id"])
-                self.notes.append("gate %s exited %d after %.0fs; no timing recorded" % (g["id"], rc, w))
+                self.notes.append("gate %s exited %d after %.0fs; not measured" % (g["id"], rc, w))
 
 
 def host_info():
@@ -570,11 +458,13 @@ def cmd_run(a):
         sections.remove("lake")
     repo = os.path.abspath(a.repo)
     sha = git(repo, "rev-parse", "HEAD")
+    ctr = counter()
+    if ctr != EVENT:
+        log("perf cannot count %s here; falling back to wall time (record not comparable)" % EVENT)
     r = Run(repo, suite, repeats, a.bench)
-    sampler = Sampler()
-    sampler.start()
     status = "ok"
     t0 = time.monotonic()
+    host = host_info()
     try:
         if "lake" in sections and not r.lake():
             status = "build_failed"
@@ -586,34 +476,34 @@ def cmd_run(a):
                 if s != "lake":
                     getattr(r, s)()
     finally:
-        sampler.finish()
         shutil.rmtree(r.tmp, ignore_errors=True)
     if status == "ok" and r.failed:
         status = "partial"
-    contaminated, foreign = sampler.verdict()
+    try:
+        host["load_after"] = round(os.getloadavg()[0], 2)
+    except OSError:
+        pass
+    host["suite_wall_s"] = round(time.monotonic() - t0, 1)
     rec = {
         "schema": perflib.RECORD_SCHEMA, "suite_version": suite["suite_version"],
         "harness": harness_sha(), "machine": a.machine, "sha": sha,
         "subject": git(repo, "log", "-1", "--format=%s"),
         "commit_time": git(repo, "log", "-1", "--format=%cI"),
         "measured_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "status": status, "contaminated": contaminated,
-        "host": dict(host_info(), foreign=foreign, suite_wall_s=round(time.monotonic() - t0, 1)),
-        "sections": sections, "bench": a.bench, "repeats": repeats,
+        "status": status, "counter": ctr, "comparable": ctr == EVENT, "contaminated": False,
+        "host": host, "sections": sections, "bench": a.bench, "repeats": repeats,
         "failed": r.failed, "notes": r.notes, "metrics": r.metrics,
     }
     text = perflib.dump_record(rec)
     with open(a.out, "w") as f:
         f.write(text + "\n")
-    log("record written: %s (%d metrics, status %s, contaminated %s)" % (a.out, len(r.metrics), status, contaminated))
+    log("record written: %s (%d metrics, status %s, counter %s)" % (a.out, len(r.metrics), status, ctr))
     return 0 if status != "build_failed" else 3
 
 
-def cmd_quiet(a):
-    return 0 if wait_quiet(a.wait) else 75
-
-
 def cmd_discover(a):
+    """Rank every CI gate by instructions (wall time when perf is unavailable) and keep the top N
+    passing ones."""
     repo = os.path.abspath(a.repo)
     plan = subprocess.run(["bash", "scripts/tests/run_ci_gates_local.sh", "--plan"], cwd=repo,
                           capture_output=True, text=True)
@@ -623,25 +513,26 @@ def cmd_discover(a):
         return 2
     timings = []
     for c in cmds:
-        w, _, rc = timed(["bash", "-c", c], repo, timeout=2 * 3600)
-        log("%7.1fs rc=%d %s" % (w, rc, c))
-        timings.append({"cmd": c, "wall_s": round(w, 1), "rc": rc})
-    timings.sort(key=lambda t: -t["wall_s"])
+        w, _, rc, ins = timed(["bash", "-c", c], repo, timeout=2 * 3600)
+        log("%7.1fs %s instr rc=%d %s" % (w, ins, rc, c))
+        timings.append({"cmd": c, "wall_s": round(w, 1), "instr": ins, "rc": rc})
+    timings.sort(key=lambda t: -(t["instr"] if t["instr"] is not None else t["wall_s"]))
     top = []
     for t in timings:
         if t["rc"] != 0:
-            continue   # a red gate's time says nothing about its normal cost
+            continue   # a red gate's cost says nothing about its normal cost
         script = re.search(r"(scripts/\S+\.(?:sh|py))", t["cmd"]).group(1)
         gid = re.sub(r"[^A-Za-z0-9_]+", "_", os.path.splitext(os.path.basename(script))[0])
         if any(g["id"] == gid for g in top):
             gid += "_%d" % len(top)
-        top.append({"id": gid, "cmd": t["cmd"], "script": script, "discovered_wall_s": t["wall_s"]})
+        top.append({"id": gid, "cmd": t["cmd"], "script": script,
+                    "discovered_instr": t["instr"], "discovered_wall_s": t["wall_s"]})
         if len(top) == a.top:
             break
-    out = {"comment": "The slowest passing CI gates, measured once on the perf machine by "
-                      "`suite.py discover-gates`. Editing this list is a suite change: bump "
-                      "suite_version in suite.json.",
-           "discovered_on": git(repo, "rev-parse", "HEAD"), "machine": a.machine,
+    out = {"comment": "The most expensive passing CI gates (by instructions:u), measured once on the "
+                      "perf machine by `suite.py discover-gates`. Editing this list is a suite change: "
+                      "bump suite_version in suite.json.",
+           "discovered_on": git(repo, "rev-parse", "HEAD"), "machine": a.machine, "counter": counter(),
            "gates": top, "all": timings}
     with open(a.out, "w") as f:
         json.dump(out, f, indent=1)
@@ -660,8 +551,7 @@ def main():
     r.add_argument("--bench")
     r.add_argument("--repeats", type=int)
     r.add_argument("--no-lake", action="store_true")
-    q = sub.add_parser("quiet")
-    q.add_argument("--wait", type=int, default=0)
+    sub.add_parser("counter")
     d = sub.add_parser("discover-gates")
     d.add_argument("--repo", required=True)
     d.add_argument("--out", required=True)
@@ -673,8 +563,9 @@ def main():
     a = ap.parse_args()
     if a.cmd == "run":
         return cmd_run(a)
-    if a.cmd == "quiet":
-        return cmd_quiet(a)
+    if a.cmd == "counter":
+        print(counter())
+        return 0
     if a.cmd == "discover-gates":
         return cmd_discover(a)
     sys.stdout.write(gen(a.family, a.n))
