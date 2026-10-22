@@ -663,7 +663,6 @@ was attributed to it. The landing tier never stands in for stage
 cancelled and incomplete stay distinct throughout: a cancelled or incomplete train run is not a pass
 for any member.
 
-### Release map
 ### Browser compiler and explorer — bounded website delivery
 
 **2026-10-22: implemented, validated, and delivered on main.** This is a small website feature using
