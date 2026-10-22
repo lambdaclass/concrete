@@ -104,6 +104,17 @@ def norm_area(a):
     return "mod:" + a
 
 
+def norm_areas(items):
+    """Hand-written areas, with a Concrete/**/X.lean path also naming module X, as derived areas do."""
+    out = set()
+    for a in items:
+        k = norm_area(str(a))
+        out.add(k)
+        if k.startswith("path:Concrete/") and k.endswith(".lean"):
+            out.add("mod:" + os.path.splitext(os.path.basename(k))[0])
+    return out
+
+
 def section(text, heading):
     m = re.search(r"^## " + heading + r"[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
     return m.group(1) if m else ""
@@ -219,7 +230,7 @@ def fuzz_tasks(fuzz_dir, mods):
         fid = str(f.get("id") or os.path.splitext(os.path.basename(path))[0])
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", fid):
             die(f"{path}: finding id '{fid}' is not [A-Za-z0-9_.-]+")
-        areas = {norm_area(str(a)) for a in (f.get("areas") or [])}
+        areas = norm_areas(f.get("areas") or [])
         areas |= areas_of(" ".join(str(f.get(k, "")) for k in ("summary", "owner", "module", "pass")), mods)
         tasks.append({
             "id": f"fuzz-{fid}", "kind": "fuzz", "tier": FUZZ_CLASSES[cls],
@@ -252,7 +263,7 @@ def parse_task_file(path, root):
         if k in meta:
             meta[k] = [x.strip() for x in meta[k].split(",") if x.strip()]
     if "areas" in meta:
-        meta["areas"] = sorted({norm_area(a) for a in meta["areas"]})
+        meta["areas"] = sorted(norm_areas(meta["areas"]))
     if "tier" in meta and meta["tier"] not in TIERS:
         die(f"{path}: tier '{meta['tier']}' is not one of {', '.join(TIERS)}")
     if "disposition" in meta and meta["disposition"] not in DISPOSITIONS:
@@ -273,7 +284,7 @@ def build(root, fuzz_dir):
     by_id = {}
     for t in sourced:
         by_id.setdefault(t["id"], t)
-    explicit = []
+    explicit, unmatched = [], []
     for path in sorted(glob.glob(os.path.join(root, "tasks", "*.md"))):
         if os.path.basename(path).upper() == "README.MD":
             continue
@@ -284,6 +295,9 @@ def build(root, fuzz_dir):
                 if k in meta:
                     t[k] = meta[k]
             t["amended_by"] = meta["source"]
+        elif "disposition" in meta and not meta.get("prompt"):
+            # A disposition for a task its source does not (or no longer) list: nothing to amend.
+            unmatched.append(meta["source"])
         else:
             if not meta.get("prompt"):
                 die(f"{meta['source']}: a new task needs a prompt (a body or `prompt:`)")
@@ -318,7 +332,8 @@ def build(root, fuzz_dir):
             t["cycle"] = True
     for i, t in enumerate(tasks):
         t["rank"] = i + 1
-    return {"schema": 1, "generated_from": os.path.abspath(root), "tiers": TIERS, "tasks": tasks}
+    return {"schema": 1, "generated_from": os.path.abspath(root), "tiers": TIERS, "tasks": tasks,
+            "unmatched_dispositions": unmatched}
 
 
 def main():

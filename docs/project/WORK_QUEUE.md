@@ -54,7 +54,9 @@ A file whose `id` names a sourced task (`R-0539`, `bug-136`, `fuzz-x`) does not 
 amends the sourced one. `disposition` takes the task out of dispatch, which is how in-flight branches
 are recorded. `areas`, `depends`, `tier` or a body override the derived values. An area written by
 hand is a rule if it reads `R-NNNN`, a path if it contains `/` or `.`, and a compiler module
-otherwise. A file with an unknown key, tier or disposition exits 2, and the tick writes nothing.
+otherwise. A file with an unknown key, tier or disposition exits 2, and the tick dispatches nothing. A
+disposition whose id no source lists is not an error. `queue.json` records it under
+`unmatched_dispositions`.
 
 ## Priority, dependencies and areas
 
@@ -71,8 +73,9 @@ or file name.
 6. **loud**: every other open bug. Under the ROADMAP's defect disposition rule, a loud defect waits
    for its structural owner, so these come after the roadmap.
 
-A task is ready when none of its dependencies is still in the queue undone. The dispatcher's state or
-a `done` disposition marks a dependency done. A dependency cycle is marked `cycle` in `queue.json`,
+A task is ready when each dependency has left the queue, is disposed `done`, or has **landed**. A
+dependency has landed when its published SHA is an ancestor of `origin/main`. Being ready to land is
+not enough, because a dependent starts from `origin/main` and would not contain the work. A dependency cycle is marked `cycle` in `queue.json`,
 is never started, and is reported once as `dependency_cycle`.
 
 **Touched areas.** Two tasks run together only when their area sets are disjoint. Areas are rules
@@ -93,19 +96,28 @@ released, because its branch is not landed yet.
 
 Each tick runs these steps:
 
-1. It takes an exclusive lock, fetches, re-detaches the source checkout at `origin/main`, and writes
-   `queue.json`.
+1. It takes an exclusive lock, reads the state, fetches, and re-detaches the source checkout at
+   `origin/main`. Process control comes before the sources: a failed fetch or a malformed source
+   is reported as `source_error`, and monitoring and the kill switch still run. Only dispatch is
+   skipped in that case.
 2. **Monitor.** For every running or exited task:
    - If the process has ended, it reads the exit status and the run's `result` event (cost, tokens).
      A usage limit releases the task. Any other nonzero exit is a failure.
    - A new SHA on `refs/heads/wip/queue/<task>` is a **heartbeat**.
    - If that SHA carries `verdict: clean` in `refs/notes/concrete-review` and `gates: pass` in
-     `refs/notes/concrete-gates`, the task is **done**. This is the landing bot's readiness contract;
-     `scripts/land/notes.sh ready` is used when the source checkout has it. The dispatcher notifies.
-     It removes the worktree once the agent has exited and the worktree's HEAD is the published SHA.
+     `refs/notes/concrete-gates`, the task is ready. This is the landing bot's readiness contract;
+     `scripts/land/notes.sh ready` is used when the source checkout has it. An exited agent that is
+     ready is **done**, and the dispatcher notifies. An agent that is ready but still running keeps
+     its slot, its areas and its stuck watch. It becomes done when it exits, or when it stalls and
+     is stopped. A done task's worktree is removed once the worktree's HEAD is the published SHA and
+     the tree is clean.
    - If there has been no new push for `QUEUE_STUCK_MINUTES` (60) since the last push or the start,
-     the task is **stuck**. The dispatcher kills the agent's process group, notifies, and releases
-     the task.
+     the task is **stuck**. The dispatcher notifies and releases the task.
+   - To stop an agent, the dispatcher signals its whole process group: SIGTERM, then SIGKILL after
+     `QUEUE_KILL_GRACE` seconds (default 10). The group is identified by `runs/<task>.<n>/pid`, so
+     this works even if the pid never reached the state. If anything survives, the task stays
+     `stopping` and keeps its areas until a later tick succeeds. A launch recorded without a pid
+     (the tick died mid-start) is stopped the same way and released uncharged.
 3. **Kill switch.** While `~/.concrete-queue-paused` exists, nothing starts and monitoring continues.
    If the file's first line is `kill`, running agents are also stopped and their tasks are released
    without charge.
@@ -119,12 +131,12 @@ Each tick runs these steps:
 5. It writes `state.json` and `status.json`.
 
 A released task returns to the queue. A failure or a stuck release charges one attempt, and at
-`QUEUE_MAX_ATTEMPTS` (2) the task becomes `abandoned` (notified; it needs a human). Clear the
-abandoned state with `dispatch.sh release <task>`. A usage limit and the kill switch charge nothing.
+`QUEUE_MAX_ATTEMPTS` (2) the task becomes `abandoned` (notified; it needs a human). `dispatch.sh release <task>` stops the task, resets its attempts and returns it to the queue. This is
+how an abandoned task is recovered. A usage limit and the kill switch charge nothing.
 
 ### What an agent gets
 
-Each task gets its own worktree, `~/.local/state/concrete-queue/worktrees/<task>`, and its own branch,
+Each task gets its own worktree, `~/queue/worktrees/<task>` (`QUEUE_WORKTREES`), and its own branch,
 `queue/<task>`. The branch starts at `origin/wip/queue/<task>` when an earlier run published there,
 and at `origin/main` otherwise. The prompt is the playbook command (`/fix-bug N`,
 `/roadmap-item R-NNNN`). The playbooks own the working rules:
@@ -158,7 +170,8 @@ cannot cross it. The permission list is not that boundary.
   runners). An agent can damage only what `agent` owns: its own clones, worktrees and the queue
   state.
 - **The queue clone (`~/queue/concrete2`) has `origin` only.** It has no `lambdaclass` remote and
-  no `fork` remote. Its `core.hooksPath` is the **push guard**, which refuses every target except
+  no `fork` remote. Its `core.hooksPath` is the **push guard** (the dispatcher checks that it exists
+  and is executable), which refuses every target except
   `refs/heads/wip/*` and the two readiness-note refs, and then runs the repository's own pre-push
   wip tier. The dispatcher starts nothing while the guard is missing. The interactive clone
   `~/concrete2` is never touched.
@@ -203,7 +216,8 @@ All knobs are set in `~/.config/concrete-queue/env`.
 | `QUEUE_FUZZ_DIR`, `QUEUE_STATUS_JSON`, `QUEUE_NOTIFY`, `QUEUE_MODEL` | unset | as named |
 
 Cost and tokens become known only when a run ends, so a running agent counts toward agent-hours but
-not toward cost. On subscription logins, `total_cost_usd` is Claude Code's API-price estimate. It is
+not toward cost. A run stopped before its `result` event is recorded with `usage_known: false`, so
+its cost is unknown and not counted as zero. On subscription logins, `total_cost_usd` is Claude Code's API-price estimate. It is
 not a bill.
 
 **Account rotation.** A new agent goes to the slot with the fewest running agents, then the slot
@@ -224,9 +238,11 @@ These files live under `~/.local/state/concrete-queue/`:
 - `state.json` holds tasks, slots, runs and flags. Each task records its status, agent (session id),
   slot, pid, worktree, branch, wip ref, start time, last push and attempts.
 - `events.log` is append-only JSON lines: `claimed`, `heartbeat`, `exited`, `done`, `stuck`,
-  `usage_limit`, `released`, `worktree_removed`. Conditions are logged when they change: `paused`,
-  `budget_exhausted`, `no_slot_available`, `push_guard_missing` and `dependency_cycle`, each with
-  its `_cleared`.
+  `usage_limit`, `ready`, `landed`, `released`, `stop_pending`, `launch_incomplete`,
+  `worktree_removed`. Conditions are logged when they change: `paused`, `budget_exhausted`,
+  `no_slot_available`, `push_guard_missing`, `source_error` and `dependency_cycle`, each with its
+  `_cleared`. A failure to write the status page is logged as `status_write_failed` and never
+  costs the state.
 - `status.json` feeds the status page. It holds the running tasks, the first 10 of the queue with
   their blocking reason, the budget used against its caps, the resting slots, and counts. It is
   copied to `QUEUE_STATUS_JSON` when that is set.

@@ -58,6 +58,8 @@ def env_float(name, default):
 
 CONFIG = {
     "home": E("QUEUE_HOME", os.path.join(HOME, ".local/state/concrete-queue")),
+    # Outside ~/.local: the agents' settings deny edits there, and worktrees must stay editable.
+    "worktrees": E("QUEUE_WORKTREES", os.path.join(HOME, "queue/worktrees")),
     "repo": E("QUEUE_REPO", os.path.join(HOME, "queue/concrete2")),
     "source_root": E("QUEUE_SOURCE_ROOT", ""),          # default: <home>/source, detached at base
     "remote": E("QUEUE_REMOTE", "origin"),
@@ -86,7 +88,9 @@ CONFIG = {
                         r"usage limit|hit your (?:usage )?limit|limit reached|out of extra usage|"
                         r"rate_limit_error|\b429\b"),
 }
-ACTIVE = ("running", "exited")
+ACTIVE = ("running", "exited", "stopping")
+# Statuses the dispatcher never starts again on its own (release puts a task back to pending).
+NOT_STARTABLE = ("launching", "running", "exited", "stopping", "done", "abandoned")
 TOOLS_ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "TodoWrite", "Task", "Agent",
                "Skill", "Bash"]
 # Guard rails, not the security boundary (WORK_QUEUE.md, "Trust model"): the boundary is the
@@ -199,6 +203,7 @@ class Q:
             return
         src = self.source_root()
         if not os.path.isdir(src):
+            self.git("worktree", "prune")  # a removed directory may still be registered
             self.git("worktree", "add", "-q", "--detach", src, self.cfg["base"])
         else:
             self.git("checkout", "-q", "--detach", "-f", self.cfg["base"], cwd=src)
@@ -208,7 +213,8 @@ class Q:
             return True
         hp = self.git("config", "--get", "core.hooksPath", check=False)
         p = os.path.join(hp, "pre-push") if hp else ""
-        return bool(p) and os.path.isfile(p) and "concrete-queue push guard" in open(p, encoding="utf-8").read()
+        return bool(p) and os.path.isfile(p) and os.access(p, os.X_OK) \
+            and "concrete-queue push guard" in open(p, encoding="utf-8").read()
 
     def remote_sha(self, ref):
         out = self.git("ls-remote", self.cfg["remote"], "refs/heads/" + ref, check=False)
@@ -248,13 +254,39 @@ class Q:
         except ChildProcessError:
             return True
 
+    @staticmethod
+    def group_alive(pgid):
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
     def kill(self, t):
-        pid = t.get("pid")
-        if self.alive(pid):
+        """Stop the agent's whole session (its own process group, even after the wrapper died):
+        SIGTERM, up to QUEUE_KILL_GRACE seconds, then SIGKILL. True when nothing of it is left."""
+        pgid = t.get("pid")
+        if not pgid and t.get("run_dir"):  # a launch whose pid never reached state.json
             try:
-                os.killpg(pid, signal.SIGTERM)
+                pgid = int(open(os.path.join(t["run_dir"], "pid"), encoding="utf-8").read().strip())
+            except (OSError, ValueError):
+                pgid = None
+        if not pgid:
+            return True
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(pgid, sig)
             except (ProcessLookupError, PermissionError):
                 pass
+            deadline = time.time() + float(E("QUEUE_KILL_GRACE", "10"))
+            while time.time() < deadline:
+                self.alive(pgid)  # reaps the leader when it is this process's child
+                if not self.group_alive(pgid):
+                    return True
+                time.sleep(0.1)
+        return not self.group_alive(pgid)
 
     def run_result(self, run_dir):
         """(exit code or None, usage-limit hit, cost usd, tokens) from a finished run."""
@@ -285,7 +317,7 @@ class Q:
                 limit_text.append(str(result.get("result", "")))
         # Only the CLI's own error text decides a usage limit, never tool output inside the stream.
         hit = bool(re.search(self.cfg["usage_limit_re"], "\n".join(limit_text), re.I))
-        return rc, hit, cost, tokens
+        return rc, hit, cost, tokens, result is not None
 
     # ------------------------------------------------------------ budgets
     def usage_today(self, t_now):
@@ -324,8 +356,16 @@ class Q:
                                         self.cfg["slots"].index(s)))
 
     # ------------------------------------------------------------ lifecycle
-    def release(self, tid, t, why, charge):
-        self.kill(t)
+    def release(self, tid, t, why, charge, t_now=None):
+        if not self.kill(t):
+            # Part of the agent survived SIGKILL (uninterruptible I/O): keep its areas and its
+            # worktree, and try again next tick.
+            t["status"] = "stopping"
+            t["release_reason"] = why
+            self.event("stop_pending", tid, reason=why)
+            return
+        if t.get("status") in ("running", "stopping", "launching"):
+            self.finish_run(t, now() if t_now is None else t_now)
         if charge:
             t["attempts"] = t.get("attempts", 0) + 1
         t["status"] = "abandoned" if t.get("attempts", 0) >= self.cfg["max_attempts"] else "pending"
@@ -336,19 +376,25 @@ class Q:
         if t["status"] == "abandoned":
             self.notify(f"queue: {tid} abandoned", f"{why}; {t.get('attempts')} failed attempts; needs a human")
 
-    def close_run(self, t, t_now, rc, hit, cost, tokens):
+    def close_run(self, t, t_now, rc, hit, cost, tokens, known):
         for r in reversed(self.state["runs"]):
             if r.get("run_dir") == t.get("run_dir") and not r.get("end"):
-                r.update(end=t_now, rc=rc, usd=cost, tokens=tokens, usage_limit=hit)
+                # A run stopped before its result event has UNKNOWN usage, recorded as such.
+                r.update(end=t_now, rc=rc, usd=cost, tokens=tokens, usage_limit=hit, usage_known=known)
                 break
+
+    def finish_run(self, t, t_now):
+        """Close the task's open run with whatever its log and exit file recorded."""
+        rc, hit, cost, tokens, known = self.run_result(t["run_dir"])
+        self.close_run(t, t_now, rc, hit, cost, tokens, known)
+        return rc, hit, cost, tokens
 
     def cleanup(self, tid, t):
         """Remove a done task's worktree once its agent is gone and everything in it is published."""
         if self.alive(t.get("pid")):
             return
-        if t.get("pid"):  # the agent outlived the readiness notes; account for its run now
-            rc, hit, cost, tokens = self.run_result(t["run_dir"])
-            self.close_run(t, now(), rc, hit, cost, tokens)
+        if t.get("pid"):
+            self.finish_run(t, now())
             t.pop("pid", None)
         wt = t.get("worktree")
         if not wt or not os.path.isdir(wt):
@@ -364,11 +410,19 @@ class Q:
         for tid, t in self.state["tasks"].items():
             if t.get("status") == "done":
                 self.cleanup(tid, t)
+            if t.get("status") == "launching":
+                # A tick died between recording the launch and recording the pid: there is no pid
+                # to watch, so stop whatever runs in the worktree's run and release uncharged.
+                self.event("launch_incomplete", tid)
+                self.release(tid, t, "launch not recorded", charge=False, t_now=t_now)
+                continue
             if t.get("status") not in ACTIVE:
                 continue
+            if t["status"] == "stopping":
+                self.release(tid, t, t.get("release_reason") or "stopping", charge=False, t_now=t_now)
+                continue
             if t["status"] == "running" and not self.alive(t.get("pid")):
-                rc, hit, cost, tokens = self.run_result(t["run_dir"])
-                self.close_run(t, t_now, rc, hit, cost, tokens)
+                rc, hit, cost, tokens = self.finish_run(t, t_now)
                 if hit:
                     s = t["slot"]
                     self.state["slots"].setdefault(s, {})["limited_at"] = t_now
@@ -388,24 +442,53 @@ class Q:
                 t["last_sha"] = sha
                 t["last_push"] = t_now
                 self.event("heartbeat", tid, sha=sha)
-            if t.get("last_sha") and self.ready(t["last_sha"]):
-                t["status"] = "done"
-                t["done"] = utc()
-                self.event("done", tid, sha=t["last_sha"], branch=t["wip_ref"])
-                self.notify(f"queue: {tid} ready to land", f"{t['wip_ref']} at {t['last_sha']}")
+            ready = bool(t.get("last_sha")) and self.ready(t["last_sha"])
+            if ready and t["status"] == "exited":
+                self.mark_done(tid, t)
                 continue
+            if ready and t.get("ready_sha") != t["last_sha"]:
+                # Ready, but the agent still runs: it keeps its slot, areas and stuck watch until it
+                # exits (then it is done) or stalls (then it is stopped and done).
+                t["ready_sha"] = t["last_sha"]
+                self.event("ready", tid, sha=t["last_sha"])
             if t_now - (t.get("last_push") or t["started_at"]) > stuck_s:
+                if ready:
+                    if self.kill(t):
+                        self.finish_run(t, t_now)
+                        t.pop("pid", None)
+                        self.mark_done(tid, t)
+                    continue
                 self.event("stuck", tid, minutes=self.cfg["stuck_minutes"], last_sha=t.get("last_sha", ""))
                 self.notify(f"queue: {tid} stuck",
                             f"no push to {t['wip_ref']} for {self.cfg['stuck_minutes']:g} min; released")
-                if t["status"] == "running":
-                    self.close_run(t, t_now, None, False, 0.0, 0)
-                self.release(tid, t, "stuck: no wip push", charge=True)
+                self.release(tid, t, "stuck: no wip push", charge=True, t_now=t_now)
+
+    def mark_done(self, tid, t):
+        t["status"] = "done"
+        t["done"] = utc()
+        self.event("done", tid, sha=t["last_sha"], branch=t["wip_ref"])
+        self.notify(f"queue: {tid} ready to land", f"{t['wip_ref']} at {t['last_sha']}")
+
+    def landed(self, tid):
+        """A done task's work is on the base branch (the landing bot merged it)."""
+        t = self.state["tasks"].get(tid, {})
+        if t.get("landed"):
+            return True
+        if t.get("status") != "done" or not t.get("last_sha"):
+            return False
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", t["last_sha"], self.cfg["base"]],
+                           cwd=self.cfg["repo"], capture_output=True)
+        if r.returncode == 0:
+            t["landed"] = utc()
+            self.event("landed", tid, sha=t["last_sha"])
+        return r.returncode == 0
 
     def deps_ok(self, task, by_id):
+        """A dependency is met when it is no longer queued, is disposed `done`, or its work has
+        landed on the base branch. A dependent starts from the base, so ready-but-unlanded work
+        would be missing from its worktree."""
         for d in task.get("depends", []):
-            if d in by_id and self.state["tasks"].get(d, {}).get("status") != "done" \
-                    and by_id[d].get("disposition") != "done":
+            if d in by_id and by_id[d].get("disposition") != "done" and not self.landed(d):
                 return False
         return True
 
@@ -426,11 +509,12 @@ class Q:
         t = self.state["tasks"].setdefault(tid, {})
         branch = self.cfg["branch_prefix"] + tid
         wip_ref = self.cfg["wip_prefix"] + tid
-        wt = os.path.join(self.home, "worktrees", tid)
+        wt = os.path.join(self.cfg["worktrees"], tid)
         if not os.path.isdir(wt):
             remote_wip = f"refs/remotes/{self.cfg['remote']}/{wip_ref}"
             start_at = remote_wip if self.git("rev-parse", "-q", "--verify", remote_wip, check=False) \
                 else self.cfg["base"]
+            self.git("worktree", "prune")
             self.git("worktree", "add", "-q", "-B", branch, wt, start_at)
         n = len([r for r in self.state["runs"] if r["task"] == tid]) + 1
         run_dir = os.path.join(self.home, "runs", f"{tid}.{n}")
@@ -464,6 +548,9 @@ class Q:
             env.pop(k, None)
         with open(os.path.join(run_dir, "command.json"), "w", encoding="utf-8") as f:
             json.dump([self.cfg["cswap"], "run", slot, "--", *cmd], f, indent=1)
+        t.update(status="launching", run_dir=run_dir, worktree=wt, areas=task["areas"])
+        self.state["runs"].append({"task": tid, "slot": slot, "start": t_now, "run_dir": run_dir})
+        self.save()
         p = subprocess.Popen(["bash", runner, run_dir, wt, self.cfg["cswap"], "run", slot, "--", *cmd],
                              cwd=wt, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
@@ -473,14 +560,14 @@ class Q:
         t.pop("last_push", None)
         t.setdefault("attempts", 0)
         self.state["slots"].setdefault(slot, {})["last_start"] = t_now
-        self.state["runs"].append({"task": tid, "slot": slot, "start": t_now, "run_dir": run_dir})
         self.event("claimed", tid, slot=slot, worktree=wt, branch=branch, agent=t["agent"], pid=p.pid,
                    areas=task["areas"])
+        self.save()  # a started agent is on disk before anything else can fail
 
     def dispatch(self, queue, t_now):
         by_id = {t["id"]: t for t in queue["tasks"]}
         active = {tid: t for tid, t in self.state["tasks"].items() if t.get("status") in ACTIVE}
-        running = sum(1 for t in active.values() if t["status"] == "running")
+        running = sum(1 for t in active.values() if t["status"] in ("running", "stopping"))
         held = [set(t.get("areas", [])) for t in active.values()]
         cycles = sorted(t["id"] for t in queue["tasks"] if t.get("cycle"))
         self.flag("cycle", bool(cycles), "dependency_cycle", tasks=cycles)
@@ -489,7 +576,7 @@ class Q:
             if running >= self.cfg["max_agents"]:
                 break
             st = self.state["tasks"].get(task["id"], {}).get("status")
-            if task.get("disposition") or task.get("cycle") or st in ("running", "exited", "done", "abandoned"):
+            if task.get("disposition") or task.get("cycle") or st in NOT_STARTABLE:
                 continue
             if not self.deps_ok(task, by_id):
                 continue
@@ -517,7 +604,7 @@ class Q:
                  ("cycle" if t.get("cycle") else ("" if self.deps_ok(t, {x["id"]: x for x in queue["tasks"]})
                                                   else "dependencies"))}
                 for t in queue["tasks"]
-                if tasks.get(t["id"], {}).get("status") not in ("running", "exited", "done", "abandoned")][:10]
+                if tasks.get(t["id"], {}).get("status") not in NOT_STARTABLE][:10]
         st = {
             "generated": utc(t_now), "paused": paused,
             "running": [{"id": k, **{f: v.get(f) for f in ("status", "slot", "branch", "wip_ref", "started",
@@ -533,55 +620,79 @@ class Q:
                       for s, v in self.state["slots"].items()
                       if t_now - v.get("limited_at", -1e18) < self.cfg["slot_cooldown"]},
             "counts": {s: sum(1 for v in tasks.values() if v.get("status") == s)
-                       for s in ("running", "exited", "done", "pending", "abandoned")},
+                       for s in ("running", "exited", "stopping", "done", "pending", "abandoned")},
         }
         data = json.dumps(st, indent=1, sort_keys=True) + "\n"
         for p in filter(None, [os.path.join(self.home, "status.json"), self.cfg["status_json"]]):
-            with open(p + ".tmp", "w", encoding="utf-8") as f:
-                f.write(data)
-            os.replace(p + ".tmp", p)
+            try:  # the status page is a view: failing to publish it never costs the state
+                with open(p + ".tmp", "w", encoding="utf-8") as f:
+                    f.write(data)
+                os.replace(p + ".tmp", p)
+            except OSError as e:
+                self.event("status_write_failed", path=p, error=str(e)[:200])
+
+    def read_pause(self):
+        if not os.path.exists(self.cfg["pause_file"]):
+            return ""
+        try:
+            return open(self.cfg["pause_file"], encoding="utf-8").read().strip().split("\n")[0] or "pause"
+        except OSError:
+            return "pause"
 
     def tick(self):
+        """Process control first (monitor, kill switch), sources second: a fetch failure or a
+        malformed source must never stop the queue from watching, stopping or releasing agents."""
         t_now = now()
-        self.refresh_sources()
-        queue = build_queue.build(self.source_root(), self.cfg["fuzz_dir"])
-        with open(os.path.join(self.home, "queue.json.tmp"), "w", encoding="utf-8") as f:
-            json.dump(queue, f, indent=1, sort_keys=True)
-        os.replace(os.path.join(self.home, "queue.json.tmp"), os.path.join(self.home, "queue.json"))
-        self.monitor(t_now)
-        pause = ""
-        if os.path.exists(self.cfg["pause_file"]):
-            try:
-                pause = open(self.cfg["pause_file"], encoding="utf-8").read().strip().split("\n")[0] or "pause"
-            except OSError:
-                pause = "pause"
+        source_error = ""
+        try:
+            self.refresh_sources()
+        except (RuntimeError, OSError) as e:
+            source_error = f"refresh: {e}"
+        try:
+            self.monitor(t_now)
+        finally:
+            self.save()
+        pause = self.read_pause()
         self.flag("paused", bool(pause), "paused", mode=pause)
         if pause == "kill":
             for tid, t in self.state["tasks"].items():
                 if t.get("status") in ACTIVE:
-                    if t["status"] == "running":
-                        self.close_run(t, t_now, None, False, 0.0, 0)
-                    self.release(tid, t, "kill switch", charge=False)
+                    self.release(tid, t, "kill switch", charge=False, t_now=t_now)
+        queue = None
+        if not source_error:
+            try:
+                queue = build_queue.build(self.source_root(), self.cfg["fuzz_dir"])
+            except SystemExit as e:  # build_queue exits 2 on a malformed source
+                source_error = f"build: exit {e.code} (see the dispatcher's stderr)"
+            except (OSError, ValueError) as e:
+                source_error = f"build: {e}"
+        self.flag("source_error", bool(source_error), "source_error", error=source_error)
+        if queue is not None:
+            with open(os.path.join(self.home, "queue.json.tmp"), "w", encoding="utf-8") as f:
+                json.dump(queue, f, indent=1, sort_keys=True)
+            os.replace(os.path.join(self.home, "queue.json.tmp"), os.path.join(self.home, "queue.json"))
         started = []
-        if not pause:
+        if not pause and queue is not None:
             guard = self.guard_ok()
             self.flag("no_guard", not guard, "push_guard_missing", repo=self.cfg["repo"])
             if guard:
                 started = self.dispatch(queue, t_now)
-        self.write_status(queue, t_now, bool(pause))
         self.save()
+        self.write_status(queue or {"tasks": []}, t_now, bool(pause))
         return started
 
 
 def main():
     sub = sys.argv[1] if len(sys.argv) > 1 else ""
-    q = Q(CONFIG)
-    lock = open(os.path.join(q.home, "lock"), "w")
+    home = CONFIG["home"]
+    os.makedirs(home, exist_ok=True)
+    lock = open(os.path.join(home, "lock"), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         print("dispatch: another tick holds the lock; nothing to do")
         return 0
+    q = Q(CONFIG)  # state is read only under the lock
     if sub == "tick":
         started = q.tick()
         print("dispatch: started " + (", ".join(started) if started else "nothing"))
@@ -592,10 +703,10 @@ def main():
         t = q.state["tasks"].get(sys.argv[2])
         if not t:
             sys.exit(f"dispatch: no task {sys.argv[2]} in state")
-        if t.get("status") == "running":
-            q.close_run(t, now(), None, False, 0.0, 0)
+        t["attempts"] = 0  # the documented recovery of an abandoned task
         q.release(sys.argv[2], t, "released by hand", charge=False)
         q.save()
+        print(f"dispatch: {sys.argv[2]} is {t['status']}")
     else:
         print(__doc__.split("\n\n")[1])
         return 2

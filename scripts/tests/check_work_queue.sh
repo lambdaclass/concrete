@@ -15,11 +15,16 @@
 #   caps        the concurrency cap; the agent-hours and USD daily budgets stop new starts
 #   rotation    a usage limit releases the task uncharged and restarts it on another slot; a limited
 #               slot is not used again within the hour; tool output mentioning a limit is not one
-#   lifecycle   heartbeat from wip pushes; clean+pass notes make a task done, unblock its dependents
-#               and retire its worktree; no push for the stuck window kills and releases it
-#   kill switch the pause file stops new starts; `kill` in it also stops running agents
-#   guard       the queue clone refuses pushes to main; a clone without the guard starts nothing
-#   install     units are written with KillMode=process and the timer is NOT enabled
+#   lifecycle   heartbeat from wip pushes; clean+pass notes make an exited task done; a ready agent
+#               that still runs keeps its slot until it stalls; dependents wait until the work
+#               LANDS on main; done worktrees are retired; no push for the stuck window kills and
+#               releases (and at the attempt cap abandons); `release` recovers an abandoned task
+#   kill switch the pause file stops new starts; `kill` in it also stops running agents, and keeps
+#               doing so while the sources are broken (a malformed fuzz finding)
+#   guard       the queue clone refuses pushes to main and ci/*, runs the repository's own pre-push
+#               after it; a missing or non-executable guard starts nothing
+#   install     the unit text (KillMode=process) and the timer is NOT enabled; no systemd is run,
+#               and the agents' permission settings are checked as text, not by a real claude
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 QD="$ROOT_DIR/scripts/queue"
@@ -178,7 +183,23 @@ mkdir -p "$TMP/bad/tasks"; printf -- '---\nid: x\nsize: 3\n---\nbody\n' > "$TMP/
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/bad" > /dev/null 2>&1 || rc=$?
 [ "$rc" = 2 ] && ok "an unknown task-file key exits 2" || no "malformed task file exit $rc (want 2)"
 
+echo "=== the repository's own sources ==="
+if python3 "$QD/build_queue.py" --root "$ROOT_DIR" > "$TMP/real.json" 2> "$TMP/real.err"; then
+  ok "build_queue.py builds a queue from this checkout's bugs, ROADMAP and tasks/"
+else
+  no "build_queue.py fails on this checkout: $(cat "$TMP/real.err")"
+fi
+mkdir -p "$TMP/x/tasks"; printf -- '---\nareas: Concrete/Check/Lower.lean\n---\ndo it\n' > "$TMP/x/tasks/a.md"
+printf -- '---\nid: R-9999\ndisposition: done\n---\n' > "$TMP/x/tasks/gone.md"
+xa="$(python3 "$QD/build_queue.py" --root "$TMP/x" 2>&1 | python3 -c 'import json,sys; q=json.load(sys.stdin); print(" ".join(q["tasks"][0]["areas"]), "|", " ".join(q["unmatched_dispositions"]))' 2>&1)"
+[ "$xa" = "mod:Lower path:Concrete/Check/Lower.lean | tasks/gone.md" ] && ok "a hand-written Concrete/**/X.lean area also names module X; a disposition for an unlisted id is recorded, not fatal" \
+  || no "explicit areas / unmatched: '$xa'"
+
 # ------------------------------------------------------------------ the sandbox repository and stubs
+export HOOK_LOG="$TMP/hook.log"
+mkdir -p "$SRC/.githooks"
+printf '#!/usr/bin/env bash\ncat > /dev/null\necho "repo pre-push $1" >> "$HOOK_LOG"\n' > "$SRC/.githooks/pre-push"
+chmod +x "$SRC/.githooks/pre-push"
 git init -q --bare "$TMP/remote.git"
 git clone -q "$TMP/remote.git" "$TMP/seed" 2>/dev/null
 cp -r "$SRC/." "$TMP/seed/"
@@ -209,9 +230,18 @@ case "$b" in
   noisy-fail)
     echo '{"type":"user","message":"tool output: usage limit reached in the docs"}'; result true "build failed" 0.1; exit 1 ;;
   hang) push; sleep 600 ;;
+  ready-hang)
+    push
+    git fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review" "+refs/notes/concrete-gates:refs/notes/concrete-gates" 2>/dev/null || true
+    git notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
+    git notes --ref=refs/notes/concrete-gates add -f -m "gates: pass" HEAD
+    git push -q origin refs/notes/concrete-review refs/notes/concrete-gates 2>>"$STUB/push.err"
+    touch "$STUB/noted.$QUEUE_TASK_ID"
+    sleep 600 ;;
   silent) sleep 600 ;;
   ready)
     push
+    git fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review" "+refs/notes/concrete-gates:refs/notes/concrete-gates" 2>/dev/null || true
     git notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
     git notes --ref=refs/notes/concrete-gates add -f -m "gates: pass" HEAD
     git push -q origin refs/notes/concrete-review refs/notes/concrete-gates 2>>"$STUB/push.err"
@@ -229,7 +259,7 @@ scenario() {
   HOME="$S" XDG_CONFIG_HOME="$S/xdg/config" XDG_DATA_HOME="$S/xdg/data" QUEUE_REPO="$S/repo" \
     QUEUE_NO_SYSTEMCTL=1 bash "$QD/install-queue.sh" "$TMP/remote.git" > "$S/install.log" 2>&1 \
     || no "$1: install-queue.sh failed: $(tail -3 "$S/install.log")"
-  export STUB="$S/stub" QUEUE_HOME="$S/home" QUEUE_REPO="$S/repo" QUEUE_PAUSE_FILE="$S/paused" \
+  export STUB="$S/stub" QUEUE_HOME="$S/home" QUEUE_REPO="$S/repo" QUEUE_WORKTREES="$S/worktrees" QUEUE_KILL_GRACE=3 QUEUE_PAUSE_FILE="$S/paused" \
     QUEUE_CLAUDE="$TMP/bin/claude" QUEUE_CSWAP="$TMP/bin/cswap" QUEUE_ENV_FILE="$S/none" \
     QUEUE_FUZZ_DIR="" QUEUE_MAX_AGENTS=3 QUEUE_SLOTS="1 2 3 4" QUEUE_MAX_ATTEMPTS=2
   unset QUEUE_MAX_AGENT_HOURS QUEUE_MAX_DAILY_USD QUEUE_STUCK_MINUTES QUEUE_REQUIRE_GUARD
@@ -261,7 +291,7 @@ sys.exit(1)' "$1"; }
 echo "=== push guard and install ==="
 scenario guard
 [ "$(git -C "$QUEUE_REPO" config core.hooksPath)" = "$S/xdg/data/concrete-queue/hooks" ] && ok "install points the clone's hooks at the guard" || no "hooksPath: $(git -C "$QUEUE_REPO" config core.hooksPath)"
-grep -q '^KillMode=process' "$S/xdg/config/systemd/user/concrete-queue.service" && ok "the service keeps detached agents alive (KillMode=process)" || no "KillMode=process missing"
+grep -q '^KillMode=process' "$S/xdg/config/systemd/user/concrete-queue.service" && ok "the service unit sets KillMode=process (detached agents outlive a tick)" || no "KillMode=process missing"
 [ -f "$S/xdg/config/systemd/user/concrete-queue.timer" ] && [ ! -e "$S/xdg/config/systemd/user/timers.target.wants/concrete-queue.timer" ] \
   && ok "the timer is written and NOT enabled" || no "timer missing or enabled"
 grep -q 'systemctl --user enable --now concrete-queue.timer' "$S/install.log" && ok "install prints the enable command" || no "no enable command printed"
@@ -270,7 +300,15 @@ git -C "$QUEUE_REPO" commit -q --allow-empty -m "try main"
 if git -C "$QUEUE_REPO" push -q origin HEAD:refs/heads/main 2>/dev/null; then no "the guard let a push to main through"; else ok "the guard refuses a push to main"; fi
 git -C "$QUEUE_REPO" push -q origin HEAD:refs/heads/ci/x 2>/dev/null && no "the guard let a push to ci/* through" || ok "the guard refuses a push to ci/*"
 git -C "$QUEUE_REPO" push -q origin HEAD:refs/heads/wip/queue/try 2>/dev/null && ok "the guard allows wip/*" || no "the guard refused wip/*"
+grep -q 'repo pre-push origin' "$HOOK_LOG" 2>/dev/null && ok "the guard then runs the repository's own pre-push" || no "the repository's pre-push was not run"
 [ "$(git -C "$TMP/remote.git" rev-parse main)" = "$main0" ] && ok "remote main unchanged" || no "remote main moved"
+chmod -x "$S/xdg/data/concrete-queue/hooks/pre-push"
+tick "$T0"
+[ -z "$(running_ids)" ] && [ "$(events push_guard_missing)" = 1 ] && ok "a non-executable guard (git would skip it): no agents" || no "started with a non-executable guard: $(running_ids)"
+chmod +x "$S/xdg/data/concrete-queue/hooks/pre-push"
+tick "$T0"
+echo kill > "$QUEUE_PAUSE_FILE"; tick "$T0"; rm -f "$QUEUE_PAUSE_FILE"
+rm -rf "$QUEUE_HOME"
 git -C "$QUEUE_REPO" config --unset core.hooksPath
 tick "$T0"
 [ -z "$(running_ids)" ] && [ "$(events push_guard_missing)" = 1 ] && ok "no guard, no agents (and one event)" || no "started without the guard: $(running_ids)"
@@ -309,6 +347,8 @@ QUEUE_MAX_AGENTS=4 tick "$((T0+180))"
 sleep 0.5
 [ -z "$(running_ids)" ] && dead "$pid" && [ "$(st R-0547 status)" = pending ] && [ "$(st R-0547 attempts)" = 0 ] \
   && ok "kill: agents stopped, tasks released uncharged" || no "kill: running='$(running_ids)' status=$(st R-0547 status)"
+python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["runs"][0]; sys.exit(0 if r["end"] and r["usage_known"] is False else 1)' "$QUEUE_HOME/state.json" \
+  && ok "a killed run's usage is recorded as unknown, not zero" || no "killed run accounting: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runs"][0])' "$QUEUE_HOME/state.json")"
 rm -f "$QUEUE_PAUSE_FILE"
 QUEUE_MAX_AGENTS=1 tick "$((T0+240))"
 [ "$(running_ids)" = R-0547 ] && [ "$(events paused_cleared)" = 1 ] && ok "removing the switch resumes dispatch" || no "resume: '$(running_ids)'"
@@ -378,10 +418,41 @@ wt="$(st R-0547 worktree)"
 wait_exit R-0547
 QUEUE_MAX_AGENTS=1 tick "$((T0+60))"
 [ "$(st R-0547 status)" = done ] && [ "$(events heartbeat)" -ge 1 ] && ok "clean review + passing gates notes on the wip head: done" || no "done: status=$(st R-0547 status)"
-[ "$(running_ids)" = R-0539 ] && ok "its dependent (R-0539) starts once it is done" || no "dependent: '$(running_ids)'"
-QUEUE_MAX_AGENTS=1 tick "$((T0+120))"
+QUEUE_MAX_AGENTS=0 tick "$((T0+120))"
 [ ! -d "$wt" ] && [ "$(events worktree_removed)" = 1 ] && ok "a done task's published worktree is removed" || no "worktree $wt still present"
 [ "$(git -C "$TMP/remote.git" rev-parse main)" = "$main0" ] && ok "main untouched by the whole lifecycle" || no "main moved"
+grep -q '"blocked": "dependencies"' "$QUEUE_HOME/status.json" && [ "$(st R-0539 status)" = "" ] \
+  && ok "its dependent (R-0539) waits while the work is ready but not landed" || no "R-0539 started before R-0547 landed"
+# The landing bot's part, simulated: R-0547's wip head reaches main.
+git -C "$TMP/seed" fetch -q origin "refs/heads/wip/queue/R-0547" && git -C "$TMP/seed" merge -q --ff-only FETCH_HEAD \
+  && git -C "$TMP/seed" push -q origin main 2>/dev/null
+QUEUE_MAX_AGENTS=1 tick "$((T0+180))"
+[ "$(running_ids)" = R-0539 ] && [ "$(events landed)" = 1 ] && ok "once it lands on main, the dependent starts" || no "after landing: '$(running_ids)'"
+echo kill > "$QUEUE_PAUSE_FILE"; tick "$((T0+240))"; rm -f "$QUEUE_PAUSE_FILE"
+
+scenario readyhang
+echo ready-hang > "$STUB/behave/R-0547"
+QUEUE_MAX_AGENTS=1 tick "$T0"; pid="$(st R-0547 pid)"
+for i in $(seq 1 150); do [ -f "$STUB/noted.R-0547" ] && break; sleep 0.2; done
+QUEUE_MAX_AGENTS=2 tick "$((T0+60))"
+[ "$(st R-0547 status)" = running ] && [ "$(events ready)" = 1 ] && [ "$(running_ids | wc -w | tr -d ' ')" = 2 ] \
+  && ok "ready but still running: it stays running (and counted), it is not yet done" || no "readyhang: status=$(st R-0547 status) running=$(running_ids)"
+QUEUE_MAX_AGENTS=0 tick "$((T0+60+3700))"
+sleep 0.5
+[ "$(st R-0547 status)" = done ] && dead "$pid" && [ "$(events stuck)" = 0 ] \
+  && ok "a ready agent that stalls is stopped and counted done, not failed" || no "readyhang stall: status=$(st R-0547 status)"
+echo kill > "$QUEUE_PAUSE_FILE"; tick "$((T0+3800))"; rm -f "$QUEUE_PAUSE_FILE"
+
+scenario brokensrc
+echo hang > "$STUB/behave/default"
+QUEUE_MAX_AGENTS=1 tick "$T0"; pid="$(st R-0547 pid)"
+mkdir -p "$S/badfuzz"; echo 'not json' > "$S/badfuzz/x.json"
+echo kill > "$QUEUE_PAUSE_FILE"
+QUEUE_FUZZ_DIR="$S/badfuzz" QUEUE_MAX_AGENTS=1 tick "$((T0+60))"
+sleep 0.5
+[ "$(events source_error)" = 1 ] && dead "$pid" && [ -z "$(running_ids)" ] \
+  && ok "a malformed source is reported, and the kill switch still stops the agents" || no "brokensrc: errors=$(events source_error) running='$(running_ids)'"
+rm -f "$QUEUE_PAUSE_FILE"
 
 scenario stuck
 echo hang > "$STUB/behave/default"
@@ -396,6 +467,9 @@ QUEUE_MAX_AGENTS=1 tick "$((T0+600+3700))"
 sleep 0.5
 [ "$(events stuck)" = 1 ] && [ "$(st R-0547 status)" = abandoned ] && dead "$pid" \
   && ok "61 minutes without a push: killed, released, abandoned at the attempt cap" || no "stuck: status=$(st R-0547 status) events=$(events stuck)"
+QUEUE_NOW="$((T0+600+3800))" bash "$QD/dispatch.sh" release R-0547 > /dev/null 2>&1
+[ "$(st R-0547 status)" = pending ] && [ "$(st R-0547 attempts)" = 0 ] && ok "release recovers an abandoned task" || no "release: status=$(st R-0547 status) attempts=$(st R-0547 attempts)"
+echo kill > "$QUEUE_PAUSE_FILE"; tick "$((T0+600+3900))"; rm -f "$QUEUE_PAUSE_FILE"
 unset QUEUE_MAX_ATTEMPTS
 
 echo ""
