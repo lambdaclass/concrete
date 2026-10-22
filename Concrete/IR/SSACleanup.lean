@@ -217,8 +217,11 @@ private def applyReplacements (blocks : List SBlock)
         | some v' => chase v' f
         | none => v
       | _, _ => v
+    -- Fuel computed once: `replacements.length` inside the fold re-walked the
+    -- list per key, O(replacements²) (bug 178).
+    let fuel := replacements.length
     let rmap : Std.HashMap String SVal :=
-      raw.fold (fun m k v => m.insert k (chase v replacements.length)) ∅
+      raw.fold (fun m k v => m.insert k (chase v fuel)) ∅
     blocks.map fun b =>
       let insts := b.insts.filter fun inst =>
         match inst with
@@ -245,27 +248,28 @@ private partial def eliminateTrivialPhis (blocks : List SBlock) : List SBlock :=
 -- Pass 3: Empty block folding
 -- ============================================================
 
-/-- Check if a label is referenced in any phi incoming of a block. -/
-private def isPhiSource (b : SBlock) (label : String) : Bool :=
-  b.insts.any fun inst =>
-    match inst with
-    | .phi _ incoming _ => incoming.any fun (_, lbl) => lbl == label
-    | _ => false
-
 /-- Find blocks that only contain a br (no instructions, just jump).
     Returns list of (emptyLabel, targetLabel).
     Skips the entry block and blocks whose target has phis referencing them
     (folding those requires complex phi predecessor updates). -/
 private def findEmptyBlocks (blocks : List SBlock) : List (String × String) :=
   let nonEntry := blocks.drop 1
-  let byLabel := firstBlockByLabel blocks
+  -- label → phi source labels of the FIRST block with that label (the block
+  -- `blocks.find?` returned), built once. Asking `isPhiSource` per empty block
+  -- rescanned the target's phis, O(arms²) when every arm of a wide match is an
+  -- empty block into one merge with an arm-wide phi (bug 178).
+  let phiSources : Std.HashMap String (Std.HashSet String) := blocks.foldl (fun m b =>
+    if m.contains b.label then m
+    else m.insert b.label (b.insts.foldl (fun acc inst =>
+      match inst with
+      | .phi _ incoming _ => incoming.foldl (fun acc (_, lbl) => acc.insert lbl) acc
+      | _ => acc) ∅)) ∅
   nonEntry.filterMap fun b =>
     match b.insts, b.term with
     | [], .br target =>
       -- Skip folding if the target block has phis that reference this block
-      let targetBlock := byLabel.get? target
-      match targetBlock with
-      | some tb => if isPhiSource tb b.label then none else some (b.label, target)
+      match phiSources.get? target with
+      | some srcs => if srcs.contains b.label then none else some (b.label, target)
       | none => some (b.label, target)
     | _, _ => none
 
