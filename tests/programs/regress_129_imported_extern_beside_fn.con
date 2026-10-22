@@ -1,0 +1,25 @@
+// Bug 129 (fixed), Codex round 1: an IMPORTED extern binds C even when a third module defines a
+// Concrete function of the same name. `u` imports `c.{abs}` (C's abs) and `d` defines a Concrete
+// `abs`; the resolver binds u's call to the extern, and emission follows that binding.
+// Expected: 5 (C abs) + 100 (d's abs) = 105.
+mod c {
+    pub trusted extern fn abs(x: i32) with() -> i32;
+}
+mod d {
+    pub fn abs(x: i32) -> i32 {
+        return 100;
+    }
+}
+mod u {
+    import c.{abs};
+    pub fn call_c() -> i32 {
+        return abs(0 - 5);
+    }
+}
+mod m {
+    import u.{call_c};
+    import d.{abs};
+    pub fn main() -> i32 {
+        return call_c() + abs(1);
+    }
+}

@@ -1,0 +1,25 @@
+// Bug 129 (fixed), Codex round 5: a GENERIC body's foreign binding survives specialization.
+// `u.call_c<T>` calls the imported C `abs`; Mono copies its foreign bindings into the
+// specialization, so the call stays C's `abs` although module `d` defines a Concrete `abs`.
+// Expected: 5 + 100 = 105.
+mod c {
+    pub trusted extern fn abs(x: i32) with() -> i32;
+}
+mod d {
+    pub fn abs(x: i32) -> i32 {
+        return 100;
+    }
+}
+mod u {
+    import c.{abs};
+    pub fn call_c<T: Copy>(x: T) -> i32 {
+        return abs(0 - 5);
+    }
+}
+mod m {
+    import u.{call_c};
+    import d.{abs};
+    pub fn main() -> i32 {
+        return call_c::<i32>(0) + abs(1);
+    }
+}

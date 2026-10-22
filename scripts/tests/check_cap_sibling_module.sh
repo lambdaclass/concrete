@@ -117,8 +117,11 @@ echo "=== a BODY-LESS declaration keeps the trusted modifier the author wrote ==
 # `pub trusted fn sizeof<T>() -> u64;` reached `externFnRequiredCaps` as UNTRUSTED and was
 # charged `Unsafe`. Invisible until cross-module requirements bound at all: the `mem` probe
 # in check_std_compiled_coverage.sh compiles under the full `Std` set, which excludes Unsafe.
-# Both fixtures are CHECK-ONLY — `#[intrinsic]` resolves by the compiler's own name table,
-# so a renamed copy has no symbol to link. What is under test is what the checker charges.
+# Both fixtures are CHECK-ONLY body-less foreign declarations (`fn my_size() with() -> u64;`,
+# no C symbol to link). They used `#[intrinsic = "sizeof"] fn my_sizeof<T>()`; since the bug
+# 112 fix a renamed intrinsic is a foreign binding, which must declare its effects, and the
+# parser now keeps a body-less declaration's `with(...)`. What is under test is what the
+# checker charges.
 tout="$(cd "$FIX/bodyless_trusted" && $TO "$CC" check . 2>&1)"
 if printf '%s' "$tout" | grep -qE 'error\['; then
   no "a trusted body-less declaration is still charged a capability"
@@ -129,7 +132,7 @@ fi
 # CONTROL: without `trusted` it must STILL cost Unsafe, or carrying the modifier through
 # made it meaningless rather than effective.
 uout="$(cd "$FIX/bodyless_untrusted" && $TO "$CC" check . 2>&1)"
-if printf '%s' "$uout" | grep -q "function 'my_sizeof' requires Unsafe"; then
+if printf '%s' "$uout" | grep -q "function 'my_size' requires Unsafe"; then
   ok "the same shape WITHOUT trusted still costs Unsafe"
 else
   no "an untrusted body-less declaration is free — the modifier now means nothing"

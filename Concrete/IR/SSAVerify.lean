@@ -156,7 +156,7 @@ private def instUses : SInst → List String
   | .call _ callee args _ =>
     let argRegs := args.foldl (fun acc a => acc ++ svalRegs a) []
     match callee with
-    | .direct _ => argRegs
+    | .direct _ | .foreign _ => argRegs
     | .indirect target => svalRegs target ++ argRegs
   | .alloca _ _ => []
   | .load _ ptr _ => svalRegs ptr
@@ -454,6 +454,8 @@ private def checkCallArity (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
     -- An indirect target has no declared signature to compare against; arity is
     -- the fn type's business, checked before Lower.
     | .call _ (.indirect _) _ _ => ctx
+    -- A C runtime symbol has no Concrete signature here.
+    | .call _ (.foreign _) _ _ => ctx
     | _ => ctx
   ) ctx
 

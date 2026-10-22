@@ -927,7 +927,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         let innerTy := arg.ty
         let szDst ← freshReg
         let sz ← computeTySize innerTy
-        emit (.call (some szDst) (.direct "malloc") [.intConst (Int.ofNat sz) .int] (.ptrMut innerTy))
+        emit (.call (some szDst) (.foreign "malloc") [.intConst (Int.ofNat sz) .int] (.ptrMut innerTy))
         let ptrVal := SVal.reg szDst (.ptrMut innerTy)
         emit (.store aVal ptrVal)
         return ptrVal
@@ -942,13 +942,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | .generic "Heap" [t] _ => t
           | t => t
         if ty == .unit || ty == .never then
-          emit (.call none (.direct "free") [ptrVal] .unit)
+          emit (.call none (.foreign "free") [ptrVal] .unit)
           return .unit
         else
           -- Load value before freeing
           let loadDst ← freshReg
           emit (.load loadDst ptrVal innerTy)
-          emit (.call none (.direct "free") [ptrVal] .unit)
+          emit (.call none (.foreign "free") [ptrVal] .unit)
           return .reg loadDst innerTy
       | none => return .unit
     else
@@ -2298,6 +2298,8 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
       isTest := f.isTest
       isEntryPoint := f.isEntryPoint
       declSpan := f.declSpan
+      exportName := f.exportName
+      foreignCalls := f.foreignCalls
     }, finalState.stringLits)
   | ((.error e), _) => .error e
 
@@ -2332,6 +2334,9 @@ private partial def collectAllExterns (m : CModule) : List (String × List (Stri
   let own := m.externFns.map fun (n, ps, rt, _) => (n, ps, rt)
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllExterns s) []
   own ++ sub
+
+private partial def collectAllExternLinkNames (m : CModule) : List (String × String) :=
+  m.externLinkNames ++ m.submodules.foldl (fun acc s => acc ++ collectAllExternLinkNames s) []
 
 private partial def collectAllLinkerAliases (m : CModule) : List (String × String) :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllLinkerAliases s) []
@@ -2433,6 +2438,7 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
     globals := globals
     linkerAliases := collectAllLinkerAliases m
     newtypes := allNewtypes
+    externLinkNames := collectAllExternLinkNames m
   }
   return result
 

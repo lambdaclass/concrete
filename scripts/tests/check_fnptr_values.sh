@@ -126,8 +126,9 @@ fn main() -> Int {
 }
 CON
 IR="$("$COMPILER" "$TMP/direct.con" --emit-llvm 2>/dev/null)"
-BODY="$(sed -n '/define .*@user_main/,/^}/p' <<<"$IR")"
-if grep -qE 'call i64 @a\(' <<<"$BODY"; then
+# The program's main is emitted as the mangled `_C.main.main` (FFI.md "Symbol Names").
+BODY="$(sed -n '/define .*@_C\.main\.main(/,/^}/p' <<<"$IR")"
+if grep -qE 'call i64 @_C\.main\.a\(' <<<"$BODY"; then
   ok "a statically-known target still compiles to a direct call"
 else
   no "the straight-line case lost its direct call — devirtualization regressed:
@@ -150,8 +151,8 @@ fn main() -> Int {
   return f(10);
 }
 CON
-FBODY="$(sed -n '/define .*@user_main/,/^}/p' <<<"$("$COMPILER" "$TMP/folded.con" --emit-llvm 2>/dev/null)")"
-if grep -qE 'call i64 @b\(' <<<"$FBODY"; then
+FBODY="$(sed -n '/define .*@_C\.main\.main(/,/^}/p' <<<"$("$COMPILER" "$TMP/folded.con" --emit-llvm 2>/dev/null)")"
+if grep -qE 'call i64 @_C\.main\.b\(' <<<"$FBODY"; then
   ok "a phi folded to one known target becomes a direct call"
 else
   no "the folded phi did not devirtualize:

@@ -1,0 +1,17 @@
+// Bug 166: a foreign function taken as a VALUE is called with the Concrete ABI. `take_pair`
+// takes a small #[repr(C)] struct by value, which the C ABI passes in a register (`i64`);
+// called through the fn-pointer parameter `f`, the struct's ADDRESS is passed instead
+// (`call i64 %f(ptr %p)`). Expected: `apply` passes the struct value as C declares it.
+// CHECK-ONLY (no C definition of take_pair): the pin is the emitted call.
+#[repr(C)]
+struct Copy Pair { v: Int }
+
+trusted extern fn take_pair(p: Pair) with() -> Int;
+
+fn apply(f: fn(Pair) -> Int, p: Pair) -> Int {
+    return f(p);
+}
+
+fn main() -> Int {
+    return apply(take_pair, Pair { v: 7 });
+}

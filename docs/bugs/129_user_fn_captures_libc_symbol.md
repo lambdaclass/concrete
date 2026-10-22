@@ -1,6 +1,6 @@
 # Bug 129 — a safe user function named like a C library symbol replaces it for the whole program
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (branch `symbols`)
 **Found:** 2026-10-21, by the semantics probes (finding N3, `symclash2.con`, `symclash.con`).
 **Severity:** memory and authority safety in safe code. User functions are emitted under their bare
 source names, so a safe `fn malloc` becomes the program's `malloc` and every allocation the compiler
@@ -57,6 +57,33 @@ C runtime is known to the emitter that calls them but not to the checker that ad
 the reserved-name list (bug 028) and the `_destroy` synthesis (bug 103) are earlier spellings of the
 same missing separation between Concrete-defined symbols and foreign ones.
 
+## Fix
+
+The decided symbol-name rule ([FFI.md, "Symbol Names"](../platform/FFI.md)) is implemented at
+emission (`Concrete/Backend/Symbols.lean`, `EmitSSA`). Every Concrete-defined function is emitted
+under `_C.<module path>.<name>` and every runtime helper under `_C$rt.<name>`; both contain a
+character no C identifier has, so a Concrete definition can no longer occupy a C symbol. The
+compiler's own C calls (`alloc` → `malloc`, `free`) became `SCallee.foreign`, which is never
+resolved against Concrete definitions, so the user's `malloc` and the allocator are different
+functions even though both are spelled `malloc` in source. The reverse capture is closed too: every
+call the resolver binds to an extern, own or imported, carries that binding into emission
+(`CFnDef.foreignCalls`, copied by Mono into specializations), so a module's `extern fn abs`, or an
+imported one, binds C's `abs` even when another module defines a Concrete `abs` (before, the
+extern's declaration was dropped and both calls reached the Concrete function). A foreign
+binding's identity is its name, so two bindings of one name to different C symbols, or a binding
+named like a runtime helper, are refused (E0118).
+
+The reproducer now exits 42. Regressions in `run_tests.sh`: `regress_129_user_fn_named_malloc.con`
+(exit 42, and an IR leg: `define i64 @_C.main.malloc`, C `malloc` stays a `declare`, no
+`define @malloc`), `regress_129_extern_beside_same_named_fn.con` and
+`regress_129_imported_extern_beside_fn.con` and `regress_129_fn_value_extern.con` (an imported
+extern taken as a function value), `regress_129_generic_extern.con` (a generic body's binding
+survives specialization; exit 105 each), and `regress_129_runtime_helper_beside_fn.con`
+(a call bound to the runtime helper `print_int` is not captured by another module's
+`fn print_int`; prints 7). The open-bug
+reproducer row is dropped. Proof and report identities are unchanged (mangling happens after Core;
+`check_identity_rows.sh` and `check_claim_inventory.sh` pass unchanged).
+
 ## Structural owner
 
 R-0492 (S5 `DefId`): every Concrete-defined function gets a mangled link symbol derived from its
@@ -68,8 +95,5 @@ a safe definition whose name is a symbol the emitted code or the C runtime uses,
 
 ## Containment while open
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `signals`) requires the
-binary to be killed by a signal; which signal is not pinned, since the C allocator's response to the
-bogus pointer differs by platform. When the program is refused or exits normally (42 is below 128, so
-a completed run is never read as a signal), that leg fails until this document, the corpus entry and
-the leg are updated together.
+While open, `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `signals`)
+required the binary to be killed by a signal; the row was removed with the fix.

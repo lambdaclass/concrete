@@ -1,0 +1,11 @@
+// #[export_name] may not take a C runtime symbol the compiled program itself calls: exporting
+// a definition as `malloc` would replace the allocator every `alloc` uses (bug 129 spelled
+// explicitly). E0119.
+#[export_name = "malloc"]
+fn my_alloc(n: Int) -> Int {
+    return n;
+}
+
+fn main() -> Int {
+    return my_alloc(0);
+}

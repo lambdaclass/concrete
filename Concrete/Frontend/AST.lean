@@ -403,6 +403,9 @@ structure FnDef where
   ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)
   loopContracts : List LoopContract := []  -- #[invariant]/#[variant] on loops in the body (erased metadata)
   proofLink : Option SourceProofLink := none  -- in-source proof/spec link (erased metadata)
+  /-- `#[export_name = "sym"]`: the C symbol this function is exported under (FFI.md "Symbol
+      Names", R-0286). The only way a Concrete-defined function gets an unmangled name. -/
+  exportName : Option String := none
   span : Span := default
 
 structure ConstDef where
@@ -442,6 +445,9 @@ structure ExternFnDecl where
   /-- `#[intrinsic = "name"]`: a bodiless declaration the COMPILER implements (`std.mem.sizeof`).
       Not a foreign binding: no C code stands behind it, so it is no foreign assumption. -/
   intrinsic : Option String := none
+  /-- `#[link_name = "sym"]`: the C symbol this binding names, when it is not (or should not
+      be) the declared Concrete name. Absent, the binding names the symbol spelled like it. -/
+  linkName : Option String := none
   span : Span := default
   deriving Repr
 

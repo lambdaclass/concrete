@@ -1,0 +1,8 @@
+// R-0484 R3 judges the C symbol a binding calls, not its Concrete name: `my_write` binds
+// `write`, a known effectful symbol, so declaring it `with()` is refused (E0117).
+#[link_name = "write"]
+extern fn my_write(fd: i32, buf: *const u8, count: u64) with() -> i64;
+
+fn main() -> i32 {
+    return 0;
+}

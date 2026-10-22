@@ -1,0 +1,15 @@
+// Bug 129 (fixed), Codex round 3: a runtime helper call cannot be captured by another module's
+// Concrete function of the same name. `other` defines `print_int` (never called); `main`'s
+// `print_int(7)` is bound by its resolver to the compiler's helper and must print 7 through
+// `_C$rt.print_int`, not run `other.print_int` (which would exit 99). Expected stdout "7", exit 0.
+mod other {
+    pub fn print_int(x: Int) -> Int {
+        return 99;
+    }
+}
+mod m {
+    pub fn main() with(Console) -> Int {
+        print_int(7);
+        return 0;
+    }
+}

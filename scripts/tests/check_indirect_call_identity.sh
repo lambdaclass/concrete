@@ -151,14 +151,15 @@ IR="$("$COMPILER" "$TMP/ir.con" --emit-llvm 2>/dev/null)"
 
 # Pre-fix, Mono specialized the shadowed generic and the call became a direct
 # call of it. No specialization of `pick` may exist: nothing calls it generically.
-if grep -qE "@pick_(for_)?[A-Za-z0-9_]+" <<<"$IR"; then
+# Concrete functions are mangled `_C.<module>.<name>` (FFI.md "Symbol Names").
+if grep -qE "@_C\.[A-Za-z0-9_.]*\.pick_(for_)?[A-Za-z0-9_]+" <<<"$IR"; then
   no "a specialization of the shadowed generic was emitted — the indirect call was resolved by name"
 else
   ok "no specialization of the shadowed generic exists"
 fi
 
 # The call must go through a register (indirect), not a direct @symbol.
-if grep -qE "call .*@pick" <<<"$IR"; then
+if grep -qE "call .*@_C\.[A-Za-z0-9_.]*\.pick[(_]" <<<"$IR"; then
   no "the call targets @pick directly — the callee value was replaced by a symbol"
 else
   ok "the call does not target a @pick symbol"
@@ -169,7 +170,7 @@ fi
 # targeting the SHADOWED NAME instead. (A pointer whose target is only known at
 # runtime cannot be exercised here: bug 056 makes reassigning a fn-pointer across
 # a branch fail SSAVerify, so that case joins this gate when R-0436 lands.)
-if grep -qE "call i64 @double" <<<"$IR"; then
+if grep -qE "call i64 @_C\.[A-Za-z0-9_.]*\.double\(" <<<"$IR"; then
   ok "the call targets @double — the function the local holds"
 else
   no "the call does not target @double; the callee value was not what got called"

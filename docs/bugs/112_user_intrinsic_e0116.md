@@ -40,19 +40,24 @@ examples/snippets/sizeof_intrinsic.con and examples/snippets/vec.con, manifest `
 
 ## Fix
 
-R-0484 R3 no longer applies to an `#[intrinsic]` declaration: the compiler implements it and no C
-code stands behind it, so it is not a foreign binding (R10), and Resolve's R3 walk
-(`externEffectsCheck`, the bug 113 fix) skips it. The reproducer compiles and exits 5; it is the
+R-0484 R3 no longer applies to an intrinsic the compiler implements: `#[intrinsic = "n"]` on a
+declaration named `n` that `resolveIntrinsic` knows (`sizeof`, `alignof`, ...). No C code stands
+behind it, so it is not a foreign binding (R10), and Resolve's R3 walk (`externEffectsCheck`, the
+bug 113 fix) skips it. Any other annotation (an unknown name, a name that differs from the
+declaration, or one combined with `#[link_name]`) leaves the declaration a foreign binding under
+every rule: `error_intrinsic_unknown_is_foreign.con` (E0116, from the Codex review). The reproducer compiles and exits 5; it is the
 permanent fixture `tests/programs/regress_112_user_intrinsic.con` (`run_ok` exit 5 in
 `run_tests.sh`), and `examples/snippets/sizeof_intrinsic.con` (exit 5) and
 `examples/snippets/vec.con` (exit 4) are promoted from `known-bug 112` to run rules (the
 interpreter still has no `sizeof`). std passed before only because bug 113 hid its submodules from
 R3; the 113 fix would otherwise have refused every project that imports std.mem.
 
-**Residual, not part of this record's reproducer:** `parseFnDefOrDecl` still drops the `with(...)`
-clause and the span of a body-less declaration, so a body-less non-intrinsic `fn f() with();` is
-refused with E0116 at `0:0`, and E0116 / E0117 carry no location for any extern (the extern record
-has no span). Both belong to R-0492/R-0514's single declaration record.
+The record's other half is fixed too: `parseFnDefOrDecl` keeps a body-less declaration's
+`with(...)` clause and span, and `parseExternFn` its span, so a body-less foreign declaration can
+write `with()` and E0116 / E0117 point at the declaration instead of `0:0`. The two
+`check_cap_sibling_module.sh` fixtures that used a renamed intrinsic (`#[intrinsic = "sizeof"] fn
+my_sizeof<T>()`, which calls C `my_sizeof` and is a foreign binding) now declare
+`fn my_size() with() -> u64;`.
 
 ## Structural cause
 

@@ -2211,6 +2211,31 @@ run_err "$TESTDIR/error_extern_effectful_declared_pure.con" "E0117"   # ...and a
 # Bug 113 (fixed): both halves of R3 hold in nested submodules, not only top-level modules.
 run_err "$TESTDIR/error_113_submodule_extern_undeclared.con" "E0116"
 run_err "$TESTDIR/error_113_submodule_extern_effectful_pure.con" "E0117"
+# Bug 129 (fixed): every Concrete-defined function has a mangled symbol disjoint from C (FFI.md
+# "Symbol Names"). A safe `fn malloc` no longer becomes the allocator (was SIGABRT), and a
+# module's extern binds C even beside another module's same-named Concrete function.
+run_ok "$TESTDIR/regress_129_user_fn_named_malloc.con" "42"
+run_ok "$TESTDIR/regress_129_extern_beside_same_named_fn.con" "105"
+run_ok "$TESTDIR/regress_129_imported_extern_beside_fn.con" "105"
+run_ok "$TESTDIR/regress_129_fn_value_extern.con" "105"
+run_ok "$TESTDIR/regress_129_runtime_helper_beside_fn.con" "7"
+run_ok "$TESTDIR/regress_129_generic_extern.con" "105"
+run_err "$TESTDIR/error_extern_named_intrinsic.con" "E0118"   # an intrinsic's name never reaches C
+run_err "$TESTDIR/error_import_alias_intrinsic.con" "E0120"   # nor does an import renamed to one
+# #[link_name] binds a C symbol under another Concrete name; it may not name the Concrete
+# namespace (E0118), and R3 judges the C symbol it binds (E0117).
+run_ok "$TESTDIR/ffi_link_name.con" "7"
+run_err "$TESTDIR/error_link_name_concrete_namespace.con" "E0118"
+run_err "$TESTDIR/error_link_name_effectful_pure.con" "E0117"
+run_err "$TESTDIR/error_link_name_conflict.con" "E0118"   # one extern name binds one C symbol
+run_err "$TESTDIR/error_link_name_runtime_helper.con" "E0118"   # a runtime helper's name is not foreign
+run_err "$TESTDIR/error_intrinsic_unknown_is_foreign.con" "E0116"   # only a known intrinsic skips R3
+# #[export_name]: refused for a C runtime symbol, a non-scalar shape, or a symbol an extern
+# imports (E0119); the positive case links with a C caller in the codegen section.
+run_err "$TESTDIR/error_export_runtime_symbol.con" "E0119"
+run_err "$TESTDIR/error_export_shape.con" "E0119"
+run_err "$TESTDIR/error_export_imported_symbol.con" "E0119"
+run_err "$TESTDIR/error_export_narrow_int.con" "E0119"
 # Bug 112 (fixed with 113): an #[intrinsic] declaration is not a foreign binding, so R3 does not
 # refuse it; std.mem's sizeof form compiles outside std (exit 5).
 run_ok "$TESTDIR/regress_112_user_intrinsic.con" "5"
@@ -5693,12 +5718,13 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Entry point: main → user_main in LLVM
-if grep <<<"$tr_proved" -A10 "main.main" | grep -q "llvm:.*user_main"; then
-    echo "  ok  traceability: main maps to user_main in LLVM"
+# Entry point: main → its mangled symbol in LLVM (FFI.md "Symbol Names"; the C `main` the
+# compiler generates calls it). Was `user_main` before every Concrete function was mangled.
+if grep <<<"$tr_proved" -A10 "main.main" | grep -qE 'llvm:[[:space:]]+_C\.main\.main$'; then
+    echo "  ok  traceability: main maps to its mangled symbol _C.main.main in LLVM"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  traceability: main should map to user_main in LLVM"
+    echo "FAIL  traceability: main should map to _C.main.main in LLVM"
     echo "$tr_proved"
     FAIL=$((FAIL + 1))
 fi
@@ -7444,6 +7470,56 @@ if filter_match "$TESTDIR/regress_103_extern_destroy.con"; then
         fi
     else
         echo "FAIL  regress_103_extern_destroy.con: compilation failed"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+
+# Symbol names (FFI.md "Symbol Names"): a user `fn malloc` is `_C.main.malloc`, `alloc` calls
+# the C `malloc`, and no Concrete definition takes a C name (bug 129).
+r129_ll="$TMPDIR/regress_129_user_fn_named_malloc.ll"
+if filter_match "$TESTDIR/regress_129_user_fn_named_malloc.con"; then
+    if $COMPILER "$TESTDIR/regress_129_user_fn_named_malloc.con" --emit-llvm > "$r129_ll" 2>/dev/null \
+       && grep -qE '^define i64 @_C\.main\.malloc\(' "$r129_ll" \
+       && grep -qE '^declare ptr @malloc\(' "$r129_ll" \
+       && ! grep -qE '^define [^@]*@malloc\(' "$r129_ll"; then
+        echo "  ok  regress_129: the user's malloc is _C.main.malloc; C malloc stays a declaration"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  regress_129: a Concrete function took the C symbol malloc (bug 129)"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+# Bug 166 pin (OPEN): a foreign function taken as a value is called with the Concrete ABI.
+# The reproducer's call through `f` passes the struct's address although C takes it in a
+# register. When this leg fails, the call changed: update docs/bugs/166, the corpus entry and
+# this leg together.
+b166_ll="$TMPDIR/bug166_foreign_fn_value_abi.ll"
+if filter_match "tests/regressions/bug166_foreign_fn_value_abi/repro.con"; then
+    if $COMPILER "tests/regressions/bug166_foreign_fn_value_abi/repro.con" --emit-llvm > "$b166_ll" 2>/dev/null \
+       && grep -qE '^declare i64 @take_pair\(i64\)' "$b166_ll" \
+       && grep -qE 'call i64 %f\(ptr %p\)' "$b166_ll"; then
+        echo "  ok  bug 166 pin: the call through a foreign fn value still uses the Concrete ABI (OPEN)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 166 pin: the reproducer's IR changed -- fixed? update docs/bugs/166, the corpus entry and this leg"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+# #[export_name]: a C caller reaches the Concrete function by its exported name (rc 42).
+xp_ll="$TMPDIR/ffi_export_name.ll"
+xp_bin="$TMPDIR/ffi_export_name"
+if filter_match "$TESTDIR/ffi_export_name.con"; then
+    xp_rc=fail
+    if $COMPILER "$TESTDIR/ffi_export_name.con" --emit-llvm > "$xp_ll" 2>/dev/null \
+       && grep -qE '^define i64 @cc_triple\(' "$xp_ll" \
+       && clang "$xp_ll" "$TESTDIR/ffi_export_name.c" -o "$xp_bin" -Wno-override-module 2>/dev/null; then
+        xp_rc=0; "$xp_bin" >/dev/null 2>&1 || xp_rc=$?
+    fi
+    if [ "$xp_rc" = "42" ]; then
+        echo "  ok  ffi_export_name.con: C calls the export cc_triple (rc 42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  ffi_export_name.con: expected rc 42 through the export cc_triple, got $xp_rc"
         FAIL=$((FAIL + 1))
     fi
 fi

@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.IR.SSA
 import Concrete.Elab.Core
 import Concrete.Semantics.IntArith
@@ -7,6 +8,7 @@ import Concrete.Resolve.Intrinsic
 import Concrete.Backend.LLVM
 import Concrete.Backend.EmitLLVM
 import Concrete.Backend.EmitBuiltins
+import Concrete.Backend.Symbols
 
 namespace Concrete
 
@@ -65,8 +67,22 @@ structure EmitSSAState where
   collidingNames : List String := []
   /-- Per-module linker aliases (reset per module, used before global aliases). -/
   localAliases : List (String × String) := []
-  /-- Set of all LLVM function names that will be emitted (for direct-match resolution). -/
+  /-- Set of all LLVM function names that will be emitted (for direct-match resolution).
+      These are the PRE-MANGLING names the alias machinery resolves to; `fnSymbols` maps
+      each to its link symbol. -/
   definedFnNames : List String := []
+  /-- Pre-mangling name of every Concrete-defined function → its link symbol: the mangled
+      `Symbols.concreteFn` (FFI.md "Symbol Names"), or its `#[export_name]`. -/
+  fnSymbols : Std.HashMap String String := {}
+  /-- The current module's own `extern fn` names that the module does not also define: a call
+      spelled with one of these binds the foreign symbol even when another module defines a
+      Concrete function of the same name (that function has a different, mangled symbol). -/
+  moduleExterns : List String := []
+  /-- `extern fn` name → C symbol, for `#[link_name]` bindings. Program-wide and unambiguous:
+      Resolve refuses two bindings of one name to different symbols (E0118). -/
+  externLinks : List (String × String) := []
+  /-- The current function's `foreignCalls`: spellings its resolver bound to an extern. -/
+  currentForeign : List (String × String) := []
   /-- Alloca instructions to hoist to the function entry block.
       Allocas emitted inside loop bodies would otherwise grow the stack
       on every iteration; collecting them here and prepending to the
@@ -349,21 +365,49 @@ private def floatTyToLLVMTy : Ty → LLVMTy
   | .float32 => .float_
   | _ => .double
 
+/-- Resolve aliased imports to the pre-mangling name of their definition.
+    If the name already matches a defined function, use it directly (avoids alias chains that
+    would de-qualify a qualified colliding name). Otherwise: per-module aliases first, then
+    global aliases, chaining through local aliases if the linker alias target also collides. -/
+private def resolveAliasedName (s : EmitSSAState) (fn : String) : String :=
+  if s.definedFnNames.contains fn then fn
+  else match s.localAliases.lookup fn with
+    | some orig => orig
+    | none => match s.linkerAliases.lookup fn with
+      | some orig => match s.localAliases.lookup orig with
+        | some qual => qual
+        | none => orig
+      | none => fn
+
+/-- The C symbol a foreign name binds: its `#[link_name]`, else its spelling. -/
+private def externSymbol (s : EmitSSAState) (name : String) : String :=
+  (s.externLinks.lookup name).getD name
+
+/-- The link symbol a direct reference to `fn` names, and whether it is a Concrete
+    definition (FFI.md "Symbol Names"): the module's own extern binds the foreign symbol;
+    otherwise a Concrete definition binds its mangled (or exported) symbol; anything else
+    is foreign (an imported extern, a runtime builtin renamed at assembly, a C symbol). -/
+private def directSymbol (s : EmitSSAState) (fn : String) : String × Bool :=
+  -- The resolver's verdict for this body first: an own or imported extern.
+  match s.currentForeign.lookup fn with
+  | some decl =>
+    -- A runtime helper binding already names its reserved symbol.
+    if decl.startsWith "_C$rt." then (decl, false) else (externSymbol s decl, false)
+  | none =>
+  if s.moduleExterns.contains fn then (externSymbol s fn, false)
+  else
+    let pre := resolveAliasedName s fn
+    match s.fnSymbols.get? pre with
+    | some sym => (sym, true)
+    | none => (externSymbol s pre, false)
+
 /-- Convert an SVal to a structured LLVM operand. -/
 private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
   match v with
   | .reg name _ => .reg name
   | .fnRef bareName _ =>
-    -- Resolve linker aliases for function pointer references (e.g., hash_i32 → hash_hash_i32)
-    let resolved := if s.definedFnNames.contains bareName then bareName
-      else match s.localAliases.lookup bareName with
-        | some orig => orig
-        | none => match s.linkerAliases.lookup bareName with
-          | some orig => match s.localAliases.lookup orig with
-            | some qual => qual
-            | none => orig
-          | none => bareName
-    .global resolved
+    -- A function-pointer reference names the same symbol a direct call would.
+    .global (directSymbol s bareName).1
   | .intConst val _ => .intLit val
   -- An f32 constant is rounded to f32 here, before it is printed as a double (bug 109).
   | .floatConst val ty => .floatLit (if ty == .float32 then val.toFloat32.toFloat else val)
@@ -795,7 +839,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- `%`-prefixed register, and each had to be careful not to.
     let directName : Option String := match callee with
       | .direct n => some n
-      | .indirect _ => none
+      | .indirect _ | .foreign _ => none
     -- Intercept vec sized operations for per-element-size dispatch
     match (match directName with
            | some fn => resolveVecCall s fn args retTy
@@ -847,8 +891,15 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     | none =>
     -- General call path (non-vec or unspecialized vec ops like vec_len/vec_free)
     -- For extern fn calls, #[repr(C)] struct args use C ABI (by-value) passing.
+    -- A call that resolves to a Concrete definition uses the Concrete ABI even when some
+    -- extern elsewhere shares its spelling (the definition has its own mangled symbol).
+    -- An imported alias of an extern (`import c.{take as alias}`) is foreign by the resolver's
+    -- binding (`currentForeign`), not by its spelling, and must get the C ABI too.
     let isExternCall := match directName with
-      | some fn => s.externFnNames.contains fn
+      | some fn =>
+        ((match s.currentForeign.lookup fn with
+          | some d => !d.startsWith "_C$rt."
+          | none => false) || s.externFnNames.contains fn) && !(directSymbol s fn).2
       | none => false
     -- Build typed argument list
     let (s, argOps) := args.foldl (fun (s, ops) a =>
@@ -935,6 +986,8 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       -- devirtualization falling out of the representation instead of being
       -- decoded from a name.
       | .indirect target => svalToOperand s target
+      -- A C runtime symbol the compiler chose: never a Concrete definition (bug 129).
+      | .foreign sym => .global sym
       | .direct fn =>
         -- A fn-typed parameter, or a register loaded from memory (fnTypeRegs),
         -- is still a call THROUGH a value even though it is spelled as a bare
@@ -944,19 +997,8 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
            || s.fnTypeRegs.contains fn then
           .reg fn
         else
-          -- Resolve aliased imports to their real linker symbol.
-          -- If the call target already matches a defined function, use it directly
-          -- (avoids alias chains that would de-qualify a qualified colliding name).
-          -- Otherwise: check per-module aliases first, then global aliases,
-          -- chaining through local aliases if the linker alias target also collides.
-          .global (if s.definedFnNames.contains fn then fn
-            else match s.localAliases.lookup fn with
-              | some orig => orig
-              | none => match s.linkerAliases.lookup fn with
-                | some orig => match s.localAliases.lookup orig with
-                  | some qual => qual
-                  | none => orig
-                | none => fn)
+          -- Resolve aliased imports to the definition, then to its link symbol.
+          .global (directSymbol s fn).1
     -- For extern calls returning small repr(C) structs: call returns i64,
     -- store through pointer so downstream code sees the struct correctly.
     -- Downstream code expects dst to be a pointer (pass-by-ptr for structs).
@@ -1191,12 +1233,23 @@ private def llvmFnName (s : EmitSSAState) (f : SFnDef) : String :=
     f.modulePath.replace "." "_" ++ "_" ++ f.name
   else f.name
 
-private def emitSFnDef (s : EmitSSAState) (f : SFnDef) (isUserMain : Bool) : EmitSSAState :=
+/-- The link symbol of a Concrete definition (FFI.md "Symbol Names"), computed from the
+    definition itself — its export name, else `_C.<module path>.<name>` — so two definitions
+    never share one, whatever the legacy pre-mangling names do. -/
+private def defSymbol (_s : EmitSSAState) (f : SFnDef) : String :=
+  match f.exportName with
+  | some e => e
+  | none => Symbols.concreteFn f.modulePath f.name
+
+private def emitSFnDef (s : EmitSSAState) (f : SFnDef) : EmitSSAState :=
   let retTy := tyToLLVMTy s f.retTy
-  let fnName := if isUserMain then "user_main" else llvmFnName s f
+  -- The program's `main` is mangled like every other function; the C entry `main` the
+  -- wrapper defines calls it (MAIN_EXIT_MODEL).
+  let fnName := defSymbol s f
   let params := f.params.map fun (n, t) => (n, paramTyToLLVMTy s t)
   -- Reset per-function state
-  let s := { s with currentBlocks := #[], fnParams := f.params, entryAllocas := #[] }
+  let s := { s with currentBlocks := #[], fnParams := f.params, entryAllocas := #[],
+                    currentForeign := f.foreignCalls }
   -- Mark struct-type params as pointers, track fn params for indirect calls
   let s := f.params.foldl (fun s (n, t) =>
     match t with
@@ -1220,7 +1273,8 @@ private def emitSFnDef (s : EmitSSAState) (f : SFnDef) (isUserMain : Bool) : Emi
   }
   let s := { s with moduleFunctions := s.moduleFunctions.push fnDef }
   -- Reset per-function state
-  { s with ptrRegs := [], fnParams := [], fnTypeRegs := [], currentBlocks := #[], currentInstrs := #[], entryAllocas := #[] }
+  { s with ptrRegs := [], fnParams := [], fnTypeRegs := [], currentBlocks := #[], currentInstrs := #[], entryAllocas := #[],
+           currentForeign := [] }
 
 -- ============================================================
 -- Emit struct/enum type definitions
@@ -1230,8 +1284,8 @@ private def emitSFnDef (s : EmitSSAState) (f : SFnDef) (isUserMain : Bool) : Emi
 -- Emit external declarations and builtins
 -- ============================================================
 
-private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List (String × Ty) × Ty))
-    (definedFns : List String := []) : EmitSSAState :=
+private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List (String × Ty) × Ty)) :
+    EmitSSAState :=
   -- Standard C runtime declarations (used by remaining builtins)
   let s := emitDecl s { name := "malloc", retTy := .ptr, params := [.i64] }
   let s := emitDecl s { name := "free", retTy := .void, params := [.ptr] }
@@ -1258,17 +1312,19 @@ private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List
     "malloc", "free", "realloc", "write", "abort", "printf", "strlen",
     "memset", "memcmp", "snprintf", "strtol"
   ]
-  -- User extern function declarations (skip if already defined as a concrete function).
+  -- User extern function declarations, under their C symbol (`#[link_name]` or spelling).
+  -- A Concrete function of the same spelling no longer hides one: it has a mangled symbol.
   -- Uses ABI flattening so #[repr(C)] structs are passed in registers per the C ABI.
   externFns.foldl (fun s (name, params, retTy) =>
-    if builtinNames.contains name || definedFns.contains name then s
+    let sym := externSymbol s name
+    if builtinNames.contains sym then s
     else
       let retLLTy := externABIFlattenRet s retTy
       let paramTys := params.foldl (fun acc (_, t) => acc ++ externABIFlattenParam s t) []
-      emitDecl s { name := name, retTy := retLLTy, params := paramTys }
+      emitDecl s { name := sym, retTy := retLLTy, params := paramTys }
   ) s
 
-/-- Emit the main wrapper that calls user_main.
+/-- Emit the C entry `main`, which calls the program's mangled `main` (`entrySym`).
 
     Default (exit-code semantics, MAIN_EXIT_MODEL stage 1): the returned value
     becomes the PROCESS EXIT CODE — integer returns are masked to the OS's
@@ -1283,7 +1339,7 @@ private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List
 
     The wrapper accepts (argc, argv) from the C runtime and saves them
     to globals so user code can access them via __concrete_get_argc/argv. -/
-private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
+private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) (entrySym : String) : EmitSSAState :=
   let retLLTy := tyToLLVMTy s retTy
   let ret0 : LLVMTerm := .ret .i32 (some (.intLit 0))
   -- Emit globals and accessor functions for argc/argv
@@ -1306,7 +1362,7 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
         .load "arg" .ptr (.reg "argp")
       ], .ret .ptr (some (.reg "arg"))⟩] }
   let s := { s with moduleFunctions := s.moduleFunctions.push getArgvFn }
-  -- Save argc/argv at the start of main, then call user_main
+  -- Save argc/argv at the start of main, then call the program's main
   let saveArgcArgv : List LLVMInstr := [
     .store .i32 (.reg "argc") (.global "__concrete_argc"),
     .store .ptr (.reg "argv") (.global "__concrete_argv")
@@ -1315,21 +1371,21 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
     { name := "main", retTy := .i32, params := [("argc", .i32), ("argv", .ptr)], blocks := [blk] }
   if retLLTy == .void then
     -- Unit/void return: just call; exit 0 either way
-    let instrs : List LLVMInstr := saveArgcArgv ++ [.call none .void (.global "user_main") []]
+    let instrs : List LLVMInstr := saveArgcArgv ++ [.call none .void (.global entrySym) []]
     let mainFn := mkMainFn ⟨"entry", instrs, ret0⟩
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
   else
     -- Exit-code semantics: mask the scalar result into 0-255 and return it.
     if retLLTy == .i1 then
       let instrs : List LLVMInstr := saveArgcArgv ++ [
-        .call (some "result") .i1 (.global "user_main") [],
+        .call (some "result") .i1 (.global entrySym) [],
         .cast "code" .zext .i1 (.reg "result") .i32
       ]
       let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
       { s with moduleFunctions := s.moduleFunctions.push mainFn }
     else if retLLTy == .i64 then
       let instrs : List LLVMInstr := saveArgcArgv ++ [
-        .call (some "result") .i64 (.global "user_main") [],
+        .call (some "result") .i64 (.global entrySym) [],
         .binOp "masked" .and_ .i64 (.reg "result") (.intLit 255),
         .cast "code" .trunc .i64 (.reg "masked") .i32
       ]
@@ -1337,14 +1393,14 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
       { s with moduleFunctions := s.moduleFunctions.push mainFn }
     else if retLLTy == .i32 then
       let instrs : List LLVMInstr := saveArgcArgv ++ [
-        .call (some "result") .i32 (.global "user_main") [],
+        .call (some "result") .i32 (.global entrySym) [],
         .binOp "code" .and_ .i32 (.reg "result") (.intLit 255)
       ]
       let mainFn := mkMainFn ⟨"entry", instrs, .ret .i32 (some (.reg "code"))⟩
       { s with moduleFunctions := s.moduleFunctions.push mainFn }
     else if retLLTy == .i16 || retLLTy == .i8 then
       let instrs : List LLVMInstr := saveArgcArgv ++ [
-        .call (some "result") retLLTy (.global "user_main") [],
+        .call (some "result") retLLTy (.global entrySym) [],
         .cast "wide" .zext retLLTy (.reg "result") .i32,
         .binOp "code" .and_ .i32 (.reg "wide") (.intLit 255)
       ]
@@ -1352,7 +1408,7 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
       { s with moduleFunctions := s.moduleFunctions.push mainFn }
     else
       -- Non-scalar main return (struct/string): no meaningful status; exit 0.
-      let instrs : List LLVMInstr := saveArgcArgv ++ [.call (some "result") retLLTy (.global "user_main") []]
+      let instrs : List LLVMInstr := saveArgcArgv ++ [.call (some "result") retLLTy (.global entrySym) []]
       let mainFn := mkMainFn ⟨"entry", instrs, ret0⟩
       { s with moduleFunctions := s.moduleFunctions.push mainFn }
 -- ============================================================
@@ -1364,9 +1420,10 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) : EmitSSAState :=
 private def emitBuiltins (s : EmitSSAState) : EmitSSAState :=
   let (builtinFns, builtinGlobals, builtinDecls) := getBuiltinFns
   let vecFns := getVecBuiltinFns s.vecElemSpecs
-  -- Filter out builtins that are already defined by user/extern code
-  let userFnNames := s.moduleFunctions.toList.map (·.name)
-  let allFns := (builtinFns ++ vecFns).filter fun f => !userFnNames.contains f.name
+  -- Every runtime helper is emitted: no Concrete definition can shadow one (Concrete
+  -- definitions carry mangled symbols), and the helpers are renamed into the reserved
+  -- `_C$rt.` namespace when the module is assembled (`mangleRuntimeHelpers`).
+  let allFns := builtinFns ++ vecFns
   { s with
     moduleFunctions := s.moduleFunctions ++ allFns.toArray,
     moduleGlobals := s.moduleGlobals ++ builtinGlobals.toArray,
@@ -1492,10 +1549,13 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     s.definedFnNames.contains target
   -- Local aliases: import aliases take priority (they specify which module was imported)
   let s := { s with localAliases := ownImportAliases ++ importQualAliases ++ selfQualAliases }
+  -- This module's own externs bind their foreign symbols at its call sites, ahead of
+  -- another module's same-spelled definition; a name the module itself defines stays its own.
+  let ownDefs := m.functions.map (·.name)
+  let s := { s with moduleExterns := (m.externFns.map (·.1)).filter (!ownDefs.contains ·)
+                    externLinks := m.externLinkNames ++ s.externLinks }
   let hasMain := m.functions.any fun f => f.isEntryPoint
-  let s := m.functions.foldl (fun s f =>
-    emitSFnDef s f f.isEntryPoint
-  ) s
+  let s := m.functions.foldl (fun s f => emitSFnDef s f) s
   -- Main wrapper (skip in test mode — the test runner provides `main` and the
   -- argc/argv stubs, emitted ONCE at program level. Emitting the stubs here, per
   -- module, duplicated `@__concrete_argc` in any multi-module build, e.g. a
@@ -1503,7 +1563,7 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
   if testMode then s
   else if hasMain then
     match m.functions.find? fun f => f.isEntryPoint with
-    | some mainFn => emitMainWrapper s mainFn.retTy
+    | some mainFn => emitMainWrapper s mainFn.retTy (defSymbol s mainFn)
     | none => s
   else s
 
@@ -1619,7 +1679,7 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
       let llName := llvmFnName s f
       let nameLen := llName.length + 1
       [ .comment s!"Test: {llName}",
-        .call (some s!"result.{i}") .i32 (.global llName) [],
+        .call (some s!"result.{i}") .i32 (.global (defSymbol s f)) [],
         .binOp s!"is_pass.{i}" .icmpEq .i32 (.reg s!"result.{i}") (.intLit 0),
         gep32 s!"name.{i}" (.array nameLen .i8) (.global s!"test.name.{llName}") ]
     -- Build all blocks via fold over (remaining tests, index, accumulated blocks)
@@ -1668,6 +1728,49 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
     let allBlocks := [entryBlock] ++ blocks
     let mainFn : LLVMFnDef := { name := "main", retTy := .i32, params := [], blocks := allBlocks }
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
+
+/-- Rename every reference to a runtime helper in an operand. -/
+private def renameOperand (ren : Std.HashMap String String) : LLVMOperand → LLVMOperand
+  | .global n => .global ((ren.get? n).getD n)
+  | o => o
+
+private def renameInstr (ren : Std.HashMap String String) : LLVMInstr → LLVMInstr
+  | .binOp d op ty a b => .binOp d op ty (renameOperand ren a) (renameOperand ren b)
+  | .fneg d ty a => .fneg d ty (renameOperand ren a)
+  | .call d rt t args => .call d rt (renameOperand ren t) (args.map fun (ty, a) => (ty, renameOperand ren a))
+  | .callVariadic d rt t args ps =>
+    .callVariadic d rt (renameOperand ren t) (args.map fun (ty, a) => (ty, renameOperand ren a)) ps
+  | .load d ty a => .load d ty (renameOperand ren a)
+  | .store ty v d => .store ty (renameOperand ren v) (renameOperand ren d)
+  | .gep d ty b idx => .gep d ty (renameOperand ren b) (idx.map fun (t, a) => (t, renameOperand ren a))
+  | .phi d ty inc => .phi d ty (inc.map fun (a, l) => (renameOperand ren a, l))
+  | .cast d op st v dt => .cast d op st (renameOperand ren v) dt
+  | .memcpy a b n => .memcpy (renameOperand ren a) (renameOperand ren b) n
+  | .select d c ty a b => .select d (renameOperand ren c) ty (renameOperand ren a) (renameOperand ren b)
+  | i => i
+
+private def renameTerm (ren : Std.HashMap String String) : LLVMTerm → LLVMTerm
+  | .ret ty (some v) => .ret ty (some (renameOperand ren v))
+  | .condBr c a b => .condBr (renameOperand ren c) a b
+  | t => t
+
+-- Every runtime helper is named in `Symbols.runtimeHelperNames` (or is a sized `Vec` helper),
+-- the list Resolve uses to refuse a foreign binding or export that the renaming would capture.
+#guard (getBuiltinFns.1 ++ getVecBuiltinFns [(8, 8)]).all fun f => Symbols.isRuntimeHelperName f.name
+
+/-- Move the runtime helpers (string, print, conversion, `Vec` builtins) into the reserved
+    `_C$rt.` namespace (FFI.md "Symbol Names"): their definitions and every reference to them.
+    No Concrete definition can carry one of these names any more (those are `_C.`-mangled),
+    so a remaining `@string_length` reference is a call to the helper. -/
+private def mangleRuntimeHelpers (s : EmitSSAState) : EmitSSAState :=
+  let (builtinFns, _, _) := getBuiltinFns
+  let names := (builtinFns ++ getVecBuiltinFns s.vecElemSpecs).map (·.name)
+  let ren : Std.HashMap String String :=
+    names.foldl (fun m n => m.insert n (Symbols.runtimeFn n)) {}
+  { s with moduleFunctions := s.moduleFunctions.map fun f =>
+      { f with name := (ren.get? f.name).getD f.name
+               blocks := f.blocks.map fun b =>
+                 { b with instrs := b.instrs.map (renameInstr ren), term := renameTerm ren b.term } } }
 
 def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   let s : EmitSSAState := {}
@@ -1740,8 +1843,8 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let s := { s with emittedTypes := [resultEnumName, optionEnumName] ++ s.emittedTypes }
   -- External declarations (skip externs that shadow defined functions)
   let allExternFns := modules.foldl (fun acc m => acc ++ m.externFns) []
-  let allDefinedFns := modules.foldl (fun acc m => acc ++ m.functions.map (·.name)) []
-  let s := emitExternDecls s allExternFns allDefinedFns
+  let s := { s with externLinks := modules.foldl (fun acc m => acc ++ m.externLinkNames) [] }
+  let s := emitExternDecls s allExternFns
   -- Detect function name collisions across modules: find bare names defined in 2+ module paths
   -- Use f.modulePath (set by Lower) instead of m.name to handle flattened submodules correctly
   let fnNamesByModule := modules.foldl (fun acc m =>
@@ -1759,12 +1862,24 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
     acc ++ m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f
   ) ([] : List String)
   let s := { s with definedFnNames := definedFnNames }
+  -- Link symbols (FFI.md "Symbol Names"): every Concrete definition is mangled into
+  -- `_C.<module path>.<name>`, or takes its `#[export_name]`. Injective: (path, name) fixes
+  -- the pre-mangling name, and the mangled form contains `.`, which no C name does.
+  let pairs := modules.foldl (fun acc m =>
+    acc ++ m.functions.map fun f => (llvmFnName s f, defSymbol s f)) ([] : List (String × String))
+  -- A legacy pre-mangling name shared by two different definitions (e.g. `a.f` qualified to
+  -- `a_f` beside a `z.a_f`) is AMBIGUOUS: it is left out of the map, so a call through it
+  -- binds no definition and fails to link, loudly, rather than picking one.
+  let fnSymbols := pairs.foldl (fun (acc : Std.HashMap String String) (pre, sym) =>
+    if pairs.any (fun (p, q) => p == pre && q != sym) then acc else acc.insert pre sym) {}
+  let s := { s with fnSymbols := fnSymbols }
   -- Emit each module
   let s := modules.foldl (fun s m => emitSModule s m testMode) s
   -- In test mode, emit the test runner instead of the normal main wrapper
   let s := if testMode then emitTestRunner s modules moduleFilter else s
   -- Emit builtin function implementations
   let s := emitBuiltins s
+  let s := mangleRuntimeHelpers s
   -- Assemble the final LLVMModule and print it
   -- Deduplicate declarations: remove duplicates by name and declarations
   -- that collide with a defined function (user code takes precedence)

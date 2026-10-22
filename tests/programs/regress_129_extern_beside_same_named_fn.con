@@ -1,0 +1,19 @@
+// Bug 129 (fixed), the other direction: a module's `extern fn abs` binds C's `abs` even when
+// another module defines a Concrete `abs`. Before mangling the extern's declaration was dropped
+// and both calls reached the Concrete definition (`call i32 @abs(i32 -5)` into `define i32 @abs`,
+// exit 200, seen with a 2026-10-18 build). Expected: 5 + 100 = 105.
+mod c {
+    pub trusted extern fn abs(x: i32) with() -> i32;
+    pub fn call_c() -> i32 {
+        return abs(0 - 5);
+    }
+}
+mod m {
+    import c.{call_c};
+    fn abs(x: i32) -> i32 {
+        return 100;
+    }
+    pub fn main() -> i32 {
+        return call_c() + abs(1);
+    }
+}

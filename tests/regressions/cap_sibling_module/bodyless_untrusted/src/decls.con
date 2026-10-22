@@ -2,6 +2,5 @@ mod decls {
     // The SAME body-less shape WITHOUT `trusted`. It must still cost `Unsafe`, or
     // carrying the modifier through would have made it meaningless rather than
     // effective — the paired control for `bodyless_trusted`.
-    #[intrinsic = "sizeof"]
-    pub fn my_sizeof<T>() -> u64;
+    pub fn my_size() with() -> u64;
 }

@@ -1,0 +1,12 @@
+// One symbol cannot be both imported and defined: exporting a function as `labs` while an
+// `extern fn` imports `labs` is refused (E0119).
+extern fn labs(x: Int) with() -> Int;
+
+#[export_name = "labs"]
+fn my_labs(x: Int) -> Int {
+    return x;
+}
+
+fn main() with(Unsafe) -> Int {
+    return labs(0 - 1) + my_labs(0);
+}

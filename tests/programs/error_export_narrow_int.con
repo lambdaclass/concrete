@@ -1,0 +1,11 @@
+// An exported function may not take or return an 8- or 16-bit integer: the C ABI extends those
+// (signext / zeroext), which emission does not do, so a C caller would read (i8)-1 as 255
+// (Codex review). E0119.
+#[export_name = "cc_minus_one"]
+fn minus_one() -> i8 {
+    return (0 - 1) as i8;
+}
+
+fn main() -> Int {
+    return 0;
+}

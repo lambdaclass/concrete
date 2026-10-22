@@ -1,0 +1,11 @@
+// An import may not be renamed to a compiler intrinsic's name: `import c.{abs as sizeof}` made
+// `sizeof(0 - 5)` compile as the intrinsic (8) and never call C's `abs` (Codex review). E0120.
+mod c {
+    pub trusted extern fn abs(x: i32) with() -> i32;
+}
+mod m {
+    import c.{abs as sizeof};
+    pub fn main() -> i32 {
+        return sizeof(0 - 5);
+    }
+}

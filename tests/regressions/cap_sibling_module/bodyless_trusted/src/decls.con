@@ -2,13 +2,14 @@ mod decls {
     // A BODY-LESS `pub trusted fn`. The parser carried `isPublic` on this branch and
     // dropped `isTrusted`, so this declaration reached `externFnRequiredCaps` as
     // UNTRUSTED and was charged `Unsafe` — a modifier the author wrote, discarded, with
-    // the default `false` read as a decision. `std.mem.sizeof` is spelled this way.
-    // CHECK-ONLY, deliberately. `#[intrinsic]` resolves by the compiler's own name
-    // table, so a renamed copy is not an intrinsic and has no symbol to link — which is
-    // fine, because the fact under test is what the CHECKER charges for the declaration,
-    // not what the backend emits. The linkable instance is `std.mem.sizeof` itself, and
-    // `check_std_compiled_coverage.sh` compiles a `mem` probe under the full `Std` set
-    // (which excludes `Unsafe`) — that probe is what stopped compiling.
-    #[intrinsic = "sizeof"]
-    pub trusted fn my_sizeof<T>() -> u64;
+    // the default `false` read as a decision.
+    // A body-less declaration that is not a compiler intrinsic is a foreign binding, so it
+    // declares its effects (`with()`, R-0484 R3); since the bug 112 fix the parser keeps that
+    // clause. (This fixture used `#[intrinsic = "sizeof"] fn my_sizeof<T>()`; a renamed
+    // intrinsic is a foreign binding now, and an undeclared one is E0116.)
+    // CHECK-ONLY, deliberately: no C function `my_size` exists to link. The fact under test
+    // is what the CHECKER charges for the declaration. The linkable instance is
+    // `std.mem.sizeof`, and `check_std_compiled_coverage.sh` compiles a `mem` probe under the
+    // full `Std` set (which excludes `Unsafe`).
+    pub trusted fn my_size() with() -> u64;
 }

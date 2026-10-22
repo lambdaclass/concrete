@@ -1,0 +1,9 @@
+// Bug 112's exemption is for intrinsics the compiler implements: `#[intrinsic = "n"]` on a
+// declaration named `n` that the compiler knows. A made-up annotation does not make a C call
+// an intrinsic, so the binding must still declare its effects (E0116).
+#[intrinsic = "garbage"]
+trusted extern fn labs(x: Int) -> Int;
+
+fn main() -> Int {
+    return labs(0 - 1);
+}

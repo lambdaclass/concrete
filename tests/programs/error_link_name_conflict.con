@@ -1,0 +1,13 @@
+// A foreign binding's identity is its name, so one name binds one C symbol: two `extern fn f`
+// declarations linked to different symbols are refused (E0118) instead of resolved by order.
+mod a {
+    #[link_name = "labs"]
+    pub extern fn f(x: Int) with() -> Int;
+}
+mod b {
+    #[link_name = "llabs"]
+    pub extern fn f(x: Int) with() -> Int;
+    pub fn main() -> Int {
+        return 0;
+    }
+}

@@ -1,0 +1,10 @@
+// A call spelled like a compiler intrinsic is compiled as the intrinsic, so a foreign binding of
+// that name would never reach C: `sizeof(0 - 5)` returned 8 instead of calling `abs` (Codex
+// review). Refused (E0118); only `free` and `abort`, whose intrinsics are the C functions of
+// those names, may be bound without a link name.
+#[link_name = "abs"]
+trusted extern fn sizeof(x: i32) with() -> i32;
+
+fn main() -> i32 {
+    return sizeof(0 - 5);
+}

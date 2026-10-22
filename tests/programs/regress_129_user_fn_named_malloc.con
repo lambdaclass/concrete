@@ -1,0 +1,16 @@
+// Bug 129 (fixed): a safe user function named like a C library symbol no longer replaces it.
+// Every Concrete-defined function is emitted under a mangled symbol disjoint from C
+// (`_C.main.malloc`), and `alloc` calls the C allocator through a foreign callee, so the
+// allocation and the user's `malloc(0)` are different functions. Before: SIGABRT (status 134).
+struct Copy B { v: Int }
+
+fn malloc(n: Int) -> Int {
+    return n;
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<B> = alloc(B { v: 42 });
+    let out: Int = h.v;
+    free(h);
+    return out + malloc(0);
+}

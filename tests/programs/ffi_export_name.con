@@ -1,0 +1,14 @@
+// #[export_name = "sym"] (FFI.md "Symbol Names", rule 2; R-0286): `triple` is exported to C as
+// `cc_triple`, and the C side (ffi_export_name.c) calls it back through `c_apply`, an import.
+// Every other function stays mangled. Linked with ffi_export_name.c: exit 42 (c_apply calls
+// cc_triple(14)).
+#[export_name = "cc_triple"]
+fn triple(x: i64) -> i64 {
+    return x * 3;
+}
+
+extern fn c_apply(x: i64) with() -> i64;
+
+fn main() with(Unsafe) -> i64 {
+    return c_apply(14);
+}

@@ -1,0 +1,13 @@
+// Bug 165: Elab desugars `println(7)` into calls spelled `print_int` / `print_char`, and those
+// calls bind by spelling, so a function the module defines under that name runs instead of the
+// runtime helper. Here the module's `print_int` aborts. Expected: prints 7 and exits 0.
+// Actual: killed by SIGABRT.
+mod m {
+    fn print_int(x: Int) with(Process) {
+        abort();
+    }
+    pub fn main() with(Console, Process) -> Int {
+        println(7);
+        return 0;
+    }
+}

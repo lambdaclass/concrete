@@ -1,0 +1,10 @@
+// #[export_name] needs a C-compatible shape: scalar parameters and result. A String parameter
+// has no C meaning, so the export is refused (E0119) rather than silently choosing an ABI.
+#[export_name = "takes_string"]
+fn takes_string(s: &String) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 0;
+}

@@ -7,6 +7,7 @@ import Concrete.Proof.IdentityUseBytes
 import Concrete.Proof.Proof
 import Concrete.Proof.ProofCore
 import Concrete.IR.SSA
+import Concrete.Backend.Symbols
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Format
 import Concrete.Report.Json
@@ -4681,9 +4682,12 @@ private partial def collectMonoFnNames (m : CModule) (pfx : String := "") : List
   let fns := m.functions.map fun f => modPfx ++ "." ++ f.name
   fns ++ m.submodules.foldl (fun acc sub => acc ++ collectMonoFnNames sub modPfx) []
 
-/-- Determine the LLVM symbol name for a function. -/
-private def llvmSymbol (name : String) (isEntry : Bool) : String :=
-  if isEntry then "user_main" else name
+/-- The link symbol the backend emits a function under (FFI.md "Symbol Names"): its
+    `#[export_name]`, else the mangled `_C.<module path>.<name>` — the entry `main` included. -/
+private def llvmSymbol (f : SFnDef) (moduleName : String) : String :=
+  match f.exportName with
+  | some e => e
+  | none => Symbols.concreteFn (if f.modulePath.isEmpty then moduleName else f.modulePath) f.name
 
 /-- Determine the claim boundary for a function. -/
 private def claimBoundaryFor (evidence : String) (extracted : Bool) : String :=
@@ -4714,7 +4718,7 @@ private def collectTraceEntries
   let allMonoNames := monoModules.foldl (fun acc m => acc ++ collectMonoFnNames m) []
   -- Collect SSA names
   let allSSAFns := ssaModules.foldl (fun acc sm =>
-    acc ++ sm.functions.map fun f => (f.name, f.isEntryPoint)) []
+    acc ++ sm.functions.map fun f => (f.name, llvmSymbol f sm.name)) []
   -- Build entries
   extractionEntries.map fun ext =>
     let bareName := match ext.qualName.splitOn "." with
@@ -4758,7 +4762,7 @@ private def collectTraceEntries
     let ssaMatches := allSSAFns.filter fun (sn, _) =>
       sn == bareName || sn.startsWith (bareName ++ "_for_")
     let ssaNames := ssaMatches.map (·.1)
-    let llvmNames := ssaMatches.map fun (sn, isEntry) => llvmSymbol sn isEntry
+    let llvmNames := ssaMatches.map (·.2)
     let boundary := claimBoundaryFor evidence ext.extracted.isSome
     { sourceFunction := ext.qualName
     , fingerprint := ext.fingerprint

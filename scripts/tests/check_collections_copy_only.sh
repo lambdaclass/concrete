@@ -173,9 +173,11 @@ if (cd "$TMP/b52p" && "$C" build >"$TMP/b52p.out" 2>&1); then
   (cd "$TMP/b52p" && "$C" build --emit-llvm >"$TMP/b52p.ll" 2>&1)
   # Synthesized glue is spelled `$destroy$<type>` -- `$` is not an identifier character,
   # so no user definition can be selected in its place (Codex review of bug 052).
-  glue="$(awk '/^define void @\$destroy\$Ref_T_Arr2_T_Tracked_E_E\(/,/^}/' "$TMP/b52p.ll")"
-  if printf '%s' "$glue" | grep -q "call void @Tracked_destroy" \
-     && ! grep -qE "^define void @(T_destroy|T\\\$destroy)" "$TMP/b52p.ll"; then
+  # Every Concrete definition, glue included, is emitted under `_C.<module path>.<name>`
+  # (FFI.md "Symbol Names").
+  glue="$(awk '/^define void @_C\.[A-Za-z0-9_.]*\.\$destroy\$Ref_T_Arr2_T_Tracked_E_E\(/,/^}/' "$TMP/b52p.ll")"
+  if printf '%s' "$glue" | grep -qE "call void @_C\.[A-Za-z0-9_.]*\.Tracked_destroy\(" \
+     && ! grep -qE "^define void @(_C\.[A-Za-z0-9_.]*\.)?(T_destroy|T\\\$destroy)\(" "$TMP/b52p.ll"; then
     ok "array glue calls @Tracked_destroy per element; no literal @T_destroy is synthesized"
   else
     no "array glue does not call @Tracked_destroy (or a literal @T_destroy no-op is back)"

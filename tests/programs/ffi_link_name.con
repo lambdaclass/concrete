@@ -1,0 +1,8 @@
+// #[link_name = "sym"] (FFI.md "Symbol Names", rule 3): the binding `c_labs` calls the C
+// symbol `labs`. Exit 7.
+#[link_name = "labs"]
+extern fn c_labs(x: Int) with() -> Int;
+
+fn main() with(Unsafe) -> Int {
+    return c_labs(0 - 7);
+}

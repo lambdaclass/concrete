@@ -53,7 +53,7 @@ Rules:
 - callers do not need `with(Unsafe)`
 - parameter and return types must still be FFI-safe
 - the declaration itself is the audit boundary — it asserts the foreign function is safe to call with any valid arguments of the declared types
-- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117), in every module, nested submodules included (enforced; bug 113). An `#[intrinsic]` declaration is implemented by the compiler, is not a foreign binding, and needs no effect declaration (bug 112). The declared effects bind every caller, trusted bodies included (R-0484)
+- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117), in every module, nested submodules included (enforced; bug 113). An `#[intrinsic = "n"]` declaration named `n` that the compiler implements (`resolveIntrinsic`) is not a foreign binding and needs no effect declaration (bug 112); any other `#[intrinsic]` annotation leaves the declaration a foreign binding under every rule. The declared effects bind every caller, trusted bodies included (R-0484)
 - `--report unsafe` shows trusted extern declarations in a separate "Trusted extern functions" section
 
 Keep the category narrow. `trusted extern fn` means "safe for every argument its types permit, with no undeclared effects" — not a general "safe FFI" escape hatch. A foreign function whose safety depends on pointer validity, or that can invalidate a resource another handle owns (`close`), stays a regular `extern fn`; its callers outside `trusted` code need `with(Unsafe)`. Effects are not what decides this: they are declared either way.
@@ -79,26 +79,63 @@ Keep the category narrow. `trusted extern fn` means "safe for every argument its
    loud; it does not replace the identity-based synthesis of destructors (R-0510), which is the
    repair for bug 103's root (structural class 3).
 
-**Status on main: not enforced.** There is no mangling ([ABI.md](ABI.md) lists symbol naming as
-unspecified): user functions are emitted under their bare names (`define i64 @abs`, `@strlen`,
-`@malloc`), the program's `main` becomes `user_main` behind a generated C `main`, and the runtime
-helpers share the same flat namespace. Bug 028's reserved-name list (`user_main`, `__*`) is the
-only protection. So a safe function `fn malloc(n: Int) -> Int` replaces the allocator for the
-whole program, and every `alloc` calls it (the binary aborts, exit 134; probed at `5b63cd87`; bug
-129); on
-ELF, symbol interposition would also redirect libc's internal calls. No `extern`, no `trusted`.
-Separately, Mono synthesizes an empty body for any unresolved `*_destroy`, silently replacing a
-foreign destructor (bug 103). `#[link_name]` does not exist (0 uses; it is a new, opt-in
-attribute); extern declarations (std 58 lines in 4 files, examples 41 in 13, tests 140 in 65) are
-unchanged unless they want a different C name.
+**Status on main: enforced** (2026-10-21, bugs 129 and 103; `Concrete/Backend/Symbols.lean` is the
+one place that spells a link symbol).
+
+- Rule 1: every Concrete-defined function is emitted as `_C.<module path>.<name>` (the entry
+  `main` included: `_C.main.main`, which the generated C `main` calls), and every compiler
+  runtime helper (`string_*`, `print_*`, `*_to_string`, `vec_*`, `__concrete_check_oom`) as
+  `_C$rt.<name>`. Every such symbol contains `.` or `$`, which no C identifier contains, so the
+  namespaces are disjoint by construction: `fn malloc` is `_C.main.malloc` and `alloc` still
+  calls C's `malloc` (bug 129). The disambiguator is the function's Core name (impl methods
+  `Type_method`, specializations `f_for_T`, glue `$destroy$<type>`), unique per module path; it
+  becomes the `DefId` when R-0492 lands. Mangling is an emission concern: Core names,
+  CallableIds, proof and report identities do not change (the traceability report's `llvm:` row
+  shows the mangled symbol).
+- Rule 2: the only unmangled names a program defines are `#[export_name = "sym"]` functions and
+  the generated C `main`. An export must be a C identifier, not `main`, not `__`-prefixed, not a C
+  runtime symbol the program itself calls (`malloc`, `free`, `write`, ...), not a symbol an
+  `extern fn` imports, unique, and of a C-compatible shape (not generic, not `main`, not a test,
+  32- or 64-bit integer / float / raw-pointer parameters and result: 8- and 16-bit integers need
+  the C ABI's sign or zero extension, which emission does not do); otherwise E0119. The header, report and
+  library-output parts of R-0286 are not built yet.
+- Rule 3: `#[link_name = "sym"]` on an `extern fn` binds `sym` (ASCII letters, digits, `_`, `$`,
+  `.`; never in the `_C.` / `_C$` namespace; E0118). A foreign binding's identity is its name
+  (`CallableId.ofExtern`), so one name binds one C symbol across the program (two declarations
+  of `f` with different link names: E0118), and no binding may name a compiler runtime helper
+  (`print_int`, `string_length`, `vec_*`, ...; E0118), which emission renames into `_C$rt.`, nor
+  be spelled like a compiler intrinsic (`sizeof`, ...; E0118), since such a call is compiled as
+  the intrinsic and never reaches C (`free` and `abort` without a link name excepted: their
+  intrinsics are those C functions); likewise no import may be renamed to an intrinsic's name
+  (`import c.{abs as sizeof}`, E0120). A call the resolver binds to a runtime-helper intrinsic
+  carries the helper's `_C$rt.` symbol into emission, so another module's Concrete function of
+  that name cannot capture it.
+  R-0484 R3's effectful-symbol check (E0117) judges the C symbol the binding calls. Every call the
+  resolver binds to an extern, own or imported, carries that binding to emission
+  (`CFnDef.foreignCalls`), so it calls the C symbol even when some module defines a Concrete
+  function of the same spelling.
+- Rule 4: the compiler's own C calls (`alloc` → `malloc`, `free`) are `SCallee.foreign` and are
+  never resolved against Concrete definitions; destructors are dispatched by type through the
+  reserved `$destroy` callee (bug 103, fixed on main by `0c507fb9`), and their glue is mangled too.
+- Open: a foreign function taken as a VALUE is called with the Concrete ABI, so a small
+  `#[repr(C)]` struct argument reaches C as a pointer (bug 166, predates this work; owner R-0283).
+- Open: a call Elab GENERATES (`println` → `print_int`) still binds by spelling, so a module
+  defining its own `print_int` captures it (bug 165, predates mangling; owner R-0492).
+- Not mangled: the runtime ABI symbols std imports through `extern fn` (`__concrete_get_argc`,
+  `__concrete_get_argv`, the `__concrete_argc`/`__concrete_argv` globals) and the `internal`
+  checked-arithmetic helpers (`__cc_*`); the `__` prefix is reserved to the implementation in C
+  and refused for Concrete definitions (bug 028).
 
 **Prevents.** Bug 103's silent replacement (made loud), bug 028's class, and the user-function
 capture of a C symbol ([bug 129](../bugs/129_user_fn_captures_libc_symbol.md): a safe function
 named like a libc symbol replaces it program-wide).
 
-**Migration.** No source change. Mangling changes what tools see: the `user_main` wrapper, the
-`clash_*` cases of `check_error_leaks.sh`, profiler and debugger tooling, and tests that assert
-`@name` in `--emit-llvm` output.
+**Migration.** No source change. Mangling changes what tools see: the program's `main` is
+`_C.main.main` (formerly `user_main`), profiler and debugger tooling show `_C.` symbols, and tests
+that assert `@name` in `--emit-llvm` output now match `@_C.<module>.<name>`
+(`check_fnptr_values.sh`, `check_trap_inventory.sh`, `check_indirect_call_identity.sh`,
+`check_collections_copy_only.sh`, run_tests.sh traceability). A C program that called a Concrete
+function by its bare name must export it with `#[export_name]`.
 
 **Owners.** Bugs 103 and 129: ROADMAP exit 0b (R-0482), as wrong code and a
 memory-safety defect in safe code. Mangling and the namespace: R-0285 / R-0283 (the foreign

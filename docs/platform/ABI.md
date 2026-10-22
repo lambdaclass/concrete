@@ -21,7 +21,7 @@ For the exploratory design direction behind the source-facing `repr` surface, se
 | Pass-by-pointer convention | Implemented | **No** — which types are passed by pointer may change |
 | Calling convention | LLVM default | **No** — no explicit calling convention annotation |
 | String/Vec/HashMap internal layout | Implemented | **No** — opaque to FFI; sizes may change |
-| Linker symbol naming | Not implemented: Concrete functions are emitted under bare names | **No** — decided 2026-10-21: every Concrete-defined function gets a mangled symbol disjoint from C; only `extern fn`, `#[link_name]` and an export attribute name C symbols ([FFI.md](FFI.md#symbol-names-normative-decided-2026-10-21)) |
+| Linker symbol naming | Enforced (2026-10-21): every Concrete-defined function is `_C.<module path>.<name>`, runtime helpers `_C$rt.<name>`, disjoint from C | **Partially** — the namespace and its disjointness from C are the contract; the exact spelling after `_C.` is not stable. C names come only from `extern fn` (`#[link_name]`) and `#[export_name]` ([FFI.md](FFI.md#symbol-names-normative-decided-2026-10-21)) |
 
 ## Platform Assumptions
 
@@ -181,7 +181,7 @@ The language should not promise a large Rust-style menu of representation tricks
 ## What We Intentionally Do Not Promise
 
 1. **ABI compatibility across compiler versions.** Recompile everything when the compiler changes.
-2. **Stable symbol names.** Function name mangling is not specified.
+2. **Stable symbol names.** Mangled symbols live in the `_C` namespace, but their spelling may change (it moves to `DefId`s with R-0492); a C caller uses `#[export_name]`.
 3. **Non-repr struct layout.** Only `#[repr(C)]` and `#[repr(packed)]` have guaranteed layout.
 4. **Enum representation.** Tag size, payload offset, and discriminant values may change.
 5. **32-bit support.** Not planned for the near term.

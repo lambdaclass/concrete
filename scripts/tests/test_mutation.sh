@@ -643,8 +643,8 @@ gate_for_last "scripts/tests/check_fnptr_values.sh"
 # keep passing (the call still reaches the right function via a load) while the
 # common case silently becomes an indirect call.
 MUT_FILE+=("Concrete/Backend/EmitSSA.lean")
-MUT_OLD+=("    .global resolved")
-MUT_NEW+=("    .reg resolved -- MUTATION: fn reference emitted as a register")
+MUT_OLD+=("    .global (directSymbol s bareName).1")
+MUT_NEW+=("    .reg (directSymbol s bareName).1 -- MUTATION: fn reference emitted as a register")
 MUT_DESC+=("EmitSSA: fn reference no longer resolves to a global (R-0436)")
 gate_for_last "scripts/tests/check_fnptr_values.sh"
 

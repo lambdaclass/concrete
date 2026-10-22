@@ -126,10 +126,11 @@ mod t {
 }
 CON
 IR="$("$COMPILER" "$TMP/ir.con" --emit-llvm 2>/dev/null)"
-if sed -n '/define .*@user_main/,/^}/p' <<<"$IR" | grep -q "__cc_ssub"; then
-  ok "the checked-negation helper is present in user_main"
+# The program's main is emitted as the mangled `_C.t.main` (FFI.md "Symbol Names").
+if sed -n '/define .*@_C\.t\.main(/,/^}/p' <<<"$IR" | grep -q "__cc_ssub"; then
+  ok "the checked-negation helper is present in the program's main (_C.t.main)"
 else
-  no "user_main contains no checked-negation call — the operation was deleted (bug 053's signature)"
+  no "_C.t.main contains no checked-negation call — the operation was deleted (bug 053's signature)"
 fi
 
 echo "=== the trap answer comes from ONE place ==="

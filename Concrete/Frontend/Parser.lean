@@ -1659,7 +1659,7 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
   -- attribute must be added here as well as wired into its consumer.
   let knownAttrs := ["repr", "test", "overflow_checked", "spec", "proof_by",
     "ensures_proof", "proof_coverage", "proof_fingerprint", "requires",
-    "ensures", "invariant", "variant", "intrinsic", "langitem"]
+    "ensures", "invariant", "variant", "intrinsic", "langitem", "link_name", "export_name"]
   unless knownAttrs.contains key do
     throwParse s!"unknown attribute '#[{key}]'"
       (span := some attrSp)
@@ -1969,6 +1969,11 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
   expect .lparen
   let params ← parseParamList
   expect .rparen
+  -- Whether a `with(...)` clause was WRITTEN: a body-less declaration is a foreign binding
+  -- (unless it is a compiler intrinsic), and R-0484 R3 distinguishes no clause (refused,
+  -- E0116) from `with()` (the audited claim of none). Bug 112's residual: this clause and
+  -- the span used to be dropped, so every body-less declaration read as undeclared at 0:0.
+  let wroteWith := (← peek) == .with_
   let withCaps ← parseWithCaps
   let capSet := resolveCapVars capParams withCaps
   let tk ← peek
@@ -1980,7 +1985,10 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
   let tk2 ← peek
   if tk2 == .semicolon then
     advance  -- consume ';'
-    return .inr { name, params, retTy }
+    let declCaps : Option CapSet :=
+      if wroteWith then some (match capSet with | .concrete [] => CapSet.empty | other => other)
+      else none
+    return .inr { name, params, retTy, capSet := declCaps, span := sp }
   else
     let before := (← get).loopContracts.length
     let body ← parseBlock
@@ -2134,6 +2142,7 @@ partial def parseTypeAlias : ParseM TypeAlias := do
 
 /-- Parse an extern fn declaration: extern fn name(params) -> RetType; -/
 partial def parseExternFn : ParseM ExternFnDecl := do
+  let sp ← peekSpan
   expect .extern_
   expect .fn
   let name ← expectIdent
@@ -2154,7 +2163,7 @@ partial def parseExternFn : ParseM ExternFnDecl := do
   else
     pure .unit
   expect .semicolon
-  return { name, params, retTy, capSet }
+  return { name, params, retTy, capSet, span := sp }
 
 /-- Tokens that begin a new top-level item — the resync points for error recovery
     (ROADMAP Phase 4 #12c). When a declaration fails to parse we skip to the next of
@@ -2227,6 +2236,10 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   -- `#[intrinsic = "..."]` on a bodiless declaration: the compiler implements it, so it is not
   -- a foreign binding (R-0484 R10). Carried to Core; nothing else reads it.
   let mut pendingIntrinsic : Option String := none
+  -- `#[link_name = "sym"]` (extern fn) and `#[export_name = "sym"]` (fn with a body): the only
+  -- spellings of a C symbol (FFI.md "Symbol Names"). Resolve validates the symbol.
+  let mut pendingLinkName : Option String := none
+  let mut pendingExportName : Option String := none
   let mut pendingEnsures : List Expr := []
   let mut pendingRequires : List Expr := []
   let mut pendingSpecLink : Option String := none
@@ -2247,6 +2260,14 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           pendingIsTest := true
         if key == "overflow_checked" then pendingOverflow := true
         if key == "intrinsic" then pendingIntrinsic := attrVal
+        if key == "link_name" then
+          if pendingLinkName.isSome then throwParse "duplicate #[link_name] on one declaration" (span := none)
+          if attrVal.isNone then throwParse "#[link_name] needs a symbol: #[link_name = \"sym\"]" (span := none)
+          pendingLinkName := attrVal
+        if key == "export_name" then
+          if pendingExportName.isSome then throwParse "duplicate #[export_name] on one function" (span := none)
+          if attrVal.isNone then throwParse "#[export_name] needs a symbol: #[export_name = \"sym\"]" (span := none)
+          pendingExportName := attrVal
         if key == "spec" then
           if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
           pendingSpecLink := attrVal
@@ -2271,6 +2292,9 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         if pendingRepr.isSome then
           let sp ← peekSpan
           throwParse "#[repr(...)] can only be applied to struct definitions" (span := some sp)
+        if pendingLinkName.isSome || pendingExportName.isSome then
+          let sp ← peekSpan
+          throwParse "#[link_name] / #[export_name] can only be applied to an extern fn / a function" (span := some sp)
         let imp ← parseImport
         imports := imports ++ [imp]
       else
@@ -2286,6 +2310,9 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if pendingIsTest then
             let sp ← peekSpan
             throwParse "#[test] can only be applied to function definitions" (span := some sp)
+          if pendingLinkName.isSome || pendingExportName.isSome then
+            let sp ← peekSpan
+            throwParse "#[link_name] / #[export_name] can only be applied to an extern fn / a function" (span := some sp)
           let s ← parseStructDef
           let reprC := pendingRepr.map (·.isReprC) |>.getD false
           let packed := pendingRepr.map (·.isPacked) |>.getD false
@@ -2305,6 +2332,14 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             pendingIsTest := true
           if key == "overflow_checked" then pendingOverflow := true
           if key == "intrinsic" then pendingIntrinsic := attrVal
+          if key == "link_name" then
+            if pendingLinkName.isSome then throwParse "duplicate #[link_name] on one declaration" (span := none)
+            if attrVal.isNone then throwParse "#[link_name] needs a symbol: #[link_name = \"sym\"]" (span := none)
+            pendingLinkName := attrVal
+          if key == "export_name" then
+            if pendingExportName.isSome then throwParse "duplicate #[export_name] on one function" (span := none)
+            if attrVal.isNone then throwParse "#[export_name] needs a symbol: #[export_name = \"sym\"]" (span := none)
+            pendingExportName := attrVal
           if key == "spec" then
             if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
             pendingSpecLink := attrVal
@@ -2342,10 +2377,20 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if pendingIntrinsic.isSome && tk != .fn && tk != .extern_ then
             let sp ← peekSpan
             throwParse "#[intrinsic] can only be applied to a bodiless function declaration" (span := some sp)
+          if pendingLinkName.isSome && tk != .fn && tk != .extern_ then
+            let sp ← peekSpan
+            throwParse "#[link_name] can only be applied to an extern fn" (span := some sp)
+          if pendingExportName.isSome && tk != .fn then
+            let sp ← peekSpan
+            throwParse "#[export_name] can only be applied to a function with a body" (span := some sp)
           if tk == .extern_ then
+            if pendingExportName.isSome then
+              let sp ← peekSpan
+              throwParse "#[export_name] can only be applied to a function with a body; an extern fn names a C symbol with #[link_name]" (span := some sp)
             let ext ← parseExternFn
-            externFns := { ext with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic } :: externFns
+            externFns := { ext with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic, linkName := pendingLinkName } :: externFns
             pendingIntrinsic := none
+            pendingLinkName := none
           else if tk == .enum_ then
             let e ← parseEnumDef
             enums := enums ++ [{ e with isPublic := isPub }]
@@ -2447,14 +2492,21 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             | .inl fnDef =>
               if pendingIntrinsic.isSome then
                 throwParse "#[intrinsic] can only be applied to a bodiless function declaration, not one with a body" (span := some fnDef.span)
-              fns := { fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow } :: fns
+              if pendingLinkName.isSome then
+                throwParse "#[link_name] can only be applied to an extern fn; a function with a body is exported with #[export_name]" (span := some fnDef.span)
+              fns := { fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow, exportName := pendingExportName } :: fns
             -- `isTrusted` must come along. The body-less branch carried `isPublic` and
             -- dropped it, so `pub trusted fn sizeof<T>() -> u64;` parsed as UNtrusted and
             -- `externFnRequiredCaps` charged it `Unsafe` — a modifier the author wrote,
             -- silently discarded, with the default read as a decision. (`trusted extern fn`
             -- was unaffected: that is a different production.)
-            | .inr extDef => externFns := { extDef with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic } :: externFns
+            | .inr extDef =>
+              if pendingExportName.isSome then
+                throwParse "#[export_name] can only be applied to a function with a body" (span := none)
+              externFns := { extDef with isPublic := isPub, isTrusted, intrinsic := pendingIntrinsic, linkName := pendingLinkName } :: externFns
             pendingIntrinsic := none
+            pendingLinkName := none
+            pendingExportName := none
             pendingIsTest := false
             pendingOverflow := false
             pendingEnsures := []
@@ -2492,6 +2544,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       pendingIsTest := false
       pendingOverflow := false
       pendingIntrinsic := none
+      pendingLinkName := none
+      pendingExportName := none
       pendingEnsures := []
       pendingRequires := []
       pendingSpecLink := none

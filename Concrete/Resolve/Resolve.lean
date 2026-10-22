@@ -4,6 +4,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Frontend.Token
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Intrinsic
+import Concrete.Backend.Symbols
 
 namespace Concrete
 
@@ -59,6 +60,9 @@ inductive ResolveError where
   | wrongCapArgCount (name : String) (expected : Nat) (got : Nat)
   | externEffectsUndeclared (name : String)
   | effectfulSymbolDeclaredPure (name : String)
+  | invalidLinkName (name : String) (symbol : String) (reason : String)
+  | invalidExport (name : String) (symbol : String) (reason : String)
+  | importAliasIsIntrinsic (name : String) (alias : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -79,6 +83,12 @@ def ResolveError.message : ResolveError → String
     s!"foreign binding '{name}' does not declare its effects: write `with(...)` naming the capabilities it exercises, or `with()` if it has none — an undeclared binding is never read as having no effects"
   | .effectfulSymbolDeclaredPure name =>
     s!"foreign binding '{name}' is declared with no effects, but '{name}' is a known effectful C symbol; declare the capability it exercises"
+  | .invalidLinkName name symbol reason =>
+    s!"foreign binding '{name}' cannot bind the C symbol '{symbol}': {reason}"
+  | .importAliasIsIntrinsic name alias =>
+    s!"'{name}' may not be imported as '{alias}': '{alias}' is the name of a compiler intrinsic, so a call spelled '{alias}' is compiled as the intrinsic and never reaches '{name}'"
+  | .invalidExport name symbol reason =>
+    s!"#[export_name = \"{symbol}\"] on '{name}' cannot be exported: {reason}"
   | .wrongCapArgCount name expected got =>
     s!"'{name}' takes {expected} capability argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
   | .wrongTypeArgCount name expected got =>
@@ -157,6 +167,9 @@ def ResolveError.code : ResolveError → String
   | .wrongCapArgCount _ _ _ => "E0115"
   | .externEffectsUndeclared _ => "E0116"
   | .effectfulSymbolDeclaredPure _ => "E0117"
+  | .invalidLinkName _ _ _ => "E0118"
+  | .invalidExport _ _ _ => "E0119"
+  | .importAliasIsIntrinsic _ _ => "E0120"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -573,19 +586,51 @@ private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : 
                    then [mkResolveDiag (.recursiveTypeAlias ta.name) (some ta.span)] else []
     acc ++ tErrs ++ recErrs) []
 
+/-- A compiler intrinsic the compiler actually implements: `#[intrinsic = "n"]` on a declaration
+    named `n` that `resolveIntrinsic` knows, with no `#[link_name]`. Any other annotation is not an
+    implementation: the declaration stays a foreign binding under every rule (R3, link names). -/
+def isCompilerIntrinsic (ef : ExternFnDecl) : Bool :=
+  match ef.intrinsic with
+  | some v => v == ef.name && (resolveIntrinsic v).isSome && ef.linkName.isNone
+  | none => false
+
 /-- R-0484 R3 over a module and every nested submodule (bug 113). A `#[intrinsic]`
     declaration is not a foreign binding (the compiler implements it, no C code stands behind
     it), so R3 does not apply to it; std.mem's `sizeof`/`alignof` are the instances, and they
     reach this walk because std's modules are submodules in a project build. -/
 private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   let ctx := m.externFns.foldl (fun ctx ef =>
-    if ef.intrinsic.isSome then ctx else
+    let sym := ef.linkName.getD ef.name
+    if isCompilerIntrinsic ef then ctx else
+    let ctx := match ef.linkName with
+      | some l => if Symbols.isForeignSymbolSpelling l then ctx
+                  else addError ctx (.invalidLinkName ef.name l "a link name is ASCII letters, digits, '_', '$' and '.', does not start with a digit, and is outside the Concrete symbol namespace ('_C.' / '_C$')") (some ef.span)
+      | none => ctx
+    -- A call spelled like a compiler intrinsic is compiled as the intrinsic and never reaches
+    -- C, so a foreign binding of that name is refused, except `free` and `abort` without a
+    -- link name, whose intrinsics ARE the C functions of those names (std binds both).
+    let ctx := if (resolveIntrinsic ef.name).isSome
+        && !(ef.linkName.isNone && (ef.name == "free" || ef.name == "abort")) then
+        addError ctx (.invalidLinkName ef.name sym s!"'{ef.name}' is the name of a compiler intrinsic, so a call to it is compiled as the intrinsic and never reaches the C function") (some ef.span)
+      else ctx
+    let ctx := if Symbols.isRuntimeHelperName sym then
+        addError ctx (.invalidLinkName ef.name sym "it is the name of a compiler runtime helper, which the backend moves into its reserved namespace; the binding would be captured by the helper") (some ef.span)
+      else ctx
+    -- The effectful-symbol judgment is about the C function actually called.
     match ef.capSet with
     | none => addError ctx (.externEffectsUndeclared ef.name) (some ef.span)
     | some cs =>
-      if cs.isEmpty && Capabilities.knownEffectfulForeignSymbols.contains ef.name
-      then addError ctx (.effectfulSymbolDeclaredPure ef.name) (some ef.span)
+      if cs.isEmpty && Capabilities.knownEffectfulForeignSymbols.contains sym
+      then addError ctx (.effectfulSymbolDeclaredPure sym) (some ef.span)
       else ctx) ctx
+  -- An import renamed to a compiler intrinsic's name would be compiled as the intrinsic: an
+  -- imported foreign binding (`import c.{abs as sizeof}`) would never reach C (Codex review).
+  let ctx := m.imports.foldl (fun ctx imp =>
+    imp.symbols.foldl (fun ctx sym =>
+      match sym.alias with
+      | some a => if a != sym.name && (resolveIntrinsic a).isSome
+                  then addError ctx (.importAliasIsIntrinsic sym.name a) (some imp.span) else ctx
+      | none => ctx) ctx) ctx
   m.submodules.foldl (fun ctx sub => externEffectsCheck sub ctx) ctx
 
 /-- Resolve all names in a module's function bodies. -/
@@ -733,6 +778,70 @@ def resolveShallow (moduleSummaries : List FileSummary)
 -- Body-level resolution
 -- ============================================================
 
+/-- A type an exported function may take or return: one passed identically by the C ABI and
+    by Concrete's calling convention (32- and 64-bit integers, floats, raw pointers; `()` as a
+    return). 8- and 16-bit integers are excluded: the C ABI extends them (`signext`/`zeroext`),
+    which emission does not do, so a C caller would read `(i8)-1` as 255 (Codex review). -/
+private def isExportScalarTy : Ty → Bool
+  | .int | .uint | .i32 | .u32 | .float64 | .float32 => true
+  | .ptrMut _ | .ptrConst _ => true
+  | _ => false
+
+private partial def collectFns (m : Module) : List FnDef :=
+  m.functions ++ m.submodules.foldl (fun acc sub => acc ++ collectFns sub) []
+
+private partial def collectExterns (m : Module) : List ExternFnDecl :=
+  m.externFns ++ m.submodules.foldl (fun acc sub => acc ++ collectExterns sub) []
+
+/-- `#[export_name]` (FFI.md "Symbol Names", rule 2; R-0286): the one way a Concrete-defined
+    function gets a C name. Refused (E0119) unless the symbol is a C identifier that the
+    program does not already use for something else — the process entry, a compiler runtime
+    or C runtime symbol the emitted code calls (exporting `malloc` would replace the
+    allocator: bug 129 spelled explicitly), a foreign symbol an `extern fn` imports, or
+    another export — and the function has a C-compatible shape: not generic, not `main`, not
+    a test, scalar parameters and result. Program-wide, over every module and submodule. -/
+def exportErrors (modules : List Module) : Diagnostics :=
+  let fns := modules.foldl (fun acc m => acc ++ collectFns m) []
+  let externSyms := (modules.foldl (fun acc m => acc ++ collectExterns m) []).map
+    fun ef => ef.linkName.getD ef.name
+  let exported := fns.filterMap fun f => f.exportName.map (f, ·)
+  exported.foldl (fun errs (f, sym) =>
+    -- Prepended, reversed once below (the quadratic-append ratchet).
+    let bad (reason : String) := mkResolveDiag (.invalidExport f.name sym reason) (some f.span) :: errs
+    if !Symbols.isCIdentifier sym then bad "the symbol must be a C identifier (letters, digits and '_', not starting with a digit)"
+    else if sym == "main" then bad "'main' is the process entry the compiler generates"
+    else if sym.startsWith "__" then bad "the '__' prefix is reserved for the compiler runtime"
+    else if Symbols.isRuntimeHelperName sym then
+      bad s!"'{sym}' is the name of a compiler runtime helper"
+    else if Symbols.cRuntimeSymbols.contains sym then
+      bad s!"'{sym}' is a C runtime symbol the compiled program itself calls; exporting a definition under it would replace it for the whole program"
+    else if externSyms.contains sym then
+      bad s!"'{sym}' is imported by an `extern fn` in this program; one symbol cannot be both imported and defined"
+    else if (exported.filter (·.2 == sym)).length > 1 then bad s!"several functions are exported as '{sym}'"
+    else if !f.typeParams.isEmpty then bad "a generic function has no single C signature"
+    else if f.name == mainFnName then bad "the program's `main` is called by the generated entry, not exported"
+    else if f.isTest then bad "a #[test] function is not exported"
+    else if !(f.params.all fun p => isExportScalarTy p.ty) then
+      bad "every parameter must be a 32- or 64-bit integer, a float or a raw pointer (the types C and Concrete pass alike)"
+    else if !(f.retTy == .unit || isExportScalarTy f.retTy) then
+      bad "the result must be (), a 32- or 64-bit integer, a float or a raw pointer (the types C and Concrete pass alike)"
+    else errs) [] |>.reverse
+
+/-- A foreign binding's identity is its name (`CallableId.ofExtern`), so one name must bind one
+    C symbol across the program: two `extern fn f` declarations with different `#[link_name]`s
+    (or one with and one without) are refused (E0118) rather than resolved by declaration order. -/
+def linkNameConflicts (modules : List Module) : Diagnostics :=
+  let exts := modules.foldl (fun acc m => acc ++ collectExterns m) []
+  let exts := exts.filter fun ef => !isCompilerIntrinsic ef
+  let (_, errs) := exts.foldl (fun (seen, errs) ef =>
+    let sym := ef.linkName.getD ef.name
+    match seen.lookup ef.name with
+    | some other =>
+      if other == sym then (seen, errs)
+      else (seen, mkResolveDiag (.invalidLinkName ef.name sym s!"another declaration of '{ef.name}' binds '{other}'; a foreign binding's identity is its name, so one name binds one C symbol") (some ef.span) :: errs)
+    | none => ((ef.name, sym) :: seen, errs)) (([] : List (String × String)), ([] : Diagnostics))
+  errs.reverse
+
 /-- Resolve bodies, returning the (always structurally complete, side-table-resolved)
     modules ALONGSIDE any diagnostics, rather than discarding the modules on error.
     Resolution never modifies the AST (it validates via side tables), so the returned
@@ -747,7 +856,7 @@ def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (Li
     let (rm, mErrs) := resolveModule m scope shallow.knownTypes shallow.traitMethods shallow.traitImpls
     (acc ++ [rm], errs ++ mErrs)
   ) ([], [])
-  (resolved, shallow.errors ++ bodyErrors)
+  (resolved, shallow.errors ++ bodyErrors ++ exportErrors modules ++ linkNameConflicts modules)
 
 def resolveBodies (modules : List Module) (shallow : ShallowResult) : Except Diagnostics (List ResolvedModule) :=
   let (resolved, allErrors) := resolveBodiesPartial modules shallow

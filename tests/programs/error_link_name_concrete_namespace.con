@@ -1,0 +1,8 @@
+// #[link_name] may not name a symbol in the Concrete namespace (`_C.` / `_C$`): the mangled
+// namespace belongs to Concrete definitions alone (FFI.md "Symbol Names"). E0118.
+#[link_name = "_C.main.helper"]
+extern fn helper() with() -> Int;
+
+fn main() -> Int {
+    return 0;
+}

@@ -151,6 +151,17 @@ structure CFnDef where
   -- artifacts can point back at source (ROADMAP Phase 4 #13). `none` for synthesized
   -- functions with no source form.
   declSpan : Option Span := none
+  /-- `#[export_name]` (FFI.md "Symbol Names"): the C symbol the backend emits this function
+      under instead of its mangled one. An emission fact; no identity or digest reads it. -/
+  exportName : Option String := none
+  /-- Spellings visible in this function's module that the resolver binds to a FOREIGN
+      declaration (`CallableId.ns = .extern`, an imported extern included), whether called or
+      taken as a value: (spelling, declared name). Also the spellings it binds to a compiler
+      intrinsic or builtin implemented by a runtime helper: (spelling, `_C$rt.` symbol).
+      Emission binds them to the C symbol even where a Concrete function shares the
+      spelling (FFI.md "Symbol Names"). Copied with the body by Mono, so a specialization
+      keeps its generic's bindings. An emission fact; no identity or digest reads it. -/
+  foreignCalls : List (String × String) := []
 
 /-- The declaration name proof and report identities use (see `CFnDef.declName`). -/
 def CFnDef.sourceName (f : CFnDef) : String := f.declName.getD f.name
@@ -294,6 +305,8 @@ structure CModule where
   /-- Bodiless declarations marked `#[intrinsic = "..."]`: (name, intrinsic). Implemented by the
       compiler, so the assumption summary does not treat them as foreign bindings. -/
   intrinsicDecls : List (String × String) := []
+  /-- `#[link_name]` bindings: (extern name, C symbol). An emission fact (FFI.md "Symbol Names"). -/
+  externLinkNames : List (String × String) := []
   constants : List (String × Ty × CExpr)
   submodules : List CModule := []
   traitDefs : List CTraitDef := []

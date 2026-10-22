@@ -36,6 +36,27 @@ one without returning it. Linear elements use `vec_pop` or `Vec`'s `pop`, `swap_
 `replace` and `with_at`. Two test programs that drained a `Vec<String>` with `vec_get` now use
 `vec_pop`.
 
+### Concrete Symbols Live In Their Own Namespace (bug 129, 2026-10-21)
+
+The decided foreign/symbol-name rule (FFI.md "Symbol Names") is implemented. Every
+Concrete-defined function is emitted as `_C.<module path>.<name>` (the program's `main` is
+`_C.main.main`, called by the generated C `main`; it was `user_main`), and the runtime helpers as
+`_C$rt.<name>`. No C identifier can spell either, so a safe `fn malloc` no longer becomes the
+allocator every `alloc` calls (bug 129: the binary died with SIGABRT; it now exits 42), and a
+module's `extern fn abs` binds C's `abs` even beside another module's Concrete `abs`. The
+compiler's own C calls are `SCallee.foreign`, never resolved against Concrete definitions. Two
+attributes name C symbols: `#[link_name = "sym"]` on an `extern fn` (E0118 for a spelling outside C,
+and R-0484's effectful-symbol check now judges the bound symbol), and `#[export_name = "sym"]` on a
+function with a body (E0119 unless it is a C identifier not used by the runtime, an import or
+another export, with scalar parameters and result); a C harness calls an export in run_tests.sh.
+A foreign binding may not be spelled like a compiler intrinsic or runtime helper, nor bind one name
+to two C symbols (E0118), and an import may not be renamed to an intrinsic's name (E0120): each
+would be compiled as something other than the C call. Mangling is an emission concern: Core
+names, CallableIds, proof and report identities do not move. Found on the way and filed: bug 165,
+a `println` desugared into `print_int` binds to a same-named function the module defines
+(predates mangling), and bug 166, a foreign function taken as a value is called with the
+Concrete ABI (predates it too).
+
 ### A Foreign `*_destroy` Function Reaches C (bug 103 recorded fixed, 2026-10-21)
 
 Bug 103 (an `extern fn` ending in `_destroy` replaced by an empty synthesized body, a silent leak of

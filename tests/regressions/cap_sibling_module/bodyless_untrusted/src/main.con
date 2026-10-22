@@ -1,10 +1,10 @@
 mod bodyless_untrusted {
     mod decls;
-    import decls.{my_sizeof};
+    import decls.{my_size};
 
     // Declares nothing. Must be refused: the declaration is not trusted.
     fn measure() -> u64 {
-        return my_sizeof::<i64>();
+        return my_size();
     }
 
     fn main() -> i64 {

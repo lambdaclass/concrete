@@ -1,10 +1,10 @@
 mod bodyless_trusted {
     mod decls;
-    import decls.{my_sizeof};
+    import decls.{my_size};
 
     // Declares no Unsafe. A trusted body-less declaration must cost none.
     fn measure() -> u64 {
-        return my_sizeof::<i64>();
+        return my_size();
     }
 
     fn main() -> i64 {

@@ -47,11 +47,17 @@ every other one. -/
 inductive SCallee where
   | direct (name : String)
   | indirect (target : SVal)
+  /-- A call to a C library symbol the COMPILER chose (`malloc` for `alloc`, `free`),
+      by its link name. Never resolved against Concrete definitions: a user `fn malloc`
+      is a different function with a mangled symbol, and must not become the allocator
+      (bug 129, FFI.md "Symbol Names"). -/
+  | foreign (symbol : String)
 
 -- No `Coe String SCallee`. The point of the type is that a call target cannot
 -- be spelled as a bare string any more; an implicit coercion would let the old
 -- `"%reg"` convention compile again silently, which is how it survived this
--- long. Direct calls to fixed runtime symbols write `.direct "name"`.
+-- long. A call to a C runtime symbol the compiler emits writes `.foreign "name"`;
+-- `.direct` names a definition or binding the program declares.
 
 
 inductive SInst where
@@ -97,6 +103,10 @@ structure SFnDef where
   -- Source declaration span, carried Core→SSA so backend IR / debug info can name
   -- the originating source function (ROADMAP Phase 4 #13b). `none` if synthesized.
   declSpan : Option Span := none
+  /-- `#[export_name]`: emitted under this C symbol instead of the mangled one. -/
+  exportName : Option String := none
+  /-- `CFnDef.foreignCalls`: call spellings bound to a foreign declaration. -/
+  foreignCalls : List (String × String) := []
 
 structure SModule where
   name : String
@@ -110,6 +120,8 @@ structure SModule where
   /-- Newtype definitions, threaded into Layout.Ctx so tySize/tyAlign can
       unwrap newtype names that survived elaboration (e.g. in Option<Port>). -/
   newtypes : List NewtypeDef := []
+  /-- `#[link_name]` bindings of this module and its submodules: (extern name, C symbol). -/
+  externLinkNames : List (String × String) := []
 
 -- ============================================================
 -- SVal.ty accessor
@@ -198,12 +210,14 @@ private def ppSInst (inst : SInst) : String :=
     -- operand it is, so `%r` and `@f` are visibly different in the dump.
     let calleeStr := match callee with
       | .direct name => s!"@{name}"
+      | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  %{dst} = call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
   | .call none callee args retTy =>
     let argsStr := args.map fun a => s!"{ssaTyToStr a.ty} {ppSVal a}"
     let calleeStr := match callee with
       | .direct name => s!"@{name}"
+      | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
   | .alloca dst ty =>

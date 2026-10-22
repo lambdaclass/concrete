@@ -22,9 +22,9 @@ Concrete currently targets a **hosted** environment only. All programs assume:
 
 ### What "hosted" means concretely
 
-The compiler generates a `main` function that calls the user's `main` (renamed to `user_main` internally). The generated `main`:
+The compiler generates a C `main` function that calls the user's `main`, which is emitted under its mangled symbol like every Concrete function (`_C.main.main` for a top-level `main`; FFI.md "Symbol Names"). The generated `main`:
 
-1. Calls `user_main`
+1. Calls the user's `main`
 2. Returns the result as the PROCESS EXIT CODE, masked to the OS's 8-bit
    status range (`-1` exits 255, `257` exits 1). Unit `main` exits 0.
    Nothing is written to stdout — stdout belongs to the program.
@@ -78,12 +78,12 @@ Concrete does not have a runtime in the traditional sense (no GC, no green threa
 
 1. OS/libc calls `main(argc, argv)`; the wrapper saves argc/argv to globals
    for `std.args`
-2. `main` calls `user_main` (the user's `fn main()`)
+2. `main` calls the user's `fn main()` (`_C.<module>.main`)
 3. No global initialization, no module init functions, no static constructors
 
 ### Shutdown
 
-1. `user_main` returns
+1. the user's `main` returns
 2. `main` returns the (8-bit masked) value as the process exit status
 3. OS reclaims process resources
 
@@ -633,7 +633,7 @@ See [../research/stdlib/concurrency.md](../../research/stdlib/concurrency.md) fo
 |--------|--------------|------------------|
 | Environment | Hosted only (POSIX + libc) | Freestanding mode later |
 | Targets | 64-bit, x86_64 + aarch64, POSIX | Cross-target CI, 32-bit, Windows |
-| Startup | `main` → `user_main`, no init | No change needed |
+| Startup | C `main` → the user's mangled `main`, no init | No change needed |
 | Shutdown | Return from `main`, OS cleanup | No change needed |
 | Failure | No panic, no unwind, explicit errors, abort-on-OOM | Allocator traits |
 | Allocation | libc malloc/realloc/free, abort-on-OOM | Allocator traits, arenas |

@@ -358,7 +358,11 @@ def fmtExternFn (ext : ExternFnDecl) (ind : Nat) : String :=
     | some .empty => " with()"
     | some cs => fmtCapSetTop cs
   let retStr := if ext.retTy == .unit then "" else s!" -> {fmtTy ext.retTy}"
-  s!"{pfx}{pubStr}{trustedStr}extern fn {ext.name}({", ".intercalate paramsStr}){capStr}{retStr};"
+  -- `#[link_name]` decides which C symbol the binding calls; it must survive formatting.
+  let linkStr := match ext.linkName with
+    | some l => s!"{pfx}#[link_name = \"{l}\"]\n"
+    | none => ""
+  s!"{linkStr}{pfx}{pubStr}{trustedStr}extern fn {ext.name}({", ".intercalate paramsStr}){capStr}{retStr};"
 
 def fmtNewtypeDef (nt : NewtypeDef) (ind : Nat) : String :=
   let pfx := indent ind
@@ -410,7 +414,11 @@ def fmtFnDef (f : FnDef) (ind : Nat) : String :=
   let capStr := fmtCapSetTop f.capSet
   let retStr := if f.retTy == .unit then "" else s!" -> {fmtTy f.retTy}"
   let bodyStr := f.body.map (fmtStmt (ind + 1))
-  s!"{testStr}{pfx}{pubStr}{trustedStr}fn {f.name}{tparamsStr}({", ".intercalate paramsStr}){capStr}{retStr} \{\n{"\n".intercalate bodyStr}\n{pfx}}"
+  -- `#[export_name]` decides the function's C symbol; dropping it would silently unexport it.
+  let exportStr := match f.exportName with
+    | some e => s!"{pfx}#[export_name = \"{e}\"]\n"
+    | none => ""
+  s!"{testStr}{exportStr}{pfx}{pubStr}{trustedStr}fn {f.name}{tparamsStr}({", ".intercalate paramsStr}){capStr}{retStr} \{\n{"\n".intercalate bodyStr}\n{pfx}}"
 
 def fmtTraitDef (t : TraitDef) (ind : Nat) : String :=
   let pfx := indent ind

@@ -649,6 +649,8 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               isTest := false
               capSet := fnDef.capSet
               declSpan := fnDef.declSpan
+              -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
+              foreignCalls := fnDef.foreignCalls
             }
             enqueueMono name monoFn
             return .call name [] args' (sub ty)
@@ -680,6 +682,8 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         isTest := false
         capSet := fnDef.capSet
         declSpan := fnDef.declSpan
+        -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
+        foreignCalls := fnDef.foreignCalls
       }
       enqueueMono name monoFn
       return .call name [] args' (sub ty)

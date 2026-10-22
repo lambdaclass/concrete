@@ -1,0 +1,9 @@
+// A foreign binding may not name a compiler runtime helper (`print_int`): the backend moves the
+// helpers into their reserved namespace by renaming every reference spelled like one, so the
+// binding would silently call the helper instead of C (E0118).
+#[link_name = "print_int"]
+extern fn c_print(x: Int) with(Console);
+
+fn main() -> Int {
+    return 0;
+}
