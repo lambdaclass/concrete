@@ -260,15 +260,36 @@ if git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concre
 else
   ok "C6: DebugBundle and Reduce call only ResolvedIdentity.standalone over their complete source map"
 fi
-# CAPTURED, then tested: a `| grep -q` short-circuit under pipefail makes the verdict depend on
-# scheduling (R-0547). The matching lines are printed, so a failure names what it saw.
-_c6_hits="$(git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity\b' -- 'Concrete/*.lean' Main.lean 2>&1 || true)"
+# CAPTURED, then tested, and matched as WHOLE IDENTIFIERS IN CODE (R-0547). The old form,
+# `git grep -nE '...|PackageIdentity\b' | grep -q .` under pipefail, had two defects that hid each
+# other: the pattern also matched the live refusal constructor `noPackageIdentity` and a history
+# comment, and the early-exiting `grep -q` turned that match into a PASS whenever git grep was still
+# writing (SIGPIPE makes the pipeline fail). Measured on concrete-ci-1: it FAILED only when git grep
+# finished first, i.e. under load. Comments are stripped (Lean `--` and `/- -/`), names must be whole
+# identifiers, and the hits are printed.
+if command -v perl >/dev/null 2>&1; then
+  _c6_hits="$(git ls-files -- 'Concrete/*.lean' Main.lean | xargs perl -0ne '
+      s{/-.*?-/}{}gs; s{--[^\n]*}{}g;
+      while (/(?<![A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)(?![A-Za-z0-9_])/g) { print "$ARGV: $1\n" }' 2>&1 || true)"
+else
+  _c6_hits="perl unavailable: comments cannot be stripped, so the C6 scan cannot be trusted"
+fi
 if [ -n "$_c6_hits" ]; then
   no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced"
   printf '%s\n' "$_c6_hits" | awk 'NR<=5 {print "       " $0}'
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi
+# CONTROL for the C6 scan: a real reference is flagged; the refusal constructor and comments are not.
+_c6_fx="$(mktemp)"
+printf '%s\n' 'def a := Proof.PackageIdentity.of x' '  | .noPackageIdentity w => w' '-- PackageIdentity was deleted' \
+  '/- syntheticForModules, in a block comment -/' > "$_c6_fx"
+_c6_ctl="$(perl -0ne 's{/-.*?-/}{}gs; s{--[^\n]*}{}g;
+  while (/(?<![A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)(?![A-Za-z0-9_])/g) { print "$1\n" }' "$_c6_fx" 2>/dev/null)"
+rm -f "$_c6_fx"
+[ "$_c6_ctl" = "PackageIdentity" ] \
+  && ok "CONTROL: the C6 scan flags a qualified reference and ignores noPackageIdentity and comments" \
+  || no "CONTROL: the C6 scan reported '${_c6_ctl//$'\n'/,}' on its fixture (want exactly PackageIdentity)"
 
 echo ""
 echo "=== M: the old-to-new map ==="

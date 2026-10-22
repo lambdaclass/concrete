@@ -361,4 +361,40 @@ generated in order, checked concurrently, lowest failing case reported), and the
 
 ### After
 
-AFTER_TABLE_PLACEHOLDER
+Measured at `4e596e24` (all fixes above except the campaign-golden isolation and the two
+capture-then-grep fixes, which came after). Rechecks are included in "total".
+
+| JOBS | pool wall | pool failures (of 252 run) | recheck | total | peak memory used | max load |
+|---|---|---|---|---|---|---|
+| 16 | 445 s (7.4 min) | 3 | 1 passed, 2 failed | 836 s | 15.9 GB | 41 |
+| 32 | **372 s (6.2 min)** | 3 | 1 passed, 2 failed | 930 s | 16.1 GB | 61 |
+| 48 | 456 s (7.6 min) | 4 | 2 passed, 2 failed | 1008 s | 24.9 GB | 107 |
+| 64 | 422 s (7.0 min) | 6 | 4 passed, 2 failed | 1242 s | 24.9 GB | 115 |
+
+(The 48 and 64 passes overlapped another session's gate pass on the host: load 107 to 115.)
+
+**It stops scaling at about 32.** The pool is now bounded by its longest gate, not by width: at
+JOBS=32 every gate starts in the first seconds (longest first), and the pass ends when
+`run_tests.sh --trust-gate` does (373 s), followed by `check_obligation_core.sh` (327 s),
+`check_phase6c_observability.sh` (317 s), `check_replay_producer.sh` (294 s) and
+`check_slice8_adversarial.sh` (289 s). Wider pools only add contention to those same gates.
+
+**The two failures in every row are the server's environment** (item 6 above): `run_tests.sh`
+(stddef.h) and `check_example_outputs.sh` (lld wording). They fail identically on `main`. Because the
+runner re-checks a pool failure serially, they add about 7 minutes to every pass on this host; with
+the devshell clang fixed, a pass would take the pool wall plus about 40 s of seeding and build.
+
+The remaining pool-only failures at 48/64 were `check_campaign_summary_golden.sh` (it counted other
+campaign runs' evidence directories; now isolated), `check_qualification_record.sh` and
+`check_identity_separation.sh` C6 (`| grep -q` under pipefail; now captured first), and one
+`check_mint_batch_accounting.sh` case and one `check_phase6c_observability.sh` artifact write at
+JOBS=64, which passed on re-check and are not yet explained.
+
+FINAL_ROW_PLACEHOLDER
+
+### Recommendation
+
+`JOBS=32` on concrete-ci-1, which `concrete-remote` sets by default there
+(`CONCRETE_GATE_JOBS_DEFAULT`; `CONCRETE_REMOTE_JOBS` overrides). The next reductions are inside the
+critical-path gates: `run_tests.sh --trust-gate` runs its 21 sections and its corpus loops serially,
+and `check_obligation_core.sh` / `check_phase6c_observability.sh` each run one long serial probe.
