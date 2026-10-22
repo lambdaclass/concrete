@@ -28,8 +28,10 @@ on:
 # Cancel a superseded push/PR run when a newer commit arrives — faster
 # feedback and less runner contention. NEVER cancel scheduled (cron) runs:
 # the weekly proof replay and nightly fuzz campaign must always complete.
+# A campaign dispatch gets its own group, so a landing-tier dispatch of the same ref neither waits
+# behind a multi-hour campaign run nor displaces a queued one.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}${{ inputs.campaign && '-campaign' || '' }}
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
