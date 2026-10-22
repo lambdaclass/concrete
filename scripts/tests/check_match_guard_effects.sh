@@ -212,8 +212,9 @@ else
 fi
 
 # CONTROL for the inner half: sibling arms binding the SAME spelling (legal: sibling scopes,
-# no outer binding of that name). After the first arm's guard fails, the fallback must see
-# its OWN payload, not a stale value from the failed arm's frame or an outer slot.
+# no outer binding of that name). After the first arm's guard fails, the fallback must bind
+# and read its own payload. (Both arms bind the same payload, so this cannot tell a fresh 99
+# from a stale one; it pins that sibling same-name binders are legal and bind correctly.)
 cat > "$T/rebind.con" <<'EOF'
 mod g {
     enum Copy E { A { v: Int }, B { v: Int } }
