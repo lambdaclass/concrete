@@ -76,8 +76,8 @@ PRIMARY="${PRIMARY:-origin}"
 # `MIRROR=` (explicitly empty) skips the mirror for a one-off and says so; the remote named
 # `fork` is a divergent repository and is never a mirror.
 MIRROR="${MIRROR-lambdaclass}"
-if [ "$MIRROR" = "fork" ]; then
-  echo "push-both: refusing MIRROR=fork (a divergent repository)" >&2
+if [ "$PRIMARY" = "fork" ] || [ "$MIRROR" = "fork" ]; then
+  echo "push-both: refusing the remote named fork (a divergent repository) as PRIMARY or MIRROR" >&2
   exit 2
 fi
 BRANCH="${BRANCH:-main}"
@@ -104,7 +104,28 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-echo "push-both: $PRIMARY (gated) then $MIRROR (fast-forward)"
+echo "push-both: $PRIMARY (gated) then ${MIRROR:-<no mirror>} (fast-forward)"
+# PRE-FLIGHT THE MIRROR, before the primary moves. With both remotes required, a mirror that is
+# missing, unreachable or divergent must stop the publish while nothing has been pushed; checked
+# only after the primary push, it left a half-landing (primary advanced, mirror not). The check is
+# repeated before the mirror push below, because the primary push and CI wait take time.
+if [ -n "$MIRROR" ]; then
+  if ! git remote get-url "$MIRROR" >/dev/null 2>&1; then
+    echo "push-both: mirror remote '$MIRROR' is not configured; both remotes are required" >&2
+    echo "push-both: (add it, or set MIRROR= deliberately). Nothing was pushed." >&2
+    exit 1
+  fi
+  if ! mpre="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+    echo "push-both: cannot read $MIRROR/$BRANCH (unreachable?). Nothing was pushed." >&2
+    exit 1
+  fi
+  mpre="$(printf '%s' "$mpre" | cut -f1)"
+  if [ -n "$mpre" ] && ! git merge-base --is-ancestor "$mpre" "$LOCAL" 2>/dev/null; then
+    echo "push-both: $MIRROR/$BRANCH (${mpre:0:8}) is not an ancestor of ${LOCAL:0:8}; the mirror would" >&2
+    echo "push-both: not fast-forward. Reconcile it first (never force it). Nothing was pushed." >&2
+    exit 1
+  fi
+fi
 # Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —
 # the primary verification, the CI wait, the parity check — is about $LOCAL, so
 # pushing HEAD means publishing something other than what was checked.
@@ -219,7 +240,11 @@ fi
 # commit we do not contain, that is the exact anomaly this script was written
 # after — a mirror carrying work the primary never accepted. Report it as such
 # instead of letting a bare push failure stand in for the diagnosis.
-mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH" | cut -f1)"
+if ! mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+  echo "push-both: cannot read $MIRROR/$BRANCH now; $PRIMARY is published, the mirror is NOT. Re-run the mirror push." >&2
+  exit 1
+fi
+mnow="$(printf '%s' "$mnow" | cut -f1)"
 if [ -n "$mnow" ] && ! git merge-base --is-ancestor "$mnow" "$LOCAL" 2>/dev/null; then
   echo "push-both: $MIRROR/$BRANCH is at ${mnow:0:8}, which is NOT an ancestor of ${LOCAL:0:8}." >&2
   echo "push-both: the mirror holds commits the primary does not. Reconcile before publishing;" >&2

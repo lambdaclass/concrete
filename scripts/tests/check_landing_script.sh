@@ -321,6 +321,19 @@ out="$(bash "$TRAIN" bisect t7 --test '! test -e BAD' 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "culprit: b8" && has "$out" "build t7 --force b9 b4" && ok "bisect attributes b8 and prints the rebuild without it" || { no "bisect: exit $rc"; echo "$out" | sed 's/^/      /'; }
 no_op_left && [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "bisect leaves the checkout clean" || no "bisect left state behind"
 
+echo "=== push-both.sh: both remotes required, refusals before anything is pushed ==="
+cp "$ROOT_DIR/scripts/push-both.sh" scripts/push-both.sh
+before="$(git ls-remote origin refs/heads/main | cut -f1)"
+out="$(PRIMARY=fork bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses PRIMARY=fork" || no "push-both PRIMARY=fork: exit $rc"
+out="$(MIRROR=fork bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses MIRROR=fork" || no "push-both MIRROR=fork: exit $rc"
+out="$(MIRROR=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "both remotes are required" && ok "push-both refuses a missing mirror remote" || no "push-both missing mirror: exit $rc"
+[ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
+rm -f scripts/push-both.sh
+
 echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "median time to land" && has "$out" "landed: 1" && ok "report prints the median time to land" || { no "report: exit $rc"; echo "$out" | sed 's/^/      /'; }
