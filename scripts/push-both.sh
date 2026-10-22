@@ -24,9 +24,11 @@
 # push-both", "we don't really need the CI to say things are fine, we can check later and
 # keep going"). Two things changed under it:
 #
-#   * THERE IS NO MIRROR. `MIRROR` has defaulted to empty since 2026-07-31, and the mirror
-#     push was the only thing the wait gated. It has been holding the exclusive lock for up
-#     to 70 minutes to protect a publication target that does not exist.
+#   * THERE WAS NO MIRROR. `MIRROR` defaulted to empty from 2026-07-31 to 2026-10-22, and the
+#     mirror push was the only thing the wait gated. It held the exclusive lock for up to 70
+#     minutes to protect a publication target that did not exist then. (The mirror is required
+#     again since 2026-10-22, below; the wait stays opt-in, and the mirror still receives only
+#     the exact commit the primary's hook accepted.)
 #   * MOST RUNS NEVER REACH A VERDICT ANYWAY. The workflow sets `cancel-in-progress` for
 #     pushes on a ref, so when two people push to main the earlier run is cancelled. Three
 #     of the last four waits ended in `cancelled` — 70 minutes of held lock for no answer.
@@ -65,13 +67,19 @@ printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || 
 trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
 
 PRIMARY="${PRIMARY:-origin}"
-# NO MIRROR BY DEFAULT (changed 2026-07-31 on the owner's instruction: "stop
-# pushing to lambdaclass"). `origin` is unbalancedparentheses/concrete2 and is the
-# only publication target; `lambdaclass` points at lambdaclass/concrete, a
-# DIFFERENT repository. Set MIRROR=<remote> to re-enable mirroring; everything
-# below — the CI wait, the ancestry check, the parity check — still applies when
-# it is set, so turning it back on does not turn the safeguards off.
-MIRROR="${MIRROR:-}"
+# BOTH REMOTES ARE REQUIRED (2026-10-22, the owner's decision: every landing goes to BOTH
+# origin = unbalancedparentheses/concrete2 and lambdaclass = lambdaclass/concrete). This
+# supersedes the 2026-07-31 instruction "stop pushing to lambdaclass", under which MIRROR
+# defaulted to empty. `lambdaclass` is a DIFFERENT repository, so it is still pushed SECOND,
+# fast-forward only, and only with the exact commit the primary accepted; the ancestry and
+# parity checks below are unchanged. scripts/land/train.sh land mirrors the same way.
+# `MIRROR=` (explicitly empty) skips the mirror for a one-off and says so; the remote named
+# `fork` is a divergent repository and is never a mirror.
+MIRROR="${MIRROR-lambdaclass}"
+if [ "$MIRROR" = "fork" ]; then
+  echo "push-both: refusing MIRROR=fork (a divergent repository)" >&2
+  exit 2
+fi
 BRANCH="${BRANCH:-main}"
 LOCAL="$(git rev-parse HEAD)"
 CI_WAIT=0
@@ -201,7 +209,8 @@ fi
 # already ran for this exact commit on the primary; running them twice proves
 # nothing and doubles the wait.
 if [ -z "$MIRROR" ]; then
-  echo "push-both: no mirror configured — $PRIMARY is the only publication target."
+  echo "push-both: MIRROR is empty — the mirror was SKIPPED on request. Both remotes are" >&2
+  echo "push-both: required since 2026-10-22: publish ${LOCAL:0:8} to lambdaclass before calling this landed." >&2
   echo "push-both: published ${LOCAL:0:8}"
   exit 0
 fi

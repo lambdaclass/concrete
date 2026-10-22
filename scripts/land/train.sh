@@ -25,7 +25,7 @@
 #
 # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
 # unbalancedparentheses/concrete2), LAND_GH (gh binary), LAND_REMOTE (primary, default origin),
-# LAND_MIRROR (default lambdaclass, pushed only when that remote exists; empty disables),
+# LAND_MIRROR (default lambdaclass, required: a missing remote is refused; empty or --no-mirror skips),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push).
@@ -593,8 +593,12 @@ cmd_land() {
   git merge-base --is-ancestor "$base" "$head" || die "land: the train does not descend from its base"
 
   local mirror="" mmain=""
-  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1; then
+  # Both remotes are required (owner's decision, 2026-10-22): a missing mirror remote is a refusal
+  # before anything is pushed, not a silent origin-only landing. --no-mirror is the explicit opt-out.
+  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ]; then
     refuse_fork "$MIRROR"
+    git remote get-url "$MIRROR" >/dev/null 2>&1 \
+      || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
     mirror="$MIRROR"
     mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
     if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then

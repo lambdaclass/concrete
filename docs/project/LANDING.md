@@ -112,14 +112,17 @@ The push sequence:
 1. Pushes the exact SHA to `origin main` through the hook, which reuses the `check` record. The
    push carries `--force-with-lease=refs/heads/main:<base>`, so it succeeds only while main is still
    the base, even against a publisher that does not take the lock.
-2. Pushes the same SHA to `lambdaclass main`, only if that remote exists, with a lease on the value
-   read before the first push. Following `push-both.sh` policy, this push runs with the hook
+2. Pushes the same SHA to `lambdaclass main`, with a lease on the value read before the first
+   push. Both remotes are required (the owner's decision of 2026-10-22, which supersedes the
+   2026-07-31 "stop pushing to lambdaclass" note in `push-both.sh`): a missing `lambdaclass` remote
+   is refused before anything is pushed. Following `push-both.sh` policy, this push runs with the hook
    skipped, because the identical commit was just accepted by the primary's hook. If it fails after
    the primary landed, the command says so and exits non-zero.
 3. Checks both remotes with `ls-remote`.
 
 A remote named `fork` is refused as primary or mirror. `--no-mirror` (or `LAND_MIRROR=`) lands on
-origin only.
+origin only. That is a deliberate exception, and the landing is not complete until the same SHA
+reaches `lambdaclass`. `push-both.sh` follows the same rule: it mirrors to `lambdaclass` by default.
 
 ### bisect
 
@@ -171,7 +174,7 @@ directory is what R-0547's generated median, next to the candidate table, will r
 |---|---|---|
 | `LAND_REPO` | `unbalancedparentheses/concrete2` | repository for `gh` |
 | `LAND_REMOTE` | `origin` | primary remote |
-| `LAND_MIRROR` | `lambdaclass` | mirror pushed after the primary, only if that remote exists; empty disables it |
+| `LAND_MIRROR` | `lambdaclass` | required mirror, pushed after the primary; a missing remote is refused; empty (or `--no-mirror`) skips it deliberately |
 | `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz)` | job names in the campaign tier |
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
