@@ -1,0 +1,3 @@
+[package]
+name = "regress_179_concurrent_build"
+version = "0.1.0"

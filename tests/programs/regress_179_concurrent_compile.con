@@ -1,0 +1,35 @@
+// Bug 179: compiling one source to several outputs at once must give every compile a
+// working binary. The compiler wrote its intermediate LLVM file at `<input>.ll`, a path
+// shared by every compile of this source, so one compile removed or rewrote it while
+// another's llvm-as or clang was reading it. run_tests.sh compiles this file concurrently
+// to distinct outputs, several rounds, and requires each binary to exit 42.
+// The functions only give the emitted IR some size, so the shared-file window is wide.
+fn step(x: Int) -> Int {
+    if x % 2 == 0 { return x / 2; }
+    return 3 * x + 1;
+}
+
+fn collatz_len(n: Int) -> Int {
+    let mut x: Int = n;
+    let mut len: Int = 0;
+    while x != 1 {
+        x = step(x);
+        len = len + 1;
+    }
+    return len;
+}
+
+fn sum_to(n: Int) -> Int {
+    let mut i: Int = 0;
+    let mut acc: Int = 0;
+    while i <= n {
+        acc = acc + i;
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn main() -> Int {
+    // collatz_len(27) = 111, sum_to(10) = 55: 111 - 55 - 14 = 42.
+    return collatz_len(27) - sum_to(10) - 14;
+}

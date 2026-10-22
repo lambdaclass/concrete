@@ -79,7 +79,6 @@ lean_tests/cap_alias_basic
 lean_tests/cap_alias_pub
 lean_tests/union_basic
 *.con.test
-*.con.*.test
 
 # Compiled checker binaries
 scripts/check_ll1
