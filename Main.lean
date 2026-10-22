@@ -141,7 +141,7 @@ def getMacOSSysrootFlags : IO (Array String) := do
     if sdkPath.length > 0 then return #[s!"--sysroot={sdkPath}"]
   return #[]
 
-/-- A private temporary path for a build's intermediate file (R-0547), named after `base`.
+/-- A private temporary path for a build's intermediate file (R-0546), named after `base`.
 
     The IR used to go to the fixed `<source>.ll` (and a test build's binary to `<source>.test`), and
     each build deleted it after linking. Two builds of the same source at once — any parallel gate

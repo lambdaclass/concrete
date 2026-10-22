@@ -19,7 +19,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mapfile -t SOURCES < <(grep -rl '#\[proof_by' examples tests 2>/dev/null | grep '\.con$' | LC_ALL=C sort)
 CHECKER=""
 ROWS="$TMP/rows"; : > "$ROWS"
-# SOURCES ARE REPLAYED CONCURRENTLY (R-0547). Each source is two compiler runs and a batch of Lean
+# SOURCES ARE REPLAYED CONCURRENTLY (R-0546). Each source is two compiler runs and a batch of Lean
 # processes (about 7.6 s), independent of every other source, and the 59 of them in series made
 # check_claim_inventory.sh a 4-minute gate. Each source writes its rows to its own file in its own
 # directory; the output is the same rows, sorted as before, so the inventory is byte-identical.

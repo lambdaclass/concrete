@@ -1,6 +1,6 @@
 # Gate Profile
 
-Status: measurement record (R-0546 step 1), taken 2026-10-22
+Status: measurement record (R-0546: step 1 profile, caches, parallel scaling), taken 2026-10-22
 
 This file records where CI time goes, why the slowest gates are slow, and what the build and
 compile caches changed. It is a measurement at named SHAs, not a live dashboard. Re-measure before
@@ -273,7 +273,7 @@ the verifying build always runs, the seed is never a substitute for building.
 Copy-on-write seeding gives the same speed-up without sharing a mutable directory between
 worktrees.
 
-## Parallel scaling on concrete-ci-1 (R-0547)
+## Parallel scaling on concrete-ci-1 (R-0546 step 4)
 
 The full local set (`run_ci_gates_local.sh`) was measured on concrete-ci-1 (AMD EPYC 8324P, 32 cores
 / 64 threads, 251 GiB) through `concrete-remote`, one pass at a time, with the fuzz farm running at
@@ -390,7 +390,19 @@ campaign runs' evidence directories; now isolated), `check_qualification_record.
 `check_mint_batch_accounting.sh` case and one `check_phase6c_observability.sh` artifact write at
 JOBS=64, which passed on re-check and are not yet explained.
 
-FINAL_ROW_PLACEHOLDER
+**Final candidate, `3b8fa74a`, JOBS=32** (the command in CONCURRENT_WORK.md): pool wall **378 s
+(6.3 min)**, 250 passed, no gate failed only under parallelism, peak memory used 16.5 GB, max load 64.
+The only failures were the two host-environment gates above (failed in the pool and again on
+re-check); their serial re-check brought the total to 782 s. `external_checker` was a named host
+skip. `3acb5a24` changed only the C6 scan in `check_identity_separation.sh` after this pass, and
+that gate, `check_qualification_record.sh` and `check_gate_hygiene.sh` were re-run on it (all
+green). Critical path: `run_tests.sh --trust-gate` 379 s, `check_obligation_core.sh` 336 s,
+`check_phase6c_observability.sh` 328 s, `check_replay_producer.sh` 306 s,
+`check_slice8_adversarial.sh` 297 s; every one starts at second 0.
+
+Against the 25-minute JOBS=8 pass this replaces: the pool is about 3.6 times faster (1357 s to
+378 s) and, unlike before, green apart from the host gaps. A whole `concrete-remote` invocation is
+about 7 minutes once the server's clang is fixed, 13 minutes until then.
 
 ### Recommendation
 

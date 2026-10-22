@@ -6,7 +6,7 @@
 # the same stable ids and statuses appear across --report vcs, --report
 # obligation-ledger, --report audit, --report proof-status, and `concrete prove`.
 # Then it checks that the Phase-3 consolidation gates are each a CI step of their own (delegated,
-# not re-run: R-0547).
+# not re-run: R-0546).
 
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
@@ -68,7 +68,7 @@ lp="$(ccache_run "$COMPILER" "$P" --report obligation-ledger --json 2>/dev/null 
 [ -n "$sp" ] && [ "$sp" = "$lp" ] && ok "prove --show-obligation O1 == ledger ($sp)" || no "prove ≠ ledger: prove=$sp ledger=$lp"
 
 echo "=== umbrella: the Phase-3 consolidation gates run, each once, as their own CI steps ==="
-# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh). Each of these is its own CI
+# DELEGATED, NOT RE-RUN (R-0546, scripts/tests/lib/delegated_gates.sh). Each of these is its own CI
 # step in this workflow run and its own command in the local full set, and re-running all eight here
 # was 12.2 of this gate's 13.3 CI minutes for no assertion the steps do not already make. What the
 # umbrella adds is that the composition stays whole: a sub-gate whose step is removed or disabled

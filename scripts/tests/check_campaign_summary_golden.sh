@@ -36,7 +36,7 @@
 set -uEo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-# PRIVATE CHECKOUT (R-0547, lib/private_checkout.sh). This gate identifies its own artifact by the
+# PRIVATE CHECKOUT (R-0546, lib/private_checkout.sh). This gate identifies its own artifact by the
 # evidence directories that appear under .mutation-evidence while it runs; in a full pass other gates
 # run the same campaign driver in the same checkout at the same time (check_phase6c_observability,
 # check_mint_missing_result), and their directories were counted as this run's ("created 3 evidence

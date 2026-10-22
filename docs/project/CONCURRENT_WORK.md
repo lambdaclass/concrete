@@ -95,7 +95,7 @@ two mutation-driver gates refuse worktrees) and sets the runner's default width
 to the measured best for that host (`CONCRETE_GATE_JOBS_DEFAULT`, 32 on
 scaleway; override with `CONCRETE_REMOTE_JOBS=N`, or pass `JOBS=N` in the
 command). The measurements and the critical path are in
-[GATE_PROFILE.md](GATE_PROFILE.md#parallel-scaling-on-concrete-ci-1-r-0547).
+[GATE_PROFILE.md](GATE_PROFILE.md#parallel-scaling-on-concrete-ci-1-r-0546-step-4).
 
 **A gate must be safe to run beside every other gate.** In a pass the gates run
 JOBS-wide in one checkout, and several passes run on one host. So a gate:

@@ -10,7 +10,7 @@
 # snapshot gate, which this gate also runs.
 
 set -uo pipefail
-# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+# Per-run scratch (R-0546): a fixed /tmp path collides with a concurrent run of this gate.
 GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
@@ -79,7 +79,7 @@ done
 [ "$audit_mismatch" -eq 0 ] && ok "audit per-class VC counts == --report vcs counts" || no "audit VC summary drifted from --report vcs"
 
 echo "=== existing snapshots stay green (output parity) ==="
-# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh): check_snapshots.sh is its own CI
+# DELEGATED, NOT RE-RUN (R-0546, scripts/tests/lib/delegated_gates.sh): check_snapshots.sh is its own CI
 # step and its own command in the local full set, so re-running it here repeated every one of its
 # assertions in the same run. This gate now asserts only that the step exists and is unconditional.
 source scripts/tests/lib/delegated_gates.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A PRIVATE COPY OF THIS CHECKOUT, for gates that must perturb or populate the tree (R-0547).
+# A PRIVATE COPY OF THIS CHECKOUT, for gates that must perturb or populate the tree (R-0546).
 #
 # In a full pass the gates run JOBS-wide in ONE checkout, and several passes share a host. A gate that
 # edits a tracked file (even to restore it a moment later), adds a module under Concrete/, or creates

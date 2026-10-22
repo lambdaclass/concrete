@@ -1,4 +1,4 @@
-# Measured seconds per gate command (R-0547), read by run_ci_gates_local.sh to start the longest
+# Measured seconds per gate command (R-0546), read by run_ci_gates_local.sh to start the longest
 # gates first. ORDERING ONLY: a stale or missing row changes when a gate starts, never whether it
 # runs or what it concludes. Commands are the runner's normalized spelling (`--plan` output).
 # Source: .ci-gate-timings.tsv of two full passes on concrete-ci-1 at JOBS=32 (8f5f2ba4, 453367d0);

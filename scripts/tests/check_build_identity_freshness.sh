@@ -23,7 +23,7 @@ require_fresh_binary || exit 1
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 BIN="$ROOT_DIR/.lake/build/bin/concrete"
 
-# THE GENERATOR RUNS IN A PRIVATE COPY OF ITS INPUTS, never in this checkout (R-0547). It rewrites
+# THE GENERATOR RUNS IN A PRIVATE COPY OF ITS INPUTS, never in this checkout (R-0546). It rewrites
 # Concrete/BuildIdentity.lean in place (`cat >`, not atomic), and the probes below append to
 # Concrete/Proof/Replay.lean and add Concrete/__InventoryProbe.lean. In a parallel pass every other
 # gate's require_fresh_binary then rebuilt the shared compiler from those transient sources

@@ -69,7 +69,7 @@ remove_first_line_with() {
   echo "$removed"
 }
 
-# THE SELF-TEST MUTATES A PRIVATE COPY, never this checkout (R-0547). It used to edit the tracked
+# THE SELF-TEST MUTATES A PRIVATE COPY, never this checkout (R-0546). It used to edit the tracked
 # files below in place, inside a full gate pass that runs ~30 other gates beside it. Every gate's
 # require_fresh_binary runs `lake build`, so while Concrete/Report/Report.lean was mutated a
 # concurrent gate rebuilt the SHARED compiler from the mutated source; the binary vanished during the

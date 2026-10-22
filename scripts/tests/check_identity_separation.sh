@@ -260,7 +260,7 @@ if git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concre
 else
   ok "C6: DebugBundle and Reduce call only ResolvedIdentity.standalone over their complete source map"
 fi
-# CAPTURED, then tested, and matched as WHOLE IDENTIFIERS IN CODE (R-0547). The old form,
+# CAPTURED, then tested, and matched as WHOLE IDENTIFIERS IN CODE (R-0546). The old form,
 # `git grep -nE '...|PackageIdentity\b' | grep -q .` under pipefail, had two defects that hid each
 # other: the pattern also matched the live refusal constructor `noPackageIdentity`, and the
 # early-exiting `grep -q` turned that match into a PASS whenever git grep was still writing (SIGPIPE

@@ -340,7 +340,7 @@ def main():
     args = ap.parse_args()
     if not os.access(CC, os.X_OK):
         print(f"error: build first ({CC} missing)", file=sys.stderr); sys.exit(2)
-    # THE PROGRAMS ARE GENERATED IN ORDER, THE CHECKS RUN CONCURRENTLY (R-0547). Generation draws
+    # THE PROGRAMS ARE GENERATED IN ORDER, THE CHECKS RUN CONCURRENTLY (R-0546). Generation draws
     # from one seeded stream, so case i is the same program whatever the worker count; each check is
     # two independent compiler runs in its own directory. The reported failure is the LOWEST failing
     # case index, exactly the one a serial run would have stopped at, so a seed reproduces the same

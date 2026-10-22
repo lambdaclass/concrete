@@ -104,7 +104,7 @@ for c in same_comment same_quoted same_anchor same_reindent; do
   else no "$c changed or broke the required set"; fi
 done
 for c in keep_coe_false keep_if_true keep_if_expr_true keep_coe_expr_false; do
-  # CAPTURED, then tested (R-0547): `python3 ... | grep -q` under pipefail failed whenever grep
+  # CAPTURED, then tested (R-0546): `python3 ... | grep -q` under pipefail failed whenever grep
   # exited on its match before python finished writing (SIGPIPE), a verdict that depended on load.
   # The recorder's own exit status still counts: it must succeed AND list the step.
   _rrc=0; _req="$(python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" 2>/dev/null)" || _rrc=$?

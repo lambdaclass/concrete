@@ -2,7 +2,7 @@
 # Phase 2 VC/discharge VALIDATION ARTIFACT (ROADMAP Phase 2 #3).
 #
 # The single umbrella gate for the whole VC / external-SMT surface. It checks that every sub-gate
-# below is its own CI step (delegated, not re-run: R-0547), so the Phase 2 evidence story is whole:
+# below is its own CI step (delegated, not re-run: R-0546), so the Phase 2 evidence story is whole:
 #   - the VC schema and kernel-checked discharge (omega / bv_decide);
 #   - the opt-in external-SMT path, its determinism/provenance, the release-policy
 #     gate, the Lean-replay artifact, and the negative/honesty boundaries;
@@ -28,7 +28,7 @@ SUBGATES=(
   check_vc_examples.sh            # end-of-Phase-2 examples (one VC/SMT surface each)
 )
 
-# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh). Every sub-gate is its own CI
+# DELEGATED, NOT RE-RUN (R-0546, scripts/tests/lib/delegated_gates.sh). Every sub-gate is its own CI
 # step in this workflow run and its own command in the local full set; running all nine again here
 # was most of this gate's 8 CI minutes and asserted nothing the steps do not. What the umbrella keeps
 # is the composition: a sub-gate whose step is removed or disabled turns this gate red.

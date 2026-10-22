@@ -865,7 +865,7 @@ jobs:
       # SELF-CONTAINED: the identity, the hostile controls with their logs (and tied to that
       # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
       # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
-      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0547): they used to
+      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0546): they used to
       # be steps of their own as well, so each assertion ran twice per workflow run.
       - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
         run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
