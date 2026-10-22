@@ -19,11 +19,30 @@ import Concrete.Check.Verify
 
 namespace Concrete
 
-/-! ## Pipeline — cacheable compiler artifacts
+/-! ## Pipeline — typed, payload-bound compiler artifacts (R-0497 slice 1)
 
-Each pipeline stage produces a named artifact type.
-Runner functions wrap the underlying pass with diagnostic handling.
-No serialization yet — these types are the prerequisite for future `ToJson`/`FromJson` instances.
+Each pipeline stage produces a named artifact type. From `ValidatedCore` on, an artifact is
+SEALED and CERTIFIED:
+
+- **sealed** — its constructor is private, so only its producer in this file builds one. Outside
+  this file `{ … }`, `⟨…⟩`, `.mk` and `{ a with … }` on these types are compile errors. That last
+  one is the point: a record update used to keep the type `ValidatedCore` while replacing the
+  modules it certified (Main's report path did this, reusing CoreCheck's certificate for a
+  filtered or wrapper-synthesised forest that CoreCheck never saw).
+- **certified** — it carries, as an erased `Prop` field, the equation its producer established
+  about its EXACT payload (`coreCheckProgram coreModules = .ok ()`; `verifyPostMono coreModules =
+  []`; `ssaVerifyProgram ssaModules = .ok ()`), and each later artifact names the artifact it was
+  produced from (`source`) and how (`produced`/`lowered`). Changing the payload therefore needs a
+  new proof about the new payload; privacy is API discipline, the equation is the statement. The
+  fields are `Prop`s, so the compiled code and its output are unchanged.
+
+Artifacts that carry no certificate have their own types, which no certified consumer accepts:
+`UnverifiedSSA` (the `--emit ssa-unverified` debugging path; `emit` refuses it) and
+`CoreSubset` (modules drawn from a `ValidatedCore` — proof extraction and reports read it; Mono,
+lowering and emission do not).
+
+`check_pipeline_artifacts.sh` holds the compile-fail controls (forgery, mutation reuse, diagnostic
+bypass, subset-as-certificate) and the positive controls.
 -/
 
 -- ============================================================
@@ -39,19 +58,63 @@ structure SummaryTable where
 structure ResolvedProgram where
   modules : List ResolvedModule
 
+/-- Elaborated, canonicalized Core; not yet validated. Only `Pipeline.elaborate` constructs it. -/
 structure ElaboratedProgram where
+  private mk ::
   coreModules : List CModule
 
 /-- Core IR that has passed `coreCheckProgram`.
     This is the proof-oriented artifact boundary: downstream passes (Mono, Lower, Emit)
-    may assume all Core-level invariants hold.  Only `Pipeline.coreCheck` constructs this. -/
+    may assume all Core-level invariants hold.  Only `Pipeline.coreCheck` constructs this,
+    and `valid` states that CoreCheck accepted exactly `coreModules`. -/
 structure ValidatedCore where
+  private mk ::
   coreModules : List CModule
+  valid : coreCheckProgram coreModules = .ok ()
 
+/-- Modules drawn from a `ValidatedCore`: each top-level module of `coreModules` is one of
+    `source`'s, in order (`drawn`). It is NOT a certificate — dropping modules can drop what the
+    kept ones were checked against — so Mono, lowering and emission do not accept it. Proof
+    extraction reads it; a whole program coerces to its trivial subset. -/
+structure CoreSubset where
+  private mk ::
+  source : ValidatedCore
+  coreModules : List CModule
+  drawn : coreModules.Sublist source.coreModules
+
+/-- The whole validated program, as a subset of itself. -/
+def ValidatedCore.whole (vc : ValidatedCore) : CoreSubset :=
+  ⟨vc, vc.coreModules, by apply List.Sublist.refl⟩
+
+/-- The top-level modules of a validated program that satisfy `keep`, in order. -/
+def ValidatedCore.filterModules (vc : ValidatedCore) (keep : CModule → Bool) : CoreSubset :=
+  ⟨vc, vc.coreModules.filter keep, by apply List.filter_sublist⟩
+
+instance : Coe ValidatedCore CoreSubset := ⟨ValidatedCore.whole⟩
+
+/-- Monomorphized Core: exactly what `monoProgram` produced from `source`, with the post-Mono
+    verifier clean on it. Only `Pipeline.monomorphize` constructs it. -/
 structure MonomorphizedProgram where
+  private mk ::
+  source : ValidatedCore
   coreModules : List CModule
+  produced : monoProgram source.coreModules (preTypeCheck := verifyNoStoredRefs) = .ok coreModules
+  postMono : verifyPostMono coreModules = []
 
+/-- Verified, cleaned SSA: lowered from `source`, verified, cleaned up, and verified again
+    (`verified` is the post-cleanup verdict on exactly `ssaModules`). Only `Pipeline.lower`
+    constructs it; `Pipeline.emit` accepts nothing else. -/
 structure SSAProgram where
+  private mk ::
+  source : MonomorphizedProgram
+  ssaModules : List SModule
+  lowered : ∃ raw, source.coreModules.mapM (fun m => lowerModule m source.coreModules) = .ok raw
+    ∧ ssaVerifyProgram raw = .ok () ∧ ssaModules = ssaCleanupProgram raw
+  verified : ssaVerifyProgram ssaModules = .ok ()
+
+/-- Raw lowered SSA that no verifier has seen, for the `ssa-unverified` debugging view. A
+    separate type, so it cannot reach `emit` or any consumer of `SSAProgram`. -/
+structure UnverifiedSSA where
   ssaModules : List SModule
 
 -- ============================================================
@@ -117,16 +180,16 @@ def check (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnos
 def elaborate (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnostics ElaboratedProgram :=
   match elabProgram resolved.modules summary.entries with
   | .error ds => .error ds
-  | .ok coreModules => .ok { coreModules := canonicalizeProgram coreModules }
+  | .ok coreModules => .ok ⟨canonicalizeProgram coreModules⟩
 
 /-- Validate elaborated Core IR.  This is the only way to construct a `ValidatedCore`.
     Note: the post-Elab placeholder check (`verifyPostElab`) is **not** run here — it is
     only available via `--report verify`. Placeholder legitimately survives elaboration
     in try/defer expressions and is resolved during lowering. -/
 def coreCheck (elabProg : ElaboratedProgram) : Except Diagnostics ValidatedCore :=
-  match coreCheckProgram elabProg.coreModules with
+  match h : coreCheckProgram elabProg.coreModules with
   | .error ds => .error ds
-  | .ok () => .ok { coreModules := elabProg.coreModules }
+  | .ok () => .ok ⟨elabProg.coreModules, h⟩
 
 /-- Run the post-Elab verifier (placeholder check) as a non-blocking diagnostic pass.
     Returns warnings for any Ty.placeholder found; does not block compilation. -/
@@ -135,30 +198,31 @@ def verifyPostElab (modules : List CModule) : Diagnostics :=
 
 /-- Monomorphize generic functions.  Runs the post-Mono verifier (no Ty.typeVar). -/
 def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram :=
-  match monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
+  match hm : monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
   | .ok modules =>
-    let monoDs := verifyPostMono modules
-    if !monoDs.isEmpty then .error monoDs
-    else .ok { coreModules := modules }
+    match hv : verifyPostMono modules with
+    | [] => .ok ⟨vc, modules, hm, hv⟩
+    | d :: ds => .error (d :: ds)
   | .error ds => .error ds
 
 /-- Lower to SSA, verify, and clean up. -/
-def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
-  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
-  match ssaVerifyProgram ssaModules with
+def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram :=
+  match hl : mono.coreModules.mapM (fun m => lowerModule m mono.coreModules) with
   | .error ds => .error ds
-  | .ok () =>
-    let ssaModules := ssaCleanupProgram ssaModules
-    -- Verify cleanup preserved SSA invariants
-    match ssaVerifyProgram ssaModules with
+  | .ok raw =>
+    match hv : ssaVerifyProgram raw with
     | .error ds => .error ds
-    | .ok () => .ok { ssaModules }
+    | .ok () =>
+      -- Verify cleanup preserved SSA invariants
+      match hc : ssaVerifyProgram (ssaCleanupProgram raw) with
+      | .error ds => .error ds
+      | .ok () => .ok ⟨mono, ssaCleanupProgram raw, ⟨raw, hl, hv, rfl⟩, hc⟩
 
 /-- Same as `lower`, but skip both verifier passes AND the cleanup
     pass. Diagnostic-only — used by debugging entry points to print
     raw SSA that the verifier rejects. Not on the production compile
-    path. -/
-def lowerUnverified (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
+    path. Its result is an `UnverifiedSSA`, which `emit` does not accept. -/
+def lowerUnverified (mono : MonomorphizedProgram) : Except Diagnostics UnverifiedSSA := do
   let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   .ok { ssaModules }
 
