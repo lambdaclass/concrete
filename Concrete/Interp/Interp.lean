@@ -2073,7 +2073,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | [] =>
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
-      if let some decl := (cx.foreign.lookup name).filter (fun d => cx.externs.contains d && (resolveIntrinsic name).isNone) then
+      -- A function value (Lower intercepts intrinsics only at direct calls).
+      if let some decl := (cx.foreign.lookup name).filter (cx.externs.contains ·) then
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
       match ← liftE (resolveCall cx name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
@@ -2766,7 +2767,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     | _ => fail "interp: deref of non-ref value"
 
   | .fnRef name _ =>
-    if let some decl := (cx.foreign.lookup name).filter (fun d => cx.externs.contains d && (resolveIntrinsic name).isNone) then
+    -- A function value (Lower intercepts intrinsics only at direct calls).
+    if let some decl := (cx.foreign.lookup name).filter (cx.externs.contains ·) then
       return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
     match ← liftE (resolveCall cx name) with
     | some (d, sc) => return (env, .val (.fnPtr d.name sc))
