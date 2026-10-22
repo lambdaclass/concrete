@@ -143,7 +143,8 @@ CONCRETE_COMPILE_CACHE=refresh run_c "$F" --report audit; r="$CCACHE_LAST"
 [ "$r" = miss ] && ok "CONCRETE_COMPILE_CACHE=refresh recomputes a present entry" || no "refresh: $r"
 
 echo "=== K11: a result whose inputs moved during the compile is not stored ==="
-run_c "$F" --report audit; [ "$CCACHE_LAST" = hit ] || run_c "$F" --report audit
+# A fresh input state first, so the probe call is a real miss rather than a hit on an earlier entry.
+printf '\nfn k11() -> i32 { return 11; }\n' >> "$F"
 CC_PROBE_APPEND="$F" run_c "$F" --report audit; m1="$CCACHE_LAST"
 grep -q edited_mid_compile "$TMP/c.out" && ok "the probe compile really saw the edited bytes" \
   || no "the probe compile did not see the mid-compile edit (control is vacuous)"

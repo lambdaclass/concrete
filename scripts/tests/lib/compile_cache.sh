@@ -200,11 +200,13 @@ ccache_run() {
     esac
   fi
   rm -f "$priv/e"
-  # The start marker is dated one second in the PAST, so a filesystem with whole-second mtimes cannot
-  # hide a write made in the same second as the marker. (Erring early only refuses publication.)
-  local past; past=$(( $(date +%s) - 1 ))
+  # THE START MARKER. On a filesystem with sub-second mtimes (APFS, ext4, tmpfs) "newer than the
+  # marker" is exact. Where mtimes are whole seconds, a write in the marker's own second could look
+  # older, so the compile is held until the next second begins.
   : > "$priv/start"
-  touch -t "$(date -d "@$past" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$past" +%Y%m%d%H%M.%S)" "$priv/start" 2>/dev/null
+  case "$(stat -c %y "$priv/start" 2>/dev/null || stat -f %Fm "$priv/start" 2>/dev/null)" in
+    *.000000000*|'') sleep 1 ;;
+  esac
   # Captured without tripping a caller's `set -e`: the diagnostics are replayed either way.
   if "$comp" "$@" >"$priv/out" 2>"$priv/err"; then rc=0; else rc=$?; fi
   cat "$priv/out"; cat "$priv/err" >&2
