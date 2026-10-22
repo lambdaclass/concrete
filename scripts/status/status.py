@@ -380,7 +380,7 @@ SECRET_PATTERNS = [
     # key=value, key: value, "key": "value" for any key that names a credential, including prefixed
     # and suffixed forms (NTFY_TOKEN, AWS_SECRET_ACCESS_KEY, db_password); a quoted value goes whole.
     (re.compile(r"""(?i)\b([A-Za-z0-9_-]*?(?:token|secret|password|passwd|pass|pw|api[_-]?key|credential|topic|webhook[_-]?url)"""
-                r"""(?:[_-][A-Za-z0-9_-]*)?)(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)"""), r"\1\2[redacted]"),
+                r"""(?:[_-][A-Za-z0-9_-]*)?)(["']?\s*[=:]\s*)("(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|\S+)"""), r"\1\2[redacted]"),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{12,}=*"), "Bearer [token]"),
     (re.compile(r"\bntfy\.sh/[A-Za-z0-9_-]+"), "ntfy.sh/[topic]"),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"), "[ip]"),
