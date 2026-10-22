@@ -24,7 +24,8 @@
 #     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
 #     so output-matching checks never pass on the partial output of a run that hung. Without -i the
 #     command inherits stdin, which a re-run cannot replay: callers that feed input pass -i.
-#     Returns CMD's status, or 124 when it timed out on both attempts. A command may itself exit
+#     Returns CMD's status, or 124 when it timed out on both attempts or the runner reported no
+#     outcome. SECS and RETRY_SECS are positive decimal seconds. A command may itself exit
 #     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
 #     recorded (this works across `( cd dir && bounded_run ... )` subshells; run one bounded_run
 #     at a time per sourcing). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
@@ -41,8 +42,8 @@
 #     command's empty output. Last line:
 #       bounded_gate_status && [ "$FAIL" -eq 0 ]
 #
-# If the runner itself fails (no outcome reported), the command's output is discarded, status 125
-# is returned and a "runner-failed" line is logged: never a pass. If the runner is cancelled (the
+# If the runner itself fails (no outcome reported), the command's output is discarded and the run
+# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
 # gate is interrupted or terminated), it kills the command's group first.
 #
 # Without python3 commands run directly with no watchdog: one warning when the gate sources this
@@ -50,7 +51,11 @@
 # Such a run is never incomplete.
 
 BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
-case "$BOUNDED_RETRY_FACTOR" in ''|*[!0-9]*|0) echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a positive integer" >&2; BOUNDED_RETRY_FACTOR=2 ;; esac
+if [[ "$BOUNDED_RETRY_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v f="$BOUNDED_RETRY_FACTOR" 'BEGIN { exit !(f + 0 >= 1) }'; then :
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { print s * f }'; }
 BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
 BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
@@ -84,7 +89,10 @@ bounded_run() {
     esac
   done
   [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
-  [ -n "$retry" ] || retry=$((secs * BOUNDED_RETRY_FACTOR))
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
   echo done > "$BOUNDED_OUTCOME_FILE"
   if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
     if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
@@ -112,10 +120,12 @@ bounded_run() {
     echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
     rc=124
   elif [ "$outcome" = runner-failed ]; then
-    # The runner reported nothing (it failed or was cancelled): no observation, never a pass.
+    # The runner reported nothing (it failed or was cancelled): no observation, so the run is
+    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
     echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
     echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
-    rc=125
+    rc=124
   else
     cat "$tmp/out"; cat "$tmp/err" >&2
     rc="${outcome#exit }"
@@ -157,7 +167,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   secs="$1"; shift
   bounded_run "$secs" -- "$@"; rc=$?
   if bounded_is_incomplete "$rc"; then
-    echo "INCOMPLETE: timed out twice (${secs}s, then $((secs * BOUNDED_RETRY_FACTOR))s alone): $*" >&2
+    echo "INCOMPLETE: timed out twice (${secs}s, then $(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")s alone) or lost its runner: $*" >&2
   fi
   exit "$rc"
 fi

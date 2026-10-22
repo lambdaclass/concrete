@@ -77,17 +77,26 @@ def main(argv):
     def cancel(sig, _frame):
         raise Cancelled(sig)
 
-    for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+    cancel_sigs = {signal.SIGTERM, signal.SIGHUP, signal.SIGINT}
+    for s in cancel_sigs:
         signal.signal(s, cancel)
     pgid = None
     try:
+        # Cancellation is held off while the child is created, so it can never arrive between the
+        # child starting and its group being recorded; the child itself starts with them unblocked.
+        signal.pthread_sigmask(signal.SIG_BLOCK, cancel_sigs)
         try:
-            proc = subprocess.Popen(cmd, start_new_session=True)
+            proc = subprocess.Popen(cmd, start_new_session=True,
+                                    preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs))
         except OSError as e:
+            proc = None
             print(f"bounded_exec: cannot run {cmd[0]}: {e}", file=sys.stderr)
             outcome = "exit 127"
         else:
             pgid = proc.pid
+        finally:
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs)  # a held signal is delivered here
+        if proc is not None:
             try:
                 rc = proc.wait(timeout=budget)
                 outcome = f"exit {rc if rc >= 0 else 128 - rc}"
