@@ -265,6 +265,14 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- cannot drift (they previously disagreed on typeVar/newtype).
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
+  -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
+  -- head alias of a newtype payload and of the type itself (a few levels; aliases are acyclic).
+  let deAlias : Ty → Ty := fun t =>
+    let step : Ty → Ty := fun t => match t with
+      | .named a => (env.typeAliases.lookup a).getD t
+      | t => t
+    step (step (step (step t)))
+  let ty := deAlias ty
   return Layout.isCopyTyGeneric
     (fun name =>
       match env.structs.find? fun sd => sd.name == name with
@@ -272,7 +280,7 @@ def isCopyType (ty : Ty) : CheckM Bool := do
       | none => match env.enums.find? fun ed => ed.name == name with
         | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap (fun v => v.fields.map (fun f => f.ty)))
         | none => none)
-    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => nt.innerTy))
+    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => deAlias nt.innerTy))
     (fun name => (((env.currentTypeBounds.find? fun b => b.1 == name).map Prod.snd).getD []).contains "Copy")
     ty
 

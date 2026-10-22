@@ -1,0 +1,6 @@
+// Bug 149: a `return` must account for every live owned binding; a later `defer` never runs. E0208.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    return 0;
+    defer free(h);
+}

@@ -1,0 +1,9 @@
+// Bug 149: a `return` inside a borrow block leaves the owner live (E0208).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    borrow h as r in R {
+        return 0;
+    }
+    free(h);
+    return 0;
+}

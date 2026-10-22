@@ -91,6 +91,9 @@ structure TypeEnv where
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
+  -- Bug 149: the loop depth each active label names (a labelled break/continue exits every loop
+  -- from the innermost one out to that depth, and must account for all of their locals).
+  loopLabelDepths : List (String × Nat) := []
   -- True while checking a branch/arm that EXITS THE FUNCTION (every path
   -- returns): consuming an outer linear there is safe even inside a loop —
   -- the loop can never re-iterate past a return. Reset on entering any new

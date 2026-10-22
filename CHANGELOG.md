@@ -49,7 +49,9 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   now frees, as MEMORY_SEMANTICS always said, and is never a place: `(*h).f` is E0290, `h.f` is the
   spelling). A move inside an erased `assert`, `assume` or `ghost let` is E0243 (bug 147): the
   statement is erased, so the move never ran. A move inside the right operand of `&&` / `||` is
-  E0244 (bug 148): that operand runs only when the left one does not decide the result.
+  E0244 (bug 148): that operand runs only when the left one does not decide the result. Loop
+  conditions are checked inside their loop, every `return` must account for each live owned
+  value, and a labelled `break`/`continue` checks every loop it exits (bug 149).
 - **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
   `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
 

@@ -496,6 +496,22 @@ def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option
         throwCheck (.conditionalOperandConsumes n op) span
     | none => pure ()
 
+/-- Bug 149: a `return` exits every enclosing scope, so every live owned non-Copy binding must
+    be consumed or reserved by a pending `defer` at that point, whatever block it sits in (a loop
+    body, a borrow block, a match arm). Before, only `if` branches that exited the function were
+    checked, so a statement after the `return`, or code after an enclosing borrow block, was
+    credited with a consumption that never ran. References are borrows (nothing to consume); a
+    `ghost let` binding has no runtime obligation. -/
+def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (name, info) in env.vars do
+    if info.isCopy || info.isGhost then continue
+    match info.ty with
+    | .ref _ | .refMut _ => continue
+    | _ => pure ()
+    if info.state == .consumed || info.state == .reserved then continue
+    throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
+
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
   let env ← getEnv
@@ -2245,8 +2261,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
     let valTy ← checkExpr value (some retTy)
     expectTy retTy valTy "return value" (some stmt.getSpan)
+    checkReturnAccountsForAll (some stmt.getSpan)
   | .return_ _ none =>
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
+    checkReturnAccountsForAll (some stmt.getSpan)
   | .expr _ e isValue =>
     let eTy ← checkExpr e
     -- Phase 6 #13: a `;`-terminated statement expression (`isValue := false`)
@@ -2348,36 +2366,52 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         -- and the later use was a spurious E0205.
         setEnv envBefore
   | .while_ _ cond body lbl =>
+    -- Bug 149: the condition runs on every iteration, so it is checked at the loop's depth: a
+    -- move of an outer binding there is a move inside the loop (E0207).
+    let env0 ← getEnv
+    setEnv { env0 with loopDepth := env0.loopDepth + 1 }
     let _condTy ← checkExpr cond
+    let envC ← getEnv
+    setEnv { envC with loopDepth := env0.loopDepth }
     -- Increment loop depth for the body, push label if present
     let env ← getEnv
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
+    let labelDepths := match lbl with
+      | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
+      | none => env.loopLabelDepths
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false }
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths }
   | .forLoop _ init cond step body lbl =>
     -- Init
     match init with
     | some initStmt => checkStmt initStmt retTy
     | none => pure ()
-    -- Condition
+    -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
+    let env0 ← getEnv
+    setEnv { env0 with loopDepth := env0.loopDepth + 1 }
     let _condTy ← checkExpr cond
+    let envC ← getEnv
+    setEnv { envC with loopDepth := env0.loopDepth }
     -- Body + step in loop scope, push label if present
     let env ← getEnv
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
+    let labelDepths := match lbl with
+      | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
+      | none => env.loopLabelDepths
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false }
     checkStmts body retTy
     match step with
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths }
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv
@@ -2677,9 +2711,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         if prevTy != valTy then
           throwCheck (.breakTypeMismatch (tyToString valTy) (tyToString prevTy)) (some stmt.getSpan)
     | none => pure ()
-    -- Check all linear variables declared in the loop body are consumed or reserved by defer
+    -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
+    -- defer. Bug 149: a labelled break exits every loop out to the labelled one.
+    let targetDepth := match lbl with
+      | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
+      | none => env.loopDepth
     for (name, info) in (← getEnv).vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
+      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
@@ -2691,9 +2729,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       if !env.loopLabels.contains l then
         throwCheck (.unknownLoopLabel l) (some stmt.getSpan)
     | none => pure ()
-    -- Check all linear variables declared in the loop body are consumed or reserved by defer
+    -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
+    -- defer. Bug 149: a labelled continue leaves every loop inside the labelled one.
+    let targetDepth := match lbl with
+      | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
+      | none => env.loopDepth
     for (name, info) in env.vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
+      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
   -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is

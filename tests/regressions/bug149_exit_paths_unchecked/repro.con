@@ -1,0 +1,11 @@
+// Bug 149: a `while` condition was checked outside the loop, so `*h` there (a move that also
+// releases the cell) was accepted and ran on every iteration. With bug 146's fix the binary
+// released the same cell again on the second iteration. Now E0207.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let mut n: Int = 0;
+    while *h == 42 && n < 2 {
+        n = n + 1;
+    }
+    return 0;
+}

@@ -1835,6 +1835,13 @@ run_ok  "$TESTDIR/regress_147_ghost_consumes_ghost.con" "" 0
 run_err "$TESTDIR/error_148_and_operand_consumes.con"       "(E0244)"
 run_err "$TESTDIR/error_148_or_operand_consumes.con"        "(E0244)"
 run_ok  "$TESTDIR/regress_148_short_circuit_reads.con" "" 0
+# Bug 149: loop conditions, returns in nested blocks and labelled exits account for owned values.
+run_err "$TESTDIR/error_149_loop_cond_moves_outer.con"          "(E0207)"
+run_err "$TESTDIR/error_149_return_after_unreached_defer.con"   "(E0208)"
+run_err "$TESTDIR/error_149_return_in_borrow_block.con"         "(E0208)"
+run_err "$TESTDIR/error_149_labelled_break_skips.con"           "(E0210)"
+run_err "$TESTDIR/error_149_labelled_continue_skips.con"        "(E0211)"
+run_ok  "$TESTDIR/regress_149_exits_accounted.con" "9" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
     r144_i=$($COMPILER "$r144" --interp 2>&1 || true)
