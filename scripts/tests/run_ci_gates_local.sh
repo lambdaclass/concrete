@@ -93,7 +93,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh|check_checker_pin_freshness\.sh --tier campaign' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -155,7 +155,11 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
-EXPECTED_GATE_COMMANDS=255
+# 255 -> 256: check_checker_pin_freshness.sh --tier landing (external-checker pins vs the Lean Kernel
+#   Arena; warns, never fails; SKIPs offline), pinned in the same commit. Its `--tier campaign`
+#   spelling is excluded above with the campaign driver: there a stale pin is a finding (exit 1), and an
+#   upstream commit must not turn a local pre-push or closure pass red.
+EXPECTED_GATE_COMMANDS=256
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
