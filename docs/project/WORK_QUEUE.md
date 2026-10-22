@@ -116,8 +116,16 @@ Each tick runs these steps:
    - To stop an agent, the dispatcher signals its whole process group: SIGTERM, then SIGKILL after
      `QUEUE_KILL_GRACE` seconds (default 10). The group is identified by `runs/<task>.<n>/pid`, so
      this works even if the pid never reached the state. If anything survives, the task stays
-     `stopping` and keeps its areas until a later tick succeeds. A launch recorded without a pid
-     (the tick died mid-start) is stopped the same way and released uncharged.
+     `stopping` and keeps its areas, its pending charge and its outcome (a ready agent that stalled
+     stays bound for done) until a later tick succeeds.
+   - **Launch handshake.** `run_agent.sh` starts the agent only after the dispatcher writes
+     `runs/<task>.<n>/go`, and the dispatcher writes it after the launch and its pid are in
+     `state.json`. A launch left `launching` by a dead tick is cancelled (`cancel` file) and released
+     uncharged. A wrapper that never sees `go` exits 98 without running anything, and is released
+     uncharged too.
+   - An agent whose published head was already ready counts as done even if it then exits
+     nonzero. A failure to watch one task (git unreachable) is logged as `monitor_error` and never
+     stops the other tasks or the kill switch.
 3. **Kill switch.** While `~/.concrete-queue-paused` exists, nothing starts and monitoring continues.
    If the file's first line is `kill`, running agents are also stopped and their tasks are released
    without charge.

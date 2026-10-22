@@ -89,6 +89,12 @@ CONFIG = {
                         r"rate_limit_error|\b429\b"),
 }
 ACTIVE = ("running", "exited", "stopping")
+NO_GO = 98  # run_agent.sh's exit when the dispatcher never confirmed the launch
+
+
+def cancel(run_dir):
+    if run_dir and os.path.isdir(run_dir):
+        open(os.path.join(run_dir, "cancel"), "w").close()
 # Statuses the dispatcher never starts again on its own (release puts a task back to pending).
 NOT_STARTABLE = ("launching", "running", "exited", "stopping", "done", "abandoned")
 TOOLS_ALLOW = ["Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit", "TodoWrite", "Task", "Agent",
@@ -362,8 +368,10 @@ class Q:
             # worktree, and try again next tick.
             t["status"] = "stopping"
             t["release_reason"] = why
+            t["stop_charge"] = bool(charge or t.get("stop_charge"))
             self.event("stop_pending", tid, reason=why)
             return
+        t.pop("stop_charge", None)
         if t.get("status") in ("running", "stopping", "launching"):
             self.finish_run(t, now() if t_now is None else t_now)
         if charge:
@@ -406,62 +414,92 @@ class Q:
             self.event("worktree_removed", tid, worktree=wt)
 
     def monitor(self, t_now):
-        stuck_s = self.cfg["stuck_minutes"] * 60
+        """Watch every task; a failure watching one (git unreachable, a vanished run directory) is
+        logged and never stops the others, the kill switch or the state save."""
         for tid, t in self.state["tasks"].items():
-            if t.get("status") == "done":
-                self.cleanup(tid, t)
-            if t.get("status") == "launching":
-                # A tick died between recording the launch and recording the pid: there is no pid
-                # to watch, so stop whatever runs in the worktree's run and release uncharged.
-                self.event("launch_incomplete", tid)
-                self.release(tid, t, "launch not recorded", charge=False, t_now=t_now)
-                continue
-            if t.get("status") not in ACTIVE:
-                continue
-            if t["status"] == "stopping":
-                self.release(tid, t, t.get("release_reason") or "stopping", charge=False, t_now=t_now)
-                continue
-            if t["status"] == "running" and not self.alive(t.get("pid")):
-                rc, hit, cost, tokens = self.finish_run(t, t_now)
-                if hit:
-                    s = t["slot"]
-                    self.state["slots"].setdefault(s, {})["limited_at"] = t_now
-                    self.event("usage_limit", tid, slot=s)
-                    self.notify(f"queue: slot {s} hit its usage limit", f"{tid} released; slot rests 1 h")
-                    self.release(tid, t, f"usage limit on slot {s}", charge=False)
-                    continue
-                t["status"] = "exited"
-                t["exit"] = rc
-                self.event("exited", tid, rc=rc, usd=cost, tokens=tokens)
-                if rc != 0:
-                    self.notify(f"queue: {tid} failed", f"agent exited {rc}; log {t['run_dir']}/agent.log")
-                    self.release(tid, t, f"agent exited {rc}", charge=True)
-                    continue
-            sha = self.remote_sha(t["wip_ref"])
-            if sha and sha != t.get("last_sha"):
-                t["last_sha"] = sha
-                t["last_push"] = t_now
-                self.event("heartbeat", tid, sha=sha)
-            ready = bool(t.get("last_sha")) and self.ready(t["last_sha"])
-            if ready and t["status"] == "exited":
-                self.mark_done(tid, t)
-                continue
-            if ready and t.get("ready_sha") != t["last_sha"]:
-                # Ready, but the agent still runs: it keeps its slot, areas and stuck watch until it
-                # exits (then it is done) or stalls (then it is stopped and done).
-                t["ready_sha"] = t["last_sha"]
-                self.event("ready", tid, sha=t["last_sha"])
-            if t_now - (t.get("last_push") or t["started_at"]) > stuck_s:
-                if ready:
-                    if self.kill(t):
-                        self.finish_run(t, t_now)
-                        t.pop("pid", None)
-                        self.mark_done(tid, t)
-                    continue
-                self.event("stuck", tid, minutes=self.cfg["stuck_minutes"], last_sha=t.get("last_sha", ""))
-                self.notify(f"queue: {tid} stuck",
-                            f"no push to {t['wip_ref']} for {self.cfg['stuck_minutes']:g} min; released")
-                self.release(tid, t, "stuck: no wip push", charge=True, t_now=t_now)
+            try:
+                self.monitor_one(tid, t, t_now)
+            except (RuntimeError, OSError, ValueError, KeyError) as e:
+                self.event("monitor_error", tid, error=str(e)[:300])
+
+    def monitor_one(self, tid, t, t_now):
+        stuck_s = self.cfg["stuck_minutes"] * 60
+        if t.get("status") == "done":
+            self.cleanup(tid, t)
+        if t.get("status") == "launching":
+            # A tick died between recording the launch and recording the pid: there is no pid
+            # to watch, so stop whatever runs in the worktree's run and release uncharged.
+            self.event("launch_incomplete", tid)
+            cancel(t.get("run_dir"))  # an agent that has not started yet never will
+            self.release(tid, t, "launch not recorded", charge=False, t_now=t_now)
+            return
+        if t.get("status") not in ACTIVE:
+            return
+        if t["status"] == "stopping":
+            if t.get("stop_outcome") == "done":
+                self.stop_done(tid, t, t_now)
+            else:
+                self.release(tid, t, t.get("release_reason") or "stopping",
+                             charge=t.get("stop_charge", False), t_now=t_now)
+            return
+        if t["status"] == "running" and not self.alive(t.get("pid")):
+            rc, hit, cost, tokens = self.finish_run(t, t_now)
+            if rc == NO_GO:
+                # The wrapper never got the go-ahead (the tick that launched it died): nothing
+                # ran, so nothing is charged.
+                self.release(tid, t, "launch never confirmed", charge=False, t_now=t_now)
+                return
+            if hit:
+                s = t["slot"]
+                self.state["slots"].setdefault(s, {})["limited_at"] = t_now
+                self.event("usage_limit", tid, slot=s)
+                self.notify(f"queue: slot {s} hit its usage limit", f"{tid} released; slot rests 1 h")
+                self.release(tid, t, f"usage limit on slot {s}", charge=False)
+                return
+            t["status"] = "exited"
+            t["exit"] = rc
+            self.event("exited", tid, rc=rc, usd=cost, tokens=tokens)
+            if rc != 0 and t.get("ready_sha") and t.get("ready_sha") == t.get("last_sha"):
+                self.mark_done(tid, t)  # its candidate was already ready; the exit is not a failure
+                return
+            if rc != 0:
+                self.notify(f"queue: {tid} failed", f"agent exited {rc}; log {t['run_dir']}/agent.log")
+                self.release(tid, t, f"agent exited {rc}", charge=True)
+                return
+        sha = self.remote_sha(t["wip_ref"])
+        if sha and sha != t.get("last_sha"):
+            t["last_sha"] = sha
+            t["last_push"] = t_now
+            self.event("heartbeat", tid, sha=sha)
+        ready = bool(t.get("last_sha")) and self.ready(t["last_sha"])
+        if ready and t["status"] == "exited":
+            self.mark_done(tid, t)
+            return
+        if ready and t.get("ready_sha") != t["last_sha"]:
+            # Ready, but the agent still runs: it keeps its slot, areas and stuck watch until it
+            # exits (then it is done) or stalls (then it is stopped and done).
+            t["ready_sha"] = t["last_sha"]
+            self.event("ready", tid, sha=t["last_sha"])
+        if t_now - (t.get("last_push") or t["started_at"]) > stuck_s:
+            if ready:
+                self.stop_done(tid, t, t_now)
+                return
+            self.event("stuck", tid, minutes=self.cfg["stuck_minutes"], last_sha=t.get("last_sha", ""))
+            self.notify(f"queue: {tid} stuck",
+                        f"no push to {t['wip_ref']} for {self.cfg['stuck_minutes']:g} min; released")
+            self.release(tid, t, "stuck: no wip push", charge=True, t_now=t_now)
+
+    def stop_done(self, tid, t, t_now):
+        """Stop a ready agent that stalled; its outcome is done, however many ticks the stop takes."""
+        t["stop_outcome"] = "done"
+        if not self.kill(t):
+            t["status"] = "stopping"
+            self.event("stop_pending", tid, reason="ready agent stalled")
+            return
+        self.finish_run(t, t_now)
+        t.pop("pid", None)
+        t.pop("stop_outcome", None)
+        self.mark_done(tid, t)
 
     def mark_done(self, tid, t):
         t["status"] = "done"
@@ -563,6 +601,8 @@ class Q:
         self.event("claimed", tid, slot=slot, worktree=wt, branch=branch, agent=t["agent"], pid=p.pid,
                    areas=task["areas"])
         self.save()  # a started agent is on disk before anything else can fail
+        # Only now may the wrapper start the agent: a launch that never reaches the state never runs.
+        open(os.path.join(run_dir, "go"), "w").close()
 
     def dispatch(self, queue, t_now):
         by_id = {t["id"]: t for t in queue["tasks"]}
@@ -650,13 +690,15 @@ class Q:
             source_error = f"refresh: {e}"
         try:
             self.monitor(t_now)
-        finally:
-            self.save()
+        except Exception as e:  # noqa: BLE001 - the kill switch below must still run
+            self.event("monitor_error", error=str(e)[:300])
+        self.save()
         pause = self.read_pause()
         self.flag("paused", bool(pause), "paused", mode=pause)
         if pause == "kill":
             for tid, t in self.state["tasks"].items():
-                if t.get("status") in ACTIVE:
+                if t.get("status") in ACTIVE + ("launching",):
+                    cancel(t.get("run_dir"))
                     self.release(tid, t, "kill switch", charge=False, t_now=t_now)
         queue = None
         if not source_error:

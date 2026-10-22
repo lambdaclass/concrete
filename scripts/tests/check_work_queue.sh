@@ -20,7 +20,10 @@
 #               LANDS on main; done worktrees are retired; no push for the stuck window kills and
 #               releases (and at the attempt cap abandons); `release` recovers an abandoned task
 #   kill switch the pause file stops new starts; `kill` in it also stops running agents, and keeps
-#               doing so while the sources are broken (a malformed fuzz finding)
+#               doing so while the sources are broken (a malformed fuzz finding) or every git call
+#               fails (the clone is gone)
+#   handshake   run_agent.sh starts the agent only after the dispatcher's `go`; unconfirmed or
+#               cancelled launches exit 98 without running it
 #   guard       the queue clone refuses pushes to main and ci/*, runs the repository's own pre-push
 #               after it; a missing or non-executable guard starts nothing
 #   install     the unit text (KillMode=process) and the timer is NOT enabled; no systemd is run,
@@ -453,6 +456,30 @@ sleep 0.5
 [ "$(events source_error)" = 1 ] && dead "$pid" && [ -z "$(running_ids)" ] \
   && ok "a malformed source is reported, and the kill switch still stops the agents" || no "brokensrc: errors=$(events source_error) running='$(running_ids)'"
 rm -f "$QUEUE_PAUSE_FILE"
+
+
+scenario norepo
+echo hang > "$STUB/behave/default"
+QUEUE_MAX_AGENTS=1 tick "$T0"; pid="$(st R-0547 pid)"
+mv "$QUEUE_REPO" "$QUEUE_REPO.away"
+echo kill > "$QUEUE_PAUSE_FILE"
+QUEUE_MAX_AGENTS=1 QUEUE_NOW="$((T0+60))" bash "$QD/dispatch.sh" tick > "$S/tick.out" 2> "$S/tick.err"
+sleep 0.5
+dead "$pid" && [ -z "$(running_ids)" ] && ok "with the clone gone (every git call fails) the kill switch still stops the agents" \
+  || no "norepo: running='$(running_ids)' err=$(tail -2 "$S/tick.err")"
+mv "$QUEUE_REPO.away" "$QUEUE_REPO"; rm -f "$QUEUE_PAUSE_FILE"
+
+echo "=== launch handshake ==="
+mkdir -p "$TMP/hs/run" "$TMP/hs/wt"
+rc=0; QUEUE_GO_WAIT=3 bash "$QD/run_agent.sh" "$TMP/hs/run" "$TMP/hs/wt" touch "$TMP/hs/ran" || rc=$?
+[ "$rc" = 98 ] && [ ! -e "$TMP/hs/ran" ] && [ "$(cat "$TMP/hs/run/exit")" = 98 ] \
+  && ok "an unconfirmed launch exits 98 without starting the agent" || no "no-go launch: rc=$rc"
+mkdir -p "$TMP/hs/run2"; touch "$TMP/hs/run2/go" "$TMP/hs/run2/cancel"
+rc=0; QUEUE_GO_WAIT=3 bash "$QD/run_agent.sh" "$TMP/hs/run2" "$TMP/hs/wt" touch "$TMP/hs/ran" || rc=$?
+[ "$rc" = 98 ] && [ ! -e "$TMP/hs/ran" ] && ok "a cancelled launch never starts" || no "cancelled launch: rc=$rc"
+mkdir -p "$TMP/hs/run3"; touch "$TMP/hs/run3/go"
+rc=0; QUEUE_GO_WAIT=3 bash "$QD/run_agent.sh" "$TMP/hs/run3" "$TMP/hs/wt" touch "$TMP/hs/ran" || rc=$?
+[ "$rc" = 0 ] && [ -e "$TMP/hs/ran" ] && [ -s "$TMP/hs/run3/pid" ] && ok "a confirmed launch runs and leaves its pid file" || no "confirmed launch: rc=$rc"
 
 scenario stuck
 echo hang > "$STUB/behave/default"
