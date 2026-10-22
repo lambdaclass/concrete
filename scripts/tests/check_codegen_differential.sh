@@ -58,8 +58,9 @@ for f in tests/codegen/*.con; do
     cc="$("$TMP/d" 2>/dev/null)"; ce=$?; [ -z "$cc" ] && cc="$ce"
   else cc="CFAIL"; ce=99; fi
   if in_list "$name" "$EXPECTED_TRAP"; then
-    # What a trapping run printed before the trap is part of its outcome (D13): the binary
-    # prints it and then aborts, and the interpreter must print the same bytes first.
+    # What a trapping run printed before the trap is part of its outcome (D13): whatever the
+    # binary's stdout received (abort flushes stdio on Darwin, not on glibc), the interpreter
+    # must have printed the same bytes.
     "$COMPILER" "$f" --interp > "$TMP/trap.int" 2>/dev/null
     ( "$TMP/d" > "$TMP/trap.nat" ) 2>/dev/null
     if [ "$ie" -ne 0 ] && [ "$ce" -ne 0 ] && ! cmp -s "$TMP/trap.int" "$TMP/trap.nat"; then

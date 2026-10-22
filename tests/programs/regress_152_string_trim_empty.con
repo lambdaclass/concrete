@@ -1,0 +1,10 @@
+// Bug 152: `string_trim` of the empty string returned a one-byte string (the byte past the end
+// of its source: the literal copy's NUL terminator). Expected length 0; the binary exited 1.
+fn main() with(Console, Alloc) -> Int {
+    let e: String = "";
+    let t: String = string_trim(&e);
+    let n: Int = string_length(&t);
+    drop_string(e);
+    drop_string(t);
+    return n;
+}

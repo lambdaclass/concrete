@@ -315,7 +315,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/float_unprofiled/src/main.con float_unprofiled exit=0 ret=0 interp=yes stdout=empty
 @run examples/ghost_state/src/main.con ghost_state exit=0 ret=0 interp=yes stdout=empty
 @run examples/hmac_sha256/src/main.con hmac_sha256 exit=0 ret=0 interp=yes
-@run examples/json/main.con json exit=0 interp=fails:undefined~function~'string_append_int'
+@run examples/json/main.con json exit=0 ret=0 interp=yes
 @run examples/loop_invariant/src/main.con loop_invariant exit=0 ret=0 interp=yes stdout=empty
 @run examples/mal/main.con mal exit=0 ret=0 interp=yes
 @run examples/parse_validate/src/main.con parse_validate exit=0 ret=0 interp=yes stdout=empty
@@ -351,9 +351,9 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/generic_enum_impl.con generic_enum_impl exit=1 ret=1 interp=yes stdout=empty
 @run examples/snippets/generic_struct.con generic_struct exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/generics_basic.con generics_basic exit=4 ret=4 interp=yes stdout=empty
-@run examples/snippets/hello_world.con hello_world exit=0 interp=fails:field~access~on~non
-@run examples/snippets/hello_world_array.con hello_world_array exit=0 interp=fails:unsupported~cast
-@run examples/snippets/hello_world_hacky.con hello_world_hacky exit=0 interp=fails:undefined~function~'malloc'
+@run examples/snippets/hello_world.con hello_world exit=0 ret=0 interp=yes
+@run examples/snippets/hello_world_array.con hello_world_array exit=0 ret=0 interp=yes
+@run examples/snippets/hello_world_hacky.con hello_world_hacky exit=0 ret=0 interp=yes
 @run examples/snippets/if_else.con if_else exit=59 ret=59 interp=yes stdout=empty
 @run examples/snippets/if_if_false.con if_if_false exit=7 ret=7 interp=yes stdout=empty
 @run examples/snippets/if_with_literals.con if_with_literals exit=1 ret=1 interp=yes stdout=empty
@@ -366,21 +366,21 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/snippets/linearExample01.con linearExample01 exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/linearExample02.con linearExample02 exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/linearExample03if.con linearExample03if exit=0 ret=0 interp=yes stdout=empty
-@run examples/snippets/linked_list.con linked_list exit=60 interp=fails:undefined~function~'alloc' stdout=empty
-@run examples/snippets/malloc.con malloc exit=5 interp=fails:undefined~function~'malloc' stdout=empty
+@run examples/snippets/linked_list.con linked_list exit=60 ret=60 interp=yes stdout=empty
+@run examples/snippets/malloc.con malloc exit=5 ret=5 interp=yes stdout=empty
 @run examples/snippets/module_test.con module_test exit=42 ret=42 interp=yes stdout=empty
 @run examples/snippets/nested_calls.con nested_calls exit=42 ret=42 interp=yes stdout=empty
 @run examples/snippets/nested_if.con nested_if exit=138 ret=3210 interp=yes stdout=empty
-@run examples/snippets/opaque_vec.con opaque_vec exit=4 interp=fails:undefined~function~'malloc' stdout=empty
+@run examples/snippets/opaque_vec.con opaque_vec exit=4 ret=4 interp=yes stdout=empty
 @run examples/snippets/refs.con refs exit=6 ret=6 interp=yes stdout=empty
 @run examples/snippets/simple.con simple exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/simple_trait.con simple_trait exit=2 ret=2 interp=yes stdout=empty
 @run examples/snippets/sizeof_intrinsic.con sizeof_intrinsic exit=5 interp=fails:undefined~function~'sizeof' stdout=empty
-@run examples/snippets/string_processing.con string_processing exit=100 interp=fails:undefined~function~'string_to_int'
+@run examples/snippets/string_processing.con string_processing exit=100 ret=100 interp=yes
 @run examples/snippets/structs.con structs exit=8 ret=8 interp=yes stdout=empty
 @run examples/snippets/trait_dispatch.con trait_dispatch exit=26 ret=26 interp=yes stdout=empty
 @run examples/snippets/type_alias.con type_alias exit=4 ret=4 interp=yes stdout=empty
-@run examples/snippets/union.con union exit=1 interp=fails:field~'baz' stdout=empty
+@run examples/snippets/union.con union exit=1 interp=fails:holds~no~value stdout=empty
 @run examples/snippets/variable_inside_if.con variable_inside_if exit=16 ret=16 interp=yes stdout=empty
 @run examples/snippets/vec.con vec exit=4 interp=fails:undefined~function~'sizeof' stdout=empty
 @run examples/snippets/while.con while exit=16 ret=16 interp=yes stdout=empty
@@ -389,7 +389,7 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/source_maps/obligation_located.con obligation_located exit=5 ret=5 interp=yes stdout=empty
 @run examples/thesis_demo/src/main.con thesis_demo exit=0 ret=0 interp=yes
 @run examples/thesis_demo/src/main_drifted.con drifted exit=0 ret=0 interp=yes
-@run examples/vm/main.con vm exit=0 interp=fails:undefined~function~'vec_pop'
+@run examples/vm/main.con vm exit=0 interp=fails:clock_monotonic_ns
 @run examples/known_holes/mono_name_collision/src/main.con mono_name_collision exit=18 ret=18 interp=yes stdout=empty
 @run examples/known_holes/nested_field_write/src/main.con nested_field_write exit=29 ret=7709 interp=yes stdout=empty
 @run examples/known_holes/raw_ptr_to_local/src/main.con raw_ptr_to_local exit=99 ret=99 interp=yes stdout=empty
@@ -397,54 +397,54 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/multi_kernel_policy/blocked/src/main.con blocked exit=6 ret=6 interp=yes stdout=empty
 @norun examples/unsound_hypothesis/src/main.con reason=deliberately aborts (H23 counterexample); check_known_wrong_corpus.sh owns its runtime behavior
 @norun examples/trap_semantics_gap/src/main.con reason=deliberately traps (H24 counterexample); check_known_wrong_corpus.sh owns its runtime behavior
-@run examples/elf_header/src/main.con usage exit=1 interp=fails:'__concrete_get_argc'
-@run examples/elf_header/src/main.con valid exit=0 interp=fails:'__concrete_get_argc' -- testdata/valid.bin
-@run examples/elf_header/src/main.con bad_magic exit=1 interp=fails:'__concrete_get_argc' -- testdata/bad_magic.bin
-@run examples/elf_header_drifted/src/main.con usage exit=1 interp=fails:'__concrete_get_argc'
-@run examples/elf_header_drifted/src/main.con real_header_rejected exit=1 interp=fails:'__concrete_get_argc' -- testdata/valid.bin
-@run examples/elf_header_drifted/src/main.con zero_magic_accepted exit=0 interp=fails:'__concrete_get_argc' -- testdata/zero_magic.bin
-@run examples/base64_cli/ encode exit=0 interp=fails:E0110 -- encode hello
-@run examples/base64_cli/ decode exit=0 interp=fails:E0110 -- decode aGVsbG8gd29ybGQ=
-@run examples/base64_cli/ decode_invalid exit=1 interp=fails:E0110 stdout=empty -- decode a$b
-@run examples/base64_cli/ usage exit=2 interp=fails:E0110 stdout=empty
-@run examples/byte_view/http_header_view/ http_header_view exit=0 interp=fails:E0110
-@run examples/byte_view/tlv_packet_view/ tlv_packet_view exit=0 interp=fails:E0110
-@run examples/byte_view/utf8_text_slice/ utf8_text_slice exit=0 interp=fails:E0110
-@run examples/byte_view/wrong_buffer/ wrong_buffer exit=0 interp=fails:E0110
-@run examples/cli_tool/ flags exit=0 interp=fails:E0110 -- -n 3 -v alpha beta
-@run examples/cli_tool/ bad_number exit=2 interp=fails:E0110 stdout=empty -- -n x a
-@run examples/cli_tool/ usage exit=2 interp=fails:E0110 stdout=empty
-@run examples/conlog/ sample exit=0 interp=fails:E0110 -- logs/sample.log
-@run examples/conlog/ usage exit=2 interp=fails:E0110 stdout=empty
+@run examples/elf_header/src/main.con usage exit=1 ret=1 interp=yes
+@run examples/elf_header/src/main.con valid exit=0 ret=0 interp=yes -- testdata/valid.bin
+@run examples/elf_header/src/main.con bad_magic exit=1 ret=1 interp=yes -- testdata/bad_magic.bin
+@run examples/elf_header_drifted/src/main.con usage exit=1 ret=1 interp=yes
+@run examples/elf_header_drifted/src/main.con real_header_rejected exit=1 ret=1 interp=yes -- testdata/valid.bin
+@run examples/elf_header_drifted/src/main.con zero_magic_accepted exit=0 ret=0 interp=yes -- testdata/zero_magic.bin
+@run examples/base64_cli/ encode exit=0 ret=0 interp=yes -- encode hello
+@run examples/base64_cli/ decode exit=0 ret=0 interp=yes -- decode aGVsbG8gd29ybGQ=
+@run examples/base64_cli/ decode_invalid exit=1 ret=1 interp=yes stdout=empty -- decode a$b
+@run examples/base64_cli/ usage exit=2 ret=2 interp=yes stdout=empty
+@run examples/byte_view/http_header_view/ http_header_view exit=0 ret=0 interp=yes
+@run examples/byte_view/tlv_packet_view/ tlv_packet_view exit=0 ret=0 interp=yes
+@run examples/byte_view/utf8_text_slice/ utf8_text_slice exit=0 ret=0 interp=yes
+@run examples/byte_view/wrong_buffer/ wrong_buffer exit=0 ret=0 interp=yes
+@run examples/cli_tool/ flags exit=0 ret=0 interp=yes -- -n 3 -v alpha beta
+@run examples/cli_tool/ bad_number exit=2 ret=2 interp=yes stdout=empty -- -n x a
+@run examples/cli_tool/ usage exit=2 ret=2 interp=yes stdout=empty
+@run examples/conlog/ sample exit=0 ret=0 interp=yes -- logs/sample.log
+@run examples/conlog/ usage exit=2 ret=2 interp=yes stdout=empty
 @run examples/defer/cleanup_order/ cleanup_order exit=0 ret=0 interp=yes
-@run examples/envcfg/ app exit=0 interp=fails:E0110 -- testdata/app.conf
-@run examples/envcfg/ malformed exit=1 interp=fails:E0110 -- testdata/bad.conf
-@run examples/grep/ line_numbers exit=0 interp=fails:E0110 -- -n quick testdata/poem.txt
-@run examples/grep/ count_ignore_case exit=0 interp=fails:E0110 -- -c -i quick testdata/poem.txt
-@run examples/grep/ invert exit=0 interp=fails:E0110 -- -v the testdata/poem.txt
-@run examples/hexdump/ full exit=0 interp=fails:E0110 -- testdata/sample.bin
-@run examples/hexdump/ skip_len exit=0 interp=fails:E0110 -- -s 32 -n 12 testdata/sample.bin
+@run examples/envcfg/ app exit=0 ret=0 interp=yes -- testdata/app.conf
+@run examples/envcfg/ malformed exit=1 ret=1 interp=yes -- testdata/bad.conf
+@run examples/grep/ line_numbers exit=0 ret=0 interp=yes -- -n quick testdata/poem.txt
+@run examples/grep/ count_ignore_case exit=0 ret=0 interp=yes -- -c -i quick testdata/poem.txt
+@run examples/grep/ invert exit=0 ret=0 interp=yes -- -v the testdata/poem.txt
+@run examples/hexdump/ full exit=0 ret=0 interp=yes -- testdata/sample.bin
+@run examples/hexdump/ skip_len exit=0 ret=0 interp=yes -- -s 32 -n 12 testdata/sample.bin
 @norun examples/httpget/ reason=network client (connects to <host> <port>); check_httpget_differential.sh runs it against a local server
 @norun examples/http/ reason=network server (binds 127.0.0.1:8080 and serves until killed); no terminating input exists
-@run examples/integrity/ scan exit=0 interp=fails:E0110 -- scan manifest.txt testdata/a.txt testdata/b.txt
-@run examples/integrity/ check_ok exit=0 interp=fails:E0110 -- check testdata/manifest.txt testdata/a.txt testdata/b.txt
-@run examples/integrity/ check_modified exit=1 interp=fails:E0110 -- check testdata/manifest_stale.txt testdata/a.txt testdata/b_changed.txt
-@run examples/kvstore/ list_empty exit=0 interp=fails:E0110 -- list
-@run examples/kvstore/ set exit=0 interp=fails:E0110 -- set k v
-@run examples/kvstore/ get_missing exit=0 interp=fails:E0110 -- get nope
-@run examples/lox/ hello exit=0 interp=fails:E0110 -- testdata/hello.lox
-@run examples/lox/ comprehensive exit=0 interp=fails:E0110 -- test_comprehensive.lox
-@run examples/packet/ packet exit=0 interp=fails:E0110
+@run examples/integrity/ scan exit=0 ret=0 interp=yes -- scan manifest.txt testdata/a.txt testdata/b.txt
+@run examples/integrity/ check_ok exit=0 ret=0 interp=yes -- check testdata/manifest.txt testdata/a.txt testdata/b.txt
+@run examples/integrity/ check_modified exit=1 ret=1 interp=yes -- check testdata/manifest_stale.txt testdata/a.txt testdata/b_changed.txt
+@run examples/kvstore/ list_empty exit=0 ret=0 interp=yes -- list
+@run examples/kvstore/ set exit=0 ret=0 interp=yes -- set k v
+@run examples/kvstore/ get_missing exit=0 ret=0 interp=yes -- get nope
+@run examples/lox/ hello exit=0 ret=0 interp=yes -- testdata/hello.lox
+@run examples/lox/ comprehensive exit=0 ret=0 interp=yes -- test_comprehensive.lox
+@run examples/packet/ packet exit=0 ret=0 interp=yes
 @run examples/patterns/byte_ranges/ byte_ranges exit=0 ret=0 interp=yes
-@run examples/png_chunks/ tiny exit=0 interp=fails:E0110 -- testdata/tiny.png
-@run examples/png_chunks/ bad_crc exit=1 interp=fails:E0110 -- testdata/bad_crc.png
-@run examples/png_chunks/ bad_sig exit=1 interp=fails:E0110 stdout=empty -- testdata/bad_sig.png
+@run examples/png_chunks/ tiny exit=0 ret=0 interp=yes -- testdata/tiny.png
+@run examples/png_chunks/ bad_crc exit=1 ret=1 interp=yes -- testdata/bad_crc.png
+@run examples/png_chunks/ bad_sig exit=1 ret=1 interp=yes stdout=empty -- testdata/bad_sig.png
 @run examples/project/ project exit=18 ret=18 interp=yes stdout=empty
-@run examples/tar_list/ sample exit=0 interp=fails:E0110 -- testdata/sample.tar
-@run examples/tar_list/ truncated exit=1 interp=fails:E0110 -- testdata/truncated.tar
+@run examples/tar_list/ sample exit=0 ret=0 interp=yes -- testdata/sample.tar
+@run examples/tar_list/ truncated exit=1 ret=1 interp=yes -- testdata/truncated.tar
 @norun examples/tcpserve/ reason=network server (accepts on <port> until killed); check_tcpserve.sh drives it over loopback
-@run examples/toml/ sample exit=0 interp=fails:E0110 -- test.toml
-@run examples/verify/ hash exit=0 interp=fails:E0110 -- testdata/hello.txt
-@run examples/verify/ match exit=0 interp=fails:E0110 -- testdata/hello.txt a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447
-@run examples/verify/ mismatch exit=1 interp=fails:E0110 -- testdata/hello.txt 0000000000000000000000000000000000000000000000000000000000000000
-@run examples/wordfreq/ words exit=0 interp=fails:E0110 -- testdata/words.txt
+@run examples/toml/ sample exit=0 ret=0 interp=yes -- test.toml
+@run examples/verify/ hash exit=0 interp=fails:clock_monotonic_ns -- testdata/hello.txt
+@run examples/verify/ match exit=0 interp=fails:clock_monotonic_ns -- testdata/hello.txt a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447
+@run examples/verify/ mismatch exit=1 interp=fails:clock_monotonic_ns -- testdata/hello.txt 0000000000000000000000000000000000000000000000000000000000000000
+@run examples/wordfreq/ words exit=0 ret=0 interp=yes -- testdata/words.txt

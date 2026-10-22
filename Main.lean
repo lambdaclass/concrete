@@ -364,13 +364,36 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
     IO.println s!"Compiled {inputPath} -> {outputPath}"
     return 0
 
-/-- Interpret a program via the source-level interpreter (no codegen). -/
-def interpProgram (inputPath : String) : IO UInt32 := do
+/-- The validated Core `--interp` runs: the project's whole module graph when the file is the entry
+    point of the enclosing project (the graph `concrete build` compiles, std included), otherwise
+    the file on its own. Without the project graph every `import std.*` was an unknown module
+    (E0110), so no std-using example could run under the interpreter. -/
+def interpFrontend (inputPath : String) : IO (Option ValidatedCore) := do
+  let canon (p : String) : IO String := do
+    try pure (← IO.FS.realPath ⟨p⟩).toString catch _ => pure p
+  let projectCore ← do
+    match ← findProjectRoot (dirOf inputPath) with
+    | none => pure none
+    | some root =>
+      if !(← System.FilePath.pathExists ⟨root ++ "/src/main.con"⟩) then pure none
+      else if (← canon inputPath) != (← canon (root ++ "/src/main.con")) then pure none
+      else
+        match ← loadProject root (stripTestFns := true) with
+        | .error _ => return none
+        | .ok ctx =>
+          match Pipeline.monomorphize ctx.validCore with
+          | .error ds =>
+            IO.eprintln (renderDiagnostics ds (sourceMap := ctx.allSrcMap))
+            return none
+          | .ok _ => pure (some ctx.validCore)
+  match projectCore with
+  | some vc => return some vc
+  | none =>
   let source ← readFile inputPath
   match ← Pipeline.runFrontend inputPath source resolveAllModules with
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
-    return 1
+    return none
   | .ok (_, _, validCore, _) =>
     -- The interpreter runs the generic Core, but a program the compiler would
     -- reject at the post-mono boundary must not run here either (bug 088: a
@@ -379,24 +402,50 @@ def interpProgram (inputPath : String) : IO UInt32 := do
     match Pipeline.monomorphize validCore with
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
-      return 1
-    | .ok _ =>
-    let run := Interp.interpret validCore.coreModules
-    -- Program output first, whatever happened next: a program that prints and then traps
-    -- printed that output, natively and here (D13).
-    IO.print run.out
-    match run.result with
-    | .error msg =>
-      IO.eprintln msg
-      return 1
-    | .ok retVal =>
-      -- Match compiled binary contract byte-for-byte: the return value on its own line
-      -- after the output — but ONLY when `main` returns a value. A Unit `main` prints no
-      -- value line, exactly like the compiled binary.
-      match retVal with
-      | some n => IO.println s!"{n}"
-      | none => pure ()
-      return 0
+      return none
+    | .ok _ => return some validCore
+
+/-- Interpret a program via the source-level interpreter (no codegen), with `args` as its
+    command-line arguments after `argv[0]` (`--interp -- a b`) and standard input read up front
+    when it is not a terminal. -/
+def interpProgram (inputPath : String) (args : List String := []) : IO UInt32 := do
+  let some validCore ← interpFrontend inputPath | return 1
+  let stdinH ← IO.getStdin
+  let stdinIsTty ← stdinH.isTty
+  let stdin ← if stdinIsTty then pure ByteArray.empty else stdinH.readBinToEnd
+  -- stdout's buffering follows the C library's rule: line-buffered on a terminal, else full.
+  let stdoutIsTty ← (← IO.getStdout).isTty
+  let run := Interp.interpret validCore.coreModules args stdin (stdoutIsTty := stdoutIsTty)
+    (stdinIsTty := stdinIsTty)
+  -- The program's output first, in the order it reached each descriptor, whatever happened
+  -- next: a program that prints and then traps printed that output, natively and here (D13).
+  let out ← IO.getStdout
+  let err ← IO.getStderr
+  let mut errEndsLine := true
+  for (fd, bytes) in run.events do
+    if fd == 1 then
+      out.write bytes; out.flush
+    else
+      err.write bytes; err.flush
+      if bytes.size > 0 then errEndsLine := bytes[bytes.size - 1]! == 10
+  match run.outcome with
+  | .failed msg =>
+    -- On a line of its own, so a gate can tell the interpreter's diagnostic from the program's
+    -- own stderr.
+    if !errEndsLine then IO.eprintln ""
+    IO.eprintln msg
+    return 1
+  | .exited status =>
+    -- `exit(status)`: the process status is its low eight bits, as for the binary.
+    return (status % 256).toNat.toUInt32
+  | .returned retVal =>
+    -- Match compiled binary contract byte-for-byte: the return value on its own line
+    -- after the output — but ONLY when `main` returns a value. A Unit `main` prints no
+    -- value line, exactly like the compiled binary.
+    match retVal with
+    | some n => IO.println s!"{n}"
+    | none => pure ()
+    return 0
 
 /-- Compile and run tests: Parse → ... → EmitSSA (test mode) → clang → run -/
 def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO UInt32 := do
@@ -4252,6 +4301,8 @@ def main (args : List String) : IO UInt32 := do
     compileSSA inputPath "" true
   | [inputPath, "--interp"] =>
     interpProgram inputPath
+  | inputPath :: "--interp" :: "--" :: progArgs =>
+    interpProgram inputPath progArgs
   | [inputPath, "--emit-core"] =>
     compileAndEmit inputPath "core"
   | [inputPath, "--emit-ssa"] =>

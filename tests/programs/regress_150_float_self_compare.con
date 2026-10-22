@@ -1,4 +1,4 @@
-// Bug 139: SSA cleanup folded a float self-comparison as if it were an integer one, so
+// Bug 150: SSA cleanup folded a float self-comparison as if it were an integer one, so
 // `x != x` was false and `x == x` true for a NaN `x` (the guard tested the comparison's
 // result type, bool, not the operand type). Expected 1 (only `nan != nan` holds); the binary
 // exited 10 and `--interp` printed 1.

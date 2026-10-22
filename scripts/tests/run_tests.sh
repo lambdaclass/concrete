@@ -1593,10 +1593,11 @@ done
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
 # Bugs 119 and 120 (fixed by batch 2's interpreter changes) and 117, 118, 128 and 139 (the
-# interpreter-coverage pass): the interpreter agrees with the binary on each reproducer.
+# interpreter-coverage pass, with 144): the interpreter agrees with the binary on each reproducer.
 for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref \
             bug117_interp_module_const bug118_interp_nested_module_import \
-            bug128_interp_int_to_float_identity bug139_float_self_compare_fold; do
+            bug128_interp_int_to_float_identity bug150_float_self_compare_fold \
+            bug152_string_trim_empty; do
     r119_src="tests/regressions/$r119/repro.con"
     r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
     r119_n=""
@@ -7827,8 +7828,12 @@ run_ok "$TESTDIR/regress_116_vec_push_first_field.con" 42
 # Bug 133 (silent): `&mut (*p).n` borrowed the field of a copy of `*p`, so the
 # write was lost (binary 39, interpreter 42).
 run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
-# Bug 139: a float self-comparison is not folded (x != x is true for NaN).
-run_ok "$TESTDIR/regress_139_float_self_compare.con" 1
+# Bug 150: a float self-comparison is not folded (x != x is true for NaN).
+run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
+# Bug 152: string_trim("") is the empty string (it was one byte, read past the source).
+run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
+# Bug 151 (contained): two nested modules' functions with one flattened name are refused (E0299).
+run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

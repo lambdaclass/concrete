@@ -1,6 +1,6 @@
 // Floating point, interpreter == binary (the interpreter-coverage pass, 2026-10-21).
 // Bug 128: an integer → float conversion rounds to the nearest representable value
-// (2^53 + 1 → 2^53 as f64; 2^24 + 1 → 2^24 as f32). Bug 139: `x != x` is true and `x == x`
+// (2^53 + 1 → 2^53 as f64; 2^24 + 1 → 2^24 as f32). Bug 150: `x != x` is true and `x == x`
 // false for a NaN `x` (the SSA cleanup folded both for floats). Also: the checked float →
 // integer conversion truncates toward zero, `%` is C fmod (the dividend's sign), an f32
 // literal is the binary32 value nearest the decimal, and the ordered comparisons are false

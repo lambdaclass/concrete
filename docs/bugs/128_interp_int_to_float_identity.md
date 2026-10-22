@@ -48,7 +48,7 @@ or rounds. Float literals, `+ - * / %` (`%` is C `fmod`, computed exactly), nega
 comparisons (ordered, except unordered `!=`) are modelled too, so `examples/snippets/floats.con`
 runs. The reproducer prints 2, as the binary exits 2. Permanent legs: `run_tests.sh`'s
 interp-vs-native loop over fixed reproducers and `tests/codegen/float_semantics.con` in
-`check_codegen_differential.sh`. The first float probe found bug 139 (the binary folded `x != x`
+`check_codegen_differential.sh`. The first float probe found bug 150 (the binary folded `x != x`
 to false for a NaN `x`).
 
 ## Structural cause

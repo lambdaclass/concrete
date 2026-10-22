@@ -1,4 +1,4 @@
-# Bug 139 — SSA cleanup folds `x != x` to false (and `x == x` to true) for a float `x`
+# Bug 150 — SSA cleanup folds `x != x` to false (and `x == x` to true) for a float `x`
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)
 **Found:** 2026-10-21, by the interpreter-coverage pass: once `--interp` could run floats
@@ -8,7 +8,7 @@ is always false in the binary, so a NaN passes every such check.
 
 ## Reproducer
 
-`tests/regressions/bug139_float_self_compare_fold/repro.con`:
+`tests/regressions/bug150_float_self_compare_fold/repro.con`:
 
 ```con
 fn mk(z: f64) -> f64 { return z / z; }
@@ -37,7 +37,7 @@ the result type is the operand type.
 ## Fix
 
 The four self-comparison rules test the operand's type (`lhs.ty`). The reproducer exits 1 natively
-and prints 1 under `--interp`. Permanent legs: `tests/programs/regress_139_float_self_compare.con`
+and prints 1 under `--interp`. Permanent legs: `tests/programs/regress_150_float_self_compare.con`
 (`run_ok` 1 in `run_tests.sh`), the reproducer in `run_tests.sh`'s interp-vs-native loop, and
 `tests/codegen/float_semantics.con` in `check_codegen_differential.sh` (NaN `==`, `!=`, `<`, `>=`).
 

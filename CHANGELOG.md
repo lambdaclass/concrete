@@ -139,14 +139,34 @@ can be called (bug 118). A call spelling now resolves per calling module the way
 resolves it, and any ambiguity is refused instead of being settled by list order. Floats are
 modelled in IEEE `f64`/`f32` (bug 128). An integer-to-float cast rounds to nearest-even, a
 float-to-integer cast is the checked conversion, and `%` is C `fmod`. `return` from a call argument
-or a struct-literal field now leaves the function, as it does natively (D4). Output printed before
-a trap is kept, so a trapping run's stdout can be compared too (D13). The first float programs
-exposed bug 139, silent wrong code in the binary: SSA cleanup folded `x != x` to false and
+or a struct-literal field now leaves the function, as it does natively (D4). A trapping run's
+stdout can now be compared (D13): the interpreter models the C library's stdout buffer, which
+`abort` flushes on Darwin and glibc does not, and orders `write(1, ..)` output ahead of
+still-buffered `print_*` output as the binary does. The first float programs
+exposed bug 150, silent wrong code in the binary: SSA cleanup folded `x != x` to false and
 `x == x` to true for a float `x`, because its float guard read the comparison's `bool` result type
 instead of the operand type. That fold is fixed. New differential legs in
 `check_codegen_differential.sh` (`float_semantics`, `return_in_value_position`, and
 `print_then_trap`, which compares the output before the trap). Four examples move to
 `interp=yes`: `constants`, `floats`, `import` and `project`.
+
+The interpreter now has a typed heap. It covers `alloc`/`free`/`Heap<T>`, `malloc`/`realloc`/`free`
+and raw pointers with element-sized arithmetic. A pointer cast to an integer stays a symbolic
+address: offset arithmetic works on it, and any other use is refused. `String` is the runtime's
+`{ptr, len, cap}` struct over a heap buffer, and each string builtin follows its `EmitBuiltins`
+code. A fixed table models the C functions the corpus calls: memory functions, stdio, `FILE *`
+over an in-run overlay (the host's files are read but never written), argv, stdin, `getenv` and a
+few libm functions. Any other foreign function is refused. So are uninitialized or reinterpreted
+memory, use after free and host values such as the clock: the interpreter never makes up a value
+for them. On a project's entry point, `concrete src/main.con --interp -- args` interprets the
+whole module graph `concrete build` compiles, std included, with the program's arguments and
+stdin. `check_example_outputs.sh` runs the interpreter with each case's arguments and stdin, in its
+own scratch copy of the example. Interpreter/native agreement on the example manifest went from 89
+of 149 cases to 144. The remaining five are refused for a stated reason: four read the clock, and
+one reads a union through an inactive field. Two more native defects surfaced. Bug 152 (fixed):
+`string_trim("")` returned a one-byte string holding the byte past its source. Bug 151: `a.b_f` and `a_b.f`
+flattened to one name, and the binary's `a_b::f()` ran the other function. The interpreter refused
+that call, and main's E0299 containment for bugs 097/098 now refuses the program too.
 
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
