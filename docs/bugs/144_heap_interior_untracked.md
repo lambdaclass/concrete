@@ -67,7 +67,9 @@ positive control `regress_144_heap_node_destructure.con` (`*h` and bound `free(h
 both destructors run, `free` of a Copy pointee; prints `12 7`). An interpreter leg asserts both
 reproducers are refused by both engines.
 
-Migration: `std/` 0, `examples/` 0, `tests/programs/` 22 files: 19 heap tests whose pointee was a
+Migration: `std/` 0, `examples/` 0, `tests/programs/` 23 files (`regress_126_heap_ref_one_hop.con`,
+which landed with bug 126 after this branch began, takes its `Cell<Int>` back from `free` and
+destructures it): 19 heap tests whose pointee was a
 plain-data struct (only scalar fields, no `Destroy`) now declare it `struct Copy` (their subject is
 heap ownership, not the struct's linearity), and three heap-node tests
 (`complex_recursive_list`, `complex_recursive_tree`, `complex_recursive_mutual`) replaced

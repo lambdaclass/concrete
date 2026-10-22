@@ -417,6 +417,17 @@ private def findLoopByLabel (label : Option String) : LowerM (Option LoopInfo) :
     | some info => return some info
     | none => currentLoop
 
+/-- Bug 149: how many loops a `break`/`continue` with this label leaves (1 for an unlabelled one,
+    or for a label naming the innermost loop). -/
+private def loopsExitedBy (label : Option String) : LowerM Nat := do
+  match label with
+  | none => return 1
+  | some lbl =>
+    let s ← getState
+    match s.loopStack.findIdx? (fun info => info.loopLabel == some lbl) with
+    | some i => return i + 1
+    | none => return 1
+
 /-- Record a break edge on a specific loop (identified by exitLabel). -/
 private def addBreakEdgeToLoop (vars : List (String × SVal)) (srcLabel : String) (targetExitLabel : String) : LowerM Unit := do
   let s ← getState
@@ -1632,11 +1643,18 @@ private partial def addDeferredToCurrentScope (body : CExpr) : LowerM Unit := do
 
 /-- Emit deferred calls for scopes being exited by break/continue.
     Stops before the nearest loop marker or outer function scope. -/
-private partial def emitDeferredUntilLoop : LowerM Unit := do
+private partial def emitDeferredUntilLoop (loopsToExit : Nat := 1) : LowerM Unit := do
+  -- Bug 149 (Codex review): a labelled `break 'outer` / `continue 'outer` leaves every loop up to
+  -- the labelled one, so the deferred calls of every block inside it run, not only those inside
+  -- the innermost loop. `loopsToExit` loop markers are crossed before stopping.
   let s ← get
+  let mut remaining := loopsToExit
   for frame in s.scopeStack do
     match frame.kind with
-    | .loop | .function => break
+    | .function => break
+    | .loop =>
+      remaining := remaining - 1
+      if remaining == 0 then break
     | .block => emitFrameDeferredCalls frame
 
 /-- Address of a place expression, for `&place` / `&mut place`. Returns the
@@ -2183,7 +2201,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         let bVal ← coerceVal bVal info.resultTy "bcast."
         emit (.store bVal (.reg slot info.resultTy))
       | _, _ => pure ()
-      emitDeferredUntilLoop
+      emitDeferredUntilLoop (← loopsExitedBy breakLabel)
       let vars ← snapshotVars
       let label ← getCurrentLabel
       addBreakEdgeToLoop vars label info.exitLabel
@@ -2194,7 +2212,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     match ← findLoopByLabel contLabel with
     | some info =>
       let target := if info.continueTarget != "" then info.continueTarget else info.headerLabel
-      emitDeferredUntilLoop
+      emitDeferredUntilLoop (← loopsExitedBy contLabel)
       let vars ← snapshotVars
       let label ← getCurrentLabel
       addContinueEdgeToLoop vars label info.headerLabel

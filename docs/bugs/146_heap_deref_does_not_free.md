@@ -42,7 +42,8 @@ method's receiver mode is known), so `(*h).take()` is refused as well; the spell
 (`error_091_norm_paren_heap_load.con` now expects E0290).
 `regress_146_heap_deref_frees.con` (run, prints 42), `error_146_deref_heap_place_write.con`,
 `error_146_deref_heap_field_read.con`, and a `run_tests.sh` leg asserting the reproducer's emitted
-SSA calls `@free`. Migration: 0 sites.
+SSA calls `@free`. A cast operand is a value, so `(*h) as i32` moves the value out and frees
+(`regress_146_heap_deref_cast.con`; Codex review). Migration: 0 sites.
 
 ## Structural cause
 

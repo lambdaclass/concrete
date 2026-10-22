@@ -509,7 +509,10 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     match info.ty with
     | .ref _ | .refMut _ => continue
     | _ => pure ()
-    if info.state == .consumed || info.state == .reserved then continue
+    -- A borrow block freezes its owner; the owner's own state is the one before the freeze
+    -- (a `defer` registered before the block still runs on this return; Codex review).
+    let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+    if st == .consumed || st == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
@@ -1960,7 +1963,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- so an ILLEGAL `s as Int` reports "cannot cast", not a consume error.
     -- A literal operand gets the shared cast-operand hint (bug 088): `Uint` for a
     -- literal only `Uint` can hold, otherwise none (defaulted, range-checked `Int`).
-    let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) .place
+    -- A heap dereference is a move out of the cell, never a place (bug 146): `(*h) as i32`
+    -- checks it as a value (Codex review).
+    let castMode : UseMode := match stripParens inner with
+      | .deref _ _ => .value
+      | _ => .place
+    let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) castMode
     -- CoreCheck validates cast legality and capability requirements. The target is returned
     -- RESOLVED, so a reference spelled through an alias (`x as R`, `type R = &P`) is seen as a
     -- reference by every check downstream (normalized place rule).
@@ -2146,6 +2154,16 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | none => pure ()
 
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
+  -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
+  -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
+  -- the initializer's branch chain (Codex review: `a[if c { return 7; } else { 0 }] = v`).
+  let destOperands : List Expr := match stmt with
+    | .arrayIndexAssign _ a i _ => [a, i]
+    | .derefAssign _ t _ => [t]
+    | .fieldAssign _ o _ _ => [o]
+    | _ => []
+  if let some (kw, sp) := firstOperandEscape? 0 [] destOperands then
+    throwCheck (.exitInOperand kw "an assignment's destination") (some sp)
   match stmt with
   | .letDecl _ name mutable ty value isGhost =>
     -- Bug 147: an erased binding may not move a runtime value (see `.assert_`).
@@ -2652,7 +2670,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Save state and freeze the original variable
       let savedState := varInfo.state
       let vars' := env.vars.map fun (n, vi) =>
-        if vi.uid == varInfo.uid then (n, { vi with state := .frozen })
+        if vi.uid == varInfo.uid then (n, { vi with state := .frozen, frozenFrom := some savedState })
         else (n, vi)
       setEnv { env with vars := vars' }
       -- Add reference binding and track for escape analysis

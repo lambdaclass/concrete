@@ -1,0 +1,7 @@
+// Bug 146 (Codex review): `(*h) as i32` moves the value out of the cell (a value, not a place).
+fn main() with(Alloc, Console) -> Int {
+    let h: Heap<Int> = alloc(41);
+    let n: i32 = (*h) as i32;
+    print_int((n + 1) as Int);
+    return 0;
+}

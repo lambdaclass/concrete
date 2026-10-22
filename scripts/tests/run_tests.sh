@@ -1777,6 +1777,7 @@ run_err "$TESTDIR/error_142_method_arg_return.con"     "(E0278)"
 run_err "$TESTDIR/error_142_break_in_arg.con"          "(E0278)"
 run_err "$TESTDIR/error_142_deref_operand_return.con"  "(E0278)"
 run_err "$TESTDIR/error_142_for_cond_break.con"        "(E0278)"
+run_err "$TESTDIR/error_142_assign_index_return.con"   "(E0278)"
 run_ok  "$TESTDIR/regress_142_exits_allowed.con" "1 4 5 2 0" 0
 r142_i=$($COMPILER "$TESTDIR/regress_142_exits_allowed.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r142_i" = "1 4 5 2 00" ]; then
@@ -1842,6 +1843,9 @@ run_err "$TESTDIR/error_149_return_in_borrow_block.con"         "(E0208)"
 run_err "$TESTDIR/error_149_labelled_break_skips.con"           "(E0210)"
 run_err "$TESTDIR/error_149_labelled_continue_skips.con"        "(E0211)"
 run_ok  "$TESTDIR/regress_149_exits_accounted.con" "9" 0
+run_ok  "$TESTDIR/regress_149_labelled_exit_runs_defers.con" "3" 0
+run_ok  "$TESTDIR/regress_149_return_in_borrow_with_defer.con" "42" 0
+run_ok  "$TESTDIR/regress_146_heap_deref_cast.con" "42" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
     r144_i=$($COMPILER "$r144" --interp 2>&1 || true)

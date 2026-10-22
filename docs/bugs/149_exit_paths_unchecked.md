@@ -46,11 +46,21 @@ whatever their label.
   not a `ghost let`) must be consumed or reserved by a pending `defer` (E0208).
 - `TypeEnv.loopLabelDepths` records each label's loop depth; a labelled `break`/`continue` checks
   the locals of every loop it exits (E0210 / E0211).
+- `Lower`'s `emitDeferredUntilLoop` unwinds the deferred calls of every block a labelled
+  `break`/`continue` leaves (`loopsExitedBy`), not only those inside the innermost loop (Codex
+  review: `'outer: while .. { defer free(h); while true { break 'outer; } }` never released `h`;
+  the interpreter already ran them). `regress_149_labelled_exit_runs_defers.con` (prints 3 in both
+  engines).
+- The return check sees through a borrow block's freeze (`VarInfo.frozenFrom`), so a `return`
+  inside a borrow block whose owner has a pending `defer` is accepted
+  (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines).
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted
   `newtype N = Num` with `type Num = i64` judged non-Copy; such a newtype cannot currently be
   constructed, CoreCheck refuses the cast, so this had no reachable effect).
 
-Fixtures (`run_tests.sh`): `error_149_loop_cond_moves_outer.con` (E0207),
+Migration: 1 test (`pressure_interleaved_linear.con` returned inside a borrow block while `r1` was
+live; the sum is now carried out of the block). Fixtures (`run_tests.sh`):
+`error_149_loop_cond_moves_outer.con` (E0207),
 `error_149_return_after_unreached_defer.con`, `error_149_return_in_borrow_block.con` (E0208),
 `error_149_labelled_break_skips.con` (E0210), `error_149_labelled_continue_skips.con` (E0211), and
 the positive control `regress_149_exits_accounted.con` (prints 9).

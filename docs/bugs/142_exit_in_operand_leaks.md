@@ -60,7 +60,8 @@ Fixtures (`run_tests.sh`): `error_142_struct_field_return.con`, `error_142_call_
 `error_142_array_elem_return.con`, `error_142_enum_field_return.con`,
 `error_142_operand_return.con`, `error_142_method_arg_return.con`, `error_142_break_in_arg.con`
 (D15), `error_142_deref_operand_return.con` (dereference, borrow and field-access bases are operands
-too) and `error_142_for_cond_break.con` (a `for` condition is outside its loop; both from Codex
+too) `error_142_for_cond_break.con` (a `for` condition is outside its loop) and
+`error_142_assign_index_return.con` (an assignment's destination is an operand; all three from Codex
 review), and the positive control `regress_142_exits_allowed.con` (let-initializer return, tail
 `return if`, statement match, a `break` bound inside the operand; native and `--interp` agree).
 

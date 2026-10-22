@@ -70,6 +70,9 @@ structure VarInfo where
   -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
   -- may consume it (no runtime obligation is discharged).
   isGhost : Bool := false
+  -- Bug 149: the state a borrow block's owner had when the block froze it (read by the
+  -- return check, which must see a pending `defer` through the freeze).
+  frozenFrom : Option VarState := none
   deriving Repr
 
 structure TypeEnv where
