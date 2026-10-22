@@ -173,10 +173,19 @@ the invocation can read, and any invocation it cannot cover runs uncached.
 - **The input's closure:** the project closure, found the way `findProjectRoot` finds it (every
   file under the nearest `Concrete.toml`, or under the input's directory when there is no
   manifest). Each file is hashed separately.
-- **What the compiler loads:** the resolved std tree and `proofs/`.
+- **What the compiler loads:** the std tree, resolved in the same candidate order as
+  `findBuiltinStd`, and `proofs/`.
 - **The Lean workspace and environment:** `lean-toolchain`, `lakefile.toml` and
-  `lake-manifest.json` (VC discharge runs `lake env lean` in the cwd), plus `PATH` and the resolved
-  path of every tool the compiler can spawn.
+  `lake-manifest.json` (VC discharge runs `lake env lean` in the cwd), `PATH`, every
+  `LEAN*`/`LAKE*`/`ELAN*` variable, and every tool the compiler can spawn, by content. A
+  `/nix/store` path names its content; any other tool is hashed. `lake` and `lean` must be
+  `/nix/store` paths, because an elan launcher's bytes do not identify the toolchain it selects.
+  Outside the nix devshell, VC reports are therefore not cached.
+
+**Publication.** A result is stored only if nothing the key covers was modified while the compiler
+ran. The check uses a start marker that every covered file must not be newer than, so an edit made
+and reverted inside one compile is caught. The recomputed key must also equal the first one. Each
+entry is a single file, replaced only by rename, so a reader always sees exactly one generation.
 
 **What is cached.** Only the allowlisted pure reports `vcs`, `obligation-ledger` and `audit` are
 cached. Each was checked to be deterministic run-to-run on HMAC.
@@ -192,7 +201,8 @@ nonce, and the replay is the evidence), model-diff, traces, and projects with `[
 - editing the input, another project file, a std file or the compiler's bytes each invalidates
   the entry;
 - cwd and argv are separate keys;
-- the shapes the key cannot cover bypass the cache.
+- the shapes the key cannot cover bypass the cache;
+- an input edited and reverted while the compiler runs is not stored (K11).
 
 **Known limit.** A Lean discharge that fails for a reason outside the key, for example the
 process being killed under memory pressure, is stored like any other result. If a cached report

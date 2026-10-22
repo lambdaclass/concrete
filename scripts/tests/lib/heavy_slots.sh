@@ -72,35 +72,54 @@ _heavy_discard() {
   mv "$1" "$trash" 2>/dev/null && rm -rf "$trash" 2>/dev/null
 }
 
-# THE MUTEX IS OWNED BY A TOKEN (pid, start time, random), and only two things remove it: its owner,
-# and a waiter that finds the owner DEAD. A live owner is never evicted by age (a suspended process
-# keeps it), and an ownerless directory is reclaimed only after 10 s (a crash between mkdir and the
-# owner write). Reclaim renames the directory away FIRST and then re-reads the owner it actually
-# took: if that is not the dead owner it judged (another waiter reclaimed first and a live process
-# now holds it), it is put back. What remains is a three-way race on an already-dead mutex in which
-# the put-back loses to a third mkdir; the cost is one critical section run twice, i.e. at worst one
-# extra slot holder for one run — load, never a verdict — and it is stated rather than hidden.
+# THE MUTEX IS OWNED BY A TOKEN (pid, start time, random). Only two things remove it: its owner, and
+# a waiter that finds the owner DEAD while holding the RECLAIM LOCK (`.reclaim`). A live owner is
+# never evicted by age (a suspended process keeps it); an ownerless directory (a crash between mkdir
+# and the owner write) is reclaimed after 10 s.
+#
+# WHY RECLAIM IS SERIALIZED: two waiters that both saw the dead owner could otherwise both rename
+# `.mutex` away, the second one taking a LIVE successor's mutex. Under `.reclaim`, the owner is
+# re-read; the dead owner cannot change it and no other process can remove it, so "still the dead
+# owner" holds until the rename. The reclaim lock itself is recovered the same way when its holder
+# is dead. What remains needs a dead reclaim-lock holder AND two concurrent recoveries of it; its
+# cost would be one extra slot holder for one run (load, never a verdict), and it is stated here.
 _HEAVY_MUTEX_TOKEN=""
 _heavy_mutex_owner() { cat "$1/owner" 2>/dev/null; }
+_heavy_token_dead() { # "<pid> <start> <rand>" -> 0 when that process no longer exists
+  local pid start now
+  pid="${1%% *}"; start="$(printf '%s' "$1" | cut -d' ' -f2)"
+  now="$(_heavy_pid_start "$pid" | tr ' ' '_')"
+  [ -z "$now" ] || [ "$now" != "$start" ]
+}
+_heavy_reclaim_stale() { # $1 = the mutex owner string observed (may be empty)
+  local m="$_HEAVY_DIR/.mutex" r="$_HEAVY_DIR/.reclaim" own rown tok
+  tok="$$ $(_heavy_pid_start "$$" | tr ' ' '_') $RANDOM$RANDOM"
+  if ! mkdir "$r" 2>/dev/null; then
+    rown="$(_heavy_mutex_owner "$r")"
+    if { [ -n "$rown" ] && _heavy_token_dead "$rown"; } || { [ -z "$rown" ] && [ "$(_heavy_age "$r")" -gt 10 ]; }; then
+      [ "$(_heavy_mutex_owner "$r")" = "$rown" ] && _heavy_discard "$r"
+    fi
+    return 0   # someone else is reclaiming; the caller simply retries
+  fi
+  printf '%s\n' "$tok" > "$r/owner"
+  own="$(_heavy_mutex_owner "$m")"
+  if [ -d "$m" ] && [ "$own" = "$1" ]; then
+    if { [ -n "$own" ] && _heavy_token_dead "$own"; } || { [ -z "$own" ] && [ "$(_heavy_age "$m")" -gt 10 ]; }; then
+      _heavy_discard "$m"
+    fi
+  fi
+  [ "$(_heavy_mutex_owner "$r")" = "$tok" ] && _heavy_discard "$r"
+  return 0
+}
 _heavy_mutex_acquire() {
-  local m="$_HEAVY_DIR/.mutex" tries=0 own pid start now grab
+  local m="$_HEAVY_DIR/.mutex" tries=0 own
   _HEAVY_MUTEX_TOKEN="$$ $(_heavy_pid_start "$$" | tr ' ' '_') $RANDOM$RANDOM"
   while ! mkdir "$m" 2>/dev/null; do
     tries=$((tries+1))
     if [ $((tries % 20)) -eq 0 ]; then
       own="$(_heavy_mutex_owner "$m")"
-      if [ -n "$own" ]; then
-        pid="${own%% *}"; start="$(printf '%s' "$own" | cut -d' ' -f2)"
-        now="$(_heavy_pid_start "$pid" | tr ' ' '_')"
-        if [ -z "$now" ] || [ "$now" != "$start" ]; then
-          grab="$_HEAVY_DIR/.mutex.reclaim.$$.$RANDOM"
-          if mv "$m" "$grab" 2>/dev/null; then
-            if [ "$(_heavy_mutex_owner "$grab")" = "$own" ]; then rm -rf "$grab"
-            else mv "$grab" "$m" 2>/dev/null || rm -rf "$grab"; fi
-          fi
-        fi
-      elif [ "$(_heavy_age "$m")" -gt 10 ]; then
-        _heavy_discard "$m"
+      if { [ -n "$own" ] && _heavy_token_dead "$own"; } || { [ -z "$own" ] && [ "$(_heavy_age "$m")" -gt 10 ]; }; then
+        _heavy_reclaim_stale "$own"
       fi
     fi
     [ "$tries" -lt 1200 ] || { echo "heavy-slots: could not take $m" >&2; return 1; }

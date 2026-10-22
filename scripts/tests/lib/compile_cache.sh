@@ -133,7 +133,11 @@ _cc_key() {
     tp="$(realpath "$tp" 2>/dev/null || readlink -f "$tp" 2>/dev/null || echo "$tp")"
     case "$tp" in
       /nix/store/*) tools="$tools $tl=$tp" ;;
-      *) [ -f "$tp" ] || { CCACHE_LAST="bypass:tool($tl)"; return 1; }
+      # lake and lean DECIDE the VC statuses. Outside /nix/store they are usually elan launchers,
+      # whose bytes do not identify the toolchain they select (directory overrides, relinked
+      # toolchains), so the selected checker cannot be named: not cached.
+      *) case "$tl" in lake|lean) CCACHE_LAST="bypass:toolchain-not-pinned($tl)"; return 1 ;; esac
+         [ -f "$tp" ] || { CCACHE_LAST="bypass:tool($tl)"; return 1; }
          tools="$tools $tl=$tp:$(_cc_sha_file "$tp")" ;;
     esac
   done
@@ -157,59 +161,70 @@ _cc_key() {
     echo "concrete_std=${CONCRETE_STD:-}"
   } | _cc_sha)"
   [ "${#CCACHE_KEY}" = 64 ] || { CCACHE_LAST="bypass:hash"; return 1; }
+  # Everything hashed above, for the post-compile modification check in ccache_run.
+  CCACHE_WATCH=("$comp_abs" "$proj" "$std" "$repo/proofs")
+  for t in lean-toolchain lakefile.toml lakefile.lean lake-manifest.json; do
+    [ -e "$t" ] && CCACHE_WATCH+=("$(pwd -P)/$t")
+  done
+  return 0
 }
 
 ccache_run() {
   local comp="$1"; shift
-  local key ent rc priv
+  local key ent rc priv hdr ob eb
   if ! _cc_key "$comp" "$@"; then
     CCACHE_BYPASS=$((CCACHE_BYPASS+1))
     if "$comp" "$@"; then return 0; else return $?; fi
   fi
   key="$CCACHE_KEY"
-  ent="$CCACHE_DIR/${key:0:2}/$key"
+  # ONE FILE PER ENTRY: a header line "rc out_bytes err_bytes", then stdout, then stderr. It is
+  # published and replaced only by rename, so a reader that opened it reads exactly one generation,
+  # and a rename onto an existing FILE replaces it (a directory destination would nest instead).
+  ent="$CCACHE_DIR/${key:0:2}/$key.entry"
   mkdir -p "$CCACHE_DIR/${key:0:2}" 2>/dev/null
   priv="$(mktemp -d "$CCACHE_DIR/${key:0:2}/.tmp.XXXXXX" 2>/dev/null)" || {
     CCACHE_BYPASS=$((CCACHE_BYPASS+1)); CCACHE_LAST="bypass:unwritable"
     if "$comp" "$@"; then return 0; else return $?; fi; }
-  # A HIT IS READ IN FULL INTO A PRIVATE COPY BEFORE ANYTHING IS REPLAYED. An entry replaced by a
-  # concurrent refresh between reading `rc` and reading `out` would otherwise replay a partial
-  # result; any failed read falls through to a fresh compile instead.
-  if [ "${CONCRETE_COMPILE_CACHE:-1}" != "refresh" ] \
-     && cp "$ent/rc" "$priv/rc" 2>/dev/null && cp "$ent/out" "$priv/out" 2>/dev/null \
-     && cp "$ent/err" "$priv/err" 2>/dev/null; then
-    rc="$(cat "$priv/rc")"
-    case "$rc" in ''|*[!0-9]*) ;; *)
-      cat "$priv/out"; cat "$priv/err" >&2; rm -rf "$priv"
-      CCACHE_HITS=$((CCACHE_HITS+1)); CCACHE_LAST="hit"
-      return "$rc" ;;
+  if [ "${CONCRETE_COMPILE_CACHE:-1}" != "refresh" ] && cp "$ent" "$priv/e" 2>/dev/null; then
+    hdr="$(head -n 1 "$priv/e")"
+    rc="${hdr%% *}"; ob="$(printf '%s' "$hdr" | cut -d' ' -f2)"; eb="$(printf '%s' "$hdr" | cut -d' ' -f3)"
+    case "$rc$ob$eb" in ''|*[!0-9]*) ;; *)
+      local hl=$(( ${#hdr} + 1 ))
+      if [ "$(wc -c < "$priv/e" | tr -d ' ')" = $(( hl + ob + eb )) ]; then
+        tail -c +$(( hl + 1 )) "$priv/e" | head -c "$ob"
+        tail -c +$(( hl + ob + 1 )) "$priv/e" >&2
+        rm -rf "$priv"
+        CCACHE_HITS=$((CCACHE_HITS+1)); CCACHE_LAST="hit"
+        return "$rc"
+      fi ;;
     esac
   fi
-  rm -f "$priv/rc" "$priv/out" "$priv/err"
+  rm -f "$priv/e"
+  # The start marker is dated one second in the PAST, so a filesystem with whole-second mtimes cannot
+  # hide a write made in the same second as the marker. (Erring early only refuses publication.)
+  local past; past=$(( $(date +%s) - 1 ))
+  : > "$priv/start"
+  touch -t "$(date -d "@$past" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$past" +%Y%m%d%H%M.%S)" "$priv/start" 2>/dev/null
   # Captured without tripping a caller's `set -e`: the diagnostics are replayed either way.
   if "$comp" "$@" >"$priv/out" 2>"$priv/err"; then rc=0; else rc=$?; fi
   cat "$priv/out"; cat "$priv/err" >&2
   CCACHE_MISSES=$((CCACHE_MISSES+1))
-  # PUBLISHED ONLY IF THE INPUTS DID NOT MOVE WHILE THE COMPILER RAN: the key is recomputed after the
-  # run, and a result whose inputs changed underneath it is returned but never stored. (An edit that
-  # is made AND reverted entirely within one compile is not detectable this way; gate inputs are
-  # tracked fixtures that nothing edits mid-run.)
-  if [ "$rc" -lt 128 ] && _cc_key "$comp" "$@" && [ "$CCACHE_KEY" = "$key" ]; then
-    echo "$rc" > "$priv/rc"
-    if [ -e "$ent" ]; then
-      if [ "${CONCRETE_COMPILE_CACHE:-1}" = "refresh" ]; then
-        local old="$CCACHE_DIR/${key:0:2}/.old.$$.$RANDOM"
-        mv "$ent" "$old" 2>/dev/null && rm -rf "$old"
-        mv "$priv" "$ent" 2>/dev/null || rm -rf "$priv"
-      else
-        rm -rf "$priv"   # an equal key is an equal result; a published entry is never deleted
-      fi
-    else
-      mv "$priv" "$ent" 2>/dev/null || rm -rf "$priv"
-    fi
-  else
-    rm -rf "$priv"
+  local watch=("${CCACHE_WATCH[@]}")
+  # PUBLISHED ONLY IF NOTHING THE KEY COVERS MOVED WHILE THE COMPILER RAN: no covered file may be
+  # newer than the start marker (this catches an edit that was made and then reverted during the
+  # compile, which a second hash alone cannot), and the recomputed key must equal the first one.
+  if [ "$rc" -lt 128 ] \
+     && [ -z "$(find "${watch[@]}" -newer "$priv/start" -print 2>/dev/null | head -1)" ] \
+     && _cc_key "$comp" "$@" && [ "$CCACHE_KEY" = "$key" ]; then
+    {
+      printf '%s %s %s\n' "$rc" "$(wc -c < "$priv/out" | tr -d ' ')" "$(wc -c < "$priv/err" | tr -d ' ')"
+      cat "$priv/out" "$priv/err"
+    } > "$priv/e"
+    if [ ! -e "$ent" ] || [ "${CONCRETE_COMPILE_CACHE:-1}" = "refresh" ]; then
+      mv -f "$priv/e" "$ent" 2>/dev/null
+    fi   # else an equal key is an equal result, and the published entry is kept
   fi
+  rm -rf "$priv"
   CCACHE_LAST="miss"
   return "$rc"
 }

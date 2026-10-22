@@ -45,9 +45,13 @@ fi
 TMP_LAKE="$ROOT_DIR/.lake.seed.$$"
 # THE SEED MUST BE A QUIESCENT SNAPSHOT. Lake trusts an artifact whose .trace matches; a copy taken
 # while the source checkout is building could pair an old artifact with a new trace, and the
-# verifying build below would then trust it. So the source's file listing (path, size, mtime) is
-# taken before and after the copy, and any difference discards the copy. This detects a concurrent
-# write during the copy window; it is not a lock, so seed from a checkout that is not building.
+# verifying build below would then trust it. Two checks, neither of them a lock:
+#   * the source's listing (path, size, mtime) before and after the copy must agree, and
+#   * the copy must be BYTE-IDENTICAL to the source after the copy (`diff -r`), so whatever was
+#     copied is exactly one state of the source, never a mix of two states. mtimes alone are not
+#     enough: whole-second times can hide a same-size rewrite.
+# A source that is mid-build at the instant of copying is still not detectable this way, so seed
+# from a checkout that is not building (worktree-new.sh seeds from the checkout it is run in).
 _listing() {
   local fmt_gnu='%n %s %Y' fmt_bsd='%N %z %m'
   if stat -c '%Y' "$SRC/.lake" >/dev/null 2>&1; then
@@ -69,7 +73,7 @@ for how in clone reflink plain; do
   [ "$copied" = 1 ] && break
 done
 if [ "$copied" != 1 ]; then rm -rf "$TMP_LAKE"; echo "lake-seed: copy failed" >&2; exit 1; fi
-if [ "$(_listing)" != "$before" ]; then
+if [ "$(_listing)" != "$before" ] || ! diff -rq "$SRC/.lake" "$TMP_LAKE" >/dev/null 2>&1; then
   rm -rf "$TMP_LAKE"
   echo "lake-seed: $SRC/.lake changed while it was copied (a build is running there); refusing the seed." >&2
   exit 1
