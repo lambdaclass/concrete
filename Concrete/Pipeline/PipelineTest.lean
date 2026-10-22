@@ -358,6 +358,70 @@ def testMonoNestedDestroyVerified : IO UInt32 := do
         return 1
 
 -- ============================================================
+-- Tests: CoreCheck binder agreement (bug 177)
+-- ============================================================
+
+/-- Bug 177: CoreCheck is the independent re-check of elaborated Core, so a value whose
+    Core type differs from its binder's must be refused there even when the source checker
+    let it through (bug 176 did: `let y: u8 = <i32>` reached a binary and printed 300).
+    The front end accepts this program; each case then plants a width confusion directly in
+    its Core, bypassing Check, and requires `coreCheckProgram` to name the binder. -/
+def binderAgreementSource : String :=
+  "mod m { struct P { v: u8 } fn take(x: u8) -> u8 { return x; } " ++
+  "fn narrow(a: i32) -> u8 { let r: u8 = 1; return r; } " ++
+  "fn main() -> Int { let a: i32 = 300; let mut y: u8 = 7; y = 8; " ++
+  "let t: u8 = take(y); let p: P = P { v: y }; let P { v } = p; return 0; } }"
+
+/-- Rewrite each top-level statement of every function in the tree. -/
+partial def mapFnStmts (f : CStmt → CStmt) (m : CModule) : CModule :=
+  { m with functions := m.functions.map (fun fd => { fd with body := fd.body.map f })
+           submodules := m.submodules.map (mapFnStmts f) }
+
+def testCoreCheckBinderAgreement : IO UInt32 := do
+  match frontendNoIO binderAgreementSource with
+  | .error ds =>
+    IO.eprintln "FAIL: corecheck/binder-agreement — frontend refused the valid program"
+    IO.eprintln (renderDiagnostics ds)
+    return 1
+  | .ok (_, _, validCore) =>
+    let wide : CExpr := .ident "a" .i32
+    -- (label, rewrite, a fragment the E0510/E0560 message must contain)
+    let cases : List (String × (CStmt → CStmt) × String × String) := [
+      ("let", fun
+        | .letDecl "y" m ty _ => .letDecl "y" m ty wide
+        | s => s, "E0510", "let 'y'"),
+      ("assign", fun
+        | .assign "y" _ => .assign "y" wide
+        | s => s, "E0510", "assignment to 'y'"),
+      ("call argument", fun
+        | .letDecl "t" m ty (.call c tas [_] rt) => .letDecl "t" m ty (.call c tas [wide] rt)
+        | s => s, "E0510", "argument 1 ('x')"),
+      ("struct field", fun
+        | .letDecl "p" m ty (.structLit n tas [(fname, _)] st) =>
+            .letDecl "p" m ty (.structLit n tas [(fname, wide)] st)
+        | s => s, "E0510", "field 'v'"),
+      ("return", fun
+        | .return_ (some (.ident "r" _)) rt => .return_ (some wide) rt
+        | s => s, "E0560", "expected u8, got i32")]
+    let mut failed := 0
+    for (label, rw, code, frag) in cases do
+      let planted := validCore.coreModules.map (mapFnStmts rw)
+      match coreCheckProgram planted with
+      | .ok () =>
+        IO.eprintln s!"FAIL: corecheck/binder-agreement ({label}) — CoreCheck accepted an i32 value in a u8 binder"
+        failed := failed + 1
+      | .error ds =>
+        if ds.any (fun d => d.code == code && d.message.contains' frag) then pure ()
+        else
+          IO.eprintln s!"FAIL: corecheck/binder-agreement ({label}) — expected {code} naming \"{frag}\""
+          IO.eprintln (renderDiagnostics ds)
+          failed := failed + 1
+    if failed == 0 then
+      IO.println "PASS: corecheck/binder-agreement — let, assignment, argument, field and return refused"
+      return 0
+    else return 1
+
+-- ============================================================
 -- Tests: SSA lowering (isolated)
 -- ============================================================
 
@@ -786,6 +850,12 @@ def main : IO UInt32 := do
   failures := failures + (← testMonoGeneric)
   failures := failures + (← testMonoTrait)
   failures := failures + (← testMonoNestedDestroyVerified)
+  IO.println ""
+
+  -- CoreCheck tests
+  IO.println "--- CoreCheck (hand-planted Core) ---"
+  total := total + 1
+  failures := failures + (← testCoreCheckBinderAgreement)
   IO.println ""
 
   -- SSA Lowering tests

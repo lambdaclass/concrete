@@ -16,6 +16,7 @@
 #   4b. caps via trait-bound dispatch    -> CoreCheck E0586 + Check E0240; re-asserted post-mono (verifyCapsPostMono)
 #   5. unsafe op without capability      -> CoreCheck (core-check)               [Core boundary]
 #   6. returning a second-class reference -> Check                               [front-end]
+#   7. binder type confusion (bug 177)   -> Check E0220; re-asserted by CoreCheck E0510/E0560
 # Classes 4/5 are enforced at the CoreCheck boundary; 3/6 are caught once in
 # Check. Migrating 3/6 to explicit post-mono re-assertion (defense-in-depth) is
 # the staged follow-up. This gate guarantees the OBSERVABLE property regardless
@@ -60,6 +61,14 @@ rejected "class 4: calling a File-capability fn from a pure fn" capmisuse
 # Refused at CoreCheck (E0586); verifyCapsPostMono re-asserts it after Mono.
 emit traitcaps 'mod m { trait Act { fn act(&self) -> Int; } struct Loud { v: Int } impl Act for Loud { fn act(&self) with(Console) -> Int { print_int(777); return self.v; } } fn run<T: Act>(x: &T) -> Int { return x.act(); } fn main() -> Int { let l: Loud = Loud { v: 3 }; let r: Int = run::<Loud>(&l); let Loud { v } = l; return r; } }'
 rejected "class 4b: capability smuggled through a trait-bound generic call" traitcaps
+
+# Bug 177: bug 176's shape. A loop body's shadowing `let mut v0: u8` leaked out of the
+# loop in Check, so `let y: u8 = v0` (the outer i32) passed Check and, with CoreCheck never
+# comparing a let's declared type with its value's, printed 300 from a u8. CoreCheck now
+# refuses it (E0510); once bug 176's fix lands Check refuses it first (E0220). Either way
+# it must never compile.
+emit loopshadow 'mod m { fn main() with(Std) -> Int { let mut v0: i32 = 300; let mut k: i32 = 0; while k < 1 { let mut v0: u8 = 7; v0 = v0 + 1; k = k + 1; } let y: u8 = v0; println(y); return 0; } }'
+rejected "class 7: binder type confusion (u8 binder, i32 value; bug 176 shape)" loopshadow
 
 emit retref 'mod m { fn bad(x: i32) -> &i32 { return &x; } fn main() -> Int { return 0; } }'
 rejected "class 6: returning a second-class reference" retref
