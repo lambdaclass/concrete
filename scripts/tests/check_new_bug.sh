@@ -194,16 +194,18 @@ elif [ "$(ls "$W/docs/bugs" | sort)" = "$recs_before" ] && [ "$(ls "$W/tests/reg
   ok "a failed write after the record exists removes every file it wrote and leaves the views consistent"
 else no "a failed filing left files or stale views behind: $(tr '\n' ' ' < "$TMP/rb.out" | cut -c1-200)"; fi
 chmod 755 "$W/changelog.d"
-# A dangling symlink where the fragment would go is an existing path: refused, and left in place.
+# A dangling symlink where the reproducer directory would go is an existing path: refused by the
+# scaffold's own existence check (no generator reads that path), and left in place.
 nx="$(git -C "$W" ls-remote origin 'refs/bug-reservations/*' | sed -nE 's#.*/([0-9]+)$#\1#p' | sort -n | tail -1)"
 nx="$(printf '%03d' $((10#$nx + 1)))"
-ln -s "$TMP/missing/dir/x" "$W/changelog.d/2026-01-02-bug$nx-symlink-control.md"
+SL="$W/tests/regressions/bug${nx}_symlink_control"
+ln -s "$TMP/missing/dir" "$SL"
 if bash "$NB" "symlink control" > "$TMP/sl.out" 2>&1; then no "filing over a dangling symlink succeeded"
-elif [ -L "$W/changelog.d/2026-01-02-bug$nx-symlink-control.md" ] && grep -qE 'already exists|cannot read' "$TMP/sl.out" \
-     && [ ! -e "$W/tests/regressions/bug${nx}_symlink_control" ]; then
-  ok "a dangling symlink at an output path is refused and left untouched"
-else no "a dangling symlink at the fragment path was not refused cleanly: $(tr '\n' ' ' < "$TMP/sl.out" | cut -c1-200)"; fi
-rm -f "$W/changelog.d/2026-01-02-bug$nx-symlink-control.md"
+elif [ -L "$SL" ] && grep -q "bug${nx}_symlink_control already exists" "$TMP/sl.out" \
+     && ! ls "$W/docs/bugs/${nx}_"* >/dev/null 2>&1; then
+  ok "a dangling symlink at an output path is refused by the existence check and left untouched"
+else no "a dangling symlink at the reproducer path was not refused cleanly: $(tr '\n' ' ' < "$TMP/sl.out" | cut -c1-200)"; fi
+rm -f "$SL"
 if [ "$MIGRATED_HERE" = 0 ]; then
   git init -q -b main "$RAW" && git -C "$RAW" remote add origin "$O"
   refuse "an unmigrated tree" "not migrated" bash "$RAW/scripts/gen/new_bug.sh" "some defect"
