@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof Replay Ready For Lean 4.35's Removed Native Axioms (2026-10-22)
+
+Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and `Lean.trustCompiler` (lean4#14953;
+release notes and `Init/Core.lean` checked at both tags). The re-check probe in
+`Concrete/Proof/Replay.lean` named two of them as double-backtick literals, which must resolve, so on
+4.35 the probe would not compile and every theorem would read `notRun`. The pin stays at 4.34.1.
+
+- The native-trust classifier is one piece of Lean source (`nativeAxiomClassifierSrc`) spliced into
+  the probe: the legacy names as unresolved single-backtick literals, plus the `._native.` axioms
+  `Lean.Meta.nativeEqTrue` mints on both toolchains (unchanged between them). `Lean.ofReduceNat`,
+  previously unrecognised (a theorem on it was refused as a generic failure), is now classified native.
+- `check_kernel_recheck.sh` gains two legs: a scan refusing any resolved reference to a removed name
+  in Lean sources, probes held in strings included; and the classifier compiled on its own under
+  4.34.1 and under 4.35, where `native_decide`, `decide +native` and `bv_decide` proofs must read
+  native, a classical proof must not, and every axiom the toolchain declares must be classified
+  (4.35 declares exactly 4.34.1's set minus the three). CI's checker-gates job installs 4.35 and
+  requires the leg; elsewhere it SKIPs when that toolchain is absent.
+- `check_axiom_inventory.sh` lists `Lean.ofReduceNat` as native trust too; on 4.35 its legacy list
+  matches nothing. Two mutation families (134 -> 136) show the new legs kill a reintroduced resolved
+  literal and a dropped legacy name.
+
 ### External Checker Pins Kept Current; con-leche Single-Threaded (2026-10-22)
 
 con-leche and nanoda, which re-check every theorem outside the Lean kernel, are trust anchors, and

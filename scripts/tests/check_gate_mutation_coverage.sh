@@ -480,7 +480,9 @@ cd "$ROOT_DIR"
 # build is invisible to the role that audits it.
 # 132 -> 134 with bug 088's literal-default-range and post-mono-literal-range families (both
 # killed by check_cast_matrix.sh's both-paths-reject rows).
-EXPECTED_FAMILIES=134
+# 134 -> 136 with the Lean 4.35 readiness families (legacy native names unresolved and complete),
+# both killed by check_kernel_recheck.sh's classifier legs.
+EXPECTED_FAMILIES=136
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1737,8 +1739,21 @@ add "recheck-replays-workspace-closure" "Concrete/Proof/Replay.lean" "check_kern
 # NATIVE EVALUATION IS NAMED, never re-checked: a bv_decide theorem must read native_trust, not a
 # generic failure that hides why the kernel could not re-establish it.
 add "recheck-native-never-rechecked" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
-  $'    if extra.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler\n                           || (a.toString.splitOn "._native.").length > 1) then' \
-  $'    if false && extra.isEmpty then'
+  '    if extra.any _concreteIsNativeAxiom then' \
+  '    if false && extra.isEmpty then'
+
+# LEAN 4.35 READINESS: THE LEGACY NATIVE NAMES STAY UNRESOLVED. A double-backtick literal must resolve,
+# so the probe stops compiling on Lean 4.35 (which removes the name) and every theorem reads notRun.
+# Builds and replays fine on 4.34.1; killed by the removed-name scan (and by the 4.35 leg when present).
+add "recheck-legacy-native-literal-unresolved" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '  [`Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]' \
+  '  [``Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]'
+
+# ...AND COMPLETE. Dropping a legacy name lets a 4.34 theorem resting on it read as a generic failure
+# instead of native trust; killed by the 4.34.1 leg, where that toolchain axiom is then unclassified.
+add "recheck-legacy-native-list-complete" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '  [`Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]' \
+  '  [`Lean.ofReduceBool, `Lean.trustCompiler]'
 
 # ONE VERDICT PER THEOREM. Taking the first of two lines lets an injected verdict decide.
 add "recheck-verdict-unambiguous" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
@@ -1795,7 +1810,7 @@ add "consumer-acceptance-requires-recheck" "Concrete/Proof/CheckerPolicy.lean" "
 # declared axiom re-check (the kernel takes axioms on trust) — the hole the upgrade exposed.
 add "recheck-allowlists-kernel-axioms" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
   '    let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))' \
-  '    let extra := axs.filter (fun a => a == ``Lean.ofReduceBool || (a.toString.splitOn "._native.").length > 1)'
+  '    let extra := axs.filter _concreteIsNativeAxiom'
 
 # THE REPORT MUST USE THE RULE. `acceptedNow` is tested on synthetic inputs everywhere; this family
 # keeps PRODUCTION covered: bypassing the call (acceptance from policy alone) must fail a gate. Killed by

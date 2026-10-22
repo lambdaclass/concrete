@@ -30,7 +30,12 @@ and LRAT certificate check run as compiled Lean. A theorem proved "by
 kernel-checked bitblasting" is therefore *not* kernel-only: the kernel checks
 the reflection, but the bit-blasting and certificate validation are native
 code. (Lean 4.34 spells this trust as a fresh axiom per call rather than
-`Lean.ofReduceBool`; see below.)
+`Lean.ofReduceBool`; see below. Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and
+`Lean.trustCompiler` altogether (lean4#14953), leaving only the per-call `._native.` axioms. The
+replay's classifier and the axiom-inventory gate recognise both spellings, refer to the removed names
+only as unresolved literals, and `check_kernel_recheck.sh` compiles the classifier under 4.34.1 and
+4.35 against real `native_decide`, `decide +native` and `bv_decide` proofs and each toolchain's full
+axiom set, so a bump cannot silently reclassify native trust.)
 
 Wherever a report or doc says `proved_by_kernel_decision (bv_decide)`,
 read it as "kernel-checked reflection over natively executed bit-blasting

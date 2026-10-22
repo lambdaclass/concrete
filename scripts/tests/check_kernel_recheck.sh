@@ -16,7 +16,11 @@
 #     the SAME module (the re-check is per constant, so an unrelated bad declaration is not contagious);
 #   - a theorem resting on native evaluation (`bv_decide`) is reported `native_trust`, never
 #     re-checked, and mints nothing;
-#   - a missing, duplicated or foreign-nonce re-check line is not a verdict.
+#   - a missing, duplicated or foreign-nonce re-check line is not a verdict;
+#   - native trust is classified identically on Lean 4.34.1 and Lean 4.35 (which removes
+#     Lean.ofReduceBool/ofReduceNat/trustCompiler): no Lean source resolves a removed name, and the
+#     probe's classifier, compiled alone on each toolchain, reads real native proofs as native and
+#     accounts for every axiom the toolchain declares.
 #
 # WHAT IT DOES NOT ESTABLISH: modules shipped with the toolchain are not replayed (they are part of
 # the checker build `CheckerIdentity` names); and the verdict line is correlated with the run by
@@ -160,6 +164,100 @@ if grep -q '^TOKEN-REFUSED bogus not_rechecked' <<<"$FOR" && grep -q '^TOKEN fin
   ok "a 'rechecked' line under a foreign nonce is ignored; the run's own verdict decides"
 else
   no "a foreign-nonce verdict moved the outcome: $(grep -E '^(RECHECK|TOKEN)' <<<"$FOR" | tr '\n' ' ')"
+fi
+
+echo "=== native trust is classified the same on Lean 4.34.1 and Lean 4.35 ==="
+# Lean 4.35 removes Lean.ofReduceBool, Lean.ofReduceNat and Lean.trustCompiler (lean4#14953); native
+# evaluation is then only the per-use `<decl>._native.<tactic>.ax_<n>` axioms, which 4.34 already
+# mints. The replay probe is Lean source elaborated by whichever toolchain runs it, so a resolved
+# (double-backtick) reference to a removed name would stop it compiling on 4.35 and every theorem
+# would read notRun. The classifier the probe uses (Replay.nativeAxiomClassifierSrc) is compiled here
+# on its own, under this repository's toolchain and under Lean 4.35 when that toolchain is installed,
+# against real native_decide / decide +native / bv_decide proofs and the toolchain's whole axiom set.
+SCAN=scripts/tools/removed_native_names.py
+if python3 -I "$SCAN" --selftest >/dev/null; then
+  HITS="$(git ls-files '*.lean' | xargs python3 -I "$SCAN" 2>&1 || true)"
+  [ -z "$HITS" ] && ok "no Lean source (or probe held in a string) resolves a name Lean 4.35 removed" \
+    || no "Lean 4.35-removed native names resolved (use a single-backtick literal): $(head -3 <<<"$HITS" | tr '\n' ' ')"
+else
+  no "the removed-name scanner fails its own self-test: $(python3 -I "$SCAN" --selftest 2>&1 | head -2 | tr '\n' ' ')"
+fi
+cat > "$TMP/classifier_dump.lean" <<'LEAN'
+import Concrete.Proof.Replay
+#eval IO.print Concrete.Proof.nativeAxiomClassifierSrc
+LEAN
+CLS="$(lake env lean "$TMP/classifier_dump.lean" 2>&1 || true)"
+if grep -q '^def _concreteIsNativeAxiom' <<<"$CLS"; then
+  { printf 'import Lean\nimport Std.Tactic.BVDecide\n'; printf '%s\n' "$CLS"; cat <<'LEAN'
+theorem _t_nd : 2 + 2 = 4 := by native_decide
+theorem _t_dn : 3 * 3 = 9 := by decide +native
+theorem _t_bv (x : BitVec 8) : x &&& x = x := by bv_decide
+theorem _t_std (p : Prop) : p ∨ ¬p := Classical.em p
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  IO.println s!"VERSION {Lean.versionString}"
+  for t in [`_t_nd, `_t_dn, `_t_bv, `_t_std] do
+    let axs ← liftCoreM <| Lean.collectAxioms t
+    IO.println s!"CASE {t} native={(axs.filter _concreteIsNativeAxiom).size} total={axs.size}"
+  for (n, ci) in env.constants.toList do
+    if let .axiomInfo _ := ci then
+      unless n.toString.startsWith "_t_" do
+        IO.println s!"AXIOM {n} {if _concreteIsNativeAxiom n then "native" else "other"}"
+  for n in _concreteLegacyNativeAxioms do
+    IO.println s!"LEGACY {n} {env.contains n}"
+LEAN
+  } > "$TMP/classifier_test.lean"
+  # Axioms a toolchain declares that are NOT native evaluation: the kernel's three, sorryAx, and the
+  # compiler's internal ones. The replay refuses a theorem resting on any but the three (fail closed).
+  # A toolchain axiom outside this list and outside the classifier fails here: a new spelling of
+  # native trust must be classified deliberately, never inherited as "some other axiom".
+  OTHER_AXIOMS="Classical.choice Quot.sound propext sorryAx Quot.lcInv isScalarObj lcAny lcCast lcErased lcProof lcUnreachable lcVoid"
+  # classify_on LABEL LEAN-COMMAND... → runs the test file and judges it; LEGACY_WANT is true|false
+  classify_on() {
+    local label=$1 want=$2; shift 2
+    local out; out="$("$@" "$TMP/classifier_test.lean" 2>&1 || true)"
+    local cases_ok=1 c
+    for c in _t_nd _t_dn _t_bv; do
+      grep -qE "^CASE $c native=[1-9][0-9]* " <<<"$out" || cases_ok=0
+    done
+    grep -qE '^CASE _t_std native=0 total=[1-9]' <<<"$out" || cases_ok=0
+    local native other legacy
+    native="$(sed -n 's/^AXIOM \(.*\) native$/\1/p' <<<"$out" | sort)"
+    other="$(sed -n 's/^AXIOM \(.*\) other$/\1/p' <<<"$out" | sort)"
+    legacy="$(sed -n 's/^LEGACY \(.*\) \(true\|false\)$/\1 \2/p' <<<"$out")"
+    local stray; stray="$(comm -23 <(echo "$other") <(printf '%s\n' $OTHER_AXIOMS | sort) | tr '\n' ' ')"
+    local declared; declared="$(awk '$2=="true"{print $1}' <<<"$legacy" | sort)"
+    local legacy_ok=1
+    [ "$(grep -c . <<<"$legacy")" = 3 ] || legacy_ok=0
+    if [ "$want" = true ]; then [ "$(grep -c . <<<"$declared")" = 3 ] || legacy_ok=0
+    else [ -z "$declared" ] || legacy_ok=0; fi
+    if grep -q '^VERSION ' <<<"$out" && [ "$cases_ok" = 1 ] && [ -z "$(echo $stray)" ] \
+       && [ "$native" = "$declared" ] && [ "$legacy_ok" = 1 ]; then
+      ok "$label ($(sed -n 's/^VERSION //p' <<<"$out")): native_decide, decide +native and bv_decide proofs read native, a classical one does not; the toolchain's axioms are exactly the classified set (native: $(echo ${native:-none}))"
+    else
+      no "$label: classification moved — cases_ok=$cases_ok stray=[${stray}] native=[$(echo $native)] legacy=[$(echo $legacy)] want_legacy=$want: $(grep -vE '^(AXIOM|LEGACY|CASE|VERSION)' <<<"$out" | head -3 | tr '\n' ' ')"
+    fi
+  }
+  classify_on "Lean $(sed 's/^leanprover\/lean4://' lean-toolchain)" true lake env lean
+  # Lean 4.35, by its elan toolchain. Never fetched here unless asked (CONCRETE_LEAN435_FETCH=1): an
+  # offline gate must not depend on the network. Absent, it is an explicit SKIP, or a FAIL when
+  # CONCRETE_REQUIRE_LEAN435=1 (CI's checker-gates job installs it and sets that).
+  L435_TC="leanprover/lean4:v4.35.0"
+  L435="${ELAN_HOME:-$HOME/.elan}/toolchains/leanprover--lean4---v4.35.0/bin/lean"
+  if [ ! -x "$L435" ] && [ "${CONCRETE_LEAN435_FETCH:-0}" = 1 ] && command -v elan >/dev/null; then
+    elan toolchain install "$L435_TC" >/dev/null 2>&1 || true
+  fi
+  if [ -x "$L435" ]; then
+    # Its own library only: an inherited LEAN_PATH names this repository's 4.34 build.
+    classify_on "Lean 4.35 ($L435_TC)" false env -u LEAN_PATH -u LEAN_SYSROOT "$L435"
+  elif [ "${CONCRETE_REQUIRE_LEAN435:-0}" = 1 ]; then
+    no "Lean 4.35 is required (CONCRETE_REQUIRE_LEAN435=1) but $L435 is not installed"
+  else
+    echo "  SKIP Lean 4.35 leg: $L435_TC is not installed (CONCRETE_LEAN435_FETCH=1 installs it)"
+  fi
+else
+  no "could not read Replay.nativeAxiomClassifierSrc: $(head -3 <<<"$CLS" | tr '\n' ' ')"
 fi
 
 GATE_DONE=1

@@ -1329,7 +1329,15 @@ jobs:
       - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
         run: bash scripts/tests/check_checker_identity.sh
 
+      # The re-check gate also compiles the replay probe's native-trust classifier under Lean 4.35,
+      # which removes Lean.ofReduceBool/ofReduceNat/trustCompiler; here that leg is required, not
+      # skipped. Only the toolchain is installed; this repository still builds with its own pin.
+      - name: Install the Lean 4.35 toolchain (classifier compatibility leg only)
+        run: elan toolchain install leanprover/lean4:v4.35.0
+
       - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
+        env:
+          CONCRETE_REQUIRE_LEAN435: "1"
         run: bash scripts/tests/check_kernel_recheck.sh
 
       - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
