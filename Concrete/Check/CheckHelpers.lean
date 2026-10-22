@@ -530,19 +530,77 @@ partial def isLitTrueExpr : Expr → Bool
   | .paren _ inner => isLitTrueExpr inner
   | _ => false
 
--- Does a `break` appear directly in this block (not inside a nested loop, whose
--- break targets that inner loop)? Distinguishes a truly infinite `while true {}`
--- from one that can exit. Labeled breaks to an outer loop are treated as inner
--- (conservative: at worst we under-report a leak, never false-positive).
+/-- Where the loop-exit search stands (bug 176). `own` is the loop's label; `inner`
+    the labels of loops nested inside it at this point; `direct` is false inside a
+    nested loop, where an unlabelled `break` targets that loop. `anyExit` picks the
+    question: true asks "can control leave this loop at all" (also to an enclosing
+    loop, through a labelled `break`/`continue`), false asks "can control reach the
+    statement after this loop" (only a `break` that targets it). -/
+structure LoopExitCtx where
+  own : Option String
+  inner : List String := []
+  direct : Bool := true
+  anyExit : Bool
+
+-- Does an exit of the kind `ctx.anyExit` asks for appear in a loop's body?
+-- Searches through `if` and value-`if` branches, `match` arms, borrow blocks,
+-- `let`-`else` and statement expressions (bug 176, Codex review: a `while let`,
+-- whose `break` sits in the desugared match's fallback arm, read as infinite, and
+-- a labelled `break` out of a nested loop was ignored, so a loop body that exits
+-- was taken as one that never ends and its locals were exempted from H9). Labels
+-- are resolved: an exit to a nested loop's label stays inside, a `continue` to
+-- the loop's own label stays in it.
 mutual
-partial def blockHasBreak (stmts : List Stmt) : Bool :=
-  stmts.any stmtHasBreak
-partial def stmtHasBreak : Stmt → Bool
-  | .break_ _ _ _ => true
-  | .ifElse _ _ t e => blockHasBreak t || (match e with | some es => blockHasBreak es | none => false)
-  | .while_ _ _ _ _ | .forLoop _ _ _ _ _ _ => false  -- break here targets the inner loop
+partial def loopBlockExits (ctx : LoopExitCtx) (stmts : List Stmt) : Bool :=
+  stmts.any (loopStmtExits ctx)
+partial def loopStmtExits (ctx : LoopExitCtx) : Stmt → Bool
+  | .break_ _ v lbl =>
+    let leaves := match lbl with
+      | none => ctx.direct
+      | some l => !ctx.inner.contains l && (ctx.anyExit || ctx.own == some l)
+    leaves || (match v with | some e => loopExprExits ctx e | none => false)
+  | .continue_ _ lbl =>
+    match lbl with
+    | none => false
+    | some l => ctx.anyExit && !ctx.inner.contains l && ctx.own != some l
+  | .ifElse _ c t e =>
+    loopExprExits ctx c || loopBlockExits ctx t
+      || (match e with | some es => loopBlockExits ctx es | none => false)
+  | .while_ _ c body lbl =>
+    loopExprExits ctx c
+      || loopBlockExits { ctx with inner := lbl.toList ++ ctx.inner, direct := false } body
+  | .forLoop _ init c step body lbl =>
+    let ctx' : LoopExitCtx := { ctx with inner := lbl.toList ++ ctx.inner, direct := false }
+    (match init with | some s => loopStmtExits ctx s | none => false) || loopExprExits ctx c
+      || (match step with | some s => loopStmtExits ctx' s | none => false)
+      || loopBlockExits ctx' body
+  | .expr _ e _ => loopExprExits ctx e
+  | .letDecl _ _ _ _ v _ => loopExprExits ctx v
+  | .assign _ _ v => loopExprExits ctx v
+  | .return_ _ (some v) => loopExprExits ctx v
+  | .borrowIn _ _ _ _ _ body => loopBlockExits ctx body
+  | .letDestructure _ _ _ _ v eb =>
+    loopExprExits ctx v || (match eb with | some b => loopBlockExits ctx b | none => false)
   | _ => false
+partial def loopExprExits (ctx : LoopExitCtx) : Expr → Bool
+  | .paren _ e => loopExprExits ctx e
+  | .match_ _ s arms => loopExprExits ctx s || arms.any (loopArmExits ctx)
+  | .ifExpr _ c t e => loopExprExits ctx c || loopBlockExits ctx t || loopBlockExits ctx e
+  | _ => false
+partial def loopArmExits (ctx : LoopExitCtx) : MatchArm → Bool
+  | .mk _ _ _ _ _ body => loopBlockExits ctx body
+  | .litArm _ _ _ body => loopBlockExits ctx body
+  | .varArm _ _ _ body => loopBlockExits ctx body
+  | .rangeArm _ _ _ _ _ body => loopBlockExits ctx body
 end
+
+/-- Can control leave the loop whose body is `stmts` and whose label is `own`?
+    With `anyExit := false` (divergence: does the loop fall through to the next
+    statement) only a `break` targeting this loop counts; with `anyExit := true`
+    (H9: does the body's scope ever close) a labelled `break`/`continue` to an
+    enclosing loop counts too. -/
+def blockHasBreak (stmts : List Stmt) (own : Option String := none) (anyExit : Bool := false) : Bool :=
+  loopBlockExits { own, anyExit } stmts
 
 -- Control cannot fall off the end of this block — it returns, breaks, continues,
 -- `abort()`s, or loops forever (`while true {}` with no break). When true, a
@@ -559,7 +617,9 @@ partial def stmtDiverges : Stmt → Bool
   | .return_ _ _ => true
   | .break_ _ _ _ => true
   | .continue_ _ _ => true
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
   | .ifElse _ _ t (some e) => blockDiverges t && blockDiverges e
   | .expr _ e _ => exprDiverges e
   | _ => false
@@ -588,7 +648,9 @@ partial def blockNonTerminating (stmts : List Stmt) : Bool :=
   | none => false
   | some s => stmtNonTerminating s
 partial def stmtNonTerminating : Stmt → Bool
-  | .while_ _ cond body _ => isLitTrueExpr cond && !blockHasBreak body
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl (anyExit := true)
+  | .forLoop _ _ cond step body lbl =>
+    isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl (anyExit := true)
   | .ifElse _ _ t (some e) => blockNonTerminating t && blockNonTerminating e
   | .expr _ e _ => exprNonTerminating e
   | _ => false
@@ -841,6 +903,32 @@ def checkBlockLocalsConsumed
     if info.isCopy then continue
     if info.state == .consumed || info.state == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
+
+/-- Bug 176: the ONE lexical-scope discipline of Check's binding environment.
+    Closes a block opened when the environment's bindings were `outer`: every
+    binding the block introduced (by identity — a uid absent from `outer`) is
+    dropped, so an outer binding that an inner `let` shadowed is the visible one
+    again, with its own type and mutability. Outer bindings keep the states the
+    block left them in (a consume inside the block is not undone). Every block
+    construct closes through here: `if`/`else` branches (statement and value),
+    loop bodies, `for` headers and borrow blocks. -/
+def closeBlockScope (outer : List (String × VarInfo)) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
+
+/-- Bug 176: run `k`, which checks `body` as a lexical block nested in the current
+    environment, then apply H9 to the block's own bindings and close it
+    (`closeBlockScope`). Before this, a `while`/`for` body never closed: its
+    bindings stayed in the environment after the loop, so an inner `let v0: u8`
+    replaced the outer `v0: i32` for the rest of the function (the checker typed
+    and mutability-checked later code against a binding that no longer existed,
+    while Elab, the interpreter and the binary read the outer one). -/
+def inBlockScope {α : Type} (body : List Stmt) (span : Option Span) (k : CheckM α) : CheckM α := do
+  let outer := (← getEnv).vars
+  let r ← k
+  checkBlockLocalsConsumed outer (← getEnv).vars (blockNonTerminating body) span
+  closeBlockScope outer
+  return r
 
 -- ============================================================
 -- Type substitution for generics

@@ -1,0 +1,20 @@
+// Bug 176 (Codex review): a labelled `break 'outer` from a loop nested inside an
+// inner `while true` leaves that inner loop, so the inner loop terminates and the
+// outer body's unconsumed `r` leaks on every iteration. The divergence predicate
+// skipped nested loops entirely and read the inner loop as infinite, exempting
+// `r`. Expected: "was never consumed" for `r`.
+mod m {
+    struct Res { v: i32 }
+
+    fn main() -> Int {
+        let mut n: i32 = 0;
+        'outer: while n < 2 {
+            let r: Res = Res { v: n };
+            n = n + 1;
+            while true {
+                while true { break 'outer; }
+            }
+        }
+        return 0;
+    }
+}

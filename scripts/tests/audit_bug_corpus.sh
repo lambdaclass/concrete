@@ -139,6 +139,9 @@ declare -A BUG_TEST_MAP=(
   [152]="regress_152_string_trim_empty.con"
   # Bug 151 (contained by E0299): a.b_f and a_b.f flattened to one Core name.
   [151]="error_151_nested_name_flattening.con"
+  # Bug 176: a loop body's / for header's shadowing let outlived the loop in Check (run_tests.sh
+  # also requires --interp == binary == 42 for the valid fixture).
+  [176]="regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type.con error_176_while_shadow_ssa.con error_176_while_shadow_mut.con error_176_for_header_type.con error_176_loop_body_linear_leak.con error_176_loop_body_leak_while_let.con error_176_loop_body_leak_labelled_break.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).

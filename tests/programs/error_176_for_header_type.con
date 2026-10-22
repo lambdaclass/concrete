@@ -1,0 +1,13 @@
+// Bug 176: a `for` header binding is scoped to the loop. After
+// `for (let mut i: i32 = 0; ...)` the visible `i` is the outer u8; pre-fix the
+// header's i32 `i` leaked and `let y: i32 = i;` was accepted.
+// Bug-176 fix alone: E0220 at `let y`. Since exit 2i the header `i` shadows the
+// visible outer `i`, which SCOPE-1@1 refuses first. Expected: E0301.
+mod m {
+    fn main() with(Console) {
+        let i: u8 = 3;
+        for (let mut i: i32 = 0; i < 2; i = i + 1) { }
+        let y: i32 = i;
+        println(y);
+    }
+}

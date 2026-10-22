@@ -35,7 +35,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | class | bugs | structural owner |
 |---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C), 132 (two modules' constants of one name), 165 (a compiler-generated `print_int` call binds to a same-named user function), 151 (two nested modules' functions flattened to one name) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
-| 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124 (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments. Since exit 2i the source rule SCOPE-1@1 (E0301) keeps every shadowing shape of this class out of the compiler (124 closed by it); the identity repair stays R-0492's |
+| 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124, 176 (a loop body's shadowing `let` outlived the loop in the checker) (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments. Since exit 2i the source rule SCOPE-1@1 (E0301) keeps every shadowing shape of this class out of the compiler (124 closed by it); the identity repair stays R-0492's |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131, 143 (a deferred call's borrow reserved nothing) | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
@@ -87,11 +87,15 @@ block `let` shadowing an outer name was not lexically scoped in the interpreter,
 model), 093 (a shadowing block local was skipped by the never-consumed check because its name
 existed before the block), 094 (per-binding state updates marked every entry with the name), 107
 (a same-scope `let` shadowing a borrowed binding reused its Core name and so its stack slot: a
-reference to the old binding read the new value in the binary, not in the interpreter), and 068's
-binder half (a ghost `let` opened no scope slot).
+reference to the old binding read the new value in the binary, not in the interpreter), 176 (a
+loop body's shadowing `let` stayed visible to the checker after the loop, because Check's
+`while`/`for` restored only loop depth and labels: the outer name took the inner type and
+mutability, so a `u8` held 300), and 068's binder half (a ghost `let` opened no scope slot).
 
 **Design cause.** The checker's environment is a list of `(name, VarInfo)`; scope exit, merges and
-state updates find bindings by name, and Elab alpha-renames only some binders.
+state updates find bindings by name, and Elab alpha-renames only some binders. Scope exit was
+written per construct (176: three mechanisms, and the loops had none); since 176 every block
+closes through `closeBlockScope`.
 
 **Structural fix.** A `LocalId` for every binder from Resolve on, consumed by the source checker
 and Elab alike; the language rule "no block `let` shadowing a visible name" (exit 2i).

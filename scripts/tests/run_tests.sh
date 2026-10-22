@@ -8005,6 +8005,33 @@ else
     echo "FAIL  bug 087: interp ($r087_interp) or extracted model is not lexical"
     FAIL=$((FAIL + 1))
 fi
+# Bug 176: a loop body (and a `for` header) is a lexical block in the CHECKER
+# too. Pre-fix Check's while/for restored only loop depth and labels, so a body
+# `let` shadowing an outer name replaced it for the rest of the function: valid
+# code was refused (E0217/E0233/E0220) and a u8 was typed over an i32 holding 300.
+# The regress fixture now reuses the body's names in LATER siblings (legal under
+# SCOPE-1); the H9 legs below are the leak the rule does not reach.
+run_ok "$TESTDIR/regress_176_loop_shadow_restores_outer.con" 42
+r176_interp=$($COMPILER "$TESTDIR/regress_176_loop_shadow_restores_outer.con" --interp 2>&1 || true)
+if [ "$r176_interp" = "42" ]; then
+    echo "  ok  bug 176: loop-body shadows close — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 176: loop-body shadows — interp gave '$r176_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Since exit 2i the shadowing trigger itself is SCOPE-1@1: these four are refused
+# with E0301 at the inner binding, before the type/mutability errors the bug-176
+# fix alone produces. The legal sibling-reuse shapes live in the regress fixture.
+run_err "$TESTDIR/error_176_while_shadow_type.con" "E0301"
+run_err "$TESTDIR/error_176_while_shadow_ssa.con" "E0301"
+run_err "$TESTDIR/error_176_while_shadow_mut.con" "E0301"
+run_err "$TESTDIR/error_176_for_header_type.con" "E0301"
+run_err "$TESTDIR/error_176_loop_body_linear_leak.con" "was never consumed"
+# Codex review: a body ending in `while let`, or in an inner `while true` that a
+# nested labelled break leaves, terminates; its locals are not exempt from H9.
+run_err "$TESTDIR/error_176_loop_body_leak_while_let.con" "was never consumed"
+run_err "$TESTDIR/error_176_loop_body_leak_labelled_break.con" "was never consumed"
 # Bug 050 / R-0002: a call through a fn-typed LOCAL dispatches to the value the
 # local holds, not to a generic function that shares its name. Pre-fix: compiled
 # 21 (the identity generic) vs interp 42 — silent wrong code.
