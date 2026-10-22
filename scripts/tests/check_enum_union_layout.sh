@@ -140,6 +140,9 @@ tests/programs/pressure_err_branch_leak.con
 tests/programs/pressure_err_defer_then_move.con
 tests/programs/pressure_err_destroy_then_use.con
 tests/programs/pressure_err_linear_no_destroy.con
+tests/programs/regress_093_shadowing_locals_consumed.con
+tests/programs/regress_094_shadow_state_by_identity.con
+tests/programs/regress_094_shadowing_binders.con
 tests/programs/report_interface_check.con"
 # Annotated layouts the probe must reach (their report headers carry #[repr(C)] / #[packed]).
 MUST_PROBE="tests/programs/regress_bug121_enum_field_layout.con

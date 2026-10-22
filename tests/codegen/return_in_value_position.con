@@ -1,7 +1,9 @@
-// D4 (semantics evaluation, 2026-10-21): `return` inside a call argument and inside a struct
-// literal field leaves the function, natively and in the interpreter. The `&mut` argument
-// evaluated before the `return` keeps its effect. Expected 96 (worked out per call below). The
-// interpreter used to refuse both shapes ("unexpected return in value position").
+// D4 (semantics evaluation, 2026-10-21): `return` in value position leaves the function,
+// natively and in the interpreter. The `&mut` argument evaluated before the `return` keeps its
+// effect. Expected 96 (worked out per call below). The interpreter used to refuse the shape
+// ("unexpected return in value position"). Since rule (d) (bug 142, E0278) an exit may not occur
+// inside a call argument or a literal field, so the value position here is a `let` initializer's
+// branch, the form rule (d) keeps legal; the operand forms are refused (error_142_*.con).
 struct Copy P { a: Int, b: Int }
 
 fn bump(c: &mut Int) -> Int {
@@ -14,12 +16,16 @@ fn add(x: Int, y: Int) -> Int {
 }
 
 fn f(n: Int, c: &mut Int) -> Int {
-    let p: P = P { a: bump(c), b: if n > 0 { return 7; } else { 2 } };
+    let a: Int = bump(c);
+    let b: Int = if n > 0 { return 7; } else { 2 };
+    let p: P = P { a: a, b: b };
     return p.a + p.b;
 }
 
 fn g(n: Int, c: &mut Int) -> Int {
-    return add(bump(c), if n > 0 { return 40; } else { 1 });
+    let x: Int = bump(c);
+    let y: Int = if n > 0 { return 40; } else { 1 };
+    return add(x, y);
 }
 
 fn main() -> Int {
