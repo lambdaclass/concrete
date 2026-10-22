@@ -288,10 +288,17 @@ def y := ("--", Proof.PackageIdentity)
 def z := "a string naming PackageIdentity"
 def w := 'x'
   | .noPackageIdentity w => s!"x"
+def r1 := r"\"
+def r2 := Proof.PackageIdentity
+def r3 := r#"" PackageIdentity ""#
+def i1 := s!"value {Proof.PackageIdentity.x} done"
+def u1 := αPackageIdentity + PackageIdentity₁
+def g1 := «some PackageIdentity name»
+def g2 := Foo.«PackageIdentity»
 LEAN
 _c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$TMP/c6_fixture.lean" | cut -d: -f2 | tr '\n' ' ')"
-[ "$_c6_ctl" = "1 2 " ] && ok "C6 control: code uses of a deleted name are found (also after a \"--\" string); comments, docstrings, strings and noPackageIdentity are not" \
-  || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '1 2 '"
+[ "$_c6_ctl" = "1 2 13 15 18 " ] && ok "C6 control: code uses of a deleted name are found (after a \"--\" string or a raw string, in an interpolation, as «PackageIdentity»); comments, docstrings, strings, raw strings, other identifiers and noPackageIdentity are not" \
+  || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '1 2 13 15 18 '"
 C6_FILES="$(git ls-files -- 'Concrete/*.lean' Main.lean)"
 if [ -z "$C6_FILES" ]; then
   no "C6: no Lean sources listed to scan"
