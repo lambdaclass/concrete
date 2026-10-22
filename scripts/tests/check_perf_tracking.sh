@@ -285,11 +285,19 @@ PREV="$(tail -2 "$REC" | head -1 | python3 -I -c 'import json,sys; print(json.lo
 python3 -I "$PERF/store.py" processed --data "$D" --machine fixture-1 --sha "$NEWEST" --mark
 [ "$(python3 -I "$PERF/store.py" pending --data "$D" --machine fixture-1)" = "$PREV" ] \
   && ok "pending: an older unprocessed commit behind a processed one is not stranded" || no "pending skipped an older unprocessed commit"
-ln -s "$TMP/outside/victim" "$D/data/fixture-1/.planted"
-python3 -I "$PERF/store.py" put --data "$D" --machine fixture-1 --name planted-dest.json --file "$TMP/s.json" >/dev/null 2>&1
-[ ! -e "$TMP/outside/victim" ] && ok "atomic writes never follow a planted symlink" || no "a write followed a planted symlink"
-rm -f "$D/data/fixture-1/.planted"
-G rm -q --cached "data/fixture-1/planted-dest.json" >/dev/null 2>&1; rm -f "$D/data/fixture-1/planted-dest.json"; G commit -qm "test cleanup" >/dev/null 2>&1
+# Plant a symlink at every predictable temp name (the old "<dest>.tmp.<pid>" scheme, for this pid)
+# and write in-process: an implementation that opens a predictable name follows it.
+python3 -I - "$PERF" "$TMP/plant" "$TMP/outside/victim" <<'PY' && ok "atomic_write never follows a planted symlink at a predictable temp name" || no "atomic_write followed a planted symlink"
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import store
+d = sys.argv[2]; os.makedirs(d)
+dest = os.path.join(d, "records.jsonl")
+for name in ("%s.tmp.%d" % (dest, os.getpid()), dest + ".tmp", os.path.join(d, ".records.jsonl.tmp")):
+    os.symlink(sys.argv[3], name)
+store.atomic_write(dest, b"x\n")
+assert not os.path.exists(sys.argv[3]) and open(dest).read() == "x\n" and not os.path.islink(dest)
+PY
 [ -z "$(G status --porcelain)" ] && ok "the data worktree is clean after every write" || no "uncommitted data: $(G status --porcelain | head -3)"
 
 echo "=== detect.py / report.py on the stored data ==="
