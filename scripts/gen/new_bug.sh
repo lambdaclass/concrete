@@ -179,8 +179,11 @@ REC="docs/bugs/${num}_${SLUG}.md"
 REPRO_DIR="tests/regressions/bug${num}_${SLUG}"
 REPRO="$REPRO_DIR/repro.con"
 FRAG="changelog.d/${TODAY}-bug${num}-$(printf '%s' "$SLUG" | tr '_' '-').md"
-for f in "$REC" "$REPRO" "$FRAG"; do [ ! -e "$f" ] || die "$f already exists"; done
-[ ! -e "$REPRO_DIR" ] || die "$REPRO_DIR already exists"
+# -L as well as -e: a dangling symlink is not "absent", and the rollback must never delete a path
+# this run did not create.
+for f in "$REC" "$REPRO" "$FRAG" "$REPRO_DIR"; do
+  if [ -e "$f" ] || [ -L "$f" ]; then die "$f already exists"; fi
+done
 WRITING=1
 mkdir -p "$REPRO_DIR"
 {
