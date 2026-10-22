@@ -6242,7 +6242,7 @@ def diagnosticCodesReport : String :=
     entry "E0203" "check" "error" "variable frozen by borrow",
     entry "E0204" "check" "error" "cannot move linear variable: borrowed",
     entry "E0205" "check" "error" "linear variable used after move",
-    entry "E0206" "check" "error" "variable reserved by defer",
+    entry "E0206" "check" "error" "variable reserved or borrowed by a pending defer",
     entry "E0207" "check" "error" "cannot consume linear variable in loop",
     entry "E0208" "check" "error" "linear variable never consumed",
     entry "E0209" "check" "error" "match arms disagree on consumption",
@@ -6266,6 +6266,7 @@ def diagnosticCodesReport : String :=
     entry "E0226" "check" "error" "break value type mismatch",
     entry "E0227" "check" "error" "integer literal out of range",
     entry "E0228" "check" "error" "binary operand type mismatch",
+    entry "E0229" "check" "error" "comparison not defined on this type (integers, floats, bool, char; raw pointers in Unsafe code; bugs 134/140)",
     -- Check: borrow/escape (E0230–E0235)
     entry "E0230" "check" "error" "cannot borrow: already moved",
     entry "E0231" "check" "error" "cannot borrow: already mutably borrowed",
@@ -6310,6 +6311,8 @@ def diagnosticCodesReport : String :=
     entry "E0275" "retired" "error" "former ? operator required Result type",
     entry "E0276" "retired" "error" "former ? operator required Ok/Err variants",
     entry "E0277" "retired" "error" "former ? operator required an Ok value field",
+    entry "E0278" "check" "error" "return/break/continue inside a call argument, literal element or operator operand (bug 142)",
+    entry "E0279" "check" "error" "deferred call argument is not a local, a borrow of a local, or a constant (bug 143)",
     -- Check: control flow (E0280–E0285)
     entry "E0280" "check" "error" "break outside loop",
     entry "E0281" "check" "error" "continue outside loop",
@@ -6388,7 +6391,7 @@ def diagnosticCodesReport : String :=
     entry "E0552" "core-check" "error" "indexing non-array type",
     entry "E0553" "core-check" "error" "cannot cast between types",
     entry "E0554" "core-check" "error" "dereference of non-reference type",
-    entry "E0555" "core-check" "error" "assign through non-mutable reference",
+    entry "E0555" "core-check" "error" "assign through a target that is not `&mut T` or `*mut T`",
     entry "E0560" "core-check" "error" "return type mismatch",
     -- Core-check: module validation (E0570–E0582)
     entry "E0570" "core-check" "error" "Copy/Destroy conflict",

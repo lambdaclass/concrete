@@ -1,0 +1,7 @@
+// EVALUATION2 D14: `*h = v` on a Heap<T> is refused (E0555); the message names the type in
+// source spelling ('Heap<Int>'), not the internal `Concrete.Ty.heap ...` term.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(1);
+    *h = 2;
+    return free(h);
+}

@@ -1798,6 +1798,8 @@ for r143 in tests/regressions/bug143_defer_borrow_unpinned/repro.con tests/regre
     fi
     rm -f "$TESTDIR/.r143_bin"
 done
+# EVALUATION2 D14: E0555 names the type in source spelling, not the internal Ty term.
+run_err "$TESTDIR/error_d14_heap_deref_assign.con" "cannot assign through 'Heap<Int>'"
 # Bug 144: heap interiors are linearity-tracked: a by-value non-Copy heap-field read is E0290,
 # free(h) of a non-Copy pointee is E0287.
 run_err "$TESTDIR/error_144_heap_field_read_twice.con"      "(E0290)"
