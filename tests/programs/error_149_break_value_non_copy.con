@@ -3,8 +3,8 @@
 struct T { x: Int }
 
 fn main() -> Int {
-    let t: T = T { x: 1 };
     while true {
+        let t: T = T { x: 1 };
         break t;
     }
     return 0;

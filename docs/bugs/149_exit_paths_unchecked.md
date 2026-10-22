@@ -55,7 +55,9 @@ whatever their label.
   inside a borrow block whose owner has a pending `defer` is accepted
   (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines); `break`/`continue` likewise
   (`regress_149_break_in_borrow_with_defer.con`).
-- `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state.
+- `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state; a
+  binding consumed before the loop and given a new value inside it has no single state after a
+  loop that may run zero times, and is E0212 (`error_149_loop_revives_consumed.con`).
 - The H14 one-level exemption (a `break value` could move a binding declared outside the loop) is
   withdrawn: loops are statements since 6D, so the value is discarded anyway, and the move was
   credited on paths that never ran it (`if c { break free(h); }` then `free(h)` after the loop

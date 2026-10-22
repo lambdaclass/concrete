@@ -519,8 +519,16 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     consumptions of an outer binding inside the body are on paths that leave the function (the
     loop-depth rule refuses the rest), and the loop may run zero times, so crediting them after
     the loop would accept a value that was never consumed. -/
-def restoreAfterLoop (before : TypeEnv) : CheckM Unit := do
+def restoreAfterLoop (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
+  -- A binding consumed before the loop and given a new value inside it is live after an
+  -- iteration and consumed after none: its state after the loop is undecided (Codex review).
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      if !vi.isCopy && old.state == .consumed && vi.state != .consumed && vi.state != .reserved then
+        throwCheck (.linearConsumedOneBranchNotOther n) span
+    | none => pure ()
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     match lookupByUid before.vars vi.uid with
     | some old => if old.state != vi.state then (n, { vi with state := old.state }) else (n, vi)
@@ -2432,7 +2440,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Restore loop depth and labels
     let env' ← getEnv
     setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
-    restoreAfterLoop env0
+    restoreAfterLoop env0 (some stmt.getSpan)
   | .forLoop _ init cond step body lbl =>
     -- Init
     match init with
@@ -2460,7 +2468,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none => pure ()
     let env' ← getEnv
     setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
-    restoreAfterLoop env0
+    restoreAfterLoop env0 (some stmt.getSpan)
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv

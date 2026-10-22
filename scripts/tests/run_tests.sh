@@ -1858,6 +1858,7 @@ run_ok  "$TESTDIR/regress_149_nested_loop_in_exit_branch.con" "" 0
 run_ok  "$TESTDIR/regress_149_break_value_statement_loop.con" "" 0
 run_err "$TESTDIR/error_149_break_value_non_copy.con"           "(E0287)"
 run_err "$TESTDIR/error_149_break_value_moves_outer.con"        "(E0207)"
+run_err "$TESTDIR/error_149_loop_revives_consumed.con"          "(E0212)"
 r149_ssa=$($COMPILER "$TESTDIR/regress_149_break_value_statement_loop.con" --emit-ssa 2>&1 || true)
 if [[ "$r149_ssa" == *"call void @free("* ]]; then
     echo "  ok  regress_149_break_value_statement_loop.con: the break operand runs (emits @free)"
