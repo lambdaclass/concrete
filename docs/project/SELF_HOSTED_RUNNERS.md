@@ -193,9 +193,13 @@ already handles, and what the host has to handle.
 
   An ephemeral runner in a fresh container or VM needs neither.
 - **`$HOME` caches** persist: `~/.elan` (the toolchain, keyed by `lean-toolchain`) and
-  `~/.cache/concrete-ext` (lean4export, con-leche and nanoda, each built into a directory named by
-  its pinned SHA and checked against it). Both are content-addressed, so a persistent copy is a
-  speed-up, not a correctness risk. They are per user, so per runner.
+  `~/.cache/concrete-ext`. In that cache, each tool is built into a directory named by its pinned
+  SHA and checked against it, and lean4export, which is rebuilt with this repository's toolchain,
+  also has that toolchain in its directory name. So a toolchain bump builds a new exporter instead of
+  reusing one that cannot read the new `.olean` files. Both caches are keyed by everything their
+  builds depend on, so keeping them between jobs makes runs faster without affecting correctness.
+  They live in the user's HOME, so each runner has its own. Old directories are never deleted; prune
+  `~/.cache/concrete-ext` now and then.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a
   daemon behind would survive on a persistent runner. That is one more reason to prefer ephemeral
   runners.
