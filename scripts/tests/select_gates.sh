@@ -6,7 +6,11 @@
 #               changes (default origin/main)
 #   --files F   take the changed paths from F instead of git (one per line)
 #   --explain   print `command<TAB>reason`
+#        scripts/tests/select_gates.sh --base <sha> --head <sha>
+#               exactly the range base..head (head must be the checked-out commit); the
+#               landing script's interface
 #
+# Exit status is nonzero on any error; an empty stdout means nothing was selected.
 # Prints the selected workflow gate commands, in the runner's spelling, one per line, and a
 # count with a time estimate on stderr. `run_ci_gates_local.sh --impact <base>` runs them.
 #
@@ -21,12 +25,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-EXPLAIN=(); FILES=""; BASE=""
+EXPLAIN=(); FILES=""; BASE=""; XBASE=""; XHEAD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --explain) EXPLAIN=(--explain); shift ;;
     --files)   [ -n "${2:-}" ] || { echo "select_gates: --files needs a path" >&2; exit 2; }
                FILES="$2"; shift 2 ;;
+    # The landing script's interface (wip/landing-script): exactly the range base..head, no
+    # working-tree changes. The gate definitions are read from this checkout, so head must be the
+    # commit checked out here; anything else is refused rather than answered from other sources.
+    --base)    [ -n "${2:-}" ] || { echo "select_gates: --base needs a commit" >&2; exit 2; }
+               XBASE="$2"; shift 2 ;;
+    --head)    [ -n "${2:-}" ] || { echo "select_gates: --head needs a commit" >&2; exit 2; }
+               XHEAD="$2"; shift 2 ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     -*)        echo "select_gates: unknown option $1" >&2; exit 2 ;;
     *)         BASE="$1"; shift ;;
@@ -36,7 +47,16 @@ done
 TMPD="$(mktemp -d)"
 trap 'rm -rf "$TMPD"' EXIT
 
-if [ -n "$FILES" ]; then
+if [ -n "$XBASE$XHEAD" ]; then
+  [ -n "$XBASE" ] && [ -n "$XHEAD" ] && [ -z "$FILES$BASE" ] \
+    || { echo "select_gates: --base and --head go together, without --files or a base-ref" >&2; exit 2; }
+  b="$(git rev-parse --verify "$XBASE^{commit}")" || { echo "select_gates: unknown base $XBASE" >&2; exit 2; }
+  h="$(git rev-parse --verify "$XHEAD^{commit}")" || { echo "select_gates: unknown head $XHEAD" >&2; exit 2; }
+  [ "$h" = "$(git rev-parse HEAD)" ] \
+    || { echo "select_gates: --head $XHEAD is not the checked-out commit; the gate definitions would not match" >&2; exit 2; }
+  git diff --name-only "$b" "$h" | sed '/^$/d' | LC_ALL=C sort -u > "$TMPD/changed"
+  MB="$b"
+elif [ -n "$FILES" ]; then
   [ -f "$FILES" ] || { echo "select_gates: no such file $FILES" >&2; exit 2; }
   sed '/^$/d; /^#/d' "$FILES" | LC_ALL=C sort -u > "$TMPD/changed"
   # The base a workflow edit is compared against (which commands it added or re-spelled):

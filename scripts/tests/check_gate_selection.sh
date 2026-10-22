@@ -142,6 +142,24 @@ if SELECT_GATES_BASE=HEAD select_fixture wfhead "$TMPD/wf.paths"; then
   else no "a workflow edit compared with HEAD still selects every gate"; fi
 fi
 
+echo "=== indirect inputs (each one an under-selection found in review) ==="
+# A manifest names the example; the gate's text names neither the example nor its expected output.
+printf 'examples/base64_cli/expected/encode.stdout\n' > "$TMPD/expected.paths"
+select_fixture expected "$TMPD/expected.paths" && must expected check_example_outputs.sh
+# check_campaign_summary_golden.sh runs a one-family campaign through the mutation driver, which
+# launches its children through this helper: a driver invoked in a bounded mode still runs its helpers.
+printf 'scripts/tests/lib/run_campaign_child.py\n' > "$TMPD/child.paths"
+select_fixture child "$TMPD/child.paths" && must child check_campaign_summary_golden.sh
+# A workflow edit that re-spells a command (new arguments) selects that command: compared against
+# main before this gate was registered, the gate's own command is new.
+if git cat-file -e "713778e2^{commit}" 2>/dev/null; then
+  if SELECT_GATES_BASE=713778e2 select_fixture wfadd "$TMPD/wf.paths"; then
+    must wfadd check_gate_selection.sh
+  fi
+else
+  skip "713778e2 not in this clone: the added-command leg needs the base's workflow"
+fi
+
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="
 grep -v '^#' "$FIX/stack_budget_leg_26c409f8.paths" > "$TMPD/wire.paths"
 if bash scripts/tests/run_ci_gates_local.sh --plan --impact-files "$TMPD/wire.paths" > "$TMPD/wire.plan" 2>/dev/null; then

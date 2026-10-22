@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gates_for_diff as gfd  # noqa: E402  (ALWAYS_IF: the one owner of the derived-artifact table)
 
 SCRIPT_EXT = (".sh", ".py")
+GATE_NAME_RE = re.compile(r"(check|run|test)_[A-Za-z0-9_]+\.sh$")
 DATA_EXT = (".txt", ".toml", ".tsv", ".json", ".list", ".csv")
 # Directory references that are NOT a dependency on every file inside: gate scripts reach their
 # helpers as "$ROOT/scripts/tests/$name", which would make every gate depend on every script. A
@@ -256,16 +257,17 @@ class Repo:
             if s in seen:
                 continue
             seen.add(s)
-            # The whole-suite drivers name every gate. A gate that invokes one of them does so in a
-            # bounded mode (`--plan`, a single family), so its run is not "every gate's inputs".
-            # The drivers' own commands are roots and are traversed.
-            if s not in roots and os.path.basename(s) in gfd.NOT_AUTO_RUN:
-                continue
             f, d, c, l, runs = self.script(s)
             compiler |= c
             lean |= l
             dirs |= d
             files |= f
+            # The whole-suite drivers name every gate. A gate that invokes one of them does so in a
+            # bounded mode (`--plan`, a single mutation family), so it depends on the driver and the
+            # helpers the driver runs, but not on every gate the driver could run. The drivers' own
+            # workflow commands are roots and are traversed in full.
+            if s not in roots and os.path.basename(s) in gfd.NOT_AUTO_RUN:
+                runs = {x for x in runs if not GATE_NAME_RE.match(os.path.basename(x))}
             stack.extend(x for x in runs if x not in seen)
         # running the corpus runner is running the compiler, whatever its text says
         if any(os.path.basename(s) in ("run_tests.sh", "test_ssa.sh") for s in seen):
