@@ -168,7 +168,13 @@ print(("OK " if a.get("alert") and a.get("rate", 0) > 0.3 else "NO ") + f"drift 
 print(("OK " if a.get("top_codes") and a["top_codes"][0][0] == "E0100" else "NO ") + f"drift names the refusing code {a.get('top_codes')}")
 ref = [e for e in idx["signatures"].values() if e["class"] == "refusal"]
 tot = sum(e["count"] for e in ref)
-print(("OK " if tot <= 2 * max(1, len(ref)) and tot < 10 else "NO ") + f"refusals under drift are not filed one per case (filed {tot})")
+import glob
+stats = [json.load(open(f)) for f in glob.glob(os.path.join(d, "state", "stats", "*", "*.json"))]
+batches = sum(s.get("drift_batches", 0) for s in stats)
+refused = sum(s.get("outcomes", {}).get("diff:refusal", 0) for s in stats)
+print(("OK " if batches >= 1 and tot <= batches and refused > 3 * tot else "NO ") +
+      f"refusals under drift: one sample per drift batch, not one per case "
+      f"(filed {tot}, drift batches {batches}, refused cases {refused})")
 print(("OK " if "diff" in st.get("drift_alerts", {}) else "NO ") + "status JSON carries the drift alert")
 PY
 while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; done < "$TMP/g.txt"
