@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gates_for_diff as gfd  # noqa: E402  (ALWAYS_IF: the one owner of the derived-artifact table)
 
 SCRIPT_EXT = (".sh", ".py")
+DATA_EXT = (".txt", ".toml", ".tsv", ".json", ".list", ".csv")
 # Directory references that are NOT a dependency on every file inside: gate scripts reach their
 # helpers as "$ROOT/scripts/tests/$name", which would make every gate depend on every script. A
 # script-to-script edge is taken from the script's NAME instead; a real `scripts/tests/check_*.sh`
@@ -73,6 +74,23 @@ INERT_RE = re.compile(r"(^|/)[^/]*\.md$|^(docs|research|paper|site|editor|bench)
 FULL_SET_LOCAL_MIN = 23
 
 
+WORKFLOW = ".github/workflows/lean_action_ci.yml"
+# A replica of run_ci_gates_local.sh's `_extract_cmds` pattern and `_norm_cmd`. It is used only to
+# tell which commands a workflow edit ADDED OR CHANGED; if it ever disagrees with the runner, the
+# disagreement shows up as "new" commands, i.e. as over-selection.
+CMD_RE = re.compile(
+    r"(?:[A-Z_][A-Z0-9_]*=[^ ;|&]+\s+)*(?:(?:bash|python3|sh)\s+)?(?:\./)?scripts/[^ ;|&]*\.(?:sh|py)[^;|&\n]*")
+
+
+def norm_cmd(cmd):
+    cmd = re.sub(r"\s[0-9]*[<>].*$", "", cmd).rstrip()
+    return cmd.replace("bash ./", "bash ", 1)
+
+
+def workflow_commands(text):
+    return {norm_cmd(m) for m in CMD_RE.findall(text)}
+
+
 def git_lines(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.split("\n")
 
@@ -87,6 +105,7 @@ class Repo:
                 self.dirs.add(d)
                 d = os.path.dirname(d)
         self._scripts = {}
+        self._data = {}
         self.lean_closure = self._main_closure()
 
     # ---- Lean import graph -------------------------------------------------------------
@@ -251,16 +270,48 @@ class Repo:
         # running the corpus runner is running the compiler, whatever its text says
         if any(os.path.basename(s) in ("run_tests.sh", "test_ssa.sh") for s in seen):
             compiler = True
+        # ONE LEVEL OF DATA INDIRECTION. A gate that reads a manifest (example_manifest.txt,
+        # test_manifest.toml, a .tsv ledger) depends on every path the manifest names, though the
+        # gate's own text names none of them.
+        for f in [f for f in files if f.endswith(DATA_EXT)]:
+            df, dd = self.data(f)
+            files |= df
+            dirs |= dd
         return files, dirs, compiler, lean, seen
 
+    def data(self, path):
+        if path not in self._data:
+            try:
+                text = open(path, errors="ignore").read() if os.path.getsize(path) < 2_000_000 else ""
+            except OSError:
+                text = ""
+            self._data[path] = self.deps_of_text(text, os.path.dirname(path))
+        return self._data[path]
 
-def select(repo, inventory, changed):
-    """-> ({command: reason}, [unmapped changed files])"""
+
+def select(repo, inventory, changed, base=None):
+    """-> ({command: reason}, [unmapped changed files])
+
+    `base` is the commit the change is measured from; it is needed only when the workflow itself
+    changed, to tell which commands the edit added or re-spelled (new arguments, a new env prefix).
+    Without it, a workflow change selects every command."""
     info = {cmd: repo.closure(cmd) for cmd in inventory}
     chosen, unmapped = {}, []
 
     def pick(cmd, why):
         chosen.setdefault(cmd, why)
+
+    if WORKFLOW in changed:
+        old = None
+        if base:
+            r = subprocess.run(["git", "show", f"{base}:{WORKFLOW}"], capture_output=True, text=True)
+            if r.returncode == 0:
+                old = workflow_commands(r.stdout)
+        for cmd in inventory:
+            if old is None:
+                pick(cmd, "the workflow changed and no base is known to compare its commands with")
+            elif cmd not in old:
+                pick(cmd, "the workflow adds or re-spells this command")
 
     for ch in changed:
         hit = False
@@ -300,12 +351,13 @@ def main():
     ap.add_argument("--changed")
     ap.add_argument("--explain", action="store_true")
     ap.add_argument("--durations")
+    ap.add_argument("--base", help="commit the change is measured from (for workflow edits)")
     a = ap.parse_args()
     inventory = [l.rstrip("\n") for l in open(a.inventory) if l.strip()]
     src = open(a.changed) if a.changed else sys.stdin
     changed = sorted({l.strip() for l in src if l.strip()})
     repo = Repo(changed)
-    chosen, unmapped = select(repo, inventory, changed)
+    chosen, unmapped = select(repo, inventory, changed, a.base)
     for cmd in inventory:  # inventory order, so output is stable
         if cmd in chosen:
             print(f"{cmd}\t{chosen[cmd]}" if a.explain else cmd)

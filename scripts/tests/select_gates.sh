@@ -39,6 +39,9 @@ trap 'rm -rf "$TMPD"' EXIT
 if [ -n "$FILES" ]; then
   [ -f "$FILES" ] || { echo "select_gates: no such file $FILES" >&2; exit 2; }
   sed '/^$/d; /^#/d' "$FILES" | LC_ALL=C sort -u > "$TMPD/changed"
+  # The base a workflow edit is compared against (which commands it added or re-spelled):
+  # SELECT_GATES_BASE, else where HEAD left origin/main. With neither, a workflow edit selects all.
+  MB="${SELECT_GATES_BASE:-$(git merge-base origin/main HEAD 2>/dev/null || true)}"
 else
   BASE="${BASE:-origin/main}"
   MB="$(git merge-base "$BASE" HEAD)" || { echo "select_gates: no merge base with $BASE" >&2; exit 2; }
@@ -57,5 +60,6 @@ if [ ! -s "$TMPD/changed" ]; then
   echo "select_gates: no changed files" >&2
   exit 0
 fi
+BASE_ARG=(); [ -n "${MB:-}" ] && [ "$MB" != none ] && BASE_ARG=(--base "$MB")
 python3 scripts/tests/lib/select_gates.py --inventory "$TMPD/inventory" --changed "$TMPD/changed" \
-  --durations scripts/tests/lib/gate_durations.tsv "${EXPLAIN[@]}"
+  "${BASE_ARG[@]}" --durations scripts/tests/lib/gate_durations.tsv "${EXPLAIN[@]}"

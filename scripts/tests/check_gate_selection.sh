@@ -130,6 +130,18 @@ if select_fixture unmapped "$TMPD/unmapped.paths"; then
   else no "a path no rule maps selects $n of $NINV; the fail-safe must select every gate"; fi
 fi
 
+printf '.github/workflows/lean_action_ci.yml\n' > "$TMPD/wf.paths"
+if SELECT_GATES_BASE=none select_fixture wfnobase "$TMPD/wf.paths"; then
+  n="$(count wfnobase)"
+  if [ "$n" -eq "$NINV" ]; then ok "a workflow edit with no base to compare selects every gate ($n)"
+  else no "a workflow edit with no base selects $n of $NINV"; fi
+fi
+if SELECT_GATES_BASE=HEAD select_fixture wfhead "$TMPD/wf.paths"; then
+  n="$(count wfhead)"
+  if [ "$n" -lt "$NINV" ]; then ok "a workflow edit compared with a base selects only what reads it or changed ($n)"
+  else no "a workflow edit compared with HEAD still selects every gate"; fi
+fi
+
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="
 grep -v '^#' "$FIX/stack_budget_leg_26c409f8.paths" > "$TMPD/wire.paths"
 if bash scripts/tests/run_ci_gates_local.sh --plan --impact-files "$TMPD/wire.paths" > "$TMPD/wire.plan" 2>/dev/null; then

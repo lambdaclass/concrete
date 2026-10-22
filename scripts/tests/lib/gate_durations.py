@@ -4,26 +4,20 @@
 Usage: gate_durations.py JOBS_JSON > scripts/tests/lib/gate_durations.tsv
   JOBS_JSON  `gh run view <id> -R <repo> --json jobs,headSha,databaseId` output
 
-Each workflow step's wall time is split evenly over the gate commands the step runs (the same
-extraction pattern as run_ci_gates_local.sh's `_extract_cmds`). The table only feeds an ESTIMATE
+Each workflow step's wall time is split evenly over the gate commands the step runs (select_gates.py's
+replica of run_ci_gates_local.sh's `_extract_cmds`). The table only feeds an ESTIMATE
 printed beside the selection; it never decides what is selected, so a stale table costs accuracy,
 not coverage. CI runners are 2-core machines that run a job's steps serially.
 """
 import datetime
 import json
-import re
+import os
 import sys
 
 import yaml
 
-WORKFLOW = ".github/workflows/lean_action_ci.yml"
-CMD_RE = re.compile(
-    r"(?:[A-Z_][A-Z0-9_]*=[^ ;|&]+\s+)*(?:(?:bash|python3|sh)\s+)?(?:\./)?scripts/[^ ;|&]*\.(?:sh|py)[^;|&\n]*")
-
-
-def norm(cmd):
-    cmd = re.sub(r"\s[0-9]*[<>].*$", "", cmd).rstrip()
-    return cmd.replace("bash ./", "bash ", 1)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from select_gates import WORKFLOW, workflow_commands  # noqa: E402  (one extractor replica)
 
 
 def ts(s):
@@ -43,7 +37,7 @@ def main():
             text = decl.get(st["name"])
             if not text or not st.get("startedAt") or not st.get("completedAt"):
                 continue
-            cmds = sorted({norm(m) for m in CMD_RE.findall(text)})
+            cmds = sorted(workflow_commands(text))
             if not cmds:
                 continue
             dt = (ts(st["completedAt"]) - ts(st["startedAt"])).total_seconds()
