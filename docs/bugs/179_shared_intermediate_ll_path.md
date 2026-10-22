@@ -58,8 +58,10 @@ name, so llvm-as and clang diagnostics still name the source.
 - `compileSSA` and `compileBuild` use `IO.FS.withTempDir`, so the directory is removed on every
   path: success, a failed validation, a refused native-library declaration, a clang failure, and
   an exception. Before the fix the `.ll` survived a clang failure.
-- `compileTest` and `compileTestBuild` keep the directory when a step fails, as before, and print
-  the paths in it (`LLVM IR at:`, `Binary at:`). They remove it on success.
+- `compileTest` and `compileTestBuild` keep the directory, as before, when a step fails after
+  printing where its artifacts are: failed validation or clang (`LLVM IR left at:`), or a failing
+  test binary (`LLVM IR at:`, `Binary at:`). Every other outcome removes it: success, a refused
+  native-library declaration, and an exception (`withPrivateDirKeptOnFailure`).
 - `concrete run` builds into a private directory and removes it after the program exits.
 - The reducer writes each candidate into a private directory.
 - `--emit-llvm` is unchanged. It prints the IR on stdout and still writes the `<input>.ll`

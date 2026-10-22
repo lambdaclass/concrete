@@ -198,6 +198,18 @@ def validateLLVMIR (llPath : String) : IO Bool := do
 def privateIntermediate (dir : System.FilePath) (sourcePath : String) (suffix : String) : String :=
   (dir / (((System.FilePath.mk sourcePath).fileName.getD "main.con") ++ suffix)).toString
 
+/-- Run `f` in a fresh directory private to this run (bug 179). `f` returns an exit code and
+    whether to keep the directory: a failing step that has printed where its IR or binary is keeps
+    it for debugging. Every other outcome, an exception included, removes it. -/
+def withPrivateDirKeptOnFailure (f : System.FilePath → IO (UInt32 × Bool)) : IO UInt32 := do
+  let dir ← IO.FS.createTempDir
+  let (rc, keep) ← try f dir catch e => do
+    try IO.FS.removeDirAll dir catch _ => pure ()
+    throw e
+  unless keep do
+    try IO.FS.removeDirAll dir catch _ => pure ()
+  return rc
+
 
 /-- Best-effort resident-set size in KB. Reads `/proc/self/statm` (Linux); returns
     `none` on any platform without it (e.g. macOS) — the telemetry field is
@@ -427,40 +439,39 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
     return 1
   | .ok ssa =>
     let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-    -- Private to this run (bug 179); kept for debugging when a step fails, removed on success.
-    let dir ← IO.FS.createTempDir
-    let llPath := privateIntermediate dir inputPath ".test.ll"
-    let outPath := privateIntermediate dir inputPath ".test"
-    writeFile llPath llvmIR
-    -- Validate LLVM IR (if llvm-as available)
-    let llValid ← validateLLVMIR llPath
-    if !llValid then return 1
-    let some native ← fileModeNativeLinkFlags inputPath
-      | return 1
-    let args ← clangArgs llPath outPath native
-    let exitCode ← runCmd "clang" args
-    if exitCode != 0 then
-      IO.eprintln "clang compilation failed"
-      IO.eprintln s!"LLVM IR left at: {llPath}"
-      return exitCode
-    -- Run the test binary (keep .ll and binary for debugging)
-    let child ← IO.Process.spawn {
-      cmd := outPath
-      stdout := .piped
-      stderr := .piped
-    }
-    let stdout ← child.stdout.readToEnd
-    let stderr ← child.stderr.readToEnd
-    let exitCode ← child.wait
-    IO.print stdout
-    if !stderr.isEmpty then IO.eprint stderr
-    if exitCode != 0 then
-      IO.eprintln s!"Test binary exited with code {exitCode}"
-      IO.eprintln s!"LLVM IR at: {llPath}"
-      IO.eprintln s!"Binary at: {outPath}"
-    else
-      IO.FS.removeDirAll dir
-    return exitCode
+    -- Private to this run (bug 179); kept for debugging when a step fails after saying where.
+    withPrivateDirKeptOnFailure fun dir => do
+      let llPath := privateIntermediate dir inputPath ".test.ll"
+      let outPath := privateIntermediate dir inputPath ".test"
+      writeFile llPath llvmIR
+      -- Validate LLVM IR (if llvm-as available)
+      if !(← validateLLVMIR llPath) then
+        IO.eprintln s!"LLVM IR left at: {llPath}"
+        return (1, true)
+      let some native ← fileModeNativeLinkFlags inputPath
+        | return (1, false)
+      let args ← clangArgs llPath outPath native
+      let exitCode ← runCmd "clang" args
+      if exitCode != 0 then
+        IO.eprintln "clang compilation failed"
+        IO.eprintln s!"LLVM IR left at: {llPath}"
+        return (exitCode, true)
+      -- Run the test binary (keep .ll and binary for debugging)
+      let child ← IO.Process.spawn {
+        cmd := outPath
+        stdout := .piped
+        stderr := .piped
+      }
+      let stdout ← child.stdout.readToEnd
+      let stderr ← child.stderr.readToEnd
+      let exitCode ← child.wait
+      IO.print stdout
+      if !stderr.isEmpty then IO.eprint stderr
+      if exitCode != 0 then
+        IO.eprintln s!"Test binary exited with code {exitCode}"
+        IO.eprintln s!"LLVM IR at: {llPath}"
+        IO.eprintln s!"Binary at: {outPath}"
+      return (exitCode, exitCode != 0)
 
 /-- Emit Core or SSA IR for inspection. Runs full pipeline including new passes. -/
 def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
@@ -3621,40 +3632,39 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       return 1
     | .ok ssa =>
       let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-      -- Private to this run (bug 179); kept for debugging when a step fails, removed on success.
-      let dir ← IO.FS.createTempDir
-      let llPath := privateIntermediate dir mainPath ".test.ll"
-      let outPath := privateIntermediate dir mainPath ".test"
-      writeFile llPath llvmIR
-      -- Validate LLVM IR (if llvm-as available)
-      let llValid ← validateLLVMIR llPath
-      if !llValid then return 1
-      let some native ← nativeLinkFlags ctx
-        | return 1
-      let args ← clangArgs llPath outPath native
-      let exitCode ← runCmd "clang" args
-      if exitCode != 0 then
-        IO.eprintln "clang compilation failed"
-        nativeLinkFailureNote ctx
-        IO.eprintln s!"LLVM IR left at: {llPath}"
-        return exitCode
-      let child ← IO.Process.spawn {
-        cmd := outPath
-        stdout := .piped
-        stderr := .piped
-      }
-      let stdout ← child.stdout.readToEnd
-      let stderr ← child.stderr.readToEnd
-      let testExit ← child.wait
-      IO.print stdout
-      if !stderr.isEmpty then IO.eprint stderr
-      if testExit != 0 then
-        IO.eprintln s!"Test binary exited with code {testExit}"
-        IO.eprintln s!"LLVM IR at: {llPath}"
-        IO.eprintln s!"Binary at: {outPath}"
-      else
-        try IO.FS.removeDirAll dir catch _ => pure ()
-      return testExit
+      -- Private to this run (bug 179); kept for debugging when a step fails after saying where.
+      withPrivateDirKeptOnFailure fun dir => do
+        let llPath := privateIntermediate dir mainPath ".test.ll"
+        let outPath := privateIntermediate dir mainPath ".test"
+        writeFile llPath llvmIR
+        -- Validate LLVM IR (if llvm-as available)
+        if !(← validateLLVMIR llPath) then
+          IO.eprintln s!"LLVM IR left at: {llPath}"
+          return (1, true)
+        let some native ← nativeLinkFlags ctx
+          | return (1, false)
+        let args ← clangArgs llPath outPath native
+        let exitCode ← runCmd "clang" args
+        if exitCode != 0 then
+          IO.eprintln "clang compilation failed"
+          nativeLinkFailureNote ctx
+          IO.eprintln s!"LLVM IR left at: {llPath}"
+          return (exitCode, true)
+        let child ← IO.Process.spawn {
+          cmd := outPath
+          stdout := .piped
+          stderr := .piped
+        }
+        let stdout ← child.stdout.readToEnd
+        let stderr ← child.stderr.readToEnd
+        let testExit ← child.wait
+        IO.print stdout
+        if !stderr.isEmpty then IO.eprint stderr
+        if testExit != 0 then
+          IO.eprintln s!"Test binary exited with code {testExit}"
+          IO.eprintln s!"LLVM IR at: {llPath}"
+          IO.eprintln s!"Binary at: {outPath}"
+        return (testExit, testExit != 0)
 
 /-- `concrete prove --help=agent`: the agent entrypoint. Prints the
     proof-authoring sequence, stable output formats, the exit-code taxonomy, and

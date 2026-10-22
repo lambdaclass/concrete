@@ -20,7 +20,8 @@ uncaught `no such file or directory`. A devshell toolchain change shifted `run_t
 enough to expose it: bug 102's `--interp == binary` leg raced a background `run_ok` worker
 compiling the same fixture. Every compile now writes its intermediates into a temp directory it
 creates for itself and removes on every path, including failures. Test mode, `concrete run` and
-the reducer, which named temporaries after the source or a millisecond clock, do the same.
+the reducer, which named temporaries after the source or a millisecond clock, also use private
+directories; test mode still keeps its IR and binary after a failure it reports, and prints where.
 `--emit-llvm` is unchanged. Pinned by concurrent-compile legs in `run_tests.sh` for both build
 paths (`regress_179_concurrent_compile.con`, `regress_179_concurrent_build`). On the previous
 compiler, 35 of 40 file-mode compiles and 9 of 12 project builds failed.
