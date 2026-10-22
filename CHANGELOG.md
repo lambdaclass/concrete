@@ -28,8 +28,8 @@ ledgers, load control, review and branch discipline, build caches and stage-time
 measurement. R-0513 owns impact-based pre-push selection. The promotion pipeline describes trains
 and the landing and campaign tiers with its existing passed, failed, skipped, cancelled and
 incomplete vocabulary. `docs/project/CONCURRENT_WORK.md` and `docs/compiler/TESTING.md` give the
-rules that apply now. Targets: under 2 h from Codex-clean to main, ≤ 40 min of landing CI,
-≤ 10 min of pre-push, zero ledger conflicts and ≤ 5 review rounds per slice.
+rules that apply now. The targets are medians: under 2 h from Codex-clean to main, ≤ 40 min of
+landing CI, ≤ 10 min of pre-push and ≤ 5 review rounds per slice. Ledger conflicts are to be zero.
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
