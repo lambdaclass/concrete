@@ -159,10 +159,15 @@ out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "paused" && [ "$(main_sha origin)" = "$BASE" ] && ok "the kill switch stops the tick" || { no "pause: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE"
 if command -v flock >/dev/null 2>&1; then
-  mkdir -p "$LAND_STATE_DIR/bot"; flock "$LAND_STATE_DIR/bot/lock.flock" sleep 60 & fl=$!; sleep 1
+  # The holder keeps the fd itself and lets go on a signal file: `flock FILE sleep` hands the fd to
+  # the sleep, and killing flock would leave the lock held by the orphan.
+  mkdir -p "$LAND_STATE_DIR/bot"
+  ( exec 9>"$LAND_STATE_DIR/bot/lock.flock"; flock 9; touch "$TMP/held"
+    while [ ! -e "$TMP/release" ]; do sleep 0.2; done ) & fl=$!
+  while [ ! -e "$TMP/held" ]; do sleep 0.1; done
   out="$(bot tick)"; rc=$?
   [ "$rc" = 0 ] && has "$out" "another instance holds" && [ "$(main_sha origin)" = "$BASE" ] && ok "flock: a live holder stops a second instance" || { no "flock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-  kill "$fl" 2>/dev/null; wait "$fl" 2>/dev/null
+  touch "$TMP/release"; wait "$fl" 2>/dev/null
 else
   echo "  (flock is not installed here; the mkdir fallback below is the lock under test)"
 fi
