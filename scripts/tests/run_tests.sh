@@ -1573,7 +1573,9 @@ run_err "$TESTDIR/error_115_vec_get_generic_unbounded.con"  "(E0290)"
 run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
 # Bugs 102 and 105: the interpreter agrees with the binary (102 needed pointer equality on
 # reference paths in the interpreter; 105's reproducer runs in both).
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic; do
+# Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
+# inside a loop, E0703 under an if); five shapes, binary exit 42.
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -7826,6 +7828,9 @@ run_ok "$TESTDIR/regress_116_vec_push_first_field.con" 42
 # Bug 133 (silent): `&mut (*p).n` borrowed the field of a copy of `*p`, so the
 # write was lost (binary 39, interpreter 42).
 run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
+# Bug 175 (fails closed): a match whose arms all diverge left its merge block open, so a
+# loop around it failed SSA verification (E0708). --interp agreement: the r102 loop.
+run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).

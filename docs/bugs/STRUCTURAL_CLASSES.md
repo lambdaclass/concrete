@@ -41,7 +41,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131 | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities), 105 (a source-level reference rule satisfied later by Mono's substitution) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 107, 108, 110, 116, 126, 127, 130, 133, 134 | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 107, 108, 110, 116, 126, 127, 130, 133, 134, 175 (a `match` whose arms all diverge left its merge open: 078's shape, missed in `match`) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
@@ -209,7 +209,9 @@ Core: 084 – 086, 101); the harness R-0491 (S1, exit 2c) detects the class mean
 stale storage of aggregate references, "requires correct storage aliasing during lowering"), 102 (a
 pointer-typed local whose address is taken got no stack slot), 105 (listed here while it was
 open; its cause turned out to be in EmitSSA, class 12), 107 (a shadowing `let` was given the shadowed binding's slot because slots
-are keyed by Core name, while a reference to the old binding was still live).
+are keyed by Core name, while a reference to the old binding was still live), 175 (a `match`
+whose arms all diverge left its merge block open: the 078 shape again, because each branch
+construct decides for itself whether its merge is reachable).
 
 **Design cause.** `Lower` performs sequencing, `defer`, match compilation, promotion, layout and
 bounds checks in one pass with no semantics of its own; storage is decided by recognizing
