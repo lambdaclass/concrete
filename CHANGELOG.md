@@ -46,7 +46,9 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
 - **Found in review (bugs 145, 146).** The raw `vec_free` intrinsic dropped non-Copy elements
   (now E0287 unless the element is Copy; `Vec::drop` is the linear form; the matching `vec_set`
   overwrite is bug 115's fix), and `*h` loaded a heap value without freeing its cell (it
-  now frees, as MEMORY_SEMANTICS always said).
+  now frees, as MEMORY_SEMANTICS always said, and is never a place: `(*h).f` is E0290, `h.f` is the
+  spelling). A move inside an erased `assert`, `assume` or `ghost let` is E0243 (bug 147): the
+  statement is erased, so the move never ran.
 - **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
   `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
 

@@ -466,6 +466,18 @@ def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
     if isInteger t || isFloatType t then pure none
     else pure (some "comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)")
 
+/-- Bug 147: a proof-only statement (`assert`, `assume`, `ghost let`) is erased before Core, so it
+    may not move, consume or reserve a runtime binding: the obligation would be discharged by an
+    operation that never runs. `before` is the environment when the statement started. -/
+def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      if !vi.isCopy && old.state != vi.state && (vi.state == .consumed || vi.state == .reserved) then
+        throwCheck (.erasedConsumesRuntime n) span
+    | none => pure ()
+
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
   let env ← getEnv
@@ -1077,10 +1089,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => false
       if !ok then throwCheck (.builtinWrongFirstArg "vec_free" "Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
       -- Bug 145 (rule (c)): `vec_free` releases the buffer only; non-Copy elements still in it
-      -- would be dropped without being destroyed. `Vec::drop` runs the element drop glue.
+      -- would be dropped without being destroyed. `Vec::drop` runs the element drop glue. A
+      -- trusted function may still release a buffer it has emptied (it vouches for that).
       match vecTy with
       | .generic "Vec" [et] _ =>
-        if !(← isCopyType et) then
+        if !(← isCopyType et) && !(← getEnv).currentFnTrusted then
           throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
       | _ => pure ()
       match vecArg with
@@ -1408,14 +1421,16 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           let viaRef ← match stripParens obj with
             | .ident _ varName => do
               match ← lookupVarInfo varName with
-              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true | _ => false)
+              -- Bug 144 (Codex round 4): a heap shell is not the newtype's owner either: `h.0` on
+              -- a `Heap<W>` read the payload out of the cell and consumed `h` without freeing it.
+              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ => true | _ => false)
               | none => pure false
             | _ => pure baseThroughRef
           match stripParens obj with
           | .ident _ varName =>
             if viaRef then
               if mode != .place && !(← isCopyType innerFieldTy) then
-                throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference") (some e.getSpan)
+                throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference or heap shell") (some e.getSpan)
             else consumeVarIfExists varName (some e.getSpan)
           | _ =>
             if mode != .place && !(← isCopyType innerFieldTy) then
@@ -2089,7 +2104,9 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
 
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with
-  | .letDecl _ name mutable ty value _isGhost =>
+  | .letDecl _ name mutable ty value isGhost =>
+    -- Bug 147: an erased binding may not move a runtime value (see `.assert_`).
+    let envErase ← getEnv
     -- Escape analysis: prevent storing a borrow ref into a new binding
     let env ← getEnv
     match value with
@@ -2098,6 +2115,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
     | _ => pure ()
     let valTy ← checkExpr value ty
+    if isGhost then refuseErasedConsumption envErase (some stmt.getSpan)
     match ty with
     | some declTy => expectTy declTy valTy s!"let binding '{name}'" (some stmt.getSpan)
     | none => pure ()
@@ -2649,7 +2667,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
   -- surfaced by the contracts report.
   | .assert_ _ cond | .assume_ _ cond =>
+    let envErase ← getEnv
     let t ← checkExpr cond none
+    -- Bug 147: `assert`/`assume` are erased before Core, so a move inside the condition
+    -- (`assert(*h == 42)` consumes `h`) would discharge a runtime obligation that nothing
+    -- performs: the heap cell was never freed.
+    refuseErasedConsumption envErase (some stmt.getSpan)
     expectTy .bool t "assert/assume condition" (some stmt.getSpan)
   -- These are desugared before reaching Check; should never appear
   | .letDestructure _ _ _ _ _ _ => pure ()

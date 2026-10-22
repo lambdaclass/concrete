@@ -1,0 +1,11 @@
+// Bug 144 (Codex round 4): `h.0` on a Heap<W> (W a newtype over String) read the payload out of
+// the cell and consumed `h` without freeing the cell. A heap shell is not the newtype's owner:
+// E0290; move the value out first (`let w = *h;`).
+newtype W = String;
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<W> = alloc("payload" as W);
+    let s: String = h.0;
+    drop_string(s);
+    return 0;
+}

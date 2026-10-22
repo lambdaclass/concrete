@@ -47,9 +47,12 @@ element; `Vec::drop` runs the element drop glue, bug 052), and std's `Vec::set` 
 ## Fix
 
 Containment at the intrinsic: `vec_free` of a `Vec<T>` with non-Copy `T` is E0287
-(`vecFreeDropsElements`). Fixture `error_145_vec_free_linear.con` (`run_tests.sh`). The `vec_set`
-half: bug 115's fix (E0291, `lowering-bugs`). Migration: 0 sites (every corpus use is at a Copy
-element type).
+(`vecFreeDropsElements`) outside trusted code. A trusted function may release a buffer it has
+emptied (it vouches for that, as for any trusted operation); the builtin `Vec` has no other way to
+release an emptied buffer in a single-file program without std. Fixture `error_145_vec_free_linear.con` (`run_tests.sh`). The `vec_set`
+half: bug 115's fix (E0291, `lowering-bugs`). Migration: 2 test files (`test_alloca_loop_stress.con`,
+`test_string_literal_in_loop.con` empty a `Vec<String>` and then release it through a trusted
+`free_emptied` helper).
 
 ## Structural cause
 

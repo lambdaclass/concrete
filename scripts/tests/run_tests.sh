@@ -1823,6 +1823,11 @@ run_err "$TESTDIR/error_d14_heap_deref_assign.con" "cannot assign through 'Heap<
 run_err "$TESTDIR/error_144_heap_field_read_twice.con"      "(E0290)"
 run_err "$TESTDIR/error_144_free_drops_linear.con"          "(E0287)"
 run_err "$TESTDIR/error_144_defer_free_drops_linear.con"    "(E0287)"
+run_err "$TESTDIR/error_144_heap_newtype_unwrap.con"        "(E0290)"
+# Bug 147: proof-only statements (assert, assume, ghost let) may not move a runtime value (E0243).
+run_err "$TESTDIR/error_147_assert_consumes_heap.con"       "(E0243)"
+run_err "$TESTDIR/error_147_ghost_let_consumes_heap.con"    "(E0243)"
+run_ok  "$TESTDIR/regress_147_assert_reads.con" "" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
     r144_i=$($COMPILER "$r144" --interp 2>&1 || true)
@@ -1933,7 +1938,7 @@ error_091_norm_copied_mut_ref:E0231
 error_091_norm_double_deref_heap:E0238
 error_091_norm_field_write_under_reborrow:E0231
 error_091_norm_borrow_block_under_live_ref:E0232
-error_091_norm_paren_heap_load:E0205
+error_091_norm_paren_heap_load:E0290
 error_091_norm_assign_under_shared_ref:E0232
 error_091_norm_heap_field_load:E0290
 error_091_norm_paren_array_write:E0217

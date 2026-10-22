@@ -1,5 +1,6 @@
 // Normalized place rule (Codex review, second pass): `(*(h)).take()` consumed nothing (the heap
-// load matched only a bare `*h`), so `(*h).take()` loaded the freed heap again. E0205.
+// load matched only a bare `*h`), so `(*h).take()` loaded the freed heap again. E0205 then; since
+// bug 146 a heap dereference is never a place (a receiver included), so the first call is E0290.
 mod m {
     struct P { n: Int }
     impl P { fn take(self) -> Int { let P { n } = self; return n; } }

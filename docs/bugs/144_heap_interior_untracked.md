@@ -53,6 +53,9 @@ of, an initialized non-Copy place without consuming it):
 
 - A by-value non-Copy field read of a heap shell is E0290, as for any other owner. Copy fields,
   borrows (`&h.f`) and further projection stay legal.
+- `h.0` on a `Heap<W>` with `W` a newtype over a non-Copy type is E0290 too (Codex review, round 4:
+  the newtype unwrap treated the shell as the newtype's owner, consumed it and never freed the
+  cell); `error_144_heap_newtype_unwrap.con`.
 - `free(h)` as a statement, or deferred, is E0287 (`freeDropsLinearInterior`) when the pointee is
   not Copy. `free(h)` of a Copy pointee is unchanged.
 - The idiom becomes: move the node out of its cell (`let n = *h;`, which frees the cell, or
