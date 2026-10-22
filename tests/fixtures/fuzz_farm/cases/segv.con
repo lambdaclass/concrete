@@ -1,0 +1,6 @@
+mod m {
+    fn main() with(Console) {
+        inc;
+        SEGV;
+    }
+}

@@ -48,6 +48,8 @@ expect_cls "compiler panic" crash diff "$FIX/cases/crash.con"
 expect_cls "checker refusal of a generated program" refusal diff "$FIX/cases/refusal.con"
 expect_cls "agreeing program" None diff "$FIX/cases/agree.con"
 FARM_T_RUN=0.2 expect_cls "native hang (re-run at 4x first)" timeout diff "$FIX/cases/hang.con"
+expect_cls "native SIGSEGV is a native crash, not trap agreement" silent diff "$FIX/cases/segv.con"
+expect_cls "runaway output hits the cap: resource limit, not a finding" None diff "$FIX/cases/spam.con"
 expect_cls "accepted leak" unsound lin "$FIX/cases/lin_leak_accepted.con" '{"must_compile": false, "kind": "leak"}'
 expect_cls "rejected leak (E0208)" None lin "$FIX/cases/lin_leak_rejected.con" '{"must_compile": false, "kind": "leak"}'
 expect_cls "mutation oracle ignores clean refusals" None mut "$FIX/cases/refusal.con"
@@ -125,16 +127,30 @@ print(("OK " if st.get("crash") == "open" else "NO ") + f"crash finding stays op
 print(("OK " if st.get("unsound") == "open" else "NO ") + f"unsound finding stays open -> {st.get('unsound')}")
 PY
 while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; done < "$TMP/e.txt"
+# main is now 2222222 (the snapshot the re-check used): a worker still on the OLD snapshot
+# 1111111 reproduces the bug, which must NOT reopen it; one on the current main must.
+mkdir -p "$H/current"; echo 2222222 > "$H/current/SHA"
 FARM_HOME="$H" FARM_PUBLIC="$H/pub" FAKE_GEN_MODE=bugs $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 3333333 --seconds 3 --batch 10 --seed 9 --generators diff \
+  --gen-dir "$FIX/gen" --sha 1111111 --seconds 3 --batch 10 --seed 9 --generators diff \
   --no-lean-reduce >/dev/null 2>&1
 python3 - "$H" <<'PY' > "$TMP/e2.txt"
 import json, os, sys
 idx = json.load(open(os.path.join(sys.argv[1], "findings", "findings.json")))
 e = [e for e in idx["signatures"].values() if e["class"] == "silent"][0]
-print(("OK " if e["status"] == "open" and "reopened" in e else "NO ") +
-      f"a fixed signature seen again is reopened -> {e['status']}")
+print(("OK " if e["status"] == "fixed-on-main 2222222" else "NO ") +
+      f"an occurrence on an older snapshot does not reopen a fixed finding -> {e['status']}")
 PY
+FARM_HOME="$H" FARM_PUBLIC="$H/pub" FAKE_GEN_MODE=bugs $FARM campaign --compiler "$CC" \
+  --gen-dir "$FIX/gen" --sha 2222222 --seconds 3 --batch 10 --seed 9 --generators diff \
+  --no-lean-reduce >/dev/null 2>&1
+python3 - "$H" <<'PY' >> "$TMP/e2.txt"
+import json, os, sys
+idx = json.load(open(os.path.join(sys.argv[1], "findings", "findings.json")))
+e = [e for e in idx["signatures"].values() if e["class"] == "silent"][0]
+print(("OK " if e["status"] == "open" and "reopened" in e else "NO ") +
+      f"an occurrence on the current main reopens it -> {e['status']}")
+PY
+rm -rf "$H/current"
 while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; done < "$TMP/e2.txt"
 
 echo "=== F: promote ==="
@@ -148,6 +164,9 @@ if [ -f "$f" ] && head -1 "$f" | grep -q '^// Fuzz-farm finding silent-000000f1x
    && [ "$(grep -v '^//' "$f")" = "$(cat "$FIX/findings/silent-000000f1x7e0/minimized.con")" ]; then
   ok "--write places the fixture under tests/regressions/ with header + minimized body"
 else no "--write fixture missing or malformed ($f)"; fi
+rp="$(sed -n 's|^// Replay: python3 \([^ ]*\) .*|\1|p' "$FIX/promote.golden")"
+[ -n "$rp" ] && [ -f "$rp" ] && ok "the replay command names a real script ($rp)" \
+  || no "the replay command names no real script ('$rp')"
 if FARM_HOME="$FIX" $FARM promote silent-doesnotexist >/dev/null 2>&1; then
   no "promote of an unknown signature must fail"; else ok "promote of an unknown signature fails"; fi
 

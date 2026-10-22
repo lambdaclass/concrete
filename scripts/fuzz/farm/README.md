@@ -105,5 +105,5 @@ sudo systemctl stop fuzz-farm.service fuzz-farm-track.timer            # stop no
 sudo systemctl disable --now fuzz-farm.service fuzz-farm-track.timer   # stop and keep off across reboots
 sudo systemctl enable --now fuzz-farm-track.timer fuzz-farm.service    # start (production config)
 sudo bash scripts/fuzz/farm/install-farm.sh --smoke 10                 # re-run a 10 min smoke
-journalctl -u fuzz-farm -f ; sudo -u fuzz /home/fuzz/farm/farm.sh status
+journalctl -u fuzz-farm -f ; sudo -u fuzz /opt/fuzz-farm/farm.sh status
 ```

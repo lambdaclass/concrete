@@ -15,7 +15,7 @@
 #   src/                 dedicated clone of origin/main (build happens here, never in a gate tree)
 #   snap/<sha>/          immutable snapshot: bin/concrete, gen/fuzz_*.py, scripts/land/notify.sh
 #   current -> snap/<sha>
-#   farm/                this engine (installed copy; tracks this script, not main)
+#   /opt/fuzz-farm/      this engine (root-owned installed copy; tracks this branch, not main)
 #   findings/<sig>/      repro.con minimized.con meta.json log;  findings/findings.json index
 #   state/               farm.json, drift.json, seeds.log, stats/<day>/, paused (flag)
 #   reports/summary-<day>.md
@@ -49,16 +49,29 @@ STATE="$FARM_HOME/state"
 mkdir -p "$STATE" "$FARM_HOME/snap" "$FARM_HOME/reports" "$FARM_PUBLIC" 2>/dev/null
 log() { echo "[farm $(date -u +%H:%M:%S)] $*"; }
 
-set_state() {  # set_state <state> [sha]
+set_state() {  # set_state <state> [sha]   (run and track both write it: locked, private tmp)
   python3 - "$STATE/farm.json" "$1" "${2:-}" <<'EOF'
-import json, sys, datetime, os
+import json, sys, datetime, os, fcntl
 p, st, sha = sys.argv[1:4]
-try: d = json.load(open(p))
-except Exception: d = {}
-d["state"] = st; d["at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-if sha: d["sha"] = sha
-json.dump(d, open(p + ".tmp", "w"), indent=1); os.replace(p + ".tmp", p)
+with open(p + ".lock", "a") as lk:
+    fcntl.flock(lk, fcntl.LOCK_EX)
+    try: d = json.load(open(p))
+    except Exception: d = {}
+    d["state"] = st; d["at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if sha: d["sha"] = sha
+    tmp = f"{p}.tmp.{os.getpid()}"
+    json.dump(d, open(tmp, "w"), indent=1); os.replace(tmp, p)
 EOF
+}
+
+leased() {  # leased <snapdir>: a live campaign worker still uses this snapshot
+  local f
+  for f in "$1"/.lease-*; do
+    [ -e "$f" ] || continue
+    kill -0 "${f##*.lease-}" 2>/dev/null && return 0
+    rm -f "$f"
+  done
+  return 1
 }
 
 # ---------------------------------------------------------------- tracking / build
@@ -72,9 +85,11 @@ snapshot() {  # snapshot <sha>: copy the built compiler + generators out of the 
   echo "$sha" > "$s.tmp/SHA"
   rm -rf "$s"; mv "$s.tmp" "$s"
   ln -sfn "$s" "$FARM_HOME/current.tmp" && mv -T "$FARM_HOME/current.tmp" "$FARM_HOME/current"
-  # prune old snapshots (never the current one)
+  # prune old snapshots: never the current one, never one a running worker holds a lease on
   ls -1dt "$FARM_HOME"/snap/*/ 2>/dev/null | tail -n +"$((KEEP_SNAPSHOTS + 1))" | while read -r d; do
-    [ "$(readlink -f "$d")" = "$(readlink -f "$FARM_HOME/current")" ] || rm -rf "$d"
+    d="${d%/}"
+    [ "$(readlink -f "$d")" = "$(readlink -f "$FARM_HOME/current")" ] && continue
+    leased "$d" || rm -rf "$d"
   done
 }
 
@@ -100,14 +115,18 @@ track() {
       if (cd "$src" && nix develop -c lake build) > "$STATE/build.log" 2>&1 && snapshot "$new"; then
         rm -f "$STATE/build_failed"
         set_state running "$new"
-        log "snapshot $new ready; re-checking open findings"
-        $PY recheck --compiler "$FARM_HOME/current/bin/concrete" --sha "$new"
+        log "snapshot $new ready"
       else
         echo "$new" > "$STATE/build_failed"
         set_state build-failed "$cur"
         log "build FAILED at $new (see $STATE/build.log); fuzzing continues on ${cur:0:12}"
       fi
     fi
+  fi
+  # Every run, not only when main moves: findings recorded late by workers still on an older
+  # snapshot get checked against the current main too (already-checked ones are skipped).
+  if [ -x "$FARM_HOME/current/bin/concrete" ]; then
+    $PY recheck --compiler "$FARM_HOME/current/bin/concrete" --sha "$(cat "$FARM_HOME/current/SHA")"
   fi
   $PY summary >/dev/null
   $PY status

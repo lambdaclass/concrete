@@ -9,6 +9,8 @@ Semantics of a "program" (one statement per line; markers are the bugs):
   value = number of lines containing `inc;`
   BUG       native prints value+1000, interp prints value   (silent wrong code)
   HANGME    the native binary sleeps 30 s                    (timeout)
+  SPAM      the native binary prints forever                 (resource limit, not a finding)
+  SEGV      the native binary dies of SIGSEGV                (native crash = silent)
   CRASHME   the compiler panics                              (crash)
   REJECTME  the checker refuses with E0100                   (refusal)
   linearity programs (they contain `fn main() -> Int`):
@@ -52,7 +54,10 @@ def main():
         return 0
     if a[1:2] == ["-o"]:
         native = value + (1000 if "BUG" in src and not fixed else 0)
-        body = "#!/bin/sh\n" + ("sleep 30\n" if "HANGME" in src else "") + f"echo {native}\n"
+        body = "#!/bin/sh\n" + ("sleep 30\n" if "HANGME" in src else "")
+        body += "exec yes spam\n" if "SPAM" in src else ""
+        body += "kill -SEGV $$\n" if "SEGV" in src else ""
+        body += f"echo {native}\n"
         with open(a[2], "w") as fh:
             fh.write(body)
         os.chmod(a[2], 0o755)

@@ -5,7 +5,7 @@
 // Observed compile: rc=0 Compiled case.con -> case.bin
 // Observed native: rc=0 1001
 // Observed interp: rc=0 1
-// Replay: python3 scriptsfarm.py classify --oracle diff <this file>
+// Replay: python3 scripts/fuzz/farm/farm.py classify --oracle diff <this file>
 mod m {
     fn main() with(Console) {
         inc;

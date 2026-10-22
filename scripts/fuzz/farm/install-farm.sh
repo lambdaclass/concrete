@@ -6,7 +6,8 @@
 #
 # Creates:
 #   user `fuzz`        no sudo, own group only, home /home/fuzz mode 750 (gha*/dev cannot read)
-#   /home/fuzz/farm    installed copy of scripts/fuzz/farm (the engine)
+#   /opt/fuzz-farm     installed copy of scripts/fuzz/farm (the engine), ROOT-owned: a generated
+#                      program runs as `fuzz` and must not be able to replace the farm itself
 #   /home/fuzz/src     dedicated clone of origin/main (built by the track job)
 #   /srv/fuzz-farm     world-readable status JSON for the status page (fuzz-status.json)
 #   /etc/fuzz-farm.conf
@@ -48,10 +49,12 @@ for g in $(id -nG fuzz); do [ "$g" = fuzz ] || gpasswd -d fuzz "$g" >/dev/null; 
 for u in $(getent group fuzz | cut -d: -f4 | tr , ' '); do gpasswd -d "$u" fuzz >/dev/null; done
 
 # --- engine + dirs
-install -d -o fuzz -g fuzz -m 750 "$H/farm" "$H/state" "$H/findings" "$H/reports" "$H/snap" "$H/tmp"
-install -o fuzz -g fuzz -m 755 "$SRC_DIR"/farm.sh "$SRC_DIR"/farm.py "$SRC_DIR"/predicate.sh \
-  "$SRC_DIR"/promote.sh "$H/farm/"
-[ -f "$SRC_DIR/README.md" ] && install -o fuzz -g fuzz -m 644 "$SRC_DIR/README.md" "$H/farm/"
+install -d -o fuzz -g fuzz -m 750 "$H/state" "$H/findings" "$H/reports" "$H/snap" "$H/tmp"
+rm -rf "$H/farm"   # pre-/opt layout
+install -d -o root -g root -m 755 /opt/fuzz-farm
+install -o root -g root -m 755 "$SRC_DIR"/farm.sh "$SRC_DIR"/farm.py "$SRC_DIR"/predicate.sh \
+  "$SRC_DIR"/promote.sh /opt/fuzz-farm/
+[ -f "$SRC_DIR/README.md" ] && install -o root -g root -m 644 "$SRC_DIR/README.md" /opt/fuzz-farm/
 install -d -o fuzz -g fuzz -m 755 /srv/fuzz-farm
 
 # --- dedicated clone (optionally seeded with a built .lake to skip the cold build)
@@ -127,7 +130,7 @@ Wants=fuzz-farm-track.timer
 
 [Service]
 Type=simple
-ExecStart=/home/fuzz/farm/farm.sh run
+ExecStart=/opt/fuzz-farm/farm.sh run
 Restart=on-failure
 RestartSec=120
 KillMode=control-group
@@ -147,7 +150,7 @@ Description=Concrete fuzz farm: track origin/main, rebuild, re-check findings, s
 
 [Service]
 Type=oneshot
-ExecStart=/home/fuzz/farm/farm.sh track
+ExecStart=/opt/fuzz-farm/farm.sh track
 TimeoutStartSec=3h
 EOF
 common_service

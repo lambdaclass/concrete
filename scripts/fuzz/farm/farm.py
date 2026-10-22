@@ -43,7 +43,7 @@ T_COMPILE = float(os.environ.get("FARM_T_COMPILE", "60"))
 T_RUN = float(os.environ.get("FARM_T_RUN", "10"))
 T_INTERP = float(os.environ.get("FARM_T_INTERP", "30"))
 TIMEOUT_RETRY_FACTOR = 4
-MAX_VARIANTS_PER_PRESIG = 5     # distinct minimized structures kept per pre-signature
+MAX_VARIANTS_PER_PRESIG = 50    # distinct minimized structures kept per pre-signature
 RESAMPLE_EVERY = 25             # re-minimize every Nth repeat of a known pre-signature
 MAX_OCCURRENCES = 50            # seeds remembered per signature
 LINEARITY_CODES = ["E0205", "E0206", "E0207", "E0208", "E0209", "E0210", "E0211",
@@ -179,26 +179,52 @@ class InfraError(Exception):
     """The farm cannot run the compiler/binary at all (missing file, exec format...)."""
 
 
+class ResourceLimit(Exception):
+    """A case hit the farm's own per-process limits (output cap, OOM kill): not a finding."""
+
+
+OUTPUT_CAP = 8 << 20  # bytes per stream; RLIMIT_FSIZE makes a runaway printer die (SIGXFSZ)
+# Under `concrete reduce` (predicate mode) children stay in the reducer's process group, so the
+# reducer's timeout kill reaches every nested compiler (FARM_NO_SETSID=1).
+NEW_SESSION = os.environ.get("FARM_NO_SETSID") != "1"
+
+
 def _limits():
-    os.setsid()
+    if NEW_SESSION:
+        os.setsid()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (OUTPUT_CAP, OUTPUT_CAP))
 
 
-def run_cmd(argv, timeout, cwd):
-    """(rc, stdout, stderr, timed_out). rc < 0 means killed by a signal."""
-    try:
-        p = subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                             stdin=subprocess.DEVNULL, preexec_fn=_limits)
-    except OSError as e:  # the farm's own environment is broken: never a finding
-        raise InfraError(f"cannot run {argv[0]}: {e}")
-    try:
-        out, err = p.communicate(timeout=timeout)
-        return (p.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace"), False)
-    except subprocess.TimeoutExpired:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(p.pid, signal.SIGKILL)
-        out, err = p.communicate()
-        return (None, out.decode("utf-8", "replace"), err.decode("utf-8", "replace"), True)
+def _read_capped(fh):
+    fh.seek(0)
+    return fh.read(OUTPUT_CAP).decode("utf-8", "replace")
+
+
+def run_cmd(argv, timeout, cwd, env=None):
+    """(rc, stdout, stderr, timed_out). rc < 0 means killed by a signal. Output goes to files
+    (bounded by RLIMIT_FSIZE), never to unbounded pipes. Raises ResourceLimit when the process
+    died of the farm's limits (SIGXFSZ, or SIGKILL that was not our timeout: the OOM killer)."""
+    with tempfile.TemporaryFile(dir=cwd) as fo, tempfile.TemporaryFile(dir=cwd) as fe:
+        try:
+            p = subprocess.Popen(argv, cwd=cwd, stdout=fo, stderr=fe, env=env,
+                                 stdin=subprocess.DEVNULL, preexec_fn=_limits)
+        except OSError as e:  # the farm's own environment is broken: never a finding
+            raise InfraError(f"cannot run {argv[0]}: {e}")
+        try:
+            rc = p.wait(timeout=timeout)
+            timed_out = False
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                if NEW_SESSION:
+                    os.killpg(p.pid, signal.SIGKILL)
+                else:
+                    p.kill()
+            p.wait()
+            rc, timed_out = None, True
+        if rc in (-signal.SIGXFSZ, -signal.SIGKILL):
+            raise ResourceLimit(f"{os.path.basename(argv[0])} killed by signal {-rc}")
+        return (rc, _read_capped(fo), _read_capped(fe), timed_out)
 
 
 def run_retry(argv, timeout, cwd):
@@ -270,6 +296,13 @@ def compile_prog(compiler, src, wd):
 
 def classify(oracle, src, params, compiler, wd):
     os.makedirs(wd, exist_ok=True)
+    try:
+        return _classify(oracle, src, params, compiler, wd)
+    except ResourceLimit as e:
+        return Result(None, "", {"resource": str(e)}, "resource")
+
+
+def _classify(oracle, src, params, compiler, wd):
     path, binp, rc, out, err, to = compile_prog(compiler, src, wd)
     both = out + "\n" + err
     codes = sorted(set(CODE_RE.findall(both)))
@@ -303,16 +336,24 @@ def classify(oracle, src, params, compiler, wd):
     irc, iout, ierr, ito = run_retry([compiler, path, "--interp"], T_INTERP, wd)
     d["native"] = {"rc": rrc, "stdout": rout[-4000:], "stderr": rerr[-2000:], "timeout": rto}
     d["interp"] = {"rc": irc, "stdout": iout[-4000:], "stderr": ierr[-2000:], "timeout": ito}
-    icl = crash_line(iout + "\n" + ierr)
+    # The interpreter's diagnostics (panic, trap, unsupported) are on stderr; stdout is the
+    # PROGRAM's output and is never scanned for control words.
+    icl = crash_line(ierr)
     if (irc is not None and irc < 0) or icl:
         return Result("crash", f"interp:{norm(icl) if icl else f'signal {-irc}'}", d, "crash")
-    iall = iout + "\n" + ierr
-    if any(u in iall for u in ("not yet supported", "unsupported", "not supported")):
+    if irc != 0 and any(u in ierr for u in ("not yet supported", "unsupported", "not supported")):
         return Result(None, "", d, "pending")
     if rto or ito:
         if rto and ito:  # both hang: agreement (e.g. a genuine infinite loop)
             return Result(None, "", d, "agree")
         return Result("timeout", "native" if rto else "interp", d, "timeout")
+    # A language trap is abort(): SIGABRT, or exit 134 through a shell. Any other signal
+    # (SIGSEGV, SIGBUS, SIGILL, SIGFPE) is a native crash, never "agreement" with an
+    # interpreter trap. The interpreter discards buffered output on a trap, so the output
+    # printed before a trap cannot be compared.
+    if rrc is not None and rrc < 0 and rrc != -signal.SIGABRT:
+        return Result("silent", f"native=signal{-rrc}/interp={'value' if irc == 0 else 'trap'}",
+                      d, "silent")
     nk = "value" if rrc == 0 else "trap"
     ik = "value" if irc == 0 else "trap"
     if nk == ik == "trap":
@@ -447,12 +488,20 @@ def line_variants(line):
 
 
 class Budget:
-    def __init__(self, seconds, max_tests):
+    """Oracle-run budget for one minimization: a time limit, a test count, the campaign's hard
+    deadline, and the load monitor's pause flag (a paused minimizer sleeps, the clock runs)."""
+
+    def __init__(self, seconds, max_tests, hard_deadline=None, pause_flag=None):
         self.deadline = time.time() + seconds
+        if hard_deadline is not None:
+            self.deadline = min(self.deadline, hard_deadline)
         self.left = max_tests
         self.tests = 0
+        self.pause_flag = pause_flag
 
     def ok(self):
+        while self.pause_flag and os.path.exists(self.pause_flag) and time.time() < self.deadline:
+            time.sleep(5)
         return time.time() < self.deadline and self.left > 0
 
     def spend(self):
@@ -576,18 +625,23 @@ def lean_reduce(compiler, src, meta_path, wd, seconds):
     with open(inp, "w") as fh:
         fh.write(src)
     pred = f"external:{os.path.join(HERE, 'predicate.sh')} {meta_path}"
-    rc, _, _, to = run_cmd([compiler, "reduce", inp, "--predicate", pred, "-o", outp], seconds, wd)
+    try:
+        rc, _, _, to = run_cmd([compiler, "reduce", inp, "--predicate", pred, "-o", outp],
+                               seconds, wd, env=dict(os.environ, FARM_NO_SETSID="1"))
+    except ResourceLimit:
+        return None
     if rc == 0 and not to and os.path.exists(outp):
         with open(outp) as fh:
             return fh.read()
     return None
 
 
-def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True):
+def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
+             hard_deadline=None, pause_flag=None):
     """Return (minimized_src, tests_run). Every accepted step preserves cls+shape."""
     oracle, params = case["oracle"], case["params"]
     target = res.presig(oracle)
-    budget = Budget(seconds, max_tests)
+    budget = Budget(seconds, max_tests, hard_deadline, pause_flag)
     cwd = os.path.join(wd, "min")
 
     def holds(src):
@@ -613,7 +667,8 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True)
         meta = os.path.join(wd, "pred_meta.json")
         save_json(meta, {"oracle": oracle, "params": params, "presig": target,
                          "compiler": compiler})
-        red = lean_reduce(compiler, src, meta, wd, min(seconds / 2, 600))
+        red = lean_reduce(compiler, src, meta, wd,
+                          max(1, min(seconds / 2, 600, budget.deadline - time.time())))
         if red and len(red) < len(src) and holds(red):
             src = red
     return minimize_text(src, holds, budget), budget.tests
@@ -632,10 +687,10 @@ def notify(snapshot, cls, sig, meta):
     subject = f"fuzz-farm: NEW {cls} finding {sig}"
     body = (f"class={cls} oracle={meta['oracle']} generator={meta['generator']} "
             f"seed={meta['seed']} sha={meta['compiler_sha'][:12]}\nshape={meta['shape']}\n"
-            f"promote: /home/fuzz/farm/promote.sh {sig}")
+            f"promote: /opt/fuzz-farm/promote.sh {sig}")
     try:
-        rc, out, err, _ = run_cmd([script, level, subject, body], 60, snapshot)
-    except InfraError as e:
+        rc, out, err, _ = run_cmd([script, level, subject, body], 60, tempfile.gettempdir())
+    except Exception as e:  # a notification never fails the farm
         return f"notify failed: {e}"
     return f"notify rc={rc} {out.strip()[:200]} {err.strip()[:200]}"
 
@@ -649,14 +704,19 @@ def record(p, case, res, ctx, wd, log):
         idx = load_json(p["index"], empty_index())
         known = idx["presig"].get(pre, [])
         pend = idx["pending"].get(pre)
-        hits = sum(idx["signatures"][s]["count"] for s in known) if known else 0
-        resample = (known and len(known) < MAX_VARIANTS_PER_PRESIG
-                    and hits % RESAMPLE_EVERY == 0)
+        hits = idx.setdefault("presig_hits", {}).get(pre, 0) + 1
+        idx["presig_hits"][pre] = hits
+        open_known = [s for s in known if idx["signatures"][s]["status"] == "open"]
+        # A pre-signature is coarse (many distinct bugs share `value/value:lines=0`), so it is
+        # never treated as bug identity: every RESAMPLE_EVERY-th hit is re-minimized, without a
+        # permanent cap, and so is any hit once every known variant is fixed. Other hits are
+        # attributed to the newest open variant (count = attributed occurrences).
+        resample = (not open_known or hits % RESAMPLE_EVERY == 0) and len(known) < MAX_VARIANTS_PER_PRESIG
         if (known and not resample) or (pend and time.time() - pend < 3600):
-            sig = known[0] if known else None
+            sig = (open_known or known or [None])[-1]
             if sig:
-                bump(idx, sig, occ)
-                save_json(p["index"], idx)
+                bump(idx, sig, occ, ctx)
+            save_json(p["index"], idx)
             return sig, False
         idx["pending"][pre] = time.time()
         save_json(p["index"], idx)
@@ -664,7 +724,9 @@ def record(p, case, res, ctx, wd, log):
     try:
         min_src, ntests = minimize(case, res, ctx["compiler"], wd,
                                    seconds=ctx.get("min_seconds", 900),
-                                   use_lean=ctx.get("lean_reduce", True))
+                                   use_lean=ctx.get("lean_reduce", True),
+                                   hard_deadline=ctx.get("hard_deadline"),
+                                   pause_flag=p["pause"])
     except Exception as e:  # a minimizer bug must never lose the finding
         log.append(f"minimizer error: {e!r}")
         min_src, ntests = case["src"], 0
@@ -674,7 +736,7 @@ def record(p, case, res, ctx, wd, log):
         idx = load_json(p["index"], empty_index())
         idx["pending"].pop(pre, None)
         if sig in idx["signatures"]:
-            bump(idx, sig, occ)
+            bump(idx, sig, occ, ctx)
             save_json(p["index"], idx)
             return sig, False
         d = os.path.join(p["findings"], sig)
@@ -713,13 +775,25 @@ def record(p, case, res, ctx, wd, log):
     return sig, True
 
 
-def bump(idx, sig, occ):
+def current_sha(p):
+    """The SHA of the snapshot main tracking published last (None outside a farm home)."""
+    try:
+        with open(os.path.join(p["home"], "current", "SHA")) as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def bump(idx, sig, occ, ctx):
     e = idx["signatures"][sig]
     e["count"] += 1
     e["last_seen"] = occ["at"]
     e["last_sha"] = occ["sha"]
     e["occurrences"] = (e.get("occurrences", []) + [occ])[-MAX_OCCURRENCES:]
-    if e["status"].startswith("fixed-on-main"):
+    # Only an occurrence on the CURRENT main reopens a fixed finding: a worker still running an
+    # older snapshot reproduces what the newer main already fixed.
+    cur = ctx.get("current_sha")
+    if e["status"].startswith("fixed-on-main") and (cur is None or occ["sha"] == cur):
         e["status"] = "open"
         e["reopened"] = occ["at"]
 
@@ -760,6 +834,22 @@ def campaign(args):
     os.makedirs(wd)
     stats = Stats(p, args.worker_id)
     deadline = time.time() + args.seconds
+    # minimization may overrun the campaign by at most this much (then the finding is stored
+    # partially minimized; it is re-minimized on a later resample)
+    ctx["hard_deadline"] = deadline + 120
+    lease = os.path.join(args.snapshot, f".lease-{os.getpid()}") if args.snapshot else None
+    if lease:
+        with contextlib.suppress(OSError):
+            open(lease, "w").close()
+    try:
+        return _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline)
+    finally:
+        if lease:
+            with contextlib.suppress(OSError):
+                os.remove(lease)
+
+
+def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
     master = random.Random(args.seed if args.seed is not None else
                            int.from_bytes(os.urandom(8), "big"))
     gi = args.worker_id
@@ -791,6 +881,7 @@ def campaign(args):
                 if res.cls == "refusal":
                     refusals.append((case, res))
                 elif res.cls:
+                    ctx["current_sha"] = current_sha(p)
                     sig, new = record(p, case, res, ctx, wd, [])
                     if new:
                         stats.data["new"][res.cls] = stats.data["new"].get(res.cls, 0) + 1
@@ -806,7 +897,10 @@ def campaign(args):
                       flush=True)
             else:
                 drift_clear(p, gen, args.sha, compared, rate)
+            ctx["current_sha"] = current_sha(p)
             for case, res in refusals:
+                if time.time() >= deadline:  # low priority: never overrun the window for them
+                    break
                 record(p, case, res, ctx, wd, [])
         stats.data["seconds"] += time.time() - t0
         stats.flush()
@@ -848,7 +942,8 @@ def recheck(args):
     wd = os.path.join(p["tmp"], "recheck")
     with locked(p):
         idx = load_json(p["index"], empty_index())
-        sigs = [s for s, e in idx["signatures"].items() if e["status"] == "open"]
+        sigs = [s for s, e in idx["signatures"].items() if e["status"] == "open"
+                and e.get("last_recheck", {}).get("sha") != args.sha]
     fixed = still = 0
     for sig in sigs:
         d = os.path.join(p["findings"], sig)
@@ -1008,7 +1103,8 @@ def promote(args):
     if params:
         replay += f" --params '{json.dumps(params, sort_keys=True)}'"
     header.append(f"// Replay: {replay} <this file>")
-    header = [re.sub(r"(?:/[^\s/:]+)+/([^\s/:]+)", r"\1", h) for h in header]  # no host paths
+    header = [re.sub(r"(?<![\w.])(?:/[^\s/:]+)+/([^\s/:]+)", r"\1", h)
+              for h in header]  # absolute host paths -> basenames
     fixture = "\n".join(header) + "\n" + src.rstrip("\n") + "\n"
     out_dir = os.path.join(args.repo, "tests", "regressions", slug) if args.repo else None
     if out_dir and args.write:
