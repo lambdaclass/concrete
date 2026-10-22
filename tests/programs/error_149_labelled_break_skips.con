@@ -1,0 +1,12 @@
+// Bug 149: `break 'outer` from an inner loop exits the outer loop body too; its live locals must be
+// accounted for (E0210).
+fn main() with(Alloc) -> Int {
+    'outer: while true {
+        let h: Heap<Int> = alloc(42);
+        while true {
+            break 'outer;
+        }
+        free(h);
+    }
+    return 0;
+}

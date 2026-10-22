@@ -1,0 +1,33 @@
+// Bug 149 positive control: returns, labelled breaks and loop conditions that account for every
+// owned value. Prints 9 (1 + 5 + 3).
+struct Copy P { v: Int }
+
+fn early(c: bool) with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(5);
+    if c {
+        free(h);
+        return 1;
+    }
+    let v: Int = *h;
+    return v;
+}
+
+fn main() with(Alloc, Console) -> Int {
+    let mut total: Int = 0;
+    'outer: while true {
+        let k: Heap<Int> = alloc(7);
+        free(k);
+        while true {
+            break 'outer;
+        }
+    }
+    let g: Heap<P> = alloc(P { v: 3 });
+    let mut n: Int = 0;
+    while n < g.v {
+        n = n + 1;
+    }
+    free(g);
+    total = early(true) + early(false) + n;
+    print_int(total);
+    return 0;
+}

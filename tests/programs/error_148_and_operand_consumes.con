@@ -1,0 +1,12 @@
+// Bug 148: a move inside the right operand of `&&` may never run. E0244.
+fn consume(h: Heap<Int>) with(Alloc) -> bool {
+    free(h);
+    return true;
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let b: bool = false && consume(h);
+    if b { return 1; }
+    return 0;
+}

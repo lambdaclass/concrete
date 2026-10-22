@@ -1,0 +1,14 @@
+// Bug 142: a `return` in a struct-literal field after a String was moved into the literal leaked
+// the String (EVALUATION2 c16). Refused (E0278).
+struct S2 { a: String, b: String }
+
+fn f(n: Int) with(Alloc) -> Int {
+    let a: String = "hello";
+    let s: S2 = S2 { a: a, b: if n > 0 { return 7; } else { "x" } };
+    let S2 { a, b } = s;
+    drop_string(a);
+    drop_string(b);
+    return 0;
+}
+
+fn main() with(Alloc) -> Int { return f(1); }

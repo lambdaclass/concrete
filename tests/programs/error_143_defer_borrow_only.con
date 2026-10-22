@@ -1,0 +1,11 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143 control (d24): a borrow-only defer discharges nothing, so the local is never consumed
+// (E0208).
+fn main() with(Console) -> Int {
+    let t: T = T { id: 3 };
+    defer peek(&t);
+    return 0;
+}

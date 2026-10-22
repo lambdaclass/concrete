@@ -1,0 +1,44 @@
+// Bug 142 positive control: exits that rule (d) keeps legal. A `return` in a let initializer's
+// branch chain, a tail `return if`, a statement-position match whose arms return, and a `break`
+// bound by a loop entered inside the operand. Native and --interp agree (prints 1, 4, 5, 2, 0).
+fn id(x: Int) -> Int { return x; }
+
+fn letret(x: Int) -> Int {
+    let y: Int = if x > 0 { return 1; } else { 2 };
+    return y + 10;
+}
+
+fn tailif(x: Int) -> Int {
+    return if x > 0 { return 4; } else { 5 };
+}
+
+fn armret(o: Option<Int>) -> Int {
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; },
+    }
+}
+
+fn inner_break(c: bool) -> Int {
+    return id(if c {
+        let mut i: Int = 0;
+        while i < 10 {
+            if i == 2 { break; }
+            i = i + 1;
+        }
+        i
+    } else { 0 });
+}
+
+fn main() with(Console) -> Int {
+    print_int(letret(1));
+    print_char(32);
+    print_int(tailif(1));
+    print_char(32);
+    print_int(tailif(0));
+    print_char(32);
+    print_int(inner_break(true));
+    print_char(32);
+    print_int(armret(Option::None));
+    return 0;
+}

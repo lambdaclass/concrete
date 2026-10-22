@@ -15,10 +15,14 @@ fn read_val(r: &Res) -> Int {
 fn main() -> Int {
     let r1: Res = Res { val: 10 };
     let r2: Res = Res { val: 20 };
+    // Bug 149: a return inside the borrow block would leave r1 unconsumed (its consume below
+    // never runs on that path), so the sum is carried out of the block.
+    let mut sum: Int = 0;
     borrow r1 as ref1 in R1 {
         let v1: Int = read_val(ref1);
         let v2: Int = consume(r2);
-        return v1 + v2;
+        sum = v1 + v2;
     }
-    return consume(r1);
+    discard(consume(r1));
+    return sum;
 }

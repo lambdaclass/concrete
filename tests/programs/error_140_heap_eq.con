@@ -1,0 +1,9 @@
+// Bug 140: `==` on two Heap<Int> consumed both shells and compared their addresses; neither cell
+// was freed. Refused (E0229): a heap shell has no built-in comparison.
+fn b2i(b: bool) -> Int { if b { return 1; } return 0; }
+
+fn main() with(Alloc) -> Int {
+    let a: Heap<Int> = alloc(1);
+    let b: Heap<Int> = alloc(1);
+    return b2i(a == b);
+}

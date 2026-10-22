@@ -1,0 +1,13 @@
+// Bug 134: `==` on a fieldless Copy enum passed the checker and emitted `icmp eq i64` on the
+// enum's union struct (llvm-as error). Comparison operators are defined on integers, floats,
+// `bool` and `char` only (E0229); compare variants with `match`.
+enum Copy E { A, B }
+
+fn main() -> Int {
+    let e: E = E::B;
+    let same: bool = e == E::B;
+    if same {
+        return 0;
+    }
+    return 1;
+}

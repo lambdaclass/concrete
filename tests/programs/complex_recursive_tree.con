@@ -3,7 +3,7 @@
 //          /  \
 //         20   12
 // Sum = 42
-struct Leaf { value: Int }
+struct Copy Leaf { value: Int }
 
 struct Branch {
     value: Int,
@@ -11,16 +11,14 @@ struct Branch {
     right: Heap<Leaf>
 }
 
+// Heap interiors are linearity-tracked (bug 144): move the node out of its cell and destructure.
 fn tree_sum(root: Heap<Branch>) with(Alloc) -> Int {
-    let v: Int = root.value;
-    let l: Heap<Leaf> = root.left;
-    let r: Heap<Leaf> = root.right;
-    let lv: Int = l.value;
-    let rv: Int = r.value;
-    free(l);
-    free(r);
-    free(root);
-    return v + lv + rv;
+    let Branch { value, left, right } = *root;
+    let lv: Int = left.value;
+    let rv: Int = right.value;
+    free(left);
+    free(right);
+    return value + lv + rv;
 }
 
 fn main() with(Std) -> Int {

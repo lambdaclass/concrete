@@ -1,0 +1,8 @@
+// Bug 140: `==` on two Strings consumed both (a later drop was E0205), failed in llvm-as natively
+// and compared contents under --interp. Refused (E0229).
+fn main() with(Alloc) -> Int {
+    let a: String = "abc";
+    let b: String = "abc";
+    if a == b { return 1; }
+    return 0;
+}

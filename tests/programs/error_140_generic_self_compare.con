@@ -1,0 +1,4 @@
+// Bug 140 (Codex): a comparison is refused before its operands are checked, so `x == x` at an
+// unbounded type parameter reports the undefined comparison (E0229), not a fictitious move (E0205).
+fn eq<T>(x: T) -> bool { return x == x; }
+fn main() -> Int { return 0; }

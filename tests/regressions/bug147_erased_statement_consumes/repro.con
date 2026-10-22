@@ -1,0 +1,7 @@
+// Bug 147: `assert(*h == 42)` consumed `h` in the checker, but `assert` is erased before code
+// generation, so the heap cell was never freed (the emitted SSA has a malloc and no free).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    assert(*h == 42);
+    return 0;
+}

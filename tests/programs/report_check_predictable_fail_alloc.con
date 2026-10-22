@@ -1,5 +1,5 @@
 // Test: --check predictable should fail for allocating function
-struct Box { value: Int }
+struct Copy Box { value: Int }
 
 fn heap_op() with(Alloc) -> Int {
     let p: Heap<Box> = alloc(Box { value: 42 });

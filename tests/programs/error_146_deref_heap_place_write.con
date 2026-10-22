@@ -1,0 +1,9 @@
+// Bug 146 (Codex round 3): `*h` moves the value out and frees the cell, so it is not a place.
+// `(*h).x = 5` freed the cell twice once `*h` lowered to free. Refused (E0290); write `h.x = 5`.
+struct Copy P { x: Int }
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<P> = alloc(P { x: 42 });
+    (*h).x = 5;
+    let p: P = free(h);
+    return p.x;
+}

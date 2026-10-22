@@ -229,3 +229,25 @@ literal-field order, functional update and assignment order in exit 2c (R-0491).
 (fixed), 136 and 137 and the dereference-assignment disagreement are silent wrong code, so their
 repair or containment is exit 0b (R-0482) under the defect disposition rule.
 
+## Exits in operand position
+
+**Rule (d) (normative, decided 2026-10-21).** `return`, `break` and `continue` may not occur inside
+a call argument (a method receiver included), a struct, enum or array literal element (a
+functional-update base included), or an operator operand (binary, unary, cast, index). A `break` or
+`continue` bound by a loop entered inside that operand is not an exit from it and stays legal. An
+exit stays legal in statement position, in a tail (`return if c { return 1; } else { 2 };`), and in
+a `let` or assignment initializer's branch chain (`let v = match o { Option::Some { value } =>
+value, Option::None => { return 1; } };`, the let-else idiom). Diagnostic: E0278
+(`exitInOperand`), at the exit.
+
+Why: an exit inside an operand leaves a call or literal whose earlier operands were already
+evaluated and moved into it; the construct never completes and nothing destroys them (Concrete has
+no implicit destruction). The rule covers `break`/`continue` explicitly although a `{ break; }`
+branch is typed `()` today, so typing it as diverging later cannot reopen the hole.
+
+**Status on main.** Enforced: `Check.lean` `checkExpr` (`protectedOperands`,
+`firstOperandEscape?`), [bug 142](../bugs/142_exit_in_operand_leaks.md). The proof-model extractor
+keeps its narrower subset (bug 086's `cExprNoEscape` declines any non-tail exit, let initializers
+included). The Core form is "an operand already evaluated for a pending construct is a live owned
+temporary until it completes" (R-0499), which accepts everything this rule accepts. Owner: exit 2j
+(R-0500); containment exit 0b.

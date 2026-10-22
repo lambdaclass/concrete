@@ -1,0 +1,11 @@
+// Bug 149 (Codex review): a statement loop has no value, so a `break` value is discarded; a
+// non-Copy one would be dropped without being consumed (E0287).
+struct T { x: Int }
+
+fn main() -> Int {
+    while true {
+        let t: T = T { x: 1 };
+        break t;
+    }
+    return 0;
+}

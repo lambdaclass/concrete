@@ -1,3 +1,7 @@
+// Bug 145: `vec_free` of a Vec<String> is refused in safe code (it would drop live elements); a
+// trusted helper vouches that the vector was emptied first.
+trusted fn free_emptied(v: Vec<String>) with(Alloc) { vec_free::<String>(v); }
+
 // Test: allocas inside loops must be hoisted to entry block.
 // Without hoisting, each iteration grows the stack.
 // 200k iterations * 24 bytes = 4.8MB → stack overflow on 8MB stack.
@@ -27,7 +31,7 @@ fn main() with(Std) {
         }
         si = si + 1;
     }
-    vec_free::<String>(strings);
+    free_emptied(strings);
     // Return element count to prove it ran
     println(slen);
 }

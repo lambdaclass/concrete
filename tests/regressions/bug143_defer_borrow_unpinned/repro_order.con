@@ -1,0 +1,13 @@
+// Bug 143: `defer peek(&t); defer kill(t);` runs kill first (LIFO), so peek read a consumed value.
+// Now E0206: a later defer may borrow a pinned local but not consume it.
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+
+fn main() with(Console) -> Int {
+    let t: T = T { id: 3 };
+    defer peek(&t);
+    defer kill(t);
+    return 0;
+}

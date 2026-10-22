@@ -1,0 +1,18 @@
+// Bug 142: a `return` in an enum-literal field (c04), here through a match arm. Refused (E0278).
+struct T { id: Int }
+enum E { Two { a: T, b: T }, Nil }
+fn drop_t(t: T) -> Int {
+    let T { id } = t;
+    return id;
+}
+
+fn f(o: Option<Int>) -> Int {
+    let a: T = T { id: 1 };
+    let e: E = E::Two { a: a, b: match o { Option::Some { value } => T { id: value }, Option::None => { return 7; } } };
+    match e {
+        E::Two { a, b } => { return drop_t(a) + drop_t(b); },
+        E::Nil => { return 0; },
+    }
+}
+
+fn main() -> Int { return f(Option::None); }

@@ -1,0 +1,12 @@
+// Bug 142: a `return` in a method-call argument (c13). Refused (E0278).
+struct C { n: Int }
+impl C {
+    fn add(&self, x: Int) -> Int { return self.n + x; }
+}
+
+fn f(n: Int) -> Int {
+    let c: C = C { n: 1 };
+    return c.add(if n > 0 { return 7; } else { 2 });
+}
+
+fn main() -> Int { return f(1); }

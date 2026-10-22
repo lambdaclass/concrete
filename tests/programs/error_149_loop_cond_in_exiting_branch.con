@@ -1,0 +1,11 @@
+// Bug 149 (Codex review): a loop condition does not inherit an enclosing function-exiting
+// branch's exemption: `*h` there would run, and release the cell, on every iteration (E0207).
+fn main() with(Alloc) -> Int {
+  let h: Heap<Int> = alloc(42);
+  if true {
+    while *h == 42 { }
+    return 1;
+  }
+  free(h);
+  return 2;
+}

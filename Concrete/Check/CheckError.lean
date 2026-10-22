@@ -61,6 +61,18 @@ structure VarInfo where
   -- env snapshots by this id, never by name. Assigned by `addVar` from
   -- `TypeEnv.nextVarUid`.
   uid : Nat := 0
+  -- Defer rule (a) (bug 143): a pending deferred call BORROWS this binding (`defer
+  -- peek(&t);`). The borrow discharges nothing, so the binding must still be consumed,
+  -- but nothing may move or consume it before the deferred call runs at the exit of the
+  -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
+  -- the only way left). Lifted when that block ends (`checkStmts`).
+  pinnedByDefer : Bool := false
+  -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
+  -- may consume it (no runtime obligation is discharged).
+  isGhost : Bool := false
+  -- Bug 149: the state a borrow block's owner had when the block froze it (read by the
+  -- return check, which must see a pending `defer` through the freeze).
+  frozenFrom : Option VarState := none
   deriving Repr
 
 structure TypeEnv where
@@ -82,6 +94,9 @@ structure TypeEnv where
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
+  -- Bug 149: the loop depth each active label names (a labelled break/continue exits every loop
+  -- from the innermost one out to that depth, and must account for all of their locals).
+  loopLabelDepths : List (String × Nat) := []
   -- True while checking a branch/arm that EXITS THE FUNCTION (every path
   -- returns): consuming an outer linear there is safe even inside a loop —
   -- the loop can never re-iterate past a return. Reset on entering any new
@@ -102,6 +117,7 @@ structure TypeEnv where
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
+
   -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
   -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
   -- an id a sibling branch already used.
@@ -141,6 +157,11 @@ inductive CheckError where
   | cannotMoveLinearBorrowed (name : String)
   | variableUsedAfterMove (name : String)
   | variableReservedByDefer (name : String)
+  -- Defer rule (a) (bug 143): consuming a binding a pending deferred call borrows.
+  | variablePinnedByDefer (name : String)
+  -- Defer rule (a) (bug 143): a deferred call's argument is a local name, a borrow of a
+  -- local name, or a constant; anything else would be evaluated at the exit.
+  | deferArgNotPlace (arg : String)
   | cannotConsumeLinearInLoop (name : String)
   | linearVariableNeverConsumed (name : String)
   | matchConsumptionDisagreement (name : String)
@@ -169,6 +190,10 @@ inductive CheckError where
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
   | binOpOperandMismatch (op : String) (lhsTy : String) (rhsTy : String)
+  -- A comparison operator (`==`, `!=`, `<`, ...) on a type with no built-in comparison:
+  -- comparisons are defined on integers, floats, `bool`, `char` and (in trusted or
+  -- `Unsafe` code) raw pointers, and never consume an operand (bugs 134, 140).
+  | comparisonNotDefined (op : String) (ty : String) (why : String)
   -- arrayLiteralEmpty, cannotAssignThroughNonMutRef moved to CoreCheck
   -- Slice 3: Borrow/escape/freeze
   | cannotBorrowMoved (name : String)
@@ -222,6 +247,10 @@ inductive CheckError where
   | breakOutsideLoop
   | continueOutsideLoop
   | deferBodyNotCall
+  -- Rule (d) (bug 142): a `return`/`break`/`continue` inside a call argument, a literal
+  -- element or an operator operand would leave a construct whose evaluated operands were
+  -- already moved into it, and those values were never destroyed.
+  | exitInOperand (kw : String) (ctx : String)
   | reservedName (name : String)
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
@@ -236,6 +265,16 @@ inductive CheckError where
   -- error. Consume it (move/return it), destructure it, or `destroy()` it. (A pure
   -- *Copy* value silently discarded is E0294 `discardedPureValue`, not this.)
   | discardedLinear (tyName : String)
+  -- Bug 144: `free(h)` (statement or deferred) on a `Heap<T>` whose pointee is non-Copy
+  -- would drop that live value: heap interiors are linearity-tracked.
+  | freeDropsLinearInterior (tyName : String)
+  -- Bug 145: `vec_free` of a `Vec<T>` with non-Copy `T` drops the elements still in it.
+  | vecFreeDropsElements (elemTy : String)
+  -- Bug 147: an erased proof statement (`assert`, `assume`, `ghost let`) moved a runtime value.
+  | erasedConsumesRuntime (name : String)
+  -- Bug 148: the right operand of `&&` / `||` runs only when the left one does not decide the
+  -- result, so a move inside it may never happen.
+  | conditionalOperandConsumes (name : String) (op : String)
   -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
   -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
   -- used exactly once, so `_` may ignore ONLY a Copy value. To get rid of a non-Copy
@@ -341,6 +380,8 @@ def CheckError.message : CheckError → String
   | .cannotMoveLinearBorrowed name => s!"cannot move linear variable '{name}': variable is borrowed"
   | .variableUsedAfterMove name => s!"linear variable '{name}' used after move"
   | .variableReservedByDefer name => s!"variable '{name}' is reserved by defer"
+  | .variablePinnedByDefer name => s!"variable '{name}' is borrowed by a pending defer: it may not be moved or consumed before the deferred call runs at the end of the block"
+  | .deferArgNotPlace arg => s!"a deferred call's argument must be a local name, a borrow of a local name (`&x`, `&mut x`) or a constant, not {arg}"
   | .cannotConsumeLinearInLoop name => s!"cannot consume linear variable '{name}' inside a loop (declared outside the loop)"
   | .linearVariableNeverConsumed name => s!"linear variable '{name}' was never consumed"
   | .matchConsumptionDisagreement name => s!"match arms disagree on consumption of '{name}'"
@@ -366,6 +407,7 @@ def CheckError.message : CheckError → String
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
   | .binOpOperandMismatch op lhsTy rhsTy => s!"operands of '{op}' have different numeric types '{lhsTy}' and '{rhsTy}'"
+  | .comparisonNotDefined op ty why => s!"comparison '{op}' is not defined on '{ty}': {why}"
   -- cannotAssignThroughNonMutRef, arrayLiteralEmpty moved to CoreCheck
   -- Slice 3
   | .cannotBorrowMoved name => s!"cannot borrow '{name}': already moved"
@@ -408,11 +450,16 @@ def CheckError.message : CheckError → String
   | .breakOutsideLoop => "break outside of loop"
   | .continueOutsideLoop => "continue outside of loop"
   | .deferBodyNotCall => "defer body must be a function call"
+  | .exitInOperand kw ctx => s!"`{kw}` may not occur inside {ctx}: an exit there leaves a call or literal whose earlier operands were already evaluated and moved into it"
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
+  | .conditionalOperandConsumes name op => s!"the right operand of '{op}' may not move or consume '{name}': it runs only when the left operand does not decide the result, so the move may never happen"
+  | .erasedConsumesRuntime name => s!"a proof-only statement (assert, assume, ghost let) may not move or consume '{name}': it is erased before code generation, so the move would never happen"
+  | .vecFreeDropsElements elemTy => s!"vec_free would drop the non-Copy elements of type '{elemTy}' still in the vector without destroying them"
+  | .freeDropsLinearInterior tyName => s!"free() would drop the live non-Copy value of type '{tyName}' inside the heap cell"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .discardedPureValue tyName => s!"pure value of type '{tyName}' is computed and then discarded — this is a dead computation with no effect"
   | .newtypeConstructPrivate name => s!"newtype '{name}' cannot be constructed here: direct construction is private to its defining module"
@@ -481,7 +528,15 @@ def CheckError.hint : CheckError → Option String
   | .importBindingCollision name _ => some s!"a name has one binding per module: rename the import (`import m.\{{name} as other_name}`) or the local definition, or call it qualified as `module::{name}`"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
+  | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
+  | .variablePinnedByDefer name => some s!"register the consuming `defer` BEFORE the one that borrows '{name}' (deferred calls run in reverse order), or consume '{name}' after the block that holds the borrowing `defer`"
+  | .deferArgNotPlace _ => some "the arguments are bound when the `defer` registers and read when it runs; compute a value in a `let` first, or move the computation into a named cleanup function that takes the local (or a borrow of it)"
+  | .conditionalOperandConsumes name _ => some s!"compute the right operand first in a `let` (consuming '{name}' on every path), or use an `if` whose branches both account for it"
+  | .erasedConsumesRuntime name => some s!"state the property over a borrow or a Copy reading (`h.f`, `*r` for a Copy pointee) that leaves '{name}' owned"
+  | .vecFreeDropsElements _ => some "use `v.drop()`, which runs the elements' destructors; or move every element out and release the emptied buffer in a trusted function"
+  | .freeDropsLinearInterior _ => some "move the value out with `let v = *h;` (which also frees the cell) and consume it, or bind the result of `free(h)`: `let v = free(h);`"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
+  | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
   | .ifBranchTypeMismatch thenTy elseTy =>
     if thenTy == "()" || elseTy == "()" then
       some "a branch whose last item is a statement or `expr;` has value `()`; end the branch with a trailing expression (no `;`) to give it a value"
@@ -508,6 +563,8 @@ def CheckError.code : CheckError → String
   | .cannotMoveLinearBorrowed _ => "E0204"
   | .variableUsedAfterMove _ => "E0205"
   | .variableReservedByDefer _ => "E0206"
+  | .variablePinnedByDefer _ => "E0206"
+  | .deferArgNotPlace _ => "E0279"
   | .cannotConsumeLinearInLoop _ => "E0207"
   | .linearVariableNeverConsumed _ => "E0208"
   | .matchConsumptionDisagreement _ => "E0209"
@@ -533,6 +590,7 @@ def CheckError.code : CheckError → String
   | .breakTypeMismatch _ _ => "E0226"
   | .intLiteralOutOfRange _ _ _ _ => "E0227"
   | .binOpOperandMismatch _ _ _ => "E0228"
+  | .comparisonNotDefined _ _ _ => "E0229"
   -- Slice 3: Borrow/escape (E0230–E0239)
   | .cannotBorrowMoved _ => "E0230"
   | .cannotBorrowMutablyBorrowed _ => "E0231"
@@ -571,11 +629,16 @@ def CheckError.code : CheckError → String
   | .breakOutsideLoop => "E0280"
   | .continueOutsideLoop => "E0281"
   | .deferBodyNotCall => "E0282"
+  | .exitInOperand _ _ => "E0278"
   | .reservedName _ => "E0283"
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"
   | .discardedMustUse _ => "E0286"
   | .discardedLinear _ => "E0287"
+  | .freeDropsLinearInterior _ => "E0287"
+  | .vecFreeDropsElements _ => "E0287"
+  | .erasedConsumesRuntime _ => "E0243"
+  | .conditionalOperandConsumes _ _ => "E0244"
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
   | .nonCopyProjection _ _ => "E0290"

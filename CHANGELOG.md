@@ -113,6 +113,51 @@ handled it. The merge is now terminated as soon as no arm reaches it. The defect
 It is pinned by `regress_175_match_arms_all_diverge.con` (five shapes, binary equal to
 `--interp`) and four `check_divergence_detection.sh` rows.
 
+### Silent Safety Defects From The Second Semantics Evaluation Closed (2026-10-21)
+
+The second semantics evaluation (EVALUATION2) found safe programs the checker accepted and the
+binary then ran wrongly. Fixed here, each with a rejection fixture and a positive control:
+
+- **Comparisons (bugs 134 and 140).** `==`, `!=`, `<`, `<=`, `>`, `>=` are defined on integers,
+  floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code; everything else is
+  E0229. A comparison never consumes an operand (it used to move linear operands: `Heap == Heap`
+  compared addresses and leaked both cells), references have no comparison (the binary compared
+  addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
+  `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
+  is [ARITHMETIC_POLICY §8a](docs/language/ARITHMETIC_POLICY.md#8a-comparison-operators).
+  Migration: 2 sites (`examples/hexdump`, `examples/png_chunks` discarded a Copy error through
+  `error == error`).
+- **No exit inside an operand (bug 142).** `return`, `break` and `continue` may not occur inside a
+  call argument, a struct/enum/array literal element or an operator operand (E0278): a `return` in
+  a later field after an owned value was moved into the literal leaked that value. Exits stay legal
+  in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
+  [STATEMENT_EXPRESSION_MODEL](docs/language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
+  Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
+- **`defer` reserves by place (bug 143).** A deferred call's arguments are locals, borrows of
+  locals or constants (E0279). A local passed by value is reserved, a local passed by borrow is
+  pinned: neither may be moved or consumed before the deferred call runs (E0206), a later `defer`
+  included. `defer pb(&h); free(h);` was a use after free. Ownership is not taken at registration,
+  so `let f = open(); defer close(f); read(&f);` is unchanged. Arguments bind by binding identity
+  (a later shadowing `let` is a different binding, already true since bug 087). DEFER.md states the
+  rule, and no longer claims `defer obj.method();` is accepted (it is E0282). Migration: 0 sites.
+- **Heap interiors are linearity-tracked (bug 144).** A by-value read of a non-Copy field of a
+  `Heap<T>` is E0290, and `free(h)` (or `defer free(h)`) of a non-Copy pointee is E0287: `let a =
+  h.s; let b = h.s;` double-freed a `String`, and `free(h)` dropped a live linear value. The
+  heap-node destructure is `let n = *h;` plus a pattern. KNOWN_HOLES H11's "heap interiors are not
+  tracked" exclusion is withdrawn. Migration: 22 test files (19 plain-data pointees declared
+  `struct Copy`, 3 node destructures), 0 in `std` and `examples`.
+- **Found in review (bugs 145, 146).** The raw `vec_free` intrinsic dropped non-Copy elements
+  (now E0287 unless the element is Copy; `Vec::drop` is the linear form; the matching `vec_set`
+  overwrite is bug 115's fix), and `*h` loaded a heap value without freeing its cell (it
+  now frees, as MEMORY_SEMANTICS always said, and is never a place: `(*h).f` is E0290, `h.f` is the
+  spelling). A move inside an erased `assert`, `assume` or `ghost let` is E0243 (bug 147): the
+  statement is erased, so the move never ran. A move inside the right operand of `&&` / `||` is
+  E0244 (bug 148): that operand runs only when the left one does not decide the result. Loop
+  conditions are checked inside their loop, every `return` must account for each live owned
+  value, and a labelled `break`/`continue` checks every loop it exits (bug 149).
+- **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
+  `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
+
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
 A borrow of a local is the address of its slot whatever the local's type. A local holding a raw

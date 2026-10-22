@@ -1,0 +1,30 @@
+// Bug 140 positive control: comparisons on integers of every width, floats, bool, char, a
+// Copy-bounded generic at a scalar, and raw pointers in trusted code all compile and never consume
+// an operand. Native only: the interpreter on main has no float literals or raw-pointer casts.
+fn pick<T: Copy>(a: T, b: T) -> T {
+    if a < b { return a; }
+    return b;
+}
+
+fn b2i(b: bool) -> Int { if b { return 1; } return 0; }
+
+trusted fn same_cell() with(Unsafe) -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    let q: *const Int = &x as *const Int;
+    return b2i(p == q);
+}
+
+fn main() with(Unsafe, Console) -> Int {
+    let a: i32 = 3;
+    let b: u8 = 200;
+    let c: char = 'x';
+    let t: bool = true;
+    let h: f64 = 1.5;
+    let mut r: Int = 0;
+    r = r + b2i(a >= 3) + b2i(b > 100) + b2i(c == 'x') + b2i(t != false) + b2i(h < 2.0);
+    r = r + pick::<Int>(7, 9) * 10;
+    r = r + same_cell() * 100;
+    print_int(r);
+    return 0;
+}

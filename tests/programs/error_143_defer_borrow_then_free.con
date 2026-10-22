@@ -1,0 +1,11 @@
+// Bug 143: `defer pb(&h); free(h);` freed the heap cell before the deferred read (use after free).
+// The pending defer pins `h` (E0206).
+struct B { v: Int }
+fn pb(b: &Heap<B>) with(Console) { print_int(b.v); }
+
+fn main() with(Console, Alloc) -> Int {
+    let h: Heap<B> = alloc(B { v: 77 });
+    defer pb(&h);
+    free(h);
+    return 0;
+}

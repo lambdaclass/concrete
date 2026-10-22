@@ -2,7 +2,7 @@
 // refuses it first (E0301; before: run 42). The check below it stays as defense in depth.
 // Bug 093 positive control: block locals and match binders that shadow a
 // consumed outer name are fine when they are themselves consumed.
-struct B { v: Int }
+struct Copy B { v: Int }
 fn mk(k: Int) with(Alloc) -> Option<Heap<Int>> { return Option::Some { value: alloc(k) }; }
 fn main() with(Std) -> Int {
     let r: Heap<B> = alloc(B { v: 10 });

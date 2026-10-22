@@ -1,0 +1,15 @@
+// Bug 134: `==` on a Copy struct passed the checker and emitted `icmp eq i64` on the struct
+// pointers (llvm-as error). No aggregate has a built-in comparison (E0229).
+struct Copy P {
+    x: Int,
+    y: Int,
+}
+
+fn main() -> Int {
+    let a: P = P { x: 1, y: 2 };
+    let b: P = P { x: 1, y: 2 };
+    if a == b {
+        return 0;
+    }
+    return 1;
+}

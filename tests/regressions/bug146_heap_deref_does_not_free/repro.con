@@ -1,0 +1,6 @@
+// Bug 146: `*h` on an owned Heap<T> consumes the shell in the checker (MEMORY_SEMANTICS §8: it
+// loads the value and frees the cell), but Lower only loads: the cell is never freed (a leak).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    return *h;
+}

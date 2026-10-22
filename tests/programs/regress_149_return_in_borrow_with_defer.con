@@ -1,0 +1,21 @@
+// Bug 149 (Codex review): a return inside a borrow block whose owner has a pending `defer` is
+// accounted for (the deferred destroy runs on that return). Returns 42 by printing it.
+struct Data { x: Int, y: Int }
+impl Destroy for Data {
+    fn destroy(&self) { }
+}
+fn sum_fields(d: &Data) -> Int { return d.x + d.y; }
+
+fn run() -> Int {
+    let d: Data = Data { x: 15, y: 27 };
+    defer destroy(d);
+    borrow d as r in R {
+        return sum_fields(r);
+    }
+    return 0;
+}
+
+fn main() with(Console) -> Int {
+    print_int(run());
+    return 0;
+}

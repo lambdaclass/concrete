@@ -1,0 +1,14 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143: a projection argument (`t.id`) was read at the exit from a struct that had been
+// consumed (d06). Deferred arguments are locals, borrows of locals or constants (E0279).
+fn show(n: Int) with(Console) { print_int(n); }
+fn main() with(Console) -> Int {
+    let mut t: T = T { id: 1 };
+    defer show(t.id);
+    t.id = 5;
+    kill(t);
+    return 0;
+}

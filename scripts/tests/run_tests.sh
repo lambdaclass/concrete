@@ -1752,6 +1752,178 @@ run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0302)"
 run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0302)"
 run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0301)"
 run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0301)"
+# Bugs 134 and 140: comparison operators are defined on integers, floats, bool and char (raw
+# pointers in trusted/Unsafe code), never consume an operand, and refuse references (E0229);
+# a Copy-bounded generic comparison is re-checked per instantiation after Mono.
+run_err "$TESTDIR/error_134_enum_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_134_struct_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_heap_eq.con"                   "(E0229)"
+run_err "$TESTDIR/error_140_linear_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_ref_eq.con"                    "(E0229)"
+run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
+run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
+run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
+run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
+# Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
+# fix, E0291).
+run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
+run_ok  "$TESTDIR/regress_145_vec_free_copy_param.con" "" 0
+run_ok  "$TESTDIR/regress_145_vec_free_nested_copy_param.con" "" 0
+# Bug 146: `*h` frees the cell it moves the value out of.
+run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0
+run_err "$TESTDIR/error_146_deref_heap_place_write.con" "(E0290)"
+run_err "$TESTDIR/error_146_deref_heap_field_read.con"  "(E0290)"
+r146_ssa=$($COMPILER tests/regressions/bug146_heap_deref_does_not_free/repro.con --emit-ssa 2>&1 || true)
+if [[ "$r146_ssa" == *"call void @free("* ]]; then
+    echo "  ok  bug146 repro: *h emits the free of the cell"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug146 repro: *h emits no free (the cell leaks)"
+    FAIL=$((FAIL + 1))
+fi
+run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+# Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
+# operator operand (E0278); exits in statement position, tails and let initializers stay legal.
+run_err "$TESTDIR/error_142_struct_field_return.con"   "(E0278)"
+run_err "$TESTDIR/error_142_call_arg_return.con"       "(E0278)"
+run_err "$TESTDIR/error_142_array_elem_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_enum_field_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_operand_return.con"        "(E0278)"
+run_err "$TESTDIR/error_142_method_arg_return.con"     "(E0278)"
+run_err "$TESTDIR/error_142_break_in_arg.con"          "(E0278)"
+run_err "$TESTDIR/error_142_deref_operand_return.con"  "(E0278)"
+run_err "$TESTDIR/error_142_for_cond_break.con"        "(E0278)"
+run_err "$TESTDIR/error_142_assign_index_return.con"   "(E0278)"
+run_ok  "$TESTDIR/regress_142_exits_allowed.con" "1 4 5 2 0" 0
+r142_i=$($COMPILER "$TESTDIR/regress_142_exits_allowed.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r142_i" = "1 4 5 2 00" ]; then
+    echo "  ok  regress_142_exits_allowed.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_142_exits_allowed.con: --interp printed '$r142_i'"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 143, defer rule (a), reserve by place: deferred arguments are locals, borrows of locals or
+# constants (E0279); a borrowed local is pinned until the deferred call runs (E0206).
+run_err "$TESTDIR/error_143_defer_borrow_then_free.con"          "(E0206)"
+run_err "$TESTDIR/error_143_defer_borrow_then_consume.con"       "(E0206)"
+run_err "$TESTDIR/error_143_defer_observer_before_consumer.con"  "(E0206)"
+run_err "$TESTDIR/error_143_defer_field_arg.con"                 "(E0279)"
+run_err "$TESTDIR/error_143_defer_call_arg.con"                  "(E0279)"
+run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
+run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
+run_err "$TESTDIR/error_143_defer_last_in_match_arm.con"         "(E0205)"
+run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5 " 0
+r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then
+    echo "  ok  regress_143_defer_reserve_by_place.con: --interp prints what the binary prints"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_143_defer_reserve_by_place.con: --interp printed '$r143_i'"
+    FAIL=$((FAIL + 1))
+fi
+for r143 in tests/regressions/bug143_defer_borrow_unpinned/repro.con tests/regressions/bug143_defer_borrow_unpinned/repro_order.con; do
+    r143_i=$($COMPILER "$r143" --interp 2>&1 || true)
+    r143_n=$($COMPILER "$r143" -o "$TESTDIR/.r143_bin" 2>&1 || true)
+    if [[ "$r143_i" == *"(E0206)"* && "$r143_n" == *"(E0206)"* ]]; then
+        echo "  ok  $r143: refused with E0206 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r143: not refused with E0206 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r143_bin"
+done
+# EVALUATION2 D14: E0555 names the type in source spelling, not the internal Ty term.
+run_err "$TESTDIR/error_d14_heap_deref_assign.con" "cannot assign through 'Heap<Int>'"
+# Bug 144: heap interiors are linearity-tracked: a by-value non-Copy heap-field read is E0290,
+# free(h) of a non-Copy pointee is E0287.
+run_err "$TESTDIR/error_144_heap_field_read_twice.con"      "(E0290)"
+run_err "$TESTDIR/error_144_free_drops_linear.con"          "(E0287)"
+run_err "$TESTDIR/error_144_defer_free_drops_linear.con"    "(E0287)"
+run_err "$TESTDIR/error_144_heap_newtype_unwrap.con"        "(E0290)"
+# Bug 147: proof-only statements (assert, assume, ghost let) may not move a runtime value (E0243).
+run_err "$TESTDIR/error_147_assert_consumes_heap.con"       "(E0243)"
+run_err "$TESTDIR/error_147_ghost_let_consumes_heap.con"    "(E0243)"
+run_ok  "$TESTDIR/regress_147_assert_reads.con" "" 0
+run_err "$TESTDIR/error_147_assert_revives_binding.con"     "(E0243)"
+run_ok  "$TESTDIR/regress_147_ghost_consumes_ghost.con" "" 0
+# Bug 148: the right operand of && / || may not move a value (it may not run). E0244.
+run_err "$TESTDIR/error_148_and_operand_consumes.con"       "(E0244)"
+run_err "$TESTDIR/error_148_or_operand_consumes.con"        "(E0244)"
+run_ok  "$TESTDIR/regress_148_short_circuit_reads.con" "" 0
+# Bug 149: loop conditions, returns in nested blocks and labelled exits account for owned values.
+run_err "$TESTDIR/error_149_loop_cond_moves_outer.con"          "(E0207)"
+run_err "$TESTDIR/error_149_return_after_unreached_defer.con"   "(E0208)"
+run_err "$TESTDIR/error_149_return_in_borrow_block.con"         "(E0208)"
+run_err "$TESTDIR/error_149_labelled_break_skips.con"           "(E0210)"
+run_err "$TESTDIR/error_149_labelled_continue_skips.con"        "(E0211)"
+run_ok  "$TESTDIR/regress_149_exits_accounted.con" "9" 0
+run_ok  "$TESTDIR/regress_149_labelled_exit_runs_defers.con" "3" 0
+run_ok  "$TESTDIR/regress_149_return_in_borrow_with_defer.con" "42" 0
+run_ok  "$TESTDIR/regress_149_break_in_borrow_with_defer.con" "1" 0
+run_err "$TESTDIR/error_149_diverging_branches_in_loop.con"     "(E0208)"
+run_err "$TESTDIR/error_149_loop_cond_in_exiting_branch.con"    "(E0207)"
+run_err "$TESTDIR/error_149_match_diverge_in_loop.con"          "(E0208)"
+run_ok  "$TESTDIR/regress_149_both_branches_return.con" "" 1
+run_ok  "$TESTDIR/regress_149_cond_return_in_borrow.con" "" 1
+run_err "$TESTDIR/error_149_continue_in_exit_branch.con"        "(E0207)"
+run_ok  "$TESTDIR/regress_149_nested_loop_in_exit_branch.con" "" 0
+run_ok  "$TESTDIR/regress_149_break_value_statement_loop.con" "" 0
+run_err "$TESTDIR/error_149_break_value_non_copy.con"           "(E0287)"
+run_err "$TESTDIR/error_149_break_value_moves_outer.con"        "(E0207)"
+run_err "$TESTDIR/error_149_loop_revives_consumed.con"          "(E0212)"
+run_err "$TESTDIR/error_149_rebinding_nested_loop.con"          "(E0207)"
+run_ok  "$TESTDIR/regress_149_inner_label_in_exit_branch.con" "" 0
+r149_ssa=$($COMPILER "$TESTDIR/regress_149_break_value_statement_loop.con" --emit-ssa 2>&1 || true)
+if [[ "$r149_ssa" == *"call void @free("* ]]; then
+    echo "  ok  regress_149_break_value_statement_loop.con: the break operand runs (emits @free)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_149_break_value_statement_loop.con: the break operand was not lowered"
+    FAIL=$((FAIL + 1))
+fi
+run_ok  "$TESTDIR/regress_146_heap_deref_cast.con" "42" 0
+run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
+for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
+    r144_i=$($COMPILER "$r144" --interp 2>&1 || true)
+    r144_n=$($COMPILER "$r144" -o "$TESTDIR/.r144_bin" 2>&1 || true)
+    if [[ "$r144_i" == *"error[check]"* && "$r144_n" == *"error[check]"* && ( "$r144_n" == *"(E0290)"* || "$r144_n" == *"(E0287)"* ) ]]; then
+        echo "  ok  $r144: refused at the checker natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r144: not refused at the checker by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r144_bin"
+done
+for r142 in tests/regressions/bug142_exit_in_operand/repro.con tests/regressions/bug142_exit_in_operand/repro_arg.con; do
+    r142_i=$($COMPILER "$r142" --interp 2>&1 || true)
+    r142_n=$($COMPILER "$r142" -o "$TESTDIR/.r142_bin" 2>&1 || true)
+    if [[ "$r142_i" == *"(E0278)"* && "$r142_n" == *"(E0278)"* ]]; then
+        echo "  ok  $r142: refused with E0278 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r142: not refused with E0278 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r142_bin"
+done
+# Both engines refuse the bug 140 reproducers at the checker (the interpreter used to fail at
+# run time on references, and the binary compared addresses).
+for r140 in tests/regressions/bug140_comparison_consumes_linear/repro.con tests/regressions/bug140_comparison_consumes_linear/repro_ref.con; do
+    r140_i=$($COMPILER "$r140" --interp 2>&1 || true)
+    r140_n=$($COMPILER "$r140" -o "$TESTDIR/.r140_bin" 2>&1 || true)
+    if [[ "$r140_i" == *"(E0229)"* && "$r140_n" == *"(E0229)"* ]]; then
+        echo "  ok  $r140: refused with E0229 natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r140: not refused with E0229 by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r140_bin"
+done
 run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
 run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0302)"
@@ -1819,13 +1991,14 @@ error_091_norm_copied_mut_ref:E0302
 error_091_norm_double_deref_heap:E0302
 error_091_norm_field_write_under_reborrow:E0302
 error_091_norm_borrow_block_under_live_ref:E0302
-error_091_norm_paren_heap_load:E0205
+error_091_norm_paren_heap_load:E0290
 error_091_norm_assign_under_shared_ref:E0302
 error_091_norm_heap_field_load:E0290
 error_091_norm_paren_array_write:E0217
 error_091_norm_double_deref_read:E0238
 error_091_norm_intrinsic_arg_under_reborrow:E0302
 error_091_norm_ref_array_overwrite:E0291
+error_091_norm_generic_ref_array_overwrite:E0291
 error_091_norm_catchall_binder_through_ref:E0290
 error_091_norm_enum_payload_ref:E0239
 error_091_norm_generic_field_ref_write:E0239

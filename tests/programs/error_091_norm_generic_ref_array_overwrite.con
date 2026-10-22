@@ -1,0 +1,10 @@
+// EVALUATION2 D1 (generic form of the normalized place rule's array case): `q[0] = v` with
+// `q: &mut [T; 2]` and `T` unconstrained overwrites an element that may be linear, leaking it.
+// Refused (E0291), whatever `T` is instantiated at.
+fn set<T>(q: &mut [T; 2], v: T) { q[0] = v; }
+
+fn main() -> Int {
+    let mut a: [Int; 2] = [1, 2];
+    set::<Int>(&mut a, 3);
+    return a[0];
+}

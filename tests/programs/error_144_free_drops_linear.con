@@ -1,0 +1,12 @@
+struct R { id: Int, log: *mut Int }
+trusted fn bump(p: *mut Int, id: Int) { *p = *p * 10 + id; }
+impl Destroy for R { fn destroy(&self) { bump(self.log, self.id); } }
+fn mk(id: Int, log: *mut Int) -> R { return R { id: id, log: log }; }
+// Bug 144: `free(h)` on a cell holding a live linear value dropped it silently. E0287.
+fn main() with(Unsafe, Alloc) -> Int {
+    let mut cnt: Int = 0;
+    let p: *mut Int = &mut cnt as *mut Int;
+    let h: Heap<R> = alloc(mk(1, p));
+    free(h);
+    return cnt;
+}

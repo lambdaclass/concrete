@@ -1,0 +1,12 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143: a nested call in a deferred argument ran at the exit, not at the defer (d07, d11).
+// Refused (E0279).
+fn wrap(t: T) -> T { return t; }
+fn main() with(Console) -> Int {
+    let t: T = T { id: 9 };
+    defer kill(wrap(t));
+    return 0;
+}

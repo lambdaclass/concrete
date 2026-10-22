@@ -82,8 +82,9 @@ fn generic_case() with(Alloc) -> Int {
     set_val::<Int>(&mut h, 99);
     let t: Int = get_tag::<Int>(&h);
     let x: Int = h.val;
-    free(h);
-    if x == 99 && t == 8 { return 8; }
+    // Bug 144: Cell<Int> is not Copy, so the pointee is taken back from free and destructured.
+    let Cell { val, tag } = free(h);
+    if x == 99 && t == 8 && val == 99 && tag == 8 { return 8; }
     return 0;
 }
 

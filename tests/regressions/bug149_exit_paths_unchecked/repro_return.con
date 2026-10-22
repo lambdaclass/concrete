@@ -1,0 +1,10 @@
+// Bug 149: a `return` inside a borrow block left `h` live, and the `free(h)` after the block
+// (never reached on that path) was credited. Now E0208 at the return.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    borrow h as r in R {
+        return 0;
+    }
+    free(h);
+    return 0;
+}

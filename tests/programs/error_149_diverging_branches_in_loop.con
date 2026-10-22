@@ -1,0 +1,10 @@
+// Bug 149 (Codex review): consumptions on paths that leave the function inside a loop body that
+// may run zero times are not credited after the loop: `h` is still owned (E0208).
+fn main() with(Alloc) -> Int {
+  let h: Heap<Int> = alloc(1);
+  let c: bool = false;
+  while c {
+    if true { defer free(h); return 1; } else { defer free(h); return 2; }
+  }
+  return 0;
+}

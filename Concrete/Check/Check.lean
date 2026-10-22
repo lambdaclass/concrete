@@ -445,6 +445,122 @@ def checkDirectDestroyImplUse (fnName : String) (span : Option Span) : CheckM Un
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
 -- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
 -- only: the definitions are unchanged. Remove when the new elaborator copes with blocks this size.
+/-- The comparison rule (bugs 134, 140): why a comparison operator is not defined on `t`, or
+    `none` when it is (integers, floats, `bool`, `char`; raw pointers in trusted or `Unsafe` code;
+    a `Copy`-bounded type parameter, re-checked per instance after monomorphization). -/
+def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
+  let env ← getEnv
+  let unsafeOk := Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet
+  match t with
+  | .placeholder | .never => pure none
+  | .bool | .char => pure none
+  | .ptrMut _ | .ptrConst _ =>
+    if unsafeOk then pure none
+    else pure (some "raw pointers compare only in trusted code or a function declaring `with(Unsafe)`")
+  | .ref _ | .refMut _ =>
+    pure (some "a reference has no built-in comparison (neither by address nor by content)")
+  | .typeVar _ =>
+    if ← isCopyType t then pure none
+    else pure (some "a type parameter compares only when it is bounded by `Copy` (a comparison never consumes its operands), and each instantiation must be an integer, float, `bool` or `char`")
+  | t =>
+    if isInteger t || isFloatType t then pure none
+    else pure (some "comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)")
+
+/-- Bug 147: a proof-only statement (`assert`, `assume`, `ghost let`) is erased before Core, so it
+    may not move, consume or reserve a runtime binding: the obligation would be discharged by an
+    operation that never runs. `before` is the environment when the statement started. -/
+def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      -- Any change of a runtime binding's ownership state, in either direction (a move, a
+      -- reservation, or an assignment that makes a consumed binding live again), or a new pin.
+      let changed := old.state != vi.state && !(old.state == .unconsumed && vi.state == .used)
+        || (vi.pinnedByDefer && !old.pinnedByDefer)
+      if !vi.isCopy && !vi.isGhost && changed then
+        throwCheck (.erasedConsumesRuntime n) span
+    | none => pure ()
+
+/-- Bug 148: the right operand of `&&`/`||` is conditional, so it may not change a non-Copy
+    binding's ownership state (a move there may not run). `before` is the environment after the
+    left operand was checked. -/
+def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      let changed := old.state != vi.state && !(old.state == .unconsumed && vi.state == .used)
+        || (vi.pinnedByDefer && !old.pinnedByDefer)
+      if !vi.isCopy && changed then
+        throwCheck (.conditionalOperandConsumes n op) span
+    | none => pure ()
+
+/-- Bug 149: a `return` exits every enclosing scope, so every live owned non-Copy binding must
+    be consumed or reserved by a pending `defer` at that point, whatever block it sits in (a loop
+    body, a borrow block, a match arm). Before, only `if` branches that exited the function were
+    checked, so a statement after the `return`, or code after an enclosing borrow block, was
+    credited with a consumption that never ran. References are borrows (nothing to consume); a
+    `ghost let` binding has no runtime obligation. -/
+def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (name, info) in env.vars do
+    if info.isCopy || info.isGhost then continue
+    match info.ty with
+    | .ref _ | .refMut _ => continue
+    | _ => pure ()
+    -- A borrow block freezes its owner; the owner's own state is the one before the freeze
+    -- (a `defer` registered before the block still runs on this return; Codex review).
+    let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+    if st == .consumed || st == .reserved then continue
+    throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
+
+/-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state. The only
+    consumptions of an outer binding inside the body are on paths that leave the function (the
+    loop-depth rule refuses the rest), and the loop may run zero times, so crediting them after
+    the loop would accept a value that was never consumed. -/
+def restoreAfterLoop (before : TypeEnv) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  -- A binding consumed before the loop and given a new value inside it is live after an
+  -- iteration and consumed after none: its state after the loop is undecided (Codex review).
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      if !vi.isCopy && old.state == .consumed && vi.state != .consumed && vi.state != .reserved then
+        throwCheck (.linearConsumedOneBranchNotOther n) span
+    | none => pure ()
+  setEnv { env with vars := env.vars.map fun (n, vi) =>
+    match lookupByUid before.vars vi.uid with
+    | some old => if old.state != vi.state then (n, { vi with state := old.state }) else (n, vi)
+    | none => (n, vi) }
+
+/-- A named type that is one of the enclosing function's type parameters, read as that type
+    variable, at any depth (an inferred `vec_new::<[T; 1]>()` keeps `T` named; Codex review). -/
+partial def typeParamsAsVars (ps : List String) : Ty → Ty
+  | .named n => if ps.contains n then .typeVar n else .named n
+  | .ref t => .ref (typeParamsAsVars ps t)
+  | .refMut t => .refMut (typeParamsAsVars ps t)
+  | .ptrMut t => .ptrMut (typeParamsAsVars ps t)
+  | .ptrConst t => .ptrConst (typeParamsAsVars ps t)
+  | .array t n => .array (typeParamsAsVars ps t) n
+  | .generic name args caps => .generic name (args.map (typeParamsAsVars ps)) caps
+  | t => t
+
+/-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
+def deferScopeEntry : CheckM (List Nat × List Nat) := do
+  let env ← getEnv
+  return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
+          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none)
+
+/-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
+    trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
+def deferScopeExit (entry : List Nat × List Nat) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.map fun (n, vi) =>
+    let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
+    let vi := if vi.pinnedByDefer && !entry.2.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    (n, vi) }
+
 set_option backward.do.legacy true in
 mutual
 
@@ -454,6 +570,11 @@ mutual
     E0236), and this guard extends it to every call form — intrinsics included (`free(h)` of a
     `Heap<&P>`, `vec_get`) — so a reference can never surface from a call (E0238). -/
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
+  -- Rule (d) (bug 142): no `return`/`break`/`continue` inside a protected operand. Checked
+  -- here, before any operand is checked, so the exit is reported rather than a consequence.
+  if let some (ctx, ops) := protectedOperands e then
+    if let some (kw, sp) := firstOperandEscape? 0 [] ops then
+      throwCheck (.exitInOperand kw ctx) (some sp)
   let t ← checkExprCore e hint mode
   match e with
   | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>
@@ -543,11 +664,34 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         return .fn_ paramTys sig.capSet sig.retTy
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
   | .binOp _ op lhs rhs =>
+    -- The comparison rule is decided before the operands are checked: checking a non-Copy
+    -- operand in value position moves it, and `x == x` would report a fictitious move (E0205)
+    -- instead of the undefined comparison (Codex review, bug 140). A bound name's type is read
+    -- without effects; the full check below still runs on the checked types.
+    match op with
+    | .eq | .neq | .lt | .gt | .leq | .geq =>
+      for side in [lhs, rhs] do
+        if let .ident _ n := stripParens side then
+          if let some info := ← lookupVarInfo n then
+            let pt ← resolveType info.ty
+            match ← comparisonRefusal? pt with
+            | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString pt) why) (some e.getSpan)
+            | none => pure ()
+    | _ => pure ()
     -- A literal-only side is flexible: it adopts the type of the OTHER operand
     -- (mirroring Core elaboration), not the surrounding hint — `inner[64 + i]`
     -- with i: i32 types 64 as i32 even though the index hint is Int. The
     -- operand-order decision is shared with Elab (TypeJudgment.binOpOperandOrder)
     -- so both front-end passes type the two sides identically.
+    -- Bug 148: `a && b` / `a || b` evaluate `b` only when `a` does not decide the result, so `b`
+    -- may not move anything (its operands are bools; a move would be inside a call there).
+    if op == .and_ || op == .or_ then
+      let lTy ← checkExpr lhs (some .bool)
+      let before ← getEnv
+      let _ ← checkExpr rhs (some .bool)
+      refuseConditionalConsumption before (binOpSymbol op) (some e.getSpan)
+      let _ := lTy
+      return .bool
     let (lTy, lTyR, rTyR) ←
       match TypeJudgment.binOpOperandOrder
               (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
@@ -586,7 +730,22 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- call-syntax intrinsics, type-checked in the call path. Defensive.
       return lTy
     | .eq | .neq | .lt | .gt | .leq | .geq =>
-      return .bool  -- CoreCheck validates operand type compatibility
+      -- The comparison rule (bugs 134, 140; EVALUATION2 D8/D10/D11): a comparison operator
+      -- is defined on integers, floats, `bool` and `char`, and on raw pointers in trusted
+      -- or `Unsafe` code. Nothing else has a built-in comparison: an aggregate (struct,
+      -- enum, array, `String`, `Heap<T>`, fn pointer) reached `llvm-as` as an ill-typed
+      -- `icmp`, a linear operand was consumed and leaked, and a reference compared
+      -- addresses. A type parameter compares only when it is `Copy`-bounded (so the
+      -- comparison cannot consume a linear operand); each instantiation is then held to
+      -- the same scalar rule after monomorphization (`verifyComparisonTypes`, E0229), so a
+      -- `max<T: Copy>` instantiated at a struct is refused before LLVM sees it.
+      -- The comparable types are all Copy, so a comparison never consumes an operand.
+      -- CoreCheck still validates that the two operand types agree.
+      for t in [lTyR, rTyR] do
+        match ← comparisonRefusal? t with
+        | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString t) why) (some e.getSpan)
+        | none => pure ()
+      return .bool
     | .and_ | .or_ =>
       return .bool  -- CoreCheck validates logical operator types
     | .bitand | .bitor | .bitxor | .shl | .shr =>
@@ -639,10 +798,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- snapshot, check each arm from the snapshot, then merge with agreement.
     let envBefore ← getEnv
     -- Check then branch: all stmts except the last, then check last for its type
-    if blockExitsFunction then_ then
+    if exemptExitBranch then_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let thenInit := then_.dropLast
-    checkStmts thenInit env.currentRetTy
+    -- Defer rule (a): the branch's deferred calls run after its trailing value.
+    let thenDefer ← deferScopeEntry
+    checkStmtsCore thenInit env.currentRetTy
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
         let ty ← checkExpr tExpr hint
@@ -656,14 +817,16 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
+    deferScopeExit thenDefer
     let envAfterThen ← getEnv
     checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating then_) (some e.getSpan)
     -- Check else branch from the SNAPSHOT (not the then-arm's aftermath)
     setEnv envBefore
-    if blockExitsFunction else_ then
+    if exemptExitBranch else_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let elseInit := else_.dropLast
-    checkStmts elseInit env.currentRetTy
+    let elseDefer ← deferScopeEntry
+    checkStmtsCore elseInit env.currentRetTy
     let elseTy ← match else_.getLast? with
       | some (.expr _ eExpr true) => do
         let ty ← checkExpr eExpr hint
@@ -676,6 +839,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
+    deferScopeExit elseDefer
     let envAfterElse ← getEnv
     checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating else_) (some e.getSpan)
     if blockExitsFunction then_ then
@@ -1001,6 +1165,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .generic "Vec" _ _ => true
         | _ => false
       if !ok then throwCheck (.builtinWrongFirstArg "vec_free" "Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
+      -- Bug 145 (rule (c)): `vec_free` releases the buffer only; non-Copy elements still in it
+      -- would be dropped without being destroyed. `Vec::drop` runs the element drop glue. A
+      -- trusted function may still release a buffer it has emptied (it vouches for that).
+      match vecTy with
+      | .generic "Vec" [et] _ =>
+        -- An inferred `vec_new::<T>()` keeps `T` as a named type; read it as the enclosing
+        -- function's type parameter so a `T: Copy` bound is seen (Codex review).
+        let envT ← getEnv
+        let et := typeParamsAsVars envT.currentTypeParams et
+        if !(← isCopyType et) && !envT.currentFnTrusted then
+          throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
+      | _ => pure ()
       match vecArg with
       | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
       | _ => pure ()
@@ -1290,22 +1466,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .ref t => t
       | .refMut t => t
       | t => t
-    -- Heap-shell access keeps the blessed `->` semantics: heap interiors are
-    -- not linearity-tracked, so `h.next` + `free(h)` (the heap-node
-    -- destructure) stays legal — H11 below is skipped for it.
-    -- Only an OWNED shell: through `&Heap<W>` / `&mut Heap<W>` the owner is elsewhere and a
-    -- by-value non-Copy field read would hand out a payload it still holds (bug 091 round 3).
-    -- The base's NORMALIZED place decides "through a reference", whatever the spelling:
-    -- `(*r).p` with `r: &Heap<W>` has a `Heap<W>`-typed base yet is reached through `&`.
+    -- Bug 144: heap interiors ARE linearity-tracked. A by-value non-Copy field read of a heap
+    -- shell is the H11 projection (E0290), as for any other owner: the cell still holds the
+    -- value, so `let a = h.s; let b = h.s;` was a double free and `h.next` + `free(h)` left
+    -- the cell's other non-Copy fields unaccounted for. Move the value out with `*h` (which
+    -- frees the cell) and destructure it.
     -- Every field access normalizes (bug 091 round 3): a projection of an untraceable base
     -- (`(**r).f`, `(if c { a } else { b }).f`) is refused (E0238), reads included.
     let baseThroughRef ← match ← normProjBase obj with
       | .place p => pure p.reach.throughRef
       | .temp => pure false
       | .reject why => throwCheck (.untraceablePlace "the base of this field access" why) (some e.getSpan)
-    let isHeapShell := !baseThroughRef && match objTy with
-      | .heap _ | .heapArray _ => true
-      | _ => false
+    let _ := baseThroughRef
     -- Extract struct name, type args and capability args for substitution
     let (structName, typeArgs, capArgs) := match innerTy with
       | .named n => (n, ([] : List Ty), ([] : List CapSet))
@@ -1330,14 +1502,16 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           let viaRef ← match stripParens obj with
             | .ident _ varName => do
               match ← lookupVarInfo varName with
-              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true | _ => false)
+              -- Bug 144 (Codex round 4): a heap shell is not the newtype's owner either: `h.0` on
+              -- a `Heap<W>` read the payload out of the cell and consumed `h` without freeing it.
+              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ => true | _ => false)
               | none => pure false
             | _ => pure baseThroughRef
           match stripParens obj with
           | .ident _ varName =>
             if viaRef then
               if mode != .place && !(← isCopyType innerFieldTy) then
-                throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference") (some e.getSpan)
+                throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference or heap shell") (some e.getSpan)
             else consumeVarIfExists varName (some e.getSpan)
           | _ =>
             if mode != .place && !(← isCopyType innerFieldTy) then
@@ -1362,7 +1536,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
           -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
           -- and destructuring the whole owner.
-          if mode != .place && !isHeapShell && !(← isCopyType fieldTy) then
+          if mode != .place && !(← isCopyType fieldTy) then
             throwCheck (.nonCopyProjection (tyToString fieldTy) s!"field '{field}' of '{structName}'") (some e.getSpan)
           return fieldTy
         | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
@@ -1514,13 +1688,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             pure body
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
-          if blockExitsFunction body then
+          if exemptExitBranch body then
             let cur ← getEnv
             setEnv { cur with inFnExitingBranch := true }
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
           let curEnv ← getEnv
-          checkStmts bodyInit curEnv.currentRetTy
+          -- Defer rule (a): the arm's deferred calls run after its trailing value.
+          let armDefer ← deferScopeEntry
+          checkStmtsCore bodyInit curEnv.currentRetTy
           let armTy ← match body.getLast? with
             | some (.expr _ armExpr true) => do
               let ty ← checkExpr armExpr hint
@@ -1536,6 +1712,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               checkStmt other curEnv.currentRetTy
               pure Ty.unit
             | none => pure Ty.unit
+          deferScopeExit armDefer
           -- Unify arm types
           if !firstArmDone then
             matchResultTy := armTy
@@ -1656,12 +1833,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
-        if blockExitsFunction body then
+        if exemptExitBranch body then
           let cur ← getEnv
           setEnv { cur with inFnExitingBranch := true }
         -- Check all stmts except the last, then extract type from last
         let bodyInit := body.dropLast
-        checkStmts bodyInit envBefore.currentRetTy
+        let armDefer ← deferScopeEntry
+        checkStmtsCore bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
           | some (.expr _ armExpr true) => do
             let ty ← checkExpr armExpr hint
@@ -1673,6 +1851,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkStmt other envBefore.currentRetTy
             pure Ty.unit
           | none => pure Ty.unit
+        deferScopeExit armDefer
         if !firstArmDone then
           matchResultTy := armTy
           firstArmDone := true
@@ -1769,6 +1948,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- (`*(h)` is `*h`: parentheses never hide the consumed binding). A heap reached any
       -- other way (`*w.h`, through a reference) would be freed while its owner still holds
       -- it — a second `*w.h` freed it again — so only a bare owned binding is loaded.
+      -- Bug 146 (Codex round 3): `*h` is a move out of the cell plus its release, never a
+      -- place. As a projection base or assignment target (`(*h).f = v`, `(*h).x`) it would free
+      -- the cell while the place is still in use, or drop the moved-out value's other fields.
+      -- Field access through the shell is spelled `h.f`.
+      if mode == .place then
+        throwCheck (.nonCopyProjection (tyToString innerTy)
+          "a heap dereference used as a place (`*h` moves the value out and frees the cell); write `h.f` to read or assign a field, or bind `let v = *h;` first") (some e.getSpan)
       match stripParens inner with
       | .ident _ varName => consumeVar varName (some e.getSpan)
       | _ =>
@@ -1823,7 +2009,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- so an ILLEGAL `s as Int` reports "cannot cast", not a consume error.
     -- A literal operand gets the shared cast-operand hint (bug 088): `Uint` for a
     -- literal only `Uint` can hold, otherwise none (defaulted, range-checked `Int`).
-    let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) .place
+    -- A heap dereference is a move out of the cell, never a place (bug 146): `(*h) as i32`
+    -- checks it as a value (Codex review).
+    let castMode : UseMode := match stripParens inner with
+      | .deref _ _ => .value
+      | _ => .place
+    let _innerTy ← checkExpr inner (TypeJudgment.castOperandHint inner) castMode
     -- CoreCheck validates cast legality and capability requirements. The target is returned
     -- RESOLVED, so a reference spelled through an alias (`x as R`, `type R = &P`) is seen as a
     -- reference by every check downstream (normalized place rule).
@@ -2009,8 +2200,20 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | none => pure ()
 
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
+  -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
+  -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
+  -- the initializer's branch chain (Codex review: `a[if c { return 7; } else { 0 }] = v`).
+  let destOperands : List Expr := match stmt with
+    | .arrayIndexAssign _ a i _ => [a, i]
+    | .derefAssign _ t _ => [t]
+    | .fieldAssign _ o _ _ => [o]
+    | _ => []
+  if let some (kw, sp) := firstOperandEscape? 0 [] destOperands then
+    throwCheck (.exitInOperand kw "an assignment's destination") (some sp)
   match stmt with
   | .letDecl _ name mutable ty value _isGhost =>
+    -- Bug 147: an erased binding may not move a runtime value (see `.assert_`).
+    let envErase ← getEnv
     -- `__destr_*` names Elab's struct-destructuring temporary, which the post-mono REF-6 check
     -- exempts; a source `let` may not take that spelling (exit 2i review).
     if name.startsWith "__destr_" then
@@ -2030,6 +2233,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let valTy ← checkExpr value ty
     if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
+    if _isGhost then refuseErasedConsumption envErase (some stmt.getSpan)
     match ty with
     | some declTy => expectTy declTy valTy s!"let binding '{name}'" (some stmt.getSpan)
     | none => pure ()
@@ -2068,6 +2272,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | .ref _ | .refMut _ => some <$> normRef value
         | _ => pure none
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
+      if isGhost then
+        let envG ← getEnv
+        match envG.vars with
+        | (n, vi) :: rest => setEnv { envG with vars := (n, { vi with isGhost := true }) :: rest }
+        | [] => pure ()
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
     -- REF-6@1 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
@@ -2152,8 +2361,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
     let valTy ← checkExpr value (some retTy)
     expectTy retTy valTy "return value" (some stmt.getSpan)
+    checkReturnAccountsForAll (some stmt.getSpan)
   | .return_ _ none =>
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
+    checkReturnAccountsForAll (some stmt.getSpan)
   | .expr _ e isValue =>
     let eTy ← checkExpr e
     -- Phase 6 #13: a `;`-terminated statement expression (`isValue := false`)
@@ -2171,6 +2382,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let isFreeCall := match e with
       | .call _ fn _ _ => resolveIntrinsic fn == some .free
       | _ => false
+    -- Bug 144: `free(h)` hands back the pointee; discarding it is legal only when the pointee
+    -- is Copy. A live non-Copy interior would be dropped without being consumed.
+    if !isValue && isFreeCall && !(← isCopyType eTy) then
+      throwCheck (.freeDropsLinearInterior (tyToString eTy)) (some stmt.getSpan)
     if !isValue && !isFreeCall then
       match eTy with
       | .unit | .never | .placeholder => pure ()
@@ -2197,7 +2412,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
     -- the consume-inside-loop rule — see TypeEnv.inFnExitingBranch)
-    if blockExitsFunction thenBody then
+    if exemptExitBranch thenBody then
       setEnv { envBefore with inFnExitingBranch := true }
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
@@ -2209,7 +2424,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     setEnv envBefore
     match elseBody with
     | some stmts =>
-      if blockExitsFunction stmts then
+      if exemptExitBranch stmts then
         setEnv { envBefore with inFnExitingBranch := true }
       checkStmts stmts retTy
       let envAfterElse ← getEnv
@@ -2251,36 +2466,56 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         -- and the later use was a spurious E0205.
         setEnv envBefore
   | .while_ _ cond body lbl =>
+    -- Bug 149: the condition runs on every iteration, so it is checked at the loop's depth: a
+    -- move of an outer binding there is a move inside the loop (E0207).
+    let env0 ← getEnv
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
     let _condTy ← checkExpr cond
+    let envC ← getEnv
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
     let env ← getEnv
+
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
+    let labelDepths := match lbl with
+      | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
+      | none => env.loopLabelDepths
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false, rebindingVar := none }
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
+    restoreAfterLoop env0 (some stmt.getSpan)
   | .forLoop _ init cond step body lbl =>
     -- Init
     match init with
     | some initStmt => checkStmt initStmt retTy
     | none => pure ()
-    -- Condition
+    -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
+    let env0 ← getEnv
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
     let _condTy ← checkExpr cond
+    let envC ← getEnv
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Body + step in loop scope, push label if present
     let env ← getEnv
+
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
-    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, inFnExitingBranch := false }
+    let labelDepths := match lbl with
+      | some l => (l, env.loopDepth + 1) :: env.loopLabelDepths
+      | none => env.loopLabelDepths
+    setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false, rebindingVar := none }
     checkStmts body retTy
     match step with
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
+    restoreAfterLoop env0 (some stmt.getSpan)
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv
@@ -2400,6 +2635,33 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     match body with
     | .call _ _ _ _ => pure ()
     | _ => throwCheck .deferBodyNotCall (some stmt.getSpan)
+    -- Defer rule (a) (bug 143): each argument is a local name, a borrow of a local name, or
+    -- a constant. A projection (`t.id`, `&t.f`) or a computed argument (`f(x)`) would be
+    -- evaluated at the exit (effects and traps moved there, and a projection of a place
+    -- whose owner nothing reserves or pins).
+    match body with
+    | .call _ _ _ args =>
+      for arg in args do
+        let ok := match stripParens arg with
+          | .ident _ _ | .fnRef _ _ => true
+          | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .charLit _ _ => true
+          | .unaryOp _ .neg x => match stripParens x with
+            | .intLit _ _ | .floatLit _ _ => true
+            | _ => false
+          | .borrow _ x | .borrowMut _ x => match stripParens x with
+            | .ident _ _ => true
+            | _ => false
+          | _ => false
+        if !ok then
+          let what := match stripParens arg with
+            | .fieldAccess _ _ f => s!"the field projection '.{f}'"
+            | .borrow _ _ | .borrowMut _ _ => "a borrow of a projection"
+            | .call _ fn _ _ => s!"the call '{fn}(..)'"
+            | .methodCall _ _ m _ _ => s!"the method call '.{m}(..)'"
+            | .strLit _ _ => "a string literal (it allocates when the call runs)"
+            | _ => "a computed expression"
+          throwCheck (.deferArgNotPlace what) (some arg.getSpan)
+    | _ => pure ()
     let bodyTy ← checkExpr body
     -- H6: a deferred call's return value is discarded at scope exit, exactly like
     -- a bare statement expression — a non-Copy result leaks. (`free()` is exempt,
@@ -2407,6 +2669,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let isFreeCall := match body with
       | .call _ fn _ _ => resolveIntrinsic fn == some .free
       | _ => false
+    -- Bug 144: a deferred `free(h)` discards the pointee too (see the statement case).
+    if isFreeCall && !(← isCopyType bodyTy) then
+      throwCheck (.freeDropsLinearInterior (tyToString bodyTy)) (some stmt.getSpan)
     if !isFreeCall then
       match bodyTy with
       | .unit | .never | .placeholder => pure ()
@@ -2418,11 +2683,25 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | none =>
           if !(← isCopyType bodyTy) then
             throwCheck (.discardedLinear (tyToString bodyTy)) (some stmt.getSpan)
-    -- Any variable consumed by the deferred call should be reserved, not consumed.
-    -- The actual consumption happens at scope exit.
+    -- Defer rule (a), "reserve by place" (bug 143): a local passed BY VALUE is reserved
+    -- (pending consumption: the deferred call discharges it at the block's exit, nothing
+    -- moves it before). A local passed BY BORROW is pinned: the borrow discharges nothing,
+    -- so the local must still be consumed, and nothing may move or consume it before the
+    -- deferred call runs. Ownership is not taken at registration: a reserved or pinned
+    -- local may still be read, borrowed and mutated in place. The call reads its
+    -- argument places at the exit (a Copy argument sees its value then), bound by the
+    -- binding's identity (Elab gives a shadowing binder a fresh Core name, bug 087).
+    -- The reservation becomes a consumption, and the pin ends, when the registering
+    -- block ends (`checkStmts`).
     match body with
     | .call _ _fname _ args =>
       for arg in args do
+        let pinned? : Option String := match stripParens arg with
+          | .borrow _ inner | .borrowMut _ inner =>
+            match stripParens inner with
+            | .ident _ n => some n
+            | _ => none
+          | _ => none
         match stripParens arg with
         | .ident _ varName =>
           let env ← getEnv
@@ -2434,7 +2713,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
                 else (n, vi)
               setEnv { env with vars := vars' }
           | none => pure ()
-        | _ => pure ()
+        | _ =>
+          match pinned? with
+          | some varName =>
+            let env ← getEnv
+            match env.vars.lookup varName with
+            | some info =>
+              let vars' := env.vars.map fun (n, vi) =>
+                if vi.uid == info.uid then (n, { vi with pinnedByDefer := true })
+                else (n, vi)
+              setEnv { env with vars := vars' }
+            | none => pure ()
+          | none => pure ()
     | _ => pure ()
   | .borrowIn _ var ref _region isMut body =>
     -- Check that var exists
@@ -2465,7 +2755,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Save state and freeze the original variable
       let savedState := varInfo.state
       let vars' := env.vars.map fun (n, vi) =>
-        if vi.uid == varInfo.uid then (n, { vi with state := .frozen })
+        if vi.uid == varInfo.uid then (n, { vi with state := .frozen, frozenFrom := some savedState })
         else (n, vi)
       setEnv { env with vars := vars' }
       -- Add reference binding and track for escape analysis
@@ -2513,10 +2803,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- value-mode checkExpr auto-consumes it. `breakConsumeExempt` grants
       -- the one-level loop-depth exemption (a break fires at most once per
       -- loop entry); restore the flag right after.
+      -- Bug 149 (Codex review): the H14 one-level exemption (a `break value` could move a binding
+      -- declared outside the loop) is withdrawn. Loops are statements since 6D, so the value is
+      -- discarded anyway, and the move was credited on paths that never ran it (the
+      -- condition-false path, and every path past a conditional `if c { break free(h); }`, which
+      -- then released `h` twice). A break value is checked like any expression in the loop body.
       let envB ← getEnv
-      setEnv { envB with breakConsumeExempt := true }
       let valTy ← checkExpr expr
-      modify fun envA => { envA with breakConsumeExempt := envB.breakConsumeExempt }
+      -- Bug 149 (Codex review): loops are statements (value `while` was removed in 6D), so a
+      -- break value is evaluated and discarded; a non-Copy one would be dropped.
+      if !(← isCopyType valTy) then
+        throwCheck (.discardedLinear (tyToString valTy)) (some stmt.getSpan)
+      let _ := envB
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
@@ -2524,9 +2822,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         if prevTy != valTy then
           throwCheck (.breakTypeMismatch (tyToString valTy) (tyToString prevTy)) (some stmt.getSpan)
     | none => pure ()
-    -- Check all linear variables declared in the loop body are consumed or reserved by defer
+    -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
+    -- defer. Bug 149: a labelled break exits every loop out to the labelled one.
+    let targetDepth := match lbl with
+      | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
+      | none => env.loopDepth
     for (name, info) in (← getEnv).vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
+      let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
@@ -2538,18 +2841,28 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       if !env.loopLabels.contains l then
         throwCheck (.unknownLoopLabel l) (some stmt.getSpan)
     | none => pure ()
-    -- Check all linear variables declared in the loop body are consumed or reserved by defer
+    -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
+    -- defer. Bug 149: a labelled continue leaves every loop inside the labelled one.
+    let targetDepth := match lbl with
+      | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
+      | none => env.loopDepth
     for (name, info) in env.vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
+      let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
   -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
   -- surfaced by the contracts report.
   | .assert_ _ cond | .assume_ _ cond =>
+    let envErase ← getEnv
     -- erased before monomorphization: see TypeEnv.erasedDepth
     modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let t ← checkExpr cond none
     modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
+    -- Bug 147: `assert`/`assume` are erased before Core, so a move inside the condition
+    -- (`assert(*h == 42)` consumes `h`) would discharge a runtime obligation that nothing
+    -- performs: the heap cell was never freed.
+    refuseErasedConsumption envErase (some stmt.getSpan)
     expectTy .bool t "assert/assume condition" (some stmt.getSpan)
   -- Desugared before Check everywhere a block can hold one; what survives is a destructuring `let`
   -- in a `for` header, which has no match form to become (exit 2i review: it was skipped silently)
@@ -2602,6 +2915,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => throwCheck (.structHasNoField structName pb.fieldName) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
+  -- Defer rule (a) (bug 143): the deferred calls this block registers run when it ends.
+  -- A binding reserved here is consumed then, and a pin taken here ends then.
+  let entry ← deferScopeEntry
+  checkStmtsCore stmts retTy
+  deferScopeExit entry
+
+partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []
   for stmt in stmts do
     let envBefore ← getEnv

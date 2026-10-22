@@ -1,0 +1,9 @@
+// Bug 147 positive control: proof-only statements may read runtime values without moving them.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let n: Int = 7;
+    assert(n == 7);
+    ghost let m: Int = n;
+    let v: Int = *h;
+    return v - 42;
+}

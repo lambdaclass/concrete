@@ -1,0 +1,14 @@
+// Bug 148: the right operand of `&&` runs only when the left one is true, but the checker
+// counted its move unconditionally. With `false && consume(h)` the call never runs, so `h` is
+// neither consumed nor freed; on main the program is accepted and the cell leaks.
+fn consume(h: Heap<Int>) with(Alloc) -> bool {
+    free(h);
+    return true;
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let b: bool = false && consume(h);
+    if b { return 1; }
+    return 0;
+}

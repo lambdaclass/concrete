@@ -314,12 +314,14 @@ let p: Heap<Point> = alloc(Point { x: 1.0, y: 2.0 }) with(Alloc);
 
 ### Reading through a heap pointer
 
-- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3).
+- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3). A by-value read of a **non-Copy** field is E0290, as for any owner: heap interiors are linearity-tracked (decided 2026-10-21; [bug 144](../bugs/144_heap_interior_untracked.md)). Borrow it (`&p.field`) or move the whole value out with `*p`.
 - `*p` (full dereference) **consumes** the `Heap<T>` — it loads the value from the heap and frees the memory. After `*p`, the heap pointer is in `consumed` state.
 
 ### Freeing
 
-- `free(p)` consumes the `Heap<T>` and frees the memory.
+- `free(p)` consumes the `Heap<T>`, frees the memory and hands back the pointee. Discarding it
+  (`free(p);`, `defer free(p);`) is legal only when `T` is Copy; a non-Copy pointee would be
+  dropped without being consumed (E0287, bug 144): bind it (`let v = free(p);`) or use `*p`.
 - `destroy(p)` consumes the value and runs the type's `Destroy` implementation.
 
 ### Linearity prevents leaks
@@ -344,11 +346,20 @@ Concrete does **not** have implicit destructors (no RAII drop). Cleanup is expli
 defer destroy(resource);
 ```
 
-1. The body of `defer` must be a single function call expression.
-2. Variables consumed by the deferred call are marked `reserved` instead of `consumed`.
-3. A `reserved` variable can still be read but cannot be moved.
-4. At scope exit, `reserved` variables are accepted (the deferred call will handle cleanup).
-5. Defers execute in LIFO (reverse declaration) order at scope exit.
+1. The body of `defer` must be a single function call expression (not a method call, E0282).
+2. Its arguments are local names, borrows of local names (`&x`, `&mut x`) or constants; anything
+   else is E0279 (decided 2026-10-21, "reserve by place"; [DEFER.md](DEFER.md)).
+3. Variables passed by value are marked `reserved` instead of `consumed`; variables passed by
+   borrow are **pinned**. Neither may be moved or consumed before the deferred call runs (E0206),
+   by a later `defer` included; both may still be read, borrowed and mutated in place.
+4. At scope exit, `reserved` variables are accepted (the deferred call will handle cleanup); a pin
+   discharges nothing (a borrow-only `defer` leaves its local to be consumed, E0208). When the
+   registering block ends, its reservations become consumptions and its pins end.
+5. Defers execute in LIFO (reverse declaration) order at scope exit, reading their argument places
+   then (a `Copy` argument sees its value at the exit), bound by binding identity.
+
+Status: enforced on main ([bug 143](../bugs/143_defer_borrow_argument_unpinned.md) closed the
+unpinned-borrow use after free).
 
 ### Destroy
 
@@ -369,6 +380,7 @@ the element/key/value destructors in the drop path.
 |-----------|----------------------|--------|
 | Read (field access, pass to `&T` borrow) | Allowed | State stays `reserved` |
 | Move (pass by value) | **Error** | `variableReservedByDefer` |
+| Consume a **pinned** variable (a pending `defer` borrows it) | **Error** | `variablePinnedByDefer` (E0206) |
 | Borrow block owner | Allowed | Freezes as normal |
 | Scope exit | Accepted | Deferred call runs |
 
@@ -420,7 +432,14 @@ which this section does not restate. Then:
   destructuring and rebuilding the aggregate. A general place `replace` is a pull-gated
   language/`std` item with no owner yet; it waits for a workload that needs it.
 
-Status: the refusals are enforced on `main` (E0219, E0291). The order is stated, not yet gated
+Status: the refusals are enforced on `main` (E0219, E0291), through every place form: an element
+write through `&mut [T; N]` (EVALUATION2 D1) is the place `(*r)[i]` and is E0291 since bug 091's
+normalized place rule (`error_091_norm_ref_array_overwrite.con`, and the generic form
+`error_091_norm_generic_ref_array_overwrite.con`), and a heap cell's interior is tracked like any
+other owner since bug 144 (no by-value non-Copy field read, no `free` of a live non-Copy pointee).
+So there is no safe store into, or drop of, an initialized non-Copy place without consuming it
+(decided 2026-10-21); the trusted raw store into an uninitialized slot (`*p = v`, `p: *mut T`) stays
+a distinct operation. The order is stated, not yet gated
 (exit 2j). This prevents silent leaks of an overwritten resource; the order rule removes a
 consumer-agreement obligation (interpreter, Core and native must agree on it). Owner: ROADMAP exit
 2j (R-0500); OWNERSHIP_MODEL cites this section.

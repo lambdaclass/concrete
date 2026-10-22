@@ -1,0 +1,13 @@
+// Bug 149 (Codex review): a `break value` may not move a binding declared outside the loop (the H14
+// exemption is withdrawn): after `if c { break free(h); }` the checker treated `h` as still owned on
+// the exit path, so the later `free(h)` released it twice. E0207.
+fn f(c: bool) with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(1);
+    while true {
+        if c { break free(h); }
+    }
+    free(h);
+    return 1;
+}
+
+fn main() with(Alloc) -> Int { return f(true); }

@@ -1,0 +1,12 @@
+struct T { id: Int }
+fn kill(t: T) with(Console) { print_int(t.id); print_char(32); let T { id } = t; }
+fn peek(t: &T) with(Console) { print_int(t.id); print_char(32); }
+fn setid(t: &mut T, n: Int) { t.id = n; }
+// Bug 143: `defer peek(&t); defer kill(t);` (d23): kill runs first by LIFO. A later defer may not
+// consume a pinned local (E0206).
+fn main() with(Console) -> Int {
+    let t: T = T { id: 3 };
+    defer peek(&t);
+    defer kill(t);
+    return 0;
+}

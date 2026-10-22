@@ -1,0 +1,15 @@
+// Bug 149 (Codex review): a consumption inside a loop body on a path that leaves the function is
+// not credited after the loop (it may run zero times): `t` is still owned at the end (E0208).
+struct Token { x: Int }
+fn eat(t: Token) { let Token { x } = t; }
+fn main() -> Int {
+  let t: Token = Token { x: 42 };
+  let c: bool = false;
+  while c {
+    match c {
+      true => { eat(t); return 1; },
+      false => { eat(t); return 2; }
+    }
+  }
+  return 0;
+}

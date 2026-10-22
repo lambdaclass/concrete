@@ -1,0 +1,10 @@
+// Bug 144: `h.s` by value on a heap shell duplicated the String (double free). E0290.
+struct S { s: String }
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<S> = alloc(S { s: "abc" });
+    let a: String = h.s;
+    free(h);
+    drop_string(a);
+    return 0;
+}

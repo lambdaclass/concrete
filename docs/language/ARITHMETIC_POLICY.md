@@ -481,6 +481,46 @@ and the permanent differential legs in exit 2c (R-0491). [NUMERIC_MODEL.md](NUME
 
 ---
 
+## 8a. Comparison operators
+
+**Rule (decided 2026-10-21, user decision (b)).** `==`, `!=`, `<`, `<=`, `>` and `>=` are defined on
+integers of every width, on floats, on `bool` and on `char`, and on raw pointers (`*const T`,
+`*mut T`) in trusted code or a function declaring `with(Unsafe)`. Both operands have the same type
+(E0228 for a mixed-width pair). No other type has a built-in comparison: structs and enums
+(fieldless `Copy` enums included), `Option`/`Result`, arrays, `String`, `Heap<T>`, fn pointers and
+references are refused with E0229 (`comparisonNotDefined`). A type parameter compares only when it
+is `Copy`-bounded, and every instantiation is held to the same scalar rule after monomorphization
+(E0229, `post-mono`), so `max<T: Copy>` at a struct is a diagnostic rather than invalid IR.
+
+- **Never consuming.** Every comparable type is `Copy`; a comparison reads its operands and never
+  moves them.
+- **References have no comparison.** `a == b` with `a, b: &T` is refused: it would have to mean
+  either address identity (which Place MIR would then have to preserve) or content (which is a
+  per-type decision). Compare the referents when they are scalars (`*a == *b`), or call a named
+  function over references (`fn same(a: &T, b: &T) -> bool`).
+- **Aggregates compare through named functions.** Collections already take explicit `eq`, `hash`
+  and `cmp` function pointers (`HashMap::new(hash_fn, eq_fn)`, `OrderedMap::new(cmp_fn)`). Derived
+  or opt-in structural equality is pull-gated by a workload.
+- **Float laws.** Comparison follows IEEE 754: `==` is not reflexive (`x == x` is false when `x` is
+  NaN, and `x != x` is true), and every ordered comparison with a NaN operand is false. The binary
+  emits `fcmp oeq`/`une`/`olt`/... ; no pass may fold a float self-comparison
+  (the SSA folder folded `x == x` to `true` for floats, EVALUATION2 D12; filed and repaired as bug 150 on the interpreter-coverage branch).
+- **Raw pointers** compare by address, in trusted or `Unsafe` code only. (Known limit: through a
+  `Copy`-bounded generic instantiated at a pointer type the post-mono re-check cannot see the
+  instance's authority, so such a comparison is accepted; bug 140.)
+
+**Status on main.** Enforced: `Check.lean` `.binOp` (E0229 at the source span), and
+`verifyComparisonTypes` after monomorphization. It closes [bug 134](../bugs/134_aggregate_eq_invalid_ir.md)
+(aggregate `==` failed in `llvm-as`) and [bug 140](../bugs/140_comparison_consumes_linear.md) (linear
+operands consumed and leaked; references compared by address). Migration: 2 sites (`examples/hexdump`,
+`examples/png_chunks`).
+
+**Owners.** The rule's normative home is this section with VALUE_MODEL under R-0500 (exit 2j/2k);
+the enforcing check is R-0499 (S8); float-comparison folding belongs to R-0493's typed-operation
+authority.
+
+---
+
 ## 9. Report and Diagnostic Visibility
 
 ### 9.1 `--report arithmetic` — IMPLEMENTED (2026-06-26)
