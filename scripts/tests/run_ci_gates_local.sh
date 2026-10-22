@@ -164,7 +164,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=258
+EXPECTED_GATE_COMMANDS=259
+# 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
+#   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

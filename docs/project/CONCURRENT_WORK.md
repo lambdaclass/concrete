@@ -1,5 +1,8 @@
 # Concurrent work: one worktree per writer
 
+Project playbooks live in `.claude/commands` (`/fix-bug`, `/roadmap-item`, `/file-bug`, `/creview`,
+`/rebase`, `/land`, `/cstatus`); the rules they share are in [AGENTS.md](AGENTS.md).
+
 **The default: every concurrent line of work gets its own git worktree.**
 
 ```sh

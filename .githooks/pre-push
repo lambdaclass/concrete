@@ -50,7 +50,15 @@ pushed=""
 # check in it — and running them per review round made every note push take minutes, and fail
 # outside the dev shell. Only an UPDATE of exactly those two refs qualifies; deleting one, or
 # pushing anything else alongside, takes the tier it would take without it.
-wip_refs=0; other_refs=0; wip_shas=""; review_note_refs=0
+#
+# BUG-NUMBER RESERVATION TIER. scripts/gen/new_bug.sh reserves a bug number by creating
+# refs/bug-reservations/NNN on the remote. That ref carries a parentless commit with the empty tree:
+# it publishes no code, so there is nothing to gate. Exactly that shape is accepted on that namespace
+# (and the deletion of a reservation); anything else pushed there is refused.
+# Both no-code tiers (review notes, reservations) may be pushed together or alongside wip/*; a push
+# that also targets any other ref takes the full gates.
+wip_refs=0; other_refs=0; wip_shas=""; review_note_refs=0; res_refs=0; res_bad=""
+EMPTY_TREE="$(git hash-object -t tree /dev/null)"
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${_remoteref:-}" in
@@ -60,6 +68,15 @@ while read -r _localref localsha _remoteref remotesha; do
         *[!0]*) review_note_refs=$((review_note_refs+1)); continue ;;
         *) other_refs=$((other_refs+1)) ;;
       esac ;;
+    refs/bug-reservations/[0-9][0-9][0-9])
+      res_refs=$((res_refs+1))
+      case "$localsha" in
+        *[!0]*) if [ "$(git cat-file -t "$localsha" 2>/dev/null)" != commit ] \
+                   || [ "$(git rev-parse -q --verify "$localsha^{tree}" 2>/dev/null)" != "$EMPTY_TREE" ] \
+                   || git rev-parse -q --verify "$localsha^1" >/dev/null 2>&1; then res_bad="$res_bad $_remoteref"; fi ;;
+      esac
+      continue ;;
+    refs/bug-reservations/*) other_refs=$((other_refs+1)); res_bad="$res_bad ${_remoteref}" ;;
     *) other_refs=$((other_refs+1)) ;;
   esac
   case "$localsha" in *[!0]*) ;; *) continue ;; esac   # all-zero = branch deletion
@@ -75,6 +92,11 @@ while read -r _localref localsha _remoteref remotesha; do
     changed="$changed"$'\n'"$(git diff --name-only $range 2>/dev/null || true)"
   fi
 done
+[ -z "$res_bad" ] || { echo "pre-push (reservation tier): only a parentless empty-tree commit may be pushed to refs/bug-reservations/NNN:$res_bad — refusing"; exit 1; }
+if [ "$res_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
+  echo "pre-push: bug-number reservation — no code published, no gates"
+  exit 0
+fi
 if [ "$wip_refs" -gt 0 ] && [ "$other_refs" -eq 0 ]; then
   bad=""
   for sha in $wip_shas; do
@@ -146,6 +168,10 @@ else
   if printf '%s\n' "$changed" | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
     echo "pre-push: bug-filing completeness selected (docs/bugs, corpus map, coverage)"
     SEL+=(--first "bash scripts/tests/check_bug_filing_complete.sh")
+  fi
+  if printf '%s\n' "$changed" | grep -qE '^scripts/gen/(new_bug\.sh|bug_ledger\.py|changelog\.py)$|^scripts/tests/check_(new_bug|bug_filing_complete)\.sh$|^\.githooks/pre-push$'; then
+    echo "pre-push: bug scaffold selected (new_bug.sh, the ledger generators, the reservation tier)"
+    SEL+=(--first "bash scripts/tests/check_new_bug.sh")
   fi
 
   # Area filters: map touched paths to the gate-name substrings the runner

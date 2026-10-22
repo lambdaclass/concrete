@@ -39,7 +39,14 @@ fragment ([changelog.d/README.md](../../changelog.d/README.md)); never edit a ge
 fact about a bug lives in its record and nowhere else, so two branches filing bugs edit different
 files and cannot conflict.
 
-A bug record is `docs/bugs/NNN_short_name.md` (the next unused number). Every time a bug is found,
+Start with `scripts/gen/new_bug.sh "<title>" [--class N] [--silent yes|no]`. It takes the next number
+no branch, worktree or reservation has used and reserves it on origin (`refs/bug-reservations/NNN`),
+so two writers never get one number; it writes the record, a reproducer skeleton under
+`tests/regressions/` and a `changelog.d/` fragment, regenerates the views and lists every
+`FILL-IN(new_bug.sh)` placeholder left to fill in. `check_bug_filing_complete.sh` refuses a
+placeholder, so a draft can be backed up on `wip/*` but cannot land.
+
+A bug record is `docs/bugs/NNN_short_name.md`. Every time a bug is found,
 ask whether an underlying problem in the compiler's design produced it, and record the answer: a
 fix that repairs one spelling of a recurring cause leaves the next spelling open. The record has
 these parts:

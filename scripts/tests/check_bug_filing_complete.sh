@@ -149,5 +149,19 @@ printf '# Bug 999\n\n## Structural cause\nnames\n\n## Structural owner\nrow 4\n'
 [ -z "$(structural_missing "$STMP/complete.md")" ] && ok "control: a complete record is accepted" \
   || no "control: a complete record was refused"
 
+# UNFILLED SCAFFOLD. scripts/gen/new_bug.sh marks every placeholder it writes with FILL-IN(new_bug.sh).
+# A placeholder is not a statement: a '## Structural cause' holding only the token passes the section
+# leg above, so the token itself is refused wherever the scaffold writes (record, reproducer,
+# changelog fragment). The wip/* tier of the pre-push hook does not run this gate, so a draft can be
+# backed up; it cannot reach a ci/* candidate or main.
+unfilled="$(grep -lF 'FILL-IN(new_bug.sh)' docs/bugs/[0-9][0-9][0-9]_*.md changelog.d/*.md 2>/dev/null || true)"
+unfilled="$unfilled$(find tests/regressions -name '*.con' -exec grep -lF 'FILL-IN(new_bug.sh)' {} + 2>/dev/null || true)"
+if [ -z "$unfilled" ]; then
+  ok "no bug record, reproducer or changelog fragment still holds a new_bug.sh placeholder"
+else
+  no "unfilled new_bug.sh placeholders (FILL-IN(new_bug.sh)) in: $(printf '%s\n' "$unfilled" | sed '/^$/d' | tr '\n' ' ')"
+fi
+# (Its negative control is in check_new_bug.sh: a freshly scaffolded bug must fail this gate here.)
+
 echo "BUG-FILING-COMPLETE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
