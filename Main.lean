@@ -141,15 +141,19 @@ def getMacOSSysrootFlags : IO (Array String) := do
     if sdkPath.length > 0 then return #[s!"--sysroot={sdkPath}"]
   return #[]
 
-/-- A per-process path for a build's intermediate file next to `base` (R-0547).
+/-- A private temporary path for a build's intermediate file (R-0547), named after `base`.
 
     The IR used to go to the fixed `<source>.ll` (and a test build's binary to `<source>.test`), and
     each build deleted it after linking. Two builds of the same source at once — any parallel gate
     run, or two terminals — then shared one file: one build removed or rewrote the IR the other was
-    handing to clang ("no such file or directory: .../main.con.ll"). The process id keeps concurrent
-    builds apart; `--emit-llvm`, whose file is the requested output, still writes `<source>.ll`. -/
+    handing to clang ("no such file or directory: .../main.con.ll"). Writing beside the source also
+    churned the source tree, so a concurrent `cp -a` of the checkout saw files vanish under it. The
+    file now lives in `$TMPDIR` (else `/tmp`) under the process id and a monotonic stamp.
+    `--emit-llvm`, whose file is the requested output, still writes `<source>.ll`. -/
 def scratchPath (base : String) (ext : String) : IO String := do
-  return s!"{base}.{← IO.Process.getPID}{ext}"
+  let dir := ((← IO.getEnv "TMPDIR").filter (· ≠ "")).getD "/tmp"
+  let name := (System.FilePath.mk base).fileName.getD "out"
+  return s!"{dir}/concrete.{← IO.Process.getPID}.{← IO.monoNanosNow}.{name}{ext}"
 
 /-- Build clang arguments for linking LLVM IR to a native binary. -/
 def clangArgs (llPath : String) (outputPath : String) (extraFlags : Array String := #[]) : IO (Array String) := do

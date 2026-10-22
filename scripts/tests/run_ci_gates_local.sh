@@ -598,12 +598,18 @@ _timing_row() { # start end stage verdict cmd
 printf 'start\tend\tsecs\tstage\tverdict\tcmd\n' > "$GATE_TIMINGS"
 
 # ONE SEQUENTIAL VERDICT, used by the first stage, JOBS=1 and the parallel re-run alike.
+# GATE OUTPUT IS WRITTEN OUTSIDE THE CHECKOUT and moved into $FAILLOG_DIR only on failure (R-0547).
+# Creating and deleting a log per gate inside the checkout churned the tree that other gates copy
+# (`cp -a` of the checkout in the mutation driver refused when a file vanished under it).
+GATE_OUT_TMP="$(mktemp -d)"
 run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
-  local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}"
+  local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}" _tmp
+  _tmp="$GATE_OUT_TMP/seq.$RANDOM$RANDOM.log"
   _t0="$(_now)"
-  if eval "$1" >"$_out" 2>&1; then
-    PASS=$((PASS+1)); rm -f "$_out"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
+  if eval "$1" >"$_tmp" 2>&1; then
+    PASS=$((PASS+1)); rm -f "$_tmp"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
   fi
+  mv -f "$_tmp" "$_out" 2>/dev/null || cp -f "$_tmp" "$_out" 2>/dev/null
   _timing_row "$_t0" "$(_now)" "$_st" FAIL "$1"
   FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})"
   return 1
@@ -656,9 +662,10 @@ else
     idx=$((idx+1))
     # The pool's own output is kept on failure too (<name>.pool.log): a gate that fails only under
     # load is a defect in the gate, and the sequential recheck's output cannot show why it failed.
-    ( _t0="$(_now)"; _pl="$FAILLOG_DIR/$(faillog_name "$cmd").pool.log"
+    ( _t0="$(_now)"; _pl="$GATE_OUT_TMP/pool.$idx.log"
       if eval "$cmd" >"$_pl" 2>&1; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
-      else _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
+      else mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
+        _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
   done
   LAUNCHED=$idx
   wait
@@ -896,6 +903,7 @@ else
 fi
 [ "$HEAVY_RUN" = "1" ] && heavy_slot_release
 [ "${_CI_RUNNER_TEMP_OWNED:-0}" = "1" ] && rm -rf "$RUNNER_TEMP"
+rm -rf "${GATE_OUT_TMP:-}"
 
 # The artifact write is part of the verdict: a pass with no durable record is not closure evidence.
 [ "$RUN_OK" = "1" ]

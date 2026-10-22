@@ -81,6 +81,41 @@ The CI wait touches no files, so work can continue during it — in another
 worktree. Treating the whole publish as tree-freezing is over-caution; treating
 the hook phase as safe is the error that costs a run.
 
+## Running the full gate set on the server
+
+The full set runs on concrete-ci-1 (64 threads), never on the laptop:
+
+```
+CONCRETE_REMOTE=scaleway ~/bin/concrete-remote <pushed-ref> \
+  'lake build && bash scripts/tests/run_ci_gates_local.sh'
+```
+
+`concrete-remote` checks the ref out as a `git clone --shared` (not a worktree:
+two mutation-driver gates refuse worktrees) and sets the runner's default width
+to the measured best for that host (`CONCRETE_GATE_JOBS_DEFAULT`, 32 on
+scaleway; override with `CONCRETE_REMOTE_JOBS=N`, or pass `JOBS=N` in the
+command). The measurements and the critical path are in
+[GATE_PROFILE.md](GATE_PROFILE.md#parallel-scaling-on-concrete-ci-1-r-0547).
+
+**A gate must be safe to run beside every other gate.** In a pass the gates run
+JOBS-wide in one checkout, and several passes run on one host. So a gate:
+
+- writes scratch only under `mktemp -d` (or a `.$$` name), never a fixed
+  `/tmp/<name>` — `check_gate_hygiene.sh` refuses fixed `/tmp` paths;
+- never edits a tracked file in place, not even to restore it a moment later.
+  A probe that perturbs a source runs in a private copy of the checkout
+  (`run_fast_surface_gates.sh --mutate`, `check_attestation_manifest.sh`). An
+  in-place edit of a `.lean` file makes every concurrent `require_fresh_binary`
+  rebuild the shared compiler from it;
+- runs sub-steps concurrently only under one lock it already holds (fresh.sh
+  refuses a second concurrent acquisition) and records each sub-step's exit
+  status, so a lost result is a failure, not a pass.
+
+A pool failure that passes on the runner's sequential re-check is listed under
+"Recovered under sequential re-run" and in `.ci-gate-timings.tsv` (stage
+`pool`, verdict `FAIL`, then stage `recheck`). Treat it as a race in that gate
+to fix, not as noise.
+
 ## Killing a publish does not un-publish it
 
 `push-both.sh` runs `git push` as a CHILD process. Killing the script does not
