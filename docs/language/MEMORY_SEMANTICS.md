@@ -1001,7 +1001,8 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   `error_123_const_borrow_in_body.con`); 27 rejection fixtures whose shape needs a named reference
   across statements now report E0302 (E0303 for bug 131's two) at that `let` or assignment, with
   their earlier codes kept as defense in depth. A shared borrow-block binder over a `Heap` passed to
-  a `&Heap<T>` parameter reads through the slot (bug 126's third form, recorded there). Before exit
+  a `&Heap<T>` parameter read through the slot (bug 126's third form, fixed with bug 126 and pinned
+  by `regress_126_heap_ref_one_hop.con`). Before exit
   2i: **gap** for both rules (G18). On `main` a `let` of shared reference type was accepted
   (`let r: &P = &w.p;`, `let s = r;`); a `let`-bound `&mut` is accepted but unusable, since every
   discharging use (writing through it, passing it, reborrowing it, moving it into another `let`)

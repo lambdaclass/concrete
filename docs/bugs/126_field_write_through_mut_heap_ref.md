@@ -96,7 +96,10 @@ On main at `5a064e77` the binary exits 116 where 40 is correct (`read(&h)` is ri
 reads through the slot: the borrow-block binder denotes the slot holding the heap pointer, `&h`
 the heap pointer itself). Same cause and owner as below; it matters more once REF-6@1 makes the
 borrow block the only way to name a reference across statements. The migrated fixture borrows
-`&h` at each use instead.
+`&h` at each use instead. The `lowering-bugs` repair (one place rule: a reference to a `Heap`
+denotes the slot, two dereferences through it) fixes this form too: after the rebase onto
+`713778e2` the program above exits 40, and `regress_126_heap_ref_one_hop.con`'s `binding_case`,
+migrated to a borrow-block binder by exit 2i, pins it.
 
 ## On `land2-fix` (`74f7284a`)
 
