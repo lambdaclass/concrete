@@ -174,3 +174,6 @@ tests/regressions/*/*/*
 !tests/regressions/*/src/*.con
 !tests/regressions/*/*/src/*.con
 !tests/regressions/*/README.md
+
+# Raw review output of scripts/review/review.sh (R-0544): .review/<sha>-<round>.md
+.review/

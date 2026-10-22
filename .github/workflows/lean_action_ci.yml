@@ -36,6 +36,9 @@ jobs:
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
 
+      - name: "Review tool (R-0544 — review.sh delta/split/refusal-retry/cap/notes, verify.sh; fake reviewer)"
+        run: bash scripts/tests/check_review_tool.sh
+
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
 
