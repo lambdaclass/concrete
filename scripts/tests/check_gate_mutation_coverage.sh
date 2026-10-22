@@ -2677,6 +2677,8 @@ _tail_shape() { awk 'NF {last=$0} END {gsub(/[0-9]+/, "#", last); print last}' "
 # The first leg grew these checks one review round at a time; the confirming leg was written later and
 # had none of them, so the confirmation was weaker than the thing it confirmed. Two implementations of
 # one question again — the defect class this whole arc keeps rediscovering — so there is now one.
+# An incomplete gate run (timed out twice) is red without being a verdict: never a kill.
+. "$ROOT_DIR/scripts/tests/lib/incomplete.sh" || { echo "error: scripts/tests/lib/incomplete.sh is missing" >&2; exit 2; }
 _RED_LEG_WHY=""
 _red_leg_is_gate_evidence() { # log rc gate
   _RED_LEG_WHY=""
@@ -2685,6 +2687,9 @@ _red_leg_is_gate_evidence() { # log rc gate
   fi
   if grep -q 'GATE-PRECONDITION-FAILED:' "$1" 2>/dev/null; then
     _RED_LEG_WHY="$(grep -m1 -o 'GATE-PRECONDITION-FAILED:.*' "$1")"; return 1
+  fi
+  if log_reports_incomplete "$1"; then
+    _RED_LEG_WHY="reported an INCOMPLETE result (a timeout is not a verdict)"; return 1
   fi
   if [ "${CLEAN_GATE_VERDICT[$3]:-no}" = "yes" ] && ! _reached_own_end "$1" "$3"; then
     _RED_LEG_WHY="never reached the end it reaches on pristine source"; return 1

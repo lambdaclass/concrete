@@ -30,8 +30,6 @@ cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/cap_sibling_module"
 
-if command -v timeout >/dev/null 2>&1; then TO="timeout 300"; else TO=""
-  echo "  warn 'timeout' not found — running without a hang watchdog"; fi
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -39,9 +37,15 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+BOUNDED_PARENT="$TMP"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 echo "=== a capability-free caller cannot reach a with(Console) SIBLING ==="
-lout="$(cd "$FIX/launder" && $TO "$CC" check . 2>&1)"
+lout="$(cd "$FIX/launder" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$lout" | grep -q "E0520"; then
   ok "the laundering call is refused (E0520)"
 else
@@ -56,14 +60,14 @@ else
   printf '%s\n' "$lout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
 fi
 # It must not merely fail to BUILD for some unrelated reason.
-if (cd "$FIX/launder" && $TO "$CC" build . -o "$TMP/launder" >/dev/null 2>&1); then
+if (cd "$FIX/launder" && "${TO[@]}" "$CC" build . -o "$TMP/launder" >/dev/null 2>&1); then
   no "the laundering program still builds"
 else
   ok "the laundering program does not build"
 fi
 
 echo "=== and an extern reached through a sibling still costs Unsafe ==="
-eout="$(cd "$FIX/extern_unsafe" && $TO "$CC" check . 2>&1)"
+eout="$(cd "$FIX/extern_unsafe" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$eout" | grep -qE "function 'raw_write' requires ([A-Za-z]+, )*Unsafe but caller has \(none\)"; then
   ok "the sibling-module extern call is refused under its PREFIXED spelling"
 else
@@ -72,7 +76,7 @@ else
 fi
 
 echo "=== CONTROL: the same two calls are ACCEPTED when the authority is declared ==="
-dout="$(cd "$FIX/declared_ok" && $TO "$CC" check . 2>&1)"
+dout="$(cd "$FIX/declared_ok" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$dout" | grep -qE 'error\['; then
   no "the positive control is refused — the rule is refusing broadly, not narrowly"
   printf '%s\n' "$dout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
@@ -80,7 +84,7 @@ else
   ok "declaring Console+Alloc, and Unsafe, makes both calls legal"
 fi
 # Behaviour, not just acceptance: it must actually run and print through the sibling.
-if (cd "$FIX/declared_ok" && $TO "$CC" build . -o "$TMP/ok" >/dev/null 2>&1); then
+if (cd "$FIX/declared_ok" && "${TO[@]}" "$CC" build . -o "$TMP/ok" >/dev/null 2>&1); then
   run="$("$TMP/ok" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$run" = "declared" ]; then
     ok "it runs and prints through the sibling (exit 0)"
@@ -100,12 +104,12 @@ echo "=== trusted absorbs an extern call's Unsafe, never its declared effect (R-
 # checked for presence.
 pos="$ROOT_DIR/tests/programs/trusted_absorbs_extern_unsafe.con"
 neg="$ROOT_DIR/tests/programs/error_trusted_extern_effect_not_absorbed.con"
-if [ -f "$pos" ] && $TO "$CC" "$pos" -o "$TMP/absorb" >/dev/null 2>&1; then
+if [ -f "$pos" ] && "${TO[@]}" "$CC" "$pos" -o "$TMP/absorb" >/dev/null 2>&1; then
   ok "a trusted body declaring Console calls a plain extern with(Console): Unsafe absorbed"
 else
   no "trusted_absorbs_extern_unsafe.con does not build — trusted no longer absorbs extern Unsafe"
 fi
-nout="$( [ -f "$neg" ] && $TO "$CC" "$neg" -o "$TMP/noabsorb" 2>&1 )"
+nout="$( [ -f "$neg" ] && "${TO[@]}" "$CC" "$neg" -o "$TMP/noabsorb" 2>&1 )"
 if printf '%s' "$nout" | grep -qE "function 'putchar' requires Console"; then
   ok "a trusted body without Console calling that extern is refused for Console — the effect is not absorbed"
 else
@@ -122,7 +126,7 @@ echo "=== a BODY-LESS declaration keeps the trusted modifier the author wrote ==
 # 112 fix a renamed intrinsic is a foreign binding, which must declare its effects, and the
 # parser now keeps a body-less declaration's `with(...)`. What is under test is what the
 # checker charges.
-tout="$(cd "$FIX/bodyless_trusted" && $TO "$CC" check . 2>&1)"
+tout="$(cd "$FIX/bodyless_trusted" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$tout" | grep -qE 'error\['; then
   no "a trusted body-less declaration is still charged a capability"
   printf '%s\n' "$tout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
@@ -131,7 +135,7 @@ else
 fi
 # CONTROL: without `trusted` it must STILL cost Unsafe, or carrying the modifier through
 # made it meaningless rather than effective.
-uout="$(cd "$FIX/bodyless_untrusted" && $TO "$CC" check . 2>&1)"
+uout="$(cd "$FIX/bodyless_untrusted" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$uout" | grep -q "function 'my_size' requires Unsafe"; then
   ok "the same shape WITHOUT trusted still costs Unsafe"
 else
@@ -156,7 +160,7 @@ echo "=== a PRELUDE-receiver method binds too (the last bug-071 escape) ==="
 #
 # THE LESSON, and it is why this block now enumerates: a headline claim must name the
 # CALL FORMS it covers. "Methods bind" was true of two forms and false of a third.
-hout="$(cd "$FIX/known_hole_cross_package_method" && $TO "$CC" check . 2>&1)"
+hout="$(cd "$FIX/known_hole_cross_package_method" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$hout" | grep -q "function 'String_drop' requires Alloc but caller has (none)"; then
   ok "prelude receiver: String::drop is refused to a caller declaring nothing"
 else
@@ -169,14 +173,14 @@ else
   no "only part of the prelude method surface binds"
 fi
 # It must be REFUSED, not merely fail to build for an unrelated reason.
-if (cd "$FIX/known_hole_cross_package_method" && $TO "$CC" build . -o "$TMP/hole" >/dev/null 2>&1); then
+if (cd "$FIX/known_hole_cross_package_method" && "${TO[@]}" "$CC" build . -o "$TMP/hole" >/dev/null 2>&1); then
   no "the prelude-method escape still builds"
 else
   ok "the escape does not build"
 fi
 # POSITIVE CONTROL: the same calls with Alloc declared must build AND RUN, or the rule
 # is refusing every prelude method rather than the undeclared ones.
-if (cd "$FIX/prelude_method_ok" && $TO "$CC" build . -o "$TMP/pok" >/dev/null 2>&1) && "$TMP/pok" >/dev/null 2>&1; then
+if (cd "$FIX/prelude_method_ok" && "${TO[@]}" "$CC" build . -o "$TMP/pok" >/dev/null 2>&1) && "$TMP/pok" >/dev/null 2>&1; then
   ok "CONTROL: the same calls with Alloc declared build and run (exit 0)"
 else
   no "the positive control fails — prelude methods are refused even when declared"
@@ -197,4 +201,4 @@ fi
 
 echo
 echo "CAP-SIBLING-MODULE: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

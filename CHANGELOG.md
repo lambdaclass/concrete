@@ -31,6 +31,75 @@ incomplete vocabulary. `docs/project/CONCURRENT_WORK.md` and `docs/compiler/TEST
 rules that apply now. The targets are medians: under 2 h from Codex-clean to main, ≤ 40 min of
 landing CI, ≤ 10 min of pre-push and ≤ 5 review rounds per slice. Ledger conflicts are to be zero.
 
+### Validation Rules: Golden Oracles, Incomplete Timeouts, CI Flow, Discovery Rate, Bug Dashboard (2026-10-22)
+
+Five lessons of the last days became rules with gates.
+
+A golden needs an independent check. Bug 121's `conlog` golden was recorded from a miscompiled
+binary and blessed its wrong count, because the interpreter could not run `conlog`. Every `@run`
+rule of `example_manifest.txt` now declares its oracle: `interp` (interpreter agreement, which
+needs `interp=yes`), `spec:<pointer>` (a hand derivation or a reference tool's output, recorded in
+`docs/project/GOLDEN_ORACLES.md`) or `unverified:<reason>`. `check_example_outputs.sh` fails on an
+undeclared or inconsistent oracle and on a spec pointer that does not resolve (seven new negative
+controls, plus a positive control that an unverified golden is counted), and prints the count:
+89 interpreter-checked, 14 derived (base64, verify, grep, hexdump, wordfreq, tar_list and conlog,
+checked against `base64`, `shasum`, `grep`, `xxd`, `sort | uniq -c` and `tar tf`, or by hand: the
+truncated tar archive and bug 121's conlog count) and 48 unverified, each a tracked gap of exit 2c. The rule is in the roadmap's example rule,
+exit 2c and R-0491.
+
+A timeout is incomplete, not failed and not passed. `scripts/tests/lib/bounded.sh` re-runs a
+timed-out command once alone with a larger budget; a completed re-run is judged normally and
+recorded as recovered, and a second timeout is reported `INCOMPLETE` with the partial output
+discarded, which still makes the gate exit nonzero. A command's own exit 124 is told apart from a
+timeout, and eleven controls in `check_example_outputs.sh` pin the helper. Each attempt runs under
+`scripts/tests/lib/bounded_exec.py`, which owns the command's process group and reports the outcome
+through a status file, so a command's own output can neither fake nor hide a timeout; a runner
+that reports nothing makes the run incomplete, and a cancelled runner kills the command's group. `check_example_outputs.sh` (native, interpreter and open-bug reproducer runs),
+`check_callable_values.sh`, `check_hashmap_probe_invariants.sh`, `check_model_diff.sh` and
+`run_tests.sh`'s project fixtures count incomplete results separately (the suite summary gains
+`incomplete=`); the seventeen gates with a `timeout 300`/`timeout 120` watchdog use the helper's
+watchdog form and end with `bounded_gate_status`, which fails the gate on an incomplete command even
+when its output checks were satisfied. A timed-out command's whole process group is killed (TERM,
+then KILL) before the retry. `test_ssa.sh` already worked this way. The roadmap's promotion pipeline now defines
+passed, failed, incomplete, skipped and cancelled, and a qualifying run contains no incomplete
+result.
+
+A gate's verdict no longer depends on which git runs it or on a pipe race. `check_identity_separation.sh`'s
+C6 leg read `git grep -E '...|PackageIdentity\b' ... | grep -q .` under `pipefail`. Two hazards met
+there. `\b` is a regex-library extension: it matches nothing in BSD-regex git (macOS), while in
+GNU-regex git (Linux) it is a word boundary and also matched the legitimate `noPackageIdentity`
+constructor and a history comment. And `grep -q` exits at its first match, so git grep could die of
+SIGPIPE and the pipeline's status was that death: the leg, whose job is to fail on a match, passed
+in CI's regular jobs by losing the race. Mutation shard 18 of run 39753399178 won it, so the gate went
+RED ON CLEAN and two families scored INVALID. Ubuntu 24.04's git 2.43 reproduces the match on main's
+tree. The leg now scans Lean code with a small tokenizer (`scripts/tests/lib/lean_idents.py`:
+comments, docstrings and strings skipped, `noPackageIdentity` is a different identifier), captures
+before testing, names what it found, treats a failed git grep as an error rather than "nothing
+found", and checks the tokenizer on a fixture. Two more `| grep -q` legs in the gate are captured
+too. `check_gate_hygiene.sh` refuses `\b`, `\<` and `\>` in git grep patterns and git grep piped
+into `grep -q`, on continuation-joined lines, with controls; both checks catch the old leg.
+
+The promotion pipeline also records the flow in use: a candidate branch, `wip/*` backups under the
+hook's conflict-marker tier, the pre-push hook as the fast local tier, `ci/<name>` with a dispatched
+CI run (which includes the qualification jobs), a fast-forward of main on both remotes when every
+regular job is green, and remote servers for fuzzing and campaigns when available.
+
+The reliability exit has a measure. `docs/bugs/discovery.tsv` records one row per probe batch (date,
+kind, probe, effort, bugs found, which are silent), seeded with bugs 079 – 137 by the probe that found
+them (the 2026-10-18 hunts, examples-health, RocksDB, the V1 design examples, the exit 2i
+specification, the semantics probes, CI, reviews and fix follow-ons). New Phase 1 exit 2m (R-0491)
+closes when the last three counting probe batches each found no silent bug and at most one loud one.
+
+The roadmap opens with a generated bug dashboard: open bugs by primary structural class and by
+Phase 1 exit, silent and loud, and the discovery-rate trend, generated by
+`scripts/gen/bug_dashboard.py` from the bug records, `STRUCTURAL_CLASSES.md`, the discovery record
+and the exits table. `check_docs_drift.sh` fails on a hand edit or stale inputs (section 6, with
+negative controls for stale, malformed and incomplete inputs and for token batches), and the
+generator refuses a bug record with no discovery batch or with a status outside the vocabulary
+(reading it found 027, 049, 054, 058 and 064 still open, under spellings an `OPEN`-prefix test
+missed). A quiet probe batch counts toward exit 2m only with a recorded effort of at least four
+hours or ten programs.
+
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
 A borrow of a local is the address of its slot whatever the local's type. A local holding a raw

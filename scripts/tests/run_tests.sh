@@ -577,6 +577,9 @@ fi
 PASS=0
 FAIL=0
 SKIP=0
+# A timeout is INCOMPLETE, never a failure and never a pass (lib/bounded.sh): it is re-run once alone
+# with a larger budget, and a second timeout is counted here. The run exits nonzero when any is.
+INCOMPLETE=0
 JOB_SEQ=0
 declare -a JOB_PIDS=()
 declare -a JOB_FILES=()
@@ -11828,15 +11831,11 @@ fi
 #   regress_087_borrow_shadow_uaf/src/main.con  (bug 087 — an `if` body's
 #     `let r` shadowing a borrow-block ref must not outlive the `if`; pre-fix
 #     the later `r` read the inner, dropped String: a heap use-after-free)
-# `timeout` is coreutils; present in the devshell and on CI. Degrade to running
-# without a watchdog rather than skipping the fixtures entirely, but say so, so
-# a hang on such a machine is at least explicable.
-if command -v timeout >/dev/null 2>&1; then
-    PROJ_TIMEOUT="timeout 60"
-else
-    PROJ_TIMEOUT=""
-    echo "  warn  'timeout' not found — project fixtures run WITHOUT a hang watchdog"
-fi
+# The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
+# python3 it degrades to running without a watchdog rather than skipping the fixtures,
+# and says so once, so a hang on such a machine is at least explicable.
+BOUNDED_PARENT="$SUITE_TMPDIR"
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
@@ -11863,10 +11862,12 @@ for projdir in "$TESTDIR"/*/; do
             # Bug 048 was exactly this shape — a probe loop that never returned —
             # and with no timeout anywhere in this script it would have taken the
             # whole run (and the CI job) down with it rather than reporting.
-            run_result=$($PROJ_TIMEOUT /tmp/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
-            if [ "$run_exit" -eq 124 ]; then
-                echo "  FAIL $projname — TIMED OUT (did not terminate)"
-                FAIL=$((FAIL + 1))
+            # A timeout is re-run once alone (120 s); a second one is INCOMPLETE, which still fails
+            # the run's exit status.
+            run_result=$(bounded_run -i /dev/null 60 -- /tmp/test_proj_"$projname" 2>&1) && run_exit=0 || run_exit=$?
+            if bounded_is_incomplete "$run_exit"; then
+                echo "  INCOMPLETE $projname — timed out twice (60 s, then 120 s alone): did not terminate, or the machine is overloaded"
+                INCOMPLETE=$((INCOMPLETE + 1))
                 rm -f /tmp/test_proj_"$projname"
                 continue
             fi
@@ -12176,9 +12177,13 @@ fi # end scoping tests
 
 # --- Summary ---
 echo ""
+bounded_summary
 echo "=== Results ==="
 echo "  passed:  $PASS"
 echo "  failed:  $FAIL"
+if [ "$INCOMPLETE" -gt 0 ]; then
+    echo "  incomplete: $INCOMPLETE (timed out twice: not passed, not failed; a qualifying run has none)"
+fi
 if [ "$SKIP" -gt 0 ]; then
     echo "  skipped: $SKIP"
 fi
@@ -12211,12 +12216,13 @@ find "$TESTDIR" -maxdepth 1 -type f ! -name '*.*' -delete 2>/dev/null || true
   echo "passed=$PASS"
   echo "failed=$FAIL"
   echo "skipped=${SKIP:-0}"
+  echo "incomplete=$INCOMPLETE"
   echo "mode=$MODE"
 } > "$SUMMARY_FILE"
 SUMMARY_WRITTEN=1
 
 echo ""
-echo "  summary written to $SUMMARY_FILE (completed=1 passed=$PASS failed=$FAIL)"
-if [ "$FAIL" -gt 0 ]; then
+echo "  summary written to $SUMMARY_FILE (completed=1 passed=$PASS failed=$FAIL incomplete=$INCOMPLETE)"
+if [ "$FAIL" -gt 0 ] || [ "$INCOMPLETE" -gt 0 ]; then
     exit 1
 fi

@@ -400,6 +400,102 @@ else
 fi
 
 echo ""
+echo "=== git grep: no engine-dependent pattern, no status read through a short-circuiting grep ==="
+# Two hazards, one leg each, found together (CI run 39753399178, mutation shard 18):
+#  1. `git grep -E/-G` compiles its pattern with the regex library git was built with, and the
+#     boundary escapes `\b`, `\<`, `\>` are extensions: BSD/macOS git matches nothing with `\b`, a
+#     GNU-regex git (Linux) treats it as a word boundary. A gate's verdict must not depend on which
+#     git it found.
+#  2. `git grep ... | grep -q` under `pipefail` reads git grep's SIGPIPE: when git grep has more to
+#     write after the first match, `grep -q` exits, git grep dies, and the pipeline fails. A leg
+#     meant to FAIL on a match then passes on whether the race was won.
+# check_identity_separation.sh's C6 leg had both: `PackageIdentity\b` (live on Linux, where it also
+# matched `noPackageIdentity` and a history comment) piped into `grep -q .`. It passed in CI's
+# regular jobs by losing the race and went RED ON CLEAN in that shard by winning it.
+# Scanned as LOGICAL lines: full-line comments are dropped first (a comment ending in a backslash
+# continues nothing), lines ending in a backslash, `|` or `&&` are joined to the next, and heredoc
+# bodies are skipped (they are data). A logical line running git grep (with any -C/-c options,
+# quoted or not) is flagged for (1) if \b, \< or \> appears anywhere after `git ... grep`: inside
+# quotes an alternation's `|` hides where the pattern ends, so keep a later plain grep on its own
+# line, and a literal `git grep -F` pattern holding one is flagged too. (2) needs a pipe into
+# `grep ... -q` with no `;` in between, so a capture followed by a separate test is not flagged.
+# Known limits: patterns passed through a variable, and a trailing backslash inside single quotes.
+logical_lines() { # files... -> FILE:LINE:joined logical line
+  awk 'BEGIN { q = sprintf("%c", 39); hdre = "(^|[^<])<<-?[[:space:]]*[\"" q "]?[A-Za-z_][A-Za-z0-9_]*[\"" q "]?" }
+       # unquoted(s): s (the text before a heredoc operator) ends outside any quotes, tracking
+       # backslash escapes, so `echo "<<EOF"` and `echo \" "<<EOF"` are not heredocs. `<<<` (a
+       # here-string) is excluded by the operator pattern.
+       function unquoted(s,   i, c, sq, dq) {
+         sq = 0; dq = 0
+         for (i = 1; i <= length(s); i++) {
+           c = substr(s, i, 1)
+           if (sq) { if (c == q) sq = 0; continue }
+           if (c == "\\") { i++; continue }
+           if (c == "\"") dq = !dq
+           else if (c == q && !dq) sq = 1
+         }
+         return !sq && !dq
+       }
+       FNR == 1 { buf = ""; hd = ""; hdp = "" }
+       hd != "" { t = $0; sub(/^\t+/, "", t); if (t == hd) hd = ""; next }
+       /^[[:space:]]*#/ { next }
+       { if (buf == "") start = FNR
+         line = $0
+         if (match(line, hdre) && unquoted(substr(line, 1, RSTART))) {
+           tag = substr(line, RSTART, RLENGTH); sub(/^[^<]?<<-?[[:space:]]*/, "", tag); gsub("[\"" q "]", "", tag); hdp = tag }
+         if (sub(/\\$/, "", line)) { buf = buf line " "; next }
+         if (line ~ /(\||&&)[[:space:]]*$/) { buf = buf line " "; next }
+         print FILENAME ":" start ":" buf line; buf = ""
+         if (hdp != "") { hd = hdp; hdp = "" } }' "$@" 2>/dev/null
+}
+_GIT_GREP="git( +-[Cc] +(\"[^\"]*\"|'[^']*'|[^ ]+))* +grep"
+gitgrep_gnuisms() { logical_lines "$@" | grep -E "${_GIT_GREP}"'.*\\[b<>]' || true; }
+gitgrep_into_quiet_grep() { logical_lines "$@" | grep -E "${_GIT_GREP}"'[^;]*\| *grep( +-[A-Za-z]+)* +-[A-Za-z]*q' || true; }
+GG_FILES=("$ROOT_DIR"/scripts/tests/*.sh "$ROOT_DIR"/scripts/tests/lib/*.sh "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/gen/*.sh "$ROOT_DIR"/.githooks/pre-push)
+GG="$(gitgrep_gnuisms "${GG_FILES[@]}")"
+if [ -z "$GG" ]; then ok "no git-grep pattern uses \\b, \\< or \\> (portable boundaries only)"
+else no "git grep patterns depend on the regex engine: $(cut -c1-160 <<<"$GG" | tr '\n' ';')"; fi
+GQ="$(gitgrep_into_quiet_grep "${GG_FILES[@]}")"
+if [ -z "$GQ" ]; then ok "no git grep is piped into a short-circuiting grep (capture, then test)"
+else no "git grep piped into 'grep -q' (its SIGPIPE can decide the leg): $(cut -c1-160 <<<"$GQ" | tr '\n' ';')"; fi
+# Controls, built from pieces so this file's own text never matches.
+_gg_dir="$(mktemp -d)"
+_GG='git'" grep"; _B='\'"b"
+printf '%s\n' "if $_GG -nE 'synthetic|Foo${_B}' -- x; then :; fi" > "$_gg_dir/alt.sh"
+printf '%s\n' "OUT=\"\$($_GG -nE \\" "  'synthetic|Foo${_B}' -- x)\"" > "$_gg_dir/cont.sh"
+printf '%s\n' "if git -C . grep -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/dashc.sh"
+printf '%s\n' "OUT=\"\$($_GG -nE '(^|[^A-Za-z0-9_])Foo([^A-Za-z0-9_]|\$)' -- x)\"" > "$_gg_dir/portable.sh"
+printf '%s\n' "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/quiet.sh"
+printf '%s\n' "if $_GG -n Foo -- x \\" "   | sed 's/a/b/' | grep -qE . ; then :; fi" > "$_gg_dir/quiet_cont.sh"
+printf '%s\n' "if git -C \"a b\" grep -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/dashc_quoted.sh"
+printf '%s\n' "# a comment ending in a backslash \\" "if $_GG -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/after_comment.sh"
+printf '%s\n' "if $_GG -n Foo -- x | grep -E -q .; then :; fi" > "$_gg_dir/quiet_split_opts.sh"
+printf '%s\n' "if $_GG -n Foo -- x |" "   grep -q .; then :; fi" > "$_gg_dir/quiet_pipe_cont.sh"
+printf '%s\n' "OUT=\"\$($_GG -n Foo -- x)\"; printf '%s' \"\$OUT\" | grep -q ." > "$_gg_dir/capture_then_test.sh"
+printf '%s\n' "cat > f <<'EOF'" "$_GG -nE 'Foo${_B}' -- x | grep -q ." "EOF" > "$_gg_dir/heredoc.sh"
+for c in alt cont dashc dashc_quoted after_comment; do
+  if [ -n "$(gitgrep_gnuisms "$_gg_dir/$c.sh")" ]; then ok "control: a \\b git grep pattern ($c) is flagged"
+  else no "control: a \\b git grep pattern ($c) was NOT flagged (the check above is inert)"; fi
+done
+if [ -z "$(gitgrep_gnuisms "$_gg_dir/portable.sh")$(gitgrep_into_quiet_grep "$_gg_dir/portable.sh")" ]; then
+  ok "control: a captured search with portable bracket-expression boundaries is not flagged"
+else no "control: a captured, portable search was flagged"; fi
+printf '%s\n' "echo \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_quoted_heredoc_text.sh"
+printf '%s\n' "cat <<<EOF" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_here_string.sh"
+printf '%s\n' "echo \\\" \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_escaped_quote_heredoc_text.sh"
+printf '%s\n' "if $_GG -n Foo -- x |" "  # why the next stage is here" "  grep -q .; then :; fi" > "$_gg_dir/comment_in_pipeline.sh"
+for c in quiet quiet_cont quiet_split_opts quiet_pipe_cont after_quoted_heredoc_text after_here_string after_escaped_quote_heredoc_text comment_in_pipeline; do
+  if [ -n "$(gitgrep_into_quiet_grep "$_gg_dir/$c.sh")" ]; then ok "control: git grep piped into grep -q ($c) is flagged"
+  else no "control: git grep piped into grep -q ($c) was NOT flagged (the check above is inert)"; fi
+done
+for c in capture_then_test heredoc; do
+  if [ -z "$(gitgrep_gnuisms "$_gg_dir/$c.sh")$(gitgrep_into_quiet_grep "$_gg_dir/$c.sh")" ]; then
+    ok "control: $c is not flagged (a separate test after a capture; heredoc data)"
+  else no "control: $c was flagged"; fi
+done
+rm -rf "$_gg_dir"
+
+echo ""
 echo "=== a summary line and the exit status cannot disagree ==="
 # A gate emitting `PASS=.. FAIL=..` must derive its status from that count rather than
 # ending in a literal non-zero exit that ignores it.
