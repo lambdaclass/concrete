@@ -159,13 +159,31 @@ require_train_checkout() { # name
 
 # --- build ---------------------------------------------------------------------------------------
 
-regenerate() {
+# The generators regenerate() runs on the current tree, colon-separated. The resolver may take one
+# side of a generated view only when that view's generator is in this plan (LAND_REGEN_PLAN).
+regen_plan() {
+  local plan="" g
   if [ -f scripts/gen/refresh_generated.sh ]; then
-    bash scripts/gen/refresh_generated.sh
+    plan="scripts/gen/refresh_generated.sh"
+    # refresh_generated.sh runs bug_ledger.py always, and the other three when present.
+    for g in scripts/gen/bug_ledger.py scripts/gen/bug_dashboard.py scripts/gen/candidate_table.py scripts/gen/build_identity.sh; do
+      [ -f "$g" ] && plan="$plan:$g"
+    done
   else
-    [ -f scripts/gen/bug_dashboard.py ] && python3 -I scripts/gen/bug_dashboard.py --write
-    [ -f scripts/gen/candidate_table.py ] && python3 -I scripts/gen/candidate_table.py --write
-    [ -f scripts/gen/build_identity.sh ] && bash scripts/gen/build_identity.sh
+    for g in scripts/gen/bug_dashboard.py scripts/gen/candidate_table.py scripts/gen/build_identity.sh; do
+      [ -f "$g" ] && plan="${plan:+$plan:}$g"
+    done
+  fi
+  echo "$plan"
+}
+
+regenerate() { # each generator's failure is the build's failure
+  if [ -f scripts/gen/refresh_generated.sh ]; then
+    bash scripts/gen/refresh_generated.sh || return 1
+  else
+    if [ -f scripts/gen/bug_dashboard.py ]; then python3 -I scripts/gen/bug_dashboard.py --write || return 1; fi
+    if [ -f scripts/gen/candidate_table.py ]; then python3 -I scripts/gen/candidate_table.py --write || return 1; fi
+    if [ -f scripts/gen/build_identity.sh ]; then bash scripts/gen/build_identity.sh || return 1; fi
   fi
   return 0
 }
@@ -226,7 +244,7 @@ cmd_build() {
   state_set "$name" members "$members"
   state_set "$name" prev "$prev"
 
-  local m ref msg rc conflicted
+  local m ref msg rc conflicted plan used_plan=""
   for m in "${shas[@]}"; do
     ref="${m%@*}"; sha="${m##*@}"
     msg="train/$name: merge $ref (${sha:0:10})"
@@ -239,8 +257,9 @@ cmd_build() {
       fi
       conflicted="$(git diff --name-only --diff-filter=U)"
       note "conflicts in $ref:"; printf '    %s\n' $conflicted
+      plan="$(regen_plan)"; used_plan="${used_plan:+$used_plan:}$plan"
       # shellcheck disable=SC2086
-      if ! python3 -I "$RESOLVER" resolve $conflicted; then
+      if ! LAND_REGEN_PLAN="$plan" python3 -I "$RESOLVER" resolve $conflicted; then
         git merge --abort
         assert_no_op "merge --abort"
         log_row "$name" build conflict "real conflict merging $ref: $(printf '%s ' $conflicted)"
@@ -262,8 +281,18 @@ cmd_build() {
     fi
   done
 
-  note "regenerating generated views once on the train"
-  regenerate || { git checkout -q -- . ; die "build: a generator refused (above); the train is left at its last merge"; }
+  # A view resolved by "take one side, regenerate" must really be regenerated: every generator the
+  # resolver relied on is still in the plan that runs now.
+  local final_plan g; final_plan="$(regen_plan)"
+  for g in ${used_plan//:/ }; do
+    case ":$final_plan:" in *":$g:"*) ;; *) die "build: $g resolved a conflict but is gone from the final tree; the view cannot be regenerated" ;; esac
+  done
+  note "regenerating generated views once on the train (${final_plan:-no generators})"
+  if ! regenerate; then
+    git checkout -q -- .
+    log_row "$name" build refused "a generator refused"
+    die "build: a generator refused (above); the train is left at its last merge and is NOT built"
+  fi
   if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     local changed; changed="$(git status --porcelain --untracked-files=no | cut -c4-)"
     local left; left="$(markers_in $changed)"
@@ -273,7 +302,7 @@ cmd_build() {
     assert_no_op "regeneration commit"
   fi
   local tracked_markers
-  tracked_markers="$(git grep -lE '^(<{7}|>{7})( |$)' HEAD -- . 2>/dev/null | head -5 || true)"
+  tracked_markers="$(git grep -lE '^(<{7}|>{7})( |$)' HEAD -- . 2>/dev/null || true)"
   [ -z "$tracked_markers" ] || die "build: committed conflict markers in: $tracked_markers"
 
   state_set "$name" head "$(git rev-parse HEAD)"
@@ -299,6 +328,8 @@ cmd_check() {
   require_train_checkout "$name"
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
+  # A new check withdraws the previous one: a failing re-run must not leave an old pass standing.
+  [ "$DRY" = 1 ] || state_set "$name" checked ""
 
   # Remote full set (R-0541) runs alongside the local selection when the server tool exists.
   local rpid="" rlog=""
@@ -463,8 +494,20 @@ cmd_watch() {
   local bad_landing bad_campaign
   bad_landing="$(printf '%s\n' "$jobs" | awk -F'\t' '$1=="landing" && $2!="success"')"
   bad_campaign="$(printf '%s\n' "$jobs" | awk -F'\t' '$1=="campaign" && $2!="success" && $2!="skipped"')"
+  # The verdict must describe THIS train: its exact head, with a non-empty landing tier. Otherwise
+  # it is no verdict (bisect --ci consumes this exit status).
   local head; head="$(state_get_soft "$name" head)"
-  [ "$sha" = "$head" ] || note "WARNING: run $id is at ${sha:0:10}, not the train head ${head:0:10}"
+  if [ "$sha" != "$head" ]; then
+    log_row "$name" watch refused "run $id at $sha"
+    echo "train: run $id ran ${sha:0:10}, not the train head ${head:0:10}; it says nothing about this train" >&2
+    return 1
+  fi
+  # awk reads all of its input: `| grep -q` under pipefail can SIGPIPE the writer and flip the test.
+  if [ "$(printf '%s\n' "$jobs" | awk -F'\t' '$1=="landing"{n++} END{print n+0}')" = 0 ]; then
+    log_row "$name" watch refused "no landing-tier jobs"
+    echo "train: run $id has no landing-tier jobs; an empty set is not green" >&2
+    return 1
+  fi
   if [ -n "$bad_landing$bad_campaign" ]; then
     note "jobs that did not succeed:"
     printf '%s\n' "$bad_landing" "$bad_campaign" | sed '/^$/d' | awk -F'\t' '{printf "    [%s] %-10s %s\n", $1, $2, $4}'
@@ -489,7 +532,7 @@ cmd_watch() {
   fi
   # failed only when a landing job failed; otherwise (cancelled, skipped, pending) it is no verdict.
   local res=incomplete
-  if printf '%s\n' "$bad_landing" | cut -f2 | grep -qE '^(failure|timed_out)$'; then res=failed; fi
+  if [ "$(printf '%s\n' "$bad_landing" | awk -F'\t' '$2=="failure"||$2=="timed_out"{n++} END{print n+0}')" != 0 ]; then res=failed; fi
   log_row "$name" watch "$res" "run conclusion $concl"
   echo "train: landing tier is NOT green ($res). Bisect: train.sh bisect $name --test '<failing gate>'" >&2
   return 1
@@ -513,6 +556,16 @@ cmd_land() {
   local base head id; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   id="$(state_get "$name" run_id)"
   [ -n "$id" ] || die "land: no CI run recorded for $name"
+
+  # Serialize with push-both.sh BEFORE reading the remotes: every check below must still hold when
+  # the push happens. The pushes also carry leases on the values read here, so a publisher that does
+  # not take this lock still cannot slip a commit in between.
+  local lock="$COMMON/concrete-push-both.lock"
+  if [ "$DRY" = 0 ]; then
+    mkdir "$lock" 2>/dev/null || die "land: another publish holds $lock"
+    printf 'pid=%s worktree=%s train=%s\n' "$$" "$ROOT" "$name" > "$lock/owner"
+    trap 'rm -f "'"$lock"'/owner"; rmdir "'"$lock"'" 2>/dev/null || true' EXIT
+  fi
 
   local status sha
   read -r status sha <<< "$(run_field "$id" status headSha)" || die "land: cannot read run $id"
@@ -539,32 +592,27 @@ cmd_land() {
   fi
   git merge-base --is-ancestor "$base" "$head" || die "land: the train does not descend from its base"
 
-  local mirror=""
+  local mirror="" mmain=""
   if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1; then
     refuse_fork "$MIRROR"
     mirror="$MIRROR"
-    local mmain; mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
+    mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
     if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
       die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
     fi
   fi
 
-  # Serialize with push-both.sh: remotes are shared by every worktree.
-  local lock="$COMMON/concrete-push-both.lock"
-  if [ "$DRY" = 0 ]; then
-    mkdir "$lock" 2>/dev/null || die "land: another publish holds $lock"
-    printf 'pid=%s worktree=%s train=%s\n' "$$" "$ROOT" "$name" > "$lock/owner"
-    trap 'rm -f "'"$lock"'/owner"; rmdir "'"$lock"'" 2>/dev/null || true' EXIT
-  fi
-  # The hook sees base..head again (the same range `check` validated) and reuses that record.
-  run_or_print in_nix git push "$REMOTE" "$head:refs/heads/main"
+  # The hook sees base..head again (the same range `check` validated) and reuses that record. The
+  # lease makes the push conditional on main still being the base (head descends from it, so this is
+  # a fast-forward whenever it succeeds).
+  run_or_print in_nix git push --force-with-lease="refs/heads/main:$base" "$REMOTE" "$head:refs/heads/main"
   if [ "$DRY" = 0 ]; then
     assert_no_op "push to $REMOTE"
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
   if [ -n "$mirror" ]; then
     # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    run_or_print env CONCRETE_SKIP_GATES=1 git push "$mirror" "$head:refs/heads/main"
+    run_or_print env CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/main:$mmain" "$mirror" "$head:refs/heads/main"
     if [ "$DRY" = 0 ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
       log_row "$name" land failed "mirror $mirror not at head"
       die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"

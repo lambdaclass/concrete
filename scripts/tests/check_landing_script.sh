@@ -79,16 +79,22 @@ cat > scripts/tests/audit_bug_corpus.sh <<'EOF'
 #!/usr/bin/env bash
 declare -A BUG_TEST_MAP=(
   [100]="regress_100.con"
+  [110]="regress_110.con"
 )
 declare -A SKIP_BUGS=(
   [050]="OPEN -- base"
 )
 EOF
 printf 'id\tnote\nc0\tbase\n' > docs/project/candidates.tsv
-printf '# Roadmap\n\nprose line one\n\n%s\n%s\n\nprose line two\n' "$BEGIN" "$END" > ROADMAP.md
+# A second generated block whose generator does not exist: nothing may resolve a conflict in it.
+GHOST='<!-- BEGIN GENERATED: ghost view (scripts/gen/ghost.py; edit nothing) -->'
+printf '# Roadmap\n\nprose line one\n\n%s\n%s\n\nprose line two\n\n%s\nghost\n%s\n' "$BEGIN" "$END" "$GHOST" '<!-- END GENERATED: ghost view -->' > ROADMAP.md
 cat > scripts/gen/candidate_table.py <<'EOF'
 import re
+import sys
 rows = [l.split("\t") for l in open("docs/project/candidates.tsv").read().splitlines()[1:] if l]
+if any(r[0] == "BROKEN" for r in rows):
+    sys.exit("candidate record: BROKEN row refused")
 body = "\n".join(f"| {r[0]} | {r[1]} |" for r in sorted(rows))
 s = open("ROADMAP.md").read()
 b = s.index("<!-- BEGIN GENERATED: candidate record"); b = s.index("\n", b) + 1
@@ -128,9 +134,29 @@ printf 'two b2\n' > src/two.txt; commit_all b2
 branch b3; printf 'one b3\n' > src/one.txt; commit_all b3
 branch b4; sed 's/prose line two/prose line two (b4)/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b4
 branch b5; sed 's/prose line two/prose line two (b5)/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b5
-# b6/b7: both re-key bug 100 differently; a union keeps both lines -> duplicate key.
-branch b6; sed 's/\[100\]="regress_100.con"/[100]="regress_100.con regress_100b.con"/' scripts/tests/audit_bug_corpus.sh > a && mv a scripts/tests/audit_bug_corpus.sh; commit_all b6
-branch b7; sed 's/\[100\]="regress_100.con"/[100]="regress_100c.con"/' scripts/tests/audit_bug_corpus.sh > a && mv a scripts/tests/audit_bug_corpus.sh; commit_all b7
+corpus_after(){ python3 -I - "$1" "$2" <<'EOF'
+import sys
+p = "scripts/tests/audit_bug_corpus.sh"; s = open(p).read()
+anchor = sys.argv[1] + "\n"
+s = s.replace(anchor, anchor + sys.argv[2] + "\n", 1)
+open(p, "w").write(s)
+EOF
+}
+corpus_edit(){ sed "s/$1/$2/" scripts/tests/audit_bug_corpus.sh > a && mv a scripts/tests/audit_bug_corpus.sh; }
+# b6/b7: both add [150], at different places: a clean merge that duplicates a key (bash keeps one).
+branch b6; corpus_after '  [100]="regress_100.con"' '  [150]="regress_150a.con"'; commit_all b6
+branch b7; corpus_after '  [110]="regress_110.con"' '  [150]="regress_150b.con"'; commit_all b7
+# b10/b11: both re-key [100]: an edit conflict, never a union.
+branch b10; corpus_edit 'regress_100.con' 'regress_100b.con'; commit_all b10
+branch b11; corpus_edit 'regress_100.con' 'regress_100c.con'; commit_all b11
+# b12/b13: both insert code after the maps: never unioned in a map-shaped ledger.
+branch b12; echo 'echo twelve' >> scripts/tests/audit_bug_corpus.sh; commit_all b12
+branch b13; echo 'echo thirteen' >> scripts/tests/audit_bug_corpus.sh; commit_all b13
+# b14/b15: both edit the ghost block, whose generator does not exist.
+branch b14; sed 's/^ghost$/ghost 14/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b14
+branch b15; sed 's/^ghost$/ghost 15/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b15
+# b16: a record the generator refuses (committed without regenerating, as a broken branch would be).
+branch b16; printf 'BROKEN\tx\n' >> docs/project/candidates.tsv; git add -A; git commit -qm b16
 # b8: the seeded red member for bisection (adds a file the "test" forbids).
 branch b8; printf 'bad\n' > BAD; commit_all b8
 branch b9; printf 'nine\n' > nine.txt; commit_all b9
@@ -175,8 +201,20 @@ out="$(bash "$TRAIN" build t3 --no-fetch b4 b5 2>&1)"; rc=$?
 no_op_left || no "MERGE_HEAD left behind after the prose conflict"
 git checkout -q main
 out="$(bash "$TRAIN" build t4 --no-fetch b6 b7 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "duplicate key [100]" && ok "a union that duplicates a corpus key is refused" || { no "duplicate corpus key accepted (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" != 0 ] && has "$out" "duplicate key [150]" && ok "a merge that duplicates a corpus key is refused" || { no "duplicate corpus key accepted (exit $rc)"; echo "$out" | sed 's/^/      /'; }
 no_op_left || no "operation left in progress after the duplicate-key refusal"
+git checkout -q main
+out="$(bash "$TRAIN" build t4 --force --no-fetch b10 b11 2>&1)"; rc=$?
+[ "$rc" = 3 ] && has "$out" "edit the same existing lines" && ok "two edits of one ledger entry are a real conflict, not a union" || { no "ledger edit conflict: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" build t4 --force --no-fetch b12 b13 2>&1)"; rc=$?
+[ "$rc" = 3 ] && has "$out" "outside every declare -A map" && ok "code inserted outside the corpus maps is never unioned" || { no "corpus code union: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" build t4 --force --no-fetch b14 b15 2>&1)"; rc=$?
+[ "$rc" = 3 ] && has "$out" "which the train will not run" && ok "a generated block whose generator will not run is a real conflict" || { no "ghost block: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" build t4 --force --no-fetch b16 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "a generator refused" && [ -z "$(git status --porcelain --untracked-files=no)" ] \
+  && ok "a generator's refusal fails the build and leaves the tree clean" || { no "generator refusal: exit $rc"; echo "$out" | sed 's/^/      /'; }
+has "$(cat "$TMP/state/t4/train.env")" "head=" && no "a refused build recorded a head" || ok "a refused build records no head"
+no_op_left || no "operation left in progress after the generator refusal"
 git checkout -q main
 out="$(bash "$TRAIN" build t1 --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "exists" && ok "an existing train is not overwritten without --force" || no "existing train overwritten (exit $rc)"
@@ -201,6 +239,7 @@ HEAD1="$(git rev-parse HEAD)"
 cat > "$TMP/hook" <<'EOF'
 #!/usr/bin/env bash
 cat > "$FAKE_GH_DIR/hook.stdin"
+[ ! -f "$FAKE_GH_DIR/hook.fail" ]
 EOF
 export LAND_HOOK="$TMP/hook"
 out="$(bash "$TRAIN" ci t1 2>&1)"; rc=$?
@@ -208,6 +247,13 @@ out="$(bash "$TRAIN" ci t1 2>&1)"; rc=$?
 out="$(bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cat "$FAKE_GH_DIR/hook.stdin")" = "refs/heads/train/t1 $HEAD1 refs/heads/ci/t1 $BASE" ] \
   && ok "check feeds the hook exactly base..head on ci/t1" || { no "check: exit $rc, hook stdin '$(cat "$FAKE_GH_DIR/hook.stdin" 2>/dev/null)'"; echo "$out" | sed 's/^/      /'; }
+touch "$FAKE_GH_DIR/hook.fail"
+out="$(bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && ok "check fails when the hook's selection fails" || no "check passed over a failing hook"
+out="$(bash "$TRAIN" ci t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "no passing check" && ok "a failed re-check withdraws the earlier pass" || no "ci used a stale pass after a failed re-check"
+rm -f "$FAKE_GH_DIR/hook.fail"
+bash "$TRAIN" check t1 --no-remote >/dev/null 2>&1 || no "re-check after repair"
 out="$(bash "$TRAIN" --dry-run ci t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "would dispatch" && [ -z "$(git ls-remote origin refs/heads/ci/t1)" ] \
   && ok "dry-run ci prints the push and dispatch and does neither" || no "dry-run ci: exit $rc"
@@ -228,7 +274,11 @@ out="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
 runjson "$HEAD1" failure success
 out="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "jobs/11/logs" && ok "watch: a landing failure is red and its log tail fetched" || no "watch landing failure: exit $rc"
+runjson "$(git rev-parse b1)" success success
+out="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "says nothing about this train" && ok "watch: a green run at another SHA is no verdict" || no "watch accepted a run at another SHA (exit $rc)"
 
+runjson "$HEAD1" failure success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "did not succeed" && ok "land refuses a red landing job" || no "land accepted a red landing job (exit $rc)"
 runjson "$(git rev-parse b1)" success success

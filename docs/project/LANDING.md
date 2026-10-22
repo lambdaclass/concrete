@@ -31,11 +31,13 @@ them. `land --dry-run` still performs every verification, so it is the way to as
 
   | kind | files | resolution |
   |---|---|---|
-  | append-only ledgers | `CHANGELOG.md`, `scripts/tests/audit_bug_corpus.sh`, `docs/bugs/discovery.tsv`, `docs/project/candidates.tsv` | union of both sides' lines |
+  | append-only ledgers | `CHANGELOG.md`, `scripts/tests/audit_bug_corpus.sh`, `docs/bugs/discovery.tsv`, `docs/project/candidates.tsv` | union of both sides' lines, only when both sides inserted lines (the diff3 base of every hunk is empty); in the corpus, only map entries inside a `declare -A` map |
   | whole generated files | `Concrete/BuildIdentity.lean` | regenerated on the train |
-  | generated blocks | any file whose every conflict hunk is inside a `BEGIN GENERATED ... (scripts/gen/<generator>; ...)` block whose generator exists | regenerated on the train |
+  | generated blocks | any file whose every conflict hunk is inside a `BEGIN GENERATED ... (scripts/gen/<generator>; ...)` block whose generator the train will run | regenerated on the train |
 
-  Any other conflict, including prose next to a generated block, aborts that merge. The script
+  A generated view is resolved only when its generator is in the regeneration plan that runs after
+  the last merge. A generator that merely exists is not enough. Any other conflict, including prose
+  next to a generated block and two edits of one ledger line, aborts that merge. The script
   names the files and exits 3. The train keeps the members merged before it.
 - After every merge, `resolve_conflicts.py corpus-keys` refuses a duplicate key in the corpus maps,
   and a bug listed in both `BUG_TEST_MAP` and `SKIP_BUGS`. bash keeps the last of two equal keys
@@ -64,7 +66,8 @@ them. `land --dry-run` still performs every verification, so it is the way to as
 
 ### ci
 
-- Refuses unless `check` passed at this exact HEAD. `--skip-check` overrides that, and the log
+- Refuses unless `check` passed at this exact HEAD. Each `check` run first withdraws the previous
+  pass, so a failed re-check leaves no pass behind. `--skip-check` overrides that, and the log
   records the check as `skipped`.
 - Pushes in two steps:
   1. `ci/<name>` is reset to the train's base. The base is main's own commit and has already been
@@ -83,6 +86,9 @@ Polls until the run completes. A timeout is reported as `incomplete`, never as a
 command then lists every job that did not succeed, by tier, and prints the log tail of each failed
 job (`gh api repos/<repo>/actions/jobs/<id>/logs`).
 
+A run at another SHA, or a run with no landing-tier jobs, is no verdict: `watch` exits 1 and logs
+`refused`.
+
 **Campaign-only failure.** The campaign tier is the mutation campaign, the fuzz campaign and the
 proof replay (`LAND_CAMPAIGN_JOBS`). When it is the only part that failed, `watch` says so and
 exits 0: the campaign gates stage (c) qualification, not merges. The failure is still printed and
@@ -90,7 +96,8 @@ logged.
 
 ### land
 
-Every condition below is checked before anything is pushed:
+`land` takes the same repository-wide lock as `push-both.sh` first, then checks every condition below
+before anything is pushed:
 
 - the CI run's `headSha` is the local HEAD, and the run is completed;
 - every landing-tier job concluded `success`, and a run with no landing-tier jobs is refused;
@@ -102,12 +109,14 @@ candidate that no longer integrates main, so the train is rebuilt, checked and r
 
 The push sequence:
 
-1. Takes the same repository-wide lock as `push-both.sh`.
-2. Pushes the exact SHA to `origin main` through the hook, which reuses the `check` record.
-3. Pushes the same SHA to `lambdaclass main`, only if that remote exists. Following `push-both.sh`
-   policy, this push runs with the hook skipped, because the identical commit was just accepted by
-   the primary's hook.
-4. Checks both remotes with `ls-remote`.
+1. Pushes the exact SHA to `origin main` through the hook, which reuses the `check` record. The
+   push carries `--force-with-lease=refs/heads/main:<base>`, so it succeeds only while main is still
+   the base, even against a publisher that does not take the lock.
+2. Pushes the same SHA to `lambdaclass main`, only if that remote exists, with a lease on the value
+   read before the first push. Following `push-both.sh` policy, this push runs with the hook
+   skipped, because the identical commit was just accepted by the primary's hook. If it fails after
+   the primary landed, the command says so and exits non-zero.
+3. Checks both remotes with `ls-remote`.
 
 A remote named `fork` is refused as primary or mirror. `--no-mirror` (or `LAND_MIRROR=`) lands on
 origin only.

@@ -7,17 +7,24 @@
 Run from the repository root while a merge is stopped on conflicts. Only three kinds of path are
 resolved; everything else is reported as a REAL conflict and nothing is written for it:
 
-  union ledgers      append-only ledgers (UNION below): `git merge-file --union` keeps both sides'
-                     lines. A union can duplicate a key, so train.sh runs `corpus-keys` after every
-                     merge, and the generators that read the TSV ledgers refuse duplicates themselves.
+  union ledgers      append-only ledgers (UNION below), and only when every conflict hunk is an
+                     INSERTION on both sides (its diff3 base is empty): `git merge-file --union` then
+                     keeps both sides' lines. Two edits of one existing line are a real conflict. In a
+                     map-shaped ledger (MAP_LEDGERS) every inserted line must also be a map entry or
+                     comment inside a `declare -A` map. A union can still duplicate a key, so
+                     train.sh runs `corpus-keys` after every merge, and the generators that read the
+                     TSV ledgers refuse duplicates themselves.
   whole generated    files a generator rewrites whole (WHOLE_GENERATED): ours is taken, and train.sh
                      regenerates the file once on the finished train.
   generated blocks   any other text file whose EVERY conflict hunk lies inside a
                      `<!-- BEGIN GENERATED: ... (scripts/gen/<generator>; ...) -->` block (or differs
-                     only inside such spans on one line), and whose generator exists: ours is taken
-                     for those hunks and train.sh regenerates the blocks. One hunk outside a block, a
-                     hunk that touches a marker line, or a block whose generator is missing makes the
-                     whole file a real conflict.
+                     only inside such spans on one line): ours is taken for those hunks and train.sh
+                     regenerates the blocks. One hunk outside a block, a hunk that touches a marker
+                     line, or a block whose generator is not in the plan makes it a real conflict.
+
+"In the plan" means listed in LAND_REGEN_PLAN, the generators train.sh will run on the finished train
+(colon-separated). A generator that merely exists is not enough: taking one side of a view is only
+correct when that view is then rewritten from the merged records.
 
 A path with no common ancestor, or deleted on one side, is resolved only when it is whole-generated.
 
@@ -35,11 +42,23 @@ UNION = {
     "docs/bugs/discovery.tsv",
     "docs/project/candidates.tsv",
 }
+# whole generated file -> the generator that rewrites it
 WHOLE_GENERATED = {
-    "Concrete/BuildIdentity.lean",
+    "Concrete/BuildIdentity.lean": "scripts/gen/build_identity.sh",
 }
+# Map-shaped ledgers: a union is accepted only when every conflicting line is a map entry or comment.
+MAP_LEDGERS = {"scripts/tests/audit_bug_corpus.sh"}
+
+
+def regen_plan():
+    """The generators train.sh WILL run after the merges (LAND_REGEN_PLAN, colon-separated). A block
+    or file is resolved by regeneration only when its generator is in this plan; an empty plan
+    resolves nothing, so a caller that forgets to pass it fails closed."""
+    return {g for g in os.environ.get("LAND_REGEN_PLAN", "").split(":") if g}
 BEGIN = re.compile(r"<!-- BEGIN GENERATED: [^>]*?\((scripts/gen/[^;)\s]+)")
 END = re.compile(r"<!-- END GENERATED: ")
+DECLARE = re.compile(r"^\s*declare -A (\w+)=\(\s*$")
+KEY = re.compile(r"^\s*\[([^\]]+)\]=")
 INLINE_SPAN = re.compile(r"<!-- BEGIN GENERATED: .*?-->.*?<!-- END GENERATED: .*?-->")
 
 
@@ -80,7 +99,7 @@ def merge_file(ours, base, theirs, *flags):
 
 def hunks(text):
     """Split merge-file output (merge or diff3 style) into ('ctx', lines) and ('conflict', ours,
-    theirs) pieces. A malformed marker sequence returns None."""
+    theirs, base) pieces (base is None without diff3). A malformed marker sequence returns None."""
     out, ctx = [], []
     lines = text.split("\n")
     i = 0
@@ -88,12 +107,12 @@ def hunks(text):
         ln = lines[i]
         if ln.startswith("<<<<<<< "):
             out.append(("ctx", ctx)); ctx = []
-            ours, theirs, mode = [], [], "ours"
+            ours, theirs, base, mode = [], [], None, "ours"
             i += 1
             while i < len(lines):
                 l2 = lines[i]
                 if l2.startswith("||||||| ") and mode == "ours":
-                    mode = "base"
+                    mode = "base"; base = []
                 elif l2 == "=======" and mode in ("ours", "base"):
                     mode = "theirs"
                 elif l2.startswith(">>>>>>> ") and mode == "theirs":
@@ -102,10 +121,12 @@ def hunks(text):
                     ours.append(l2)
                 elif mode == "theirs":
                     theirs.append(l2)
+                else:
+                    base.append(l2)
                 i += 1
             else:
                 return None
-            out.append(("conflict", ours, theirs))
+            out.append(("conflict", ours, theirs, base))
         else:
             ctx.append(ln)
         i += 1
@@ -114,7 +135,8 @@ def hunks(text):
 
 
 def generated_only(path, ours, base, theirs):
-    """True when every conflict hunk lies inside generated blocks whose generators exist."""
+    """True when every conflict hunk lies inside generated blocks whose generators will run."""
+    plan = regen_plan()
     rc, merged = merge_file(ours, base, theirs)
     if rc == 0:
         return True, "no conflict left"
@@ -135,7 +157,7 @@ def generated_only(path, ours, base, theirs):
                 elif END.search(stripped):
                     inside = None
             continue
-        _, o, t = piece
+        _, o, t, _b = piece
         for ln in o + t:
             if BEGIN.search(ln) or END.search(ln):
                 # Marker lines inside a hunk: allowed only when the two sides differ solely inside
@@ -143,19 +165,56 @@ def generated_only(path, ours, base, theirs):
                 break
         else:
             if inside is not None:
-                if not os.path.exists(inside):
-                    return False, f"conflict inside a block generated by {inside}, which does not exist"
+                if inside not in plan:
+                    return False, f"conflict inside a block generated by {inside}, which the train will not run"
                 continue
             return False, "a conflict hunk lies outside every generated block"
         strip = lambda xs: [INLINE_SPAN.sub("", x) for x in xs]
         if len(o) == len(t) and strip(o) == strip(t):
             gens = {m.group(1) for x in o + t for m in BEGIN.finditer(x)}
-            missing = [g for g in gens if not os.path.exists(g)]
+            missing = [g for g in gens if g not in plan]
             if missing:
                 return False, f"inline generated span whose generator is missing: {', '.join(missing)}"
             continue
         return False, "a conflict hunk touches a BEGIN/END GENERATED marker line"
     return True, "every hunk is inside a generated block"
+
+
+def union_ok(path, ours, base, theirs):
+    """A ledger conflict is a union only when both sides INSERTED lines at the same place: the base
+    side of every hunk is empty. Two edits of one existing line are a real conflict, and a union would
+    keep both versions. In a map-shaped ledger every inserted line must also be a map entry (or a
+    comment) inside a `declare -A` map, so executable code is never unioned."""
+    rc, merged = merge_file(ours, base, theirs, "--diff3")
+    if rc == 0:
+        return True, "no conflict left"
+    try:
+        pieces = hunks(merged.decode("utf-8"))
+    except UnicodeDecodeError:
+        return False, "not UTF-8 text"
+    if pieces is None:
+        return False, "malformed conflict markers"
+    in_map = False
+    for piece in pieces:
+        if piece[0] == "ctx":
+            for ln in piece[1]:
+                if DECLARE.match(ln):
+                    in_map = True
+                elif in_map and ln.strip() == ")":
+                    in_map = False
+            continue
+        _, o, t, b = piece
+        if b is None:
+            return False, "no base section to prove the conflict is insert-only"
+        if any(x.strip() for x in b):
+            return False, "both sides edit the same existing lines (not an append)"
+        if path in MAP_LEDGERS:
+            if not in_map:
+                return False, "inserted lines outside every declare -A map"
+            for x in o + t:
+                if x.strip() and not KEY.match(x) and not x.lstrip().startswith("#"):
+                    return False, f"inserted line is not a map entry: {x.strip()[:60]}"
+    return True, "union of both sides' inserted lines (ledger)"
 
 
 def write_and_stage(path, data):
@@ -169,6 +228,9 @@ def resolve(paths):
     for path in paths:
         base, ours, theirs = (stage_blob(path, n) for n in (1, 2, 3))
         if path in WHOLE_GENERATED:
+            if WHOLE_GENERATED[path] not in regen_plan():
+                real.append((path, f"generated by {WHOLE_GENERATED[path]}, which the train will not run"))
+                continue
             if ours is None:
                 real.append((path, "generated file deleted on the train side"))
                 continue
@@ -179,9 +241,14 @@ def resolve(paths):
             real.append((path, "deleted on one side (modify/delete)"))
             continue
         if path in UNION:
-            _, merged = merge_file(ours, base if base is not None else b"", theirs, "--union")
+            b = base if base is not None else b""
+            ok, why = union_ok(path, ours, b, theirs)
+            if not ok:
+                real.append((path, why))
+                continue
+            _, merged = merge_file(ours, b, theirs, "--union")
             write_and_stage(path, merged)
-            print(f"  resolved {path}: union of both sides' lines (ledger)")
+            print(f"  resolved {path}: {why}")
             continue
         if base is None:
             real.append((path, "added on both sides with different content"))
@@ -198,8 +265,6 @@ def resolve(paths):
     return 1 if real else 0
 
 
-DECLARE = re.compile(r"^\s*declare -A (\w+)=\(\s*$")
-KEY = re.compile(r"^\s*\[([^\]]+)\]=")
 
 
 def corpus_keys(path):
