@@ -79,7 +79,9 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
     | some iid =>
       if iid.capability == some cap then some ({ callee := h, kind := "intrinsic" } : CapSupplier) else none
     | none => none
-  spelled ++ generated.filter fun g => !spelled.any (·.callee == g.callee)
+  -- Deduplicated by spelling AND kind: a body calling both `print(7)` and a user `print_int`
+  -- has two suppliers, the program function and the intrinsic (Codex review).
+  spelled ++ generated.filter fun g => !spelled.any (fun x => x.callee == g.callee && x.kind == g.kind)
 
 def CapSupplier.render (s : CapSupplier) : String :=
   match s.kind, s.targets with
