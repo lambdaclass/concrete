@@ -590,6 +590,25 @@ run_controls() {
     if grep -qx "$c" <<< "$bres"; then echo "  ok   bounded control $c"; PASS=$((PASS + 1))
     else no "bounded control $c: lib/bounded.sh does not behave as specified"; fi
   done
+  # The mutation drivers' "incomplete is not a kill" predicate (lib/incomplete.sh) sees every form an
+  # incomplete result is printed in, ignores zero counts, and both drivers use it.
+  local ires
+  ires=$(
+    source "$ROOT_DIR/scripts/tests/lib/incomplete.sh"
+    for line in "  INCOMPLETE examples/x [y]: timed out" "INCOMPLETE t1: timed out twice" \
+                "INCOMPLETE: 1 command(s) timed out twice" "  incomplete: 2 (timed out twice)"; do
+      printf '%s\n' "$line" > "$dir/inc.log"; log_reports_incomplete "$dir/inc.log" || echo "missed: $line"
+    done
+    for line in "X: PASS=3 FAIL=0 INCOMPLETE=0" "PASS: 6  FAIL: 0  INCOMPLETE: 0  RECOVERED: 0" \
+                "=== Example outputs: 1 passed, 0 failed, 0 incomplete" "incomplete=0"; do
+      printf '%s\n' "$line" > "$dir/inc.log"; log_reports_incomplete "$dir/inc.log" && echo "false hit: $line"
+    done
+    for d in scripts/tests/check_gate_mutation_coverage.sh scripts/tests/test_mutation.sh; do
+      grep -q 'log_reports_incomplete' "$ROOT_DIR/$d" || echo "unused in $d"
+    done
+  )
+  if [ -z "$ires" ]; then echo "  ok   control: incomplete results are recognised (never a mutation kill) and zero counts are not"; PASS=$((PASS + 1))
+  else no "control: lib/incomplete.sh: $(echo "$ires" | tr '\n' ';')"; fi
   # Positive control: a real unverified golden passes and is counted, not hidden.
   local uunit="examples/snippets/constants.con"
   if ! grep -qE "^@run $uunit .*oracle=unverified:" "$MANIFEST"; then

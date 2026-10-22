@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# An incomplete run (timed out twice) is red without being a verdict: never a kill.
+. "$ROOT_DIR/scripts/tests/lib/incomplete.sh" || { echo "error: scripts/tests/lib/incomplete.sh is missing" >&2; exit 2; }
 cd "$ROOT_DIR"
 
 # Mutation testing for the Concrete compiler.
@@ -1770,6 +1772,9 @@ _confirm_red_ok() { # log rc expected-tail-shape
   if grep -q 'GATE-PRECONDITION-FAILED:' "$1" 2>/dev/null; then
     CONFIRM_WHY="confirming run hit a precondition failure, so its assertions never ran"; return 1
   fi
+  if log_reports_incomplete "$1"; then
+    CONFIRM_WHY="confirming run reported an INCOMPLETE result (a timeout is not a verdict)"; return 1
+  fi
   # THE END-SHAPE CHECK TOO. Without it this accepted exit 126/127, a shell failure, or any premature
   # non-97 exit — so the confirming leg was still weaker than the first leg it claimed to match.
   if [ -n "${3:-}" ] && [ "$(_mut_tail_shape "$1")" != "$3" ]; then
@@ -1907,6 +1912,8 @@ run_mutation() {
           gate_verdict="died-early"
         elif grep -q 'GATE-PRECONDITION-FAILED:' "$MUT_LOG_DIR/gate.log" 2>/dev/null; then
           gate_verdict="precondition"
+        elif log_reports_incomplete "$MUT_LOG_DIR/gate.log"; then
+          gate_verdict="incomplete"
         elif [[ -n "${MUT_CLEAN_TAIL[$gate]:-}" ]] \
              && [[ "$(_mut_tail_shape "$MUT_LOG_DIR/gate.log")" != "${MUT_CLEAN_TAIL[$gate]}" ]]; then
           gate_verdict="no-verdict"
@@ -1926,6 +1933,9 @@ run_mutation() {
       ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "precondition" ]]; then
       result="ERROR (a precondition of $gate failed — its assertions never ran, not evidence)"
+      ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
+    elif [[ "$gate_verdict" == "incomplete" ]]; then
+      result="ERROR ($gate reported an INCOMPLETE result — a timeout is not a verdict, not evidence)"
       ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
     elif [[ "$gate_verdict" == "no-verdict" ]]; then
       result="ERROR ($gate never reached the end it reaches on pristine source — no verdict, not evidence)"
@@ -1966,6 +1976,9 @@ run_mutation() {
         ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       elif grep -q 'GATE-PRECONDITION-FAILED:' "$MUT_LOG_DIR/test.log" 2>/dev/null; then
         result="ERROR (a precondition of the fast suite failed — its assertions never ran)"
+        ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
+      elif log_reports_incomplete "$MUT_LOG_DIR/test.log"; then
+        result="ERROR (the fast suite reported an INCOMPLETE result — a timeout is not a verdict)"
         ERRORS=$((ERRORS + 1)); INFRA=$((INFRA + 1))
       elif [[ -n "${MUT_CLEAN_FAST_TAIL:-}" ]] \
            && [[ "$(_mut_tail_shape "$MUT_LOG_DIR/test.log")" != "$MUT_CLEAN_FAST_TAIL" ]]; then
