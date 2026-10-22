@@ -420,9 +420,21 @@ class Run:
         log("run_tests.sh")
         w, rss, rc, ins = timed(["bash", "-c", self.suite["run_tests"]], self.repo, timeout=3 * 3600)
         # A red or timed-out suite is not a measurement: an early failure would read as a
-        # speed-up and the fix as a slowdown. The run is marked partial instead.
-        if rc == 0:
+        # speed-up and the fix as a slowdown. The run is marked partial instead. The one exception
+        # is a run that COMPLETED (its .test-summary says completed=1) with a few failing tests:
+        # it ran every test, so its cost is comparable; the failures are noted.
+        done = None
+        if rc not in (0, 124):
+            try:
+                summ = open(os.path.join(self.repo, ".test-summary")).read()
+                m = re.search(r"completed=1\b.*?failed=(\d+)", summ, re.S)
+                done = int(m.group(1)) if m else None
+            except OSError:
+                done = None
+        if rc == 0 or done is not None:
             self.put_run("tests.run_tests", [(w, rss, ins)], "s")
+            if done:
+                self.notes.append("run_tests.sh completed with %d failing test(s); measured anyway" % done)
         else:
             self.failed.append("tests.run_tests")
             self.notes.append("run_tests.sh exited %d after %.0fs; not measured" % (rc, w))

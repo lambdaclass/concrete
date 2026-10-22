@@ -200,7 +200,9 @@ DEFAULTS = {
     "min_history": 3,      # no verdict until this many comparable records exist
     "noise_k": 3.0,        # noise band = noise_k * robust relative spread
     # X: flag when slower than baseline * (1 + band) * (1 + X). Chosen from the instruction-count
-    # noise measured on concrete-ci-1 (see scripts/perf/README in runner.sh's header).
+    # noise measured on concrete-ci-1 at load ~35 (docs/project/PERF_TRACKING.md): compiler runs
+    # vary by <= 0.002% between runs and <= 0.008% within one, so band 0.5% + 1% (an alarm at about
+    # +1.5%) keeps a wide margin over noise while still catching a 2-3% slowdown.
     "threshold": 0.01,
     "min_band": 0.005,     # a band is never assumed tighter than 0.5%
     "max_band": 0.50,      # a metric noisier than this is reported, never alarmed on

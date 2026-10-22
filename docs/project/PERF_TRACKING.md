@@ -16,6 +16,18 @@ from instruction counts. Where `perf` cannot count `instructions:u` (macOS, or a
 `kernel.perf_event_paranoid` is above 2), a run falls back to wall time and its record is marked
 `comparable: false`: kept for reading, never a baseline, never an alarm.
 
+## Noise and threshold
+
+Measured on concrete-ci-1 (AMD EPYC 8324P) on main `185d998c`, three suite runs at load 35 with
+CI runners and gate runs active: compiler instruction counts varied by at most 0.002% between runs
+(median 0.000%) and 0.008% between repeats within a run. Peak RSS varied by up to 0.6% between
+runs and 1.4% within one. An alarm needs a metric above
+`baseline * (1 + band) * (1 + threshold)` and above an absolute floor (5M instructions, 4 MB):
+`band` is 3x the measured robust spread but never below 0.5%, and `threshold` is 1%, so an
+instruction-count alarm fires at about +1.5%. Multi-threaded builds (`lake build`) and the test
+suite may spin while waiting on other threads, which can add instructions under load; their band
+comes from their own history.
+
 ## Server provisioning (lives outside this repository)
 
 Server pieces belong to the private server provisioning (`dotfiles/servers/`), not to concrete.
