@@ -260,8 +260,24 @@ if git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concre
 else
   ok "C6: DebugBundle and Reduce call only ResolvedIdentity.standalone over their complete source map"
 fi
-if git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity\b' -- 'Concrete/*.lean' Main.lean | grep -q .; then
-  no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced"
+# The deleted names as whole identifiers, in code. Boundaries are bracket expressions, not `\b`:
+# git grep's `\b` depends on the regex library git was built with (inert with BSD regex, a word
+# boundary with GNU regex), so this leg once passed or failed depending on which git ran it, and
+# where `\b` was live it also matched the legitimate `noPackageIdentity` constructor and the
+# `PackageIdentity` named in a history comment. A Lean line comment (`--` onward) is not code.
+deleted_producer_refs() { # git grep -n lines on stdin -> the lines that still use a deleted name
+  sed -E 's/^([^:]+:[0-9]+:)(.*)$/\1 \2/; s/--.*$//' \
+    | grep -E '(^|[^A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)([^A-Za-z0-9_]|$)' || true
+}
+_c6_ctl="$(printf '%s\n' \
+  'a.lean:1:def packageIdentityOf (x : Nat) := x' 'a.lean:2:  let p : Proof.PackageIdentity := q' \
+  'a.lean:3:  | noPackageIdentity (why : R)' 'a.lean:4:-- the over-bound `PackageIdentity` this replaced' \
+  'a.lean:5:  | .noPackageIdentity w => s!"x"' | deleted_producer_refs | cut -d: -f2 | tr '\n' ' ')"
+[ "$_c6_ctl" = "1 2 " ] && ok "C6 control: the matcher flags a deleted name used as code and ignores noPackageIdentity and comments" \
+  || no "C6 control: the deleted-name matcher flagged lines '$_c6_ctl', expected '1 2 '"
+C6_REFS="$(git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity' -- 'Concrete/*.lean' Main.lean | deleted_producer_refs)"
+if [ -n "$C6_REFS" ]; then
+  no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced: $(cut -c1-120 <<<"$C6_REFS" | tr '\n' ';')"
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi

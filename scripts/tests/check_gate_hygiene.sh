@@ -400,6 +400,35 @@ else
 fi
 
 echo ""
+echo "=== no git grep pattern depends on a regex-engine extension (\\b, \\<, \\>) ==="
+# `git grep -E/-G` compiles its pattern with whatever regex library that git was built with, and
+# the word-boundary escapes are extensions: BSD/macOS git treats `\b` as matching nothing, a GNU
+# regex build treats it as a boundary. check_identity_separation.sh's C6 leg used
+# `PackageIdentity\b`: inert on macOS git and in CI's regular jobs, red under Ubuntu 24.04's git
+# 2.43 (GNU regex) on the same tree, and red in mutation shard 18 of run 39753399178, where the gate
+# went RED ON CLEAN and two families scored INVALID; where `\b` is live it also matches the
+# legitimate `noPackageIdentity` constructor and a history comment. A gate's verdict must not depend
+# on which git it found. Plain grep(1) is not flagged: GNU and BSD grep agree on these. A line that
+# runs git grep is flagged if \b, \< or \> appears anywhere on it (an alternation's `|` inside the
+# quotes makes the pattern's end undecidable here), so keep a later plain grep on its own line.
+gitgrep_gnuisms() { # files... -> offending lines (comments skipped)
+  grep -HnE 'git( -C [^ ]+)? grep.*\\[b<>]' "$@" 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+}
+GG="$(gitgrep_gnuisms "$ROOT_DIR"/scripts/tests/*.sh "$ROOT_DIR"/scripts/tests/lib/*.sh "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/gen/*.sh "$ROOT_DIR"/.githooks/pre-push \
+  | grep -v '/check_gate_hygiene.sh:' || true)"
+if [ -z "$GG" ]; then ok "no git grep pattern uses \\b, \\< or \\> (portable boundaries only)"
+else no "git grep patterns depend on the regex engine: $(cut -c1-160 <<<"$GG" | tr '\n' ';')"; fi
+_gg_fix="$(mktemp)"
+# The shape that broke: an alternation (its `|` inside the quotes) ending in a \b.
+printf '%s\n' "if git grep -nE 'synthetic|Foo\\b' -- x | grep -q .; then :; fi" > "$_gg_fix"
+if [ -n "$(gitgrep_gnuisms "$_gg_fix")" ]; then ok "control: a git grep pattern with \\b is flagged"
+else no "control: a git grep pattern with \\b was NOT flagged (the check above is inert)"; fi
+printf '%s\n' "if git grep -nE '(^|[^A-Za-z0-9_])Foo([^A-Za-z0-9_]|\$)' -- x; then :; fi" > "$_gg_fix"
+if [ -z "$(gitgrep_gnuisms "$_gg_fix")" ]; then ok "control: a portable bracket-expression boundary is not flagged"
+else no "control: a portable boundary was flagged"; fi
+rm -f "$_gg_fix"
+
+echo ""
 echo "=== a summary line and the exit status cannot disagree ==="
 # A gate emitting `PASS=.. FAIL=..` must derive its status from that count rather than
 # ending in a literal non-zero exit that ignores it.

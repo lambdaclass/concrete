@@ -69,6 +69,15 @@ then KILL) before the retry. `test_ssa.sh` already worked this way. The roadmap'
 passed, failed, incomplete, skipped and cancelled, and a qualifying run contains no incomplete
 result.
 
+A gate's verdict no longer depends on which git runs it. `check_identity_separation.sh`'s C6 leg
+searched with `git grep -E '...|PackageIdentity\b'`; `\b` is a regex-library extension, inert in
+BSD-regex git (macOS) and live in GNU-regex git, where it also matched the legitimate
+`noPackageIdentity` constructor and a history comment. Ubuntu 24.04's git 2.43 fails the leg on main's
+tree, and mutation shard 18 of run 39753399178 went RED ON CLEAN on it, scoring two families
+INVALID. The leg now uses bracket-expression boundaries, ignores Lean comments, names what it found,
+and checks its matcher on fixed lines; `check_gate_hygiene.sh` refuses `\b`, `\<` and `\>` in any
+`git grep` pattern, with controls.
+
 The promotion pipeline also records the flow in use: a candidate branch, `wip/*` backups under the
 hook's conflict-marker tier, the pre-push hook as the fast local tier, `ci/<name>` with a dispatched
 CI run (which includes the qualification jobs), a fast-forward of main on both remotes when every
