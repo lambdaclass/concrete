@@ -19,8 +19,16 @@ WHAT IS REFUSED, each by name, and every one of them means qualified=0:
 
 completed=1 means every shard is present, complete, of the plan's identity, and the shards'
 selections partition the plan exactly. integrity_ok=1 means nothing at all was refused. qualified=1
-additionally requires every discovered family KILLED, zero invalid/survived/could-not-apply, and a
-fully green baseline in every shard. The exit status follows qualified: 0 only when qualified.
+additionally requires every discovered family KILLED or PENDING, zero invalid/survived/could-not-apply,
+and a baseline in every shard whose gates are all green or red exactly as declared. The exit status
+follows qualified: 0 only when qualified.
+
+PENDING is the disposition of a family whose gate the driver declares EXPECTED-RED (`expect_red`) and
+whose shard measured that gate red on exactly its declared legs. It is accepted only for a family
+whose PLANNED gate appears in the plan's `expected_red_gate=` lines, whose record names that same
+gate, and whose shard published that gate's baseline transcript red on exactly the plan's
+`expected_red_leg=` lines with a completed verdict counting them; anywhere else it is refused. It is
+never counted as killed, and the aggregate names every pending family (`pending_families=`).
 
 Inputs:
     --plan PATH           output of `check_gate_mutation_coverage.sh --shard-plan <n>`
@@ -34,13 +42,13 @@ import re
 import sys
 import tempfile
 
-DISPOSITIONS = ("killed", "invalid", "survived", "could_not_apply")
+DISPOSITIONS = ("killed", "invalid", "survived", "could_not_apply", "pending")
 # The shard-summary keys this reader consults. Each must appear EXACTLY once: a duplicated key is two
 # answers to one question, and whichever a reader happened to take would win silently.
 SUMMARY_KEYS = (
     "completed", "mode", "discovered", "selected", "executed", "reported", "killed", "invalid",
-    "survived", "could_not_apply", "integrity_ok", "qualified", "killed_by_gate", "killed_by_build",
-    "baseline_gates_green", "run_id", "head", "executed_driver_sha", "repo_driver_sha",
+    "survived", "could_not_apply", "pending", "integrity_ok", "qualified", "killed_by_gate",
+    "killed_by_build", "baseline_gates_green", "baseline_gates_expected_red", "run_id", "head", "executed_driver_sha", "repo_driver_sha",
     "inventory_sha", "families_digest", "refusals", "supervisor_refusals", "supervisor_child_exit",
     "candidate_incoherent", "secs_total",
 )
@@ -86,19 +94,20 @@ def parse_plan(path, refuse):
         if v is None or v == "":
             refuse(f"plan_header({k})")
         hdr[k] = v
-    rows = {}
+    rows, gates = {}, {}
     for raw in kv.get("family", []):
         # `family=<name> shard=<k> gate=<g> spec=<digest>`; the name is the first token.
         toks = raw.split(" ")
         fields = dict(t.split("=", 1) for t in toks[1:] if "=" in t)
         name, k = toks[0], num(fields.get("shard"))
-        if not name or k is None:
+        if not name or k is None or not fields.get("gate"):
             refuse(f"plan_row_malformed({raw[:60]})")
             continue
         if name in rows:
             refuse(f"plan_duplicate_family({name})")
             continue
         rows[name] = k
+        gates[name] = fields["gate"]
     n, d = num(hdr.get("shards")), num(hdr.get("discovered"))
     if n is None or n < 1:
         refuse(f"plan_shards({hdr.get('shards')})")
@@ -108,11 +117,51 @@ def parse_plan(path, refuse):
     for name, k in rows.items():
         if not 1 <= k <= n:
             refuse(f"plan_row_out_of_range({name}:{k}/{n})")
-    return hdr, rows, n
+    # THE DECLARED EXPECTED-RED GATES, as the driver's plan states them. A declaration naming no
+    # planned gate is malformed: it could only ever license a pending record for a family that does
+    # not exist.
+    expected_red = {}
+    for g in kv.get("expected_red_gate", []):
+        if not g or g in expected_red or g not in set(gates.values()):
+            refuse(f"plan_expected_red_malformed({g or '<empty>'})")
+            continue
+        expected_red[g] = []
+    for raw in kv.get("expected_red_leg", []):
+        g, _, leg = raw.partition(" ")
+        if g not in expected_red or not leg or leg in expected_red[g]:
+            refuse(f"plan_expected_red_leg_malformed({raw[:60]})")
+            continue
+        expected_red[g].append(leg)
+    for g, legs in expected_red.items():
+        if not legs:
+            refuse(f"plan_expected_red_without_legs({g})")
+    return hdr, rows, n, gates, expected_red
 
 
-def read_records(evdir, refuse, k, expect_head, run_id):
-    """-> {family: disposition} for one shard's evidence; refusals for every malformed record."""
+VERDICT_TAIL = re.compile(r"(^|[^A-Za-z0-9_])FAIL=([0-9]+)$")
+
+
+def expected_red_transcript_ok(path, legs):
+    """The shard's baseline transcript for an expected-red gate: red on EXACTLY the declared `  FAIL `
+    legs, ending in a completed verdict line counting that many failures. A gate that printed the
+    expected failure and then crashed never reaches that line. Mirrors campaign_supervise.sh's
+    expected_red_transcript_ok, the rule the driver applied."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    got = sorted(ln[len("  FAIL "):] for ln in lines if ln.startswith("  FAIL "))
+    if not legs or got != sorted(legs):
+        return False
+    tail = [ln for ln in lines if ln.split()]
+    m = VERDICT_TAIL.search(tail[-1]) if tail else None
+    return bool(m) and int(m.group(2)) == len(legs)
+
+
+def read_records(evdir, refuse, k, expect_head, run_id, rec_gates=None):
+    """-> {family: disposition} for one shard's evidence; refusals for every malformed record.
+    When `rec_gates` is a dict it is filled with each record's own `gate=` (or None)."""
     recs = {}
     if not os.path.isdir(evdir):
         return recs
@@ -134,6 +183,8 @@ def read_records(evdir, refuse, k, expect_head, run_id):
             refuse(f"record_disposition({k}:{name}:{disp})")
             continue
         recs[name] = disp
+        if rec_gates is not None:
+            rec_gates[name] = one(kv, "gate")
     return recs
 
 
@@ -144,7 +195,7 @@ def aggregate(plan_path, shards_dir, expect_head):
     fields = {"mode": "campaign-sharded", "head": expect_head}
     if planned is None:
         return fields, ["plan_unusable"], integrity
-    hdr, rows, n = planned
+    hdr, rows, n, gates, expected_red = planned
     fields.update(shards=str(n), discovered=str(len(rows)), inventory_sha=hdr["inventory_sha"],
                   families_digest=hdr["families_digest"])
     if hdr["head"] != expect_head:
@@ -166,8 +217,9 @@ def aggregate(plan_path, shards_dir, expect_head):
         present[int(m.group(1))] = os.path.join(shards_dir, e)
 
     owner = {}  # family -> shard that reported it
+    pending_names = []
     totals = dict.fromkeys(DISPOSITIONS + ("killed_by_gate", "killed_by_build", "executed",
-                                           "reported", "selected"), 0)
+                                           "reported", "selected", "baseline_gates_expected_red"), 0)
     baseline_ok = True
     driver_seen = set()
     for k in range(1, n + 1):
@@ -220,7 +272,8 @@ def aggregate(plan_path, shards_dir, expect_head):
             integrity.append(f"shard_candidate_incoherent({k}:{g['candidate_incoherent']})")
 
         counts = {key: num(g[key]) for key in DISPOSITIONS + ("selected", "executed", "reported",
-                                                              "killed_by_gate", "killed_by_build")}
+                                                              "killed_by_gate", "killed_by_build",
+                                                              "baseline_gates_expected_red")}
         if None in counts.values():
             integrity.append(f"shard_nonnumeric_counts({k})")
             continue
@@ -235,13 +288,45 @@ def aggregate(plan_path, shards_dir, expect_head):
         if g["supervisor_child_exit"] != "0" and unkilled == 0:
             integrity.append(f"shard_unexplained_exit({k}:{g['supervisor_child_exit']})")
 
+        rec_gates = {}
         recs = read_records(os.path.join(path, "evidence"), integrity.append, k, expect_head,
-                            g["run_id"])
+                            g["run_id"], rec_gates)
         got = set(recs)
         if expected - got:
             incomplete.append(f"shard_missing_families({k}:{','.join(sorted(expected - got))})")
         if got - expected:
             integrity.append(f"shard_unexpected_families({k}:{','.join(sorted(got - expected))})")
+        # A PENDING RECORD IS ONLY A PENDING RECORD ON A DECLARED EXPECTED-RED GATE. Anywhere else it is
+        # a family that went unjudged under a label that excuses it.
+        checked = {}
+        for f, d in sorted(recs.items()):
+            if d != "pending":
+                continue
+            pg = gates.get(f)
+            if pg not in expected_red:
+                integrity.append(f"pending_without_declaration({k}:{f}:{pg})")
+                continue
+            if rec_gates.get(f) != pg:
+                integrity.append(f"pending_record_gate_mismatch({k}:{f}:{rec_gates.get(f)} vs {pg})")
+                continue
+            if pg not in checked:
+                checked[pg] = expected_red_transcript_ok(
+                    os.path.join(path, "evidence", "_baseline", pg + ".log"), expected_red[pg])
+            if not checked[pg]:
+                integrity.append(f"pending_without_matching_baseline({k}:{f}:{pg})")
+                continue
+            pending_names.append(f)
+        # THE EXPECTED-RED COUNT IS RECONCILED, NOT TRUSTED. It must be exactly the number of distinct
+        # declared gates this shard backed with validated pending evidence — a larger claim would let
+        # a red gate pose as an expected-red one — and every family the shard ran on such a gate must
+        # be pending, because an expected-red baseline is what made them so.
+        backed = sorted(g2 for g2, good in checked.items() if good)
+        if counts["baseline_gates_expected_red"] != len(backed):
+            integrity.append(f"shard_expected_red_unbacked({k}:claimed={counts['baseline_gates_expected_red']} "
+                             f"backed={len(backed)})")
+        for f in sorted(expected):
+            if gates.get(f) in backed and f in recs and recs[f] != "pending":
+                integrity.append(f"shard_expected_red_gate_family_not_pending({k}:{f}:{recs[f]})")
         for f in got:
             if f in owner:
                 incomplete.append(f"duplicate_family({f}:{owner[f]},{k})")
@@ -257,9 +342,23 @@ def aggregate(plan_path, shards_dir, expect_head):
                 incomplete.append(f"shard_{key}({k}:{counts[key]} vs planned {len(expected)})")
         if counts["killed_by_gate"] + counts["killed_by_build"] != counts["killed"]:
             integrity.append(f"shard_kill_split({k})")
+        # GREEN PLUS EXPECTED-RED MUST BE THE WHOLE BASELINE, and an expected-red gate is admissible
+        # only with the pending families it exists for (and vice versa).
+        # AND THE DENOMINATOR IS THE PLAN'S: the distinct gates of the families this shard owns. A
+        # shard reporting fewer could leave an ordinary gate out of its baseline entirely while the
+        # green + expected-red identity still held over what remained.
         m = re.match(r"^(\d+)/(\d+)$", g["baseline_gates_green"])
-        if not m or m.group(1) != m.group(2) or (expected and m.group(2) == "0"):
+        xr = counts["baseline_gates_expected_red"]
+        planned_gates = len({gates[f] for f in expected})
+        if (not m or int(m.group(1)) + xr != int(m.group(2))
+                or (expected and m.group(2) == "0")):
             baseline_ok = False
+        if m and int(m.group(2)) != planned_gates:
+            baseline_ok = False
+            integrity.append(f"shard_baseline_population({k}:{m.group(2)} vs {planned_gates} planned gates)")
+        if (xr > 0) != (counts["pending"] > 0):
+            integrity.append(f"shard_pending_without_expected_red_baseline({k}:pending={counts['pending']} "
+                             f"expected_red={xr})")
         for key in totals:
             totals[key] += counts[key]
 
@@ -271,6 +370,7 @@ def aggregate(plan_path, shards_dir, expect_head):
     if nowhere:
         incomplete.append(f"families_in_no_shard({','.join(nowhere)})")
     fields.update({key: str(v) for key, v in totals.items()})
+    fields["pending_families"] = ",".join(sorted(pending_names)) or "none"
     fields["baseline_all_green"] = "1" if baseline_ok else "0"
     return fields, incomplete, integrity
 
@@ -291,13 +391,15 @@ def main(argv):
     d = num(fields.get("discovered"))
     qualified = int(bool(
         completed and integrity_ok and d
-        and fields.get("killed") == str(d) and fields.get("reported") == str(d)
+        and num(fields.get("killed")) is not None and num(fields.get("pending")) is not None
+        and num(fields["killed"]) + num(fields["pending"]) == d and fields.get("reported") == str(d)
         and all(fields.get(x) == "0" for x in ("invalid", "survived", "could_not_apply"))
         and fields.get("baseline_all_green") == "1"))
     fields.update(completed=str(completed), integrity_ok=str(integrity_ok),
                   qualified=str(qualified), refusals=" ".join(incomplete + integrity) or "none")
     order = ("completed", "mode", "shards", "discovered", "selected", "executed", "reported",
-             "killed", "invalid", "survived", "could_not_apply", "integrity_ok", "qualified",
+             "killed", "invalid", "survived", "could_not_apply", "pending", "pending_families",
+             "integrity_ok", "qualified",
              "killed_by_gate", "killed_by_build", "baseline_all_green", "head", "inventory_sha",
              "families_digest", "refusals")
     body = "".join(f"{key}={fields.get(key, 'unavailable')}\n" for key in order)
@@ -311,7 +413,10 @@ def main(argv):
           f"integrity_ok={integrity_ok} qualified={qualified} "
           f"killed={fields.get('killed', 0)} invalid={fields.get('invalid', 0)} "
           f"survived={fields.get('survived', 0)} could_not_apply={fields.get('could_not_apply', 0)} "
+          f"pending={fields.get('pending', 0)} "
           f"(of {fields.get('discovered', '?')}, {fields.get('shards', '?')} shards)")
+    if fields.get("pending_families", "none") != "none":
+        print(f"  pending (declared expected-red gates, not judged): {fields['pending_families']}")
     if fields["refusals"] != "none":
         print(f"  refusals: {fields['refusals']}")
     return 0 if qualified else 1

@@ -21,7 +21,7 @@
 # THE DISPOSITION FIELDS ARE MANDATORY. Treating a MISSING survived/invalid/could_not_apply as zero
 # is fail-open in the one direction that matters: a truncated record loses exactly the fields that
 # would have denied qualification, and then qualifies.
-CAMPAIGN_CANDIDATE_KEYS="completed mode discovered selected executed reported killed invalid survived could_not_apply integrity_ok qualified"
+CAMPAIGN_CANDIDATE_KEYS="completed mode discovered selected executed reported killed invalid survived could_not_apply pending integrity_ok qualified"
 
 # supervisor_refusals <child_rc> <candidate-path> <head0> <head1> <tracked0> <tracked1> <untracked0> <untracked1>
 supervisor_refusals() {
@@ -141,7 +141,16 @@ candidate_incoherent() { # candidate [expected-family-count] [expected-gate-coun
     fi
     { [ "$d" = "$s" ] && [ "$s" = "$e" ] && [ "$e" = "$r" ]; } \
       || out="$out qualified_with_counts($d/$s/$e/$r)"
-    [ "$k" = "$r" ] || out="$out qualified_with_unkilled($k/$r)"
+    # PENDING IS ACCOUNTED, NOT KILLED. A family on a declared expected-red gate (expect_red) is
+    # neither a kill nor a failure; qualification needs every reported family to be one of the two,
+    # and the pending count is read, never defaulted — a record without it is refused below.
+    local p xr
+    p="$(_f pending)"; xr="$(_f baseline_gates_expected_red)"
+    if _num "$p" && _num "$k"; then
+      [ "$(( k + p ))" = "$r" ] || out="$out qualified_with_unkilled($k+$p/$r)"
+    else
+      out="$out qualified_with_nonnumeric_pending(${p:-<absent>})"
+    fi
     # THE FIELDS THAT WERE NEVER READ.
     #
     # Qualification reconciled the five headline counts and the disposition ledger and then ignored
@@ -186,10 +195,20 @@ candidate_incoherent() { # candidate [expected-family-count] [expected-gate-coun
       printf '%s %s' "$_n" "$_m"
     }
     # A GREEN BASELINE MEANS ALL OF THEM, AND AT LEAST ONE. Nothing was proved by zero gates.
+    # AN EXPECTED-RED GATE IS PART OF THE BASELINE, NOT A HOLE IN IT: the gates green plus the gates
+    # red exactly as declared must be all of them. And the two facts travel together — a run with
+    # pending families measured an expected-red gate, and one that measured an expected-red gate has
+    # the families it exists for. Either alone is a record describing something that cannot happen.
+    _num "$xr" || { out="$out qualified_with_nonnumeric_baseline_gates_expected_red(${xr:-<absent>})"; xr=0; }
+    if _num "$p"; then
+      if { [ "$p" -gt 0 ] && [ "$xr" -eq 0 ]; } || { [ "$p" -eq 0 ] && [ "$xr" -gt 0 ]; }; then
+        out="$out qualified_with_pending_without_expected_red($p pending, $xr expected-red)"
+      fi
+    fi
     if _bgv="$(_ratio "$bg")"; then
       set -- $_bgv
       if [ "$2" = "0" ]; then out="$out qualified_with_no_baseline_gates"
-      elif [ "$1" != "$2" ]; then out="$out qualified_with_baseline_gates_red($bg)"; fi
+      elif [ "$(( $1 + xr ))" != "$2" ]; then out="$out qualified_with_baseline_gates_red($bg, $xr expected-red)"; fi
       # AND THE DENOMINATOR IS THE REAL GATE POPULATION. Self-agreement accepts `1/1` and `999/999`.
       # A single-family run legitimately baselines ONE gate — but qualification requires
       # mode=campaign, and a full campaign must have baselined every gate the inventory declares.
@@ -248,10 +267,10 @@ candidate_incoherent() { # candidate [expected-family-count] [expected-gate-coun
     # disposition at all; this is the identity that makes the four numbers describe one population.
     local iv sv ca sum
     iv="$(_f invalid)"; sv="$(_f survived)"; ca="$(_f could_not_apply)"
-    case "$iv$sv$ca" in
-      ''|*[!0-9]*) ;;   # the per-field checks below name the offender
-      *) sum=$(( k + iv + sv + ca ))
-         [ "$sum" = "$r" ] || out="$out qualified_with_unbalanced_ledger($k+$iv+$sv+$ca=$sum vs reported=$r)" ;;
+    case "$iv$sv$ca$p" in
+      ''|*[!0-9]*) ;;   # the per-field checks name the offender
+      *) sum=$(( k + iv + sv + ca + p ))
+         [ "$sum" = "$r" ] || out="$out qualified_with_unbalanced_ledger($k+$iv+$sv+$ca+$p=$sum vs reported=$r)" ;;
     esac
   esac
   # A MISSING DISPOSITION IS NOT A ZERO ONE. It is absent evidence, and absence must not qualify.
@@ -384,15 +403,78 @@ family_set_from_driver() {
   grep -oE '^add "[^"]+"' "$1" 2>/dev/null | sed 's/^add "//; s/"$//'
 }
 
-# records_disposition_totals <evidence-dir> -> "killed invalid survived could_not_apply other"
+# family_gate_from_driver <driver-path> <family> -> the gate that family's `add` line names
+family_gate_from_driver() {
+  grep -F -- "add \"$2\" " "$1" 2>/dev/null | grep -E '^add "' | head -1 | awk '{print $4}' | tr -d '"'
+}
+
+# expected_red_transcript_ok <log> <declared legs, newline-separated> -> 0 when the transcript is red
+# on EXACTLY the declared `  FAIL ` legs and ends in a completed verdict line counting exactly that
+# many failures (`... FAIL=<n>`). A gate that printed the expected failure and then crashed or was
+# killed never reaches that line, so a truncated transcript is not an expected-red one. ONE
+# definition: the driver classifies its clean baseline with it, and the supervisor re-checks the
+# published transcript with it.
+expected_red_transcript_ok() {
+  local log="$1" want got n last
+  [ -s "$log" ] || return 1
+  want="$(printf '%s\n' "$2" | grep -v '^$' | LC_ALL=C sort)"
+  [ -n "$want" ] || return 1
+  got="$(sed -n 's/^  FAIL //p' "$log" | LC_ALL=C sort)"
+  [ "$want" = "$got" ] || return 1
+  n="$(printf '%s\n' "$want" | grep -c .)"
+  last="$(awk 'NF {l = $0} END {print l}' "$log")"
+  [[ "$last" =~ (^|[^A-Za-z0-9_])FAIL=$n$ ]]
+}
+
+# pending_reconciliation <evidence-dir> <driver-path> <claimed baseline_gates_expected_red> -> refusals
+#
+# THE EXPECTED-RED COUNT IS RECONCILED AGAINST THE RECORDS, NOT TRUSTED. It must equal the number of
+# distinct (driver-derived) gates carrying pending records — otherwise `0/2 green + 2 expected-red`
+# lets a red gate pose as a second expected-red one — and every family whose driver gate is one of
+# those must itself be pending. Whether each pending record is ADMISSIBLE is
+# records_unkilled_or_unevidenced's question; this one is about the count and the population.
+pending_reconciliation() {
+  local root="$1" drv="$2" claimed="$3" d n disp g pg="" out=""
+  [ -d "$root" ] || { printf 'no-evidence-dir'; return 0; }
+  for d in "$root"/*/; do
+    [ -e "$d" ] || continue
+    n="$(basename "$d")"; case "$n" in _*) continue ;; esac
+    disp="$(sed -n 's/^disposition=//p' "$d/verdict.txt" 2>/dev/null | head -1)"
+    [ "$disp" = "pending" ] || continue
+    g="$(family_gate_from_driver "$drv" "$n")"
+    case " $pg " in *" ${g:-<none>} "*) ;; *) pg="$pg ${g:-<none>}" ;; esac
+  done
+  local npg; npg="$(printf '%s\n' $pg | grep -c . || true)"
+  [ "$npg" = "$claimed" ] || out="$out expected_red_unbacked(claimed=$claimed backed=$npg)"
+  for d in "$root"/*/; do
+    [ -e "$d" ] || continue
+    n="$(basename "$d")"; case "$n" in _*) continue ;; esac
+    g="$(family_gate_from_driver "$drv" "$n")"
+    case " $pg " in *" ${g:-<none>} "*) ;; *) continue ;; esac
+    disp="$(sed -n 's/^disposition=//p' "$d/verdict.txt" 2>/dev/null | head -1)"
+    [ "$disp" = "pending" ] || out="$out expected_red_gate_family_not_pending($n:${disp:-none})"
+  done
+  printf '%s' "${out# }"
+}
+
+# expected_red_gates_from_driver <driver-path> -> the gates declared expected-red, space-separated
+#
+# READ FROM THE SOURCE for the same reason as the family set: the child decides which families are
+# PENDING from the declarations it loaded, and the supervisor admits a pending record only for a gate
+# the driver it is executing declares. Two readings of one array would agree with themselves.
+expected_red_gates_from_driver() {
+  grep -oE '^expect_red "[^"]+"' "$1" 2>/dev/null | sed 's/^expect_red "//; s/"$//' | tr '\n' ' '
+}
+
+# records_disposition_totals <evidence-dir> -> "killed invalid survived could_not_apply pending other"
 #
 # THE RECORDS ARE THE EVIDENCE; THE SUMMARY IS A CLAIM ABOUT THEM. Deriving the totals from the
 # per-family records and comparing them with the summary is what stops a summary asserting that
 # every family was killed while a record on disk says `survived`. A summary may never override a
 # record, so the record side is computed first and independently.
 records_disposition_totals() {
-  local root="$1" d k=0 i=0 sv=0 c=0 o=0 disp
-  [ -d "$root" ] || { printf '0 0 0 0 0'; return 0; }
+  local root="$1" d k=0 i=0 sv=0 c=0 p=0 o=0 disp
+  [ -d "$root" ] || { printf '0 0 0 0 0 0'; return 0; }
   for d in "$root"/*/; do
     [ -e "$d" ] || continue
     [ "$(basename "$d")" != "_baseline" ] || continue
@@ -405,10 +487,11 @@ records_disposition_totals() {
       invalid)         i=$((i+1)) ;;
       survived)        sv=$((sv+1)) ;;
       could_not_apply) c=$((c+1)) ;;
+      pending)         p=$((p+1)) ;;
       *)               o=$((o+1)) ;;
     esac
   done
-  printf '%s %s %s %s %s' "$k" "$i" "$sv" "$c" "$o"
+  printf '%s %s %s %s %s %s' "$k" "$i" "$sv" "$c" "$p" "$o"
 }
 
 # records_unkilled_or_unevidenced <evidence-dir> -> family ids that cannot support qualification
@@ -416,14 +499,35 @@ records_disposition_totals() {
 # QUALIFICATION IS A CLAIM ABOUT EVERY FAMILY. It requires each record to say `killed` AND to carry
 # the transcripts that make that kill checkable — a gate kill needs its red, its restored green and
 # its reapplied red, because without the green leg the red is not attributable to the mutation.
-records_unkilled_or_unevidenced() {
-  local root="$1" d n bad="" disp route
+#
+# A PENDING record is admissible only when (a) the family's gate, read from the DRIVER'S `add` line
+# and not from the record, is one the driver declares expected-red, (b) the record names that same
+# gate, and (c) the run-level baseline transcript for it shows exactly the declared FAIL legs and a
+# completed verdict counting them (expected_red_transcript_ok). The declared legs are asked of the
+# driver (`--expected-red <gate>`), the producer that applied them. Anything else is unkilled.
+records_unkilled_or_unevidenced() { # evidence-dir [driver-path]
+  local root="$1" drv="${2:-}" d n bad="" disp route gate dgate legs
   [ -d "$root" ] || { printf 'no-evidence-dir'; return 0; }
   for d in "$root"/*/; do
     [ -e "$d" ] || continue
     n="$(basename "$d")"; [ "$n" != "_baseline" ] || continue
     disp="$(sed -n 's/^disposition=//p' "$d/verdict.txt" 2>/dev/null | head -1)"
     route="$(sed -n 's/^expected_route=//p' "$d/verdict.txt" 2>/dev/null | head -1)"
+    if [ "$disp" = "pending" ]; then
+      gate="$(sed -n 's/^gate=//p' "$d/verdict.txt" 2>/dev/null | head -1)"
+      dgate=""; [ -z "$drv" ] || dgate="$(family_gate_from_driver "$drv" "$n")"
+      if [ -z "$dgate" ]; then bad="$bad $n(pending-family-unknown-to-driver)"; continue; fi
+      [ "$gate" = "$dgate" ] || { bad="$bad $n(pending-record-names-${gate:-no}-gate-not-$dgate)"; continue; }
+      case " $(expected_red_gates_from_driver "$drv") " in
+        *" $dgate "*) ;;
+        *) bad="$bad $n(pending-on-undeclared-gate-$dgate)"; continue ;;
+      esac
+      legs="$(bash "$drv" --expected-red "$dgate" 2>/dev/null)" \
+        || { bad="$bad $n(pending-legs-unreadable-$dgate)"; continue; }
+      expected_red_transcript_ok "$root/_baseline/$dgate.log" "$legs" \
+        || bad="$bad $n(pending-without-matching-baseline-transcript)"
+      continue
+    fi
     [ "$disp" = "killed" ] || { bad="$bad $n(${disp:-no-disposition})"; continue; }
     if [ "$route" = "gate" ]; then
       for f in gate.log confirm_clean.log confirm_red.log; do
@@ -479,7 +583,7 @@ records_unkilled_or_unevidenced() {
 CAMPAIGN_FIELDS_OBSERVED="executed_driver_sha preamble_driver_sha repo_driver_sha inventory_sha head tracked_sha untracked_sha run_id families_digest evidence_root evidence_dir"
 CAMPAIGN_FIELDS_CROSSFIELD="workspace_head workspace_tracked_sha workspace_untracked_sha"
 CAMPAIGN_FIELDS_NON_AUTHORITATIVE="baseline_compiler_sha compilers_tested"
-CAMPAIGN_FIELDS_SEMANTIC="completed mode discovered selected executed reported killed invalid survived could_not_apply integrity_ok qualified families_declared families_run killed_by_gate killed_by_build failed evidence_written baseline_gates_green gates_proven refusals secs_total secs_copy secs_build secs_gate secs_other supervisor_refusals supervisor_child_exit candidate_incoherent"
+CAMPAIGN_FIELDS_SEMANTIC="completed mode discovered selected executed reported killed invalid survived could_not_apply pending integrity_ok qualified families_declared families_run killed_by_gate killed_by_build failed evidence_written baseline_gates_green baseline_gates_expected_red gates_proven refusals secs_total secs_copy secs_build secs_gate secs_other supervisor_refusals supervisor_child_exit candidate_incoherent"
 
 # candidate_provenance <candidate> <exec-driver> <preamble> <repo-driver> <inventory> -> refusals
 #
@@ -685,7 +789,7 @@ decode_launch_report() {
   printf '%s' "$out"
 }
 
-CAMPAIGN_SCHEMA_NUMERIC="completed discovered selected executed reported killed invalid survived could_not_apply integrity_ok qualified secs_total secs_copy secs_build secs_gate secs_other families_declared families_run killed_by_gate killed_by_build failed evidence_written"
+CAMPAIGN_SCHEMA_NUMERIC="completed discovered selected executed reported killed invalid survived could_not_apply pending integrity_ok qualified secs_total secs_copy secs_build secs_gate secs_other families_declared families_run killed_by_gate killed_by_build failed evidence_written baseline_gates_expected_red"
 CAMPAIGN_SCHEMA_FREEFORM="mode baseline_gates_green gates_proven evidence_root evidence_dir run_id head executed_driver_sha preamble_driver_sha repo_driver_sha inventory_sha tracked_sha workspace_tracked_sha workspace_head workspace_untracked_sha baseline_compiler_sha compilers_tested untracked_sha refusals families_digest"
 
 # THE SUPERVISOR'S OWN FIELDS ARE NOT THE CHILD'S TO PROVIDE. These are appended at publication, so
@@ -988,9 +1092,9 @@ EOF
   # other than the one that left this evidence.
   _ev_run_dir="$ROOT_DIR/.mutation-evidence/$(sed -n 's/^run_id=//p' "$_cand" | head -1)"
   set -- $(records_disposition_totals "$_ev_run_dir")
-  _rk="$1"; _ri="$2"; _rs="$3"; _rc="$4"; _ro="$5"
+  _rk="$1"; _ri="$2"; _rs="$3"; _rc="$4"; _rp="$5"; _ro="$6"
   [ "$_ro" = "0" ] || _sup_refusals="$_sup_refusals records_with_unreadable_disposition($_ro)"
-  for _pair in "killed:$_rk" "invalid:$_ri" "survived:$_rs" "could_not_apply:$_rc"; do
+  for _pair in "killed:$_rk" "invalid:$_ri" "survived:$_rs" "could_not_apply:$_rc" "pending:$_rp"; do
     _k="${_pair%%:*}"; _v="${_pair##*:}"
     _claim="$(sed -n "s/^$_k=//p" "$_cand" | head -1)"
     [ "$_claim" = "$_v" ] \
@@ -1000,8 +1104,11 @@ EOF
   # transcripts. This is checked only when qualification is claimed, so a legitimately unqualified
   # run is not refused for having survivors it already reported.
   if grep -qE '^qualified=1$' "$_cand"; then
-    _unq="$(records_unkilled_or_unevidenced "$_ev_run_dir")"
+    _unq="$(records_unkilled_or_unevidenced "$_ev_run_dir" "$CAMPAIGN_DRIVER")"
     [ -z "$_unq" ] || _sup_refusals="$_sup_refusals qualified_with_unevidenced_records($_unq )"
+    _pxr="$(pending_reconciliation "$_ev_run_dir" "$CAMPAIGN_DRIVER" \
+             "$(sed -n 's/^baseline_gates_expected_red=//p' "$_cand" | head -1)")"
+    [ -z "$_pxr" ] || _sup_refusals="$_sup_refusals qualified_with_unreconciled_pending($_pxr )"
   fi
 
   # NOT JUST IMMEDIATE CHILDREN. `pgrep -P $$` sees one generation, and by this point the campaign

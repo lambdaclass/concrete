@@ -89,7 +89,8 @@ build_honest() { # dir
     _sset "$d/summary.txt" integrity_ok 1
     _sset "$d/summary.txt" discovered "$_disc"
     for _k in selected executed reported killed killed_by_gate; do _sset "$d/summary.txt" "$_k" "$cnt"; done
-    _sset "$d/summary.txt" baseline_gates_green "$cnt/$cnt"
+    local ng; ng="$(_ngates "$k")"
+    _sset "$d/summary.txt" baseline_gates_green "$ng/$ng"
     _sset "$d/summary.txt" run_id "$run"; _sset "$d/summary.txt" head "$HEAD"
     for _k in inventory_sha repo_driver_sha families_digest; do
       _sset "$d/summary.txt" "$_k" "$(sed -n "s/^$_k=//p" "$TMP/plan")"
@@ -101,6 +102,9 @@ build_honest() { # dir
     _sset "$d/summary.txt" candidate_incoherent none
     printf 'shard=%s/%s\njob_status=success\n' "$k" "$NSH" > "$d/status.txt"
   done
+}
+_ngates() { # shard -> distinct gates its planned families name (the shard's baseline population)
+  sed -n "s/^family=[^ ]* shard=$1 gate=\([^ ]*\) .*/\1/p" "$TMP/plan" | sort -u | grep -c . || true
 }
 _sset() { # file key value — the key must already exist, so the fixture cannot invent a field
   grep -q "^$2=" "$1" || { echo "FIXTURE BUG: '$2' is not a declared schema key" >&2; exit 2; }
@@ -214,10 +218,110 @@ _sset "$S/mutation-shard-1/summary.txt" supervisor_refusals " child_exit(1)"
 _sset "$S/mutation-shard-1/summary.txt" supervisor_child_exit 1
 sed -i.b 's/^job_status=.*/job_status=failure/' "$S/mutation-shard-1/status.txt"
 run_agg "$S"; expect "a survivor: completed, integrity intact, not qualified" 1 1 0
-build_honest "$S"; _sset "$S/mutation-shard-2/summary.txt" baseline_gates_green "1/2"; run_agg "$S"
+build_honest "$S"; _sset "$S/mutation-shard-2/summary.txt" baseline_gates_green "$(( $(_ngates 2) - 1 ))/$(_ngates 2)"; run_agg "$S"
 expect "a red baseline gate in one shard" 1 1 0
 build_honest "$S"; _sset "$S/mutation-shard-2/summary.txt" supervisor_child_exit 1; run_agg "$S"
 expect "nonzero exit with every family killed" 1 0 0 "shard_unexplained_exit(2"
+
+echo "=== PENDING: declared expected-red gates are accounted, never killed ==="
+# The plan carries the driver's declarations; every pending family must be on one of those gates.
+ERG="$(sed -n 's/^expected_red_gate=//p' "$TMP/plan")"
+[ -n "$ERG" ] && ok "the plan carries the declared expected-red gate(s): $(echo $ERG)" \
+  || no "the plan declares no expected-red gate"
+# make_pending <dir> — every family on a declared gate becomes pending, with its shard's counts moved
+# from killed to pending and one baseline gate moved from green to expected-red.
+make_pending() {
+  local k d f g n
+  for (( k=1; k<=NSH; k++ )); do
+    d="$1/mutation-shard-$k"; n=0
+    for f in $(sed -n "s/^family=\([^ ]*\) shard=$k gate=\([^ ]*\) .*/\1 \2/p" "$TMP/plan" | awk -v e=" $(echo $ERG) " 'index(e, " "$2" ") {print $1}'); do
+      g="$(sed -n "s/^family=$f shard=[0-9]* gate=\([^ ]*\) .*/\1/p" "$TMP/plan")"
+      sed -i.b 's/^disposition=.*/disposition=pending/' "$d/evidence/$f/verdict.txt"
+      echo "gate=$g" >> "$d/evidence/$f/verdict.txt"; n=$((n+1))
+      # The baseline transcript the shard publishes for that gate: red on exactly the plan's legs,
+      # ending in a verdict counting them.
+      { echo "  ok   a passing leg"
+        sed -n "s/^expected_red_leg=$g //p" "$TMP/plan" | sed 's/^/  FAIL /'
+        echo "GATE: PASS=1 FAIL=$(grep -c "^expected_red_leg=$g " "$TMP/plan")"; } > "$d/evidence/_baseline/$g.log"
+    done
+    [ "$n" -gt 0 ] || continue
+    _bump "$d/summary.txt" killed "-$n"; _bump "$d/summary.txt" killed_by_gate "-$n"
+    _bump "$d/summary.txt" pending "$n"
+    _sset "$d/summary.txt" baseline_gates_expected_red 1
+    local c; c="$(_ngates "$k")"
+    _sset "$d/summary.txt" baseline_gates_green "$((c-1))/$c"
+  done
+}
+_npend="$(sed -n 's/^family=\([^ ]*\) shard=[0-9]* gate=\([^ ]*\) .*/\1 \2/p' "$TMP/plan" | awk -v e=" $(echo $ERG) " 'index(e, " "$2" ")' | grep -c . || true)"
+build_honest "$S"; make_pending "$S"; run_agg "$S"
+expect "pending families on a declared gate let the set qualify" 1 1 1
+[ "$(_get "$AGG_OUT" pending)" = "$_npend" ] && [ "$(( $(_get "$AGG_OUT" killed) + _npend ))" = "$_disc" ] \
+  && ok "killed + pending = discovered ($(_get "$AGG_OUT" killed) + $_npend = $_disc)" \
+  || no "pending=$(_get "$AGG_OUT" pending) killed=$(_get "$AGG_OUT" killed) of $_disc"
+case "$(_get "$AGG_OUT" pending_families)" in none|'') no "pending families not named" ;;
+  *) ok "the aggregate names every pending family: $(_get "$AGG_OUT" pending_families)" ;; esac
+# A pending record on a gate nobody declared is a family that went unjudged under an excuse.
+build_honest "$S"; make_pending "$S"
+_G1="$(sed -n "s/^family=$F1 shard=1 gate=\([^ ]*\) .*/\1/p" "$TMP/plan")"
+case " $(echo $ERG) " in *" $_G1 "*) no "fixture: F1's gate is itself declared; pick another family" ;; esac
+sed -i.b 's/^disposition=.*/disposition=pending/' "$S/mutation-shard-1/evidence/$F1/verdict.txt"
+_bump "$S/mutation-shard-1/summary.txt" killed -1; _bump "$S/mutation-shard-1/summary.txt" killed_by_gate -1
+_bump "$S/mutation-shard-1/summary.txt" pending 1
+_sset "$S/mutation-shard-1/summary.txt" baseline_gates_expected_red 1
+run_agg "$S"; expect "pending on an undeclared gate is refused" 1 0 0 "pending_without_declaration(1:$F1"
+# Pending families with no expected-red baseline gate in their shard describe a run that cannot happen.
+build_honest "$S"; make_pending "$S"
+for (( _k=1; _k<=NSH; _k++ )); do
+  _d="$S/mutation-shard-$_k/summary.txt"
+  [ "$(_get "$_d" pending)" = "0" ] && continue
+  _sset "$_d" baseline_gates_expected_red 0; _c="$(_ngates "$_k")"; _sset "$_d" baseline_gates_green "$_c/$_c"
+  _PK="$_k"; break
+done
+run_agg "$S"; expect "pending without an expected-red baseline gate is refused" 1 0 0 "shard_pending_without_expected_red_baseline($_PK"
+# An expected-red gate does not excuse a RED one: green + expected-red must still be the whole baseline.
+build_honest "$S"; make_pending "$S"; _c="$(_ngates "$_PK")"
+_sset "$S/mutation-shard-$_PK/summary.txt" baseline_gates_green "$((_c-2))/$_c"; run_agg "$S"
+expect "an expected-red gate beside a red one does not qualify" 1 1 0
+# THE TRANSCRIPT IS CHECKED, NOT ASSUMED: a missing, green, wrong-leg or truncated baseline for the
+# expected-red gate, or a record naming another gate, leaves the pending families unaccounted.
+_XG1="$(echo $ERG | awk '{print $1}')"
+_xr_case() { # label refusal-substring — after the caller corrupted shard $_PK
+  run_agg "$S"; expect "$1" 1 0 0 "$2"
+}
+build_honest "$S"; make_pending "$S"; rm -f "$S/mutation-shard-$_PK/evidence/_baseline/$_XG1.log"
+_xr_case "pending with no baseline transcript is refused" "pending_without_matching_baseline($_PK"
+build_honest "$S"; make_pending "$S"; printf '  ok   all\nGATE: PASS=2 FAIL=0\n' > "$S/mutation-shard-$_PK/evidence/_baseline/$_XG1.log"
+_xr_case "pending over a green baseline transcript is refused" "pending_without_matching_baseline($_PK"
+build_honest "$S"; make_pending "$S"; printf '  FAIL another leg\nGATE: PASS=1 FAIL=1\n' > "$S/mutation-shard-$_PK/evidence/_baseline/$_XG1.log"
+_xr_case "pending over a baseline red on another leg is refused" "pending_without_matching_baseline($_PK"
+build_honest "$S"; make_pending "$S"; sed -i.b '$d' "$S/mutation-shard-$_PK/evidence/_baseline/$_XG1.log"
+_xr_case "pending over a truncated baseline (no verdict line) is refused" "pending_without_matching_baseline($_PK"
+build_honest "$S"; make_pending "$S"
+_PF="$(grep -l '^disposition=pending' "$S/mutation-shard-$_PK"/evidence/*/verdict.txt | head -1)"
+sed -i.b 's/^gate=.*/gate=check_something_else.sh/' "$_PF"
+_xr_case "a pending record naming another gate is refused" "pending_record_gate_mismatch($_PK"
+# THE EXPECTED-RED COUNT IS RECONCILED: inflating it while shrinking the green count hides a red gate.
+build_honest "$S"; make_pending "$S"; _c="$(_ngates "$_PK")"
+_sset "$S/mutation-shard-$_PK/summary.txt" baseline_gates_expected_red 2
+_sset "$S/mutation-shard-$_PK/summary.txt" baseline_gates_green "$((_c-2))/$_c"
+_xr_case "an expected-red count larger than the backed gates is refused" "shard_expected_red_unbacked($_PK"
+# ...and every family the shard ran on a backed expected-red gate must be pending. The plan is
+# rewritten so a KILLED family of that shard is planned on the expected-red gate too.
+_KF="$(sed -n "s/^family=\([^ ]*\) shard=$_PK gate=\([^ ]*\) .*/\1 \2/p" "$TMP/plan" | awk -v g="$_XG1" '$2 != g {print $1; exit}')"
+sed "s/^\(family=$_KF shard=$_PK gate=\)[^ ]*/\1$_XG1/" "$TMP/plan" > "$TMP/plan.xrfam"
+build_honest "$S"; make_pending "$S"; PLAN_OVERRIDE="$TMP/plan.xrfam" run_agg "$S"
+expect "a family on a backed expected-red gate that is not pending is refused" 1 0 0 "shard_expected_red_gate_family_not_pending($_PK:$_KF:killed)"
+# THE DENOMINATOR IS THE PLAN'S: dropping an ordinary gate from the baseline, with valid pending
+# evidence and green + expected-red still adding up, is refused.
+build_honest "$S"; make_pending "$S"; _c="$(_ngates "$_PK")"
+_sset "$S/mutation-shard-$_PK/summary.txt" baseline_gates_green "$((_c-2))/$((_c-1))"
+_xr_case "a shard baseline over fewer gates than its plan names is refused" "shard_baseline_population($_PK"
+build_honest "$S"; _sset "$S/mutation-shard-2/summary.txt" baseline_gates_green "1/1"; run_agg "$S"
+expect "...and so is one without pending, reporting 1/1 over a multi-gate shard" 1 0 0 "shard_baseline_population(2"
+# A declaration naming no planned gate is a malformed plan.
+{ cat "$TMP/plan"; echo "expected_red_gate=check_no_such_gate.sh"; } > "$TMP/plan.badxr"
+build_honest "$S"; PLAN_OVERRIDE="$TMP/plan.badxr" run_agg "$S"
+expect "a plan declaring an expected-red gate no family names" 0 0 0 "plan_expected_red_malformed(check_no_such_gate.sh)"
 
 echo
 echo "MUTATION-SHARD-AGGREGATE: passed=$PASS failed=$FAIL"

@@ -261,6 +261,106 @@ got="$(candidate_incoherent "$TMP/bal" "$POP")"
 case "$got" in *qualified_with_survived*) ok "a balanced ledger with a survivor is refused for the survivor" ;;
   *) no "a balanced ledger with a survivor was misdiagnosed (got '${got:-<none>}')" ;; esac
 
+echo "=== PENDING: families on a declared expected-red gate are accounted, never killed ==="
+# The production shape of a campaign whose one expected-red gate (2 families) measured red exactly as
+# declared: 83 killed + 2 pending = 85 reported, 35 green + 1 expected-red = 36 baseline gates.
+_pend() { # file — GOOD rewritten into the honest pending shape
+  sed -e 's/^killed=.*/killed=83/' -e 's/^killed_by_gate=.*/killed_by_gate=83/' \
+      -e 's/^pending=.*/pending=2/' -e 's/^baseline_gates_expected_red=.*/baseline_gates_expected_red=1/' \
+      -e 's|^baseline_gates_green=.*|baseline_gates_green=35/36|' -e 's|^gates_proven=.*|gates_proven=83/85|' \
+      "$GOOD" > "$1"
+}
+_pend "$TMP/pend"
+[ -z "$(candidate_incoherent "$TMP/pend" "$POP" "$GATES")" ] \
+  && ok "83 killed + 2 pending over 35 green + 1 expected-red baseline gates is coherent" \
+  || no "the honest pending shape is refused: $(candidate_incoherent "$TMP/pend" "$POP" "$GATES")"
+_pinc() { # label sed-expr expected-substring
+  _pend "$TMP/pinc"; sed -i.bak "$2" "$TMP/pinc" && rm -f "$TMP/pinc.bak"
+  local got; got="$(candidate_incoherent "$TMP/pinc" "$POP" "$GATES")"
+  case "$got" in *"$3"*) ok "$1" ;; *) no "$1 — expected /$3/, got '${got:-<none>}'" ;; esac
+}
+_pinc "pending families with no expected-red baseline gate are refused" \
+  's/^baseline_gates_expected_red=.*/baseline_gates_expected_red=0/' qualified_with_pending_without_expected_red
+_pinc "an expected-red baseline gate with no pending family is refused" \
+  's/^pending=.*/pending=0/' qualified_with_pending_without_expected_red
+_pinc "pending counted on top of a full kill count is refused" \
+  's/^killed=.*/killed=85/' qualified_with_unkilled
+_pinc "green + expected-red short of the baseline population is refused" \
+  's|^baseline_gates_green=.*|baseline_gates_green=34/36|' qualified_with_baseline_gates_red
+_pinc "a non-numeric pending count is refused, never read as zero" \
+  's/^pending=.*/pending=x/' qualified_with_nonnumeric_pending
+grep -v '^pending=' "$TMP/pend" > "$TMP/nopend"
+expect "a candidate missing 'pending' is malformed" "candidate_schema(missing_key(pending))" \
+  0 "$TMP/nopend" "$H" "$H" "$T" "$T" "$U" "$U"
+# THE RECORDS: a pending record is admissible only for a family whose DRIVER-declared gate is
+# expected-red, whose record names that gate, and whose baseline transcript is red on exactly the
+# declared legs with a completed verdict. Real family names, so the driver is the authority asked.
+_DRVP="$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh"
+_XG=check_atomic_flip_entrance.sh
+_XLEGS="$(bash "$_DRVP" --expected-red "$_XG" 2>/dev/null)"
+[ -n "$_XLEGS" ] && ok "the driver answers --expected-red with the declared legs" \
+  || no "the driver gave no legs for $_XG"
+_pev="$TMP/pev"
+_pev_build() { # honest pending evidence for the two atomic-flip families
+  rm -rf "$_pev"; mkdir -p "$_pev/_baseline"
+  local f
+  for f in atomic-flip-entrance-refuses-pending atomic-flip-entrance-refuses-inert-binding; do
+    mkdir -p "$_pev/$f"
+    printf 'family=%s\ngate=%s\ndisposition=pending\nexpected_route=gate\n' "$f" "$_XG" > "$_pev/$f/verdict.txt"
+  done
+  { printf '  ok   something\n'; printf '%s\n' "$_XLEGS" | sed 's/^/  FAIL /'
+    printf 'ATOMIC-FLIP-ENTRANCE: PASS=11 FAIL=%s\n' "$(printf '%s\n' "$_XLEGS" | grep -c .)"; } \
+    > "$_pev/_baseline/$_XG.log"
+}
+_pev_build
+[ -z "$(records_unkilled_or_unevidenced "$_pev" "$_DRVP")" ] \
+  && ok "pending records on a declared gate with a matching baseline transcript are admissible" \
+  || no "admissible pending records refused: $(records_unkilled_or_unevidenced "$_pev" "$_DRVP")"
+_pev_case() { # label expected-substring — after the caller corrupted $_pev
+  case "$(records_unkilled_or_unevidenced "$_pev" "$_DRVP")" in
+    *"$2"*) ok "$1" ;; *) no "$1 — expected /$2/, got '$(records_unkilled_or_unevidenced "$_pev" "$_DRVP")'" ;; esac
+}
+_pev_build; sed -i.bak "s/^gate=.*/gate=check_corecheck_boundary.sh/" "$_pev/atomic-flip-entrance-refuses-pending/verdict.txt"
+_pev_case "a pending record naming a gate other than its family's is unkilled" "pending-record-names-check_corecheck_boundary.sh-gate"
+_pev_build; mkdir -p "$_pev/corecheck-unsafe-op"
+printf 'family=corecheck-unsafe-op\ngate=check_corecheck_boundary.sh\ndisposition=pending\n' > "$_pev/corecheck-unsafe-op/verdict.txt"
+_pev_case "a pending record for a family on an undeclared gate is unkilled" "pending-on-undeclared-gate-check_corecheck_boundary.sh"
+_pev_build; mkdir -p "$_pev/not-a-family"
+printf 'family=not-a-family\ngate=%s\ndisposition=pending\n' "$_XG" > "$_pev/not-a-family/verdict.txt"
+_pev_case "a pending record for a family the driver does not declare is unkilled" "not-a-family(pending-family-unknown-to-driver)"
+_pev_build; rm -f "$_pev/_baseline/$_XG.log"
+_pev_case "pending without the baseline transcript is unkilled" "pending-without-matching-baseline-transcript"
+_pev_build; printf '  ok   all\nATOMIC-FLIP-ENTRANCE: PASS=12 FAIL=0\n' > "$_pev/_baseline/$_XG.log"
+_pev_case "pending over a GREEN baseline transcript is unkilled" "pending-without-matching-baseline-transcript"
+_pev_build; printf '  FAIL some other leg\nATOMIC-FLIP-ENTRANCE: PASS=11 FAIL=1\n' > "$_pev/_baseline/$_XG.log"
+_pev_case "pending over a baseline red on a different leg is unkilled" "pending-without-matching-baseline-transcript"
+_pev_build; sed -i.bak '$d' "$_pev/_baseline/$_XG.log"
+_pev_case "pending over a TRUNCATED baseline (expected leg, no verdict line) is unkilled" "pending-without-matching-baseline-transcript"
+# THE COUNT: one declared gate backs the two pending records, so exactly one expected-red gate.
+_pev_build
+[ -z "$(pending_reconciliation "$_pev" "$_DRVP" 1)" ] \
+  && ok "one declared gate backing the pending records reconciles with baseline_gates_expected_red=1" \
+  || no "honest pending count refused: $(pending_reconciliation "$_pev" "$_DRVP" 1)"
+case "$(pending_reconciliation "$_pev" "$_DRVP" 2)" in
+  *"expected_red_unbacked(claimed=2 backed=1)"*) ok "an expected-red count larger than the backed gates is refused (a red gate posing as expected-red)" ;;
+  *) no "an inflated expected-red count was accepted" ;; esac
+sed -i.bak 's/^disposition=.*/disposition=killed/' "$_pev/atomic-flip-entrance-refuses-inert-binding/verdict.txt"
+case "$(pending_reconciliation "$_pev" "$_DRVP" 1)" in
+  *"expected_red_gate_family_not_pending(atomic-flip-entrance-refuses-inert-binding:killed)"*)
+    ok "a family on an expected-red gate that is not pending is refused" ;;
+  *) no "a non-pending family on an expected-red gate was accepted" ;; esac
+_pev_build
+[ -n "$(records_unkilled_or_unevidenced "$_pev" "")" ] \
+  && ok "without a driver to ask, no pending record is admissible" \
+  || no "pending admitted with no driver"
+_pev_build
+[ "$(records_disposition_totals "$_pev")" = "0 0 0 0 2 0" ] \
+  && ok "the record totals count pending as its own disposition" \
+  || no "record totals: $(records_disposition_totals "$_pev")"
+[ "$(expected_red_gates_from_driver "$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh" | tr -s ' ' | sed 's/ $//')" = "check_atomic_flip_entrance.sh" ] \
+  && ok "the declared expected-red gates are read from the driver source" \
+  || no "expected_red_gates_from_driver: '$(expected_red_gates_from_driver "$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh")'"
+
 echo "=== negative, noncanonical and implausible numbers are not numbers ==="
 for spec in "discovered=-1:nonnumeric" "killed=007:noncanonical" "reported=1234567:implausible"; do
   fld="${spec%%=*}"; rest="${spec#*=}"; val="${rest%%:*}"; want="${rest##*:}"
@@ -636,6 +736,14 @@ _dupe_out="$(bash "$_SB/dupe.sh" --spec corecheck-unsafe-op 2>&1)"; _dupe_rc=$?
   && ok "a duplicated family name is refused, not silently resolved to the first match" \
   || no "duplicate names accepted (rc=$_dupe_rc): $_dupe_out"
 
+# AN EXPECTED-RED DECLARATION IS INVENTORY, VALIDATED WITH IT. One naming a gate no family names
+# would exempt nothing today and a family added tomorrow; it must be refused before anything runs.
+sed 's/^expect_red "check_atomic_flip_entrance.sh"/expect_red "check_no_family_names_this.sh"/' "$_DRV" > "$_SB/xred.sh"
+_xr_out="$(bash "$_SB/xred.sh" --spec corecheck-unsafe-op 2>&1)"; _xr_rc=$?
+{ [ "$_xr_rc" = "2" ] && printf '%s' "$_xr_out" | grep -q 'named-by-no-family(check_no_family_names_this.sh)'; } \
+  && ok "an expect_red declaration for a gate no family names is refused" \
+  || no "a dangling expect_red declaration was accepted (rc=$_xr_rc)"
+
 echo "=== qualification has ONE authority, not two ==="
 # supervisor_qualification calls candidate_incoherent a second time to decide the published
 # `qualified=` line. It was omitting the gate count, so a `1/1` baseline the first call refused could
@@ -774,6 +882,7 @@ killed=1
 invalid=0
 survived=0
 could_not_apply=0
+pending=0
 integrity_ok=1
 qualified=0
 families_declared=$n
@@ -783,6 +892,7 @@ killed_by_build=0
 failed=0
 evidence_written=1
 baseline_gates_green=1
+baseline_gates_expected_red=0
 gates_proven=1/1
 refusals=
 secs_total=1
@@ -1007,7 +1117,10 @@ sed -i.bak 's|^compilers_tested=.*|compilers_tested=single-baseline|' "$_PV" && 
 # that — 240 probes were silently lost from another gate the same way — and this round's review
 # found controls here that had been inert for rounds without anyone noticing. Changing the count is
 # a deliberate act, recorded in the same commit as the control that changed it.
-EXPECTED_CONTROLS=169
+# 169 -> 193 (2026-10-22): the PENDING disposition — 22 controls in its section (coherence, the
+# record/transcript admissibility cases, the driver as the authority for legs), `pending` joining
+# CAMPAIGN_CANDIDATE_KEYS (one more missing-key case), and the dangling expect_red refusal.
+EXPECTED_CONTROLS=193
 _total=$((PASS + FAIL))
 if [ "$_total" -ne "$EXPECTED_CONTROLS" ]; then
   echo "  FAIL this gate ran $_total controls, expected $EXPECTED_CONTROLS — one was added or removed"

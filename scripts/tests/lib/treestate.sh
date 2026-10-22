@@ -61,8 +61,10 @@ ts_digest() { # stdin -> 32 hex characters
 ts_driver_digest() { # root -> digest of the campaign driver AS IT SITS IN THAT TREE
   cat "$1/scripts/tests/check_gate_mutation_coverage.sh" 2>/dev/null | ts_digest
 }
-ts_inventory_digest() { # root -> digest of the driver's `add` inventory lines only
-  grep -h '^add "' "$1/scripts/tests/check_gate_mutation_coverage.sh" 2>/dev/null | ts_digest
+ts_inventory_digest() { # root -> digest of the driver's `add` and `expect_red` inventory lines
+  # `expect_red` is inventory too: it decides which families a run reports PENDING instead of judging,
+  # so changing one changes what the campaign is evidence about, exactly as an `add` line does.
+  grep -h -E '^(add|expect_red) "' "$1/scripts/tests/check_gate_mutation_coverage.sh" 2>/dev/null | ts_digest
 }
 
 ts_available() { echo "treestate-v1"; }

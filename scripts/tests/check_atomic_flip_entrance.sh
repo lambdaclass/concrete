@@ -13,6 +13,16 @@
 #
 # It measures; it does not restate. Every number comes from the manifest generator, the compiler, or
 # the Lean environment, and no figure is written here that a producer could supply.
+#
+# STATE AS OF 2026-10-22. It went green (13/0) and the flip landed on 2026-08-15 (568886dc); since
+# then it is the standing assertion that the entrance conditions still hold. It is RED again on
+# condition 1 alone: bug 083 (274fb411) linked thesis_demo's `parse_byte`/`check_length` in source
+# to `proofFns`, so that no-manifest table now has manifest rows and no attestation — a pending
+# conversion (its references are already generated in GeneratedAttestations; binding them is R-0004
+# work and would also move condition 3, which still asserts proofFns is evidence-ineligible). The
+# mutation inventory declares this gate EXPECTED-RED by that exact FAIL line (`expect_red` in
+# check_gate_mutation_coverage.sh), so its two families are reported PENDING rather than INVALID,
+# any other red leg still invalidates them, and the run fails loudly once this gate turns green.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -72,17 +82,20 @@ if grep -qE "error:|error\(lean" <<<"$SITES"; then
   no "the site probe did not elaborate — no condition can be measured"
   echo "ATOMIC-FLIP-ENTRANCE: PASS=$PASS FAIL=$((FAIL+1))"; exit 1
 fi
-PENDING=0
+PENDING=0; PENDING_NAMES=""
 for tbl in $(printf '%s' "$OUT" | grep ' <- ' | grep -v EXCLUDED | awk '{print $1}' | sort -u); do
   att="$(printf '%s' "$SITES" | grep -E "^SITE $tbl " | grep -oE 'attested=[0-9]+' | cut -d= -f2)"
   ent="$(printf '%s' "$SITES" | grep -E "^SITE $tbl " | grep -oE 'entries=[0-9]+' | cut -d= -f2)"
   [ "${ent:-0}" = "0" ] && continue
-  [ "${att:-0}" = "0" ] && { PENDING=$((PENDING+1)); echo "      pending: $tbl"; }
+  [ "${att:-0}" = "0" ] && { PENDING=$((PENDING+1)); PENDING_NAMES="$PENDING_NAMES $tbl"; echo "      pending: $tbl"; }
 done
 if [ "$PENDING" = "0" ]; then
   ok "no manifest-backed table with entries is unattested"
 else
-  no "$PENDING table(s) still pending conversion — the flip would migrate a join over tables that cannot describe their definitions"
+  # THE FAILURE NAMES ITS TABLES. The mutation inventory declares this gate expected-red by its exact
+  # FAIL lines, so a count alone would let one table's conversion and another's regression trade
+  # places under an unchanged line.
+  no "$PENDING table(s) still pending conversion (${PENDING_NAMES# }) — the flip would migrate a join over tables that cannot describe their definitions"
 fi
 # No table may carry a broken generated reference: `needs_recheck` is not a state to flip on.
 BROKEN="$(printf '%s' "$SITES" | grep -c 'failures=[1-9]' || true)"
@@ -96,8 +109,20 @@ UNTABLED="$(field subjects_without_table)"; MAPPED="$(field table_attestations)"
 # dependency population: `proof_pressure.validate_header`'s misattached `#[proof_by]` was deleted, so
 # the subject no longer has a table. The 86 is unchanged, which is the point — the declaration still
 # exists; what left is a false claim.
-if [ "$ROWS" = "86" ] && [ "$NOID" = "0" ] && [ "$UNTABLED" = "39" ] && [ "$MAPPED" = "47" ]; then
-  ok "subject accounting is exactly 86 = 0 + 39 + 47"
+#
+# 86 -> 105 = 0 + 49 + 56, by NEW PROOF-LINKED FIXTURES ONLY, never by the dependency population
+# (dependency rows are still 41 and still split off at the generator's door). Nothing ran this gate
+# in CI, so the pin went stale silently and was found as RED ON CLEAN in the mutation shards. Each
+# fixture entered the generator's scan (`#[proof_by]`/`#[ensures_proof]`) for the first time; every
+# subject row in it counts, linked or not:
+#   274fb411 (bug 083) thesis_demo   +3 = 2 tabled (parse_byte, check_length -> proofFns) + 1 untabled (validate)
+#   0b3314b7           toml          +12 = 4 tabled (FnTable.empty) + 8 untabled
+#   9c9971ca           hexdump       +2 = 2 tabled (FnTable.empty)
+#   d3cfaa13           png_chunks    +2 = 1 tabled (FnTable.empty) + 1 untabled (is_png_sig)
+# Sum +19 = +10 untabled + +9 tabled. The thesis_demo rows are also why condition 1 is red: proofFns
+# now has manifest rows and no attestation.
+if [ "$ROWS" = "105" ] && [ "$NOID" = "0" ] && [ "$UNTABLED" = "49" ] && [ "$MAPPED" = "56" ]; then
+  ok "subject accounting is exactly 105 = 0 + 49 + 56"
 else
   no "subject accounting moved: $ROWS = $NOID + $UNTABLED + $MAPPED — the dependency population must not touch it"
 fi

@@ -231,7 +231,7 @@ _rm_snapdir() {
 # whether it is supervised are the same question — "does this invocation run a campaign?" — and they
 # were answered by two separately maintained enumerations of `--coverage`. Adding a third reporting
 # mode to one and not the other yields a query that forks a supervisor, or one that takes the lock.
-_mut_query_mode() { case "${1:-}" in --coverage|--spec|--shard-plan) return 0 ;; *) return 1 ;; esac; }
+_mut_query_mode() { case "${1:-}" in --coverage|--spec|--shard-plan|--expected-red) return 0 ;; *) return 1 ;; esac; }
 _MUT_READ_ONLY_MODE=0
 [ "${ANCHORS_ONLY:-0}" = "1" ] && _MUT_READ_ONLY_MODE=1
 _mut_query_mode "${1:-}" && _MUT_READ_ONLY_MODE=1
@@ -626,6 +626,33 @@ fi
 NAME=();  FILE=();  GATE=();  BUILD=()
 OLD=();   NEW=()
 add(){ NAME+=("$1"); FILE+=("$2"); GATE+=("$3"); BUILD+=("$4"); OLD+=("$5"); NEW+=("$6"); }
+
+# EXPECTED-RED GATES: expect_red <gate> <reason> <exact FAIL legs, one per line>
+#
+# A gate can be red on the unmutated tree ON PURPOSE — an entrance assertion that states a finished
+# state which has not been reached. Every family naming it then scored INVALID ("RED ON CLEAN") in
+# every campaign, so the campaign could never qualify, and the only escapes were dishonest: delete the
+# families (the gate's ability to say no goes unmeasured and unrecorded) or weaken the gate until it
+# is green (it stops saying the true thing). This is the third option, and it is a CHECKED claim:
+#
+#   * the declaration names the gate's EXACT failing legs — its `  FAIL ` lines, verbatim. The clean
+#     baseline must be red with exactly that set. Any other red leg, or a missing one, is RED ON CLEAN
+#     as before and invalidates the families: an expected-red gate is not a gate allowed to be red.
+#   * when the baseline matches, each family naming the gate is reported PENDING: not killed, not
+#     invalid, not survived. It is a fifth disposition, counted and published (`pending=`,
+#     `baseline_gates_expected_red=`), and it neither proves the gate nor blocks qualification.
+#     The aggregator and supervisor accept a pending record only for a gate the driver declares here.
+#   * the moment the gate is GREEN on the clean tree the declaration is stale: the families run as
+#     ordinary families (so their kills are measured at once) AND the run is refused
+#     (`expected_red_gate_green`) until the declaration is removed. Nothing drifts back to pending
+#     silently, and nothing stays pending after it could have been measured.
+ER_GATE=(); ER_REASON=(); ER_LEGS=()
+expect_red(){ ER_GATE+=("$1"); ER_REASON+=("$2"); ER_LEGS+=("$3"); }
+# er_index <gate> -> the declaration's index, or nonzero when the gate is not declared expected-red.
+er_index(){ local j; for (( j=0; j<${#ER_GATE[@]}; j++ )); do
+  [ "${ER_GATE[$j]}" = "$1" ] && { printf '%s' "$j"; return 0; }; done; return 1; }
+# fail_legs <log> -> the transcript's `  FAIL ` lines, prefix stripped, sorted (the compared set).
+fail_legs(){ sed -n 's/^  FAIL //p' "$1" 2>/dev/null | LC_ALL=C sort; }
 
 # family_spec_digest <name> <file> <gate> <build> <old> <new> -> digest of the EXPERIMENT
 #
@@ -1377,6 +1404,16 @@ add "atomic-flip-entrance-refuses-inert-binding" "Concrete/Proof/Proof.lean" "ch
   $'    [ AttestedPFnDef.of checkClassFn      GeneratedAttestations.elfFns_4ce9c9d8_check_class' \
   $'    [ AttestedPFnDef.of checkNonceFn      GeneratedAttestations.elfFns_4ce9c9d8_check_class'
 
+# ...AND THE ENTRANCE ASSERTION IS RED ON THE CLEAN TREE, which is the true answer. Bug 083
+# (274fb411, 2026-10-18) linked thesis_demo's two functions to `proofFns` in source, so a no-manifest
+# table now has manifest rows and no attestation: a pending conversion, exactly what condition 1
+# exists to report. Until proofFns is converted (R-0004) both families above are PENDING. The
+# declaration is the gate's one FAIL line, verbatim — the subject pin (condition 2) was brought to
+# the measured 105 = 0 + 49 + 56 in the same change, so a drifted pin cannot hide in here.
+expect_red "check_atomic_flip_entrance.sh" \
+  "R-0004: proofFns pending conversion since bug 083 (274fb411) linked thesis_demo to it" \
+  '1 table(s) still pending conversion (Concrete.Proof.proofFns) — the flip would migrate a join over tables that cannot describe their definitions'
+
 
 # ---------------------------------------------------------------------------
 # R-0004 package 2: THE SCOPED JOIN'S FIVE ATTACK CLASSES. The flip replaced a name-keyed evidence
@@ -1874,6 +1911,26 @@ if [ -n "$_dupe_names" ]; then
   _gate_lock_release; exit 2
 fi
 
+# EXPECTED-RED DECLARATIONS ARE PART OF THE INVENTORY AND ARE VALIDATED WITH IT. A declaration for a
+# gate no family names would exempt nothing today and silently exempt a family added tomorrow; a
+# duplicate is two answers to one question; an empty reason or leg set is a claim that cannot be
+# checked. Each is refused before anything runs, in every mode, including ANCHORS_ONLY.
+_er_bad=""
+for (( _j=0; _j<${#ER_GATE[@]}; _j++ )); do
+  _erg="${ER_GATE[$_j]}"
+  [ -n "$_erg" ] || _er_bad="$_er_bad empty-gate-name"
+  [ -n "${ER_REASON[$_j]}" ] || _er_bad="$_er_bad no-reason($_erg)"
+  [ -n "$(printf '%s\n' "${ER_LEGS[$_j]}" | grep -v '^$')" ] || _er_bad="$_er_bad no-legs($_erg)"
+  [ "$(printf '%s\n' "${ER_LEGS[$_j]}" | grep -v '^$' | LC_ALL=C sort | uniq -d)" = "" ] \
+    || _er_bad="$_er_bad duplicate-leg($_erg)"
+  [ "$(printf '%s\n' "${ER_GATE[@]}" | grep -cxF -- "$_erg")" = "1" ] || _er_bad="$_er_bad declared-twice($_erg)"
+  printf '%s\n' "${GATE[@]}" | grep -qxF -- "$_erg" || _er_bad="$_er_bad named-by-no-family($_erg)"
+done
+if [ -n "$_er_bad" ]; then
+  echo "FATAL: malformed expect_red declaration(s):$_er_bad" >&2
+  _gate_lock_release; exit 2
+fi
+
 # `--spec <FAMILY_ID>`: print the mutation-spec digest of one family and exit.
 #
 # Callers that pin a spec need its value, and the only sound way to obtain one is to ask the producer
@@ -1902,6 +1959,15 @@ if [ "${1:-}" = "--spec" ]; then
     esac
   done
   echo "no family named '$2' in this inventory of $N" >&2; exit 2
+fi
+
+# `--expected-red <gate>`: print that gate's declared FAIL legs, one per line, and exit; nonzero when
+# the gate is not declared. The supervisor asks this producer for the legs it re-checks a published
+# baseline transcript against, rather than parsing the declaration out of this file a second way.
+if [ "${1:-}" = "--expected-red" ]; then
+  _erj="$(er_index "${2:-}")" || { echo "no expect_red declaration for '${2:-}'" >&2; exit 2; }
+  printf '%s\n' "${ER_LEGS[$_erj]}" | grep -v '^$'
+  exit 0
 fi
 
 # `--shard-plan <n>`: print the inventory ONCE, with each family's shard, and exit.
@@ -1940,6 +2006,20 @@ inventory_sha=$_pl_inv
 repo_driver_sha=$_pl_drv
 families_digest=$_pl_fams
 "
+  # THE DECLARED EXPECTED-RED GATES travel in the plan, so the aggregator accepts a `pending` record
+  # only for a family whose planned gate the driver declared — read from this producer, not inferred
+  # from what the shards happened to report.
+  for (( _j=0; _j<${#ER_GATE[@]}; _j++ )); do
+    _pl_out="${_pl_out}expected_red_gate=${ER_GATE[$_j]}
+"
+    # ...with its exact legs, `<gate> <leg>` per line, so the aggregator can check each shard's
+    # published baseline transcript against the declaration itself.
+    while IFS= read -r _leg; do
+      [ -n "$_leg" ] || continue
+      _pl_out="${_pl_out}expected_red_leg=${ER_GATE[$_j]} $_leg
+"
+    done <<< "${ER_LEGS[$_j]}"
+  done
   for (( _i=0; _i<N; _i++ )); do
     _pl_spec="$(family_spec_digest "${NAME[$_i]}" "${FILE[$_i]}" "${GATE[$_i]}" \
                                    "${BUILD[$_i]}" "${OLD[$_i]}" "${NEW[$_i]}")" || exit 2
@@ -2072,11 +2152,14 @@ write_summary() {
          echo "discovered=${N:-0}"
          echo "selected=${EXPECTED_RUN:-${N:-0}}"
          echo "executed=${FAMILIES_RUN:-0}"
-         echo "reported=$(( ${PASS:-0} + ${FAIL:-0} ))"
+         echo "reported=$(( ${PASS:-0} + ${FAIL:-0} + ${PENDING_N:-0} ))"
          echo "killed=${PASS:-0}"
          echo "invalid=${INVALID:-0}"
          echo "survived=${SURVIVED_N:-0}"
          echo "could_not_apply=${COULD_NOT_APPLY:-0}"
+         # THE FIFTH DISPOSITION: families on a declared expected-red gate (see expect_red). Always
+         # emitted, zero included, so its absence can never read as "none".
+         echo "pending=${PENDING_N:-0}"
          echo "integrity_ok=${INTEGRITY_OK:-0}"
          # Measured, not estimated. `secs_other` is whatever is left after builds and gate runs —
          # mutation apply, restores, digests, snapshot bookkeeping — so the three numbers account for
@@ -2098,6 +2181,9 @@ write_summary() {
          # families that could not be judged, and the artifact must say so rather than leaving a
          # reader to infer it from the kill count.
          echo "baseline_gates_green=${BASELINE_GREEN:-0}/${BASELINE_TOTAL:-0}"
+         # The baseline gates that were red EXACTLY as their expect_red declaration says. Together
+         # with the green ones they must make up the whole baseline for a run to qualify.
+         echo "baseline_gates_expected_red=${BASELINE_EXPECTED_RED:-0}"
          # The contract figure: how many families turned their NAMED gate red. Build kills are real
          # results but leave their gate unexercised, so they are excluded here on purpose.
          echo "gates_proven=${KILLED_BY_GATE:-0}/${N:-0}"
@@ -2665,30 +2751,71 @@ baseline_all_gates(){
   done
   total=${#uniq[@]}
   echo "=== clean-gate baseline: $total distinct gates on the pristine workspace ==="
+  local green=0 xred=0
   for g in "${uniq[@]}"; do
-    if _timed_gate "scripts/tests/$g" "$TMP/clean.log"; then
-      CLEAN_GATE[$g]=yes
-      _note_freshness_taint "$TMP/clean.log"
-      # THE POSITIVE CONTROL'S OWN TRANSCRIPT, kept per gate at RUN level. $TMP/clean.log is reused
-      # by every gate in this loop, so by the end it holds only the LAST one — and it used to be
-      # copied into all 81 family records as though it were each family's evidence. It belongs to
-      # the run: it is what makes a later red meaningful, and discarding it left every kill resting
-      # on a green baseline nobody could re-read.
-      keep_baseline_log "$g" "$TMP/clean.log"
-      CLEAN_GATE_TAIL[$g]="$(_tail_shape "$TMP/clean.log")"
-      if [ -n "${CLEAN_GATE_TAIL[$g]}" ]; then CLEAN_GATE_VERDICT[$g]=yes; else CLEAN_GATE_VERDICT[$g]=no; fi
-    else
-      CLEAN_GATE[$g]=no; red=$((red+1))
-      # KEPT ON THE RED PATH TOO. This transcript is the reason every family naming this gate is
-      # reported INVALID; retaining it only when the baseline is GREEN would discard exactly the
-      # diagnosis a reader needs.
-      keep_baseline_log "$g" "$TMP/clean.log"
-      echo "  RED ON CLEAN: $g — every family naming it will be reported INVALID, not killed"
-    fi
+    local _rc=0
+    _timed_gate "scripts/tests/$g" "$TMP/clean.log" || _rc=$?
+    classify_clean_gate "$g" "$_rc" "every family naming it"
+    case "${CLEAN_GATE[$g]}" in
+      yes) green=$((green+1)) ;;
+      expected_red) xred=$((xred+1)) ;;
+      *) red=$((red+1)) ;;
+    esac
   done
   # Reported, never silent: a baseline that measured nothing must not look like a baseline that passed.
-  echo "  baseline: $((total-red))/$total gates green on the unmutated workspace"
-  BASELINE_GREEN=$((total-red)); BASELINE_TOTAL=$total; BASELINE_RED=$red
+  echo "  baseline: $green/$total gates green on the unmutated workspace" \
+       "($xred expected-red as declared, $red red on clean)"
+  BASELINE_GREEN=$green; BASELINE_TOTAL=$total; BASELINE_RED=$red; BASELINE_EXPECTED_RED=$xred
+}
+
+# classify_clean_gate <gate> <clean-rc> <who> — ONE classifier for both baseline paths (the campaign
+# sweep and single-family selection), reading $TMP/clean.log. Sets CLEAN_GATE[gate] to
+#   yes          green on the unmutated workspace (the positive control held);
+#   expected_red red with EXACTLY the FAIL legs its expect_red declaration names;
+#   no           red any other way: RED ON CLEAN, and its families are INVALID.
+# A declared gate that is GREEN is `yes` — its families are measured like any other — and is recorded
+# in ER_STALE so the run is refused until the declaration is removed.
+ER_STALE=""
+classify_clean_gate(){
+  local g="$1" rc="$2" who="$3" j
+  # THE TRANSCRIPT IS KEPT ON EVERY PATH. Green, it is the positive control every kill rests on; red,
+  # it is the reason the families are INVALID; expected-red, it is the evidence that the red matched
+  # its declaration. $TMP/clean.log is reused per gate, so it is copied out at run level now.
+  keep_baseline_log "$g" "$TMP/clean.log"
+  if [ "$rc" = "0" ]; then
+    CLEAN_GATE[$g]=yes
+    _note_freshness_taint "$TMP/clean.log"
+    CLEAN_GATE_TAIL[$g]="$(_tail_shape "$TMP/clean.log")"
+    if [ -n "${CLEAN_GATE_TAIL[$g]}" ]; then CLEAN_GATE_VERDICT[$g]=yes; else CLEAN_GATE_VERDICT[$g]=no; fi
+    if er_index "$g" >/dev/null; then
+      ER_STALE="$ER_STALE $g"
+      echo "  STALE EXPECTED-RED: $g is GREEN on the unmutated workspace — $who runs as an ordinary"
+      echo "       family now, and this run is refused until its expect_red declaration is removed."
+    fi
+    return 0
+  fi
+  CLEAN_GATE[$g]=no
+  if j="$(er_index "$g")"; then
+    local want got
+    want="$(printf '%s\n' "${ER_LEGS[$j]}" | grep -v '^$' | LC_ALL=C sort)"
+    got="$(fail_legs "$TMP/clean.log")"
+    # EXACT LEGS, A NORMAL FAILURE EXIT, AND A COMPLETED VERDICT. A gate that printed the expected
+    # failure and then crashed, was killed, or refused a precondition (exit 2) never checked the rest
+    # of its conditions, and a truncated transcript must not read as the declared red. The transcript
+    # rule is the library's, so the supervisor re-checks the published transcript with the same one.
+    if [ "$rc" = "1" ] && expected_red_transcript_ok "$TMP/clean.log" "${ER_LEGS[$j]}"; then
+      CLEAN_GATE[$g]=expected_red
+      _note_freshness_taint "$TMP/clean.log"
+      echo "  EXPECTED RED: $g — red on exactly its $(printf '%s\n' "$want" | grep -c .) declared leg(s)"
+      echo "       (${ER_REASON[$j]}); $who will be reported PENDING, not killed and not invalid"
+      return 0
+    fi
+    echo "  RED ON CLEAN: $g is declared expected-red, but did not fail exactly as declared (exit $rc;"
+    echo "       its FAIL legs must be the declared set and its last line a verdict counting them):"
+    LC_ALL=C comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed 's/^/       unexpected FAIL: /'
+    LC_ALL=C comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed 's/^/       declared, not red: /'
+  fi
+  echo "  RED ON CLEAN: $g — $who will be reported INVALID, not killed"
 }
 gate_clean_ok(){ # gate-path (bare filename) — was this gate green on the PRISTINE workspace?
   [ "${CLEAN_GATE[$1]:-no}" = "yes" ]
@@ -2705,6 +2832,9 @@ UNDECLARED_BUILD_KILLS=""
 # anchor. The 81-family run on 898d9a7b reported `failed=8` and left which-was-which to be recovered
 # from the log.
 INVALID=0; SURVIVED_N=0; COULD_NOT_APPLY=0
+# PENDING: a family whose named gate is a declared expected-red gate that measured red exactly as
+# declared (see expect_red). Not a kill, not a failure; counted on its own and published.
+PENDING_N=0; BASELINE_EXPECTED_RED=0
 FRESHNESS_UNVERIFIED=0
 _note_freshness_taint() { grep -q 'GATE-FRESHNESS-UNVERIFIED' "$1" 2>/dev/null && FRESHNESS_UNVERIFIED=1; return 0; }
 
@@ -2858,6 +2988,19 @@ run_one(){
   perl -i -pe 'chomp if eof' "$TMP/old" "$TMP/new"
   echo "--- family $((i+1))/$N: $nm ($file -> ${GATE[$i]}) ---"
   FAMILY_SECS[build]=0; FAMILY_SECS[gate]=0; _fam_t0=$(_sw_now)
+  # A DECLARED EXPECTED-RED GATE, MEASURED RED ON EXACTLY ITS DECLARED LEGS: the family cannot be
+  # judged (red proves nothing over red) and is not a broken experiment either. It is PENDING — its
+  # own disposition, counted and published, never banked as a kill. The mutation is not applied; its
+  # anchor is still verified by ANCHORS_ONLY, so it cannot rot while it waits.
+  if [ "${CLEAN_GATE[${GATE[$i]}]:-}" = "expected_red" ]; then
+    local _erj; _erj="$(er_index "${GATE[$i]}")"
+    echo "  PENDING $nm — ${GATE[$i]} is a declared expected-red gate (${ER_REASON[$_erj]});"
+    echo "       its clean failure matched the declaration, so this mutation cannot be judged yet."
+    PENDING_N=$((PENDING_N+1)); PENDING_NAMES="${PENDING_NAMES:-} $nm"
+    publish_evidence "$nm" "$i" "$file" "${GATE[$i]}" 0 0 \
+      "PENDING — declared expected-red gate: ${ER_REASON[$_erj]}" pending
+    return
+  fi
   # THE POSITIVE CONTROL was measured before this campaign mutated anything. A gate that is already
   # red proves nothing by going red again.
   if ! gate_clean_ok "${GATE[$i]}"; then
@@ -3219,22 +3362,19 @@ if [ -n "$ONLY" ]; then
   # case the first build of the run would be the mutated one.
   baseline_pristine_build || { write_summary 0 " pristine_build_failed"; rm -rf "$TMP"; _gate_lock_release; exit 2; }
   BASELINE_TOTAL=1
-  if _timed_gate "scripts/tests/$_only_gate" "$TMP/clean.log"; then
-    CLEAN_GATE[$_only_gate]=yes; BASELINE_GREEN=1; BASELINE_RED=0
-    keep_baseline_log "$_only_gate" "$TMP/clean.log"
-    _note_freshness_taint "$TMP/clean.log"
-    CLEAN_GATE_TAIL[$_only_gate]="$(_tail_shape "$TMP/clean.log")"
-    if [ -n "${CLEAN_GATE_TAIL[$_only_gate]}" ]; then CLEAN_GATE_VERDICT[$_only_gate]=yes
-    else CLEAN_GATE_VERDICT[$_only_gate]=no; fi
-    echo "  baseline: 1/1 gates green on the unmutated workspace"
-  else
-    CLEAN_GATE[$_only_gate]=no; BASELINE_GREEN=0; BASELINE_RED=1
-    # A RED baseline transcript is the MOST important one to keep: every family on that gate is
-    # reported INVALID because of it.
-    keep_baseline_log "$_only_gate" "$TMP/clean.log"
-    echo "  RED ON CLEAN: $_only_gate — this family will be reported INVALID, not killed"
-    echo "  baseline: 0/1 gates green on the unmutated workspace"
-  fi
+  _only_rc=0
+  _timed_gate "scripts/tests/$_only_gate" "$TMP/clean.log" || _only_rc=$?
+  # THE SAME CLASSIFIER AS THE CAMPAIGN SWEEP: the baseline is implemented twice, and a decision
+  # made in only one of them is the drift this file keeps documenting.
+  classify_clean_gate "$_only_gate" "$_only_rc" "this family"
+  BASELINE_GREEN=0; BASELINE_RED=0; BASELINE_EXPECTED_RED=0
+  case "${CLEAN_GATE[$_only_gate]}" in
+    yes) BASELINE_GREEN=1 ;;
+    expected_red) BASELINE_EXPECTED_RED=1 ;;
+    *) BASELINE_RED=1 ;;
+  esac
+  echo "  baseline: $BASELINE_GREEN/1 gates green on the unmutated workspace" \
+       "($BASELINE_EXPECTED_RED expected-red as declared, $BASELINE_RED red on clean)"
   # The single-family path needs the same post-baseline compiler identity as the full run: its one
   # baseline gate can build too, so the compiler captured at copy time is not necessarily the one this
   # family was judged against.
@@ -3340,6 +3480,12 @@ END_DIRTY="$(snap_dirty_targets)"
 # A family that died in the build without declaring that as its intended outcome leaves its named gate
 # unproven, and the campaign's whole purpose is proving those gates load-bearing.
 [ -z "$UNDECLARED_BUILD_KILLS" ]             || REFUSALS="$REFUSALS undeclared_build_kills($UNDECLARED_BUILD_KILLS )"
+# AN EXPECTED-RED DECLARATION FOR A GATE THAT IS GREEN IS STALE. Its families were measured as
+# ordinary families in this run, so nothing went unjudged — but the inventory now claims a red that
+# is not there, and the next time the gate went red for a DIFFERENT reason it would have to match the
+# old legs exactly to hide, which is the only thing standing between it and silent pending status.
+# The declaration has done its job and is removed deliberately, in a commit that says so.
+[ -z "$ER_STALE" ]                           || REFUSALS="$REFUSALS expected_red_gate_green($(echo $ER_STALE | tr ' ' ','))"
 # A gate that ran against an unverified binary taints the whole campaign: its verdict describes an
 # artifact nobody established corresponds to the source. `CONCRETE_ALLOW_UNVERIFIED_BINARY=1` only
 # warned, which is indistinguishable from verified evidence to anything reading logs or artifacts.
@@ -3354,9 +3500,10 @@ END_DIRTY="$(snap_dirty_targets)"
 # reported PASS.
 # A shard accounts for ITS selection: the other shards' families are not its to explain.
 if [ -z "$ONLY" ]; then
-  _accounted=$(( ${KILLED_BY_GATE:-0} + ${KILLED_BY_BUILD:-0} ))
+  # A PENDING family is accounted for — by its own disposition, not as a kill.
+  _accounted=$(( ${KILLED_BY_GATE:-0} + ${KILLED_BY_BUILD:-0} + ${PENDING_N:-0} ))
   [ "$_accounted" = "${#SEL_IDX[@]}" ] \
-    || REFUSALS="$REFUSALS families_unaccounted(gate=${KILLED_BY_GATE:-0} build=${KILLED_BY_BUILD:-0} of ${#SEL_IDX[@]})"
+    || REFUSALS="$REFUSALS families_unaccounted(gate=${KILLED_BY_GATE:-0} build=${KILLED_BY_BUILD:-0} pending=${PENDING_N:-0} of ${#SEL_IDX[@]})"
 fi
 # A partial campaign is not a campaign. FAMILY=<n> selects one deliberately and cannot complete.
 EXPECTED_RUN="${#SEL_IDX[@]}"; [ -n "$ONLY" ] && EXPECTED_RUN=1
@@ -3367,13 +3514,13 @@ EXPECTED_RUN="${#SEL_IDX[@]}"; [ -n "$ONLY" ] && EXPECTED_RUN=1
 # verdict. A `return` added later without one silently shrinks the denominator, which is precisely the
 # "discovered but not executed" failure this dimension exists to catch. FAMILIES_RUN stays in the
 # artifact as reported data, not as an assertion.
-VERDICTS=$(( PASS + FAIL ))
+VERDICTS=$(( PASS + FAIL + PENDING_N ))
 # Every SELECTED unit reported a verdict. This is what `completed` asserts — not that they all passed.
 # EVERY REPORTED FAMILY MUST HAVE LEFT A RECORD. `reported` counts verdicts printed; this counts
 # transcripts a reader can actually open. If they disagree, the run claims more than it can show.
 [ -z "$EVIDENCE_FAILED" ] || REFUSALS="$REFUSALS evidence_unwritable($(echo $EVIDENCE_FAILED | tr ' ' ','))"
-[ "$EVIDENCE_WRITTEN" = "$(( ${PASS:-0} + ${FAIL:-0} ))" ] \
-  || REFUSALS="$REFUSALS evidence_missing($EVIDENCE_WRITTEN/$(( ${PASS:-0} + ${FAIL:-0} )))"
+[ "$EVIDENCE_WRITTEN" = "$(( ${PASS:-0} + ${FAIL:-0} + ${PENDING_N:-0} ))" ] \
+  || REFUSALS="$REFUSALS evidence_missing($EVIDENCE_WRITTEN/$(( ${PASS:-0} + ${FAIL:-0} + ${PENDING_N:-0} )))"
 # EXACT SET RECONCILIATION OVER FAMILY IDS, NOT A COUNT.
 #
 # Counting records reconciles a number: an unknown directory can stand in for a missing expected
@@ -3497,7 +3644,7 @@ COMPLETED=0
 QUALIFIED=0
 if [ "$COMPLETED" = "1" ] && [ "$INTEGRITY_OK" = "1" ] \
    && [ "${CAMPAIGN_MODE:-campaign}" = "campaign" ] \
-   && [ "${PASS:-0}" = "${N:-0}" ] \
+   && [ "$(( ${PASS:-0} + ${PENDING_N:-0} ))" = "${N:-0}" ] \
    && [ "${INVALID:-0}" -eq 0 ] && [ "${SURVIVED_N:-0}" -eq 0 ] && [ "${COULD_NOT_APPLY:-0}" -eq 0 ]; then
   QUALIFIED=1
 fi
@@ -3530,7 +3677,12 @@ echo
 # line and in the artifact: `killed` is how many mutations died, `gates_proven` is how many did so by
 # turning their named gate red, which is the only figure that speaks to the contract.
 GATES_PROVEN="${KILLED_BY_GATE:-0}/$N"
-DISPO="killed=$PASS invalid=${INVALID:-0} survived=${SURVIVED_N:-0} could_not_apply=${COULD_NOT_APPLY:-0}"
+# PENDING FAMILIES ARE NAMED ON EVERY SUMMARY, not left to a count: they are the part of the corpus
+# this run did not judge, and a reader must see which, and why, without opening the records.
+if [ "${PENDING_N:-0}" -gt 0 ]; then
+  echo "PENDING (declared expected-red gates, not judged):${PENDING_NAMES:-}"
+fi
+DISPO="killed=$PASS invalid=${INVALID:-0} survived=${SURVIVED_N:-0} could_not_apply=${COULD_NOT_APPLY:-0} pending=${PENDING_N:-0}"
 if [ "$CAMPAIGN_MODE" = "campaign" ] && [ "$QUALIFIED" = "1" ]; then
   # THE CHILD DOES NOT DECLARE QUALIFICATION. IT PROPOSES IT.
   #
