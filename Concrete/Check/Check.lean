@@ -2272,7 +2272,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | .ref _ | .refMut _ => some <$> normRef value
         | _ => pure none
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
-      if isGhost then
+      if _isGhost then
         let envG ← getEnv
         match envG.vars with
         | (n, vi) :: rest => setEnv { envG with vars := (n, { vi with isGhost := true }) :: rest }
