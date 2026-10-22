@@ -56,7 +56,14 @@ whatever their label.
   (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines); `break`/`continue` likewise
   (`regress_149_break_in_borrow_with_defer.con`).
 - `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state unless a
-  `break value` moved it (`TypeEnv.breakMoved`). Any other consumption of an outer binding inside
+  `break value` moved it (`VarInfo.movedByBreak`, carried through branch and match merges, so a
+  `break free(h)` in every arm of a match is not a false E0208; that program then fails at SSA
+  verification, E0708, a pre-existing loud lowering defect of matches whose arms all `break` inside
+  a loop, not changed here). `Lower` now evaluates a `break value` operand in a
+  statement loop too (it was skipped when the loop had no result slot, although the checker
+  credited its moves: `while true { break free(h); }` never released `h`;
+  `regress_149_break_value_statement_loop.con`), and a non-Copy break value, which a statement
+  loop discards, is E0287 (`error_149_break_value_non_copy.con`). Any other consumption of an outer binding inside
   the body is on a path that leaves the function, and the loop may run zero times, so crediting it
   after the loop accepted a value never consumed (`while c { if .. { defer free(h); return 1; }
   else { .. return 2; } } return 0;` and the same with a `match`; `error_149_diverging_branches_in_loop.con`,

@@ -104,7 +104,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 144: heap interiors linearity-tracked (E0290 / E0287).
   [144]="error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con error_144_heap_newtype_unwrap.con regress_144_heap_node_destructure.con"
   # Bug 145: vec_set / vec_free on non-Copy elements (E0291 / E0287).
-  [145]="error_145_vec_free_linear.con regress_145_vec_free_copy_param.con"
+  [145]="error_145_vec_free_linear.con regress_145_vec_free_copy_param.con regress_145_vec_free_nested_copy_param.con"
   # Bug 146: *h frees its cell (positive control; run_tests.sh also checks the emitted free).
   [146]="regress_146_heap_deref_frees.con regress_146_heap_deref_cast.con error_146_deref_heap_place_write.con error_146_deref_heap_field_read.con"
   # Bug 147: erased proof statements may not move runtime values (E0243).
@@ -112,7 +112,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 148: a move in the right operand of && / || (E0244).
   [148]="error_148_and_operand_consumes.con error_148_or_operand_consumes.con regress_148_short_circuit_reads.con"
   # Bug 149: exit paths account for owned values (E0207/E0208/E0210/E0211).
-  [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con"
+  [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

@@ -2200,6 +2200,9 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         let bVal ← lowerExpr valExpr
         let bVal ← coerceVal bVal info.resultTy "bcast."
         emit (.store bVal (.reg slot info.resultTy))
+      -- Bug 149 (Codex review): a statement loop has no result slot, but the checker credits the
+      -- break operand's moves, so it is still evaluated (`break free(h);`).
+      | some valExpr, none => let _ ← lowerExpr valExpr
       | _, _ => pure ()
       emitDeferredUntilLoop (← loopsExitedBy breakLabel)
       let vars ← snapshotVars

@@ -1754,6 +1754,7 @@ run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
 # fix, E0291).
 run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
 run_ok  "$TESTDIR/regress_145_vec_free_copy_param.con" "" 0
+run_ok  "$TESTDIR/regress_145_vec_free_nested_copy_param.con" "" 0
 # Bug 146: `*h` frees the cell it moves the value out of.
 run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0
 run_err "$TESTDIR/error_146_deref_heap_place_write.con" "(E0290)"
@@ -1854,6 +1855,16 @@ run_ok  "$TESTDIR/regress_149_both_branches_return.con" "" 1
 run_ok  "$TESTDIR/regress_149_cond_return_in_borrow.con" "" 1
 run_err "$TESTDIR/error_149_continue_in_exit_branch.con"        "(E0207)"
 run_ok  "$TESTDIR/regress_149_nested_loop_in_exit_branch.con" "" 0
+run_ok  "$TESTDIR/regress_149_break_value_statement_loop.con" "" 0
+run_err "$TESTDIR/error_149_break_value_non_copy.con"           "(E0287)"
+r149_ssa=$($COMPILER "$TESTDIR/regress_149_break_value_statement_loop.con" --emit-ssa 2>&1 || true)
+if [[ "$r149_ssa" == *"call void @free("* ]]; then
+    echo "  ok  regress_149_break_value_statement_loop.con: the break operand runs (emits @free)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_149_break_value_statement_loop.con: the break operand was not lowered"
+    FAIL=$((FAIL + 1))
+fi
 run_ok  "$TESTDIR/regress_146_heap_deref_cast.con" "42" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do

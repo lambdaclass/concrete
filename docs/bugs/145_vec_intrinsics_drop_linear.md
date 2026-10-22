@@ -49,7 +49,8 @@ Containment at the intrinsic: `vec_free` of a `Vec<T>` with non-Copy `T` is E028
 (`vecFreeDropsElements`) outside trusted code. A trusted function may release a buffer it has
 emptied (it vouches for that, as for any trusted operation); the builtin `Vec` has no other way to
 release an emptied buffer in a single-file program without std. Fixture `error_145_vec_free_linear.con` (`run_tests.sh`); the positive control
-`regress_145_vec_free_copy_param.con` (an inferred `vec_new::<T>()` with `T: Copy`). The `vec_set`
+`regress_145_vec_free_copy_param.con` and `regress_145_vec_free_nested_copy_param.con` (an
+inferred `vec_new::<T>()` / `vec_new::<[T; 1]>()` with `T: Copy`). The `vec_set`
 half: bug 115's fix (E0291, on main). Migration: 2 test files (`test_alloca_loop_stress.con`,
 `test_string_literal_in_loop.con` empty a `Vec<String>` and then release it through a trusted
 `free_emptied` helper).

@@ -73,6 +73,10 @@ structure VarInfo where
   -- Bug 149: the state a borrow block's owner had when the block froze it (read by the
   -- return check, which must see a pending `defer` through the freeze).
   frozenFrom : Option VarState := none
+  -- Bug 149: a `break value` moved this binding out of its loop (the H14 exemption): the only
+  -- outer-binding consumption inside a loop body that reaches the code after the loop. Kept on
+  -- the binding so it survives the branch and match merges.
+  movedByBreak : Bool := false
   deriving Repr
 
 structure TypeEnv where
@@ -112,9 +116,7 @@ structure TypeEnv where
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
-  -- Bug 149: bindings a `break value` moved out of the loop (the H14 exemption); the only
-  -- outer-binding consumption inside a loop body that reaches the code after the loop.
-  breakMoved : List Nat := []
+
   -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
   -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
   -- an id a sibling branch already used.

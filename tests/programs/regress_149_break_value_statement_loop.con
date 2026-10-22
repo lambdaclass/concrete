@@ -1,0 +1,10 @@
+// Bug 149 (Codex review): a `break value` in a statement loop (no result slot) still evaluates its
+// operand, whose moves the checker credits: `break free(h);` releases the cell (run_tests.sh checks
+// the emitted SSA calls @free). Exit 0.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(7);
+    while true {
+        break free(h);
+    }
+    return 0;
+}

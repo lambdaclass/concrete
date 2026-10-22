@@ -519,14 +519,26 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     `break value` moved it. Every other consumption of an outer binding inside the body is on a
     path that leaves the function (the loop-depth rule refuses the rest), and the loop may run
     zero times, so crediting it after the loop would accept a value that was never consumed. -/
-def restoreAfterLoop (before : TypeEnv) (movedByBreak : List Nat) : CheckM Unit := do
+def restoreAfterLoop (before : TypeEnv) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     match lookupByUid before.vars vi.uid with
     | some old =>
-      if old.state != vi.state && !movedByBreak.contains vi.uid then (n, { vi with state := old.state })
-      else (n, vi)
+      if old.state != vi.state && !(vi.movedByBreak && !old.movedByBreak) then (n, { vi with state := old.state })
+      else (n, { vi with movedByBreak := old.movedByBreak })
     | none => (n, vi) }
+
+/-- A named type that is one of the enclosing function's type parameters, read as that type
+    variable, at any depth (an inferred `vec_new::<[T; 1]>()` keeps `T` named; Codex review). -/
+partial def typeParamsAsVars (ps : List String) : Ty → Ty
+  | .named n => if ps.contains n then .typeVar n else .named n
+  | .ref t => .ref (typeParamsAsVars ps t)
+  | .refMut t => .refMut (typeParamsAsVars ps t)
+  | .ptrMut t => .ptrMut (typeParamsAsVars ps t)
+  | .ptrConst t => .ptrConst (typeParamsAsVars ps t)
+  | .array t n => .array (typeParamsAsVars ps t) n
+  | .generic name args caps => .generic name (args.map (typeParamsAsVars ps)) caps
+  | t => t
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
@@ -1155,9 +1167,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- An inferred `vec_new::<T>()` keeps `T` as a named type; read it as the enclosing
         -- function's type parameter so a `T: Copy` bound is seen (Codex review).
         let envT ← getEnv
-        let et := match et with
-          | .named n => if envT.currentTypeParams.contains n then Ty.typeVar n else et
-          | t => t
+        let et := typeParamsAsVars envT.currentTypeParams et
         if !(← isCopyType et) && !envT.currentFnTrusted then
           throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
       | _ => pure ()
@@ -1738,7 +1748,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | some vars =>
           let vars' := envBefore.vars.map fun (n, vi) =>
             match lookupByUid vars vi.uid with
-            | some info => (n, { vi with state := info.state })
+            | some info => (n, { vi with state := info.state, movedByBreak := info.movedByBreak })
             | none => (n, vi)
           setEnv { envBefore with vars := vars' }
         | none => setEnv envBefore
@@ -1871,7 +1881,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | some vars =>
         let vars' := envBefore.vars.map fun (n, vi) =>
           match lookupByUid vars vi.uid with
-          | some info => (n, { vi with state := info.state })
+          | some info => (n, { vi with state := info.state, movedByBreak := info.movedByBreak })
           | none => (n, vi)
         setEnv { envBefore with vars := vars' }
       | none => setEnv envBefore
@@ -2412,8 +2422,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
     -- Increment loop depth for the body, push label if present
     let env ← getEnv
-    let savedBreakMoved := env.breakMoved
-    modify fun e => { e with breakMoved := [] }
+
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
@@ -2424,8 +2433,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved, inFnExitingBranch := env0.inFnExitingBranch }
-    restoreAfterLoop env0 env'.breakMoved
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
+    restoreAfterLoop env0
   | .forLoop _ init cond step body lbl =>
     -- Init
     match init with
@@ -2439,8 +2448,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
     -- Body + step in loop scope, push label if present
     let env ← getEnv
-    let savedBreakMoved := env.breakMoved
-    modify fun e => { e with breakMoved := [] }
+
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
@@ -2453,8 +2461,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved, inFnExitingBranch := env0.inFnExitingBranch }
-    restoreAfterLoop env0 env'.breakMoved
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch }
+    restoreAfterLoop env0
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv
@@ -2747,13 +2755,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       setEnv { envB with breakConsumeExempt := true }
       let valTy ← checkExpr expr
       modify fun envA => { envA with breakConsumeExempt := envB.breakConsumeExempt }
+      -- Bug 149 (Codex review): loops are statements (value `while` was removed in 6D), so a
+      -- break value is evaluated and discarded; a non-Copy one would be dropped.
+      if !(← isCopyType valTy) then
+        throwCheck (.discardedLinear (tyToString valTy)) (some stmt.getSpan)
       -- Bug 149: remember what the break moved (see `restoreAfterLoop`).
       let envM ← getEnv
-      let moved := envM.vars.filterMap fun (_, vi) =>
+      setEnv { envM with vars := envM.vars.map fun (n, vi) =>
         match lookupByUid envB.vars vi.uid with
-        | some old => if old.state != .consumed && vi.state == .consumed then some vi.uid else none
-        | none => none
-      setEnv { envM with breakMoved := moved ++ envM.breakMoved }
+        | some old => if old.state != .consumed && vi.state == .consumed then (n, { vi with movedByBreak := true }) else (n, vi)
+        | none => (n, vi) }
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }

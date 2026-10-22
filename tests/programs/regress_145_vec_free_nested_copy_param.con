@@ -1,0 +1,10 @@
+// Bug 145 control (Codex review): an inferred vec_new::<[T; 1]>() with T: Copy may be released.
+fn f<T: Copy>() with(Alloc) {
+    let v = vec_new::<[T; 1]>();
+    vec_free(v);
+}
+
+fn main() with(Alloc) -> Int {
+    f::<Int>();
+    return 0;
+}
