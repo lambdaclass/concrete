@@ -16,7 +16,7 @@
 # Concrete/Check/ or Concrete/Elab/ AND add an E-code main does not have); then everything
 # else. Ties: smaller diff first, then name.
 #
-# SAFETY: one instance (lock dir with a live-pid check); state in a file, so a restart resumes a
+# SAFETY: one instance (flock, or a pid symlink on macOS); state in a file, so a restart resumes a
 # train that is in CI instead of dispatching again; `touch ~/.concrete-bot-paused` stops it before
 # the next stage; --dry-run changes nothing; main is pushed only by train.sh land (fast-forward,
 # never forced) to the primary and the mirror; a remote named `fork` is refused; every git

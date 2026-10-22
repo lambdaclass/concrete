@@ -65,9 +65,9 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 - **remote**: the full gate set (R-0541) through `LAND_REMOTE_RUNNER <ref> <command>`. The
   default runner is `~/bin/concrete-remote`; on the server it is `scripts/land/run-at-ref.sh`. A
   runner that fetches from origin first gets the head published under a ref unique to that run,
-  `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created without force and
-  deleted on exit with a lease on that SHA, so concurrent checks never share or delete each
-  other's refs. The run counts only if the runner reports
+  `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent (an
+  empty lease, with a fresh name on collision) and deleted on exit with a lease on that SHA, so
+  concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.
   Exit 0 means clean, and a published `findings` note at the head fails the leg. `--no-review`
@@ -224,9 +224,12 @@ when the head is ready.
 it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
 
 1. **Resume.** If the state file says a train is in CI, the bot watches that run instead of
-   dispatching again. The phase `dispatching` is written before the dispatch. A restart in
-   that phase, or a dispatch whose run could not be found, makes the bot look up the run at the
-   train's head SHA, and it dispatches again only if no such run exists. A train interrupted while it was being built or checked is discarded and
+   dispatching again. The phase `dispatching` is written, with its time, before the dispatch. A
+   restart in that phase, or a dispatch whose run could not be found, makes the bot look up the
+   run at the train's head SHA:
+   - a failed lookup (network, auth, bad JSON) is no answer, and the bot asks again next tick;
+   - an empty answer within `BOT_DISPATCH_GRACE` (900 s) of the dispatch waits;
+   - only an empty answer after that discards the train and dispatches again. A train interrupted while it was being built or checked is discarded and
    rebuilt. A `blocked` state waits for a human (`bot.sh status`, then `bot.sh reset`).
 2. **Auto-rebase** (below).
 3. **Collect and order.** It lists the ready heads (`bot.sh list` shows them with their keys):
@@ -258,21 +261,21 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
 **Safety.**
 
 - **One instance.** With `flock` (the Linux server), an OS lock is held for the whole run and
-  released by the kernel when the process dies. Without it (macOS), a lock directory holds the
-  owner's pid:
-  - a live owner, or a pid-less lock younger than 60 s (an instance that is starting), makes the
-    new instance exit 0;
-  - a dead owner's lock is taken over under a guard directory, which is held until the new pid is
-    written;
-  - a guard older than 60 s counts as a crashed takeover and is removed.
+  released by the kernel when the process dies. Without it (macOS), the lock is a symlink whose
+  target is the owner's pid, created atomically by `ln -s`, so no lock ever lacks an owner:
+  - a live owner makes the new instance exit 0;
+  - a dead owner's lock is taken over under a guard, itself a pid symlink;
+  - the taker re-reads the lock under the guard;
+  - a guard is removed only when its own owner is dead, never because of its age, since a
+    suspended taker is still live.
 - **State in a file.** `<git-common-dir>/concrete-landing/bot/bot.env` holds the phase, the train
   and the ejected heads. `events.tsv` beside it is the event log.
 - **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage:
   - no tick starts;
   - no train is checked and no CI is dispatched;
   - a green train waits in CI without landing;
-  - bisection stops between steps (`train.sh` reads `LAND_PAUSE_FILE`), and a red train in CI
-    waits there;
+  - bisection stops before the build, the check and the dispatch of every probe. `train.sh`
+    reads `LAND_PAUSE_FILE`, and a paused probe attributes nothing. A red train in CI waits there;
   - the rebase pass stops before the next branch, and a gated rebase is not pushed.
 
   Remove the file to resume; the train is picked up where it stopped.
@@ -371,13 +374,16 @@ exactly when the checkout contains `BAD`. It covers:
 - ordering: explicit first (including `order: 0800`, above the old fixed keys), then a new E-code
   under Check/Elab; reusing an existing code is not a rule change;
 - the dry run and the kill switch;
-- the locks: `flock` when installed; in mkdir mode, a live lock, a starting (pid-less) lock and a
-  dead lock, with a crashed takeover guard expired;
+- the locks: `flock` when installed; in symlink mode, a live lock, a live taker's guard that is
+  never expired, and a dead lock taken over;
+- the remote leg on a per-run `wip/land-*` ref that is gone afterwards;
 - a four-member train landing in order on both remotes, with fork untouched;
 - red-check and red-CI bisection that ejects exactly the culprit and lands the rest;
-- the kill switch stopping a bisection; a culprit-less bisection blocking the bot until `reset`;
+- the kill switch stopping a bisection before it starts, before the culprit probe, and between a
+  `--ci` probe's check and its dispatch; a culprit-less bisection blocking the bot until `reset`;
 - resuming a train held in CI without a second dispatch, and reconciling a `dispatching` restart
-  with the run at the train's head;
+  with the run at the train's head; a failed lookup and an empty one within the grace period keep
+  the train dispatching;
 - `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
   passing legs making a head ready;
 - the auto-rebase skip rules, a clean rebase with carried notes, and a conflict notified with its
