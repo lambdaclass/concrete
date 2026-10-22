@@ -11,8 +11,8 @@
 # path) or a project (its root directory with a trailing `/`, for the
 # `project-build` entries). Every unit needs run rules in the same manifest:
 #
-#   @run <unit> <case> exit=<N> interp=<mode> [ret=<V>] [stdin=<file>]
-#        [stdout=empty] [-- <args...>]
+#   @run <unit> <case> exit=<N> interp=<mode> oracle=<oracle> [ret=<V>]
+#        [stdin=<file>] [stdout=empty] [-- <args...>]
 #   @norun <unit> reason=<why>
 #
 # @run builds the unit, runs the binary in a scratch copy of the example
@@ -33,6 +33,25 @@
 # When it starts running the program, this gate fails until the rule is promoted
 # to interp=yes — a disagreement is never silently tolerated.
 #
+# oracle= says what independently checks the expected output (exit code and stdout). A golden
+# recorded from the binary's own output proves only that the output does not change: bug 121's
+# conlog golden blessed a wrong answer because the interpreter could not run conlog. So every
+# @run rule declares one of:
+#   oracle=interp               the interpreter agrees (requires interp=yes; enforced above);
+#   oracle=spec:<path>[#anchor] derived without the compiler: by hand from the program's
+#                               specification, or by an independent reference tool, with the
+#                               derivation recorded at <path> (a repository file; #anchor, when
+#                               given, must be one of its headings);
+#   oracle=unverified:<reason>  no independent check yet ('~' for spaces). Allowed only when the
+#                               interpreter does not run the case (interp=yes needs oracle=interp);
+#                               each one is a tracked gap: the gate lists them and prints the count.
+# A rule with no oracle, an unknown oracle, oracle=interp without interp=yes, a spec pointer that
+# does not resolve, or an unverified oracle without a reason FAILS.
+#
+# Timeouts are INCOMPLETE, not failures (scripts/tests/lib/bounded.sh): a native, interpreter or
+# reproducer run that exceeds its budget is re-run once alone with twice the budget; a second
+# timeout is reported INCOMPLETE and the gate exits nonzero without calling the case wrong.
+#
 # Coverage is fail-closed: a unit with no rule, a rule for an unknown unit, a
 # unit with both @run and @norun, a duplicate case, and an expected/*.stdout file
 # no rule uses all FAIL.
@@ -40,7 +59,10 @@
 # Negative controls (temporary manifest copies, one small unit) run at the end:
 # a wrong exit code, a wrong interpreter value, a wrong stdout, interp=fails on a
 # program the interpreter runs, a missing rule, interp=yes with args and an
-# inconsistent ret= must each FAIL; the real rule must pass.
+# inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
+# interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
+# pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
+# pass and be counted.
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
@@ -72,12 +94,35 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# shellcheck source=lib/bounded.sh
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
+export BOUNDED_LOG="$TMP/bounded.log"; : > "$BOUNDED_LOG"
 
 PASS=0
 FAIL=0
 NORUN=0
+INCOMPLETE=0
+ORACLE_INTERP=0
+ORACLE_SPEC=0
+UNVERIFIED=0
+unverified_list=""
+incomplete_list=""
 errors=""
 ok() { PASS=$((PASS + 1)); echo "  ok   $1"; }
+inc() { # a timed-out run: no observation, neither a pass nor a failure
+  INCOMPLETE=$((INCOMPLETE + 1))
+  incomplete_list="$incomplete_list\n  INCOMPLETE $1"
+  echo "  INCOMPLETE $1"
+}
+# spec_pointer_ok <path[#anchor]>: the file exists and, with an anchor, one of its headings has
+# that GitHub-style slug.
+spec_pointer_ok() {
+  local file="${1%%#*}" anchor=""
+  case "$1" in *"#"*) anchor="${1#*#}" ;; esac
+  [ -n "$file" ] && [ -f "$file" ] || return 1
+  [ -z "$anchor" ] && return 0
+  grep -E '^#+ ' "$file" | sed -E 's/^#+ +//' | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9 _-]//g; s/ /-/g' | grep -qxF -- "$anchor"
+}
 no() {
   FAIL=$((FAIL + 1))
   errors="$errors\n  FAIL $1"
@@ -185,7 +230,7 @@ while IFS= read -r line; do
   esac
   set -- $head_part
   u="$2"; case_name="${3:-}"; shift 3 2>/dev/null || true
-  exit_want=""; ret=""; stdin_rel=""; stdout_empty=0; interp=""
+  exit_want=""; ret=""; stdin_rel=""; stdout_empty=0; interp=""; oracle=""; oracle_kind=""
   for kv in "$@"; do
     case "$kv" in
       exit=*) exit_want="${kv#exit=}" ;;
@@ -193,6 +238,7 @@ while IFS= read -r line; do
       stdin=*) stdin_rel="${kv#stdin=}" ;;
       stdout=empty) stdout_empty=1 ;;
       interp=*) interp="${kv#interp=}" ;;
+      oracle=*) oracle="${kv#oracle=}" ;;
       *) no "$u/$case_name: unknown field '$kv'"; continue 2 ;;
     esac
   done
@@ -210,6 +256,32 @@ while IFS= read -r line; do
     no "$label: exit=$exit_want with interp=yes needs ret=<main's value> (only a Unit main exits 0 without one)"
     continue
   fi
+  # The golden's independent check (see the header).
+  case "$oracle" in
+    "")
+      no "$label: declares no oracle= (interp, spec:<path>[#anchor] or unverified:<reason>): an expected output counts only with an independent check"
+      continue ;;
+    interp)
+      if [ "$interp" != yes ]; then
+        no "$label: oracle=interp but interp=$interp: the interpreter does not check this golden; use oracle=spec:<pointer> or oracle=unverified:<reason>"
+        continue
+      fi
+      oracle_kind=interp ;;
+    spec:*)
+      if ! spec_pointer_ok "${oracle#spec:}"; then
+        no "$label: oracle=$oracle: the derivation pointer does not resolve (a repository file, and #anchor one of its headings)"
+        continue
+      fi
+      oracle_kind=spec ;;
+    unverified:*)
+      if [ -z "${oracle#unverified:}" ]; then no "$label: oracle=unverified: needs a reason"; continue; fi
+      if [ "$interp" = yes ]; then
+        no "$label: oracle=unverified but interp=yes: interpreter agreement is enforced, so declare oracle=interp"
+        continue
+      fi
+      oracle_kind=unverified ;;
+    *) no "$label: oracle=$oracle is not interp, spec:<pointer> or unverified:<reason>"; continue ;;
+  esac
   base=$(base_of "$u")
   exp="$base/expected/$case_name.stdout"
   if [ "$stdout_empty" = 1 ]; then
@@ -236,10 +308,14 @@ while IFS= read -r line; do
   in="/dev/null"; [ -n "$stdin_rel" ] && in="$work/$stdin_rel"
   # shellcheck disable=SC2086
   # A clean environment: examples that read it (envcfg) must not see the caller's.
-  (cd "$work" && env -i PATH="$PATH" LC_ALL=C timeout "$RUN_TIMEOUT" ${VG[@]+"${VG[@]}"} "$bin" $args < "$in" > "$TMP/nat_$n.out" 2> "$TMP/nat_$n.err")
+  (cd "$work" && bounded_run -i "$in" "$RUN_TIMEOUT" -- env -i PATH="$PATH" LC_ALL=C ${VG[@]+"${VG[@]}"} "$bin" $args > "$TMP/nat_$n.out" 2> "$TMP/nat_$n.err")
   rc=$?
   native_ok=1
-  if [ "${#VG[@]}" -gt 0 ] && [ "$rc" -eq 98 ] && [ "$exit_want" -ne 98 ]; then
+  if bounded_is_incomplete "$rc"; then
+    inc "$label: the native run timed out twice (${RUN_TIMEOUT}s, then alone): no observation"
+    rm -rf "$work"
+    continue
+  elif [ "${#VG[@]}" -gt 0 ] && [ "$rc" -eq 98 ] && [ "$exit_want" -ne 98 ]; then
     no "$label: valgrind reports a memory error in the native run"
     grep '^==' "$TMP/nat_$n.err" | awk 'NR<=12'
     native_ok=0
@@ -258,8 +334,12 @@ while IFS= read -r line; do
   # Interpreter.
   isrc="$u"; idir="."
   case "$u" in */) isrc="src/main.con"; idir="${u%/}" ;; esac
-  (cd "$idir" && env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C timeout "$INTERP_TIMEOUT" "$COMPILER" "$isrc" --interp < /dev/null > "$TMP/int_$n.out" 2> "$TMP/int_$n.err")
+  (cd "$idir" && bounded_run -i /dev/null "$INTERP_TIMEOUT" -- env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C "$COMPILER" "$isrc" --interp > "$TMP/int_$n.out" 2> "$TMP/int_$n.err")
   irc=$?
+  if bounded_is_incomplete "$irc"; then
+    inc "$label: the interpreter timed out twice (${INTERP_TIMEOUT}s, then alone): no observation"
+    continue
+  fi
   case "$interp" in
     yes)
       if [ -n "$args" ] || [ -n "$stdin_rel" ]; then
@@ -275,6 +355,7 @@ while IFS= read -r line; do
         no "$label: interpreter output differs (expected stdout + main's value)"
         diff "$TMP/int_$n.want" "$TMP/int_$n.out" | awk 'NR<=8'
       elif [ "$native_ok" = 1 ]; then
+        ORACLE_INTERP=$((ORACLE_INTERP + 1))
         ok "$label: native exit $exit_want + stdout, interpreter agrees"
       fi
       ;;
@@ -288,7 +369,14 @@ while IFS= read -r line; do
         no "$label: the interpreter fails, but not with '$marker':"
         cat "$TMP/int_$n.err" "$TMP/int_$n.out" | awk 'NR<=3'
       elif [ "$native_ok" = 1 ]; then
-        ok "$label: native exit $exit_want + stdout (interpreter: recorded failure '$marker')"
+        if [ "$oracle_kind" = spec ]; then
+          ORACLE_SPEC=$((ORACLE_SPEC + 1))
+          ok "$label: native exit $exit_want + stdout, derived at ${oracle#spec:} (interpreter: recorded failure '$marker')"
+        else
+          UNVERIFIED=$((UNVERIFIED + 1))
+          unverified_list="$unverified_list\n  unverified $label: ${oracle#unverified:}"
+          ok "$label: native exit $exit_want + stdout, UNVERIFIED golden (interpreter: recorded failure '$marker')"
+        fi
       fi
       ;;
     *) no "$label: interp=$interp is not yes or fails:<marker>" ;;
@@ -339,41 +427,47 @@ open_bug_reproducers() {
         ;;
       wrong-exit)
         if [ "$rc" -ne 0 ]; then no "$label is now rejected — fixed? update docs/bugs/$num, the corpus entry and this table"; continue; fi
-        timeout "$INTERP_TIMEOUT" "$TMP/bugrepro_$num" > /dev/null 2>&1 < /dev/null; rc=$?
-        # A timeout, a launch failure or a signal is not the recorded wrong value.
-        if [ "$rc" -ge 124 ]; then no "$label did not run to an exit (status $rc: timeout, launch failure or signal)"
+        bounded_run -i /dev/null "$INTERP_TIMEOUT" -- "$TMP/bugrepro_$num" > /dev/null 2>&1; rc=$?
+        # A timeout is INCOMPLETE; a launch failure or a signal is not the recorded wrong value.
+        if bounded_is_incomplete "$rc"; then inc "$label timed out twice: no observation"
+        elif [ "$rc" -ge 124 ]; then no "$label did not run to an exit (status $rc: launch failure or signal)"
         elif [ "$rc" -eq "$text" ]; then no "$label now exits $text, the correct value — fixed? update docs/bugs/$num, the corpus entry and this table"
         else ok "$label still exits $rc where $text is correct"; fi
         ;;
       runs-exit)
         # Wrong code: the binary builds and exits with the recorded WRONG status.
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
-        timeout "$RUN_TIMEOUT" "$TMP/bugrepro_$num" < /dev/null > /dev/null 2>&1; rc=$?
-        if [ "$rc" = "$text" ]; then ok "$label still exits $text (wrong code)"
+        bounded_run -i /dev/null "$RUN_TIMEOUT" -- "$TMP/bugrepro_$num" > /dev/null 2>&1; rc=$?
+        if bounded_is_incomplete "$rc"; then inc "$label timed out twice: no observation"
+        elif [ "$rc" = "$text" ]; then ok "$label still exits $text (wrong code)"
         else no "$label exits $rc, not the recorded wrong $text — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
         ;;
       signals)
         if [ "$rc" -ne 0 ]; then no "$label is now rejected — fixed? update docs/bugs/$num, the corpus entry and this table"; continue; fi
-        timeout "$RUN_TIMEOUT" "$TMP/bugrepro_$num" > /dev/null 2>&1 < /dev/null; rc=$?
-        # timeout(1) reports 124 for a timeout and 125 - 127 for a launch failure; a
+        bounded_run -i /dev/null "$RUN_TIMEOUT" -- "$TMP/bugrepro_$num" > /dev/null 2>&1; rc=$?
+        # timeout(1) reports 124 for a timeout (INCOMPLETE after the re-run alone) and 125 - 127
+        # for a launch failure; a
         # child killed by signal N is reported as 128 + N. A normal exit above 128 would
         # read the same, which is why a signals reproducer must exit below 128 when it
         # completes.
         if [ "$rc" -gt 128 ]; then ok "$label is still killed by a signal (status $rc)"
-        elif [ "$rc" -ge 124 ]; then no "$label did not run to completion or a signal (status $rc: timeout or launch failure)"
+        elif bounded_is_incomplete "$rc"; then inc "$label timed out twice: no observation"
+        elif [ "$rc" -ge 124 ]; then no "$label did not run to completion or a signal (status $rc: launch failure)"
         else no "$label now exits $rc without a signal — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
         ;;
       interp-prints)
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
-        out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
-        if [ "$rc" -ne 0 ]; then no "$label: the interpreter now fails (status $rc) instead of printing the recorded wrong '$text':"; printf '%s\n' "$out" | awk 'NR<=3'
+        out=$(bounded_run -i /dev/null "$INTERP_TIMEOUT" -- "$COMPILER" "$f" --interp 2>&1); rc=$?
+        if bounded_is_incomplete "$rc"; then inc "$label: the interpreter timed out twice: no observation"
+        elif [ "$rc" -ne 0 ]; then no "$label: the interpreter now fails (status $rc) instead of printing the recorded wrong '$text':"; printf '%s\n' "$out" | awk 'NR<=3'
         elif [ "$out" = "$text" ]; then ok "$label: the interpreter still prints the wrong '$text'"
         else no "$label: the interpreter prints '$out', not the recorded wrong '$text' — fixed? update docs/bugs/$num, the corpus entry and this table"; fi
         ;;
       interp-fails)
         if [ "$rc" -ne 0 ]; then no "$label no longer compiles natively:"; printf '%s\n' "$out" | awk 'NR<=3'; continue; fi
-        out=$(timeout "$INTERP_TIMEOUT" "$COMPILER" "$f" --interp 2>&1 < /dev/null); rc=$?
-        if [ "$rc" -eq 0 ]; then no "$label: the interpreter now runs it — fixed? update docs/bugs/$num, the corpus entry and this table"
+        out=$(bounded_run -i /dev/null "$INTERP_TIMEOUT" -- "$COMPILER" "$f" --interp 2>&1); rc=$?
+        if bounded_is_incomplete "$rc"; then inc "$label: the interpreter timed out twice: no observation"
+        elif [ "$rc" -eq 0 ]; then no "$label: the interpreter now runs it — fixed? update docs/bugs/$num, the corpus entry and this table"
         elif grep -qF -- "$text" <<< "$out"; then ok "$label: the interpreter still fails ('$text')"
         else no "$label: the interpreter fails differently than recorded ('$text'):"; printf '%s\n' "$out" | awk 'NR<=3'; fi
         ;;
@@ -416,20 +510,39 @@ run_controls() {
       grep FAIL "$dir/$name.log" | awk 'NR<=3'
     fi
   }
-  control wrong_exit "native exit 55, expected 54" "@run $unit fib exit=54 ret=54 interp=yes stdout=empty"
-  control wrong_interp_value "interpreter output differs" "@run $unit fib exit=55 ret=311 interp=yes stdout=empty"
-  control wrong_stdout "native stdout differs" "@run examples/hmac_sha256/src/main.con hmac exit=0 ret=0 interp=yes stdout=empty" "examples/hmac_sha256/src/main.con"
-  control interp_now_runs "promote the rule to interp=yes" "@run $unit fib exit=55 ret=55 interp=fails:undefined stdout=empty"
+  control wrong_exit "native exit 55, expected 54" "@run $unit fib exit=54 ret=54 interp=yes oracle=interp stdout=empty"
+  control wrong_interp_value "interpreter output differs" "@run $unit fib exit=55 ret=311 interp=yes oracle=interp stdout=empty"
+  control wrong_stdout "native stdout differs" "@run examples/hmac_sha256/src/main.con hmac exit=0 ret=0 interp=yes oracle=interp stdout=empty" "examples/hmac_sha256/src/main.con"
+  control interp_now_runs "promote the rule to interp=yes" "@run $unit fib exit=55 ret=55 interp=fails:undefined oracle=unverified:control stdout=empty"
   control missing_rule "has no @run or @norun rule" ""
-  control interp_with_args "interp=yes with args or stdin" "@run $unit fib exit=55 ret=55 interp=yes stdout=empty -- extra"
-  control inconsistent_ret "is inconsistent with exit=55" "@run $unit fib exit=55 ret=56 interp=yes stdout=empty"
+  control interp_with_args "interp=yes with args or stdin" "@run $unit fib exit=55 ret=55 interp=yes oracle=interp stdout=empty -- extra"
+  control inconsistent_ret "is inconsistent with exit=55" "@run $unit fib exit=55 ret=56 interp=yes oracle=interp stdout=empty"
   control norun_no_reason "has no reason=" "@norun $unit"
+  # Oracles: an expected output counts only with an independent check.
+  control no_oracle "declares no oracle=" "@run $unit fib exit=55 ret=55 interp=yes stdout=empty"
+  control unknown_oracle "is not interp, spec:<pointer> or unverified:<reason>" "@run $unit fib exit=55 ret=55 interp=yes oracle=binary stdout=empty"
+  control interp_oracle_without_interp "oracle=interp but interp=fails" "@run $unit fib exit=55 ret=55 interp=fails:undefined oracle=interp stdout=empty"
+  control unverified_but_interp_runs "so declare oracle=interp" "@run $unit fib exit=55 ret=55 interp=yes oracle=unverified:control stdout=empty"
+  control unverified_no_reason "oracle=unverified: needs a reason" "@run $unit fib exit=55 ret=55 interp=fails:undefined oracle=unverified: stdout=empty"
+  control spec_missing_file "the derivation pointer does not resolve" "@run $unit fib exit=55 ret=55 interp=yes oracle=spec:docs/no_such_derivation.md stdout=empty"
+  control spec_missing_heading "the derivation pointer does not resolve" "@run $unit fib exit=55 ret=55 interp=yes oracle=spec:docs/project/GOLDEN_ORACLES.md#no-such-heading stdout=empty"
   # Positive control: the real rule passes on its own.
   if EXAMPLE_OUTPUTS_ONLY="$unit" EXAMPLE_OUTPUTS_IS_CONTROL=1 bash "$0" > "$dir/positive.log" 2>&1; then
     echo "  ok   positive control: the real rule for $unit passes"; PASS=$((PASS + 1))
   else
     no "positive control: the real rule for $unit fails:"
     grep FAIL "$dir/positive.log" | awk 'NR<=3'
+  fi
+  # Positive control: a real unverified golden passes and is counted, not hidden.
+  local uunit="examples/snippets/constants.con"
+  if ! grep -qE "^@run $uunit .*oracle=unverified:" "$MANIFEST"; then
+    no "positive control: $uunit no longer has an unverified rule; point this control at one that does"
+  elif EXAMPLE_OUTPUTS_ONLY="$uunit" EXAMPLE_OUTPUTS_IS_CONTROL=1 bash "$0" > "$dir/positive_unverified.log" 2>&1 \
+       && grep -qF "1 unverified" "$dir/positive_unverified.log" && grep -qF "unverified $uunit" "$dir/positive_unverified.log"; then
+    echo "  ok   positive control: the unverified rule for $uunit passes and is counted and listed"; PASS=$((PASS + 1))
+  else
+    no "positive control: the unverified rule for $uunit fails or is not counted:"
+    grep -E 'FAIL|unverified' "$dir/positive_unverified.log" | awk 'NR<=3'
   fi
 }
 if [ "${EXAMPLE_OUTPUTS_IS_CONTROL:-0}" != 1 ]; then
@@ -438,8 +551,15 @@ if [ "${EXAMPLE_OUTPUTS_IS_CONTROL:-0}" != 1 ]; then
 fi
 
 echo ""
-echo "=== Example outputs: $PASS passed, $FAIL failed, $NORUN units not run (each with a reason) ==="
+recovered=$(grep -c '^recovered' "$BOUNDED_LOG" || true)
+echo "=== Example outputs: $PASS passed, $FAIL failed, $INCOMPLETE incomplete (timed out twice; $recovered recovered on the re-run alone), $NORUN units not run (each with a reason) ==="
+echo "=== Golden oracles: $ORACLE_INTERP checked by the interpreter, $ORACLE_SPEC derived from a specification, $UNVERIFIED unverified (tracked gaps) ==="
+[ "$UNVERIFIED" -gt 0 ] && echo -e "Unverified goldens (no independent check yet):$unverified_list"
+if [ "$INCOMPLETE" -gt 0 ]; then
+  echo -e "Incomplete (not passed, not failed; a qualifying run contains none):$incomplete_list"
+fi
 if [ "$FAIL" -gt 0 ]; then
   echo -e "Failures:$errors"
   exit 1
 fi
+[ "$INCOMPLETE" -eq 0 ] || exit 1
