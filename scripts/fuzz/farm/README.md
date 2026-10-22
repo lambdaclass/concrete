@@ -96,7 +96,7 @@ The farm must never slow CI (gha1..6 runner services in `system.slice`) or the g
 | `MemoryHigh` / `MemoryMax` / swap | 56G / 64G / 0 | reclaim pressure first, then OOM inside the slice only |
 | `TasksMax` | 8192 | |
 | workers | 40 in production, 4 in smoke mode | each worker is mostly one compiler process plus clang |
-| pause rule | pause when non-farm CPU use is above 8 cores (busy time from `/proc/stat` minus the slice's `cpu.stat`), or load1 is above 48. Resume after 4 consecutive 15 s samples under 4 cores | campaigns sleep. An in-flight case finishes, which takes seconds |
+| pause rule | pause when non-farm CPU use is above 16 cores (25 %; busy time from `/proc/stat` minus the slice's `cpu.stat`), or load1 is above 96 (a backstop only: load1 counts the farm's own workers). Resume after 4 consecutive 15 s samples under 8 cores | campaigns and minimizers sleep. An in-flight case finishes, which takes seconds |
 
 Stop and start:
 

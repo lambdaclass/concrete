@@ -432,8 +432,10 @@ def balanced_end(s, i, open_ch, close_ch):
     return -1
 
 
-def line_variants(line):
-    """Smaller rewrites of one line: drop a statement, take one if-arm, shrink a group."""
+def line_variants(line, token_drops=False):
+    """Smaller rewrites of one line: drop a statement, take one if-arm, shrink a group.
+    Single-token drops only with token_drops (crash class): for a refusal they manufacture the
+    same diagnostic from a different cause (dropping `mut` reproduces E0217 on any program)."""
     out = []
     indent = line[:len(line) - len(line.lstrip())]
     body = line.strip()
@@ -476,7 +478,7 @@ def line_variants(line):
     for m in re.finditer(r"\b[2-9]\d*\b", body):  # literals -> 1
         out.append(indent + body[:m.start()] + "1" + body[m.end():])
     toks = TOKEN_RE.findall(body)
-    if len(toks) <= 60:  # last resort: drop single tokens (mutated/unparseable lines)
+    if token_drops and len(toks) <= 60:  # last resort: drop single tokens (mutated/unparseable lines)
         for i in range(len(toks)):
             out.append(indent + " ".join(toks[:i] + toks[i + 1:]))
     seen, uniq = set(), []
@@ -531,7 +533,7 @@ def ddmin_lines(units, test, budget):
     return units
 
 
-def minimize_text(src, holds, budget):
+def minimize_text(src, holds, budget, token_drops=False):
     """Generic delta reduction of a program: lines, then intra-line rewrites, to fixpoint."""
     units = src.split("\n")
     test = lambda us: holds("\n".join(us))
@@ -544,7 +546,7 @@ def minimize_text(src, holds, budget):
             progress = True
             while progress and budget.ok() and i < len(units):
                 progress = False
-                for v in line_variants(units[i]):
+                for v in line_variants(units[i], token_drops):
                     if not budget.ok():
                         break
                     cand = units[:i] + ([v] if v.strip() else []) + units[i + 1:]
@@ -660,10 +662,12 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
 
             out, _ = minimize_lin(split, holds, holds_ok, budget)
             return out, budget.tests
-        out = minimize_text(case["src"], holds, budget)
+        out = minimize_text(case["src"], holds, budget, res.cls == "crash")
         return out, budget.tests
     src = case["src"]
-    if use_lean and oracle == "diff":
+    # The AST reducer rewrites freely; a refusal's diagnostic is too easy to re-create from a
+    # different cause, so refusals use only the statement-level passes.
+    if use_lean and oracle == "diff" and res.cls != "refusal":
         meta = os.path.join(wd, "pred_meta.json")
         save_json(meta, {"oracle": oracle, "params": params, "presig": target,
                          "compiler": compiler})
@@ -671,7 +675,7 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
                           max(1, min(seconds / 2, 600, budget.deadline - time.time())))
         if red and len(red) < len(src) and holds(red):
             src = red
-    return minimize_text(src, holds, budget), budget.tests
+    return minimize_text(src, holds, budget, res.cls == "crash"), budget.tests
 
 
 # --------------------------------------------------------------------------- findings store

@@ -16,8 +16,8 @@
 #
 # Resource policy (see README.md): the slice has CPUWeight=1, IOWeight=1, CPUQuota=4800%
 # (75% of 64 threads), MemoryHigh=56G, MemoryMax=64G, no swap; services run SCHED_IDLE,
-# Nice=19, IOSchedulingClass=idle; the loop pauses while non-farm CPU use > 8 cores or
-# load1 > 48. Smoke mode overrides at runtime: WORKERS=4, CPUQuota=800%, a fixed window.
+# Nice=19, IOSchedulingClass=idle; the loop pauses while non-farm CPU use > 16 cores (or
+# load1 > 96, a backstop: load1 includes the farm itself). Smoke mode overrides at runtime: WORKERS=4, CPUQuota=800%, a fixed window.
 #
 # Stop / start:
 #   sudo systemctl stop fuzz-farm.service fuzz-farm-track.timer      # stop everything
@@ -79,9 +79,9 @@ MIN_SECONDS=900
 GENERATORS=diff,lin,mut
 BATCH=40
 SMOKE_SECONDS=$SMOKE_SECONDS
-PAUSE_OTHER_CORES=8
-RESUME_OTHER_CORES=4
-PAUSE_LOAD=48
+PAUSE_OTHER_CORES=16
+RESUME_OTHER_CORES=8
+PAUSE_LOAD=96
 FARM_PUBLIC=/srv/fuzz-farm
 EOF
 chmod 644 /etc/fuzz-farm.conf
