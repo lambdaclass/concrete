@@ -10,7 +10,9 @@ independently replayable ([verified-compiler decision](#decisions), [product nor
 **Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
 079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since
 2026-10-19 found bugs 102 – 120 in about two days, nearly all of them new instances of the recurring
-[structural classes](docs/bugs/STRUCTURAL_CLASSES.md): point repairs are not converging, which is why
+[structural classes](docs/bugs/STRUCTURAL_CLASSES.md): point repairs are not converging (the
+[bug dashboard](#bug-dashboard)'s discovery-rate signal measures this, and Phase 1 exit 2m closes
+only when three consecutive probe batches find about nothing), which is why
 the [priority decision of 2026-10-21](#decisions) makes the verified compiler's structural work the
 primary track. The next release is the experimental systems preview; its
 [blockers](#next-release-blockers) are listed under [Releases](#releases). Fixes implemented on
@@ -252,7 +254,13 @@ obligations, including exit 2c's repairs of loud failures.
 **Example rule.** Every example has a gate: besides its entry in `scripts/tests/example_manifest.txt`, a
 new example has a gate leg that asserts its behaviour (expected output and exit status, an expected
 rejection with its diagnostic code, or its claims' statuses); a compile-only manifest entry does not
-count, and there are no ungated demos. New examples are workload-driven and targeted: each serves a bug
+count, and there are no ungated demos. An expected output counts only with an independent check:
+every `@run` rule declares its oracle — `interp` (the interpreter agrees, enforced on every run),
+`spec:<pointer>` (derived by hand from the program's specification or by a reference tool, the
+derivation recorded at the pointer, [GOLDEN_ORACLES.md](docs/project/GOLDEN_ORACLES.md)) or
+`unverified:<reason>` (a tracked gap the gate counts and lists); `check_example_outputs.sh` fails on an
+undeclared oracle. A golden copied from the binary's own output checks nothing: bug 121's `conlog`
+golden blessed a miscompiled answer. New examples are workload-driven and targeted: each serves a bug
 class (R-0491's [adversarial example suite](#task-r-0491)), an upcoming deliverable (the
 [RocksDB slice 1 companions](#task-r-0285), [V1a's target programs](#task-r-0511)) or an application
 workload (R-0490). All example work follows R-0135's lifecycle and owner policy: user-facing examples
@@ -305,7 +313,7 @@ agree with the classes.
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
 | 2b | R-0491 | permanent reproducer controls for 080 – 101: each bug has a checked-in record, reproducer, expected outcome and pre-fix/fixed SHA pair | each assigned control fails at its pre-fix SHA and passes at its fix; `check_bug_filing_complete.sh` and `audit_bug_corpus.sh` fail on a missing inventory entry | continues alongside | the reproducers already block as gate legs under 0a and 0b; this exit proves each one load-bearing |
-| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes; and closing the loud failures that keep valid examples out of the interpreter/native comparison (108 – 110, 112, 114, 116, 124, 130, 134, and interpreter gaps 117 – 120); permanent differential legs for struct- and enum-literal field order, functional-update evaluation, assignment order and integer → float conversion ([2026-10-21 semantics decisions](#decisions)) | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims; each bug assigned to this exit (108 – 110, 112, 114, 116, 117 – 120, 124, 130, 134) has its reproducer permanently checking the corrected expected outcome, and the bug ledger records each fixed on main | continues alongside | prevention plus repairs of loud compilation/link failures and interpreter gaps, without a demonstrated authority or safety defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
+| 2c | R-0491 | the prevention harness (S1): the extracted model, then Core's semantics, as a third side of the differential fuzzer over every shape that broke, outcomes classified and never skipped, and model-diff for zero-argument, `bool` and aggregate signatures plus a binary leg with a pinned claimed-function inventory; and the adversarial example suite for today's bug classes; and closing the loud failures that keep valid examples out of the interpreter/native comparison (108 – 110, 112, 114, 116, 124, 130, 134, and interpreter gaps 117 – 120); permanent differential legs for struct- and enum-literal field order, functional-update evaluation, assignment order and integer → float conversion ([2026-10-21 semantics decisions](#decisions)); and every example golden independently checked: each `@run` rule declares its oracle (`interp`, `spec:<pointer>` or `unverified:<reason>`, [GOLDEN_ORACLES.md](docs/project/GOLDEN_ORACLES.md)), and the unverified goldens the interpreter gaps leave are retired by interpreter agreement or a recorded derivation | R-0491's detection map: the deterministic differential suite detects 080 and 084 – 088, name-binding controls 081 – 082, evidence and cross-surface controls 083 and 089, checker mutants 090 – 094 and the binary leg 095 (`check_model_diff.sh`, `fuzz_differential.py`); and each of the eight examples of R-0491's [adversarial example suite](#task-r-0491) (`linear_flow`, `generic_destroy`, `nested_names`, `import_aliases`, `casts_widths`, `mut_receivers`, `match_and_fnptrs`, `statement_sequencing`) passes its own leg of `scripts/tests/check_adversarial_examples.sh` (new, in the full gate set), comparing interpreter output, native output and the expected output, plus the proof model and claim statuses where the example carries claims; each bug assigned to this exit (108 – 110, 112, 114, 116, 117 – 120, 124, 130, 134) has its reproducer permanently checking the corrected expected outcome, and the bug ledger records each fixed on main; `check_example_outputs.sh` fails on an undeclared oracle (with negative controls) and reports zero unverified goldens | continues alongside | prevention plus repairs of loud compilation/link failures and interpreter gaps, without a demonstrated authority or safety defect; the generator coverage 2i – 2k need is part of their own acceptance; the examples add prevention coverage, while existing repairs and containment controls keep their owners and acceptance; a defect an example newly reproduces enters the queue under the entry rule, as a new row-0 exit when it is an authority or safety defect |
 | 2d | R-0513 | checked inventories replace incidental count pins: every expected claim and comparison is accounted for, exclusions carry reasons, and missing entries, skipped work or unexpected eligibility shrinkage fail | adding a legitimate proved example needs no incidental count edit; controls with a deleted inventory entry, a disabled generator, an empty suite and altered eligibility each fail | continues alongside | gate affordability; no reproduced soundness defect |
 | 2e | R-0513, R-0491 | minimum completed comparisons by semantic feature, with permanent positive and negative controls | every generated feature has a pinned minimum completed-comparison count, and a run below it fails | continues alongside | prevention; no reproduced defect |
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
@@ -479,8 +487,10 @@ why the difference cannot affect it.
   `check_example_outputs.sh`, `check_callable_values.sh`, `check_hashmap_probe_invariants.sh`,
   `check_model_diff.sh` and `run_tests.sh`'s project fixtures, and as the watchdog wrapper of the
   gates that bound single commands; `test_ssa.sh` applies the same rule to its parallel 5-second
-  alarms (re-run alone with 30 s). Fuzzers are the exception by design: a hang on a generated input
-  is their finding, triaged like a crash;
+  alarms (re-run alone with 30 s). In the watchdog-form gates a second timeout still fails the
+  wrapped command, so their own tally counts it among their failures while the log line says
+  `INCOMPLETE`; R-0513 owns moving them to per-check accounting. Fuzzers are the exception by
+  design: a hang on a generated input is their finding, triaged like a crash;
 - **skipped**: deliberately not run, with a recorded reason (a platform without the tool, an opt-in
   leg);
 - **cancelled**: the run was stopped from outside (a superseded CI run).
@@ -2771,6 +2781,19 @@ name-binding controls detect 081 – 082; evidence and cross-surface controls de
 checker mutants detect 090 – 094; the binary leg detects 095. Each assigned control fails at its
 pre-fix SHA and passes at its fix; generated features have pinned minimum completed-comparison
 counts; missing inventory entries fail. The adversarial example suite below passes every leg (exit 2c).
+
+**Independent golden oracles (exit 2c; 2026-10-22).** An expected output is evidence only when
+something other than the compiler under test agrees with it. Bug 121's `conlog` golden was recorded
+from the miscompiled binary and blessed its wrong count, because the interpreter could not run
+`conlog` and nothing else checked it. Every `@run` rule of `scripts/tests/example_manifest.txt`
+therefore declares its oracle, enforced by `check_example_outputs.sh` with negative controls:
+`interp` (interpreter agreement, which requires `interp=yes`), `spec:<path>[#anchor]` (a hand
+derivation from the program's specification or a reference tool's output, recorded in
+[GOLDEN_ORACLES.md](docs/project/GOLDEN_ORACLES.md)), or `unverified:<reason>` (allowed only when the
+interpreter does not run the case). The gate prints the number of unverified goldens and lists
+them; each one is a tracked gap, retired by an interpreter repair (exit 2c's interpreter gaps,
+projects that import `std` modules, argv) or a recorded derivation. The same rule applies to the
+adversarial examples below and to every new expected result.
 
 **Adversarial example suite (exit 2c; 2026-10-20; planned).** Phase 7's workloads (`base64_cli`,
 `png_chunks`, `wordfreq`, `httpget`, `tcpserve`) and interpreter-vs-compiled probing found many of the
