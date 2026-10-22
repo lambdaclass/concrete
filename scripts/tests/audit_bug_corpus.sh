@@ -104,7 +104,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 144: heap interiors linearity-tracked (E0290 / E0287).
   [144]="error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con error_144_heap_newtype_unwrap.con regress_144_heap_node_destructure.con"
   # Bug 145: vec_set / vec_free on non-Copy elements (E0291 / E0287).
-  [145]="error_145_vec_free_linear.con"
+  [145]="error_145_vec_free_linear.con regress_145_vec_free_copy_param.con"
   # Bug 146: *h frees its cell (positive control; run_tests.sh also checks the emitted free).
   [146]="regress_146_heap_deref_frees.con regress_146_heap_deref_cast.con error_146_deref_heap_place_write.con error_146_deref_heap_field_read.con"
   # Bug 147: erased proof statements may not move runtime values (E0243).

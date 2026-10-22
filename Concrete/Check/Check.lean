@@ -1152,7 +1152,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- trusted function may still release a buffer it has emptied (it vouches for that).
       match vecTy with
       | .generic "Vec" [et] _ =>
-        if !(← isCopyType et) && !(← getEnv).currentFnTrusted then
+        -- An inferred `vec_new::<T>()` keeps `T` as a named type; read it as the enclosing
+        -- function's type parameter so a `T: Copy` bound is seen (Codex review).
+        let envT ← getEnv
+        let et := match et with
+          | .named n => if envT.currentTypeParams.contains n then Ty.typeVar n else et
+          | t => t
+        if !(← isCopyType et) && !envT.currentFnTrusted then
           throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
       | _ => pure ()
       match vecArg with

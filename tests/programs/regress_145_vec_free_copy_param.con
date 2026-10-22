@@ -1,0 +1,11 @@
+// Bug 145 control (Codex review): vec_free of a Vec<T> with a Copy-bounded T is legal, also when
+// the vector's type is inferred from vec_new::<T>().
+fn f<T: Copy>() with(Alloc) {
+    let v = vec_new::<T>();
+    vec_free(v);
+}
+
+fn main() with(Alloc) -> Int {
+    f::<Int>();
+    return 0;
+}
