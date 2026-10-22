@@ -83,6 +83,9 @@ REF-6	tests/programs/error_2i_ref6_erased_assert_assign.con	reject:E0303:REF-6@1
 REF-6	tests/programs/error_2i_ref6_ghost_initializer_let.con	reject:E0302:REF-6@1	ref6-generic	-
 REF-6	tests/programs/regress_2i_ref6_ghost_ptr_and_fn_types.con	run:42	ref6-generic	binary,interp
 REF-6	tests/programs/regress_2i_value_block_destructure.con	run:42	ref6-let-else	binary,interp,fmt
+REF-6	tests/programs/error_2i_ref6_const_initializer.con	reject:E0302:REF-6@1	const-init	-
+SCOPE-1	tests/programs/error_2i_scope1_const_initializer.con	reject:E0301:SCOPE-1@1	const-init	-
+SCOPE-1	tests/programs/regress_2i_const_initializer_block.con	run:42	const-init	binary,interp-exempt:bug-117-the-interpreter-has-no-module-constants
 REF-6	tests/programs/error_2i_ref6_mut_param_repointed.con	reject:E0303:REF-6@1	ref6-write	-
 REF-6	tests/programs/regress_2i_ref6_write_through_param.con	run:42	ref6-write	binary,interp
 REF-7	tests/programs/error_091_norm_ref_write_through_ref.con	reject:E0238:REF-7@1	ref7	-

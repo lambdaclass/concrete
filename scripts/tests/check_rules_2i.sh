@@ -70,7 +70,8 @@ declare -A SPEC_RULES=(
 validate_manifest() {
   local m="$1" bad=0 rule fixture expected pair modes
   local rejects runs
-  while IFS=$'\t' read -r rule fixture expected pair modes; do
+  # `|| [ -n "$rule" ]`: a final row without a newline is read too (read fails on it)
+  while IFS=$'\t' read -r rule fixture expected pair modes || [ -n "$rule" ]; do
     [ -z "$rule" ] && continue
     case "$rule" in \#*) continue ;; esac
     if [ ! -e "$fixture" ]; then echo "    defect: $rule row names a missing fixture '$fixture'"; bad=1; fi
@@ -237,7 +238,8 @@ check_run() {
 
 run_manifest_rows() {  # execute every row of manifest $1; prints FAIL lines; returns failures count
   local m="$1" n=0 rule fixture expected pair modes code tag
-  while IFS=$'\t' read -r rule fixture expected pair modes; do
+  # `|| [ -n "$rule" ]`: a final row without a newline is read too (read fails on it)
+  while IFS=$'\t' read -r rule fixture expected pair modes || [ -n "$rule" ]; do
     [ -z "$rule" ] && continue
     case "$rule" in \#*) continue ;; esac
     [ -e "$fixture" ] || continue
@@ -307,6 +309,13 @@ SIDECAR_SAVE="$SIDECAR"; SIDECAR="$TMP/badside.tsv"
 check_run SCOPE-3 tests/programs/regress_2i_scope1_087_renamed.con 42 model:087-bad > /dev/null \
   && no "N4e: a malformed negative model pattern passed" || ok "N4e: a malformed negative model pattern fails the row"
 SIDECAR="$SIDECAR_SAVE"
+# N4f: a wrong final row with no trailing newline must still be executed (and fail).
+{ cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
+n4f_fail=$FAIL; n4f_pass=$PASS
+run_manifest_rows "$TMP/n4f.tsv" > "$TMP/n4f.out" 2>&1
+FAIL=$n4f_fail; PASS=$n4f_pass
+grep -q "FAIL G4 run tests/programs/regress_2i_renamed_pattern_binder.con = 41" "$TMP/n4f.out" \
+  && ok "N4f: an unterminated final manifest row is still checked" || no "N4f: an unterminated final row was skipped"
 # N5-N8: execution. Wrong expectations on real fixtures must fail the row checks.
 check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@1 - > /dev/null \
   && no "N5: a wrong rule tag was accepted" || ok "N5: a reject row expecting the wrong rule tag fails"

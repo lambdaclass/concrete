@@ -7970,6 +7970,9 @@ run_err "$TESTDIR/error_2i_ref6_erased_assert_assign.con" "(E0303)"
 run_err "$TESTDIR/error_2i_ref6_ghost_initializer_let.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_ref6_ghost_ptr_and_fn_types.con" 42
 run_ok "$TESTDIR/regress_2i_value_block_destructure.con" 42
+run_err "$TESTDIR/error_2i_scope1_const_initializer.con" "(E0301)"
+run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).

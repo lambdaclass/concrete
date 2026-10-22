@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-1@1: a constant initializer's block reuses a visible local name. Constant
+// initializers are not checked by checkFn, so the lexical walk runs over them separately (exit 2i
+// review). Rejected: E0301.
+const X: i32 = if true {
+    let a: i32 = 1;
+    let a: i32 = 42;
+    a
+} else { 0 };
+
+fn main() -> i32 {
+    return X;
+}

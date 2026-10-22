@@ -1140,6 +1140,9 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
   and region names), so E0301 reports before E0292 and E0238, which stay as defense in depth. Every collision of a function is reported, each with the earlier binding as the related span.
   The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
+  Constant initializers, which `checkFn` never visits, get the same walk (`constInitDiagnostics`),
+  with a syntactic REF-6 test (a `let` declared with or initialized by a borrow, an assignment of
+  a borrow): a constant has no parameters, so no other reference binding can arise in it.
   Fixtures: the twelve `error_2i_scope1_*.con` with their `_renamed` twins, and the 087 / 093 / 094
   / 107 shadowing fixtures and `error_borrow_shadow.con`, all rows of `tests/rules/exit_2i.tsv`
   (the two 107 fixtures report E0301, not E0302: the SCOPE-1 walk runs before any statement is
@@ -1315,7 +1318,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 139 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 142 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a

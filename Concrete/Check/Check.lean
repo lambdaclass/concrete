@@ -2869,6 +2869,69 @@ partial def scope1Stmt (vis : List ScopeBinder) : Stmt → Scope1M (List ScopeBi
     pure v
 end
 
+/-! ### Constant initializers (exit 2i review)
+
+A module constant's initializer is not run through `checkFn` (Elab elaborates it directly), so its
+local binders get the two source rules here: SCOPE-1 by the same lexical walk, and REF-6 by a
+syntactic test — a constant is a value with no parameters, so the only way a reference binding
+can arise inside it is a `let` declared with, or initialized by a borrow to, a reference type, and
+the only way to re-point one is an assignment of a borrow. -/
+
+private def isRefTySyn : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | _ => false
+
+private def isBorrowExpr : Expr → Bool
+  | .borrow _ _ | .borrowMut _ _ => true
+  | .paren _ e => isBorrowExpr e
+  | _ => false
+
+private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
+  { severity := .error, message := e.message, pass := "check", span := some sp, hint := e.hint,
+    code := e.code, evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
+
+mutual
+private partial def constRef6Expr : Expr → List Diagnostic
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => constRef6Expr l ++ constRef6Expr r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => constRef6Expr x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap constRef6Expr
+  | .methodCall _ o _ _ args => constRef6Expr o ++ args.flatMap constRef6Expr
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => constRef6Expr e) ++ (b.map constRef6Expr).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => constRef6Expr e)
+  | .match_ _ s arms => constRef6Expr s ++ arms.flatMap constRef6Arm
+  | .ifExpr _ c t e => constRef6Expr c ++ constRef6Stmts t ++ constRef6Stmts e
+  | _ => []
+private partial def constRef6Arm : MatchArm → List Diagnostic
+  | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
+    (g.map constRef6Expr).getD [] ++ constRef6Stmts b
+private partial def constRef6Stmts (ss : List Stmt) : List Diagnostic := ss.flatMap constRef6Stmt
+private partial def constRef6Stmt : Stmt → List Diagnostic
+  | .letDecl sp n _ ty v _ =>
+    constRef6Expr v ++
+      (if (ty.map isRefTySyn).getD false || isBorrowExpr v then
+        [ref6Diag (.letBindsReference n (match ty with | some t => tyToString t | none => "a reference")) sp]
+      else [])
+  | .assign sp n v =>
+    constRef6Expr v ++ (if isBorrowExpr v then [ref6Diag (.assignsReferenceBinding n "a reference") sp] else [])
+  | .return_ _ v | .break_ _ v _ => (v.map constRef6Expr).getD []
+  | .expr _ e _ | .defer _ e | .assert_ _ e | .assume_ _ e => constRef6Expr e
+  | .ifElse _ c t e => constRef6Expr c ++ constRef6Stmts t ++ ((e.map constRef6Stmts).getD [])
+  | .while_ _ c b _ => constRef6Expr c ++ constRef6Stmts b
+  | .forLoop _ i c st b _ =>
+    ((i.map constRef6Stmt).getD []) ++ constRef6Expr c ++ ((st.map constRef6Stmt).getD []) ++ constRef6Stmts b
+  | .fieldAssign _ o _ v | .derefAssign _ o v => constRef6Expr o ++ constRef6Expr v
+  | .arrayIndexAssign _ a i v => constRef6Expr a ++ constRef6Expr i ++ constRef6Expr v
+  | .borrowIn _ _ _ _ _ b => constRef6Stmts b
+  | .letDestructure _ _ _ _ v e => constRef6Expr v ++ ((e.map constRef6Stmts).getD [])
+  | .letStructDestructure _ _ _ v => constRef6Expr v
+  | .continue_ _ _ => []
+end
+
+/-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
+def constInitDiagnostics (c : ConstDef) : List Diagnostic :=
+  ((scope1Expr [] c.value).run []).2 ++ constRef6Expr c.value
+
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
 def scope1Diagnostics (f : FnDef) : List Diagnostic :=
@@ -3258,6 +3321,10 @@ def checkModule (m : Module) (summary : FileSummary)
               code := CheckError.code (.refStoredInAggregate desc (tyToString ty)),
               evidence := ruleEvidence (some "REF-3@1"), nextAction := ruleNextAction "REF-3@1" }]
   | none =>
+  -- SCOPE-1@1 / REF-6@1 inside constant initializers, which checkFn never visits (exit 2i review)
+  match m.constants.flatMap constInitDiagnostics with
+  | d :: ds => .error (d :: ds)
+  | [] =>
   -- A `spec fn` with a DEFINITIONAL body must have that body checked. The body-less form has
   -- nothing to check, so nothing did -- and when bodies were added, a spec could reference an
   -- undeclared variable or a nonexistent function and be accepted silently. The refinement tier

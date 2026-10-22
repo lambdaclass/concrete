@@ -843,6 +843,7 @@ end
 partial def desugarModule (m : Module) : Module :=
   { m with
     functions := m.functions.map fun f => { f with body := desugarStmts f.body }
+    constants := m.constants.map fun c => { c with value := desugarExpr c.value }
     -- Methods too (found by exit 2i's review): a `let ... else` / irrefutable enum destructure
     -- in an impl or trait-impl method was left undesugared, so Check skipped it and the binders
     -- were undeclared (E0201) — and REF-6@1's destructuring-let check never saw it.
