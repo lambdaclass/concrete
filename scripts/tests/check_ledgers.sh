@@ -150,6 +150,9 @@ neg readme_markers_missing docs/bugs/README.md "old='<!-- END GENERATED: bug lis
 neg class_markers_missing docs/bugs/STRUCTURAL_CLASSES.md "old='<!-- END GENERATED: class table -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
 neg summary_restates_status "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: OPEN: control record')" 2
 neg coverage_restates_status "$R" "old='coverage: control'; assert s.count(old)==1; s=s.replace(old, 'coverage: FIXED -- control')" 2
+neg summary_lowercase_status_lead "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: Contained: control record')" 2
+neg coverage_lowercase_status_lead "$R" "old='coverage: control'; assert s.count(old)==1; s=s.replace(old, 'coverage: Fixed -- control')" 2
+neg summary_status_midtext "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control record (OPEN since 2099)')" 2
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
 if [ -n "$EXIT_ID" ]; then
   neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1
@@ -238,6 +241,14 @@ expect changelog_stamp_deleted 1 python3 -I "$CL" --check --root "$C"
 make_copy
 edit CHANGELOG.md "import re; s,n=re.subn(r'(<!-- changelog stamp: )[0-9a-f]{32}', r'\g<1>not-a-digest', s, flags=re.M); assert n==1"
 expect changelog_stamp_damaged 2 python3 -I "$CL" --check --root "$C"
+if python3 -I "$CL" --restamp --root "$C" >/dev/null 2>&1 && python3 -I "$CL" --check --root "$C" >/dev/null 2>&1; then
+  ok "positive control: --restamp repairs a damaged stamp"
+else no "positive control: --restamp could not repair a damaged stamp"; fi
+make_copy
+edit CHANGELOG.md "import re; s,n=re.subn(r'^<!-- changelog stamp: .*\n', '', s, flags=re.M); assert n==1"
+if python3 -I "$CL" --restamp --root "$C" >/dev/null 2>&1 && python3 -I "$CL" --check --root "$C" >/dev/null 2>&1; then
+  ok "positive control: --restamp repairs a deleted stamp"
+else no "positive control: --restamp could not repair a deleted stamp"; fi
 cl_neg() { # name, fragment file name, content
   make_copy
   python3 -I "$CL" --check --root "$C" >/dev/null 2>&1 || python3 -I "$CL" --stamp-initial --root "$C" >/dev/null 2>&1

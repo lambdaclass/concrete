@@ -29,6 +29,15 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "migrate_ledgers: the tree has uncommitted changes; run it on a clean checkout" >&2
   exit 2
 fi
+# Untracked files among the inputs would be rewritten but not restored by a rollback (git checkout
+# restores tracked files only), so they are refused too.
+untracked="$(git status --porcelain --untracked-files=all -- docs/bugs scripts/tests scripts/gen changelog.d \
+              ROADMAP.md CHANGELOG.md | grep '^??' || true)"
+if [ -n "$untracked" ]; then
+  echo "migrate_ledgers: untracked files among the migration's inputs; commit or move them first:" >&2
+  printf '%s\n' "$untracked" >&2
+  exit 2
+fi
 if [ -n "$(python3 -I scripts/gen/bug_ledger.py corpus)" ]; then
   echo "migrate_ledgers: the bug records already carry ledger blocks; this tree is migrated" >&2
   exit 2

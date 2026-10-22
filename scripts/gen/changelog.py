@@ -123,8 +123,16 @@ def main():
     a = ap.parse_args()
     path = os.path.join(a.root, "CHANGELOG.md")
     text = read(path)
+    if a.restamp:
+        # The repair path: drop any stamp line, intact, damaged or duplicated, and stamp the text afresh.
+        # It is a statement that a human reviewed CHANGELOG.md as it now reads.
+        body = re.sub(r"^<!-- changelog stamp:.*\n", "", text, flags=re.M)
+        split(body, path)
+        open(path, "w", encoding="utf-8").write(stamped(body))
+        print(f"changelog: restamped {path}")
+        return 0
     if "changelog stamp:" in text and not STAMP.search(text):
-        die(f"{path} holds a damaged changelog stamp line; restore it with --restamp after reviewing the file")
+        die(f"{path} holds a damaged changelog stamp line; review the file, then run --restamp")
     stamp, body = split(text, path)
     frs = fragments(a.root)
     if a.print:
@@ -153,10 +161,6 @@ def main():
         return 0
     if stamp is None:
         die(f"{path} has no stamp; the migration (scripts/gen/migrate_ledgers.sh) stamps it first")
-    if a.restamp:
-        open(path, "w", encoding="utf-8").write(stamped(body))
-        print(f"changelog: restamped {path}")
-        return 0
     if stamp != digest(body):
         die(f"{path} was edited by hand since its last stamp; review the edit, --restamp, then fold")
     open(path, "w", encoding="utf-8").write(stamped(folded(body, frs)))

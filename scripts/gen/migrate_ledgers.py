@@ -135,6 +135,21 @@ def wr(p, s):
     open(p, "w", encoding="utf-8").write(s)
 
 
+STATUS_WORDS = re.compile(r"\b(FIXED|OPEN|CONTAINED|HALF CLOSED|PARTIALLY FIXED|PARTIAL)\b")
+
+
+def unstatus(v, n, what, is_open):
+    """Lower-case any status word left inside a migrated summary or coverage line (the **Status:** line is
+    the only status; history such as 'fixed 2026-08-02' stays as prose). A word that contradicts the
+    record's status is reported, since prose cannot be rewritten mechanically."""
+    for m in STATUS_WORDS.finditer(v):
+        w = m.group(1)
+        if (w == "OPEN" and not is_open) or (w == "FIXED" and is_open):
+            note(f"bug {n}: its {what} says {w} but its **Status:** line says {'open' if is_open else 'fixed'}; "
+                 f"review the wording: {v[max(0, m.start() - 40):m.end() + 40]!r}")
+    return STATUS_WORDS.sub(lambda m: m.group(1).lower(), v)
+
+
 def oneline(s):
     s = re.sub(r"\s+", " ", s).strip()
     return s.replace("-->", "-- >")
@@ -186,7 +201,7 @@ for n, v in test_map.items():
         records[n]["fixtures"] = oneline(v)
     else:
         note(f"BUG_TEST_MAP names {n}, which has no record; dropped")
-STATUS_PREFIX = re.compile(r"^(?:FIXED|OPEN|HALF CLOSED|PARTIAL(?:LY)?(?: FIXED)?|CONTAINED)\b(.*?)\s+(?:--|—)\s+(.+)$", re.S)
+STATUS_PREFIX = re.compile(r"^(?:FIXED|OPEN|HALF CLOSED|PARTIAL(?:LY)?(?: FIXED)?|CONTAINED)\b(.*?)\s+(?:--|—)\s+(.+)$", re.S | re.I)
 
 
 def strip_status(v):
@@ -212,7 +227,7 @@ for n, r in records.items():
     if "fixtures" not in r and "coverage" not in r:
         die(f"bug {n} has no coverage entry in {AUDIT}; file it before migrating (check_bug_filing_complete.sh)")
 
-SUMMARY_STATUS = re.compile(r"^(?:FIXED|OPEN)\b([^:]*):\s+(.+)$", re.S)
+SUMMARY_STATUS = re.compile(r"^(?:fixed|open|contained|half closed|partially fixed|partial)\b([^:]*):\s+(.+)$", re.S | re.I)
 
 
 def strip_summary_status(v):
@@ -221,7 +236,8 @@ def strip_summary_status(v):
     m = SUMMARY_STATUS.match(v)
     if not m:
         if re.match(r"^(FIXED|OPEN)\b", v):
-            note(f"a README summary starts with a status word and no colon: {v[:60]}; the word is dropped")
+            note(f"a README summary starts with a status word and no colon: {v[:60]}; the word is dropped "
+                 "(the rest of the line is kept)")
             return v.split(" ", 1)[1] if " " in v else v
         return v
     qual, rest = m.group(1).strip(), m.group(2).strip()
@@ -373,6 +389,14 @@ if os.path.exists(DISC):
 
 # ------------------------------------------------------------------------------ write the records
 for n, r in records.items():
+    is_open = L.status_open(r["text"], r["path"])
+    r["summary"] = unstatus(r["summary"], n, "summary", is_open)
+    if "coverage" in r:
+        r["coverage"] = unstatus(r["coverage"], n, "coverage", is_open)
+    for k in ("summary", "coverage"):
+        if k in r and L.STATUS_LEAD.match(r[k]):
+            note(f"bug {n}: its {k} still opens with a status phrase; it was dropped: {r[k][:60]!r}")
+            r[k] = L.STATUS_LEAD.sub("", r[k], count=1).strip()
     lines = ["<!-- bug-ledger", f"summary: {r['summary']}"]
     if "fixtures" in r:
         lines.append(f"fixtures: {r['fixtures']}")

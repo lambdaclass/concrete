@@ -73,6 +73,10 @@ CLASS_END = "<!-- END GENERATED: class table -->"
 EXIT_SPAN = re.compile(r"<!-- BEGIN GENERATED: exit (\w+) bugs[^>]*-->(.*?)<!-- END GENERATED: exit \1 bugs -->", re.S)
 EXIT_BEGIN = "<!-- BEGIN GENERATED: exit {x} bugs (scripts/gen/bug_ledger.py; edit the records' exit lines) -->"
 EXIT_END = "<!-- END GENERATED: exit {x} bugs -->"
+# A status, in the ledger's vocabulary, outside the **Status:** line: an upper-case status word anywhere,
+# or a leading status phrase in any case ("Fixed -- ...", "contained: ...").
+STATUS_UPPER = re.compile(r"\b(FIXED|OPEN|CONTAINED|HALF CLOSED|PARTIALLY FIXED|PARTIAL)\b")
+STATUS_LEAD = re.compile(r"^(fixed|open|contained|half closed|partially fixed|partial)\b[^:—]{0,80}?(:|\s--\s|\s—\s)", re.I)
 CONFLICT = re.compile(r"^(<{7}|={7}|>{7}|\|{7})( .*)?$")
 CLASS_ROW = re.compile(r"^\| (\d+)\. ([^|]+?) \| ([^|]*?) \| (.*) \|$")
 
@@ -135,12 +139,12 @@ def parse_block(body, name):
     if ("fixtures" in facts) == ("coverage" in facts):
         die(f"{name}: the ledger block needs exactly one of fixtures (a regression fixture) or coverage "
             "(the rationale naming the gate that covers it)")
-    if re.match(r"^(FIXED|OPEN)\b", facts["summary"]):
-        die(f"{name}: the summary restates the status ('{facts['summary'][:30]}...'); the **Status:** line owns "
-            "it and the generated list files the bug under Fixed or Open from it")
-    if re.match(r"^(FIXED|OPEN|HALF CLOSED|PARTIAL|PARTIALLY|CONTAINED)\b", facts.get("coverage", "")):
-        die(f"{name}: coverage restates the status ('{facts['coverage'][:30]}...'); the **Status:** line owns it, "
-            "so the coverage line names only the gate or fixture")
+    for k in ("summary", "coverage"):
+        v = facts.get(k, "")
+        m = STATUS_UPPER.search(v) or STATUS_LEAD.match(v)
+        if m:
+            die(f"{name}: the {k} line states a status ('{m.group(0).strip()}'); the **Status:** line is the only "
+                f"status a bug has, so the {k} says what the bug is or what covers it, never whether it is open")
     if any("\t" in v for k, v in facts.items() if isinstance(v, str)):
         die(f"{name}: a ledger value holds a tab")
     if facts.get("silent", "yes") not in ("yes", "no"):
