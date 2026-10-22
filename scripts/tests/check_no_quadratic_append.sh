@@ -58,7 +58,10 @@ check Concrete/Elab/Elab.lean            56
 # 6->7 (2026-10-19, bug 052): destroyValue extends an element reference's path by one
 # `.index i` step per array element. The path is as long as the access nesting, not the
 # array, so each append is O(depth) and the loop stays linear in the elements.
-check Concrete/Interp/Interp.lean        7
+# 7->10 (2026-10-22, interpreter coverage): three one-shot path appends (an array-to-pointer
+# cast's `.index 0`, twice, and pointer arithmetic replacing an element path's last index),
+# each once per evaluated expression, not inside a loop over anything.
+check Concrete/Interp/Interp.lean        10
 
 echo
 echo "check_no_quadratic_append: PASS=$PASS FAIL=$FAIL"

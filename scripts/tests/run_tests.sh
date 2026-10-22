@@ -1555,16 +1555,18 @@ run_ok  "$TESTDIR/regress_105_ref_valued_branch_generic.con" 111
 # (FIXED): `&h` / `&mut h` on a Heap<S> local is h's slot and a field access through
 # `&Heap<S>` / `&mut Heap<S>` dereferences twice (MEMORY_SEMANTICS §5 one-hop rule).
 run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 63
-# Two distinct zero-sized places may share an address natively; the interpreter refuses to
-# compare them rather than answer from paths (Codex review of bug 102).
+# Two distinct elements of an array of a zero-sized type share one address natively. The
+# interpreter (interpreter-coverage pass) knows the element size from the layout, so it
+# answers 1 as the binary does; pointers to zero-sized values in different storage are
+# still refused (the stack layout decides).
 run_ok  "$TESTDIR/regress_102_zero_sized_ptr_eq.con" 1
 run_ok  "$TESTDIR/regress_102_ptr_eq_through_raw_base.con" 3
 r102_z=$($COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 || true)
-if grep -qF "distinct zero-sized places is not modelled" <<< "$r102_z"; then
-    echo "  ok  regress_102_zero_sized_ptr_eq: --interp refuses the comparison"
+if [ "$r102_z" = "1" ]; then
+    echo "  ok  regress_102_zero_sized_ptr_eq: --interp == binary (1)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp did not refuse the zero-sized pointer comparison"
+    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp gave '$r102_z', binary exits 1"
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/regress_126_heap_ref_one_hop.con" 255
@@ -1597,9 +1599,12 @@ done
 # Bug 104 (fixed by the normalized place rule): a reference re-pointed by assignment at
 # block-local storage is refused (E0238). Bug 107 (fixed): shadowing a binding a live
 # reference borrows is refused (E0238); the binary read the shadowing binding's slot.
-# Bugs 119 and 120 (fixed by batch 2's interpreter changes): the interpreter agrees with the
-# binary on both examples-health reproducers.
-for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref; do
+# Bugs 119 and 120 (fixed by batch 2's interpreter changes) and 117, 118, 128 and 139 (the
+# interpreter-coverage pass, with 144): the interpreter agrees with the binary on each reproducer.
+for r119 in bug119_interp_generic_trait_method bug120_interp_field_borrow_through_ref \
+            bug117_interp_module_const bug118_interp_nested_module_import \
+            bug128_interp_int_to_float_identity bug150_float_self_compare_fold \
+            bug152_string_trim_empty; do
     r119_src="tests/regressions/$r119/repro.con"
     r119_i=$($COMPILER "$r119_src" --interp 2>&1 | awk "NR<=1" || true)
     r119_n=""
@@ -1690,8 +1695,7 @@ for r096 in "regress_096_type_identity_same_named:1234567" "regress_096_imported
 done
 # Bug 123: a module constant of reference type is refused at the declaration (E0239), and a
 # borrow rooted at a module constant (explicit, field, index or implicit `&self`) is refused
-# (E0238) until constants have storage; a copy into a local is the working spelling (native
-# only: the interpreter does not bind module constants, bug 117).
+# (E0238) until constants have storage; a copy into a local is the working spelling.
 run_err "$TESTDIR/error_123_const_ref_type.con"          "(E0239)"
 run_err "$TESTDIR/error_123_const_borrow_in_body.con"    "(E0238)"
 run_err "$TESTDIR/error_123_const_field_borrow.con"      "(E0238)"
@@ -8019,6 +8023,12 @@ run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
 # Bug 175 (fails closed): a match whose arms all diverge left its merge block open, so a
 # loop around it failed SSA verification (E0708). --interp agreement: the r102 loop.
 run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
+# Bug 150: a float self-comparison is not folded (x != x is true for NaN).
+run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
+# Bug 152: string_trim("") is the empty string (it was one byte, read past the source).
+run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
+# Bug 151 (contained): two nested modules' functions with one flattened name are refused (E0299).
+run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
@@ -11928,19 +11938,22 @@ else
     interp_fail=$((interp_fail + 1))
 fi
 
-# 7. Unsupported construct produces clear diagnostic
+# 7. Unsupported construct produces clear diagnostic: a foreign function outside the
+# interpreter's C-function table is refused, never guessed (floats, the old example, are
+# modelled since the interpreter-coverage pass).
 cat > /tmp/interp_test_unsup.con << 'TESTEOF'
-pub fn main() -> Int {
-    let x: f64 = 3.14;
+trusted extern fn getpid() with(Process) -> i32;
+pub fn main() with(Process) -> Int {
+    let p: i32 = getpid();
     return 0;
 }
 TESTEOF
 unsup_out=$("$COMPILER" /tmp/interp_test_unsup.con --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
-if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not yet supported"; then
+if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not modelled"; then
     echo "  ok  interp: unsupported construct gives clear diagnostic"
     interp_pass=$((interp_pass + 1))
 else
-    echo "  FAIL interp: should fail with 'interp: ... not yet supported'"
+    echo "  FAIL interp: should fail with 'interp: ... not modelled'"
     interp_fail=$((interp_fail + 1))
 fi
 

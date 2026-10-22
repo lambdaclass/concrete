@@ -49,12 +49,44 @@ The interpreter currently models:
 - immutable/mutable path borrows across calls and named borrow regions;
 - explicit `Result`/`Option` matching and returning error arms;
 - `defer` on fall-through, return, break, and continue, in LIFO scope order;
-- selected String/Vec/print intrinsics sufficient for the checked differential
-  corpus.
+- the runtime's String/print builtins, each modelled on its `EmitBuiltins`
+  implementation over a `String` that is the `{ptr, len, cap}` struct over a heap
+  buffer, and the builtin Vec intrinsics;
+- IEEE `f64`/`f32` values: literals, arithmetic (`%` is C `fmod`), ordered and
+  unordered comparisons, integer → float rounding to nearest-even, and the
+  checked float → integer conversion;
+- module constants, evaluated at the use in their own frame;
+- a typed heap: `alloc`/`free`/`Heap<T>`, `malloc`/`calloc`/`realloc`/`free`,
+  raw pointers with element-sized arithmetic, `memcpy`/`memmove`/`memset`/
+  `memcmp`/`strlen`, `sizeof`/`alignof` through `Layout` with the running generic
+  function's type arguments;
+- a fixed table of C functions (`evalExtern`): the memory functions above,
+  `puts`/`putchar`/`write` to stdout and stderr, `read` from stdin, `exit`,
+  `abort`, `getenv`, the `FILE *` functions over an in-run file overlay
+  (`fopen`/`fread`/`fwrite`/`fseek`/`ftell`/`ferror`/`fflush`/`fclose`; reads see
+  the host's files, writes never reach the host; a write open needs the host's
+  write permission, asked through access(2)), argv, and a few libm functions;
+- the C library's stdout buffer: the print builtins, `puts` and `putchar` go
+  through stdio (line-buffered on a terminal, else fully buffered), `write(1, ..)`
+  does not, and stdout and stderr are replayed in the order they were written;
+  `abort` flushes stdio on Darwin and not on glibc, as the binary's runtime does;
+- project mode: `concrete src/main.con --interp -- args` on a project's entry
+  point interprets the whole module graph `concrete build` compiles, std
+  included, with the program's arguments and standard input;
+- `return` reached from value position (a call argument, a literal field), and
+  output printed before a trap, which is kept and printed.
 
 `IVal` stores integer values as Lean `Int` together with their Concrete `Ty`.
 References are logical paths (base binding, creation-frame depth, field/index
-steps, mutability), not machine addresses. Function pointers are explicit
+steps, mutability, or a heap cell), not machine addresses. Heap memory is typed:
+a block holds the values stored into it at their byte offsets. A read finds the
+value stored there, or assembles it from smaller values the layout places there
+(integers byte-wise, little-endian; structs and arrays field-wise), or refuses;
+reading uninitialized memory, reinterpreting a value as an unrelated type, a use
+after free, a double free and an out-of-bounds access are refused with a reason,
+never given a made-up value. A pointer converted to an integer stays a symbolic
+address (offset arithmetic, differences and comparisons within one allocation);
+any other use of the number is refused. Function pointers are explicit
 `fnPtr` values. This lets the interpreter model observable value and mutation
 semantics without pretending to reproduce LLVM memory layout or ABI behavior.
 
@@ -78,8 +110,18 @@ silently approximated. Current important exclusions include:
 
 | Construct | Current result |
 |---|---|
-| Float literal/arithmetic | explicit `interp: float literals not yet supported` |
-| Heap `alloc` expression and unsupported heap builtins | explicit unsupported diagnostic |
+| A foreign function outside the `evalExtern` table | `interp: foreign function '...' is not modelled` |
+| The clock (`clock_monotonic_ns`), and any value only the host knows | explicit refusal |
+| Uninitialized or reinterpreted memory, use after free, out-of-bounds access | explicit refusal naming the allocation |
+| A pointer's numeric address used as a number | explicit refusal (`addr` supports only offset arithmetic) |
+| Reading a union through a field other than the one written | explicit refusal |
+| `alloc` with an explicit allocator (`allocCall`) | explicit unsupported diagnostic |
+| The order of `write(1, ..)` or `write(2, ..)` output after more than 512 bytes of still-buffered stdio output, and a glibc trap with that much buffered | explicit refusal (depends on the C library's buffer size) |
+| Reading stdin from a terminal; `argv[0]`; argv or environment strings that are not UTF-8 | explicit refusal |
+| `fopen` of a device, FIFO or socket, a second handle on a file open for writing, writing a file with several hard links, update modes (`r+`...) | explicit refusal |
+| Allocations over 4 GiB (success depends on the machine); past `PTRDIFF_MAX` they are NULL as in C | explicit refusal |
+| Pointer comparisons that need a value's layout, the stack layout (one past the end, zero-sized values) or an allocator's reuse of freed memory | explicit refusal |
+| A C function declared with an argument narrower than its C parameter, or a result wider than the C result | explicit refusal |
 | Unsupported borrow/place shape | explicit shape diagnostic |
 | Unsupported print/IO intrinsic reaching Core without required desugaring | explicit desugar/support diagnostic |
 | Loop runaway beyond interpreter fuel | explicit fuel diagnostic |
@@ -118,7 +160,7 @@ correctly.
 
 ## 5. Why the interpreter is useful
 
-`Interp.lean` is currently about 1,200 lines and implements substantial language
+`Interp.lean` is currently about 2,700 lines and implements substantial language
 behavior, including width-aware traps, mutable path references, function
 pointers, loops, and `defer`. Its trust case is therefore not “small enough to
 assume correct.”
