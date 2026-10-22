@@ -3,8 +3,8 @@
 struct S2 { a: String, b: String }
 
 fn f(n: Int) with(Alloc) -> Int {
-    let a: String = "hello";
-    let s: S2 = S2 { a: a, b: if n > 0 { return 7; } else { "x" } };
+    let a0: String = "hello";
+    let s: S2 = S2 { a: a0, b: if n > 0 { return 7; } else { "x" } };
     let S2 { a, b } = s;
     drop_string(a);
     drop_string(b);
