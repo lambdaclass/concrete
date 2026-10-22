@@ -10,6 +10,8 @@
 # docs/verification/VERIFY_GATES.md before the corpus accepts it silently.
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -46,7 +48,7 @@ run_one() {
       FAIL=$((FAIL + 1))
       FAIL_LINES+=("FAIL $file — $first")
       # Capture per-gate detail for the log
-      echo "$out" | head -10 | sed 's/^/    /' >> /tmp/verify_gates_fail.log 2>/dev/null || true
+      echo "$out" | head -10 | sed 's/^/    /' >> "$GATE_TMP/verify_gates_fail.log" 2>/dev/null || true
       ;;
     *)
       # Couldn't even produce a verify report — most likely a
@@ -78,7 +80,7 @@ fi
 # they aren't expected to reach ValidatedCore, so the gates don't
 # apply).
 if [ -f tests/wrong-code/manifest.toml ]; then
-  python3 - tests/wrong-code/manifest.toml > /tmp/verify_gates_repros.txt <<'PYEOF'
+  python3 - tests/wrong-code/manifest.toml > "$GATE_TMP/verify_gates_repros.txt" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
 chunks = re.split(r'^\[\[case\]\]\s*$', src, flags=re.MULTILINE)[1:]
@@ -92,7 +94,7 @@ PYEOF
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     [ -f "$line" ] && run_one "$line"
-  done < /tmp/verify_gates_repros.txt
+  done < "$GATE_TMP/verify_gates_repros.txt"
 fi
 
 # Report any failures.

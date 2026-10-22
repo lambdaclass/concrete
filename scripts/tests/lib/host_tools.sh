@@ -9,6 +9,9 @@
 # One row per requirement: "<substring of the normalized command>|<tool on PATH>".
 HOST_TOOL_TABLE=(
   "EXAMPLE_VALGRIND=1 |valgrind"
+  # The external checkers (con-leche, nanoda) build against elan-managed toolchains; the gate refuses
+  # (exit 2) without $ELAN_HOME/bin/lake. CI installs elan; a nix-only host (concrete-ci-1) has none.
+  "check_external_checker.sh|elan"
 )
 
 # host_tool_required <cmd>: prints the tools <cmd> needs (one per line); nothing when none.

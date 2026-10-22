@@ -79,6 +79,7 @@ lean_tests/cap_alias_basic
 lean_tests/cap_alias_pub
 lean_tests/union_basic
 *.con.test
+*.con.*.test
 
 # Compiled checker binaries
 scripts/check_ll1
@@ -148,6 +149,7 @@ tests/programs/adversarial_policy_empty/adversarial_policy_empty
 .gate.lock/
 .ci-gates-summary
 .ci-gate-failures/
+.ci-gate-timings.tsv
 .mutation-campaign-summary
 .mutation-campaign-summary.partial
 .mutation-failures/

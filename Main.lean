@@ -141,6 +141,16 @@ def getMacOSSysrootFlags : IO (Array String) := do
     if sdkPath.length > 0 then return #[s!"--sysroot={sdkPath}"]
   return #[]
 
+/-- A per-process path for a build's intermediate file next to `base` (R-0547).
+
+    The IR used to go to the fixed `<source>.ll` (and a test build's binary to `<source>.test`), and
+    each build deleted it after linking. Two builds of the same source at once — any parallel gate
+    run, or two terminals — then shared one file: one build removed or rewrote the IR the other was
+    handing to clang ("no such file or directory: .../main.con.ll"). The process id keeps concurrent
+    builds apart; `--emit-llvm`, whose file is the requested output, still writes `<source>.ll`. -/
+def scratchPath (base : String) (ext : String) : IO String := do
+  return s!"{base}.{← IO.Process.getPID}{ext}"
+
 /-- Build clang arguments for linking LLVM IR to a native binary. -/
 def clangArgs (llPath : String) (outputPath : String) (extraFlags : Array String := #[]) : IO (Array String) := do
   let sysrootFlags ← getMacOSSysrootFlags
@@ -341,7 +351,7 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
       IO.eprintln "error[link]: no `main` function found; an executable needs an entry point — define `fn main() -> Int` in the root module"
       return 1
     let llvmIR := Pipeline.emit ssa
-    let llPath := inputPath ++ ".ll"
+    let llPath ← if emitLLVM then pure (inputPath ++ ".ll") else scratchPath inputPath ".ll"
     writeFile llPath llvmIR
     if emitLLVM then
       IO.println llvmIR
@@ -417,8 +427,8 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
     return 1
   | .ok ssa =>
     let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-    let llPath := inputPath ++ ".test.ll"
-    let outPath := inputPath ++ ".test"
+    let llPath ← scratchPath inputPath ".test.ll"
+    let outPath ← scratchPath inputPath ".test"
     writeFile llPath llvmIR
     -- Validate LLVM IR (if llvm-as available)
     let llValid ← validateLLVMIR llPath
@@ -3542,7 +3552,7 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
       return 1
     | .ok ssa =>
       let llvmIR := Pipeline.emit ssa
-      let llPath := mainPath ++ ".ll"
+      let llPath ← if emitLLVM then pure (mainPath ++ ".ll") else scratchPath mainPath ".ll"
       writeFile llPath llvmIR
       if emitLLVM then
         IO.println llvmIR
@@ -3610,8 +3620,8 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       return 1
     | .ok ssa =>
       let llvmIR := Pipeline.emit ssa (testMode := true) (moduleFilter := moduleFilter)
-      let llPath := mainPath ++ ".test.ll"
-      let outPath := "/tmp/concrete_test_" ++ toString (← IO.monoMsNow)
+      let llPath ← scratchPath mainPath ".test.ll"
+      let outPath := s!"/tmp/concrete_test_{← IO.Process.getPID}_{← IO.monoMsNow}"
       writeFile llPath llvmIR
       -- Validate LLVM IR (if llvm-as available)
       let llValid ← validateLLVMIR llPath

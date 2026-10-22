@@ -17,7 +17,7 @@ Usage:
 Exit nonzero if any mismatch/crash-divergence is found; prints a minimal-ish
 reproducer for the first failure.
 """
-import argparse, os, random, subprocess, sys, tempfile
+import argparse, concurrent.futures, os, random, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CC = os.path.join(ROOT, ".lake/build/bin/concrete")
@@ -299,9 +299,7 @@ def run(path, mode):
     except subprocess.TimeoutExpired:
         return ("timeout", "")
 
-STATS = {"compared": 0, "rejected": 0, "pending": 0}
-
-def check(src, tmp):
+def check(src, tmp, stats):
     path = os.path.join(tmp, "f.con")
     with open(path, "w") as fh:
         fh.write(src)
@@ -313,15 +311,15 @@ def check(src, tmp):
     istat, iout = run(path, "interp")
     # rejected-by-checker / interp-pending / timeout are not differential failures.
     if cstat == "rejected":
-        STATS["rejected"] += 1; return None
+        stats["rejected"] += 1; return None
     if istat == "pending" or cstat == "timeout" or istat == "timeout":
-        STATS["pending"] += 1; return None
+        stats["pending"] += 1; return None
     # Both sides now resolved to a "value" or a "trap". Compare:
     #   value vs value  → outputs must match
     #   trap  vs trap   → agree (both aborted: bounds/overflow/div-zero/…)
     #   value vs trap   → DIVERGENCE (e.g. interp traps OOB but compiled returns —
     #                     the H8 regression signal, or vice versa)
-    STATS["compared"] += 1
+    stats["compared"] += 1
     if cstat == "value" and istat == "value":
         if cout != iout:
             return ("MISMATCH", cout, iout)
@@ -342,26 +340,51 @@ def main():
     args = ap.parse_args()
     if not os.access(CC, os.X_OK):
         print(f"error: build first ({CC} missing)", file=sys.stderr); sys.exit(2)
-    tmp = tempfile.mkdtemp()
+    # THE PROGRAMS ARE GENERATED IN ORDER, THE CHECKS RUN CONCURRENTLY (R-0547). Generation draws
+    # from one seeded stream, so case i is the same program whatever the worker count; each check is
+    # two independent compiler runs in its own directory. The reported failure is the LOWEST failing
+    # case index, exactly the one a serial run would have stopped at, so a seed reproduces the same
+    # report at any FUZZ_JOBS. FUZZ_JOBS bounds the workers (default: half the cores, at most 8).
     rng = random.Random(args.seed)
-    checked = 0
+    srcs = []
     for i in range(args.n):
         g = Gen(random.Random(rng.getrandbits(64)), args.depth)
         g.loops = not args.no_loops
-        src = g.program()
-        res = check(src, tmp)
-        checked += 1
-        if res:
-            print(f"\n=== DIFFERENTIAL FAILURE (seed {args.seed}, case {i}) ===")
-            print(f"{res[0]}: compiled={res[1]!r} interp={res[2]!r}")
-            print("--- program ---")
-            print(src)
-            with open(os.path.join(ROOT, "fuzz_fail.con"), "w") as fh:
-                fh.write(src)
-            print("(saved to fuzz_fail.con)")
-            sys.exit(1)
-    print(f"FUZZ-DIFFERENTIAL: {checked} programs, 0 mismatches "
-          f"(compared={STATS['compared']} rejected={STATS['rejected']} pending={STATS['pending']}; "
+        srcs.append(g.program())
+    cores = os.cpu_count() or 2
+    jobs = int(os.environ.get("FUZZ_JOBS", "0") or 0) or max(1, min(8, cores // 2))
+
+    def one(i):
+        tmp = tempfile.mkdtemp()
+        stats = {"compared": 0, "rejected": 0, "pending": 0}
+        try:
+            return i, check(srcs[i], tmp, stats), stats
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    stats = {"compared": 0, "rejected": 0, "pending": 0}
+    failures = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        for i, res, st in ex.map(one, range(args.n)):
+            for k in stats:
+                stats[k] += st[k]
+            if res:
+                failures[i] = res
+    if failures:
+        i = min(failures)
+        res, src = failures[i], srcs[i]
+        print(f"\n=== DIFFERENTIAL FAILURE (seed {args.seed}, case {i}) ===")
+        print(f"{res[0]}: compiled={res[1]!r} interp={res[2]!r}")
+        print("--- program ---")
+        print(src)
+        with open(os.path.join(ROOT, "fuzz_fail.con"), "w") as fh:
+            fh.write(src)
+        print("(saved to fuzz_fail.con)")
+        if len(failures) > 1:
+            print(f"({len(failures) - 1} further failing case(s): {sorted(failures)[1:][:20]})")
+        sys.exit(1)
+    print(f"FUZZ-DIFFERENTIAL: {args.n} programs, 0 mismatches "
+          f"(compared={stats['compared']} rejected={stats['rejected']} pending={stats['pending']}; "
           f"seed {args.seed}, depth {args.depth})")
 
 if __name__ == "__main__":

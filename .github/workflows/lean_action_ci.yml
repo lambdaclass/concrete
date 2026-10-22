@@ -288,9 +288,6 @@ jobs:
       - name: Proof-patterns corpus gate
         run: bash scripts/tests/check_proof_patterns.sh
 
-      - name: Axiom-inventory gate (docs/verification/AXIOMS.md stays honest)
-        run: bash scripts/tests/check_axiom_inventory.sh
-
   external-checker:
     name: External proof re-check (con-leche)
     # The proof evidence re-checked by con-leche, an external Lean checker with a machine-checked
@@ -1329,24 +1326,15 @@ jobs:
       - name: Install clang
         run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
-      - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
-        run: bash scripts/tests/check_checker_identity.sh
-
-      - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
-        run: bash scripts/tests/check_kernel_recheck.sh
-
-      - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
-        run: bash scripts/tests/check_checker_policy.sh
-
       - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
         run: bash scripts/tests/check_lean14576_reproducer.sh
 
-      - name: "Claim inventory (R-0208 — the frozen claim inventory replays row by row; the local twin of the acceptance step's judgement)"
-        run: bash scripts/tests/check_claim_inventory.sh
-
       # The evidence a measured checker build needs before its digest may be registered (R-0208),
-      # SELF-CONTAINED: the identity, the hostile controls re-run with their logs (and tied to that
+      # SELF-CONTAINED: the identity, the hostile controls with their logs (and tied to that
       # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
+      # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
+      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0547): they used to
+      # be steps of their own as well, so each assertion ran twice per workflow run.
       - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
         run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
 
@@ -1837,7 +1825,7 @@ jobs:
         # skip). A skip must name an owning gate CI runs that references the
         # file, and a reason; the gate's negative controls prove an unowned skip
         # and an unlisted .con both fail.
-        run: EXAMPLES_OUT_DIR=${RUNNER_TEMP:-/tmp}/concrete_examples_out bash ./scripts/tests/check_examples.sh
+        run: bash ./scripts/tests/check_examples.sh
 
       - name: Check example outputs (native and interpreter)
         # Replaces the old smoke step, which ran binaries with no input, failed

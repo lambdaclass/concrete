@@ -69,8 +69,54 @@ remove_first_line_with() {
   echo "$removed"
 }
 
+# THE SELF-TEST MUTATES A PRIVATE COPY, never this checkout (R-0547). It used to edit the tracked
+# files below in place, inside a full gate pass that runs ~30 other gates beside it. Every gate's
+# require_fresh_binary runs `lake build`, so while Concrete/Report/Report.lean was mutated a
+# concurrent gate rebuilt the SHARED compiler from the mutated source; the binary vanished during the
+# relink (fuzzers: "No such file ... bin/concrete"), the tracked tree read dirty (check_clean_checkout),
+# the build identity moved (check_checker_identity), and the stdlib manifest gate saw a missing row.
+# The runner's sequential recheck then passed them all, so a real race in this gate was being
+# absorbed as "contention". The copy holds this checkout's tracked content (uncommitted edits
+# included) in its own git repository, with its own .lake seeded copy-on-write from this one and
+# verified by lake build (scripts/lake-seed.sh), and its own repository lock.
+mutate_copy() { # -> prints the copy's root; nonzero when it could not be made faithfully
+  local base="$1" tree="$1/tree"
+  git clone --quiet --shared --no-checkout "$ROOT_DIR" "$tree" >"$base/seed.log" 2>&1 \
+    || { echo "git clone failed" >> "$base/seed.log"; return 1; }
+  git -C "$tree" checkout --quiet --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" >>"$base/seed.log" 2>&1 \
+    || { echo "git checkout failed" >> "$base/seed.log"; return 1; }
+  # Overlay the working-tree bytes of every tracked file, so the copy is this tree, not HEAD. One tar
+  # stream (xargs could split it into several archives, and the reader stops at the first); a tracked
+  # file deleted in the working tree is absent from the copy too.
+  ( cd "$ROOT_DIR" && git ls-files -z | while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done \
+      | tar --null -T - -cf - ) | tar -xf - -C "$tree" \
+    || { echo "tar overlay failed" >> "$base/seed.log"; return 1; }
+  # ...and a file this checkout deleted relative to HEAD (staged `git rm` or unstaged) is deleted in the
+  # copy, not resurrected from HEAD.
+  { ( cd "$ROOT_DIR" && git diff --name-only -z --no-renames --diff-filter=D HEAD )
+    ( cd "$ROOT_DIR" && git ls-files -z --deleted ); } | while IFS= read -r -d '' f; do
+    rm -f "$tree/$f" || { echo "could not apply deletion of $f" >> "$base/seed.log"; exit 1; }
+  done || return 1
+  if [ -d "$ROOT_DIR/.lake" ]; then
+    ( cd "$tree" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) >"$base/seed.log" 2>&1 || return 1
+  fi
+  printf '%s' "$tree"
+}
+
 mutate_self_test() {
-  local ok=0 bad=0
+  local ok=0 bad=0 base tree
+  # MUT_BASE is GLOBAL: the EXIT trap runs after this function's locals are gone.
+  MUT_BASE="$(mktemp -d)" || { echo "FAST-SURFACE-MUTATION: could not create a private copy"; return 1; }
+  trap 'rm -rf "${MUT_BASE:-}"' EXIT
+  base="$MUT_BASE"
+  if ! tree="$(mutate_copy "$base")"; then
+    echo "FAST-SURFACE-MUTATION: could not make a faithful private copy — nothing was proven"
+    sed 's/^/    /' "$base/seed.log" 2>/dev/null | tail -5
+    return 1
+  fi
+  # Everything below runs in the copy, under the copy's own repository lock.
+  cd "$tree" || return 1
+  unset CONCRETE_GATE_LOCK
   # family | file | fixed-string needle identifying one representative row
   local TAB; TAB="$(printf '\t')"
   local -a MUT=(
@@ -82,8 +128,6 @@ mutate_self_test() {
     local fam="${m%%|*}"; local rest="${m#*|}"; local file="${rest%%|*}"; local needle="${rest#*|}"
     if [ ! -f "$file" ]; then echo "  SKIP $fam (no $file)"; continue; fi
     local bak; bak="$(mktemp)"; cp "$file" "$bak"
-    # restore on any exit path
-    trap 'cat "$bak" > "$file"; rm -f "$bak"' RETURN 2>/dev/null || true
     local did; did="$(remove_first_line_with "$file" "$needle")"
     if [ "$did" != "1" ]; then
       echo "  WARN $fam: needle matched no row (stale) — NOT proven"
@@ -95,8 +139,9 @@ mutate_self_test() {
       echo "  ok   $fam: removing a row turns the aggregate RED"
       ok=$((ok+1))
     fi
-    cat "$bak" > "$file"; rm -f "$bak"; trap - RETURN 2>/dev/null || true
+    cat "$bak" > "$file"; rm -f "$bak"
   done
+  cd "$ROOT_DIR" || true
   echo "FAST-SURFACE-MUTATION: proven=$ok unproven=$bad"
   echo "(structural families — API boundary, visibility, construction rights — carry"
   echo " their own in-gate negative fixtures; nightly check_gate_mutation_coverage"

@@ -54,19 +54,22 @@ for c in chunks:
         print(f"{name}\t{path}\t{conf}")
 PYEOF
 
-while IFS=$'\t' read -r name path claimed_conf; do
-  [ -z "$name" ] && continue
+# EACH FLAGSHIP IS CHECKED IN ITS OWN PROCESS, CONCURRENTLY (R-0547). A flagship's checks (release
+# bundle capture, the audit report) are independent of every other flagship's, and in series they made
+# this a 5-minute gate. check_flagship writes its report to its own file and its verdict (0 pass,
+# 1 fail) to another; the reports are printed and the verdicts counted in manifest order, and a
+# flagship that left no verdict is counted as a failure.
+check_flagship() { # index name path claimed_conf
+  local name="$2" path="$3" claimed_conf="$4" errs=0 f d bundle_out audit_out runtime_conf
   echo "=== flagship: $name ==="
 
   # 1. Path exists.
   if [ ! -d "$path" ]; then
     echo "  FAIL path $path missing"
-    FAIL=$((FAIL + 1))
-    continue
+    return 1
   fi
 
   # 2. Required artifacts (the 10 bars' artifacts).
-  errs=0
   # proof-registry.json is NO LONGER required: flagship proofs are in-source
   # (#[spec]/#[proof_by]/#[proof_fingerprint]); a stray registry is forbidden by
   # check_no_example_registries.sh.
@@ -116,11 +119,27 @@ while IFS=$'\t' read -r name path claimed_conf; do
 
   if [ "$errs" -eq 0 ]; then
     echo "  ok   $name — all artifacts present, release bundle captures cleanly, ProvableV1 conformance matches manifest"
-    PASS=$((PASS + 1))
-  else
-    FAIL=$((FAIL + 1))
+    return 0
   fi
+  return 1
+}
+
+N=0
+while IFS=$'\t' read -r name path claimed_conf; do
+  [ -z "$name" ] && continue
+  ( rc=0; check_flagship "$N" "$name" "$path" "$claimed_conf" > "$TMP/report-$N" 2>&1 || rc=$?
+    echo "$rc" > "$TMP/verdict-$N" ) &
+  N=$((N + 1))
 done < "$TMP/entries.tsv"
+wait
+for (( i=0; i<N; i++ )); do
+  cat "$TMP/report-$i" 2>/dev/null
+  case "$(cat "$TMP/verdict-$i" 2>/dev/null)" in
+    0) PASS=$((PASS + 1)) ;;
+    1) FAIL=$((FAIL + 1)) ;;
+    *) echo "  FAIL flagship #$i left no verdict (its check died before recording one)"; FAIL=$((FAIL + 1)) ;;
+  esac
+done
 
 echo ""
 echo "SHOWCASE: PASS=$PASS  FAIL=$FAIL"
