@@ -164,18 +164,19 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 253 -> 254: check_stack_budget.sh (bug 065 stack budget fails closed), pinned at integration.
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
-# 255 -> 256: check_landing_script.sh (R-0539 landing trains: conflict resolution and refusals in a
-#   throwaway repository), pinned in the same commit. Branch ci-tiering also moves this pin; the
-#   integration adds this one command on top of whatever that branch pins.
-# 256 -> 257: check_landing_bot.sh (R-0539 landing bot: readiness notes, rule-first order, bisect and
-#   eject, auto-rebase skip rules, kill switch, lock; throwaway repository), pinned in the same commit.
-#   Branches ci-tiering, ledgers and impact-gates also move this pin; integration adds this one
-#   command on top of whatever they pin.
-# 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
-#   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
+# 255 -> 264: landing train 2 (tooling only), recounted with `--plan` on the merged workflow rather
+#   than taken from any member's pin. Each member added its own gate (+13): check_landing_script.sh
+#   and check_landing_bot.sh (R-0539), check_review_tool.sh (R-0544), check_new_bug.sh (bug scaffold
+#   and the hook's reservation tier), check_gate_selection.sh (R-0513 impact selection),
+#   check_heavy_slots.sh (R-0543 semaphore), check_compile_cache.sh and check_build_cache.sh (R-0546;
+#   scripts/dev/seed-lake.sh is excluded below, a build accelerator rather than a gate),
+#   check_ci_triage.sh, check_status_page.sh, check_work_queue.sh, check_fuzz_farm.sh and
+#   check_perf_tracking.sh. fast-gates (R-0547, one run per assertion) removed the standalone steps
+#   for check_checker_identity.sh, check_kernel_recheck.sh, check_checker_policy.sh,
+#   check_axiom_inventory.sh and check_claim_inventory.sh, which checker_acceptance_evidence.sh
+#   re-ran in the same workflow run; that step is now their only run and this runner includes it
+#   (-5 +1). 255 + 13 - 4 = 264.
 EXPECTED_GATE_COMMANDS=264
-# 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
-#   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of
@@ -185,29 +186,6 @@ GATE_INVENTORY="scripts/tests/ci_gate_inventory.txt"
 if [ -f "$GATE_INVENTORY" ]; then
   EXPECTED_GATE_COMMANDS="$(grep -c . "$GATE_INVENTORY" || true)"
 fi
-# 255 -> 256: check_gate_selection.sh (R-0513 impact gate selection), pinned in the same commit.
-# 255 -> 256: check_heavy_slots.sh (R-0543 machine-wide heavy-run semaphore), pinned in the same commit.
-# 256 -> 257: check_compile_cache.sh (R-0546 shared compile-output cache), pinned in the same commit.
-# 257 -> 253 (R-0547, one run per assertion): the standalone steps for check_checker_identity.sh,
-#   check_kernel_recheck.sh, check_checker_policy.sh, check_axiom_inventory.sh and
-#   check_claim_inventory.sh are removed, because checker_acceptance_evidence.sh re-ran all five in the
-#   same workflow run; that step is now their only run, and this runner includes it (-5 +1).
-# 255 -> 256: check_build_cache.sh (R-0546 build cache: key computation, refusal on toolchain or
-#   manifest mismatch, seeding never replaces lake build), pinned in the same commit.
-#   scripts/dev/seed-lake.sh is excluded from the inventory: the workflow runs it on self-hosted
-#   runners to seed .lake from the server's cache. It is a build accelerator, not a gate, and run
-#   locally it would only copy a build.
-# 255 -> 256: check_ci_triage.sh (CI failure triage, flake ledger, nightly coverage diff), pinned in
-#   the same commit.
-# 256 -> 257: check_status_page.sh (status page generator, public-variant sanitizer, notify dedup), pinned
-#   in the same commit. Like the landing gate, it adds exactly one command on top of whatever
-#   ci-tiering pins at integration.
-# 256 -> 257: check_work_queue.sh (agent work queue: priority, area conflicts, budgets, slot rotation,
-#   stuck release, kill switch, push guard), pinned in the same commit. Integration with ci-tiering,
-#   ledgers and the other wip branches that move this pin adds this one command on top of theirs.
-# 255 -> 256: check_fuzz_farm.sh (the server fuzz farm's findings pipeline, build-free), pinned in
-#   the same commit. Other in-flight branches bump this pin too: rebase adds, never overwrites.
-# 255 -> 256: check_perf_tracking.sh (compiler perf tracker decision logic, scripts/perf/), pinned in the same commit.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
