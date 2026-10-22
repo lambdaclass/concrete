@@ -388,12 +388,12 @@ private def comparisonTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) :
       let t := lhs.ty
       let ok := match t with
         | .bool | .char | .never | .placeholder => true
-        -- A raw pointer: Check decides the authority at the source (trusted or `Unsafe`).
-        -- Monomorphized instances do not carry their definition's `trusted` flag, so the
-        -- instance's own authority is not known here; a pointer comparison reached through a
-        -- `Copy`-bounded generic is therefore not re-checked (no memory effect: it compares
-        -- addresses). `unsafeOk` is kept for when instances carry their trust.
-        | .ptrMut _ | .ptrConst _ => unsafeOk || true
+        -- A raw pointer compares only in trusted code or a function declaring `Unsafe`. An
+        -- instance carries its definition's authority (`isTrusted` and `capSet`, copied by
+        -- Mono; the same predicate Check applies at the source), so a safe `Copy`-bounded generic instantiated at a raw
+        -- pointer is refused here as the same comparison written directly is refused by
+        -- Check (bug 183).
+        | .ptrMut _ | .ptrConst _ => unsafeOk
         | t => isNumeric t
       if ok then none
       else some [{ fnName, message := s!"comparison is not defined on '{tyToStr t}' after monomorphization: comparison operators are defined on integers, floats, `bool` and `char`, and on raw pointers only in trusted or `Unsafe` code" }]
@@ -416,7 +416,7 @@ partial def verifyComparisonTypes (modules : List CModule) : Diagnostics :=
     message := s!"{v.fnName}: {v.message}"
     pass := "post-mono"
     span := none
-    hint := some "a generic comparison instantiated at an aggregate: compare through a named function over references, or instantiate at a scalar type"
+    hint := some "a generic comparison instantiated at an aggregate, or at a raw pointer in a generic that is neither trusted nor declares `Unsafe`: compare through a named function, or instantiate at a scalar type"
     code := "E0229"
   }
 

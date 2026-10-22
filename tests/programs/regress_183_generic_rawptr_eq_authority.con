@@ -1,0 +1,23 @@
+// Bug 183, positive control: an instance carries its definition's authority. A trusted generic and
+// a generic declaring with(Unsafe) may compare raw pointers at any instantiation; the same generic
+// at a scalar compares as before. Exit 42.
+trusted fn same_t<T: Copy>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn same_u<T: Copy>(a: T, b: T) with(Unsafe) -> bool {
+    return a == b;
+}
+
+fn main() with(Unsafe) -> Int {
+    let x: Int = 1;
+    let y: Int = 2;
+    let p: *const Int = &x as *const Int;
+    let q: *const Int = &y as *const Int;
+    let mut n: Int = 0;
+    if same_t::<*const Int>(p, p) { n = n + 10; }
+    if !same_t::<*const Int>(p, q) { n = n + 10; }
+    if same_u::<*const Int>(q, q) { n = n + 10; }
+    if same_t::<Int>(x, 1) { n = n + 12; }
+    return n;
+}

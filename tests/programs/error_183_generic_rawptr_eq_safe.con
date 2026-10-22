@@ -1,0 +1,15 @@
+// Bug 183: raw pointers compare only in trusted code or a function declaring with(Unsafe)
+// (bug 140's rule, E0229). Written directly in safe code the comparison is refused by Check; reached
+// through a safe `Copy`-bounded generic it compiled, because monomorphized instances did not carry
+// their definition's `trusted` flag and the post-mono re-check could not tell their authority.
+// The instance `same<*const Int>` is safe code: refused post-mono (E0229).
+fn same<T: Copy>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn main() -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    if same::<*const Int>(p, p) { return 42; }
+    return 0;
+}

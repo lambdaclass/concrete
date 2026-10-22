@@ -656,6 +656,9 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               isPublic := false
               isTest := false
               capSet := fnDef.capSet
+              -- Authority travels with the body (bug 183; see the explicit-args branch).
+              isTrusted := fnDef.isTrusted
+              trustedImplOrigin := fnDef.trustedImplOrigin
               declSpan := fnDef.declSpan
               -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
               foreignCalls := fnDef.foreignCalls
@@ -689,6 +692,12 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         isPublic := false
         isTest := false
         capSet := fnDef.capSet
+        -- The definition's AUTHORITY travels with its body, like its capabilities: an
+        -- instance of a trusted generic is trusted code, an instance of a safe one is not.
+        -- Without it the post-mono comparison rule could not tell which instances may
+        -- compare raw pointers (bug 183).
+        isTrusted := fnDef.isTrusted
+        trustedImplOrigin := fnDef.trustedImplOrigin
         declSpan := fnDef.declSpan
         -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
         foreignCalls := fnDef.foreignCalls

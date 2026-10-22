@@ -1850,6 +1850,9 @@ run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
 run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+# Bug 183: the same comparison through a safe Copy-bounded generic is refused post-mono; the
+# instance carries its definition's authority (trusted and Unsafe generics still compare).
+run_err "$TESTDIR/error_183_generic_rawptr_eq_safe.con"     "(E0229)"
 run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
 # Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
 # fix, E0291).
@@ -1869,6 +1872,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+run_ok  "$TESTDIR/regress_183_generic_rawptr_eq_authority.con" 42
 # Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
 # operator operand (E0278); exits in statement position, tails and let initializers stay legal.
 run_err "$TESTDIR/error_142_struct_field_return.con"   "(E0278)"
