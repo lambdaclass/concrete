@@ -93,26 +93,24 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 23** (11 silent, 6 loud, 6 filed before the discovery record) of 135 bug records.
+**Open bugs: 19** (7 silent, 6 loud, 6 filed before the discovery record) of 135 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 118, 122, 129 |
 | 2. Binder identity by name, not a `LocalId` | 1 | 0 | 124 |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 1 | 1 | 103 |
-| 4. No reference-provenance model in the source checker | 1 | 1 | 105 |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 6 | 4 | 102, 117, 128, 134, 136, 137 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 1 | 1 | 126 |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 5 | 3 | 117, 128, 134, 136, 137 |
 | 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 112 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
-| 13. Documented rules with no enforcing site | 2 | 2 | 113, 115 |
+| 13. Documented rules with no enforcing site | 1 | 1 | 113 |
 | no class yet | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
-| exit 0b | 10 | 10 | 102, 103, 113, 115, 122, 126, 128, 129, 136, 137 |
+| exit 0b | 7 | 7 | 103, 113, 122, 128, 129, 136, 137 |
 | exit 2c | 6 | 0 | 112, 114, 117, 118, 124, 134 |
-| no exit names it | 7 | 1 | 027, 049, 054, 058, 064, 077, 105 |
+| no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
