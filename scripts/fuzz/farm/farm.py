@@ -717,6 +717,22 @@ def notify(snapshot, cls, sig, meta):
     return f"notify rc={rc} {out.strip()[:200]} {err.strip()[:200]}"
 
 
+def pending_live(pend):
+    """A pre-signature is being minimized by a worker that is still alive (a placeholder left
+    by a killed worker must not block discovery)."""
+    if not pend:
+        return False
+    if not isinstance(pend, dict):  # legacy float timestamp
+        return time.time() - pend < 3600
+    try:
+        os.kill(pend["pid"], 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return time.time() - pend["t"] < 3 * 3600
+
+
 def record(p, case, res, ctx, wd, log):
     """Dedup + minimize + store one interesting result. Returns (sig, is_new)."""
     oracle = case["oracle"]
@@ -734,13 +750,13 @@ def record(p, case, res, ctx, wd, log):
         # permanent cap, and so is any hit once every known variant is fixed. Other hits are
         # attributed to the newest open variant (count = attributed occurrences).
         resample = not open_known or hits % RESAMPLE_EVERY == 0
-        if (known and not resample) or (pend and time.time() - pend < 3600):
+        if (known and not resample) or pending_live(pend):
             sig = (open_known or known or [None])[-1]
             if sig:
                 bump(idx, sig, occ, p)
             save_json(p["index"], idx)
             return sig, False
-        idx["pending"][pre] = time.time()
+        idx["pending"][pre] = {"t": time.time(), "pid": os.getpid()}
         save_json(p["index"], idx)
     t0 = time.time()
     try:
