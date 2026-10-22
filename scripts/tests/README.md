@@ -25,3 +25,42 @@ Supporting helpers:
   pipeline", result vocabulary).
 
 All scripts assume the repository root as their working directory and normalize to it internally.
+
+## Shared ledgers: one owner per fact
+
+Facts that many branches record live in files only their owner edits. The shared views are
+generated from them, and `check_ledgers.sh` (run by `check_docs_drift.sh`) fails when a view is
+hand-edited or stale.
+
+- **To file a bug, write its record.** `docs/bugs/NNN_*.md` holds the bug's status and, in its
+  `bug-ledger` block, its summary, its coverage (`fixtures:` or `coverage:`), its structural
+  classes, whether it is silent and its exits ([docs/bugs/README.md](../../docs/bugs/README.md),
+  "Filing a bug"). `audit_bug_corpus.sh` and `check_bug_filing_complete.sh` read the coverage from
+  the records at run time (`scripts/gen/bug_ledger.py corpus`). Do not add entries to the maps in
+  `audit_bug_corpus.sh`.
+- **To log a change, add a `changelog.d/` fragment** ([changelog.d/README.md](../../changelog.d/README.md)).
+  Never edit CHANGELOG.md; fragments are folded into it on main.
+- **To add a CI gate, add its command to `ci_gate_inventory.txt`** in the commit that adds it to the
+  workflow, once that file exists (sorted, one command per line). `run_ci_gates_local.sh` compares
+  it with the workflow, by content.
+- **Never edit a generated view**: the bug lists in `docs/bugs/README.md`, the bugs column of
+  `docs/bugs/STRUCTURAL_CLASSES.md`'s table, ROADMAP's generated exit bug spans and dashboards,
+  and `Concrete/BuildIdentity.lean`. After a rebase that conflicts in one of them, run
+  `bash scripts/gen/refresh_generated.sh` and `git add` the result.
+
+`scripts/gen/migrate_ledgers.sh` performs the one-time move from the hand-maintained views to the
+records. Until it has run, the generators report "not migrated" and the legacy maps stay in use.
+
+Follow-ups, not yet done:
+
+- `Concrete/BuildIdentity.lean` stays committed. It is embedded at build time and receipts bind
+  it, so a branch binary must carry its own sources' identity; regenerating it only at landing
+  would leave every branch build stale. Deriving it inside the build would need a Lake pre-build
+  step (a `lakefile.lean`). Until then a conflict in it is resolved by `refresh_generated.sh`.
+- `docs/bugs/discovery.tsv` (when present) still lists bugs per probe batch, so two branches
+  filing bugs from one batch edit one row. The record's `silent:` line is the owner of silent/loud
+  and the ledger checks the two agree; moving batch membership into the record is the next step.
+- `changelog.py --fold` orders newest first within one fold only; merging by date across folds
+  is not implemented.
+- The migration keeps one README line per bug when a bug was listed twice and NOTEs the other;
+  the lander reconciles those by hand.

@@ -11,7 +11,14 @@ fail=0
 active_file="$(mktemp)"
 retired_file="$(mktemp)"
 all_ids_file="$(mktemp)"
-trap 'rm -f "$active_file" "$retired_file" "$all_ids_file"' EXIT
+changelog_file="$(mktemp)"
+trap 'rm -f "$active_file" "$retired_file" "$all_ids_file" "$changelog_file"' EXIT
+# CHANGELOG.md with the pending changelog.d/ fragments folded in (scripts/gen/changelog.py): a branch
+# retires a task with a `### Completed Task R-NNNN` heading in its fragment.
+if ! python3 -I scripts/gen/changelog.py --print > "$changelog_file"; then
+  echo "FAIL scripts/gen/changelog.py --print failed; the changelog cannot be read"
+  exit 1
+fi
 # The 2026-10-19 reconciliation record (moved out of ROADMAP.md) cites task IDs but declares none.
 RECORD="docs/project/ROADMAP_RECONCILIATION.md"
 BACKLOG="docs/project/ROADMAP_BACKLOG.md"
@@ -47,7 +54,7 @@ done
 
 # shellcheck disable=SC2086
 cat $TASK_FILES | grep -oE '^### Task R-[0-9]{4}$' | awk '{print $3}' > "$active_file" || true
-grep -oE '^### Completed Task R-[0-9]{4}$' CHANGELOG.md | awk '{print $4}' > "$retired_file" || true
+grep -oE '^### Completed Task R-[0-9]{4}$' "$changelog_file" | awk '{print $4}' > "$retired_file" || true
 cat "$active_file" "$retired_file" > "$all_ids_file"
 count="$(wc -l < "$active_file" | tr -d ' ')"
 
@@ -70,7 +77,7 @@ while IFS=: read -r file line ref; do
   fi
 done < <(
   # shellcheck disable=SC2086
-  grep -nHoE 'R-[0-9]{4}' $TASK_FILES CHANGELOG.md $([ -f "$RECORD" ] && echo "$RECORD") \
+  grep -nHoE 'R-[0-9]{4}' $TASK_FILES CHANGELOG.md $(ls changelog.d/[0-9]*.md 2>/dev/null) $([ -f "$RECORD" ] && echo "$RECORD") \
     $(for a in $ARCHIVES; do [ -f "$a" ] && echo "$a"; done)
 )
 
