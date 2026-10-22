@@ -625,9 +625,9 @@ References exist only as **parameters**, as **call arguments** (`f(&w.p)`, scope
 **borrow-block binders** and as **arm-scoped pattern binders through a borrowed scrutinee**. No
 reference binding is introduced by `let`, and **no reference binding of any kind is ever the target
 of an assignment** (REF-6@1, which replaces this section's earlier same-source re-pointing
-comparison). Both halves are needed: reference parameters are assignable today, and
-`fn g(r: &Int) -> Int { if true { let local: Int = 7; r = &local; } return *r; }` builds a binary
-that reads a dead slot. With both, a reference binding's source is fixed when the binding is
+comparison). Both halves are needed: reference parameters were assignable before exit 2i, and
+`fn g(r: &Int) -> Int { if true { let local: Int = 7; r = &local; } return *r; }` built a binary
+that read a dead slot (since exit 2i the assignment is E0303). With both, a reference binding's source is fixed when the binding is
 introduced and every introduction form is lexically enclosed by its source's scope, so the
 flow-sensitive half of the rules goes away (REF-6's provenance comparison; gap G14; the `let`-bound
 half of G9). The lexical half stays: a borrow block, an arm binder through a borrowed scrutinee and a
@@ -1155,7 +1155,9 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   method-syntax call `x.m(..)` cannot be resolved without types here, so it is refused whenever
   the module has a generic method named `m` (a deliberate over-approximation: call it as
   `Type::m(..)` to name a non-generic one). Passing a reference to a non-generic callee is allowed:
-  that body is checked like any other. Spec fn bodies get the same exhaustive binder walk. For the same reason a generic instantiated inside an `assert`, `assume` or ghost
+  that body is checked like any other. Spec fn bodies get the same exhaustive binder walk. Imported generic functions and methods count
+  (under their local and mangled names). Spec fn, extern fn and trait-method-declaration parameter
+  lists get the duplicate-name test. For the same reason a generic instantiated inside an `assert`, `assume` or ghost
   initializer must be instantiated at a type that cannot hold a reference under substitution (no
   reference, and no forwarded type parameter except behind a function or raw-pointer type, which
   substitution cannot turn into a reference binding): otherwise E0302 (`erasedRefInstantiation`).
@@ -1337,7 +1339,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 171 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 174 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a

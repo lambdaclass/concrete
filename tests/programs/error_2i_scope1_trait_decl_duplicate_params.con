@@ -1,0 +1,3 @@
+// Exit 2i SCOPE-1@1 (review round 12): duplicate parameters of a trait method declaration. E0301.
+trait Foo { fn foo(x: Int, x: Int) -> Int; }
+fn main() -> Int { return 42; }

@@ -119,6 +119,9 @@ validate_manifest() {
     runs=$(awk -F'\t' -v r="$r" '$1==r && $3 ~ /^run:/' "$m" | grep -c . || true)
     if [ "${runs:-0}" -eq 0 ]; then echo "    defect: semantic guarantee $r has no run row"; bad=1; fi
   done
+  # SCOPE-3 promises the extracted model too (§15.6): at least one run row with a model mode
+  if ! awk -F'\t' '$1=="SCOPE-3" && $3 ~ /^run:/ && $5 ~ /(^|,)model:[^,]+/ {f=1} END {exit !f}' "$m"; then
+    echo "    defect: SCOPE-3 has no run row with a model:<id> mode"; bad=1; fi
   # G4 (the renamed pattern binder) promises binary = --interp and a formatter round-trip
   if ! awk -F'\t' '$1=="G4" && $3 ~ /^run:/ && $5 ~ /(^|,)binary(,|$)/ && $5 ~ /(^|,)interp(,|$)/ && $5 ~ /(^|,)fmt(,|$)/ {f=1} END {exit !f}' "$m"; then
     echo "    defect: G4 has no run row with modes binary, interp and fmt"; bad=1; fi
@@ -318,6 +321,8 @@ validate_manifest "$TMP/n4g.tsv" > /dev/null && no "N4g: dropping G4's run row w
 # N4h: a pair whose only run row is commented out has no run row.
 awk -F'\t' 'BEGIN{OFS="\t"} $4=="scope1-same_block_let" && $3 ~ /^run:/ {$1="#" $1} {print}' "$MANIFEST" > "$TMP/n4h.tsv"
 validate_manifest "$TMP/n4h.tsv" > /dev/null && no "N4h: a commented-out run row still satisfied its pair" || ok "N4h: a pair whose only run row is commented out is refused"
+awk -F'\t' 'BEGIN{OFS="\t"} $1=="SCOPE-3" {gsub(/,?model:[^,]+/, "", $5)} {print}' "$MANIFEST" > "$TMP/n4i.tsv"
+validate_manifest "$TMP/n4i.tsv" > /dev/null && no "N4i: SCOPE-3 without its model mode went unnoticed" || ok "N4i: SCOPE-3 without a model-checked run row is refused"
 # N4f: a wrong final row with no trailing newline must still be executed (and fail).
 { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
 n4f_fail=$FAIL; n4f_pass=$PASS

@@ -3550,12 +3550,20 @@ def checkModule (m : Module) (summary : FileSummary)
       -- generic functions and methods, by every spelling a contract can call them with
       let genericFns : List String :=
         (m.functions.filterMap fun g => if g.typeParams.isEmpty then none else some g.name)
+        -- imported generics under their local (possibly aliased) names, and imported generic
+        -- methods by their mangled names (review round 12)
+        ++ (imports.functions.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
+        ++ (imports.implMethodSigs.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
         ++ (m.implBlocks.flatMap fun ib => ib.methods.flatMap fun g =>
               if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [s!"{ib.typeName}_{g.name}"])
         ++ (m.traitImpls.flatMap fun tb => tb.methods.flatMap fun g =>
               if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [s!"{tb.typeName}_{g.name}"])
       let genericMethods : List String :=
-        (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+        (imports.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+          if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+        ++ (imports.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+          if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
+        ++ (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
           if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
         ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
           if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
@@ -3570,12 +3578,18 @@ def checkModule (m : Module) (summary : FileSummary)
           [{ severity := .error, message := ce.message, pass := "check", span := some f.span, hint := ce.hint,
              code := ce.code, evidence := ruleEvidence ce.rule,
              nextAction := some "write the contract as a binder- and statement-free proposition over the parameters (and `result`); name a repeated subterm with a `spec fn`" }]
-  let exit2iSpecParamDs : List Diagnostic := m.specFns.flatMap fun sd =>
+  -- parameter lists with no body checkFn would walk: spec fns, extern fns, trait method
+  -- declarations (review round 12)
+  let paramDups (ps : List Param) (sp : Span) : List Diagnostic :=
     let go : Scope1M Unit := do
       let mut vis : List ScopeBinder := []
-      for p in sd.params do
-        vis ← scope1Bind vis p.name sd.span "parameter"
+      for p in ps do
+        vis ← scope1Bind vis p.name sp "parameter"
     (go.run []).2
+  let exit2iSpecParamDs : List Diagnostic :=
+    m.specFns.flatMap (fun sd => paramDups sd.params sd.span)
+    ++ m.externFns.flatMap (fun ef => paramDups ef.params ef.span)
+    ++ m.traits.flatMap (fun td => td.methods.flatMap fun sig => paramDups sig.params td.span)
   match exit2iContractDs ++ exit2iSpecParamDs with
   | d :: ds => .error (d :: ds)
   | [] =>

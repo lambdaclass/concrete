@@ -7985,6 +7985,9 @@ run_err "$TESTDIR/error_2i_contract_trait_impl_invariant.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_place_assignment.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_borrow_to_generic.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_generic_call.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_imported_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_scope1_extern_duplicate_params.con" "(E0301)"
+run_err "$TESTDIR/error_2i_scope1_trait_decl_duplicate_params.con" "(E0301)"
 run_ok "$TESTDIR/regress_2i_contract_aliased_ref_param.con" 42
 run_ok "$TESTDIR/regress_2i_contract_ref_receiver.con" 42
 run_ok "$TESTDIR/regress_2i_contract_static_nongeneric_method.con" 42
