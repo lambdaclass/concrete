@@ -604,6 +604,29 @@ done
 REST=("${RUN_LIST[@]:$RUN_FIRST_N}")
 [ "$STOPPED_EARLY" = "1" ] && REST=()
 
+# LONGEST FIRST (R-0547). The pool's wall time is bounded below by its longest gate, and a 6-minute
+# gate launched last finishes 6 minutes after everything else. scripts/tests/gate_weights.tsv holds
+# measured seconds per command (from .ci-gate-timings.tsv, see docs/project/GATE_PROFILE.md); the
+# pool starts the heaviest first and keeps the workflow order among the rest. Ordering only: a stale
+# or missing weight changes when a gate starts, never whether it runs or what it concludes.
+GATE_WEIGHTS="$ROOT_DIR/scripts/tests/gate_weights.tsv"
+if [ "$JOBS" -gt 1 ] && [ -f "$GATE_WEIGHTS" ] && [ "${#REST[@]}" -gt 1 ]; then
+  _ordered=()
+  while IFS= read -r _line; do _ordered+=("${_line#*$'\t'*$'\t'}"); done < <(
+    for (( _i=0; _i<${#REST[@]}; _i++ )); do printf '%s\t%s\t%s\n' "$_i" "$_i" "${REST[$_i]}"; done \
+      | awk -F'\t' 'NR==FNR { if ($0 !~ /^#/ && NF >= 2) w[$2] = $1; next }
+                    { c = $0; sub(/^[^\t]*\t[^\t]*\t/, "", c); printf "%d\t%d\t%s\n", (c in w ? w[c] : 0), $1, c }' \
+          "$GATE_WEIGHTS" - \
+      | LC_ALL=C sort -t$'\t' -k1,1nr -k2,2n)
+  # Same multiset of commands or no reordering at all: ordering must never add, drop or alter one.
+  if [ "${#_ordered[@]}" -eq "${#REST[@]}" ] \
+     && [ "$(printf '%s\n' "${_ordered[@]}" | LC_ALL=C sort | cksum)" = "$(printf '%s\n' "${REST[@]}" | LC_ALL=C sort | cksum)" ]; then
+    REST=("${_ordered[@]}")
+  else
+    echo "warning: gate_weights ordering produced a different command list; keeping workflow order" >&2
+  fi
+fi
+
 if [ "$JOBS" -le 1 ]; then
   for cmd in "${REST[@]}"; do
     run_seq "$cmd" || true
