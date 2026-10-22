@@ -33,6 +33,8 @@ set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVER="$SELF_DIR/resolve_conflicts.py"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
 DRY=0
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
 
@@ -315,11 +317,56 @@ cmd_build() {
 
 # --- check ---------------------------------------------------------------------------------------
 
+# Remote full gate set (R-0541). LAND_REMOTE_RUNNER is `<runner> <ref> <command>`: the laptop's
+# ~/bin/concrete-remote (the default), or scripts/land/run-at-ref.sh on the server; empty disables.
+# The runner must print `sha=<sha>` for the commit it ran; a run of any other SHA is no result.
+# With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name> (the hook's
+# backup tier) so a runner that fetches from the remote can see it, and deleted afterwards; the
+# server's local runner fetches from this clone instead (LAND_REMOTE_PUSH=0, ref = the SHA).
+remote_runner() {
+  local r="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
+  if [ -n "$r" ] && [ -x "$r" ]; then echo "$r"; fi
+  return 0
+}
+
+remote_leg() { # name head
+  local name="$1" head="$2" runner ref
+  runner="$(remote_runner)"
+  ref="$head"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
+    refuse_fork "$REMOTE"
+    ref="wip/land-$name"
+    git push -q --force "$REMOTE" "$head:refs/heads/$ref" || return 1
+  fi
+  local rc=0 out
+  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then git push -q "$REMOTE" ":refs/heads/$ref" 2>/dev/null || true; fi
+  case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
+  return "$rc"
+}
+
+# Codex review leg: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head. Its
+# exit status is the verdict (0 = clean); a published review note saying `findings` at head also fails.
+review_cmd() {
+  if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
+  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  return 0
+}
+
+review_leg() { # base head
+  local cmd; cmd="$(review_cmd)"
+  bash -c "$cmd --base $1 --head $2" || return $?
+  bash "$SELF_DIR/notes.sh" fetch >/dev/null 2>&1 || true
+  [ "$(bash "$SELF_DIR/notes.sh" get review "$2" verdict 2>/dev/null)" != findings ]
+}
+
 cmd_check() {
-  local name="" remote=1
+  local name="" remote=1 review=1
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-remote) remote=0 ;;
+      --no-review) review=0 ;;
       -*) die "check: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -330,59 +377,41 @@ cmd_check() {
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   # A new check withdraws the previous one: a failing re-run must not leave an old pass standing.
   [ "$DRY" = 1 ] || state_set "$name" checked ""
+  if [ "$remote" = 1 ] && [ -z "$(remote_runner)" ]; then remote=0; fi
+  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then review=0; fi
 
-  # Remote full set (R-0541) runs alongside the local selection when the server tool exists.
-  local rpid="" rlog=""
-  if [ "$remote" = 1 ] && [ -x "$HOME/bin/concrete-remote" ]; then
-    if [ "$DRY" = 1 ]; then
-      note "(dry-run) would run: $HOME/bin/concrete-remote full-gates $head train/$name"
-    else
-      rlog="$STATE_ROOT/$name/remote-$head.log"
-      note "remote full gate set: $HOME/bin/concrete-remote full-gates $head (log $rlog)"
-      "$HOME/bin/concrete-remote" full-gates "$head" "train/$name" > "$rlog" 2>&1 &
-      rpid=$!
-    fi
-  fi
-
-  # The hook's own selection (fast surface gates + touched areas) over exactly the range the `ci`
-  # push will present (base..head on ci/<name>), so that push can reuse this validation record.
-  local line="refs/heads/train/$name $head refs/heads/ci/$name $base"
-  local rc=0
+  # The legs are independent, so they run AT THE SAME TIME and are all collected (LANDING.md,
+  # "Pipelining"): the impact selection over exactly the range the `ci` push will present
+  # (base..head on ci/<name>, so that push reuses the hook's record), the remote full set, and the
+  # Codex review. Any failing leg fails the check.
   if [ "$DRY" = 1 ]; then
-    note "(dry-run) would run the pre-push selection: echo '$line' | bash $HOOK $REMOTE"
-  else
-    [ -f "$HOOK" ] || die "check: no pre-push hook at $HOOK"
-    printf '%s\n' "$line" | in_nix bash "$HOOK" "$REMOTE" "$(git remote get-url "$REMOTE")" || rc=$?
+    note "(dry-run) would run in parallel: impact gates (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
+    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}'"; fi
+    if [ "$review" = 1 ]; then note "(dry-run)   + review: $(review_cmd) --base $base --head $head"; fi
+    return 0
   fi
-
-  # Impact selection (R-0513), when present: one gate command per line on stdout.
-  if [ "$rc" = 0 ] && [ -f scripts/tests/select_gates.sh ] && ! grep -q select_gates "$HOOK" 2>/dev/null; then
-    if [ "$DRY" = 1 ]; then
-      note "(dry-run) would run the gates printed by: bash scripts/tests/select_gates.sh --base $base --head $head"
-    else
-      local sel; sel="$(bash scripts/tests/select_gates.sh --base "$base" --head "$head")" || rc=$?
-      if [ "$rc" = 0 ] && [ -n "$sel" ]; then
-        local args=() c
-        while IFS= read -r c; do [ -n "$c" ] && args+=(--first "$c"); done <<< "$sel"
-        in_nix bash scripts/tests/run_ci_gates_local.sh "${args[@]}" || rc=$?
-      fi
-    fi
-  fi
-
-  if [ -n "$rpid" ]; then
-    local rrc=0; wait "$rpid" || rrc=$?
-    if [ "$rrc" = 0 ]; then note "remote full gate set passed at ${head:0:10}"
-    else note "remote full gate set FAILED at ${head:0:10} (exit $rrc); tail of $rlog:"; tail -n 40 "$rlog" || true; rc=1; fi
-    log_row "$name" check-remote "$([ "$rrc" = 0 ] && echo passed || echo failed)" "concrete-remote exit $rrc"
-  fi
-  [ "$DRY" = 1 ] && return 0
-  if [ "$rc" = 0 ]; then
+  local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
+  local t0; t0="$(date +%s)"
+  legs_start impact "$dir/impact.log" bash "$SELF_DIR/impact_gates.sh" --base "$base" --head "$head" \
+    --src-ref "refs/heads/train/$name" --dst-ref "refs/heads/ci/$name"
+  if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
+  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$base" "$head"; fi
+  legs_wait
+  local wall=$(( $(date +%s) - t0 )) leg
+  cat "$dir/impact.log"
+  for leg in $LEGS_FAILED; do
+    [ "$leg" = impact ] && continue
+    note "$leg leg FAILED at ${head:0:10}; tail of $dir/$leg.log:"; tail -n 40 "$dir/$leg.log" || true
+  done
+  note "legs: $LEGS_REPORT; wall ${wall}s, sequential ${LEGS_SUM}s"
+  log_row "$name" check-legs "$([ -z "$LEGS_FAILED" ] && echo passed || echo failed)" "$LEGS_REPORT wall=${wall}s sum=${LEGS_SUM}s"
+  if [ -z "$LEGS_FAILED" ]; then
     state_set "$name" checked "$head"
-    log_row "$name" check passed "pre-push selection$([ -f scripts/tests/select_gates.sh ] && echo ' + select_gates')"
+    log_row "$name" check passed "impact$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
     note "check passed at ${head:0:10}; next: train.sh ci $name"
   else
-    log_row "$name" check failed "exit $rc"
-    die "check FAILED at ${head:0:10}; fix the member that broke it (bisect: train.sh bisect $name --test '<failing gate>')"
+    log_row "$name" check failed "legs failed: $LEGS_FAILED"
+    die "check FAILED at ${head:0:10} ($LEGS_FAILED); fix the member that broke it (bisect: train.sh bisect $name --test '<failing gate>')"
   fi
 }
 
@@ -606,17 +635,18 @@ cmd_land() {
     fi
   fi
 
-  # The hook sees base..head again (the same range `check` validated) and reuses that record. The
-  # lease makes the push conditional on main still being the base (head descends from it, so this is
-  # a fast-forward whenever it succeeds).
-  run_or_print in_nix git push --force-with-lease="refs/heads/main:$base" "$REMOTE" "$head:refs/heads/main"
+  # The hook sees base..head again (the same range `check` validated) and reuses that record. main
+  # is NEVER force-pushed, not even with a lease: a plain push is a fast-forward or a refusal, so a
+  # publisher that moved main without taking the lock makes this push fail instead of being undone.
+  # (Head descends from base; if main moved to anything head does not contain, git refuses.)
+  run_or_print in_nix git push "$REMOTE" "$head:refs/heads/main"
   if [ "$DRY" = 0 ]; then
     assert_no_op "push to $REMOTE"
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
   if [ -n "$mirror" ]; then
     # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    run_or_print env CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/main:$mmain" "$mirror" "$head:refs/heads/main"
+    run_or_print env CONCRETE_SKIP_GATES=1 git push "$mirror" "$head:refs/heads/main"
     if [ "$DRY" = 0 ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
       log_row "$name" land failed "mirror $mirror not at head"
       die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
