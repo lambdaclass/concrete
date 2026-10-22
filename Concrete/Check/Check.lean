@@ -445,6 +445,21 @@ def checkDirectDestroyImplUse (fnName : String) (span : Option Span) : CheckM Un
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
 -- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
 -- only: the definitions are unchanged. Remove when the new elaborator copes with blocks this size.
+/-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
+def deferScopeEntry : CheckM (List Nat × List Nat) := do
+  let env ← getEnv
+  return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
+          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none)
+
+/-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
+    trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
+def deferScopeExit (entry : List Nat × List Nat) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.map fun (n, vi) =>
+    let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
+    let vi := if vi.pinnedByDefer && !entry.2.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    (n, vi) }
+
 set_option backward.do.legacy true in
 mutual
 
@@ -678,7 +693,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     if blockExitsFunction then_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let thenInit := then_.dropLast
-    checkStmts thenInit env.currentRetTy
+    -- Defer rule (a): the branch's deferred calls run after its trailing value.
+    let thenDefer ← deferScopeEntry
+    checkStmtsCore thenInit env.currentRetTy
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
         let ty ← checkExpr tExpr hint
@@ -692,6 +709,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
+    deferScopeExit thenDefer
     let envAfterThen ← getEnv
     checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating then_) (some e.getSpan)
     -- Check else branch from the SNAPSHOT (not the then-arm's aftermath)
@@ -699,7 +717,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     if blockExitsFunction else_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let elseInit := else_.dropLast
-    checkStmts elseInit env.currentRetTy
+    let elseDefer ← deferScopeEntry
+    checkStmtsCore elseInit env.currentRetTy
     let elseTy ← match else_.getLast? with
       | some (.expr _ eExpr true) => do
         let ty ← checkExpr eExpr hint
@@ -712,6 +731,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmt other env.currentRetTy
         pure Ty.unit
       | none => pure Ty.unit
+    deferScopeExit elseDefer
     let envAfterElse ← getEnv
     checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating else_) (some e.getSpan)
     if blockExitsFunction then_ then
@@ -1541,7 +1561,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
           let curEnv ← getEnv
-          checkStmts bodyInit curEnv.currentRetTy
+          -- Defer rule (a): the arm's deferred calls run after its trailing value.
+          let armDefer ← deferScopeEntry
+          checkStmtsCore bodyInit curEnv.currentRetTy
           let armTy ← match body.getLast? with
             | some (.expr _ armExpr true) => do
               let ty ← checkExpr armExpr hint
@@ -1557,6 +1579,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               checkStmt other curEnv.currentRetTy
               pure Ty.unit
             | none => pure Ty.unit
+          deferScopeExit armDefer
           -- Unify arm types
           if !firstArmDone then
             matchResultTy := armTy
@@ -1682,7 +1705,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           setEnv { cur with inFnExitingBranch := true }
         -- Check all stmts except the last, then extract type from last
         let bodyInit := body.dropLast
-        checkStmts bodyInit envBefore.currentRetTy
+        let armDefer ← deferScopeEntry
+        checkStmtsCore bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
           | some (.expr _ armExpr true) => do
             let ty ← checkExpr armExpr hint
@@ -1694,6 +1718,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkStmt other envBefore.currentRetTy
             pure Ty.unit
           | none => pure Ty.unit
+        deferScopeExit armDefer
         if !firstArmDone then
           matchResultTy := armTy
           firstArmDone := true
@@ -2638,15 +2663,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   -- Defer rule (a) (bug 143): the deferred calls this block registers run when it ends.
   -- A binding reserved here is consumed then, and a pin taken here ends then.
-  let entry ← getEnv
-  let reservedAtEntry := entry.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none
-  let pinnedAtEntry := entry.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none
+  let entry ← deferScopeEntry
   checkStmtsCore stmts retTy
-  let env ← getEnv
-  setEnv { env with vars := env.vars.map fun (n, vi) =>
-    let vi := if vi.state == .reserved && !reservedAtEntry.contains vi.uid then { vi with state := .consumed } else vi
-    let vi := if vi.pinnedByDefer && !pinnedAtEntry.contains vi.uid then { vi with pinnedByDefer := false } else vi
-    (n, vi) }
+  deferScopeExit entry
 
 partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []

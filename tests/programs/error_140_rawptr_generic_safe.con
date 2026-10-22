@@ -1,0 +1,5 @@
+// Bug 140 (Codex): a Copy-bounded generic comparison instantiated at a raw pointer from code
+// that is neither trusted nor Unsafe is refused after monomorphization (E0229).
+fn eq<T: Copy>(a: T, b: T) -> bool { return a == b; }
+fn safe(a: *const Int, b: *const Int) -> bool { return eq::<*const Int>(a, b); }
+fn main() with(Unsafe) -> Int { let x: Int = 1; let p: *const Int = &x as *const Int; if safe(p, p) { return 1; } return 0; }

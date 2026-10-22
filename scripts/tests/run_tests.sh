@@ -1749,6 +1749,7 @@ run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
 run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+run_err "$TESTDIR/error_140_rawptr_generic_safe.con"       "(E0229)"
 run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
 # Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
 # operator operand (E0278); exits in statement position, tails and let initializers stay legal.
@@ -1777,6 +1778,7 @@ run_err "$TESTDIR/error_143_defer_field_arg.con"                 "(E0279)"
 run_err "$TESTDIR/error_143_defer_call_arg.con"                  "(E0279)"
 run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
 run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
+run_err "$TESTDIR/error_143_defer_last_in_match_arm.con"         "(E0205)"
 run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5 " 0
 r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then

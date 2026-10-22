@@ -52,8 +52,12 @@ Defer rule (a), "reserve by place" (user decision, 2026-10-21; normative text in
   `variablePinnedByDefer`, in `consumeVar`), a later `defer` included. The borrow discharges
   nothing, so a borrow-only `defer` still leaves the local to be consumed (E0208, `d24`), and an
   observer goes after its consumer in source (`defer kill(t); defer peek(&t);`, `d22`, accepted).
-- When the registering block ends (`checkStmts`), its reservations become consumptions and its pins
-  end, so a reserved local read after the block that ran its deferred consumer is E0205.
+- When the registering block ends (`checkStmts`; for a value block, an `if`-expression branch or a
+  match arm, after its trailing value: `deferScopeEntry`/`deferScopeExit`), its reservations become
+  consumptions and its pins end, so a reserved local read after the block that ran its deferred
+  consumer is E0205. (Before the fix, and in the first version of it, a `defer` as a match arm's
+  last statement left its local reserved past the arm, so a later read of the consumed value was
+  accepted; Codex review.)
 - Ownership is not taken at registration: reserved and pinned locals may still be read, borrowed
   and mutated in place, which the 61 corpus sites that use a resource after deferring its cleanup
   need. A `Copy` argument is read at the exit.
@@ -67,7 +71,8 @@ positive control below pins it.
 Fixtures (`run_tests.sh`): `error_143_defer_borrow_then_free.con`,
 `error_143_defer_borrow_then_consume.con`, `error_143_defer_observer_before_consumer.con`,
 `error_143_defer_field_arg.con`, `error_143_defer_call_arg.con`,
-`error_143_defer_then_use_after_block.con`, `error_143_defer_borrow_only.con` (the `d24` control),
+`error_143_defer_then_use_after_block.con`, `error_143_defer_last_in_match_arm.con`,
+`error_143_defer_borrow_only.con` (the `d24` control),
 and `regress_143_defer_reserve_by_place.con` (reserved and pinned locals mutated in place, observer
 after consumer, exit-time `Copy` read, a shadowing `let`, a pin ending with its block; native and
 `--interp` print `7 1 4 2 2 5 5 5`). An interpreter leg asserts both reproducers are refused by both
