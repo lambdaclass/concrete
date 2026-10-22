@@ -33,6 +33,8 @@ set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVER="$SELF_DIR/resolve_conflicts.py"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
 DRY=0
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
 
@@ -129,14 +131,7 @@ state_get_soft() {
 
 # --- toolchain -----------------------------------------------------------------------------------
 # The pre-push hook builds the compiler, so pushes and checks run inside the dev shell.
-in_nix() { # cmd...
-  if [ "${LAND_NO_NIX:-0}" = 1 ] || [ -n "${IN_NIX_SHELL:-}" ] || ! command -v nix >/dev/null 2>&1 \
-     || [ ! -f "$ROOT/flake.nix" ]; then
-    "$@"
-  else
-    nix develop "$ROOT" --command "$@"
-  fi
-}
+in_nix() { land_in_nix "$@"; }   # scripts/land/lib.sh
 
 run_or_print() { # cmd... — executes, or prints under --dry-run
   if [ "$DRY" = 1 ]; then printf 'train (dry-run): would run:'; printf ' %q' "$@"; echo; return 0; fi
@@ -315,11 +310,82 @@ cmd_build() {
 
 # --- check ---------------------------------------------------------------------------------------
 
+# Remote full gate set (R-0541). LAND_REMOTE_RUNNER is `<runner> <ref> <command>`: the laptop's
+# ~/bin/concrete-remote (the default), or scripts/land/run-at-ref.sh on the server; empty disables.
+# The runner must print `sha=<sha>` for the commit it ran; a run of any other SHA is no result.
+# With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name>-<sha>-<pid>-<n>
+# (the hook's backup tier) so a runner that fetches from the remote can see it, and deleted
+# afterwards; the
+# server's local runner fetches from this clone instead (LAND_REMOTE_PUSH=0, ref = the SHA).
+remote_runner() {
+  local r="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
+  if [ -n "$r" ] && [ -x "$r" ]; then echo "$r"; fi
+  return 0
+}
+
+remote_leg() { # name head
+  local name="$1" head="$2" runner ref
+  runner="$(remote_runner)"
+  ref="$head"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
+    refuse_fork "$REMOTE"
+    # One ref per run, created only if absent (no --force), so concurrent checks never share one.
+    # Created only if ABSENT. An empty lease is not enough: git reports a ref that already holds
+    # this SHA as "up to date" (success) before it looks at the lease, so ownership is taken only
+    # from --porcelain's `*` (new ref) line; `=` is another run's ref and gets a fresh name.
+    local try ok=0 out
+    for try in 1 2 3; do
+      ref="${LAND_REMOTE_REF_FIRST:-wip/land-$name-${head:0:12}-$$-$RANDOM$RANDOM}"; LAND_REMOTE_REF_FIRST=""
+      out="$(git push --porcelain --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref" 2>&1)" || true
+      case $'\n'"$out"$'\n' in *$'\n*\t'"$head:refs/heads/$ref"$'\t'*) ok=1; break ;; esac
+      echo "remote: refs/heads/$ref was not created by this run (${out//$'\n'/ | }); trying another name"
+    done
+    [ "$ok" = 1 ] || return 1
+    # Removed even when the leg is interrupted. A deletion publishes nothing, so it skips the gates
+    # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
+    trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
+  fi
+  local rc=0 out
+  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
+    # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
+    local dout
+    # The backstop is disarmed BEFORE this one attempt, which is never retried: a push that fails
+    # may still have deleted the ref, and a later run may have re-created the name at the same SHA,
+    # where a retry's lease would match. An unconfirmed deletion is reported and left alone.
+    trap - EXIT
+    if dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)"; then
+      echo "remote: deleted refs/heads/$ref"
+    else
+      echo "remote: deletion of refs/heads/$ref NOT confirmed; left for a human (not retried): ${dout//$'\n'/ | }"
+    fi
+  fi
+  case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
+  return "$rc"
+}
+
+# Codex review leg: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head. Its
+# exit status is the verdict (0 = clean); a published review note saying `findings` at head also fails.
+review_cmd() {
+  if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
+  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  return 0
+}
+
+review_leg() { # base head
+  local cmd; cmd="$(review_cmd)"
+  bash -c "$cmd --base $1 --head $2" || return $?
+  bash "$SELF_DIR/notes.sh" fetch >/dev/null 2>&1 || true
+  [ "$(bash "$SELF_DIR/notes.sh" get review "$2" verdict 2>/dev/null)" != findings ]
+}
+
 cmd_check() {
-  local name="" remote=1
+  local name="" remote=1 review=1
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-remote) remote=0 ;;
+      --no-review) review=0 ;;
       -*) die "check: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -330,59 +396,41 @@ cmd_check() {
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   # A new check withdraws the previous one: a failing re-run must not leave an old pass standing.
   [ "$DRY" = 1 ] || state_set "$name" checked ""
+  if [ "$remote" = 1 ] && [ -z "$(remote_runner)" ]; then remote=0; fi
+  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then review=0; fi
 
-  # Remote full set (R-0541) runs alongside the local selection when the server tool exists.
-  local rpid="" rlog=""
-  if [ "$remote" = 1 ] && [ -x "$HOME/bin/concrete-remote" ]; then
-    if [ "$DRY" = 1 ]; then
-      note "(dry-run) would run: $HOME/bin/concrete-remote full-gates $head train/$name"
-    else
-      rlog="$STATE_ROOT/$name/remote-$head.log"
-      note "remote full gate set: $HOME/bin/concrete-remote full-gates $head (log $rlog)"
-      "$HOME/bin/concrete-remote" full-gates "$head" "train/$name" > "$rlog" 2>&1 &
-      rpid=$!
-    fi
-  fi
-
-  # The hook's own selection (fast surface gates + touched areas) over exactly the range the `ci`
-  # push will present (base..head on ci/<name>), so that push can reuse this validation record.
-  local line="refs/heads/train/$name $head refs/heads/ci/$name $base"
-  local rc=0
+  # The legs are independent, so they run AT THE SAME TIME and are all collected (LANDING.md,
+  # "Pipelining"): the impact selection over exactly the range the `ci` push will present
+  # (base..head on ci/<name>, so that push reuses the hook's record), the remote full set, and the
+  # Codex review. Any failing leg fails the check.
   if [ "$DRY" = 1 ]; then
-    note "(dry-run) would run the pre-push selection: echo '$line' | bash $HOOK $REMOTE"
-  else
-    [ -f "$HOOK" ] || die "check: no pre-push hook at $HOOK"
-    printf '%s\n' "$line" | in_nix bash "$HOOK" "$REMOTE" "$(git remote get-url "$REMOTE")" || rc=$?
+    note "(dry-run) would run in parallel: impact gates (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
+    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}'"; fi
+    if [ "$review" = 1 ]; then note "(dry-run)   + review: $(review_cmd) --base $base --head $head"; fi
+    return 0
   fi
-
-  # Impact selection (R-0513), when present: one gate command per line on stdout.
-  if [ "$rc" = 0 ] && [ -f scripts/tests/select_gates.sh ] && ! grep -q select_gates "$HOOK" 2>/dev/null; then
-    if [ "$DRY" = 1 ]; then
-      note "(dry-run) would run the gates printed by: bash scripts/tests/select_gates.sh --base $base --head $head"
-    else
-      local sel; sel="$(bash scripts/tests/select_gates.sh --base "$base" --head "$head")" || rc=$?
-      if [ "$rc" = 0 ] && [ -n "$sel" ]; then
-        local args=() c
-        while IFS= read -r c; do [ -n "$c" ] && args+=(--first "$c"); done <<< "$sel"
-        in_nix bash scripts/tests/run_ci_gates_local.sh "${args[@]}" || rc=$?
-      fi
-    fi
-  fi
-
-  if [ -n "$rpid" ]; then
-    local rrc=0; wait "$rpid" || rrc=$?
-    if [ "$rrc" = 0 ]; then note "remote full gate set passed at ${head:0:10}"
-    else note "remote full gate set FAILED at ${head:0:10} (exit $rrc); tail of $rlog:"; tail -n 40 "$rlog" || true; rc=1; fi
-    log_row "$name" check-remote "$([ "$rrc" = 0 ] && echo passed || echo failed)" "concrete-remote exit $rrc"
-  fi
-  [ "$DRY" = 1 ] && return 0
-  if [ "$rc" = 0 ]; then
+  local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
+  local t0; t0="$(date +%s)"
+  legs_start impact "$dir/impact.log" bash "$SELF_DIR/impact_gates.sh" --base "$base" --head "$head" \
+    --src-ref "refs/heads/train/$name" --dst-ref "refs/heads/ci/$name"
+  if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
+  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$base" "$head"; fi
+  legs_wait
+  local wall=$(( $(date +%s) - t0 )) leg
+  cat "$dir/impact.log"
+  for leg in $LEGS_FAILED; do
+    [ "$leg" = impact ] && continue
+    note "$leg leg FAILED at ${head:0:10}; tail of $dir/$leg.log:"; tail -n 40 "$dir/$leg.log" || true
+  done
+  note "legs: $LEGS_REPORT; wall ${wall}s, sequential ${LEGS_SUM}s"
+  log_row "$name" check-legs "$([ -z "$LEGS_FAILED" ] && echo passed || echo failed)" "$LEGS_REPORT wall=${wall}s sum=${LEGS_SUM}s"
+  if [ -z "$LEGS_FAILED" ]; then
     state_set "$name" checked "$head"
-    log_row "$name" check passed "pre-push selection$([ -f scripts/tests/select_gates.sh ] && echo ' + select_gates')"
+    log_row "$name" check passed "impact$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
     note "check passed at ${head:0:10}; next: train.sh ci $name"
   else
-    log_row "$name" check failed "exit $rc"
-    die "check FAILED at ${head:0:10}; fix the member that broke it (bisect: train.sh bisect $name --test '<failing gate>')"
+    log_row "$name" check failed "legs failed: $LEGS_FAILED"
+    die "check FAILED at ${head:0:10} ($LEGS_FAILED); fix the member that broke it (bisect: train.sh bisect $name --test '<failing gate>')"
   fi
 }
 
@@ -606,17 +654,18 @@ cmd_land() {
     fi
   fi
 
-  # The hook sees base..head again (the same range `check` validated) and reuses that record. The
-  # lease makes the push conditional on main still being the base (head descends from it, so this is
-  # a fast-forward whenever it succeeds).
-  run_or_print in_nix git push --force-with-lease="refs/heads/main:$base" "$REMOTE" "$head:refs/heads/main"
+  # The hook sees base..head again (the same range `check` validated) and reuses that record. main
+  # is NEVER force-pushed, not even with a lease: a plain push is a fast-forward or a refusal, so a
+  # publisher that moved main without taking the lock makes this push fail instead of being undone.
+  # (Head descends from base; if main moved to anything head does not contain, git refuses.)
+  run_or_print in_nix git push "$REMOTE" "$head:refs/heads/main"
   if [ "$DRY" = 0 ]; then
     assert_no_op "push to $REMOTE"
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
   if [ -n "$mirror" ]; then
     # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    run_or_print env CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/main:$mmain" "$mirror" "$head:refs/heads/main"
+    run_or_print env CONCRETE_SKIP_GATES=1 git push "$mirror" "$head:refs/heads/main"
     if [ "$DRY" = 0 ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
       log_row "$name" land failed "mirror $mirror not at head"
       die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
@@ -634,6 +683,12 @@ cmd_land() {
 # result is recorded against that train's SHA. Attribution assumes one culprit; an interaction
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
+# The landing bot's kill switch (LAND_PAUSE_FILE) is read before and after every operation of every
+# probe (each --ci probe checks and dispatches a run). A probe that sees it answers `paused`, never
+# green or red. The switch is a file that stays until the bot has acknowledged it: one created and
+# removed inside a single operation is not seen.
+bisect_paused() { [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; }
+
 subset_red() { # sub-name test-cmd|"" members...
   local sub="$1" test="$2"; shift 2
   local refs=() m
@@ -645,13 +700,28 @@ subset_red() { # sub-name test-cmd|"" members...
     git update-ref "refs/landing-bisect/$sub/$i" "${m##*@}"
     pinned+=("refs/landing-bisect/$sub/$i"); i=$((i+1))
   done
-  "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || { echo build-failed; return 0; }
+  if bisect_paused; then echo paused; return 0; fi
+  local brc=0
+  "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || brc=$?
+  if bisect_paused; then echo paused; return 0; fi
+  if [ "$brc" != 0 ]; then echo build-failed; return 0; fi
   local rc=0
+  # The switch is read again after EVERY operation, whatever it returned: a probe that ran while
+  # the switch was pulled gives no verdict, so nothing is attributed from it.
   if [ -n "$test" ]; then
     bash -c "$test" >/dev/null 2>&1 || rc=$?
+    if bisect_paused; then echo paused; return 0; fi
   else
-    "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 && "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 \
-      && "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+    "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 || rc=$?
+    if bisect_paused; then echo paused; return 0; fi
+    if [ "$rc" = 0 ]; then
+      "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 || rc=$?
+      if bisect_paused; then echo paused; return 0; fi
+    fi
+    if [ "$rc" = 0 ]; then
+      "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+      if bisect_paused; then echo paused; return 0; fi
+    fi
   fi
   STAGE_T0="$(date +%s)"
   log_row "$sub" bisect-step "$([ "$rc" = 0 ] && echo passed || echo failed)" "members: $(printf '%s ' "${refs[@]}")"
@@ -682,12 +752,21 @@ cmd_bisect() {
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
     note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
     case "$verdict" in
+      paused) log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) at step $step"; die "bisect: paused by $LAND_PAUSE_FILE at step $step; no culprit attributed" ;;
       red|build-failed) list=("${first[@]}") ;;
       green) list=("${second[@]}") ;;
     esac
   done
   local culprit="${list[0]}"
   verdict="$(subset_red "$name-bc" "$test" "$culprit")"
+  if [ "$verdict" = paused ]; then
+    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) during the culprit probe"
+    die "bisect: paused by $LAND_PAUSE_FILE while probing ${culprit%@*} alone; no culprit attributed"
+  fi
+  if bisect_paused; then
+    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before attribution"
+    die "bisect: paused by $LAND_PAUSE_FILE before attribution; no culprit attributed"
+  fi
   local rest=() ; for m in $(printf '%s\n' "${members//,/ }"); do [ "$m" = "$culprit" ] || rest+=("${m%@*}"); done
   STAGE_T0="$(date +%s)"
   state_set "$name" bisect_culprit "$culprit"

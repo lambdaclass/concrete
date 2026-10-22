@@ -1,0 +1,17 @@
+# One landing-bot tick (scripts/land/bot.sh tick), installed for user `dev` by
+# scripts/land/install-bot.sh and started by concrete-landing-bot.timer. A tick that watches CI can
+# take hours. The timer never starts a second tick while this one is active, and the bot's own lock
+# refuses a second instance started by hand.
+[Unit]
+Description=Concrete landing bot (one tick)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/concrete-landing-bot.env
+ExecStart=%h/.local/libexec/concrete-landing-bot tick
+TimeoutStartSec=8h
+Nice=5
+StandardOutput=append:%h/.local/state/concrete-landing-bot.log
+StandardError=append:%h/.local/state/concrete-landing-bot.log
