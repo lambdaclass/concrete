@@ -342,7 +342,35 @@ becomes the slowest leg instead of the sum. Both scripts record each leg's durat
 and the sum: `ready.sh` in `<git-common-dir>/concrete-landing/ready.tsv`, and `check` as the
 `check-legs` row of the train log.
 
-MEASUREMENT_PLACEHOLDER
+**Measured on 2026-10-22, on branch `wip/landing-bot`.** Two runs of `ready.sh`, each with its legs
+started together:
+
+| run | review (Codex) | impact | remote full set | wall | one after another |
+|---|---|---|---|---|---|
+| laptop, `f55935ac` | 117 s | 51 s | lost when the laptop lost its network | n/a | n/a |
+| concrete-ci-1, `93aa7ac5` | not run (no Codex login for `dev`) | 69 s | 5239 s, red | 5239 s | 5308 s |
+
+The server was shared with other full runs at a load average of 15 to 32.
+
+- **Saving.** The impact gates (69 s) and the review (117 s, from the laptop run) finish inside the
+  remote leg, so about 3 minutes come off every readiness check. Measured: 69 s with the impact
+  leg alone, and 186 s with the review included.
+- **What dominates.** The remote full set is about 98% of the cost: 87 minutes on a loaded host.
+  Pipelining removes the queue in front of it, not the leg itself. The next lever is the full
+  set's own time (R-0546 caches, R-0541 dedicated runners) and keeping concurrent full runs off
+  the same host.
+- **Why the remote leg was red.** Five gates failed:
+  - `check_phase6c_observability.sh` #5 and `check_campaign_summary_golden.sh` refuse to run in a
+    linked worktree ("Run it in a clone"), which is how that run was made. `run-at-ref.sh` now
+    uses `clone --local`.
+  - `check_example_outputs.sh` under valgrind, `run_tests.sh` and `check_external_checker.sh`
+    were not examined.
+
+  This branch changes only `scripts/land`, one build-free gate with its registration, and this
+  document. CI on a train is where those three would be settled.
+- **Not counted.** Before pipelining, a human orchestrator usually started the review, the impact
+  gates and the remote set by hand in sequence, and each hand-off waited for someone to notice
+  the previous result. The scripts remove that wait, and this table does not measure it.
 
 ## Configuration
 | variable | default | meaning |
