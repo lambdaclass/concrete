@@ -1,6 +1,6 @@
 // Bug 090 positive control: a guard may READ (borrow, Copy fields) the values
 // it inspects; only moves are rejected. Each arm still moves exactly once.
-struct B { v: Int }
+struct Copy B { v: Int }
 fn peek(h: &Heap<B>) -> Int { return h.v; }
 fn take(h: Heap<B>) with(Alloc) -> Int { let v: Int = h.v; free(h); return v; }
 fn mk(k: Int) with(Alloc) -> Option<Heap<B>> { return Option::Some { value: alloc(B { v: k }) }; }

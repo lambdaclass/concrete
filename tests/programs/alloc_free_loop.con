@@ -1,6 +1,6 @@
 // Test: alloc/free in a loop
 // Expected: 45
-struct Box { value: Int }
+struct Copy Box { value: Int }
 
 fn main() with(Std) -> Int {
     let mut sum: Int = 0;

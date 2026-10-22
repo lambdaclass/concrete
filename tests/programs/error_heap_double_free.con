@@ -1,6 +1,6 @@
 // ERROR TEST: Heap<T> double free — second free is use-after-move.
 
-struct Point {
+struct Copy Point {
     x: Int,
     y: Int,
 }

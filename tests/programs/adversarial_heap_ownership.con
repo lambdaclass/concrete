@@ -4,7 +4,7 @@
 // - free consumes the pointer
 // - multiple arrow accesses on same pointer are OK
 
-struct Point {
+struct Copy Point {
     x: Int,
     y: Int,
 }

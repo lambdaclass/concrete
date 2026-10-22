@@ -47,7 +47,7 @@ params are borrows (exempt); `&T` params are Copy. See
 | `methodCall` | receiver is a PLACE, auto-borrowed for `&self`/`&mut self`; by-value `self` **moves** an ident receiver and **rejects** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
 | `staticMethodCall` | ident arguments **move**; result owned | conservation |
 | `fnRef` | creates a Copy fn-pointer value | — |
-| heap-shell `.fieldAccess` (was `arrowAccess`/`->` pre-6D#3) | heap-interior read — EXCLUDED from the H11 rule by design: `h->next` + `free(h)` is the heap-shell destructure idiom; `Heap<T>` interiors are not linearity-tracked (trusted boundary, disclosed in KNOWN_HOLES H11) | disclosed exclusion |
+| heap-shell `.fieldAccess` (was `arrowAccess`/`->` pre-6D#3) | heap-interior read — the H11 rule applies (bug 144, 2026-10-21): a non-Copy field read by value is **E0290**; `Heap<T>` interiors are linearity-tracked, and the node destructure is `let n = *h;` plus a pattern | projection |
 | `allocCall` | inner call/allocator evaluated; creates an owned `Heap<T>` | discard |
 | `whileExpr` | loop as expression; `break value;` **moves** the value out as the loop result (H14) | conservation (H14 rows) |
 | `ifExpr` | branch values **move**; branches must agree on consumption | conservation |
@@ -68,7 +68,7 @@ params are borrows (exempt); `&T` params are Copy. See
 | `letDecl` | **moves** an ident RHS (H9); shadowing a still-LIVE linear binding **rejects** (**E0292**, H16); `let _` is removed (**E0289**) | conservation + discard |
 | `assign` | the OLD value must already be consumed (else **E0219** — rebind rule); an ident RHS **moves** (**H13**) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linears (return-path rule) | conservation + scope |
-| `expr` | `e;` (isValue=false) DISCARDS: fallible result **rejects** (**E0286**, regardless of Copy-ness); non-Copy **rejects** (**E0287**); trailing `e` (isValue=true) is the block's value, never a discard; `free(...)` is itself the consumption | discard |
+| `expr` | `e;` (isValue=false) DISCARDS: fallible result **rejects** (**E0286**, regardless of Copy-ness); non-Copy **rejects** (**E0287**); trailing `e` (isValue=true) is the block's value, never a discard; `free(...)` is itself the consumption when its pointee is Copy (a non-Copy pointee would be dropped: **E0287**, bug 144) | discard |
 | `ifElse` | branches must AGREE on consumption of outer linears (E0209/E0211); branch locals checked at branch exit (H9) | scope |
 | `while_` | loop body may not consume an outer linear (**E0207**) except in a fn-exiting branch, a rebind, or a `break`-adjacent move (H14 one-level exemption) | scope |
 | `forLoop` | same rules as `while_` | scope |

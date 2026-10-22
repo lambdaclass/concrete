@@ -37,6 +37,14 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   so `let f = open(); defer close(f); read(&f);` is unchanged. Arguments bind by binding identity
   (a later shadowing `let` is a different binding, already true since bug 087). DEFER.md states the
   rule, and no longer claims `defer obj.method();` is accepted (it is E0282). Migration: 0 sites.
+- **Heap interiors are linearity-tracked (bug 144).** A by-value read of a non-Copy field of a
+  `Heap<T>` is E0290, and `free(h)` (or `defer free(h)`) of a non-Copy pointee is E0287: `let a =
+  h.s; let b = h.s;` double-freed a `String`, and `free(h)` dropped a live linear value. The
+  heap-node destructure is `let n = *h;` plus a pattern. KNOWN_HOLES H11's "heap interiors are not
+  tracked" exclusion is withdrawn. Migration: 22 test files (19 plain-data pointees declared
+  `struct Copy`, 3 node destructures), 0 in `std` and `examples`.
+- **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
+  `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 

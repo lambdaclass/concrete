@@ -1326,22 +1326,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .ref t => t
       | .refMut t => t
       | t => t
-    -- Heap-shell access keeps the blessed `->` semantics: heap interiors are
-    -- not linearity-tracked, so `h.next` + `free(h)` (the heap-node
-    -- destructure) stays legal — H11 below is skipped for it.
-    -- Only an OWNED shell: through `&Heap<W>` / `&mut Heap<W>` the owner is elsewhere and a
-    -- by-value non-Copy field read would hand out a payload it still holds (bug 091 round 3).
-    -- The base's NORMALIZED place decides "through a reference", whatever the spelling:
-    -- `(*r).p` with `r: &Heap<W>` has a `Heap<W>`-typed base yet is reached through `&`.
+    -- Bug 144: heap interiors ARE linearity-tracked. A by-value non-Copy field read of a heap
+    -- shell is the H11 projection (E0290), as for any other owner: the cell still holds the
+    -- value, so `let a = h.s; let b = h.s;` was a double free and `h.next` + `free(h)` left
+    -- the cell's other non-Copy fields unaccounted for. Move the value out with `*h` (which
+    -- frees the cell) and destructure it.
     -- Every field access normalizes (bug 091 round 3): a projection of an untraceable base
     -- (`(**r).f`, `(if c { a } else { b }).f`) is refused (E0238), reads included.
     let baseThroughRef ← match ← normProjBase obj with
       | .place p => pure p.reach.throughRef
       | .temp => pure false
       | .reject why => throwCheck (.untraceablePlace "the base of this field access" why) (some e.getSpan)
-    let isHeapShell := !baseThroughRef && match objTy with
-      | .heap _ | .heapArray _ => true
-      | _ => false
+    let _ := baseThroughRef
     -- Extract struct name, type args and capability args for substitution
     let (structName, typeArgs, capArgs) := match innerTy with
       | .named n => (n, ([] : List Ty), ([] : List CapSet))
@@ -1398,7 +1394,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- still owns the same value). Legal forms: `&w.f`, `&mut w.f`, Copy
           -- fields, further projection (`w.f.g` — the OUTERMOST read decides),
           -- and destructuring the whole owner.
-          if mode != .place && !isHeapShell && !(← isCopyType fieldTy) then
+          if mode != .place && !(← isCopyType fieldTy) then
             throwCheck (.nonCopyProjection (tyToString fieldTy) s!"field '{field}' of '{structName}'") (some e.getSpan)
           return fieldTy
         | none => throwCheck (.structHasNoField structName field) (some e.getSpan)
@@ -2160,6 +2156,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let isFreeCall := match e with
       | .call _ fn _ _ => resolveIntrinsic fn == some .free
       | _ => false
+    -- Bug 144: `free(h)` hands back the pointee; discarding it is legal only when the pointee
+    -- is Copy. A live non-Copy interior would be dropped without being consumed.
+    if !isValue && isFreeCall && !(← isCopyType eTy) then
+      throwCheck (.freeDropsLinearInterior (tyToString eTy)) (some stmt.getSpan)
     if !isValue && !isFreeCall then
       match eTy with
       | .unit | .never | .placeholder => pure ()
@@ -2423,6 +2423,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let isFreeCall := match body with
       | .call _ fn _ _ => resolveIntrinsic fn == some .free
       | _ => false
+    -- Bug 144: a deferred `free(h)` discards the pointee too (see the statement case).
+    if isFreeCall && !(← isCopyType bodyTy) then
+      throwCheck (.freeDropsLinearInterior (tyToString bodyTy)) (some stmt.getSpan)
     if !isFreeCall then
       match bodyTy with
       | .unit | .never | .placeholder => pure ()

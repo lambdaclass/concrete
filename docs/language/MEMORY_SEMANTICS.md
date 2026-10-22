@@ -314,12 +314,14 @@ let p: Heap<Point> = alloc(Point { x: 1.0, y: 2.0 }) with(Alloc);
 
 ### Reading through a heap pointer
 
-- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3).
+- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3). A by-value read of a **non-Copy** field is E0290, as for any owner: heap interiors are linearity-tracked (decided 2026-10-21; [bug 144](../bugs/144_heap_interior_untracked.md)). Borrow it (`&p.field`) or move the whole value out with `*p`.
 - `*p` (full dereference) **consumes** the `Heap<T>` — it loads the value from the heap and frees the memory. After `*p`, the heap pointer is in `consumed` state.
 
 ### Freeing
 
-- `free(p)` consumes the `Heap<T>` and frees the memory.
+- `free(p)` consumes the `Heap<T>`, frees the memory and hands back the pointee. Discarding it
+  (`free(p);`, `defer free(p);`) is legal only when `T` is Copy; a non-Copy pointee would be
+  dropped without being consumed (E0287, bug 144): bind it (`let v = free(p);`) or use `*p`.
 - `destroy(p)` consumes the value and runs the type's `Destroy` implementation.
 
 ### Linearity prevents leaks

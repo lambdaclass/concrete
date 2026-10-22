@@ -1777,7 +1777,7 @@ run_err "$TESTDIR/error_143_defer_field_arg.con"                 "(E0279)"
 run_err "$TESTDIR/error_143_defer_call_arg.con"                  "(E0279)"
 run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
 run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
-run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5" 0
+run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5 " 0
 r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then
     echo "  ok  regress_143_defer_reserve_by_place.con: --interp prints what the binary prints"
@@ -1797,6 +1797,24 @@ for r143 in tests/regressions/bug143_defer_borrow_unpinned/repro.con tests/regre
         FAIL=$((FAIL + 1))
     fi
     rm -f "$TESTDIR/.r143_bin"
+done
+# Bug 144: heap interiors are linearity-tracked: a by-value non-Copy heap-field read is E0290,
+# free(h) of a non-Copy pointee is E0287.
+run_err "$TESTDIR/error_144_heap_field_read_twice.con"      "(E0290)"
+run_err "$TESTDIR/error_144_free_drops_linear.con"          "(E0287)"
+run_err "$TESTDIR/error_144_defer_free_drops_linear.con"    "(E0287)"
+run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
+for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
+    r144_i=$($COMPILER "$r144" --interp 2>&1 || true)
+    r144_n=$($COMPILER "$r144" -o "$TESTDIR/.r144_bin" 2>&1 || true)
+    if [[ "$r144_i" == *"error[check]"* && "$r144_n" == *"error[check]"* && ( "$r144_n" == *"(E0290)"* || "$r144_n" == *"(E0287)"* ) ]]; then
+        echo "  ok  $r144: refused at the checker natively and under --interp"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  $r144: not refused at the checker by both engines"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$TESTDIR/.r144_bin"
 done
 for r142 in tests/regressions/bug142_exit_in_operand/repro.con tests/regressions/bug142_exit_in_operand/repro_arg.con; do
     r142_i=$($COMPILER "$r142" --interp 2>&1 || true)

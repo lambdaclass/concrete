@@ -101,6 +101,8 @@ declare -A BUG_TEST_MAP=(
   [142]="error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con regress_142_exits_allowed.con"
   # Bug 143: defer rule (a), reserve by place (E0279 / E0206).
   [143]="error_143_defer_borrow_then_free.con error_143_defer_borrow_then_consume.con error_143_defer_observer_before_consumer.con error_143_defer_field_arg.con error_143_defer_call_arg.con error_143_defer_then_use_after_block.con error_143_defer_borrow_only.con regress_143_defer_reserve_by_place.con"
+  # Bug 144: heap interiors linearity-tracked (E0290 / E0287).
+  [144]="error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con regress_144_heap_node_destructure.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

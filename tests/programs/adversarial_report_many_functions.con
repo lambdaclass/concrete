@@ -22,7 +22,7 @@ fn io3(x: Int) with(Console) { println(x); }
 trusted fn trusted1(x: Int) -> Int { return x; }
 trusted fn trusted2(x: Int) -> Int { return x; }
 
-struct HeapBox { value: Int }
+struct Copy HeapBox { value: Int }
 
 fn alloc1(x: Int) with(Alloc) -> Int {
     let p: Heap<HeapBox> = alloc(HeapBox { value: x });

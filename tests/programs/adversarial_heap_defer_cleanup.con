@@ -1,7 +1,7 @@
 // Adversarial test: Heap<T> with defer cleanup pattern.
 // This is the standard ownership pattern: alloc, defer free, use, scope exit.
 
-struct Data {
+struct Copy Data {
     x: Int,
     y: Int,
 }

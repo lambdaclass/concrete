@@ -713,10 +713,13 @@ assignment targets, and auto-borrowed method receivers *as places* — so `w.f.g
 (outermost read decides), `w.f.method()` on `&self`/`&mut self`, `arr[i] = v`,
 and `&w.f` all stay legal. A by-value `self` method on a projection
 (`w.f.destroy()`) is rejected; newtype `.0` unwrap on an ident stays a
-whole-owner move. Explicitly **excluded**: heap-shell field reads (`h.next`; spelled `h->next` pre-6D#3) — that +
-`free(h)` is the blessed heap-node destructure (free() only frees the shell) and
-`Heap<T>` interiors are not linearity-tracked (that is a separate, disclosed
-design point, not a silent hole). Fallout was 2 std sites (`HashSet.drop`,
+whole-owner move. Heap-shell field reads (`h.next`; spelled `h->next` pre-6D#3) were
+explicitly **excluded** until 2026-10-21 ("`Heap<T>` interiors are not linearity-tracked",
+for the `h.next` + `free(h)` destructure). That exclusion was a hole, not a design point: it
+allowed a double free and a silent drop of a linear interior in safe code
+([bug 144](../bugs/144_heap_interior_untracked.md)). It is **withdrawn**: heap-shell reads
+follow this rule (E0290), `free(h)` of a non-Copy pointee is E0287, and the destructure is
+`let n = *h;` plus a pattern. Fallout was 2 std sites (`HashSet.drop`,
 `OrderedSet.drop` — now destructure) and 3 test fixtures.
 
 ```concrete pseudocode

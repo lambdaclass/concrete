@@ -1,0 +1,15 @@
+// Bug 144: a by-value read of a non-Copy field of a heap shell duplicated it. On main the binary
+// double-frees the String (SIGTRAP, exit 133 on arm64 macOS). Now E0290, as for any owner.
+struct S { s: String }
+
+fn main() with(Alloc) -> Int {
+    let mut t: String = "a string long enough to live on the heap for sure";
+    string_append_int(&mut t, 1234567);
+    let h: Heap<S> = alloc(S { s: t });
+    let a: String = h.s;
+    let b: String = h.s;
+    free(h);
+    drop_string(a);
+    drop_string(b);
+    return 0;
+}

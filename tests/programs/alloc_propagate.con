@@ -1,5 +1,5 @@
 // Test: allocator capability propagates through function calls
-struct Point { x: Int, y: Int }
+struct Copy Point { x: Int, y: Int }
 
 fn make_point(x: Int, y: Int) with(Alloc) -> Heap<Point> {
     return alloc(Point { x: x, y: y });

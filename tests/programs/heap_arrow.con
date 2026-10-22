@@ -1,5 +1,5 @@
 // Test: read fields via -> on Heap<T>
-struct Pair { a: Int, b: Int }
+struct Copy Pair { a: Int, b: Int }
 
 fn main() with(Std) -> Int {
     let p: Heap<Pair> = alloc(Pair { a: 8, b: 12 });
