@@ -7973,6 +7973,12 @@ run_ok "$TESTDIR/regress_2i_value_block_destructure.con" 42
 run_err "$TESTDIR/error_2i_scope1_const_initializer.con" "(E0301)"
 run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
+run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0302)"
+run_err "$TESTDIR/error_2i_scope1_contract_let.con" "(E0301)"
+run_err "$TESTDIR/error_2i_scope1_spec_fn_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_contract_and_spec_params.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).

@@ -1,0 +1,8 @@
+// Exit 2i REF-6@1 (review round 4): a constant initializer's `let` bound to a branch of borrows (no
+// written type, no bare borrow initializer). A constant may not borrow; refused: E0302.
+const X: i32 = if true {
+    let a: i32 = 42;
+    let r = if true { &a } else { &a };
+    *r
+} else { 0 };
+fn main() -> i32 { return 42; }

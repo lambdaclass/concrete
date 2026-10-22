@@ -2873,9 +2873,33 @@ end
 
 A module constant's initializer is not run through `checkFn` (Elab elaborates it directly), so its
 local binders get the two source rules here: SCOPE-1 by the same lexical walk, and REF-6 by a
-syntactic test — a constant is a value with no parameters, so the only way a reference binding
-can arise inside it is a `let` declared with, or initialized by a borrow to, a reference type, and
-the only way to re-point one is an assignment of a borrow. -/
+conservative syntactic test with no types: a constant is a value and may not borrow at all (E0602
+at its use), so a `let` declared with a reference type or whose initializer contains a borrow
+anywhere is E0302, a borrow block is E0302 (it binds a reference), and an assignment whose value
+contains a borrow is E0303. The same walk, with assignment refused outright, serves contract
+expressions (`constRef6Expr (contract := true)`). -/
+
+mutual
+private partial def exprHasBorrow : Expr → Bool
+  | .borrow _ _ | .borrowMut _ _ => true
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => exprHasBorrow l || exprHasBorrow r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x | .cast _ x _ => exprHasBorrow x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.any exprHasBorrow
+  | .methodCall _ o _ _ args => exprHasBorrow o || args.any exprHasBorrow
+  | .structLit _ _ _ fs b => fs.any (fun (_, e) => exprHasBorrow e) || (b.map exprHasBorrow).getD false
+  | .enumLit _ _ _ _ fs => fs.any (fun (_, e) => exprHasBorrow e)
+  | .match_ _ s arms => exprHasBorrow s || arms.any fun a => match a with
+      | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
+        (g.map exprHasBorrow).getD false || b.any stmtHasBorrow
+  | .ifExpr _ c t e => exprHasBorrow c || t.any stmtHasBorrow || e.any stmtHasBorrow
+  | _ => false
+private partial def stmtHasBorrow : Stmt → Bool
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => exprHasBorrow v
+  | .return_ _ v | .break_ _ v _ => (v.map exprHasBorrow).getD false
+  | .borrowIn _ _ _ _ _ _ => true
+  | _ => true  -- any other statement form is treated as possibly borrowing (conservative)
+end
 
 private def isRefTySyn : Ty → Bool
   | .ref _ | .refMut _ => true
@@ -2891,46 +2915,48 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
     code := e.code, evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
 
 mutual
-private partial def constRef6Expr : Expr → List Diagnostic
-  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => constRef6Expr l ++ constRef6Expr r
+private partial def constRef6Expr (contract : Bool) : Expr → List Diagnostic
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => constRef6Expr contract l ++ constRef6Expr contract r
   | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
-  | .deref _ x | .cast _ x _ => constRef6Expr x
-  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap constRef6Expr
-  | .methodCall _ o _ _ args => constRef6Expr o ++ args.flatMap constRef6Expr
-  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => constRef6Expr e) ++ (b.map constRef6Expr).getD []
-  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => constRef6Expr e)
-  | .match_ _ s arms => constRef6Expr s ++ arms.flatMap constRef6Arm
-  | .ifExpr _ c t e => constRef6Expr c ++ constRef6Stmts t ++ constRef6Stmts e
+  | .deref _ x | .cast _ x _ => constRef6Expr contract x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap (constRef6Expr contract)
+  | .methodCall _ o _ _ args => constRef6Expr contract o ++ args.flatMap (constRef6Expr contract)
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => constRef6Expr contract e) ++ (b.map (constRef6Expr contract)).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => constRef6Expr contract e)
+  | .match_ _ s arms => constRef6Expr contract s ++ arms.flatMap (constRef6Arm contract)
+  | .ifExpr _ c t e => constRef6Expr contract c ++ constRef6Stmts contract t ++ constRef6Stmts contract e
   | _ => []
-private partial def constRef6Arm : MatchArm → List Diagnostic
+private partial def constRef6Arm (contract : Bool) : MatchArm → List Diagnostic
   | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
-    (g.map constRef6Expr).getD [] ++ constRef6Stmts b
-private partial def constRef6Stmts (ss : List Stmt) : List Diagnostic := ss.flatMap constRef6Stmt
-private partial def constRef6Stmt : Stmt → List Diagnostic
+    (g.map (constRef6Expr contract)).getD [] ++ constRef6Stmts contract b
+private partial def constRef6Stmts (contract : Bool) (ss : List Stmt) : List Diagnostic := ss.flatMap (constRef6Stmt contract)
+private partial def constRef6Stmt (contract : Bool) : Stmt → List Diagnostic
   | .letDecl sp n _ ty v _ =>
-    constRef6Expr v ++
-      (if (ty.map isRefTySyn).getD false || isBorrowExpr v then
+    constRef6Expr contract v ++
+      (if (ty.map isRefTySyn).getD false || exprHasBorrow v then
         [ref6Diag (.letBindsReference n (match ty with | some t => tyToString t | none => "a reference")) sp]
       else [])
   | .assign sp n v =>
-    constRef6Expr v ++ (if isBorrowExpr v then [ref6Diag (.assignsReferenceBinding n "a reference") sp] else [])
-  | .return_ _ v | .break_ _ v _ => (v.map constRef6Expr).getD []
-  | .expr _ e _ | .defer _ e | .assert_ _ e | .assume_ _ e => constRef6Expr e
-  | .ifElse _ c t e => constRef6Expr c ++ constRef6Stmts t ++ ((e.map constRef6Stmts).getD [])
-  | .while_ _ c b _ => constRef6Expr c ++ constRef6Stmts b
+    constRef6Expr contract v ++ (if contract || exprHasBorrow v then [ref6Diag (.assignsReferenceBinding n "a reference") sp] else [])
+  | .return_ _ v | .break_ _ v _ => (v.map (constRef6Expr contract)).getD []
+  | .expr _ e _ | .defer _ e | .assert_ _ e | .assume_ _ e => constRef6Expr contract e
+  | .ifElse _ c t e => constRef6Expr contract c ++ constRef6Stmts contract t ++ ((e.map (constRef6Stmts contract)).getD [])
+  | .while_ _ c b _ => constRef6Expr contract c ++ constRef6Stmts contract b
   | .forLoop _ i c st b _ =>
-    ((i.map constRef6Stmt).getD []) ++ constRef6Expr c ++ ((st.map constRef6Stmt).getD []) ++ constRef6Stmts b
-  | .fieldAssign _ o _ v | .derefAssign _ o v => constRef6Expr o ++ constRef6Expr v
-  | .arrayIndexAssign _ a i v => constRef6Expr a ++ constRef6Expr i ++ constRef6Expr v
-  | .borrowIn _ _ _ _ _ b => constRef6Stmts b
-  | .letDestructure _ _ _ _ v e => constRef6Expr v ++ ((e.map constRef6Stmts).getD [])
-  | .letStructDestructure _ _ _ v => constRef6Expr v
+    ((i.map (constRef6Stmt contract)).getD []) ++ constRef6Expr contract c ++ ((st.map (constRef6Stmt contract)).getD []) ++ constRef6Stmts contract b
+  | .fieldAssign _ o _ v | .derefAssign _ o v => constRef6Expr contract o ++ constRef6Expr contract v
+  | .arrayIndexAssign _ a i v => constRef6Expr contract a ++ constRef6Expr contract i ++ constRef6Expr contract v
+  | .borrowIn sp _ r _ _ b =>
+    ref6Diag (.letBindsReference r "a borrow-block reference (not allowed in a constant initializer or contract)") sp
+      :: constRef6Stmts contract b
+  | .letDestructure _ _ _ _ v e => constRef6Expr contract v ++ ((e.map (constRef6Stmts contract)).getD [])
+  | .letStructDestructure _ _ _ v => constRef6Expr contract v
   | .continue_ _ _ => []
 end
 
 /-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
 def constInitDiagnostics (c : ConstDef) : List Diagnostic :=
-  ((scope1Expr [] c.value).run []).2 ++ constRef6Expr c.value
+  ((scope1Expr [] c.value).run []).2 ++ constRef6Expr false c.value
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
@@ -3415,6 +3441,27 @@ def checkModule (m : Module) (summary : FileSummary)
   --
   -- The rules are the spec-body rules, for the same reasons: a contract may mention only names
   -- that exist, and it must be a proposition rather than a number.
+  -- Exit 2i (review round 4): contract expressions and spec fn parameters never reach checkFn.
+  -- A contract's statement blocks get the SCOPE-1 walk (the function's parameters visible, and
+  -- `result` in an `ensures`) and the syntactic REF-6 walk with every assignment refused; a spec
+  -- fn's parameters get the duplicate-name test.
+  let exit2iContractDs : List Diagnostic :=
+    (m.functions ++ m.implBlocks.flatMap (·.methods)).flatMap fun f =>
+      let vis : List ScopeBinder := f.params.reverse.map fun p => { name := p.name, span := f.span }
+      let one (vs : List ScopeBinder) (e : Expr) : List Diagnostic :=
+        ((scope1Expr vs e).run []).2 ++ constRef6Expr true e
+      f.requires.flatMap (one vis)
+        ++ f.ensures.flatMap (one ({ name := "result", span := f.span } :: vis))
+        ++ (f.loopContracts.flatMap (·.invariants)).flatMap (constRef6Expr true)
+  let exit2iSpecParamDs : List Diagnostic := m.specFns.flatMap fun sd =>
+    let go : Scope1M Unit := do
+      let mut vis : List ScopeBinder := []
+      for p in sd.params do
+        vis ← scope1Bind vis p.name sd.span "parameter"
+    (go.run []).2
+  match exit2iContractDs ++ exit2iSpecParamDs with
+  | d :: ds => .error (d :: ds)
+  | [] =>
   let contractCheck :=
     let constNames := constantsMap.map (·.1)
     let impureFns := (impureFnsIn "" m).eraseDups

@@ -1,0 +1,3 @@
+// Exit 2i SCOPE-1@1 (review round 4): two parameters of one spec fn share a name. Refused: E0301.
+spec fn f(x: i32, x: i32) -> i32 = x;
+fn main() -> i32 { return 42; }

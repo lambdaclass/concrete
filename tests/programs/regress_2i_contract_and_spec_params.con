@@ -1,0 +1,13 @@
+// Exit 2i (review round 4): the rewrite of the contract and spec-fn rows: a contract that is a plain
+// proposition over the parameters, and a spec fn with distinct parameter names. Run 42,
+// binary = --interp.
+spec fn pick(a: i32, b: i32) -> i32 = b;
+
+#[requires(x > 0)]
+fn f(x: i32) -> i32 {
+    return x;
+}
+
+fn main() -> i32 {
+    return f(42);
+}

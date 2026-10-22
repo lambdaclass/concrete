@@ -1,5 +1,6 @@
 // Exit 2i: the rewrite of the constant-initializer rows: distinct names, no reference binding.
-// Run 42, binary = --interp.
+// Run 42 natively; the interpreter has no module constants yet (bug 117), so the manifest row
+// carries an interp exemption.
 const X: i32 = if true {
     let a: i32 = 1;
     let b: i32 = a + 41;
