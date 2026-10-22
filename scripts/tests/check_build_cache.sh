@@ -110,6 +110,41 @@ seed; rc=$?
 newwt; LEAN_BIN_OVERRIDE="$LB" seed; rc=$?
 [ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && ok "a build made by another lean executable is refused" || no "foreign-executable build seeded (exit $rc)"
 
+echo "=== provenance and consistency ==="
+newwt
+printf '{"inputs":[["Lean 4.34.1, commit %s","e9f3"]]}\n' "$COMMIT" > "$M/.lake/build/lib/lean/Concrete/Fetched.trace"
+seed; rc=$?
+[ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && ok "a same-version trace that names no executable refuses the whole build" || no "unprovenanced trace accepted (exit $rc)"
+rm -f "$M/.lake/build/lib/lean/Concrete/Fetched.trace"
+
+newwt
+mkdir -p "$T/fakecp"
+cat > "$T/fakecp/cp" <<EOF
+#!/usr/bin/env bash
+PATH="$PATH" command cp "\$@"; rc=\$?
+touch "$M/.lake/build/lib/lean/Concrete/A.olean"
+exit \$rc
+EOF
+chmod +x "$T/fakecp/cp"
+PATH="$T/fakecp:$PATH" seed; rc=$?
+[ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] \
+  && ok "a source written to during the copy discards the copy (a build was running there)" \
+  || no "copy of a changing source kept (exit $rc)"
+ls "$T/wt/.lake" 2>/dev/null | grep -q 'build.seeding\|seed.stamp\|seed.lock' && no "a refused seed left temporary files" || ok "a refused seed leaves no temporary files or lock"
+
+newwt; mkdir -p "$T/wt/.lake/seed.lock"
+seed; rc=$?
+[ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && [ -d "$T/wt/.lake/seed.lock" ] && ok "a concurrent seeder's lock is respected (and not removed)" || no "lock ignored (exit $rc)"
+
+newwt
+mkdir -p "$T/home/.elan/bin" "$T/pathlean"
+ln -s "$LA" "$T/home/.elan/bin/lean"; ln -s "$LB" "$T/pathlean/lean"
+PATH="$T/pathlean:$PATH" HOME="$T/home" bash "$SEED" --checkout "$T/wt" --elan >"$T/out" 2>&1; rc=$?
+[ $rc -eq 0 ] && ok "--elan checks ~/.elan's lean even when another lean is first on PATH" || no "--elan did not use ~/.elan (exit $rc): $(cat "$T/out")"
+newwt
+PATH="$T/pathlean:$PATH" HOME="$T/home" bash "$SEED" --checkout "$T/wt" >"$T/out" 2>&1; rc=$?
+[ $rc -eq 3 ] && ok "without --elan the PATH lean is checked (and here refused)" || no "PATH lean not used (exit $rc)"
+
 echo "=== seeding never skips the build ==="
 for case in match mismatch; do
   newwt; : > "$LAKE_LOG"
@@ -120,6 +155,14 @@ for case in match mismatch; do
     ok "--build ($case seed): lake build ran once with its args, its exit status (7) is the script's"
   else no "--build ($case seed): lake ran $n times, exit $rc"; fi
 done
+newwt; : > "$LAKE_LOG"
+PATH="$T/fakebin:$PATH" seed --build; rc=$?
+[ $rc -eq 0 ] && [ "$(cat "$LAKE_LOG")" = "lake build" ] && ok "bare --build (no lake args) runs lake build" || no "bare --build failed (exit $rc): $(cat "$T/out")"
+if [ -x /bin/bash ] && /bin/bash -c '[ "${BASH_VERSINFO[0]}" -lt 4 ]'; then
+  newwt; : > "$LAKE_LOG"
+  PATH="$T/fakebin:$PATH" LEAN_BIN="$LA" /bin/bash "$SEED" --checkout "$T/wt" --build >"$T/out" 2>&1; rc=$?
+  [ $rc -eq 0 ] && [ "$(cat "$LAKE_LOG")" = "lake build" ] && ok "bare --build under bash 3 (/bin/bash)" || no "bare --build under bash 3 failed (exit $rc): $(cat "$T/out")"
+fi
 grep -qE 'exit 0' <(sed -n '/^run_build_after()/,/^}/p' "$SEED") \
   && no "run_build_after has an exit-0 path that could stand in for the build" \
   || ok "run_build_after has no success exit besides exec lake build"
@@ -152,6 +195,8 @@ for name, job in wf["jobs"].items():
         s = steps[i]
         if s.get("if") != "runner.environment == 'self-hosted'":
             bad.append(f"{name}: seed step not self-hosted-only")
+        if "--elan" not in str(s.get("run", "")):
+            bad.append(f"{name}: seed step does not check against ~/.elan's lean (--elan)")
         if s.get("id") != "lake_seed":
             bad.append(f"{name}: seed step id is not lake_seed")
         later = [t for t in steps[i+1:] if str(t.get("uses", "")).startswith("leanprover/lean-action")]

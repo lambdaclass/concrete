@@ -247,6 +247,16 @@ cache entries.
 | GitHub-hosted runner | `actions/cache` (`.lake/build`, exact source key) and lean-action's `.lake` cache (previous commit) | unchanged |
 | New worktree (laptop or server) | the main checkout's `.lake/build` | `bash scripts/dev/seed-lake.sh` (inside `nix develop`), then `lake build` |
 
+- **Every same-version module must name its executable.** A trace from this Lean version that
+  does not name the binary that compiled it refuses the whole seed, because it may be a fetched
+  artifact or an unknown log format. The check assumes that the binary at a recorded path has not
+  been replaced in place. That holds for Nix store paths, which are immutable, and for elan
+  toolchains, which use one directory per release.
+- **A consistent snapshot.** If anything in the source is modified after the copy started (for
+  example, a `lake build` running in the main checkout), the copy is discarded and the seed
+  refused. One seeder runs per checkout at a time (`.lake/seed.lock`).
+- **CI checks against `~/.elan`'s lean** (`--elan`). That is the binary lean-action builds with,
+  whatever else is on `PATH`.
 - **Copies, never hardlinks.** Lake rewrites trace files in place, so a hardlink would write through
   into the seed. macOS uses APFS clones (`cp -c`, instant, no extra space). The server uses a plain
   copy, about 1 s for 600 MB.

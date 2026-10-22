@@ -35,6 +35,7 @@
 #   seed-lake.sh --print-key            key, source hash and the key preimage for this checkout
 #   seed-lake.sh --publish ROOT         (cache producer) run `lake build`, then publish .lake/build
 #   --checkout DIR                      act on DIR instead of the checkout holding this script
+#   --elan                              check against ~/.elan's lean only (CI: what lean-action runs)
 #
 # EXIT  0 seeded (or published) | 3 refused: no usable seed, nothing changed | 2 usage/internal error
 # With --build, the exit status is lake build's, whatever seeding did.
@@ -60,10 +61,13 @@ sha256_stdin() {
 }
 
 # The lean executable this checkout will build with.
+# --elan: resolve through ~/.elan/bin/lean only, the toolchain lean-action builds with, whatever
+# else is on PATH.
 our_lean_bin() {
   if [ -n "${LEAN_BIN:-}" ]; then printf '%s\n' "$LEAN_BIN"; return; fi
   local lean="" prefix
-  if command -v lean >/dev/null 2>&1; then lean="lean"
+  if [ "$ELAN_ONLY" = 1 ]; then [ -x "$HOME/.elan/bin/lean" ] && lean="$HOME/.elan/bin/lean"
+  elif command -v lean >/dev/null 2>&1; then lean="lean"
   elif [ -x "$HOME/.elan/bin/lean" ]; then lean="$HOME/.elan/bin/lean"; fi
   [ -n "$lean" ] || return 1
   prefix="$(cd "$ROOT_DIR" && "$lean" --print-prefix 2>/dev/null)" || return 1
@@ -104,12 +108,34 @@ lean_commit() { "$1" --version 2>/dev/null | grep -oE 'commit [0-9a-f]+' | awk '
 # modules built by Lean <commit>. Traces from another Lean version are left out: lake rebuilds those
 # modules itself (the version is in every trace), and a checkout keeps the traces of modules that no
 # longer exist, from whatever toolchain last built them.
+# EVERY such trace must name its executable: one that does not (an artifact fetched rather than
+# compiled, an unknown log format) prints UNKNOWN:<trace>, and callers refuse the whole build.
 trace_lean_bins() {
-  local build="$1" commit="$2"
+  local build="$1" commit="$2" t line
   [ -n "$commit" ] || return 0
   find "$build/lib" -name '*.trace' -type f -exec grep -lF "commit $commit" {} + 2>/dev/null \
-    | while IFS= read -r t; do grep -ohE '\.> LEAN_PATH=[^ ]* [^ "]*/bin/lean ' "$t"; done \
-    | awk '{print $3}' | LC_ALL=C sort -u
+    | while IFS= read -r t; do
+        line="$(grep -ohE '\.> LEAN_PATH=[^ ]* [^ "]*/bin/lean ' "$t" | awk 'NR==1{print $3}')"
+        if [ -n "$line" ]; then printf '%s\n' "$line"; else printf 'UNKNOWN:%s\n' "$t"; fi
+      done | LC_ALL=C sort -u
+}
+
+# check_trace_bins <build-dir> <our-binary>: every same-version module was compiled by a binary
+# with our binary's bytes. Prints the reason and returns 1 otherwise.
+# ASSUMPTION: the binary at a recorded path still has the bytes it had when it compiled. That holds
+# for Nix store paths (immutable) and for elan toolchains (one directory per release, official
+# archive); a hand-replaced executable at the same path would defeat this check.
+check_trace_bins() {
+  local build="$1" bin="$2" ours b n=0
+  ours="$(sha256_file "$bin")"
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    n=$((n+1))
+    case "$b" in UNKNOWN:*) echo "${b#UNKNOWN:} does not name the lean that built it"; return 1 ;; esac
+    [ -f "$b" ] || { echo "$build was built by $b, which is not readable here"; return 1; }
+    [ "$(sha256_file "$b")" = "$ours" ] || { echo "$build was built by a different lean executable ($b) than $bin"; return 1; }
+  done < <(trace_lean_bins "$build" "$(lean_commit "$bin")")
+  [ $n -gt 0 ] || { echo "$build has no module trace from this Lean version"; return 1; }
 }
 
 # copy_tree <src> <dst>: copy-on-write where the file system can, a plain copy otherwise. Never
@@ -123,13 +149,14 @@ copy_tree() {
   fi
 }
 
-MODE=seed FROM="" CACHE_ROOT="" FORCE=0 BUILD=0 PUBLISH_ROOT=""
+MODE=seed FROM="" CACHE_ROOT="" FORCE=0 BUILD=0 PUBLISH_ROOT="" ELAN_ONLY=0
 BUILD_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --from)       [ $# -ge 2 ] || die "--from needs a directory"; FROM="$2"; shift 2 ;;
     --cache-root) [ $# -ge 2 ] || die "--cache-root needs a directory"; CACHE_ROOT="$2"; shift 2 ;;
     --force)      FORCE=1; shift ;;
+    --elan)       ELAN_ONLY=1; shift ;;
     --build)      BUILD=1; shift; BUILD_ARGS=("$@"); break ;;
     --checkout)   [ $# -ge 2 ] || die "--checkout needs a directory"; ROOT_DIR="$(cd "$2" && pwd)" || die "no such checkout: $2"; shift 2 ;;
     --print-key)  MODE=print-key; shift ;;
@@ -147,7 +174,8 @@ run_build_after() {
   ( "$@" ); local rc=$?
   [ $rc -eq 0 ] || [ $rc -eq 3 ] || say "seeding failed (exit $rc); building cold"
   say "running: lake build ${BUILD_ARGS[*]:-}"
-  exec lake build "${BUILD_ARGS[@]}"
+  # ${a[@]+...}: an empty array is "unbound" under set -u in bash 3.2 (macOS /bin/bash).
+  exec lake build ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 }
 
 do_print_key() {
@@ -197,15 +225,8 @@ do_seed() {
   elif [ -d "$FROM/.lake/build/lib" ]; then
     # A checkout: re-derive its key from its own files and from the lean its traces name.
     src="$FROM/.lake/build"; kind="${kind:-checkout}"
-    local bins n=0
-    bins="$(trace_lean_bins "$src" "$(lean_commit "$bin")")"
-    [ -n "$bins" ] || refuse "$src has no lake trace from this Lean version naming the executable that built it"
-    while IFS= read -r b; do
-      n=$((n+1))
-      [ -f "$b" ] || refuse "$src was built by $b, which is not readable here"
-      h="$(sha256_file "$b")"
-      [ "$h" = "$(sha256_file "$bin")" ] || refuse "$src was built by a different lean executable ($b) than this checkout uses ($bin)"
-    done <<<"$bins"
+    local why
+    why="$(check_trace_bins "$src" "$bin")" || refuse "$why"
     srcpre="$(key_preimage "$FROM" "$bin")" || refuse "cannot compute the key of $FROM"
   else
     refuse "$FROM has neither .lake/build nor a published build"
@@ -219,10 +240,23 @@ do_seed() {
   fi
 
   mkdir -p "$ROOT_DIR/.lake" || die "cannot create .lake"
-  local tmp="$ROOT_DIR/.lake/build.seeding.$$"
+  # One seeder at a time per checkout; the existence check is repeated under the lock.
+  SEED_LOCK="$ROOT_DIR/.lake/seed.lock"
+  mkdir "$SEED_LOCK" 2>/dev/null || { SEED_LOCK=""; refuse "another seed-lake is running here ($ROOT_DIR/.lake/seed.lock)"; }
+  local tmp="$ROOT_DIR/.lake/build.seeding.$$" stamp="$ROOT_DIR/.lake/seed.stamp.$$"
+  SEED_TMP="$tmp" SEED_STAMP="$stamp"
+  trap 'rm -rf "${SEED_TMP:-}" "${SEED_STAMP:-}" "${SEED_LOCK:-}"' EXIT
+  if [ -e "$dst" ] && [ "$FORCE" != 1 ]; then refuse "$dst already exists (use --force to replace it)"; fi
   rm -rf "$tmp"
   local t0=$SECONDS
-  copy_tree "$src" "$tmp" || { rm -rf "$tmp"; die "copy from $src failed"; }
+  # A CONSISTENT SNAPSHOT. A build running in the source while it is copied could pair an old trace
+  # with a new .olean. Anything in the source modified after the copy started discards the copy.
+  : > "$stamp"
+  copy_tree "$src" "$tmp" || { rm -rf "$tmp" "$stamp"; die "copy from $src failed"; }
+  if [ -n "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
+    rm -rf "$tmp" "$stamp"; refuse "$src changed while it was copied (a build is running there)"
+  fi
+  rm -f "$stamp"
   chmod -R u+w "$tmp" 2>/dev/null || true
   rm -rf "$dst" && mv "$tmp" "$dst" || die "cannot move the seed into place"
   { echo "source=$src"; echo "kind=$kind"; echo "key=$ourkey"; echo "seeded=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -241,11 +275,8 @@ do_publish() {
   srch="$(source_hash "$ROOT_DIR")"
   # Publish only what a successful build in THIS process produced.
   lake build || die "lake build failed; nothing published"
-  local tb
-  while IFS= read -r tb; do
-    [ -z "$tb" ] && continue
-    [ "$(sha256_file "$tb")" = "$(sha256_file "$bin")" ] || die "the build contains modules made by $tb, not $bin"
-  done < <(trace_lean_bins "$ROOT_DIR/.lake/build" "$(lean_commit "$bin")")
+  local why
+  why="$(check_trace_bins "$ROOT_DIR/.lake/build" "$bin")" || die "not publishing: $why"
   mkdir -p "$root/$key" || die "cannot create $root/$key"
   dest="$root/$key/$srch"
   if [ -d "$dest/build" ]; then say "already published: $dest"; else

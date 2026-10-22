@@ -104,7 +104,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -165,7 +165,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -229,7 +229,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -347,7 +347,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -400,7 +400,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -515,7 +515,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -637,7 +637,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -696,7 +696,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -763,7 +763,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -941,7 +941,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1318,7 +1318,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1416,7 +1416,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1497,7 +1497,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1662,7 +1662,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1781,7 +1781,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1836,7 +1836,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1904,7 +1904,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1977,7 +1977,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -2052,7 +2052,7 @@ jobs:
       - name: Seed .lake from the server build cache (self-hosted only)
         id: lake_seed
         if: runner.environment == 'self-hosted'
-        run: if bash scripts/dev/seed-lake.sh --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
