@@ -109,6 +109,7 @@ SCOPE-1	tests/programs/regress_2i_contract_aliased_ref_param.con	run:42	contract
 SCOPE-1	tests/programs/regress_2i_contract_ref_receiver.con	run:42	contract	binary,interp
 SCOPE-1	tests/programs/regress_2i_contract_static_nongeneric_method.con	run:42	contract	binary,interp
 SCOPE-1	tests/programs/error_2i_spec_body_hidden_binder.con	reject:E0305:SCOPE-1@1	contract	-
+SCOPE-1	tests/programs/error_2i_spec_body_generic_call.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/regress_2i_contract_nongeneric_call_beside_generic_method.con	run:42	contract	binary,interp
 SCOPE-1	tests/programs/error_2i_contract_generic_method_mangled.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_contract_generic_method_static.con	reject:E0305:SCOPE-1@1	contract	-

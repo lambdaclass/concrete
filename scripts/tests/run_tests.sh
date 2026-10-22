@@ -1703,7 +1703,7 @@ run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
 run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0302)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0401)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0201)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
@@ -7979,6 +7979,7 @@ run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_const_destructure_through_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_const_match_through_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_const_typed_ref_let.con" "(E0302)"
+run_err "$TESTDIR/error_2i_spec_body_generic_call.con" "(E0305)"
 run_err "$TESTDIR/error_2i_ref5_const_ref_through_raw_ptr.con" "(E0238)"
 run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0305)"

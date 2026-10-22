@@ -2,7 +2,9 @@
 // (on main too). A borrow block on a constant inside an initializer made Y read 0; the
 // elaboration error is now reported. Exit 2i: that borrow block is refused earlier, at Check
 // (REF-6@1, E0302: a constant initializer may not bind a reference), so this fixture reaches
-// Elab's error path with an undeclared name instead (E0401), which must still be reported.
+// Elab's error path with an undeclared name instead (E0401). Since exit 2i review round 15 constant
+// initializers are type-checked, so Check reports the undeclared name first (E0201); the point —
+// an initializer that fails is reported, never replaced by a silent 0 — holds either way.
 const X: Int = 42;
 const Y: Int = if true {
     let n: Int = nosuch;

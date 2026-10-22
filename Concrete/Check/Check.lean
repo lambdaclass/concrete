@@ -3420,6 +3420,26 @@ def checkModule (m : Module) (summary : FileSummary)
   -- parameters, and may call only other spec functions (a call to an executable function would
   -- make the spec depend on runtime behaviour, which is the thing specs exist to be independent
   -- of).
+  -- generic functions and methods, by every spelling a contract or spec body can call them with (exit 2i)
+  let genericFns : List String :=
+    (m.functions.filterMap fun g => if g.typeParams.isEmpty then none else some g.name)
+    -- imported generics under their local (possibly aliased) names, and imported generic
+    -- methods by their mangled names (review round 12)
+    ++ (imports.functions.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
+    ++ (imports.implMethodSigs.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
+    ++ (m.implBlocks.flatMap fun ib => ib.methods.flatMap fun g =>
+          if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [s!"{ib.typeName}_{g.name}"])
+    ++ (m.traitImpls.flatMap fun tb => tb.methods.flatMap fun g =>
+          if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [s!"{tb.typeName}_{g.name}"])
+  let genericMethods : List String :=
+    (imports.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+    ++ (imports.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
+    ++ (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+    ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
   let specNames := m.specFns.map (·.name)
   let specBodyCheck := m.specFns.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc sd =>
     match acc with
@@ -3445,7 +3465,14 @@ def checkModule (m : Module) (summary : FileSummary)
         -- binder-free, checked by the exhaustive contract walk too (review round 11: the
         -- older `specBinders` walk skipped method calls and other constructors)
         let binders := (specBinders b ++ contractExprBad [] b).eraseDups
-        if !binders.isEmpty then
+        -- a generic call in a spec body is erased like one in a contract (review round 16)
+        let genericCalls := (contractGenericCalls genericFns genericMethods b).eraseDups
+        if !genericCalls.isEmpty then
+          let ce := CheckError.contractBinds s!"spec fn {sd.name}" (", ".intercalate genericCalls)
+          .error [{ severity := .error, message := ce.message, pass := "check", span := some sd.span,
+                    hint := ce.hint, code := ce.code, evidence := ruleEvidence ce.rule,
+                    nextAction := some "call only spec fns and non-generic functions from a spec body" }]
+        else if !binders.isEmpty then
           .error [{ severity := .error
                   , message := s!"spec fn '{sd.name}' body binds name(s): {", ".intercalate binders}; spec bodies must be binder-free"
                   , pass := "check", span := some sd.span
@@ -3515,26 +3542,6 @@ def checkModule (m : Module) (summary : FileSummary)
   let exit2iContractDs : List Diagnostic :=
     (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).flatMap fun f =>
       let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
-      -- generic functions and methods, by every spelling a contract can call them with
-      let genericFns : List String :=
-        (m.functions.filterMap fun g => if g.typeParams.isEmpty then none else some g.name)
-        -- imported generics under their local (possibly aliased) names, and imported generic
-        -- methods by their mangled names (review round 12)
-        ++ (imports.functions.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
-        ++ (imports.implMethodSigs.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
-        ++ (m.implBlocks.flatMap fun ib => ib.methods.flatMap fun g =>
-              if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [s!"{ib.typeName}_{g.name}"])
-        ++ (m.traitImpls.flatMap fun tb => tb.methods.flatMap fun g =>
-              if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [s!"{tb.typeName}_{g.name}"])
-      let genericMethods : List String :=
-        (imports.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
-          if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
-        ++ (imports.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
-          if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
-        ++ (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
-          if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
-        ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
-          if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
       clauses.flatMap fun e =>
         -- (review round 11) passing a reference to a NON-generic callee is harmless: that body is
         -- checked like any other; only an erased call's never-built specialization escapes, so

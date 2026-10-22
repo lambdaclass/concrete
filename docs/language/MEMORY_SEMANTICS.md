@@ -1155,7 +1155,7 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   method-syntax call `x.m(..)` cannot be resolved without types here, so it is refused whenever
   the module has a generic method named `m` (a deliberate over-approximation: call it as
   `Type::m(..)` to name a non-generic one). Passing a reference to a non-generic callee is allowed:
-  that body is checked like any other. Spec fn bodies get the same exhaustive binder walk. Imported generic functions and methods count
+  that body is checked like any other. Spec fn bodies get the same exhaustive binder walk and the same generic-call refusal. Imported generic functions and methods count
   (under their local and mangled names). Spec fn, extern fn and trait-method-declaration parameter
   lists get the duplicate-name test. For the same reason a generic instantiated inside an `assert`, `assume` or ghost
   initializer must be instantiated at a type that cannot hold a reference under substitution (no
@@ -1339,7 +1339,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 178 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 179 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
