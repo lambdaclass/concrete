@@ -105,8 +105,9 @@ ran when the scope was empty, where the answer cannot matter.
   `lowerFn`; the arm lists of a `match` are prepended and reversed once; the merge stores of an
   aggregate merge are inserted in one pass over the blocks (`insertStoresBeforeTerm`).
 - `ReportObligations`: `assignedScalarsS` uses an accumulator (same names, same order), the
-  scoped walk skips it when the scope is empty, and `dropStaleHyps` checks membership in a
-  `HashSet`.
+  scoped walk skips it for an else-less `if` when the scope is empty (the catch-all arm is left
+  as it was: it is the `fact-invalidation` mutation's anchor, and `dropStaleHyps` answers `[]`
+  for an empty scope), and `dropStaleHyps` checks membership in a `HashSet`.
 - `--emit-trace-json` reports per-stage Lean heartbeats (`alloc_heartbeats`), a deterministic
   count of small allocations that does not depend on machine load.
 
