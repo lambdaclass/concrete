@@ -76,7 +76,7 @@ EXIT_END = "<!-- END GENERATED: exit {x} bugs -->"
 # A status, in the ledger's vocabulary, outside the **Status:** line: an upper-case status word anywhere,
 # or a leading status phrase in any case ("Fixed -- ...", "contained: ...").
 STATUS_UPPER = re.compile(r"\b(FIXED|OPEN|CONTAINED|HALF CLOSED|PARTIALLY FIXED|PARTIAL)\b")
-STATUS_LEAD = re.compile(r"^(fixed|open|contained|half closed|partially fixed|partial)\b[^:—]{0,80}?(:|\s--\s|\s—\s)", re.I)
+STATUS_LEAD = re.compile(r"^(fixed|open|contained|half closed|partially fixed|partial)\b", re.I)
 CONFLICT = re.compile(r"^(<{7}|={7}|>{7}|\|{7})( .*)?$")
 CLASS_ROW = re.compile(r"^\| (\d+)\. ([^|]+?) \| ([^|]*?) \| (.*) \|$")
 
@@ -123,6 +123,8 @@ def parse_block(body, name):
             die(f"{name}: unknown ledger key '{k}' (known: {', '.join(sorted(KEYS))})")
         if not v:
             die(f"{name}: ledger key '{k}' is empty")
+        if "-->" in v:
+            die(f"{name}: ledger key '{k}' holds '-->', which would close the hidden block early")
         if k in REPEATABLE:
             cm = re.match(r"^(\d+)(?:\s+—\s+(.+))?$", v)
             if not cm:

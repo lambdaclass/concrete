@@ -158,6 +158,8 @@ neg coverage_lowercase_status_lead "$R" "old='coverage: control'; assert s.count
 neg summary_status_midtext "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control record (OPEN since 2099)')" 2
 neg class_note_with_pipe "$R" "old='control note'; assert s.count(old)==1; s=s.replace(old, 'a | b')" 2
 neg class_row_unreadable docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn(r'^\| 1\. ', '|1. ', s, count=1, flags=re.M); assert n==1" 2
+neg summary_status_no_punctuation "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: Fixed in R-1234')" 2
+neg value_closes_comment "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control --> visible')" 2
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
 if [ -n "$EXIT_ID" ]; then
   neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1

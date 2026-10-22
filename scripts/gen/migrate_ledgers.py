@@ -333,7 +333,7 @@ def class_items(cell):
             out.append((sub.group(1), sub.group(2)))
             continue
         for k in range(int(a), int(b or a) + 1):
-            out.append((f"{k:03d}", nt if not b else ""))
+            out.append((f"{k:03d}", nt))
     return out
 
 
@@ -402,10 +402,16 @@ for n, r in records.items():
     r["summary"] = unstatus(r["summary"], n, "summary", is_open)
     if "coverage" in r:
         r["coverage"] = unstatus(r["coverage"], n, "coverage", is_open)
-    for k in ("summary", "coverage"):
-        if k in r and L.STATUS_LEAD.match(r[k]):
-            note(f"bug {n}: its {k} still opens with a status phrase; it was dropped: {r[k][:60]!r}")
-            r[k] = L.STATUS_LEAD.sub("", r[k], count=1).strip()
+    # A line that still OPENS with a status word ("fixed by R-0003") states a status, not the defect: the
+    # summary becomes the record's title with that history kept in parentheses, a coverage line keeps
+    # its text behind a neutral lead.
+    if L.STATUS_LEAD.match(r["summary"]):
+        t = L.title_of(r["text"], n) or f"bug {n}"
+        note(f"bug {n}: its summary was only a status ({r['summary'][:50]!r}); it is now the title, with that history in parentheses")
+        r["summary"] = oneline(f"{t} ({r['summary']})")
+    if "coverage" in r and L.STATUS_LEAD.match(r["coverage"]):
+        note(f"bug {n}: its coverage line opened with a status word; prefixed 'coverage notes:': {r['coverage'][:50]!r}")
+        r["coverage"] = "coverage notes: " + r["coverage"]
     lines = ["<!-- bug-ledger", f"summary: {r['summary']}"]
     if "fixtures" in r:
         lines.append(f"fixtures: {r['fixtures']}")
