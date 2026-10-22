@@ -16,6 +16,7 @@
 #   C9  light modes take no slot: run_tests.sh --manifest and run_ci_gates_local.sh --plan return
 #       while every slot is full; run_tests.sh --full --no-wait exits 75 before running anything
 #   C10 the runners are wired: the heavy paths call heavy_slot_acquire, the full runner before its rebuild
+#   C12 a mutex whose owner is dead is reclaimed; one whose owner is alive is never taken by age
 #   C11 JOBS scale with the slot count: with N>1 the default is at most (cores-2)/N, no fixed 8
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -125,6 +126,26 @@ printf 'pid=%s\nstart=Thu Jan  1 00:00:00 1970\ncmd=ghost\nsince=0\n' "$$" > "$C
 bash -c 'source "$1"; heavy_slot_acquire reuse --no-wait' _ "$LIB" 2>/dev/null; rc=$?
 [ "$rc" = 0 ] && ok "slots whose pid is alive but whose start time differs are reclaimed (pid reuse)" \
   || no "a reused pid kept its slots (rc=$rc)"
+rm -rf "$CONCRETE_HEAVY_DIR"; mkdir -p "$CONCRETE_HEAVY_DIR"
+
+echo "=== C12: a mutex left by a dead process is reclaimed; a live one is not taken ==="
+mkdir -p "$CONCRETE_HEAVY_DIR/.mutex"
+printf '999999 Thu_Jan_1_00:00:00_1970 1\n' > "$CONCRETE_HEAVY_DIR/.mutex/owner"
+t0=$(date +%s)
+bash -c 'source "$1"; heavy_slot_acquire m1 --no-wait && heavy_slot_release' _ "$LIB" 2>/dev/null; rc=$?
+[ "$rc" = 0 ] && [ $(( $(date +%s) - t0 )) -lt 20 ] && [ ! -d "$CONCRETE_HEAVY_DIR/.mutex" ] \
+  && ok "a dead owner's mutex is reclaimed and the acquirer proceeds" || no "dead mutex not reclaimed (rc=$rc)"
+mkdir -p "$CONCRETE_HEAVY_DIR/.mutex"
+printf '%s %s 1\n' "$$" "$(ps -o lstart= -p $$ | sed 's/^ *//; s/ *$//' | tr ' ' '_')" > "$CONCRETE_HEAVY_DIR/.mutex/owner"
+touch -t 200001010000 "$CONCRETE_HEAVY_DIR/.mutex"   # old, but its owner is alive
+bash -c 'source "$1"; heavy_slot_acquire m2 --no-wait' _ "$LIB" >/dev/null 2>&1 &
+mpid=$!; sleep 3
+if kill -0 "$mpid" 2>/dev/null && grep -q "^$$ " "$CONCRETE_HEAVY_DIR/.mutex/owner"; then
+  ok "a live owner's mutex is not taken, however old it is"
+else
+  no "a live owner's mutex was stolen"
+fi
+kill "$mpid" 2>/dev/null; wait "$mpid" 2>/dev/null
 rm -rf "$CONCRETE_HEAVY_DIR"; mkdir -p "$CONCRETE_HEAVY_DIR"
 
 echo "=== C9: light modes do not wait; heavy modes queue ==="

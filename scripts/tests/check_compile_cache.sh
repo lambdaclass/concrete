@@ -17,6 +17,7 @@
 #       a project with [dependencies], an input outside the binary's repository
 #   K9  CONCRETE_COMPILE_CACHE=refresh recomputes
 #   K10 an entry is published whole: no temporary is left behind
+#   K11 an input edited while the compiler runs: the result is returned but not stored
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -39,7 +40,8 @@ mkdir -p "$SB/.lake/build/bin" "$SB/Concrete" "$SB/proj/src" "$SB/loose"
 cp Concrete/BuildIdentity.lean "$SB/Concrete/"
 cp -R std "$SB/std"
 COMP="$SB/.lake/build/bin/concrete"
-printf '#!/bin/sh\n# sandbox compiler v1\nexec "%s" "$@"\n' "$REAL" > "$COMP"; chmod +x "$COMP"
+# CC_PROBE_APPEND makes the sandbox compiler edit its input WHILE it runs (control K11).
+printf '#!/bin/sh\n# sandbox compiler v1\n[ -n "${CC_PROBE_APPEND:-}" ] && printf "\\n// edited mid-compile\\n" >> "$CC_PROBE_APPEND"\nexec "%s" "$@"\n' "$REAL" > "$COMP"; chmod +x "$COMP"
 export CONCRETE_STD="$SB/std"
 export CONCRETE_COMPILE_CACHE_DIR="$TMP/cache"
 unset CONCRETE_COMPILE_CACHE CCACHE_REPORTS
@@ -126,6 +128,19 @@ echo "=== K9: refresh recomputes ==="
 run_c "$F" --report audit; [ "$CCACHE_LAST" = hit ] || run_c "$F" --report audit
 CONCRETE_COMPILE_CACHE=refresh run_c "$F" --report audit; r="$CCACHE_LAST"
 [ "$r" = miss ] && ok "CONCRETE_COMPILE_CACHE=refresh recomputes a present entry" || no "refresh: $r"
+
+echo "=== K11: a result whose inputs moved during the compile is not stored ==="
+run_c "$F" --report audit; [ "$CCACHE_LAST" = hit ] || run_c "$F" --report audit
+printf '\nfn k11() -> i32 { return 11; }\n' >> "$F"; cp "$F" "$TMP/k11.B"
+CC_PROBE_APPEND="$F" run_c "$F" --report audit; m1="$CCACHE_LAST"
+cp "$TMP/k11.B" "$F"   # back to exactly the bytes the pre-compile key was computed from
+run_c "$F" --report audit; m2="$CCACHE_LAST"
+run_c "$F" --report audit; m3="$CCACHE_LAST"
+[ "$m1" = miss ] && [ "$m2" = miss ] \
+  && ok "an input edited mid-compile is not published under the pre-compile key (restoring it misses)" \
+  || no "mid-compile edit: got $m1 then $m2 (want miss, miss) — a result for other bytes was stored"
+[ "$m3" = hit ] && ok "...and once the input is stable, the next result is stored" \
+  || no "stable input after K11 did not hit ($m3)"
 
 echo "=== K10: no temporaries are left behind ==="
 left="$(find "$CONCRETE_COMPILE_CACHE_DIR" -name '.tmp.*' 2>/dev/null | wc -l | tr -d ' ')"

@@ -58,9 +58,11 @@ _heavy_owner_alive() {
   return 0
 }
 
-_heavy_age() { # dir -> seconds since mtime
-  local m
-  m="$(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0)"
+_heavy_age() { # dir -> seconds since mtime. GNU first: BSD `stat -f` on Linux means --file-system
+  local m=""                                  # and prints filesystem text, so each try is judged alone.
+  m="$(stat -c %Y "$1" 2>/dev/null)" || m=""
+  case "$m" in ''|*[!0-9]*) m="$(stat -f %m "$1" 2>/dev/null)" || m="" ;; esac
+  case "$m" in ''|*[!0-9]*) echo 0; return 0 ;; esac
   echo $(( $(date +%s) - m ))
 }
 
@@ -70,24 +72,48 @@ _heavy_discard() {
   mv "$1" "$trash" 2>/dev/null && rm -rf "$trash" 2>/dev/null
 }
 
+# THE MUTEX IS OWNED BY A TOKEN (pid, start time, random), and only two things remove it: its owner,
+# and a waiter that finds the owner DEAD. A live owner is never evicted by age (a suspended process
+# keeps it), and an ownerless directory is reclaimed only after 10 s (a crash between mkdir and the
+# owner write). Reclaim renames the directory away FIRST and then re-reads the owner it actually
+# took: if that is not the dead owner it judged (another waiter reclaimed first and a live process
+# now holds it), it is put back. What remains is a three-way race on an already-dead mutex in which
+# the put-back loses to a third mkdir; the cost is one critical section run twice, i.e. at worst one
+# extra slot holder for one run — load, never a verdict — and it is stated rather than hidden.
+_HEAVY_MUTEX_TOKEN=""
+_heavy_mutex_owner() { cat "$1/owner" 2>/dev/null; }
 _heavy_mutex_acquire() {
-  local m="$_HEAVY_DIR/.mutex" tries=0 pid
+  local m="$_HEAVY_DIR/.mutex" tries=0 own pid start now grab
+  _HEAVY_MUTEX_TOKEN="$$ $(_heavy_pid_start "$$" | tr ' ' '_') $RANDOM$RANDOM"
   while ! mkdir "$m" 2>/dev/null; do
     tries=$((tries+1))
     if [ $((tries % 20)) -eq 0 ]; then
-      # A mutex held by a dead process, or for longer than any critical section takes, is stale.
-      pid="$(cat "$m/pid" 2>/dev/null)"
-      if { [ -n "$pid" ] && [ -z "$(_heavy_pid_start "$pid")" ]; } || [ "$(_heavy_age "$m")" -gt 30 ]; then
+      own="$(_heavy_mutex_owner "$m")"
+      if [ -n "$own" ]; then
+        pid="${own%% *}"; start="$(printf '%s' "$own" | cut -d' ' -f2)"
+        now="$(_heavy_pid_start "$pid" | tr ' ' '_')"
+        if [ -z "$now" ] || [ "$now" != "$start" ]; then
+          grab="$_HEAVY_DIR/.mutex.reclaim.$$.$RANDOM"
+          if mv "$m" "$grab" 2>/dev/null; then
+            if [ "$(_heavy_mutex_owner "$grab")" = "$own" ]; then rm -rf "$grab"
+            else mv "$grab" "$m" 2>/dev/null || rm -rf "$grab"; fi
+          fi
+        fi
+      elif [ "$(_heavy_age "$m")" -gt 10 ]; then
         _heavy_discard "$m"
       fi
     fi
     [ "$tries" -lt 1200 ] || { echo "heavy-slots: could not take $m" >&2; return 1; }
     sleep 0.05
   done
-  echo "$$" > "$m/pid" 2>/dev/null || true
+  printf '%s\n' "$_HEAVY_MUTEX_TOKEN" > "$m/owner.tmp" 2>/dev/null && mv "$m/owner.tmp" "$m/owner" 2>/dev/null
   return 0
 }
-_heavy_mutex_release() { rm -rf "$_HEAVY_DIR/.mutex" 2>/dev/null || true; }
+_heavy_mutex_release() { # only our own token is removed
+  local m="$_HEAVY_DIR/.mutex"
+  [ "$(_heavy_mutex_owner "$m")" = "$_HEAVY_MUTEX_TOKEN" ] && _heavy_discard "$m"
+  return 0
+}
 
 # Print one line per slot currently present. Called under the mutex or not (diagnostic only).
 heavy_slot_holders() {

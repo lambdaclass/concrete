@@ -9,7 +9,8 @@
 # checkout of 8f40d45b and every seeded file was touched to be NEWER than the sources; `lake build`
 # still rebuilt the 146 modules whose sources differ, and the resulting binary embeds 8f40d45b's
 # BuildIdentity (ee30a7dc...), not the seed's (5a0afcdd...). So a seed from any commit, or from a
-# tree with uncommitted edits, only saves work; it never substitutes a stale artifact. The
+# tree with uncommitted edits, only saves work; it never substitutes a stale artifact, PROVIDED
+# the seed is a consistent snapshot, which the before/after listing below checks. The
 # `lake build` below is therefore mandatory, not an optimisation, and this script always runs it.
 #
 # The copy is copy-on-write where the filesystem supports it (APFS `cp -c`, Linux `--reflink`), so
@@ -42,13 +43,39 @@ if ! cmp -s "$SRC/lean-toolchain" "$ROOT_DIR/lean-toolchain"; then
 fi
 
 TMP_LAKE="$ROOT_DIR/.lake.seed.$$"
+# THE SEED MUST BE A QUIESCENT SNAPSHOT. Lake trusts an artifact whose .trace matches; a copy taken
+# while the source checkout is building could pair an old artifact with a new trace, and the
+# verifying build below would then trust it. So the source's file listing (path, size, mtime) is
+# taken before and after the copy, and any difference discards the copy. This detects a concurrent
+# write during the copy window; it is not a lock, so seed from a checkout that is not building.
+_listing() {
+  local fmt_gnu='%n %s %Y' fmt_bsd='%N %z %m'
+  if stat -c '%Y' "$SRC/.lake" >/dev/null 2>&1; then
+    ( cd "$SRC/.lake" && find . -type f -exec stat -c "$fmt_gnu" {} + | LC_ALL=C sort | cksum )
+  else
+    ( cd "$SRC/.lake" && find . -type f -exec stat -f "$fmt_bsd" {} + | LC_ALL=C sort | cksum )
+  fi
+}
+before="$(_listing)"
 t0=$(date +%s)
-if cp -Rc "$SRC/.lake" "$TMP_LAKE" 2>/dev/null \
-   || cp -R --reflink=auto "$SRC/.lake" "$TMP_LAKE" 2>/dev/null \
-   || cp -R "$SRC/.lake" "$TMP_LAKE"; then
-  mv "$TMP_LAKE" "$ROOT_DIR/.lake"
-else
-  rm -rf "$TMP_LAKE"; echo "lake-seed: copy failed" >&2; exit 1
+copied=0
+for how in clone reflink plain; do
+  rm -rf "$TMP_LAKE"   # every attempt starts from an absent destination
+  case "$how" in
+    clone)   cp -Rc "$SRC/.lake" "$TMP_LAKE" 2>/dev/null && copied=1 ;;
+    reflink) cp -R --reflink=auto "$SRC/.lake" "$TMP_LAKE" 2>/dev/null && copied=1 ;;
+    plain)   cp -R "$SRC/.lake" "$TMP_LAKE" && copied=1 ;;
+  esac
+  [ "$copied" = 1 ] && break
+done
+if [ "$copied" != 1 ]; then rm -rf "$TMP_LAKE"; echo "lake-seed: copy failed" >&2; exit 1; fi
+if [ "$(_listing)" != "$before" ]; then
+  rm -rf "$TMP_LAKE"
+  echo "lake-seed: $SRC/.lake changed while it was copied (a build is running there); refusing the seed." >&2
+  exit 1
+fi
+if ! mv "$TMP_LAKE" "$ROOT_DIR/.lake" || [ ! -d "$ROOT_DIR/.lake/build" ] || [ -e "$TMP_LAKE" ]; then
+  rm -rf "$TMP_LAKE"; echo "lake-seed: could not install the seed" >&2; exit 1
 fi
 echo "lake-seed: seeded .lake from $SRC in $(( $(date +%s) - t0 ))s; verifying with lake build"
 # Verification is the build. Lake rebuilds every artifact whose recorded input hashes differ.
