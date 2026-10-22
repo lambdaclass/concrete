@@ -141,7 +141,6 @@ def getMacOSSysrootFlags : IO (Array String) := do
     if sdkPath.length > 0 then return #[s!"--sysroot={sdkPath}"]
   return #[]
 
-/-- Build clang arguments for linking LLVM IR to a native binary. -/
 /-- A per-process path for a build's intermediate file next to `base` (R-0547).
 
     The IR used to go to the fixed `<source>.ll` (and a test build's binary to `<source>.test`), and
@@ -152,6 +151,7 @@ def getMacOSSysrootFlags : IO (Array String) := do
 def scratchPath (base : String) (ext : String) : IO String := do
   return s!"{base}.{← IO.Process.getPID}{ext}"
 
+/-- Build clang arguments for linking LLVM IR to a native binary. -/
 def clangArgs (llPath : String) (outputPath : String) (extraFlags : Array String := #[]) : IO (Array String) := do
   let sysrootFlags ← getMacOSSysrootFlags
   return #[llPath, "-o", outputPath, "-Wno-override-module", "-w", "-O2"] ++ sysrootFlags ++ extraFlags
