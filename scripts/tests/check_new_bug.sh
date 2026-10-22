@@ -93,8 +93,11 @@ G branch -q -D localonly; G worktree remove --force "$TMP/wt2"
 
 echo "=== 2. concurrent allocations get distinct numbers ==="
 pids=""
-# One title for all six: identical requests in the same second must still build distinct commits.
-for i in 1 2 3 4 5 6; do bash "$NB" --number-only "race" > "$TMP/race.$i" 2>&1 & pids="$pids $!"; done
+# One title and frozen commit dates for all six, so identical requests build identical commits unless
+# each carries its own nonce. The interleaving is up to the scheduler: this leg can catch a collision,
+# it cannot force one on every run.
+for i in 1 2 3 4 5 6; do GIT_AUTHOR_DATE='2026-01-02T00:00:00Z' GIT_COMMITTER_DATE='2026-01-02T00:00:00Z' \
+  bash "$NB" --number-only "race" > "$TMP/race.$i" 2>&1 & pids="$pids $!"; done
 rc_all=0; for p in $pids; do wait "$p" || rc_all=1; done
 got="$(for i in 1 2 3 4 5 6; do num_of "$TMP/race.$i"; done | sort)"
 held=0; for x in $got; do git -C "$W" ls-remote --exit-code origin "refs/bug-reservations/$x" >/dev/null && held=$((held+1)); done
@@ -150,6 +153,12 @@ fill "$REC"
        && ok "a filled record still fails while the reproducer and fragment hold placeholders" \
        || no "the placeholder leg did not name the reproducer and the fragment"; }
 fill "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con"; fill "${FRAG:-/nonexistent}"
+printf '\nFILL-IN(new_bug.sh) left in the record only\n' >> "${REC:-/dev/null}"
+(cd "$W" && bash scripts/tests/check_bug_filing_complete.sh) > "$TMP/bfc3.out" 2>&1 \
+  && no "check_bug_filing_complete.sh ignores a placeholder left in the record alone" \
+  || { grep -q "unfilled.*$(basename "${REC:-x}")" "$TMP/bfc3.out" && ok "a placeholder left in the record alone is refused" \
+       || no "a record-only placeholder failed the gate for another reason"; }
+[ -n "$REC" ] && grep -v 'left in the record only' "$REC" > "$TMP/rec" && cat "$TMP/rec" > "$REC"
 if (cd "$W" && bash scripts/tests/check_bug_filing_complete.sh) > "$TMP/bfc2.out" 2>&1; then
   ok "once filled, the new bug passes check_bug_filing_complete.sh"
 else no "the filled scaffold fails check_bug_filing_complete.sh:"; grep FAIL "$TMP/bfc2.out" | sed 's/^/      /'; fi
@@ -172,6 +181,19 @@ refuse "a title a changelog fragment cannot carry" "changelog stamp:" bash "$NB"
 printf '# not a fragment heading\n' > "$W/changelog.d/2026-01-01-broken.md"
 refuse "an already-malformed changelog.d" "already malformed" bash "$NB" "some defect"
 rm -f "$W/changelog.d/2026-01-01-broken.md"
+# A failure after the files are written (here: the fragment cannot be created) removes all of them and
+# leaves the views as they were. Root ignores the permission bits, so the leg reports itself skipped.
+recs_before="$(ls "$W/docs/bugs" | sort)"; regs_before="$(ls "$W/tests/regressions" | sort)"
+chmod 555 "$W/changelog.d"
+if [ -w "$W/changelog.d" ]; then
+  echo "  skip a failed write rolls back (the directory stays writable for this user)"
+elif bash "$NB" "rollback control defect" > "$TMP/rb.out" 2>&1; then
+  no "filing succeeded although changelog.d/ was read-only"
+elif [ "$(ls "$W/docs/bugs" | sort)" = "$recs_before" ] && [ "$(ls "$W/tests/regressions" | sort)" = "$regs_before" ] \
+     && python3 -I "$W/scripts/gen/bug_ledger.py" --check --root "$W" >/dev/null 2>&1 && grep -q 'removed the files' "$TMP/rb.out"; then
+  ok "a failed write after the record exists removes every file it wrote and leaves the views consistent"
+else no "a failed filing left files or stale views behind: $(tr '\n' ' ' < "$TMP/rb.out" | cut -c1-200)"; fi
+chmod 755 "$W/changelog.d"
 if [ "$MIGRATED_HERE" = 0 ]; then
   git init -q -b main "$RAW" && git -C "$RAW" remote add origin "$O"
   refuse "an unmigrated tree" "not migrated" bash "$RAW/scripts/gen/new_bug.sh" "some defect"

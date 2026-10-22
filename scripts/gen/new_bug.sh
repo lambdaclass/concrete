@@ -110,7 +110,20 @@ if [ "${NEW_BUG_NO_FETCH:-0}" != 1 ]; then
     || die "git fetch $REMOTE failed; the allocation needs the remote's branches"
   no_op_in_progress
 fi
-seen="$(mktemp)"; trap 'rm -f "$seen"' EXIT
+# On any failure after the first file is written (a refused record, a failed write), every file this
+# run created is removed and the views are regenerated without it, so a failed filing leaves the tree
+# as it found it. The reserved number stays reserved.
+WRITING=0; REC=""; REPRO=""; REPRO_DIR=""; FRAG=""
+cleanup() {
+  local rc=$?
+  rm -f "${seen:-}"
+  if [ "$rc" -ne 0 ] && [ "$WRITING" = 1 ]; then
+    rm -f "$REC" "$REPRO" "$FRAG"; [ -z "$REPRO_DIR" ] || rmdir "$REPRO_DIR" 2>/dev/null || true
+    python3 -I scripts/gen/bug_ledger.py --write >/dev/null 2>&1 || true
+    echo "new_bug: filing failed; removed the files it had written (bug ${num:-?} stays reserved: reuse it or leave the gap)" >&2
+  fi
+}
+seen="$(mktemp)"; trap cleanup EXIT
 record_nums() { sed -nE 's#^(.*/)?([0-9]{3})_[^/]*\.md$#\2#p'; }
 while IFS= read -r ref; do
   git ls-tree --name-only "$ref" docs/bugs/ 2>/dev/null | record_nums >> "$seen" || true
@@ -167,6 +180,8 @@ REPRO_DIR="tests/regressions/bug${num}_${SLUG}"
 REPRO="$REPRO_DIR/repro.con"
 FRAG="changelog.d/${TODAY}-bug${num}-$(printf '%s' "$SLUG" | tr '_' '-').md"
 for f in "$REC" "$REPRO" "$FRAG"; do [ ! -e "$f" ] || die "$f already exists"; done
+[ ! -e "$REPRO_DIR" ] || die "$REPRO_DIR already exists"
+WRITING=1
 mkdir -p "$REPRO_DIR"
 {
   printf '# Bug %s — %s\n\n' "$num" "$TITLE"
@@ -205,11 +220,10 @@ mkdir -p "$REPRO_DIR"
 
 if ! python3 -I scripts/gen/bug_ledger.py --write >/dev/null || ! python3 -I scripts/gen/bug_ledger.py --check >/dev/null \
    || ! python3 -I scripts/gen/changelog.py --check >/dev/null; then
-  rm -f "$REC" "$REPRO" "$FRAG"; rmdir "$REPRO_DIR" 2>/dev/null || true
-  python3 -I scripts/gen/bug_ledger.py --write >/dev/null 2>&1 || true
-  die "the ledger or changelog refused the new files (above); they were removed. Bug $num stays reserved; pass it to whoever files next or leave the gap"
+  die "the ledger or changelog refused the new files (above)"
 fi
 if [ -f scripts/gen/bug_dashboard.py ]; then python3 -I scripts/gen/bug_dashboard.py --write >/dev/null; fi
+WRITING=0
 
 echo "new_bug: filed bug $num"
 echo "  record      $REC"
