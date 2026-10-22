@@ -255,28 +255,49 @@ PRODUCERS="$(git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.(
 EXPECTED="Concrete/Report/DebugBundle.lean Concrete/Report/Reduce.lean Concrete/Resolve/Project.lean Main.lean "
 [ "$PRODUCERS" = "$EXPECTED" ] && ok "C6: identity is produced only by the resolver and the one manifestless producer's callers ($PRODUCERS)" \
   || no "C6: identity producers are called from: $PRODUCERS (expected $EXPECTED)"
-if git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concrete/Report/DebugBundle.lean Concrete/Report/Reduce.lean | grep -q .; then
-  no "C6: a debug path builds an artifact or scope itself instead of calling the one producer"
+# CAPTURED, THEN TESTED. These legs used to read `git grep ... | grep -q .` under `pipefail`: when
+# git grep had more to write after the first match, `grep -q` exited, git grep died of SIGPIPE, and
+# the pipeline's status was that death, so a leg whose job is to FAIL on a match passed on whether
+# the race was won. The deleted-name leg below was that coin flip on Linux: there `\b` is a word
+# boundary, `PackageIdentity\b` matched the legitimate `noPackageIdentity` constructor and a history
+# comment, the leg passed in CI's regular jobs only by losing the race, and in mutation shard 18 of
+# run 39753399178 it won it: RED ON CLEAN, two families INVALID (on macOS `\b` matches nothing, so it
+# never fired there). check_gate_hygiene.sh now refuses both shapes.
+# search_or_error ARGS...: git grep's output; status 0 for "found" and "found nothing" alike, 2 when
+# git grep itself failed (status > 1), which must never read as "nothing found".
+search_or_error() { local _o _r; _o="$(git grep "$@")"; _r=$?; [ "$_r" -le 1 ] || return 2; printf '%s' "$_o"; }
+if ! DBG_REFS="$(search_or_error -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concrete/Report/DebugBundle.lean Concrete/Report/Reduce.lean)"; then
+  no "C6: git grep failed searching the debug paths"
+elif [ -n "$DBG_REFS" ]; then
+  no "C6: a debug path builds an artifact or scope itself instead of calling the one producer: $(cut -c1-120 <<<"$DBG_REFS" | tr '\n' ';')"
 else
   ok "C6: DebugBundle and Reduce call only ResolvedIdentity.standalone over their complete source map"
 fi
-# The deleted names as whole identifiers, in code. Boundaries are bracket expressions, not `\b`:
-# git grep's `\b` depends on the regex library git was built with (inert with BSD regex, a word
-# boundary with GNU regex), so this leg once passed or failed depending on which git ran it, and
-# where `\b` was live it also matched the legitimate `noPackageIdentity` constructor and the
-# `PackageIdentity` named in a history comment. A Lean line comment (`--` onward) is not code.
-deleted_producer_refs() { # git grep -n lines on stdin -> the lines that still use a deleted name
-  sed -E 's/^([^:]+:[0-9]+:)(.*)$/\1 \2/; s/--.*$//' \
-    | grep -E '(^|[^A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)([^A-Za-z0-9_]|$)' || true
-}
-_c6_ctl="$(printf '%s\n' \
-  'a.lean:1:def packageIdentityOf (x : Nat) := x' 'a.lean:2:  let p : Proof.PackageIdentity := q' \
-  'a.lean:3:  | noPackageIdentity (why : R)' 'a.lean:4:-- the over-bound `PackageIdentity` this replaced' \
-  'a.lean:5:  | .noPackageIdentity w => s!"x"' | deleted_producer_refs | cut -d: -f2 | tr '\n' ' ')"
-[ "$_c6_ctl" = "1 2 " ] && ok "C6 control: the matcher flags a deleted name used as code and ignores noPackageIdentity and comments" \
-  || no "C6 control: the deleted-name matcher flagged lines '$_c6_ctl', expected '1 2 '"
-C6_REFS="$(git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity' -- 'Concrete/*.lean' Main.lean | deleted_producer_refs)"
-if [ -n "$C6_REFS" ]; then
+# The deleted names as identifiers IN CODE: a Lean-aware scan (lib/lean_idents.py) skips comments,
+# docstrings and string literals, and does not confuse `noPackageIdentity` with `PackageIdentity`.
+C6_NAMES="PackageIdentity,syntheticForModules,packageIdentityOf"
+cat > "$TMP/c6_fixture.lean" <<'LEAN'
+def packageIdentityOf (x : Nat) := x
+def y := ("--", Proof.PackageIdentity)
+  | noPackageIdentity (why : R)
+-- the over-bound `PackageIdentity` this replaced
+/- Previously PackageIdentity.
+   and syntheticForModules, /- nested -/ still a comment -/
+/-- A docstring naming
+    packageIdentityOf on a later line. -/
+def z := "a string naming PackageIdentity"
+def w := 'x'
+  | .noPackageIdentity w => s!"x"
+LEAN
+_c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$TMP/c6_fixture.lean" | cut -d: -f2 | tr '\n' ' ')"
+[ "$_c6_ctl" = "1 2 " ] && ok "C6 control: code uses of a deleted name are found (also after a \"--\" string); comments, docstrings, strings and noPackageIdentity are not" \
+  || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '1 2 '"
+C6_FILES="$(git ls-files -- 'Concrete/*.lean' Main.lean)"
+if [ -z "$C6_FILES" ]; then
+  no "C6: no Lean sources listed to scan"
+elif ! C6_REFS="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" $C6_FILES)"; then
+  no "C6: the deleted-name scan could not read the sources"
+elif [ -n "$C6_REFS" ]; then
   no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced: $(cut -c1-120 <<<"$C6_REFS" | tr '\n' ';')"
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
@@ -367,8 +388,11 @@ LEAN
 OUT="$(lake env lean "$TMP/v.lean" 2>&1)"
 [ "$OUT" = "V2-UNREADABLE" ] && ok "V: a receiptV2 record is schema_unreadable (needs re-verification), never compared field-wise" \
   || no "V: a receiptV2 record decoded as: $OUT"
-if git grep -nE '"(defIdV1|pkgIdV1|pkgOriginV1|pkgRootV1|pkgSyntheticV1|workspaceV1|depRootPreimageV2):?' -- 'Concrete/*.lean' Main.lean | grep -q .; then
-  no "V: a pre-R-0482 encoding tag is still produced: $(git grep -lE '"(defIdV1|pkgIdV1|pkgSyntheticV1|depRootPreimageV2)' -- 'Concrete/*.lean' Main.lean | tr '\n' ' ')"
+# Captured, then tested (a `| grep -q` here could pass by SIGPIPE; see C6).
+if ! OLD_TAGS="$(search_or_error -lE '"(defIdV1|pkgIdV1|pkgOriginV1|pkgRootV1|pkgSyntheticV1|workspaceV1|depRootPreimageV2):?' -- 'Concrete/*.lean' Main.lean)"; then
+  no "V: git grep failed searching for pre-R-0482 encoding tags"
+elif [ -n "$OLD_TAGS" ]; then
+  no "V: a pre-R-0482 encoding tag is still produced: $(tr '\n' ' ' <<<"$OLD_TAGS")"
 else
   ok "V: no pre-R-0482 encoding tag (defIdV1, pkg*V1, workspaceV1, depRootPreimageV2) is produced anywhere"
 fi

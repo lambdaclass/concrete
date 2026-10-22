@@ -69,14 +69,20 @@ then KILL) before the retry. `test_ssa.sh` already worked this way. The roadmap'
 passed, failed, incomplete, skipped and cancelled, and a qualifying run contains no incomplete
 result.
 
-A gate's verdict no longer depends on which git runs it. `check_identity_separation.sh`'s C6 leg
-searched with `git grep -E '...|PackageIdentity\b'`; `\b` is a regex-library extension, inert in
-BSD-regex git (macOS) and live in GNU-regex git, where it also matched the legitimate
-`noPackageIdentity` constructor and a history comment. Ubuntu 24.04's git 2.43 fails the leg on main's
-tree, and mutation shard 18 of run 39753399178 went RED ON CLEAN on it, scoring two families
-INVALID. The leg now uses bracket-expression boundaries, ignores Lean comments, names what it found,
-and checks its matcher on fixed lines; `check_gate_hygiene.sh` refuses `\b`, `\<` and `\>` in any
-`git grep` pattern, with controls.
+A gate's verdict no longer depends on which git runs it or on a pipe race. `check_identity_separation.sh`'s
+C6 leg read `git grep -E '...|PackageIdentity\b' ... | grep -q .` under `pipefail`. Two hazards met
+there. `\b` is a regex-library extension: it matches nothing in BSD-regex git (macOS), while in
+GNU-regex git (Linux) it is a word boundary and also matched the legitimate `noPackageIdentity`
+constructor and a history comment. And `grep -q` exits at its first match, so git grep could die of
+SIGPIPE and the pipeline's status was that death: the leg, whose job is to fail on a match, passed
+in CI's regular jobs by losing the race. Mutation shard 18 of run 39753399178 won it, so the gate went
+RED ON CLEAN and two families scored INVALID. Ubuntu 24.04's git 2.43 reproduces the match on main's
+tree. The leg now scans Lean code with a small tokenizer (`scripts/tests/lib/lean_idents.py`:
+comments, docstrings and strings skipped, `noPackageIdentity` is a different identifier), captures
+before testing, names what it found, treats a failed git grep as an error rather than "nothing
+found", and checks the tokenizer on a fixture. Two more `| grep -q` legs in the gate are captured
+too. `check_gate_hygiene.sh` refuses `\b`, `\<` and `\>` in git grep patterns and git grep piped
+into `grep -q`, on continuation-joined lines, with controls; both checks catch the old leg.
 
 The promotion pipeline also records the flow in use: a candidate branch, `wip/*` backups under the
 hook's conflict-marker tier, the pre-push hook as the fast local tier, `ci/<name>` with a dispatched

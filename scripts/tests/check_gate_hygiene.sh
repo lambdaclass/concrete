@@ -400,33 +400,58 @@ else
 fi
 
 echo ""
-echo "=== no git grep pattern depends on a regex-engine extension (\\b, \\<, \\>) ==="
-# `git grep -E/-G` compiles its pattern with whatever regex library that git was built with, and
-# the word-boundary escapes are extensions: BSD/macOS git treats `\b` as matching nothing, a GNU
-# regex build treats it as a boundary. check_identity_separation.sh's C6 leg used
-# `PackageIdentity\b`: inert on macOS git and in CI's regular jobs, red under Ubuntu 24.04's git
-# 2.43 (GNU regex) on the same tree, and red in mutation shard 18 of run 39753399178, where the gate
-# went RED ON CLEAN and two families scored INVALID; where `\b` is live it also matches the
-# legitimate `noPackageIdentity` constructor and a history comment. A gate's verdict must not depend
-# on which git it found. Plain grep(1) is not flagged: GNU and BSD grep agree on these. A line that
-# runs git grep is flagged if \b, \< or \> appears anywhere on it (an alternation's `|` inside the
-# quotes makes the pattern's end undecidable here), so keep a later plain grep on its own line.
-gitgrep_gnuisms() { # files... -> offending lines (comments skipped)
-  grep -HnE 'git( -C [^ ]+)? grep.*\\[b<>]' "$@" 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+echo "=== git grep: no engine-dependent pattern, no status read through a short-circuiting grep ==="
+# Two hazards, one leg each, found together (CI run 39753399178, mutation shard 18):
+#  1. `git grep -E/-G` compiles its pattern with the regex library git was built with, and the
+#     boundary escapes `\b`, `\<`, `\>` are extensions: BSD/macOS git matches nothing with `\b`, a
+#     GNU-regex git (Linux) treats it as a word boundary. A gate's verdict must not depend on which
+#     git it found.
+#  2. `git grep ... | grep -q` under `pipefail` reads git grep's SIGPIPE: when git grep has more to
+#     write after the first match, `grep -q` exits, git grep dies, and the pipeline fails. A leg
+#     meant to FAIL on a match then passes on whether the race was won.
+# check_identity_separation.sh's C6 leg had both: `PackageIdentity\b` (live on Linux, where it also
+# matched `noPackageIdentity` and a history comment) piped into `grep -q .`. It passed in CI's
+# regular jobs by losing the race and went RED ON CLEAN in that shard by winning it.
+# Scanned as LOGICAL lines (backslash continuations joined), comments skipped. A logical line that
+# runs git grep is flagged if \b, \< or \> appears anywhere on it (inside quotes an alternation's `|`
+# hides where the pattern ends), so keep a later plain grep on its own line; a literal `git grep -F`
+# pattern containing one is flagged too. Patterns passed through a variable are not seen.
+logical_lines() { # files... -> FILE:LINE:joined logical line, comment lines dropped
+  awk '{ if (buf == "") start = FNR
+         if (sub(/\\$/, "")) { buf = buf $0 " "; next }
+         line = buf $0; buf = ""
+         if (line !~ /^[[:space:]]*#/) print FILENAME ":" start ":" line }' "$@" 2>/dev/null
 }
-GG="$(gitgrep_gnuisms "$ROOT_DIR"/scripts/tests/*.sh "$ROOT_DIR"/scripts/tests/lib/*.sh "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/gen/*.sh "$ROOT_DIR"/.githooks/pre-push \
-  | grep -v '/check_gate_hygiene.sh:' || true)"
-if [ -z "$GG" ]; then ok "no git grep pattern uses \\b, \\< or \\> (portable boundaries only)"
+gitgrep_gnuisms() { logical_lines "$@" | grep -E 'git( -C [^ ]+| -c [^ ]+)* +grep.*\\[b<>]' || true; }
+gitgrep_into_quiet_grep() { logical_lines "$@" | grep -E 'git( -C [^ ]+| -c [^ ]+)* +grep[^|]*(\|[^|]*)*\| *grep -[a-zA-Z]*q' || true; }
+GG_FILES=("$ROOT_DIR"/scripts/tests/*.sh "$ROOT_DIR"/scripts/tests/lib/*.sh "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/gen/*.sh "$ROOT_DIR"/.githooks/pre-push)
+GG="$(gitgrep_gnuisms "${GG_FILES[@]}")"
+if [ -z "$GG" ]; then ok "no git-grep pattern uses \\b, \\< or \\> (portable boundaries only)"
 else no "git grep patterns depend on the regex engine: $(cut -c1-160 <<<"$GG" | tr '\n' ';')"; fi
-_gg_fix="$(mktemp)"
-# The shape that broke: an alternation (its `|` inside the quotes) ending in a \b.
-printf '%s\n' "if git grep -nE 'synthetic|Foo\\b' -- x | grep -q .; then :; fi" > "$_gg_fix"
-if [ -n "$(gitgrep_gnuisms "$_gg_fix")" ]; then ok "control: a git grep pattern with \\b is flagged"
-else no "control: a git grep pattern with \\b was NOT flagged (the check above is inert)"; fi
-printf '%s\n' "if git grep -nE '(^|[^A-Za-z0-9_])Foo([^A-Za-z0-9_]|\$)' -- x; then :; fi" > "$_gg_fix"
-if [ -z "$(gitgrep_gnuisms "$_gg_fix")" ]; then ok "control: a portable bracket-expression boundary is not flagged"
-else no "control: a portable boundary was flagged"; fi
-rm -f "$_gg_fix"
+GQ="$(gitgrep_into_quiet_grep "${GG_FILES[@]}")"
+if [ -z "$GQ" ]; then ok "no git grep is piped into a short-circuiting grep (capture, then test)"
+else no "git grep piped into 'grep -q' (its SIGPIPE can decide the leg): $(cut -c1-160 <<<"$GQ" | tr '\n' ';')"; fi
+# Controls, built from pieces so this file's own text never matches.
+_gg_dir="$(mktemp -d)"
+_GG='git'" grep"; _B='\'"b"
+printf '%s\n' "if $_GG -nE 'synthetic|Foo${_B}' -- x; then :; fi" > "$_gg_dir/alt.sh"
+printf '%s\n' "OUT=\"\$($_GG -nE \\" "  'synthetic|Foo${_B}' -- x)\"" > "$_gg_dir/cont.sh"
+printf '%s\n' "if git -C . grep -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/dashc.sh"
+printf '%s\n' "OUT=\"\$($_GG -nE '(^|[^A-Za-z0-9_])Foo([^A-Za-z0-9_]|\$)' -- x)\"" > "$_gg_dir/portable.sh"
+printf '%s\n' "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/quiet.sh"
+printf '%s\n' "if $_GG -n Foo -- x \\" "   | sed 's/a/b/' | grep -qE . ; then :; fi" > "$_gg_dir/quiet_cont.sh"
+for c in alt cont dashc; do
+  if [ -n "$(gitgrep_gnuisms "$_gg_dir/$c.sh")" ]; then ok "control: a \\b git grep pattern ($c) is flagged"
+  else no "control: a \\b git grep pattern ($c) was NOT flagged (the check above is inert)"; fi
+done
+if [ -z "$(gitgrep_gnuisms "$_gg_dir/portable.sh")$(gitgrep_into_quiet_grep "$_gg_dir/portable.sh")" ]; then
+  ok "control: a captured search with portable bracket-expression boundaries is not flagged"
+else no "control: a captured, portable search was flagged"; fi
+for c in quiet quiet_cont; do
+  if [ -n "$(gitgrep_into_quiet_grep "$_gg_dir/$c.sh")" ]; then ok "control: git grep piped into grep -q ($c) is flagged"
+  else no "control: git grep piped into grep -q ($c) was NOT flagged (the check above is inert)"; fi
+done
+rm -rf "$_gg_dir"
 
 echo ""
 echo "=== a summary line and the exit status cannot disagree ==="
