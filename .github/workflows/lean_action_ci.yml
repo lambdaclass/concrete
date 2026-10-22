@@ -1013,6 +1013,9 @@ jobs:
       - name: "Bug filing completeness (a bug needs a document, a corpus entry, and coverage)"
         run: bash scripts/tests/check_bug_filing_complete.sh
 
+      - name: "Bug scaffold (new_bug.sh allocates race-safely, writes a ledger-consistent record; hook reservation tier)"
+        run: bash scripts/tests/check_new_bug.sh
+
       - name: "Evidence builders (R-0004 — semantic decisions tested before the producer cutover)"
         run: bash scripts/tests/check_evidence_build.sh
 
