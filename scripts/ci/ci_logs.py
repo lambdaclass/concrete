@@ -448,7 +448,11 @@ def aggregate_explained(log_text, failed_shards):
     if not ref or not failed_shards:
         return False
     unusable = False
+    accounted = set()  # families a FAILED shard's own shard_missing_families(k:...) names
     for tok in refusal_tokens(ref[0]):
+        mm = re.match(r"^shard_missing_families\((\d+):(.*)\)$", tok)
+        if mm and int(mm.group(1)) in failed_shards:
+            accounted.update(f for f in mm.group(2).split(",") if f)
         if not tok.startswith(AGGREGATE_CONSEQUENTIAL):
             return False
         m = re.match(r"^\w+\((\d+)\b", tok)
@@ -463,8 +467,11 @@ def aggregate_explained(log_text, failed_shards):
     # number (shard_missing_families, shard_selected, ...), and every numbered token was checked
     # above. So the unnumbered token is explained only when some FAILED shard has an unusable
     # summary; otherwise it is the aggregate's own finding.
-    if any(t.startswith("families_in_no_shard") for t in refusal_tokens(ref[0])) and not unusable:
-        return False
+    # Families a failed shard itself reported missing are accounted for by that shard.
+    for tok in refusal_tokens(ref[0]):
+        mm = re.match(r"^families_in_no_shard\((.*)\)$", tok)
+        if mm and not unusable and not set(f for f in mm.group(1).split(",") if f) <= accounted:
+            return False
     return True
 
 

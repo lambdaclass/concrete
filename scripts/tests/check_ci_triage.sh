@@ -109,6 +109,7 @@ expect 9000000077 real "Run examples" 1 0 "no job log (404) but a step concluded
 expect 9000000019 real aggregate_mutation_shards.py 1 0 "aggregate refusal no failed shard explains"
 expect 9000000020 real check_linear_discard.sh 1 0 "tolerated install blip, then a real gate failure"
 expect 9000000021 real check_model_diff.sh 1 0 "INCOMPLETE beside a nonzero FAIL= tally"
+expect 9000000024 infra aggregate_mutation_shards.py 0 1 "families in no shard that the cancelled shard reported missing"
 expect 9000000022 real aggregate_mutation_shards.py 1 0 "families in no shard while the failed shard's summary was usable"
 expect 9000000023 real check_workload_differential.sh 1 0 "same command twice: network exit, then assertion + timeout"
 expect 9000000017 real check_linear_discard.sh 1 0 "a real failure beside an infra one (no rerun)"

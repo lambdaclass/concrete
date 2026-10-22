@@ -139,6 +139,8 @@ def record_run(run_id, repo, ledger):
                        "steps": steps}
                 res = L.classify_job(job, L.job_log(j.get("id"), repo), ledger)
             secs = res["sections"] if res else []
+            mapped = {gate_for(gmap, jname, s_.get("name", "")) for s_ in steps} - {None}
+            unclaimed = [r for r in secs if r["gate"] not in mapped]
             for s_ in steps:
                 concl = s_.get("conclusion")
                 if concl is None:
@@ -151,9 +153,14 @@ def record_run(run_id, repo, ledger):
                     # A failed step takes the classification of the log section that RAN ITS GATE
                     # (the last one, if it ran twice). Sections and steps are never paired by index:
                     # a tolerated continue-on-error failure is a section with no failed step.
-                    own = [r for r in secs if gate is not None and r["gate"] == gate]
-                    r = own[-1] if own else res
-                    gate = gate or r["gate"]
+                    # A failed step that runs no gate (an install or upload) takes a section no gate
+                    # step claims; with none left it is unattributed, never another gate's result.
+                    if gate is not None:
+                        own = [r for r in secs if r["gate"] == gate]
+                        r = own[-1] if own else res
+                    else:
+                        gate = s_.get("name", "")
+                        r = unclaimed[-1] if unclaimed else {"outcome": "failed", "class": "unattributed"}
                     outcome, cls = r["outcome"], r["class"]
                 row(att, jname, s_.get("name", ""), gate, outcome, cls)
     return rows

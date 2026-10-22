@@ -1,0 +1,9 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run python3 -I scripts/tests/lib/aggregate_mutation_shards.py --plan p --shards-dir d
+2026-10-22T10:00:00.0000000Z [36;1mpython3 -I scripts/tests/lib/aggregate_mutation_shards.py --plan p --shards-dir d[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z GATE-MUTATION-COVERAGE (sharded): REFUSED completed=0 integrity_ok=0 qualified=0 killed=130 (of 134, 24 shards)
+2026-10-22T10:00:00.0000000Z   refusals: shard_missing_families(6:walker-constructor,wrapping-stays-unchecked) families_in_no_shard(walker-constructor,wrapping-stays-unchecked)
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.

@@ -1,0 +1,78 @@
+{
+ "databaseId": 9000000024,
+ "attempt": 1,
+ "headSha": "aaaa000000000000000000000000000000000024",
+ "headBranch": "main",
+ "event": "workflow_dispatch",
+ "status": "completed",
+ "conclusion": "failure",
+ "workflowName": "CI",
+ "url": "https://github.com/o/r/actions/runs/9000000024",
+ "createdAt": "2026-10-22T10:00:00Z",
+ "jobs": [
+  {
+   "databaseId": 1,
+   "name": "Build",
+   "conclusion": "success",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 9100000124,
+   "name": "Gate mutation shard 6",
+   "conclusion": "cancelled",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Gate mutation coverage shard (heavy; rebuilds per mutation)",
+     "conclusion": "cancelled",
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "databaseId": 9100000024,
+   "name": "Gate mutation coverage (aggregate verdict)",
+   "conclusion": "failure",
+   "status": "completed",
+   "steps": [
+    {
+     "name": "Set up job",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Run actions/checkout@v4",
+     "conclusion": "success",
+     "status": "completed"
+    },
+    {
+     "name": "Aggregate (fails closed; exit 0 only when qualified)",
+     "conclusion": "failure",
+     "status": "completed"
+    }
+   ]
+  }
+ ]
+}
