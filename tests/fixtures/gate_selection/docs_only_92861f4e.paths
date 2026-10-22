@@ -1,0 +1,8 @@
+# a docs-only commit (four design documents); the negative control
+# base af9bb612459ec57e2044fe624acb3a0701e9ea7a
+# head 92861f4e0fe3e63f3c82b5705b8fdbac229c7a8b
+docs/language/EXECUTION_MODEL.md
+docs/platform/ABI.md
+docs/platform/FFI.md
+docs/platform/LAYOUT_CONTRACT.md
+docs/platform/MAIN_EXIT_MODEL.md

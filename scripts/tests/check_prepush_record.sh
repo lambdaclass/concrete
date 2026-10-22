@@ -176,9 +176,11 @@ echo "=== the hook, end to end ==="
 new_repo
 cp "$HOOK" "$REPO/.githooks/pre-push"
 # Stub runner: --plan echoes the selectors, a real run counts itself and exits $STUB_RC.
+# The real runner resolves `--impact-files <list>` to gate commands; the stub echoes the selector, so
+# it prints the hook's per-run temporary path as a fixed word, or every plan would differ.
 cat > "$REPO/scripts/tests/run_ci_gates_local.sh" <<'STUB'
 #!/usr/bin/env bash
-if [ "${1:-}" = "--plan" ]; then shift; printf '%s\n' "$@" | paste -d' ' - -; exit 0; fi
+if [ "${1:-}" = "--plan" ]; then shift; printf '%s\n' "$@" | paste -d' ' - - | sed 's#^--impact-files .*#--impact-files CHANGED#'; exit 0; fi
 echo run >> "$STUB_STATE"
 exit "${STUB_RC:-0}"
 STUB

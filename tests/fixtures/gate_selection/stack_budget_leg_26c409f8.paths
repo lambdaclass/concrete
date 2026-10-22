@@ -1,0 +1,5 @@
+# the stack-budget repair itself: a gate script and its regression fixture
+# base 05a80b2d9282a243aff9eb1d45a9a1d00d20a921
+# head 26c409f89ad53dfa616c74f3e3c291cd6845900d
+scripts/tests/check_stack_budget.sh
+tests/regressions/bug065_unbounded_stack/extern_intrinsic_name.con

@@ -21,6 +21,7 @@
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
 #        scripts/tests/run_ci_gates_local.sh --job "<CI job name substring>"
 #        scripts/tests/run_ci_gates_local.sh [--plan] [--first CMD]... [--job J]... [--filter S]...
+#        scripts/tests/run_ci_gates_local.sh [--plan] --impact <base-ref> | --impact-files <paths-file>
 #
 # SELECTORS COMPOSE INTO ONE UNIQUE LIST. `--job`, `--filter` (or a bare positional substring) and
 # `--first` may each be repeated; the union is resolved ONCE, deduplicated by the normalized command
@@ -62,13 +63,19 @@ unset $(git rev-parse --local-env-vars)
 # except in --plan mode, which never takes the lock.
 ARG_ERR=""
 PLAN=0
-JOBSEL=(); FILTERS=(); FIRST_CMDS=()
+JOBSEL=(); FILTERS=(); FIRST_CMDS=(); IMPACT=()
 while [ $# -gt 0 ]; do
   case "$1" in
     # `--closure` IS DOCUMENTED but was never parsed: it fell through as a filter substring, matched
     # no gate, and produced a partial result that looked like a deliberate subset.
     --closure) CONCRETE_CLOSURE_RUN=1; shift ;;
     --plan)    PLAN=1; shift ;;
+    # --impact BASE / --impact-files FILE: the commands scripts/tests/select_gates.sh derives from
+    # what changed since merge-base(BASE, HEAD), or from a list of changed paths (R-0513).
+    --impact|--impact-files)
+      if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
+      if [ "$1" = "--impact" ]; then IMPACT=("$2"); else IMPACT=(--files "$2"); fi
+      shift 2 ;;
     --job|--filter|--first)
       if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
       case "$1" in
@@ -82,7 +89,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 SELECTING=0
-[ "${#JOBSEL[@]}${#FILTERS[@]}${#FIRST_CMDS[@]}" = "000" ] || SELECTING=1
+[ "${#JOBSEL[@]}${#FILTERS[@]}${#FIRST_CMDS[@]}${#IMPACT[@]}" = "0000" ] || SELECTING=1
 
 # THE ONE EXTRACTOR. Strip any trailing REDIRECTION from the extracted command. The character
 # class stops at `&`, so a workflow line ending `... --trust-gate 2>&1 | tee
@@ -164,7 +171,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=259
+EXPECTED_GATE_COMMANDS=260
 # 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
 #   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
@@ -176,6 +183,7 @@ GATE_INVENTORY="scripts/tests/ci_gate_inventory.txt"
 if [ -f "$GATE_INVENTORY" ]; then
   EXPECTED_GATE_COMMANDS="$(grep -c . "$GATE_INVENTORY" || true)"
 fi
+# 255 -> 256: check_gate_selection.sh (R-0513 impact gate selection), pinned in the same commit.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
@@ -306,6 +314,22 @@ $inv_diff
       RESOLVE_ERR="filter_selected_nothing($f)"; RESOLVE_MSG="filter '$f' matches no gate command."; return 1
     fi
   done
+  # IMPACT SELECTION. Unlike a filter it may legitimately select nothing (an inert docs change); the
+  # selector's own failure is a refusal, never an empty selection. Every command it names must be in
+  # the inventory, so a selector/extractor disagreement cannot run something CI does not.
+  if [ "${#IMPACT[@]}" -gt 0 ]; then
+    local imp
+    if ! imp="$(bash "$ROOT_DIR/scripts/tests/select_gates.sh" "${IMPACT[@]}")"; then
+      RESOLVE_ERR="impact_selection_failed"; RESOLVE_MSG="scripts/tests/select_gates.sh ${IMPACT[*]} failed"; return 1
+    fi
+    while IFS= read -r cmd; do
+      [ -n "$cmd" ] || continue
+      if [ -z "${inv[$cmd]:-}" ]; then
+        RESOLVE_ERR="impact_command_outside_inventory"; RESOLVE_MSG="select_gates.sh named '$cmd', which is not a workflow command"; return 1
+      fi
+      _sel_add "$cmd" || true
+    done <<< "$imp"
+  fi
   return 0
 }
 

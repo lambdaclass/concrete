@@ -60,6 +60,11 @@ jobs:
       - name: "Review tool (R-0544 — review.sh delta/split/refusal-retry/cap/notes, verify.sh; fake reviewer)"
         run: bash scripts/tests/check_review_tool.sh
 
+      # Source-level (reads gate scripts and fixed diff lists; no build), so it sits in this
+      # build-free job rather than the long language-surface job.
+      - name: "Impact gate selection (R-0513: pre-push selection replays the 2026-10-22 CI-only failures)"
+        run: bash scripts/tests/check_gate_selection.sh
+
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
 
