@@ -147,25 +147,33 @@ def loopHypsAt (lcs : List LoopContract) (line : Nat) : List Expr :=
   | some lc => lc.invariants ++ lc.guard.toList
   | none    => []
 
+/-- Accumulator form of `assignedScalarsS`, newest first. The old
+    `t.flatMap … ++ …` copied each level's whole result into its parent's, so a
+    statement nested `k` deep cost O(k²) — and the scoped walk asks once per
+    level, O(n³) for an n-deep nest of `if`s on the ordinary compile path
+    (bug 178). Same names, same order. -/
+partial def assignedScalarsGo (acc : List String) : Stmt → List String
+  | .assign _ n _ => n :: acc
+  | .letDecl _ n _ _ _ _ => n :: acc
+  | .ifElse _ _ t el => (el.getD []).foldl assignedScalarsGo (t.foldl assignedScalarsGo acc)
+  | .while_ _ _ b _ => b.foldl assignedScalarsGo acc
+  | .forLoop _ init _ step b _ =>
+      let acc := (init.map (assignedScalarsGo acc)).getD acc
+      let acc := (step.map (assignedScalarsGo acc)).getD acc
+      b.foldl assignedScalarsGo acc
+  | _ => acc
+
 /-- Scalar variables a statement assigns to. Mutating one invalidates any
     in-scope hypothesis that mentions it. Array-element / field / deref stores
     assign no integer counter (the domain our invariants range over), so they
     return `[]`; a nested loop invalidates whatever its body assigns. -/
-partial def assignedScalarsS : Stmt → List String
-  | .assign _ n _ => [n]
-  | .letDecl _ n _ _ _ _ => [n]
-  | .ifElse _ _ t el => t.flatMap assignedScalarsS ++ (el.getD []).flatMap assignedScalarsS
-  | .while_ _ _ b _ => b.flatMap assignedScalarsS
-  | .forLoop _ init _ step b _ =>
-      (init.map assignedScalarsS).getD [] ++ (step.map assignedScalarsS).getD []
-        ++ b.flatMap assignedScalarsS
-  | _ => []
+def assignedScalarsS (s : Stmt) : List String :=
+  (assignedScalarsGo [] s).reverse
 
 /-- Drop every in-scope hypothesis that mentions a just-assigned variable.
-    `assigned` is turned into a HashSet once: list membership per identifier per
-    hypothesis made the scoped walk cubic in nesting depth — `k` nested `if`s put `k`
-    guards in scope, and the statement holding the rest of the nest assigns O(nest)
-    names (bug 178, measured ~n^3 on the compile path). -/
+    `assigned` becomes a HashSet once (bug 178): the statement holding the rest of an
+    n-deep nest assigns O(n) names, so list membership per identifier per hypothesis
+    made each call O(scope × idents × n). -/
 def dropStaleHyps (scope : List Expr) (assigned : List String) : List Expr :=
   if scope.isEmpty then [] else
   let assignedSet : Std.HashSet String := assigned.foldl (·.insert ·) ∅
@@ -343,9 +351,10 @@ partial def scopedWalkSizedB {α}
   | [] => []
   | s :: rest =>
       let restScope := match s with
+        -- An empty scope has nothing to invalidate: skip the subtree walk.
         | .ifElse _ c t none => if blockTerminates t then scope ++ (negateGuard c).toList
-                                else dropStaleHyps scope (assignedScalarsS s)
-        | _ => dropStaleHyps scope (assignedScalarsS s)
+                                else if scope.isEmpty then [] else dropStaleHyps scope (assignedScalarsS s)
+        | _ => if scope.isEmpty then [] else dropStaleHyps scope (assignedScalarsS s)
       -- A declaration is visible to what FOLLOWS it, and shadows an outer binding of the
       -- same name because it is prepended and lookups take the first match. Bindings made
       -- inside `s` (a block) do not reach `rest`: only `s`'s own declaration does.
