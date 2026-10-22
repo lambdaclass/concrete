@@ -273,6 +273,13 @@ for i in 1 2; do python3 -I "$PERF/store.py" append --data "$D" --record "$TMP/c
 python3 -I "$PERF/store.py" has --data "$D" --machine fixture-2 --sha "$(printf "e%.0s" $(seq 40))" && no "two contaminated attempts counted as measured" || ok "has: contaminated attempts below the limit ask for a re-measurement"
 python3 -I "$PERF/store.py" append --data "$D" --record "$TMP/c.json" >/dev/null 2>&1
 python3 -I "$PERF/store.py" has --data "$D" --machine fixture-2 --sha "$(printf "e%.0s" $(seq 40))" && ok "has: the third contaminated attempt stops re-measuring" || no "has: attempt limit"
+mkdir -p "$TMP/outside"
+ln -s "$TMP/outside" "$D/data/evil"
+python3 -I "$PERF/store.py" put --data "$D" --machine evil --name x.json --file "$TMP/s.json" 2>/dev/null && no "put wrote through a symlinked machine directory" || ok "put refuses a symlinked machine directory"
+[ -z "$(ls "$TMP/outside")" ] && ok "nothing was written outside the data tree" || no "a write escaped through data/evil"
+rm -f "$D/data/evil"
+[ "$(python3 -I "$PERF/store.py" pending --data "$D" --machine fixture-1)" = "$(tail -1 "$REC" | python3 -I -c 'import json,sys; print(json.loads(sys.stdin.read())["sha"])')" ] \
+  && ok "pending: the newest measured-but-unprocessed commit is resumed first" || no "pending"
 [ -z "$(G status --porcelain)" ] && ok "the data worktree is clean after every write" || no "uncommitted data: $(G status --porcelain | head -3)"
 
 echo "=== detect.py / report.py on the stored data ==="
@@ -285,6 +292,17 @@ import json,sys; s=json.load(open(sys.argv[1]))
 assert s["schema"]=="concrete.perf.summary.v1" and s["verdict"]=="regression"
 assert s["regressions"]==["compile.lox.wall_ms"], s["regressions"]
 ' "$TMP/sum.json" && ok "summary JSON: schema, verdict and the one regressed metric" || no "summary JSON content"
+python3 -I - "$TMP/zero.jsonl" <<'PY'
+import json, sys
+base = {"schema": "concrete.perf.record.v1", "suite_version": 1, "machine": "z", "measured_at": "x", "status": "ok"}
+with open(sys.argv[1], "w") as f:
+    for i, v in enumerate([0.0, 0.0, 0.0, 0.0, 100.0]):
+        r = dict(base, sha="%040x" % (i + 1), metrics={"pass.p.lower_ms": {"unit": "ms", "median": v, "lo": v, "hi": v, "n": 1, "samples": [v]}})
+        f.write(json.dumps(r) + "\n")
+PY
+python3 -I "$PERF/detect.py" --records "$TMP/zero.jsonl" --out "$TMP/zero.json" >"$TMP/zero.txt" 2>&1
+zrc=$?
+[ "$zrc" -eq 1 ] && ! grep -q Traceback "$TMP/zero.txt" && ok "detect.py CLI: a 0 -> 100 ms regression exits 1 without crashing" || no "detect.py CLI zero baseline (exit $zrc): $(tail -2 "$TMP/zero.txt")"
 python3 -I "$PERF/report.py" --records "$REC" --summary "$TMP/sum.json" --html "$TMP/r.html" > "$TMP/r.txt" \
   && grep -q "compile.lox.wall_ms" "$TMP/r.txt" && grep -q "<regression" "$TMP/r.txt" \
   && ok "report.py prints trends and marks the regression" || no "report.py text"
@@ -316,6 +334,10 @@ mark = os.path.join(sys.argv[2], "survivor")
 w, rss, rc = suite.timed(["bash", "-c", "(sleep 3; touch %s) & wait" % mark], "/", timeout=1)
 time.sleep(3.5)
 assert rc == 124 and not os.path.exists(mark), (rc, os.path.exists(mark))
+mark2 = os.path.join(sys.argv[2], "stubborn")
+w, rss, rc = suite.timed(["bash", "-c", "(trap '' TERM; sleep 13; touch %s) & sleep 30" % mark2], "/", timeout=1)
+time.sleep(13)
+assert rc == 124 and not os.path.exists(mark2), ("a TERM-ignoring descendant survived", rc)
 PY
 
 echo

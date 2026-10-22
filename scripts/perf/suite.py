@@ -88,16 +88,21 @@ def timed(cmd, cwd, env=None, timeout=None, stdout=None):
         try:
             rc = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                try:
-                    os.killpg(p.pid, sig)
-                except ProcessLookupError:
-                    break
-                try:
-                    p.wait(timeout=20)
-                    break
-                except subprocess.TimeoutExpired:
-                    continue
+            # TERM the whole group, give it a grace period, then KILL the group unconditionally:
+            # the leader (/usr/bin/time) exiting says nothing about a worker that ignored TERM.
+            try:
+                os.killpg(p.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            p.wait()
             rc = 124
         wall = time.monotonic() - t0
         if err is not subprocess.DEVNULL:

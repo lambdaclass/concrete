@@ -16,6 +16,7 @@ The branch is checked out as its own worktree (DATA). Layout:
                      contaminated) record exists, or N (default 3) attempts were already made
   store.py processed --data DATA --machine M --sha SHA [--mark]
                      exit 0 when SHA was fully processed; --mark records that it was
+  store.py pending   --data DATA --machine M   print the newest measured-but-unprocessed sha
   store.py put       --data DATA --machine M --name REL --file F [--no-commit]
   store.py check     --data DATA                               validate every records.jsonl
 
@@ -62,17 +63,22 @@ def machine_dir(data, machine):
 
 
 def contained(data, machine, rel):
-    """Resolved destination for REL under data/<machine>, refusing anything (.., absolute paths,
-    symlinks) that resolves outside it."""
-    base = os.path.realpath(machine_dir(data, machine))
-    dest = os.path.realpath(os.path.join(base, rel))
-    if os.path.commonpath([base, dest]) != base or dest == base:
+    """Destination for REL under data/<machine>. Refuses anything that resolves outside DATA/data/
+    <machine> (.., absolute paths, a symlinked machine directory, symlinks inside it) and refuses a
+    destination that is itself a symlink."""
+    root = os.path.realpath(data)
+    base = os.path.join(root, "data", os.path.basename(machine_dir(data, machine)))
+    if os.path.realpath(base) != base and os.path.lexists(base):
+        raise ValueError("data/%s is a symlink" % machine)
+    lexical = os.path.normpath(os.path.join(base, rel))
+    dest = os.path.realpath(lexical)
+    if os.path.commonpath([base, dest]) != base or dest == base or os.path.islink(lexical):
         raise ValueError("refusing a path outside data/%s: %r" % (machine, rel))
     return dest
 
 
 def records_path(data, machine):
-    return os.path.join(machine_dir(data, machine), "records.jsonl")
+    return contained(data, machine, "records.jsonl")
 
 
 def load(data, machine):
@@ -97,12 +103,22 @@ def locked(data):
         os.close(fd)
 
 
+def atomic_write(path, data_bytes):
+    """Readers see the old file or the new one, never a truncated one; a crash leaves at most a
+    stray temp file."""
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    with open(tmp, "wb") as f:
+        f.write(data_bytes)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def write_and_commit(data, path, new_bytes, msg, no_commit):
     """Write PATH, commit it; restore the previous content if the commit fails."""
     old = open(path, "rb").read() if os.path.exists(path) else None
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(new_bytes)
+    atomic_write(path, new_bytes)
     if no_commit:
         return
     try:
@@ -115,8 +131,7 @@ def write_and_commit(data, path, new_bytes, msg, no_commit):
         if old is None:
             os.unlink(path)
         else:
-            with open(path, "wb") as f:
-                f.write(old)
+            atomic_write(path, old)
         git(data, "reset", "-q", "--", os.path.relpath(os.path.realpath(path), os.path.realpath(data)), check=False)
         raise RuntimeError("commit failed, write rolled back: %s" % (ex.stderr or ex))
 
@@ -159,18 +174,33 @@ def cmd_has(a):
     return 0 if any(clean(r) for r in recs) or len(recs) >= a.attempts else 1
 
 
+def processed_set(p):
+    return set(open(p).read().split()) if os.path.exists(p) else set()
+
+
 def cmd_processed(a):
-    p = os.path.join(machine_dir(a.data, a.machine), "processed")
-    done = set(open(p).read().split()) if os.path.exists(p) else set()
+    p = contained(a.data, a.machine, "processed")
     if not a.mark:
-        return 0 if a.sha in done else 1
+        return 0 if a.sha in processed_set(p) else 1
     if not re.match(r"^[0-9a-f]{40}$", a.sha):
         sys.stderr.write("store: %r is not a full sha\n" % a.sha)
         return 2
     with locked(a.data):
-        if a.sha not in done:
+        if a.sha not in processed_set(p):
             body = (open(p, "rb").read() if os.path.exists(p) else b"") + (a.sha + "\n").encode()
             write_and_commit(a.data, p, body, "perf: %s processed %s" % (a.machine, a.sha[:12]), False)
+    return 0
+
+
+def cmd_pending(a):
+    """Print the sha of the newest full record that is not processed yet (nothing when none), so a
+    cycle interrupted after measuring finishes that commit even if main has moved on."""
+    done = processed_set(contained(a.data, a.machine, "processed"))
+    for r in reversed(load(a.data, a.machine)):
+        if r.get("bench") is None:
+            if r["sha"] not in done:
+                print(r["sha"])
+            break
     return 0
 
 
@@ -203,14 +233,14 @@ def cmd_check(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("init", "append", "has", "processed", "put", "check"):
+    for name in ("init", "append", "has", "processed", "pending", "put", "check"):
         p = sub.add_parser(name)
         p.add_argument("--data", required=True)
         if name in ("init", "append", "put"):
             p.add_argument("--no-commit", action="store_true")
         if name == "append":
             p.add_argument("--record", required=True)
-        if name in ("has", "put", "processed"):
+        if name in ("has", "put", "processed", "pending"):
             p.add_argument("--machine", required=True)
         if name in ("has", "processed"):
             p.add_argument("--sha", required=True)
@@ -224,6 +254,7 @@ def main():
     a = ap.parse_args()
     try:
         return {"init": cmd_init, "append": cmd_append, "has": cmd_has, "processed": cmd_processed,
+                "pending": cmd_pending,
                 "put": cmd_put, "check": cmd_check}[a.cmd](a)
     except ValueError as ex:
         sys.stderr.write("store: %s\n" % ex)

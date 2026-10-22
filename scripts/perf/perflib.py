@@ -238,9 +238,12 @@ def detect(records, current, cfg=None):
             ent["verdict"] = "ok"
         entries[name] = ent
     last_good = prior[-1]["sha"] if prior else None
-    # Metrics the newest comparable record had and this one lacks: a benchmark that stopped
-    # producing a number is a signal, not silence.
-    missing = sorted(set(window[-1]["metrics"]) - set(current.get("metrics", {}))) if window else []
+    # Metrics any record in the window had and this one lacks: a benchmark that stopped producing a
+    # number is a signal, not silence, and stays one for the whole window, not only the first commit.
+    seen = set()
+    for r in window:
+        seen |= set(r["metrics"])
+    missing = sorted(seen - set(current.get("metrics", {})))
     if current.get("contaminated"):
         verdict = "contaminated"
     elif regressions:
