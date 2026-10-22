@@ -2269,6 +2269,10 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- the `{ptr, len, cap}` struct over a heap buffer, as there), and the compiler's
       -- intrinsics. Anything else is a foreign function (`evalExtern`, a fixed table) or an
       -- undefined function: never guessed.
+      -- The clock is a value the interpreter cannot know: refused (and so still counted among
+      -- the builtins the interpreter does not implement, check_builtin_semantics.sh).
+      if fnName == "clock_monotonic_ns" then
+        fail "interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary"
       let strOf (v : IVal) : IM ByteArray := do stringBytes cx (← autoDeref cx env v)
       let intOf (v : IVal) (what : String) : IM Int := do
         match ← autoDeref cx env v with
@@ -2445,8 +2449,6 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match ← autoDeref cx env arg with
         | .bool b => emitOut (if b then "true" else "false") *> pure (env, .val .unit)
         | _ => fail "interp: print_bool: argument is not a bool"
-      | "clock_monotonic_ns", [] =>
-        fail "interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary"
       | "print", _ | "println", _ =>
         -- Desugared to the print_* intrinsics by Elab; reaching Core means
         -- a desugar gap, so stay loud instead of guessing a format.

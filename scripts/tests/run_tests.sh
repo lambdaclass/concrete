@@ -11631,19 +11631,22 @@ else
     interp_fail=$((interp_fail + 1))
 fi
 
-# 7. Unsupported construct produces clear diagnostic
+# 7. Unsupported construct produces clear diagnostic: a foreign function outside the
+# interpreter's C-function table is refused, never guessed (floats, the old example, are
+# modelled since the interpreter-coverage pass).
 cat > /tmp/interp_test_unsup.con << 'TESTEOF'
-pub fn main() -> Int {
-    let x: f64 = 3.14;
+trusted extern fn getpid() with(Process) -> i32;
+pub fn main() with(Process) -> Int {
+    let p: i32 = getpid();
     return 0;
 }
 TESTEOF
 unsup_out=$("$COMPILER" /tmp/interp_test_unsup.con --interp 2>&1) && unsup_exit=0 || unsup_exit=$?
-if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not yet supported"; then
+if [ "$unsup_exit" -ne 0 ] && grep <<<"$unsup_out" -q "interp:.*not modelled"; then
     echo "  ok  interp: unsupported construct gives clear diagnostic"
     interp_pass=$((interp_pass + 1))
 else
-    echo "  FAIL interp: should fail with 'interp: ... not yet supported'"
+    echo "  FAIL interp: should fail with 'interp: ... not modelled'"
     interp_fail=$((interp_fail + 1))
 fi
 
