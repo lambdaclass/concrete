@@ -75,9 +75,9 @@ The record owns the bug's facts:
 - **status**: the first `**Status:**` line. Changing it is the whole of recording a fix.
 - **the ledger block** (it renders as nothing): `summary` is required, and exactly one of
   `fixtures` (regression fixtures, each registered in `scripts/tests/run_tests.sh`) or `coverage`
-  (a rationale naming the gate or fixture that covers it). `class` (one line per structural class,
-  the first being its primary), `silent` and `exit` are optional. The format is in
-  `scripts/gen/bug_ledger.py`.
+  (a rationale naming the gate or fixture that covers it). `class` (one line per structural class;
+  the primary class is the first in the summary table's order), `silent` and `exit` are optional.
+  Neither `summary` nor `coverage` states the status. The format is in `scripts/gen/bug_ledger.py`.
 
 These views are generated from the records by `python3 scripts/gen/bug_ledger.py --write`; never
 edit them:
@@ -142,11 +142,20 @@ def unstatus(v, n, what, is_open):
     """Lower-case any status word left inside a migrated summary or coverage line (the **Status:** line is
     the only status; history such as 'fixed 2026-08-02' stays as prose). A word that contradicts the
     record's status is reported, since prose cannot be rewritten mechanically."""
-    for m in STATUS_WORDS.finditer(v):
-        w = m.group(1)
-        if (w == "OPEN" and not is_open) or (w == "FIXED" and is_open):
-            note(f"bug {n}: its {what} says {w} but its **Status:** line says {'open' if is_open else 'fixed'}; "
-                 f"review the wording: {v[max(0, m.start() - 40):m.end() + 40]!r}")
+    def contradicts(w):
+        return (w == "OPEN" and not is_open) or (w == "FIXED" and is_open)
+    # A contradicting word inside a parenthesis drops that parenthesis (a stale status note, e.g.
+    # "(OPEN, partially repaired ...)" on a fixed bug); one in running text stops the migration.
+    while True:
+        m = next((m for m in STATUS_WORDS.finditer(v) if contradicts(m.group(1))), None)
+        if not m:
+            break
+        a, b = v.rfind("(", 0, m.start()), v.find(")", m.end())
+        if a < 0 or b < 0 or ")" in v[a:m.start()] or "(" in v[m.end():b]:
+            die(f"bug {n}: its {what} says {m.group(1)} in running text but its **Status:** line says "
+                f"{'open' if is_open else 'fixed'}; fix the wording on main first: {v[max(0, m.start() - 40):m.end() + 40]!r}")
+        note(f"bug {n}: dropped a stale status note from its {what}: {v[a:b + 1]!r}")
+        v = (v[:a].rstrip() + v[b + 1:]).strip()
     return STATUS_WORDS.sub(lambda m: m.group(1).lower(), v)
 
 

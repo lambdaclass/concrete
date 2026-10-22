@@ -32,7 +32,10 @@ ok() { echo "  ok   $1"; PASS=$((PASS+1)); }
 no() { echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 BL=scripts/gen/bug_ledger.py
 CL=scripts/gen/changelog.py
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)" || { echo "FATAL: mktemp -d failed" >&2; exit 2; }
+case "$TMP" in /?*/?*) [ -d "$TMP" ] || { echo "FATAL: mktemp gave no directory" >&2; exit 2; } ;;
+  *) echo "FATAL: unusable temporary directory '$TMP'" >&2; exit 2 ;; esac
+trap 'rm -rf "$TMP"' EXIT
 
 echo "=== 1. the committed views match their records ==="
 if python3 -I "$BL" --check; then ok "bug ledger views match the records"
@@ -153,6 +156,8 @@ neg coverage_restates_status "$R" "old='coverage: control'; assert s.count(old)=
 neg summary_lowercase_status_lead "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: Contained: control record')" 2
 neg coverage_lowercase_status_lead "$R" "old='coverage: control'; assert s.count(old)==1; s=s.replace(old, 'coverage: Fixed -- control')" 2
 neg summary_status_midtext "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control record (OPEN since 2099)')" 2
+neg class_note_with_pipe "$R" "old='control note'; assert s.count(old)==1; s=s.replace(old, 'a | b')" 2
+neg class_row_unreadable docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn(r'^\| 1\. ', '|1. ', s, count=1, flags=re.M); assert n==1" 2
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
 if [ -n "$EXIT_ID" ]; then
   neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1

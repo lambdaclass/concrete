@@ -127,6 +127,8 @@ def parse_block(body, name):
             cm = re.match(r"^(\d+)(?:\s+—\s+(.+))?$", v)
             if not cm:
                 die(f"{name}: class must be 'N' or 'N — note', got '{v[:40]}'")
+            if "|" in (cm.group(2) or ""):
+                die(f"{name}: a class note may not contain '|' (it is a table cell)")
             if any(c == cm.group(1) for c, _ in facts["class"]):
                 die(f"{name}: class {cm.group(1)} listed twice")
             facts["class"].append((cm.group(1), cm.group(2) or ""))
@@ -249,9 +251,13 @@ def class_rows(block, path):
     def rows_of(text):
         out = []
         for ln in text.split("\n"):
+            if not ln.startswith("|") or ln in ("| class | bugs | structural owner |", "|---|---|---|"):
+                continue
             m = CLASS_ROW.match(ln)
-            if m:
-                out.append((m.group(1), m.group(2), m.group(4)))
+            if not m or m.group(4).count("|") or m.group(2).count("|"):
+                die(f"{path}: an unreadable row in the generated class table (expected '| N. class | bugs | "
+                    f"owner |' with no '|' inside a cell): {ln[:80]}")
+            out.append((m.group(1), m.group(2), m.group(4)))
         return out
     ours, theirs = rows_of(side(block, 1)), rows_of(side(block, 2))
     if ours != theirs:
