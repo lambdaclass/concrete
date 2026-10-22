@@ -45,6 +45,8 @@ undefined behaviour that its notes say may affect con-leche. On 2026-10-22 our c
 
 **Controls (2026-10-22):**
 
+- con-leche bumped to `c26f793` (gate 22/0; R-0208 identity gates unaffected, they bind the Lean
+  kernel replay, not the external checkers).
 - con-leche runs with one worker (`--jobs=1`) at every call; gate leg P fails otherwise. The
   #15288 fix is already in con-leche's own toolchain (`v4.35.0-rc3`, backport #15306); this is
   defence in depth.

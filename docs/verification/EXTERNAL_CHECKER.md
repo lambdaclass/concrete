@@ -42,8 +42,22 @@ with a toolchain that lacks it, or a related sharing bug remains.
 nanoda's `num_threads: 4` (the nanoda config in the gate) is unaffected: nanoda is Rust and does not
 use the Lean runtime #15288 fixed. It stays at four threads, as the Lean Kernel Arena runs it.
 
-**Cost** (measured on the Hetzner dev server, 32 hardware threads, gate at `MEASURE_SHA`):
-MEASURE_TABLE
+**Cost.** Measured 2026-10-22 on the Hetzner dev server (32 hardware threads) over the gate's own
+exports at `8621d95a` (16175 declarations in the standard export), median of three runs, con-leche
+`dd695ca`; `c26f793` is within noise of it:
+
+| con-leche run | `--jobs=1` | `--jobs=4` | default (32 workers) |
+|---|---|---|---|
+| standard export, accepted | 11.2 s | 3.4 s | 1.3 s |
+| swapped-proof control, rejected | 8.1 s | 2.7 s | 1.3 s |
+| native export, declined | 1.9 s | 0.6 s | 0.5 s |
+| **all three** | **about 21 s** | about 7 s | about 3 s |
+| peak resident set | 160–170 MB | 245–335 MB | 300–520 MB |
+
+Single-threading adds about 18 s to a gate whose wall time is about 75–80 s (most of it the
+population, export and statement-fidelity legs), and it uses about a third of the memory. The
+slowdown is kept. Should it matter, the time can be recovered by checking independent export
+shards in parallel processes, each single-threaded, rather than by threads within one process.
 
 ## Pins and their freshness
 
@@ -77,6 +91,30 @@ lean4export is not an Arena checker; it is pinned to the lean4export tag for thi
 
 ## Bump evaluation, 2026-10-22
 
-BUMP_RECORD
+**Bumped con-leche `dd695ca` → `c26f793`**, the revision behind the Arena's published results
+(lean-kernel-arena@`8bbe2534`: soundness 69 right, 0 wrong, 3 declined; completeness 131 right,
+0 wrong, 6 declined). The eight commits between them are con-leche task #353 (the official kernel's
+reduction order: arguments last to first, fuel and stack, `eagerReduce`) and #354 (check fuel
+effectively unbounded).
+
+- **Build.** The gate builds con-leche with its own `lean-toolchain`, which is `v4.35.0-rc3` at both
+  revisions; `c26f793` builds that way. It does **not** build with this repository's Lean 4.34.1,
+  and neither does `dd695ca` (both use `Array.markLinear` / `Std.HashMap.markLinear`, which 4.34.1
+  lacks). That is expected: con-leche reads exports from older toolchains, and the pins never built
+  it with ours. lean4export, which must read our `.olean` files, is the tool built with 4.34.1.
+- **Gate.** `check_external_checker.sh` with `c26f793` and `--jobs=1`: 22 passed, 0 failed
+  (16175 declarations accepted; swap rejected as a type mismatch at the receiver; native export
+  declined with exit 2).
+- **Checker identity.** R-0208's identity, kernel re-check and policy gates
+  (`check_checker_identity.sh`, `check_kernel_recheck.sh`, `check_checker_policy.sh`) bind the Lean
+  kernel replay process and its measured build, not con-leche or nanoda: none reads
+  `external_checker.pins`, so no identity pin, register row or claim-inventory row changes. They are
+  re-run on the bump commit. The R-0208 closure record is unchanged: its qualification was against
+  the Lean kernel's checker identity, and the external re-check is a separate CI job whose verdict
+  is re-earned on every run.
+- **nanoda** stays at `e0d76f5`, which matches the Arena's published results. The Arena's master
+  branch already names newer revisions of both checkers (con-leche `ae1f319`, nanoda `998e0a8`) for
+  its round in progress; the freshness check will report them once that round's results are
+  published.
 
 The tracked hole is [KNOWN_HOLES.md](KNOWN_HOLES.md) H29.

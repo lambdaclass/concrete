@@ -135,7 +135,7 @@ evidence; 3834 on the three standard axioms, 35 on native trust; no `sorryAx`.
 
 - **The 3834 standard-axiom theorems** are exported with lean4export (format 3.1.0, built with this
   repository's Lean 4.34.1 so it reads the same `.olean` files) and **accepted by con-leche --verified**
-  (14385 declarations including Lean core dependencies, about six seconds) **and by nanoda** (16377).
+  (14385 declarations including Lean core dependencies; at `8621d95a`, 16175 in about 11 s with one worker) **and by nanoda** (16377).
 - **The 35 native-trust theorems**, HMAC/SHA-256 among them, are declined by con-leche, which accepts
   only the three standard axioms. nanoda **accepts them with exactly the six native axioms above
   permitted**: every step of those proofs is re-checked except the six natively evaluated

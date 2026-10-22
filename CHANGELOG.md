@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### External Checker Pins Kept Current; con-leche Single-Threaded (2026-10-22)
+
+con-leche and nanoda, which re-check every theorem outside the Lean kernel, are trust anchors, and
+an independent checker protects us only while it is current: kernel bug lean4#14576 also got past a
+week-old nanoda. Lean 4.35.0's #15288 fixed thread-sharing undefined behaviour that its notes say
+may affect con-leche.
+
+- con-leche runs with `--jobs=1` at every call in `check_external_checker.sh`; its default was one
+  worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
+  about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
+  fix is already in con-leche's own toolchain (v4.35.0-rc3, backport #15306), so this is defence
+  in depth.
+- con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
+  results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
+  the gate 22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external
+  checkers, so no identity row changes. nanoda `e0d76f5` already matched.
+- `check_checker_pin_freshness.sh` compares the pins with the Arena's published revisions (falling
+  back to upstream heads): a warning when landing, a finding in the nightly campaign tier, and an
+  explicit SKIP offline.
+- Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
+  [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
