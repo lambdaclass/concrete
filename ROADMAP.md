@@ -425,7 +425,7 @@ record for releases (today `qualification_record.py` is run by hand against the 
 
 ### Browser compiler and explorer — bounded website delivery
 
-**2026-10-22: implemented and locally validated; publication pending.** This is a small website feature using
+**2026-10-22: implemented, validated, and delivered on main.** This is a small website feature using
 existing compiler passes, not a new backend or a replacement for the execution
 queue above. Implementation and build instructions: [browser compiler](scripts/browser/README.md).
 
@@ -440,7 +440,8 @@ queue above. Implementation and build instructions: [browser compiler](scripts/b
   modes and retry; UI cancellation, stale messages, source invalidation and partial
   stage controls; successful site build. The local browser prototype was exercised
   and the redesigned layout reviewed from browser screenshots. Versioned compiler
-  assets are included in ordinary Pages builds. Publication remains to be confirmed.
+  assets are included in ordinary Pages builds; deployment follows the existing site
+  workflow. All four selected pre-push gates passed (not the full CI suite).
 - Explicit non-goals: editor upgrades, program execution/linking, standard-library
   or multi-file loading, a Concrete-to-Wasm backend, and independent verification.
 
