@@ -262,17 +262,39 @@ else
 fi
 # CAPTURED, then tested, and matched as WHOLE IDENTIFIERS IN CODE (R-0547). The old form,
 # `git grep -nE '...|PackageIdentity\b' | grep -q .` under pipefail, had two defects that hid each
-# other: the pattern also matched the live refusal constructor `noPackageIdentity` and a history
-# comment, and the early-exiting `grep -q` turned that match into a PASS whenever git grep was still
-# writing (SIGPIPE makes the pipeline fail). Measured on concrete-ci-1: it FAILED only when git grep
-# finished first, i.e. under load. Comments are stripped (Lean `--` and `/- -/`), names must be whole
-# identifiers, and the hits are printed.
+# other: the pattern also matched the live refusal constructor `noPackageIdentity`, and the
+# early-exiting `grep -q` turned that match into a PASS whenever git grep was still writing (SIGPIPE
+# fails the pipeline). Measured on concrete-ci-1: it FAILED only when git grep finished first.
+# The scan is a small Lean lexer: string literals are kept (a name in a string still counts), line
+# comments and NESTED block comments become whitespace (so `def/- c -/PackageIdentity` cannot merge
+# into one token), and only whole identifiers match. The hits are printed.
+C6_SCAN='
+  my $s = $_; my ($o, $i, $n, $d) = ("", 0, length $s, 0);
+  while ($i < $n) {
+    my $c = substr($s, $i, 1); my $c2 = substr($s, $i, 2);
+    if ($d > 0) {
+      if ($c2 eq "/-") { $d++; $i += 2; next }
+      if ($c2 eq "-/") { $d--; $i += 2; $o .= " "; next }
+      $o .= ($c eq "\n" ? "\n" : " "); $i++; next;
+    }
+    if ($c2 eq "/-") { $d = 1; $i += 2; $o .= " "; next }
+    if ($c2 eq "--") { my $j = index($s, "\n", $i); $j = $n if $j < 0; $o .= " "; $i = $j; next }
+    if ($c eq "\"") {
+      my $j = $i + 1;
+      while ($j < $n && substr($s, $j, 1) ne "\"") { $j += (substr($s, $j, 1) eq "\\") ? 2 : 1 }
+      $o .= substr($s, $i, $j - $i + 1); $i = $j + 1; next;
+    }
+    $o .= $c; $i++;
+  }
+  while ($o =~ /(?<![A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)(?![A-Za-z0-9_])/g) {
+    print "$ARGV: $1\n";
+  }'
 if command -v perl >/dev/null 2>&1; then
-  _c6_hits="$(git ls-files -- 'Concrete/*.lean' Main.lean | xargs perl -0ne '
-      s{/-.*?-/}{}gs; s{--[^\n]*}{}g;
-      while (/(?<![A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)(?![A-Za-z0-9_])/g) { print "$ARGV: $1\n" }' 2>&1 || true)"
+  _c6_hits="$(git ls-files -- 'Concrete/*.lean' Main.lean | xargs perl -0ne "$C6_SCAN" 2>&1)" \
+    || _c6_hits="${_c6_hits}
+the C6 scan itself failed — it cannot be trusted"
 else
-  _c6_hits="perl unavailable: comments cannot be stripped, so the C6 scan cannot be trusted"
+  _c6_hits="perl unavailable: comments cannot be told from code, so the C6 scan cannot be trusted"
 fi
 if [ -n "$_c6_hits" ]; then
   no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced"
@@ -280,16 +302,25 @@ if [ -n "$_c6_hits" ]; then
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi
-# CONTROL for the C6 scan: a real reference is flagged; the refusal constructor and comments are not.
+# CONTROL for the C6 scan: every real reference below is flagged (one per line marked REF), and the
+# refusal constructor, comments and nested comments are not.
 _c6_fx="$(mktemp)"
-printf '%s\n' 'def a := Proof.PackageIdentity.of x' '  | .noPackageIdentity w => w' '-- PackageIdentity was deleted' \
-  '/- syntheticForModules, in a block comment -/' > "$_c6_fx"
-_c6_ctl="$(perl -0ne 's{/-.*?-/}{}gs; s{--[^\n]*}{}g;
-  while (/(?<![A-Za-z0-9_])(syntheticForModules|packageIdentityOf|PackageIdentity)(?![A-Za-z0-9_])/g) { print "$1\n" }' "$_c6_fx" 2>/dev/null)"
+cat > "$_c6_fx" <<'LEAN'
+def a := Proof.PackageIdentity.of x
+  | .noPackageIdentity w => w
+-- PackageIdentity was deleted
+/- syntheticForModules, in a block comment /- nested packageIdentityOf -/ still comment PackageIdentity -/
+-- /-
+def legacy := syntheticForModules x
+-- -/
+def/- c -/packageIdentityOf := 1
+def s := "--" ++ toString PackageIdentity
+LEAN
+_c6_ctl="$(perl -0ne "$C6_SCAN" "$_c6_fx" 2>/dev/null | sed 's/^[^:]*: //' | tr '\n' ' ')"
 rm -f "$_c6_fx"
-[ "$_c6_ctl" = "PackageIdentity" ] \
-  && ok "CONTROL: the C6 scan flags a qualified reference and ignores noPackageIdentity and comments" \
-  || no "CONTROL: the C6 scan reported '${_c6_ctl//$'\n'/,}' on its fixture (want exactly PackageIdentity)"
+[ "$_c6_ctl" = "PackageIdentity syntheticForModules packageIdentityOf PackageIdentity " ] \
+  && ok "CONTROL: the C6 scan flags code references (also after '-- /-', a glued block comment and a '--' string) and ignores noPackageIdentity and comments" \
+  || no "CONTROL: the C6 scan reported '$_c6_ctl' on its fixture (want: PackageIdentity syntheticForModules packageIdentityOf PackageIdentity)"
 
 echo ""
 echo "=== M: the old-to-new map ==="

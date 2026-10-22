@@ -106,8 +106,9 @@ done
 for c in keep_coe_false keep_if_true keep_if_expr_true keep_coe_expr_false; do
   # CAPTURED, then tested (R-0547): `python3 ... | grep -q` under pipefail failed whenever grep
   # exited on its match before python finished writing (SIGPIPE), a verdict that depended on load.
-  _req="$(python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" 2>/dev/null || true)"
-  if grep -q '^step	ssa-tests	Run SSA test suite$' <<<"$_req"; then
+  # The recorder's own exit status still counts: it must succeed AND list the step.
+  _rrc=0; _req="$(python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" 2>/dev/null)" || _rrc=$?
+  if [ "$_rrc" = 0 ] && grep -q '^step	ssa-tests	Run SSA test suite$' <<<"$_req"; then
     ok "$c keeps the SSA gate step required"
   else no "$c made the SSA gate step optional"; fi
 done
