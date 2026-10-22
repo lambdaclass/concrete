@@ -2,7 +2,10 @@
 // inner `while true` leaves that inner loop, so the inner loop terminates and the
 // outer body's unconsumed `r` leaks on every iteration. The divergence predicate
 // skipped nested loops entirely and read the inner loop as infinite, exempting
-// `r`. Expected: "was never consumed" for `r`.
+// `r`. With the bug-176 fix alone: "was never consumed" for `r`. Merged with
+// safety-eval2, `break 'outer` leaving the scope of the unconsumed linear `r` is
+// refused first. Expected: E0210. The H9 half without that break is
+// error_176_loop_body_leak_labelled_break_mid.con.
 mod m {
     struct Res { v: i32 }
 

@@ -1,0 +1,23 @@
+// Bug 176 (Codex review), the H9 half of error_176_loop_body_leak_labelled_break
+// without the break that skips `r`. A labelled `break 'mid` from a loop nested
+// inside `'mid: while true` leaves that loop, so `'mid` terminates and control
+// falls through to the end of the outer body with `r` unconsumed, on every
+// iteration. A divergence predicate that skipped nested loops read `'mid` as
+// infinite and exempted `r`. `break 'mid` does not leave the scope of `r`, so the
+// break-skips-linear rule (E0210) does not apply; the refusal must come from H9.
+// Expected: "was never consumed" (E0208) for `r`.
+mod m {
+    struct Res { v: i32 }
+
+    fn main() -> Int {
+        let mut n: i32 = 0;
+        while n < 2 {
+            let r: Res = Res { v: n };
+            n = n + 1;
+            'mid: while true {
+                while true { break 'mid; }
+            }
+        }
+        return 0;
+    }
+}

@@ -104,8 +104,10 @@ to the loop's own label stays in it). It looks through `match` arms, value-`if` 
 blocks, `let`-`else` and statement expressions. `stmtDiverges` and `stmtNonTerminating` treat
 `for (true)` like `while true`. Over-counting exits is the safe direction: it can only make a
 block count as terminating. Fixtures: `error_176_loop_body_leak_while_let.con`,
-`error_176_loop_body_leak_labelled_break.con` (E0208), and `spin_holding` in the regress fixture
-(accepted).
+`error_176_loop_body_leak_labelled_break.con` (E0208 with this fix alone; E0210 once merged with
+safety-eval2, whose break-skips-linear rule refuses `break 'outer` first),
+`error_176_loop_body_leak_labelled_break_mid.con` (E0208: the same nesting with a `break 'mid`
+that stays in the scope of `r`), and `spin_holding` in the regress fixture (accepted).
 
 Round 2 found that the one predicate answered two questions. H9 asks whether a body's scope can
 close; any exit from the loop, including a labelled `break`/`continue` to an enclosing loop,
