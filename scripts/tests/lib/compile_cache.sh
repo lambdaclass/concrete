@@ -126,7 +126,7 @@ _cc_key() {
             printf '%s:' "$t"; if [ -f "$t" ]; then _cc_sha_file "$t"; else echo absent; fi; done)"
   # TOOLS BY CONTENT, not by name. A /nix/store path names its content; any other resolved tool is
   # hashed, so replacing a tool in place changes the key.
-  tools=""
+  tools=""; CCACHE_TOOL_FILES=()
   for tl in lake lean z3 coqc isabelle clang cc pkg-config llvm-as git; do
     tp="$(command -v "$tl" 2>/dev/null || true)"
     if [ -z "$tp" ]; then tools="$tools $tl=none"; continue; fi
@@ -138,7 +138,7 @@ _cc_key() {
       # toolchains), so the selected checker cannot be named: not cached.
       *) case "$tl" in lake|lean) CCACHE_LAST="bypass:toolchain-not-pinned($tl)"; return 1 ;; esac
          [ -f "$tp" ] || { CCACHE_LAST="bypass:tool($tl)"; return 1; }
-         tools="$tools $tl=$tp:$(_cc_sha_file "$tp")" ;;
+         tools="$tools $tl=$tp:$(_cc_sha_file "$tp")"; CCACHE_TOOL_FILES+=("$tp") ;;
     esac
   done
   # Environment that steers Lean/Lake (toolchain overrides, search paths).
@@ -162,7 +162,7 @@ _cc_key() {
   } | _cc_sha)"
   [ "${#CCACHE_KEY}" = 64 ] || { CCACHE_LAST="bypass:hash"; return 1; }
   # Everything hashed above, for the post-compile modification check in ccache_run.
-  CCACHE_WATCH=("$comp_abs" "$proj" "$std" "$repo/proofs")
+  CCACHE_WATCH=("$comp_abs" "$proj" "$std" "$repo/proofs" ${CCACHE_TOOL_FILES[@]+"${CCACHE_TOOL_FILES[@]}"})
   for t in lean-toolchain lakefile.toml lakefile.lean lake-manifest.json; do
     [ -e "$t" ] && CCACHE_WATCH+=("$(pwd -P)/$t")
   done
@@ -191,8 +191,11 @@ ccache_run() {
     case "$rc$ob$eb" in ''|*[!0-9]*) ;; *)
       local hl=$(( ${#hdr} + 1 ))
       if [ "$(wc -c < "$priv/e" | tr -d ' ')" = $(( hl + ob + eb )) ]; then
-        tail -c +$(( hl + 1 )) "$priv/e" | head -c "$ob"
-        tail -c +$(( hl + ob + 1 )) "$priv/e" >&2
+        # Through files, not a pipeline: `tail | head` closes early and a large stderr would end
+        # an errexit/pipefail caller on SIGPIPE before the status is returned.
+        tail -c +$(( hl + 1 )) "$priv/e" > "$priv/rest"
+        head -c "$ob" "$priv/rest"
+        tail -c +$(( ob + 1 )) "$priv/rest" >&2
         rm -rf "$priv"
         CCACHE_HITS=$((CCACHE_HITS+1)); CCACHE_LAST="hit"
         return "$rc"
@@ -200,13 +203,15 @@ ccache_run() {
     esac
   fi
   rm -f "$priv/e"
-  # THE START MARKER. On a filesystem with sub-second mtimes (APFS, ext4, tmpfs) "newer than the
-  # marker" is exact. Where mtimes are whole seconds, a write in the marker's own second could look
-  # older, so the compile is held until the next second begins.
+  # THE START MARKER IS DATED ONE SECOND IN THE PAST. The watched files may live on a filesystem with
+  # whole-second mtimes even when the cache does not, so "newer than the marker" is made safe for the
+  # coarsest granularity: an edit (or an edit-and-revert) made during the compile, or in the second
+  # before it, refuses publication. Erring early only ever refuses to store.
+  local past; past=$(( $(date +%s) - 1 ))
   : > "$priv/start"
-  case "$(stat -c %y "$priv/start" 2>/dev/null || stat -f %Fm "$priv/start" 2>/dev/null)" in
-    *.000000000*|'') sleep 1 ;;
-  esac
+  touch -t "$(date -d "@$past" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$past" +%Y%m%d%H%M.%S)" "$priv/start" \
+    || { rm -rf "$priv"; CCACHE_BYPASS=$((CCACHE_BYPASS+1)); CCACHE_LAST="bypass:marker"
+         if "$comp" "$@"; then return 0; else return $?; fi; }
   # Captured without tripping a caller's `set -e`: the diagnostics are replayed either way.
   if "$comp" "$@" >"$priv/out" 2>"$priv/err"; then rc=0; else rc=$?; fi
   cat "$priv/out"; cat "$priv/err" >&2

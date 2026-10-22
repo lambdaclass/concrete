@@ -78,7 +78,12 @@ source "$ROOT_DIR/scripts/tests/lib/compile_cache.sh"
 F="$SB/proj/src/main.con"
 cd "$SB"
 
+# The cache refuses to store a result when a covered file changed within a second before the
+# compile; real fixtures are old, and the sandbox is made to look the same by dating every file in
+# it before each call. A file the probe compiler edits DURING a call is then the only recent one.
+age_sandbox() { find "$SB" -exec touch -t 200001010000 {} + 2>/dev/null; }
 run_c() { # -> files $TMP/c.out $TMP/c.err $TMP/c.rc and CCACHE_LAST
+  age_sandbox
   ccache_run "$COMP" "$@" >"$TMP/c.out" 2>"$TMP/c.err"; echo $? > "$TMP/c.rc"; }
 run_f() { "$COMP" "$@" >"$TMP/f.out" 2>"$TMP/f.err"; echo $? > "$TMP/f.rc"; }
 same() { cmp -s "$TMP/c.out" "$TMP/f.out" && cmp -s "$TMP/c.err" "$TMP/f.err" && cmp -s "$TMP/c.rc" "$TMP/f.rc"; }
@@ -119,7 +124,7 @@ grep -q extra "$TMP/c.out" && ok "...and the post-edit report mentions the new f
 
 echo "=== K7: cwd and argv are part of the key ==="
 run_c "$F" --report audit; [ "$CCACHE_LAST" = hit ] || run_c "$F" --report audit
-( cd "$SB/proj" && ccache_run "$COMP" "$F" --report audit >/dev/null 2>&1; echo "$CCACHE_LAST" > "$TMP/k7" )
+( cd "$SB/proj" && age_sandbox && ccache_run "$COMP" "$F" --report audit >/dev/null 2>&1; echo "$CCACHE_LAST" > "$TMP/k7" )
 [ "$(cat "$TMP/k7")" = miss ] && ok "another working directory is another entry" || no "cwd change: $(cat "$TMP/k7")"
 run_c "$F" --report audit --json; [ "$CCACHE_LAST" = miss ] && ok "--json is another entry" || no "--json: $CCACHE_LAST"
 
