@@ -99,9 +99,10 @@ scrapers="$(grep -rlE 'Max stack bound:[^|]*\[0-9\]' scripts/ | grep -vE 'script
 echo "=== 5. an edge with no target frame is not a leaf ==="
 # Codex review of 19e2ab9a: depth computation FILTERED callees with no frame, so a function calling
 # an extern (or a callee resolving to no unique definition) published a finite bound. Codex round 2:
-# an extern SPELLED like an intrinsic (extern_intrinsic_name) is still an extern, not exempt.
-for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main" \
-           "extern_intrinsic_name:main.wrap, main.main"; do
+# An extern SPELLED like an intrinsic (extern_intrinsic_name) is refused at
+# resolution (E0118, bug 129): the call would compile as the intrinsic, so the
+# declaration can never reach C. No stack bound may be published for it.
+for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main"; do
   f="${leg%%:*}"; want="${leg#*:}"
   out="$("$CC" "$FIX/$f.con" --report stack-depth 2>&1)"
   line="$(grep -E '^Max stack bound:' <<<"$out")"
@@ -111,6 +112,10 @@ for leg in "extern:main.wrap, main.main" "unresolved:main.total, main.main" \
   v="$(stack_max_bound <<<"$out")"; rc=$?
   [ "$rc" -eq 3 ] && ok "$f: lib/stack_bound.sh reads it as unbounded" || no "$f: stack_max_bound read '$v' (rc $rc)"
 done
+out="$("$CC" "$FIX/extern_intrinsic_name.con" --report stack-depth 2>&1)"
+grep -q 'E0118' <<<"$out" && ! grep -qE '^Max stack bound: [0-9]' <<<"$out" \
+  && ok "extern_intrinsic_name: refused with E0118 and no bound published" \
+  || no "extern_intrinsic_name: expected an E0118 refusal and no numeric bound, got: $(head -c 300 <<<"$out")"
 grep -A1 -E '^  Sq_area$' <<<"$("$CC" "$FIX/unresolved.con" --report stack-depth 2>&1)" | grep -q 'stack: 16 bytes' \
   && ok "unresolved: the resolved leaf keeps its exact row" || no "unresolved: the resolved leaf lost its row"
 line="$("$CC" "$FIX/intrinsic.con" --report stack-depth 2>&1 | grep -E '^Max stack bound:')"

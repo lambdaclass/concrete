@@ -2,7 +2,8 @@
 // intrinsic (`wrapping_add`) is externally implemented — Elab calls the extern,
 // not the intrinsic — so it has no validated stack bound and its callers have
 // none either. Before the fix the report exempted it by spelling and published
-// "Max stack bound: 24 bytes (main)".
+// "Max stack bound: 24 bytes (main)". Since bug 129 the declaration itself is
+// refused (E0118): a call to it would compile as the intrinsic, never reach C.
 trusted extern fn wrapping_add(a: i64, b: i64) with() -> i64;
 
 fn wrap(n: i64) -> i64 {
