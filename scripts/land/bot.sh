@@ -238,8 +238,14 @@ rebase_in_scratch() { # branch sha main log — runs inside the scratch worktree
     || { event rebase-skipped "$b moved while it was being rebased; left alone"; return 1; }
   land_assert_no_op push
   sel="$(sed -n 's/^selected: //p' "$log.selected" 2>/dev/null || true)"
-  bash "$NOTES" put review "$new" verdict=clean rounds="$(bash "$NOTES" get review "$sha" rounds)" \
-    reviewer="$(bash "$NOTES" get review "$sha" reviewer)" carried-from="$sha"
+  # The carried note keeps every field the reviewed note had that scripts/review/verify.sh requires
+  # (review.sh writes six; notes.sh appends a fresh utc) and names the reviewed SHA.
+  local carry=(verdict=clean) ck cv
+  for ck in rounds reviewer base pieces; do
+    cv="$(bash "$NOTES" get review "$sha" "$ck")"
+    [ -z "$cv" ] || carry+=("$ck=$cv")
+  done
+  bash "$NOTES" put review "$new" "${carry[@]}" carried-from="$sha"
   bash "$NOTES" put gates "$new" gates=pass selected="${sel:-unknown}" runner=landing-bot rebased-onto="$main"
   event rebased "$b ${sha:0:10} -> ${new:0:10} onto main ${main:0:10}"
 }

@@ -197,7 +197,7 @@ A branch is **ready** when all of the following hold:
 
 | notes ref | lines | writer |
 |---|---|---|
-| `refs/notes/concrete-review` | `verdict: clean\|findings`, `rounds: N`, `reviewer: codex`, `utc: ...` | `scripts/review/review.sh` |
+| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N` (and `carried-from: <sha>` on a verdict the bot carried across a rebase) | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh`, the bot |
 
 One `key: value` per line; when a key repeats, the last line wins. Either note may carry

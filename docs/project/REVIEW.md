@@ -112,8 +112,11 @@ pieces: K
 ```
 
 **The format is an interface.** The landing bot parses it, and `verify.sh`
-rejects any note that does not have exactly these six lines in this order.
-Change it only together with both.
+rejects any note that lacks one of these six keys, repeats a key, or carries a
+key other than these and the landing pipeline's two optional ones
+(`carried-from: <sha>`, which the bot writes when it carries a clean verdict
+across a conflict-free rebase, and `order: N`). Keys are matched by name, not
+position. Change the format only together with both.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.

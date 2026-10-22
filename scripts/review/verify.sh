@@ -32,21 +32,44 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# The note must have exactly the six fields review.sh writes, in order.
-FORMAT='^verdict: (clean|findings|blocked)
-rounds: [1-9][0-9]*
-reviewer: [^[:space:]]+
-utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
-base: [0-9a-f]{40}
-pieces: [0-9]+$'
-if ! [[ "$NOTE" =~ $FORMAT ]]; then
-  echo "$SHA malformed review note:"
+# The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
+# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/project/LANDING.md):
+# `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
+# conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
+# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
+# `put` (the bot's writer) appends `utc` last.
+malformed() {
+  echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
   exit 2
-fi
+}
+# Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
+SEEN=" "
+while IFS= read -r line; do
+  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+  SEEN="$SEEN$k "
+  printf -v "F_${k//-/_}" '%s' "$v"
+  case "$k" in
+    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    *)            false ;;
+  esac || malformed "bad $k"
+done <<< "$NOTE"
+for k in verdict rounds reviewer utc base pieces; do
+  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+done
 
-field() { printf '%s\n' "$NOTE" | awk -v k="$1: " 'index($0, k) == 1 { print substr($0, length(k) + 1); exit }'; }
+field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
-echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
+CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
 [ "$VERDICT" = clean ] && exit 0
 exit 1
