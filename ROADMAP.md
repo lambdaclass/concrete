@@ -93,23 +93,22 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 19** (7 silent, 6 loud, 6 filed before the discovery record) of 135 bug records.
+**Open bugs: 17** (6 silent, 5 loud, 6 filed before the discovery record) of 137 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 118, 122, 129 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 118, 122, 165 |
 | 2. Binder identity by name, not a `LocalId` | 1 | 0 | 124 |
-| 3. Destruction dispatched by synthesized `<Type>_destroy` names | 1 | 1 | 103 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 5 | 3 | 117, 128, 134, 136, 137 |
-| 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 112 |
+| 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
-| 13. Documented rules with no enforcing site | 1 | 1 | 113 |
+| 14. Trusted `std` and FFI code with no checked contract | 1 | 1 | 166 |
 | no class yet | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
-| exit 0b | 7 | 7 | 103, 113, 122, 128, 129, 136, 137 |
-| exit 2c | 6 | 0 | 112, 114, 117, 118, 124, 134 |
+| exit 0b | 6 | 6 | 122, 128, 136, 137, 165, 166 |
+| exit 2c | 5 | 0 | 114, 117, 118, 124, 134 |
 | no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
@@ -121,7 +120,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 | found bugs |
 | semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 6 counting batches recorded. 9 attribution-only batches (reviews, follow-ons, CI, controls, development) found 14 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 6 counting batches recorded. 10 attribution-only batches (reviews, follow-ons, CI, controls, development) found 16 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

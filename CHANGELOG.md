@@ -10,32 +10,6 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
-
-A borrow of a local is the address of its slot whatever the local's type. A local holding a raw
-pointer, a reference or a heap shell used to be "already a pointer" to `Lower`, so `&mut err as
-*mut *mut u8` passed `err`'s value (bug 102: the RocksDB error out-slot trapped) and `&h` on a
-`Heap<B>` local passed the heap pointer. Such a local is now promoted to a stack slot like any
-other. The interpreter compares pointers (two reference paths by the place they name, a path
-never equal to null), so the bug 102 program runs under `--interp` with the binary's result.
-
-Field access through `&Heap<S>` / `&mut Heap<S>` follows the MEMORY_SEMANTICS §5 one-hop rule on
-both sides (bug 126). Elab elaborates `r.f` to two dereferences, the slot and then the heap
-pointer it holds, and every caller passes the slot. A field write through a `&mut Heap<B>`
-parameter used to overwrite the caller's heap-pointer slot, and `free` then trapped.
-
-A reference-valued `if`/`match` is no longer miscompiled (bug 105). The checker's E0238 refusal
-did not cover a generic instantiated at a reference type (`if c { a } else { b }` at `T = &P`
-segfaulted). The cause was in EmitSSA: a register of reference type was stored as if it held the
-referent by pointer, copying the referent's first 8 bytes into the reference's slot. The E0238
-source restriction stays (H28).
-
-The builtin `vec_get` and `vec_set` require a Copy element (bug 115). `vec_get` copied a linear
-element out while the `Vec` kept it, so a `String` taken twice double-freed. `vec_set` overwrote
-one without returning it. Linear elements use `vec_pop` or `Vec`'s `pop`, `swap_remove`,
-`replace` and `with_at`. Two test programs that drained a `Vec<String>` with `vec_get` now use
-`vec_pop`.
-
 ### Validation Rules: Golden Oracles, Incomplete Timeouts, CI Flow, Discovery Rate, Bug Dashboard (2026-10-22)
 
 Five lessons of the last days became rules with gates.
@@ -49,7 +23,7 @@ undeclared or inconsistent oracle and on a spec pointer that does not resolve (s
 controls, plus a positive control that an unverified golden is counted), and prints the count:
 89 interpreter-checked, 14 derived (base64, verify, grep, hexdump, wordfreq, tar_list and conlog,
 checked against `base64`, `shasum`, `grep`, `xxd`, `sort | uniq -c` and `tar tf`, or by hand: the
-truncated tar archive and bug 121's conlog count) and 46 unverified, each a tracked gap of exit 2c. The rule is in the roadmap's example rule,
+truncated tar archive and bug 121's conlog count) and 48 unverified, each a tracked gap of exit 2c. The rule is in the roadmap's example rule,
 exit 2c and R-0491.
 
 A timeout is incomplete, not failed and not passed. `scripts/tests/lib/bounded.sh` re-runs a
@@ -104,6 +78,32 @@ generator refuses a bug record with no discovery batch or with a status outside 
 (reading it found 027, 049, 054, 058 and 064 still open, under spellings an `OPEN`-prefix test
 missed). A quiet probe batch counts toward exit 2m only with a recorded effort of at least four
 hours or ten programs.
+
+### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
+
+A borrow of a local is the address of its slot whatever the local's type. A local holding a raw
+pointer, a reference or a heap shell used to be "already a pointer" to `Lower`, so `&mut err as
+*mut *mut u8` passed `err`'s value (bug 102: the RocksDB error out-slot trapped) and `&h` on a
+`Heap<B>` local passed the heap pointer. Such a local is now promoted to a stack slot like any
+other. The interpreter compares pointers (two reference paths by the place they name, a path
+never equal to null), so the bug 102 program runs under `--interp` with the binary's result.
+
+Field access through `&Heap<S>` / `&mut Heap<S>` follows the MEMORY_SEMANTICS §5 one-hop rule on
+both sides (bug 126). Elab elaborates `r.f` to two dereferences, the slot and then the heap
+pointer it holds, and every caller passes the slot. A field write through a `&mut Heap<B>`
+parameter used to overwrite the caller's heap-pointer slot, and `free` then trapped.
+
+A reference-valued `if`/`match` is no longer miscompiled (bug 105). The checker's E0238 refusal
+did not cover a generic instantiated at a reference type (`if c { a } else { b }` at `T = &P`
+segfaulted). The cause was in EmitSSA: a register of reference type was stored as if it held the
+referent by pointer, copying the referent's first 8 bytes into the reference's slot. The E0238
+source restriction stays (H28).
+
+The builtin `vec_get` and `vec_set` require a Copy element (bug 115). `vec_get` copied a linear
+element out while the `Vec` kept it, so a `String` taken twice double-freed. `vec_set` overwrote
+one without returning it. Linear elements use `vec_pop` or `Vec`'s `pop`, `swap_remove`,
+`replace` and `with_at`. Two test programs that drained a `Vec<String>` with `vec_get` now use
+`vec_pop`.
 
 ### Concrete Symbols Live In Their Own Namespace (bug 129, 2026-10-21)
 
