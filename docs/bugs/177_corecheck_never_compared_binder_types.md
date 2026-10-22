@@ -27,8 +27,11 @@ the program reached SSA verification as E0715 (i32 vs u8 operands).
 The same held for every place Core binds a value to a typed slot. Planting an `i32` value in Core
 (bypassing Check) was accepted at a `let`, an assignment, a direct or indirect call argument, a
 struct-literal or variant field, a field store, a store through `&mut`/`*mut`, an array element
-store, and a `return` from a `-> u8` function. A `for` loop's step statements were not checked at
-all.
+store, an array literal's element, a value `if`/`match` branch, and a `return` from a `-> u8`
+function. A fn value with `with(Console)` was accepted in a binder of capability-free fn type,
+after which a call through the binder was checked against the binder's empty set. A `for` loop's
+step statements were not checked at all, and a borrow block's reference was never bound, so a
+store to it was not checked either.
 
 ## Expected
 
@@ -66,22 +69,25 @@ program, but it is the same per-construct scope discipline.
 
 `bindTyAgrees declared got` is the binder-agreement relation. It is exact on everything Core has
 decided before Mono: scalars (width and signedness), `bool`, `char`, `String`, `()`, and the shape
-of references, pointers, arrays, heap shells and fn types. It defers (accepts) where CoreCheck does
+of references, pointers, arrays, heap shells and fn types, and on fn types the binder's capability
+set must cover the value's. It defers (accepts) where CoreCheck does
 not hold the facts to decide: `.named` and mismatched `.generic` heads (aliases, newtypes and
 nominal types, which Check compares against tables CoreCheck does not re-derive), `.typeVar`
 (decided per instance after Mono), `.placeholder`, and a `never` value. `&mut T` fits `&T`, and
 `*mut T`/`*const T` pair as before. A `.generic` pair with the same head and arity is compared
-argument-wise. Capability sets on fn types are not compared; the call through the pointer is
-capability-checked against its own type.
+argument-wise. A fn binder must declare at least the value's capabilities, because a later call
+through the binding is capability-checked against the binder's recorded type (Codex round 1).
 
 `checkBinding site declared value` applies it at every binder: `let`, assignment (against the
 variable's recorded type), direct-call arguments (against the callee's signature), indirect-call
 arguments (against the fn pointer's parameter types), struct-literal fields, variant fields, field
-stores, stores through `&mut`/`*mut`, and array element stores. Each refusal is E0510
+stores, stores through `&mut`/`*mut`, array element stores, array literal elements (against the
+literal's element type), and the trailing value of each branch of a non-unit value `if` or
+`match` (against the expression's type). Each refusal is E0510
 (`bindingTypeMismatch`, "type mismatch at let 'y': declared u8, value has type i32"). `return`
 uses the same relation and keeps E0560. The `while` step is now checked, and `if`/`else`,
 value-`if`, `while` bodies, `for` steps, borrow blocks and literal/range match arms close their
-scope through `inCoreBlock`.
+scope through `inCoreBlock`. A borrow block binds its reference inside that scope.
 
 ## Structural cause
 
@@ -97,6 +103,14 @@ and its role as the post-elaboration semantic authority, and nothing performed e
 types. Secondary class 12, one fact kept in two places: the typing rule lives in Check, and CoreCheck
 held a weaker copy (`typesCompatible`) that had diverged from it.
 
+A second enumeration of binder positions exists: Elab's bug 096 walk (`tyAgreeStmts`,
+`checkCoreTypeAgreement`) lists call arguments, results, literal fields, field reads, `let`
+initializers and returns, and compares only the respelled type names in them, and only when a
+program has same-named types. `bindTyAgrees` and that walk are two producers of "the positions where
+Core asserts a type", with different coverage (the 096 walk has no assignments, stores, value
+branches or array elements; CoreCheck has no field reads or call results). Merging them into one
+position enumerator with two relations is the follow-up, under the same owner.
+
 ## Structural owner
 
 R-0499 (verified-pipeline S8, queue row 4): one authoritative checker over Core implements the
@@ -111,9 +125,11 @@ alone to catch before Mono. R-0492's `LocalId` (class 2, bug 176's owner) remove
 - `pipeline-test` `corecheck/binder-agreement` (`Concrete/Pipeline/PipelineTest.lean`): the front
   end accepts a small program; each case then plants an `i32` value in its Core at a `let`, an
   assignment, a call argument, a struct field and a `return` of a `-> u8` function, and requires
-  `coreCheckProgram` to refuse it with E0510 (E0560 for the return) naming the binder. It feeds
+  `coreCheckProgram` to refuse it with E0510 (E0560 for the return) naming the binder. Codex
+  round 1 added a value-`if` branch, an array literal element and a `with(Console)` fn value in a
+  capability-free fn binder. It feeds
   CoreCheck directly, so it stays meaningful after bug 176's fix makes Check refuse the source
-  shape first. On the previous compiler all five cases were accepted.
+  shape first. On the previous compiler all eight cases were accepted.
 - `check_corecheck_boundary.sh` class 7: bug 176's program must not compile. On main it compiled and
   printed 300; with this fix CoreCheck refuses it (E0510), and once bug 176 lands Check refuses it
   first (E0220).

@@ -394,8 +394,9 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
     - `.placeholder` (not yet inferred),
     - a `never` value (a diverging expression fits any binder).
     A `&mut T` value fits a `&T` binder, and `*mut T`/`*const T` pair as in
-    `typesCompatible`. Capability sets on fn types are not compared here: the call through
-    the pointer is capability-checked against the pointer's own type (`.call .indirect`). -/
+    `typesCompatible`. A fn value fits a fn binder only when the binder's capability set
+    covers the value's: a call through the binding is checked against the binder's type, so
+    a narrower binder would erase the requirement. -/
 partial def bindTyAgrees (declared got : Ty) : Bool :=
   if declared == got then true else
   match declared, got with
@@ -412,8 +413,11 @@ partial def bindTyAgrees (declared got : Ty) : Bool :=
   | .ptrMut a, .ptrConst b | .ptrConst a, .ptrMut b => bindTyAgrees a b
   | .heap a, .heap b | .heapArray a, .heapArray b => bindTyAgrees a b
   | .array a n, .array b m => n == m && bindTyAgrees a b
-  | .fn_ ps _ r, .fn_ qs _ s =>
+  | .fn_ ps dc r, .fn_ qs vc s =>
+    -- The binder's capability set must cover the value's: an indirect call is checked
+    -- against the binder's recorded type, so a narrower binder would erase a requirement.
     ps.length == qs.length && (ps.zip qs).all (fun (p, q) => bindTyAgrees p q) && bindTyAgrees r s
+      && capsContain dc vc
   | _, _ => false
 
 /-- The declared field list of a struct, nominal types where the producer recorded them. -/
@@ -424,6 +428,13 @@ private def structFieldTys (sd : CStructDef) : List (String × Ty) :=
 private def variantFieldTys (ed : CEnumDef) (variant : String) : Option (List (String × Ty)) :=
   let vs := if ed.nominalVariants.isEmpty then ed.variants else ed.nominalVariants
   (vs.find? fun (vn, _) => vn == variant).map (·.2)
+
+/-- The value a value-bearing block yields: its trailing `expr` without `;`. A block that ends
+    otherwise (a `return`, `break`, a statement) yields no value to compare. -/
+private def blockValue (ss : List CStmt) : Option CExpr :=
+  match ss.getLast? with
+  | some (.expr e true) => some e
+  | _ => none
 
 /-- Refuse `value` at `site` unless its Core type fits `declared` (bug 177). -/
 private def checkBinding (site : String) (declared : Ty) (value : CExpr) : StateM CoreCheckEnv Unit :=
@@ -637,7 +648,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       | none => pure ()
     | none => pure ()
 
-  | .match_ scrutinee arms _ty =>
+  | .match_ scrutinee arms ty =>
     ccCheckExpr scrutinee
     -- Check match arm coverage for enums
     -- Auto-deref through references (match on &T should check T)
@@ -690,6 +701,12 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
           addCCError .matchNonEnumNoDefault
     for arm in arms do
       ccCheckMatchArm arm
+    -- A value `match` binds each arm's value to its own type, like a `let`.
+    if ty != .unit then
+      for arm in arms do
+        let body := match arm with
+          | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => b
+        if let some v := blockValue body then checkBinding "the value of a match arm" ty v
 
   | .borrow inner _ => ccCheckExpr inner
   | .borrowMut inner _ => ccCheckExpr inner
@@ -713,10 +730,15 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !throughRef && !capsContain env.currentCapSet (.concrete ["Alloc"]) then
         addCCError (.missingCapability "*heap_ptr" "Alloc" "")
     | _ => addCCError (.cannotDerefNonRef (toString (repr inner.ty)))
-  | .arrayLit elems _ =>
+  | .arrayLit elems ty =>
     if elems.isEmpty then
       addCCError .arrayLiteralEmpty
     for elem in elems do ccCheckExpr elem
+    match ty with
+    | .array elemTy _ =>
+      for (i, elem) in (List.range elems.length).zip elems do
+        checkBinding s!"array element {i}" elemTy elem
+    | _ => pure ()
   | .arrayIndex arr index _ =>
     ccCheckExpr arr
     ccCheckExpr index
@@ -825,12 +847,16 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addCCError (.missingCapability "alloc" "Alloc" "")
     ccCheckExpr inner
     ccCheckExpr allocExpr
-  | .ifExpr cond then_ else_ _ =>
+  | .ifExpr cond then_ else_ ty =>
     ccCheckExpr cond
     if cond.ty != .bool && !isInteger cond.ty then
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     inCoreBlock (for s in else_ do ccCheckStmt s)
+    -- A value `if` binds each branch's value to its own type, like a `let`.
+    if ty != .unit then
+      if let some v := blockValue then_ then checkBinding "the value of an if branch" ty v
+      if let some v := blockValue else_ then checkBinding "the value of an else branch" ty v
 
 partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   -- Arm binders are arm-scoped: restore the var table afterwards so a
@@ -971,8 +997,11 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .defer body => ccCheckExpr body
 
-  | .borrowIn _var _ref _region _isMut _refTy body =>
-    inCoreBlock (for s in body do ccCheckStmt s)
+  | .borrowIn _var ref _region _isMut refTy body =>
+    -- The reference is a binder of the block, so a store to it is checked like any other.
+    inCoreBlock do
+      addVar ref refTy
+      for s in body do ccCheckStmt s
 
 end
 

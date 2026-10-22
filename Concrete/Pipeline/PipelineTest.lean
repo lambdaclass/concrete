@@ -369,8 +369,11 @@ def testMonoNestedDestroyVerified : IO UInt32 := do
 def binderAgreementSource : String :=
   "mod m { struct P { v: u8 } fn take(x: u8) -> u8 { return x; } " ++
   "fn narrow(a: i32) -> u8 { let r: u8 = 1; return r; } " ++
+  "fn quiet() -> Int { return 1; } fn loud() with(Console) -> Int { print_int(2); return 2; } " ++
   "fn main() -> Int { let a: i32 = 300; let mut y: u8 = 7; y = 8; " ++
-  "let t: u8 = take(y); let p: P = P { v: y }; let P { v } = p; return 0; } }"
+  "let t: u8 = take(y); let p: P = P { v: y }; let P { v } = p; " ++
+  "let w: u8 = if a > 0 { y } else { 1 }; let arr: [u8; 2] = [y, y]; " ++
+  "let f: fn() -> Int = quiet; return 0; } }"
 
 /-- Rewrite each top-level statement of every function in the tree. -/
 partial def mapFnStmts (f : CStmt → CStmt) (m : CModule) : CModule :=
@@ -402,7 +405,19 @@ def testCoreCheckBinderAgreement : IO UInt32 := do
         | s => s, "E0510", "field 'v'"),
       ("return", fun
         | .return_ (some (.ident "r" _)) rt => .return_ (some wide) rt
-        | s => s, "E0560", "expected u8, got i32")]
+        | s => s, "E0560", "expected u8, got i32"),
+      ("if-expression branch value", fun
+        | .letDecl "w" m ty (.ifExpr c t e it) =>
+            .letDecl "w" m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it)
+        | s => s, "E0510", "the value of an if branch"),
+      ("array element", fun
+        | .letDecl "arr" m ty (.arrayLit [e0, _] at_) => .letDecl "arr" m ty (.arrayLit [e0, wide] at_)
+        | s => s, "E0510", "array element 1"),
+      -- a capability-free fn binder holding a `with(Console)` function would let a call
+      -- through it skip the requirement
+      ("fn value capabilities", fun
+        | .letDecl "f" m ty _ => .letDecl "f" m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int))
+        | s => s, "E0510", "let 'f'")]
     let mut failed := 0
     for (label, rw, code, frag) in cases do
       let planted := validCore.coreModules.map (mapFnStmts rw)
@@ -417,7 +432,7 @@ def testCoreCheckBinderAgreement : IO UInt32 := do
           IO.eprintln (renderDiagnostics ds)
           failed := failed + 1
     if failed == 0 then
-      IO.println "PASS: corecheck/binder-agreement — let, assignment, argument, field and return refused"
+      IO.println "PASS: corecheck/binder-agreement — let, assignment, argument, field, return, if value, array element and fn capabilities refused"
       return 0
     else return 1
 
