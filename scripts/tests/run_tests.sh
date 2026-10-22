@@ -7974,6 +7974,7 @@ run_err "$TESTDIR/error_2i_scope1_const_initializer.con" "(E0301)"
 run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
 run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_destructure_through_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0305)"
 run_err "$TESTDIR/error_2i_scope1_contract_let.con" "(E0305)"

@@ -2927,7 +2927,16 @@ private partial def constRef6Expr (contract : Bool) (al : List (String × Ty)) :
   | .methodCall _ o _ _ args => constRef6Expr contract al o ++ args.flatMap (constRef6Expr contract al)
   | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => constRef6Expr contract al e) ++ (b.map (constRef6Expr contract al)).getD []
   | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => constRef6Expr contract al e)
-  | .match_ _ s arms => constRef6Expr contract al s ++ arms.flatMap (constRef6Arm contract al)
+  | .match_ _ s arms =>
+    -- a destructuring `let` (desugared to this arm, `letBound`) through a borrowed scrutinee binds
+    -- references by `let` (review round 13)
+    let viaLet := arms.flatMap fun a => match a with
+      | .mk sp _ _ bs _ _ =>
+        if bs.any (·.letBound) && exprHasBorrow al s then
+          (PatBind.names bs).filter (· != "_") |>.map fun n => ref6Diag (.letBindsReference n "a reference (a destructuring `let` through a borrow)") sp
+        else []
+      | _ => []
+    viaLet ++ constRef6Expr contract al s ++ arms.flatMap (constRef6Arm contract al)
   | .ifExpr _ c t e => constRef6Expr contract al c ++ constRef6Stmts contract al t ++ constRef6Stmts contract al e
   | _ => []
 private partial def constRef6Arm (contract : Bool) (al : List (String × Ty)) : MatchArm → List Diagnostic

@@ -1339,7 +1339,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 174 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 175 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
@@ -1383,7 +1383,7 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-5 | `regress_2i_ref5_canonical_places.con` (new; `f(&w.p)`, `f(&a[i])`, and `f(&*r)`, `f(&r.p)` with `r` a parameter) | run 42 |
 | REF-6 | `error_104_assigned_ref_heap_block.con` †, `error_104_assigned_ref_stack_block.con` †, `error_091_ref_repointed_in_branch.con` †, `error_091_mut_receiver_reassigned_ref.con` † | reject E0302 REF-6@1 (E0238 on `land2-fix` today) |
 | REF-6 | `error_2i_ref6_let_shared_ref.con` (new; `let r: &P = &w.p;`), `error_2i_ref6_let_inferred_alias.con` (new; `let s = r;` with `r` a parameter), `error_2i_ref6_let_mut_ref.con` (new; `let r: &mut Int = &mut x;`), `error_2i_ref6_let_ref_to_ref.con` (new; `let rr: & &Int = &r;`), `error_2i_ref6_generic_let_at_ref.con` (new; `let y: T = x;` in a generic called at `T := &Int`) | reject E0302 REF-6@1 |
-| REF-6 | `error_2i_ref6_param_repointed.con` (new; `r = q` with `&T` parameters, and the dead-slot `g`), `error_2i_ref6_mut_param_repointed.con` (new; a `&mut T` parameter re-pointed at a local, E0219 today), `error_2i_ref6_borrow_binder_assigned.con` (new; `r = &y` inside `borrow x as r`), `error_2i_ref6_arm_binder_assigned.con` (new; an arm binder assigned in its arm), `error_2i_ref6_generic_assign_at_ref.con` (new; `x = y` in a generic called at `T := &Int`) | reject E0303 REF-6@1 |
+| REF-6 | `error_2i_ref6_param_repointed.con` (new; `r = q` with `&T` parameters, and the dead-slot `g`), `error_2i_ref6_mut_param_repointed.con` (new; a `&mut T` parameter re-pointed at a local, E0219 before exit 2i), `error_2i_ref6_borrow_binder_assigned.con` (new; `r = &y` inside `borrow x as r`), `error_2i_ref6_arm_binder_assigned.con` (new; an arm binder assigned in its arm), `error_2i_ref6_generic_assign_at_ref.con` (new; `x = y` in a generic called at `T := &Int`) | reject E0303 REF-6@1 |
 | REF-6 | `regress_2i_ref6_generic_assign_at_value.con` (new; the same generic called at `T := Int`) | run 42 |
 | REF-6 | `error_borrow_escape.con` † | reject E0302 REF-6@1 at its outer `let mut leaked: &Point` (E0234 today) |
 | REF-6 | `regress_2i_ref6_place_each_use.con` (new; `f(&w.p); g(&w.p);`, the twin of `let_shared_ref`), `regress_2i_ref6_index_once.con` (new; `let i = index(); f(&a[i]); g(&a[i]);`), `regress_2i_ref6_borrow_block_projection.con` (new; `borrow w as rw in R { f(&rw.p); g(&rw.p); }`), `regress_2i_ref6_arm_binder_through_ref.con` (new; the `match o` shape of REF-5) | run 42 |
