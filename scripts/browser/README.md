@@ -76,7 +76,7 @@ JavaScript modules and Wasm require HTTP with the correct MIME types, not a
 `file://` URL. A modern browser with WebAssembly exception handling is required.
 
 Limits: 32 KiB UTF-8 source, 120 seconds to load, 20 seconds to compile, and a
-1 GiB maximum Wasm memory. The first prototype is about 13 MiB uncompressed.
+1 GiB maximum Wasm memory. The first prototype is about 14.3 MiB uncompressed.
 The loader revalidates the manifest, uses digest-versioned asset URLs for HTTP
 caching, reports download progress, and checks the Wasm size and SHA-256 before
 instantiation. These are delivery integrity checks, not formal verification.

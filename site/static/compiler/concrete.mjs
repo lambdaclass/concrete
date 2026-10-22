@@ -3674,9 +3674,9 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
 // end include: postlibrary.js
 
 var ASM_CONSTS = {
-  301172: () => { debugger; },
- 301182: ($0) => { var envVar = UTF8ToString($0); var val = ENV[envVar]; if (val) { var lengthBytes = lengthBytesUTF8(val)+1; var valOnWasmHeap = _malloc(lengthBytes); stringToUTF8(val, valOnWasmHeap, lengthBytes); return valOnWasmHeap; } else { return 0; } },
- 301425: () => { if ((typeof process === "undefined") || (process.release.name !== "node")) { return 0; } var lengthBytes = lengthBytesUTF8(__filename)+1; var pathOnWasmHeap = _malloc(lengthBytes); stringToUTF8(__filename, pathOnWasmHeap, lengthBytes); return pathOnWasmHeap; }
+  325588: () => { debugger; },
+ 325598: ($0) => { var envVar = UTF8ToString($0); var val = ENV[envVar]; if (val) { var lengthBytes = lengthBytesUTF8(val)+1; var valOnWasmHeap = _malloc(lengthBytes); stringToUTF8(val, valOnWasmHeap, lengthBytes); return valOnWasmHeap; } else { return 0; } },
+ 325841: () => { if ((typeof process === "undefined") || (process.release.name !== "node")) { return 0; } var lengthBytes = lengthBytesUTF8(__filename)+1; var pathOnWasmHeap = _malloc(lengthBytes); stringToUTF8(__filename, pathOnWasmHeap, lengthBytes); return pathOnWasmHeap; }
 };
 
 // Imports from the Wasm binary.
