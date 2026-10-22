@@ -613,7 +613,7 @@ run_controls() {
   if [ -z "$ires" ]; then echo "  ok   control: incomplete results are recognised (never a mutation kill) and zero counts are not"; PASS=$((PASS + 1))
   else no "control: lib/incomplete.sh: $(echo "$ires" | tr '\n' ';')"; fi
   # Positive control: a real unverified golden passes and is counted, not hidden.
-  local uunit="examples/snippets/constants.con"
+  local uunit="examples/snippets/union.con"
   if ! grep -qE "^@run $uunit .*oracle=unverified:" "$MANIFEST"; then
     no "positive control: $uunit no longer has an unverified rule; point this control at one that does"
   elif EXAMPLE_OUTPUTS_ONLY="$uunit" EXAMPLE_OUTPUTS_IS_CONTROL=1 bash "$0" > "$dir/positive_unverified.log" 2>&1 \
