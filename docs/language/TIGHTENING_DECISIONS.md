@@ -466,12 +466,15 @@ corpus's own std for both. The units are:
 The scanner records each unit's outcome (accept, refuse, crash or timeout) and its set of
 diagnostic codes. It writes `diff.tsv`, which lists every unit that changed, and `summary.txt`,
 which counts newly refused units by code and separates refusals located inside std from refusals
-in the unit itself. A run over the whole corpus takes about 65 – 95 s with 16 jobs on the OVH
-server.
+in the unit itself. A compile that cannot run (status 125 – 127) makes the whole scan a setup
+error, never a "no difference" report. A run over the whole corpus takes about 1 – 3 min with 16
+jobs on the OVH server.
 
-**Validation: train3 `949d79e9` against main `185d998c`.** The corpus was main's: 1 891 units,
-made of 1 489 files, 227 inline programs, 174 projects and std. The scanner found 297 units whose
-outcome or codes changed.
+**Validation: train3 `949d79e9` against main `185d998c`.** The corpus was main's: 1 914 units,
+made of 1 489 files, 250 inline programs, 174 projects and std. The scanner found 297 units whose
+outcome or codes changed. One of them, `examples/hmac_sha256`, is a base timeout at 120 s under
+server load, which the report keeps distinct from a refusal. Run with the same compiler on both
+sides, the scanner reports no difference (exit 0).
 
 - **Newly refused by exit 2i's codes:**
   - std: 21 E0301 sites in 6 files (`cli`, `fs`, `io`, `net`, `numeric`, `process`). Through std,
