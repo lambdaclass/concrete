@@ -9,6 +9,12 @@ Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md). The manual is
 [docs/project/LANDING.md](../../docs/project/LANDING.md); `scripts/land/train.sh` (header) is the
 contract. Landings reach `origin` and `lambdaclass` only through it or the landing bot.
 
+**Dependency.** `scripts/land/train.sh` and `LANDING.md` are on branch `wip/landing-script` until it
+lands. If they are not in your checkout, check that branch out detached elsewhere
+(`git worktree add --detach <dir> origin/wip/landing-script`) and run `bash <dir>/scripts/land/train.sh ...`
+from your checkout (it works on the repository of its working directory), or do not land: report the evidence
+below to the orchestrator. Never fall back to pushing `main` by hand.
+
 **Preconditions** (stop and report the missing one):
 - the branch is pushed as `wip/<branch>` and that SHA is the one you validated;
 - `/review` finished (clean, or 5 rounds with follow-ups recorded);

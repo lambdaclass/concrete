@@ -77,6 +77,8 @@ if [ "$NUMBER_ONLY" = 0 ]; then
     || die "this tree is not migrated to the bug ledger (scripts/gen/migrate_ledgers.sh), so there is no ledger block to write; file by hand (docs/bugs/README.md, Filing a bug) or use --number-only"
   python3 -I scripts/gen/bug_ledger.py --check >/dev/null \
     || die "the ledger views are stale before the new bug is added; run python3 scripts/gen/bug_ledger.py --write first"
+  python3 -I scripts/gen/changelog.py --check >/dev/null \
+    || die "changelog.d/ or CHANGELOG.md is already malformed (above); repair it first"
 fi
 python3 -I - "$ROOT" "$TITLE" "$CLASS" <<'PY' || exit 1
 import os, sys
@@ -87,6 +89,8 @@ def refuse(m):
     print(f"new_bug: {m}", file=sys.stderr); sys.exit(1)
 if "\n" in title or "\t" in title or "-->" in title or not title.strip():
     refuse("the title is one line with no tab and no '-->'")
+if "changelog stamp:" in title:
+    refuse("the title holds 'changelog stamp:', which a changelog fragment may not carry")
 m = b.STATUS_UPPER.search(title) or b.STATUS_LEAD.match(title)
 if m:
     refuse(f"the title states a status ('{m.group(0)}'); the record's **Status:** line is the only status a bug has")
@@ -101,7 +105,9 @@ SLUG="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+
 
 # ----------------------------------------------------------------------------- allocate
 if [ "${NEW_BUG_NO_FETCH:-0}" != 1 ]; then
-  git fetch --quiet --prune "$REMOTE" || die "git fetch $REMOTE failed; the allocation needs the remote's branches"
+  # Every branch head, whatever the configured refspec (a single-branch clone fetches only one).
+  git fetch --quiet --prune "$REMOTE" "+refs/heads/*:refs/remotes/$REMOTE/*" \
+    || die "git fetch $REMOTE failed; the allocation needs the remote's branches"
   no_op_in_progress
 fi
 seen="$(mktemp)"; trap 'rm -f "$seen"' EXIT
@@ -135,7 +141,10 @@ while :; do
   tries=$((tries + 1)); [ "$tries" -le 50 ] || die "could not reserve a number after 50 attempts"
   num="$(printf '%03d' "$n")"
   [ "${#num}" -eq 3 ] || die "bug numbers past 999 need a wider record name (docs/bugs/NNN_*.md)"
-  c="$(git commit-tree "$empty_tree" -m "bug $num reserved: $TITLE" -m "by $who at $(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+  # The nonce makes every attempt a distinct commit: two identical requests in one second would
+  # otherwise build one SHA, and pushing a SHA the remote already holds "succeeds" for both.
+  nonce="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+  c="$(git commit-tree "$empty_tree" -m "bug $num reserved: $TITLE" -m "by $who at $(date -u +%Y-%m-%dT%H:%M:%SZ), nonce $nonce")"
   if git push --quiet --force-with-lease="refs/bug-reservations/$num:" "$REMOTE" "$c:refs/bug-reservations/$num" 2>/dev/null; then
     break
   fi
@@ -194,13 +203,13 @@ mkdir -p "$REPRO_DIR"
   printf '([bug %s](docs/bugs/%s)).\n' "$num" "$(basename "$REC")"
 } > "$FRAG"
 
-if ! python3 -I scripts/gen/bug_ledger.py --write >/dev/null || ! python3 -I scripts/gen/bug_ledger.py --check >/dev/null; then
+if ! python3 -I scripts/gen/bug_ledger.py --write >/dev/null || ! python3 -I scripts/gen/bug_ledger.py --check >/dev/null \
+   || ! python3 -I scripts/gen/changelog.py --check >/dev/null; then
   rm -f "$REC" "$REPRO" "$FRAG"; rmdir "$REPRO_DIR" 2>/dev/null || true
   python3 -I scripts/gen/bug_ledger.py --write >/dev/null 2>&1 || true
-  die "the ledger refused the new record (above); nothing was written. Bug $num stays reserved; pass it to whoever files next or leave the gap"
+  die "the ledger or changelog refused the new files (above); they were removed. Bug $num stays reserved; pass it to whoever files next or leave the gap"
 fi
 if [ -f scripts/gen/bug_dashboard.py ]; then python3 -I scripts/gen/bug_dashboard.py --write >/dev/null; fi
-python3 -I scripts/gen/changelog.py --check >/dev/null || die "changelog.py refused the fragment $FRAG"
 
 echo "new_bug: filed bug $num"
 echo "  record      $REC"

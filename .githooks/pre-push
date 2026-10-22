@@ -56,7 +56,8 @@ while read -r _localref localsha _remoteref remotesha; do
     refs/bug-reservations/[0-9][0-9][0-9])
       res_refs=$((res_refs+1))
       case "$localsha" in
-        *[!0]*) if [ "$(git rev-parse -q --verify "$localsha^{tree}" 2>/dev/null)" != "$EMPTY_TREE" ] \
+        *[!0]*) if [ "$(git cat-file -t "$localsha" 2>/dev/null)" != commit ] \
+                   || [ "$(git rev-parse -q --verify "$localsha^{tree}" 2>/dev/null)" != "$EMPTY_TREE" ] \
                    || git rev-parse -q --verify "$localsha^1" >/dev/null 2>&1; then res_bad="$res_bad $_remoteref"; fi ;;
       esac
       continue ;;

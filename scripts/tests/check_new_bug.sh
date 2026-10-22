@@ -58,6 +58,8 @@ else MIGRATED_HERE=1; fi
 git init -q -b main "$W" && G config user.email gate@example.invalid && G config user.name gate \
   && G add -A && G commit -q -m base && git init -q --bare "$O" && G remote add origin "$O" \
   && G push -q origin main || { echo "FATAL: could not build the scratch repository" >&2; exit 2; }
+# A single-branch refspec, as a `clone --single-branch` has: the scaffold must fetch every head anyway.
+G config remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
 NB="$W/scripts/gen/new_bug.sh"
 M="$(ls "$W/docs/bugs" | sed -nE 's/^([0-9]{3})_.*/\1/p' | sort -n | tail -1)"; M=$((10#$M))
 num_of() { awk 'NF { last = $0 } END { print last }' "$1"; }
@@ -76,7 +78,7 @@ on_branch() { # branch, number: commit a record for <number> on <branch> from ma
 echo "=== 1. allocation sees every writer (highest bug on main: $(printf '%03d' $M)) ==="
 alloc $((M + 1)) "on a fresh remote"
 on_branch wip/other $((M + 5)) && G push -q origin wip/other && G branch -q -D wip/other
-alloc $((M + 6)) "past a record on a remote wip/* branch"
+alloc $((M + 6)) "past a record on a remote wip/* branch the configured refspec does not fetch"
 alloc $((M + 7)) "past the reservation just made"
 on_branch ci/cand $((M + 20)) && G push -q origin ci/cand && G branch -q -D ci/cand
 alloc $((M + 21)) "past a record on a remote ci/* branch"
@@ -91,7 +93,8 @@ G branch -q -D localonly; G worktree remove --force "$TMP/wt2"
 
 echo "=== 2. concurrent allocations get distinct numbers ==="
 pids=""
-for i in 1 2 3 4 5 6; do bash "$NB" --number-only "race $i" > "$TMP/race.$i" 2>&1 & pids="$pids $!"; done
+# One title for all six: identical requests in the same second must still build distinct commits.
+for i in 1 2 3 4 5 6; do bash "$NB" --number-only "race" > "$TMP/race.$i" 2>&1 & pids="$pids $!"; done
 rc_all=0; for p in $pids; do wait "$p" || rc_all=1; done
 got="$(for i in 1 2 3 4 5 6; do num_of "$TMP/race.$i"; done | sort)"
 held=0; for x in $got; do git -C "$W" ls-remote --exit-code origin "refs/bug-reservations/$x" >/dev/null && held=$((held+1)); done
@@ -110,9 +113,13 @@ REC="$(ls "$W/docs/bugs/${NEXT}_"*.md 2>/dev/null | head -1)"
 if [ -n "$REC" ] && grep -q '^<!-- bug-ledger' "$REC" && grep -q '^\*\*Status:\*\* OPEN' "$REC"; then
   ok "the record is docs/bugs/$(basename "$REC"), with a ledger block and an OPEN status"
 else no "no record docs/bugs/${NEXT}_*.md with a ledger block"; fi
-for sec in Observed Expected "Structural cause" "Structural owner" "Containment while open"; do
-  grep -q "^## $sec\$" "${REC:-/dev/null}" || no "the record has no '## $sec' section"
+missing=""
+for sec in Reproducer Observed Expected Cause "Structural cause" "Structural owner" "Containment while open"; do
+  grep -q "^## $sec\$" "${REC:-/dev/null}" || missing="$missing '$sec'"
 done
+[ -z "$missing" ] && ok "the record has every section" || no "the record lacks sections:$missing"
+grep -qx 'class: 1' "${REC:-/dev/null}" && grep -qx 'silent: yes' "${REC:-/dev/null}" \
+  && ok "the ledger block carries the requested class and silent values" || no "the ledger block lost --class or --silent"
 [ -f "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con" ] \
   && ok "the reproducer skeleton exists" || no "no reproducer skeleton under tests/regressions/bug${NEXT}_*"
 FRAG="$(ls "$W/changelog.d/2026-01-02-bug${NEXT}-"*.md 2>/dev/null | head -1)"
@@ -134,9 +141,15 @@ if (cd "$W" && bash scripts/tests/check_bug_filing_complete.sh) > "$TMP/bfc.out"
 elif grep -q 'unfilled new_bug.sh placeholders' "$TMP/bfc.out"; then
   ok "check_bug_filing_complete.sh refuses the unfilled placeholders"
 else no "check_bug_filing_complete.sh failed, but not on the placeholders:"; grep FAIL "$TMP/bfc.out" | sed 's/^/      /'; fi
-for f in "$REC" "$FRAG" "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con"; do
-  [ -f "$f" ] && sed -i.bak 's/FILL-IN(new_bug.sh)/filled:/g' "$f" && rm -f "$f.bak"
-done
+# Fill one output at a time: each must still be refused while any other holds a placeholder.
+fill() { [ -f "$1" ] && sed -i.bak 's/FILL-IN(new_bug.sh)/filled:/g' "$1" && rm -f "$1.bak"; }
+fill "$REC"
+(cd "$W" && bash scripts/tests/check_bug_filing_complete.sh) > "$TMP/bfc1.out" 2>&1 \
+  && no "check_bug_filing_complete.sh ignores placeholders left in the reproducer and the fragment" \
+  || { grep -q 'unfilled.*repro.con' "$TMP/bfc1.out" && grep -q "unfilled.*$(basename "${FRAG:-x}")" "$TMP/bfc1.out" \
+       && ok "a filled record still fails while the reproducer and fragment hold placeholders" \
+       || no "the placeholder leg did not name the reproducer and the fragment"; }
+fill "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con"; fill "${FRAG:-/nonexistent}"
 if (cd "$W" && bash scripts/tests/check_bug_filing_complete.sh) > "$TMP/bfc2.out" 2>&1; then
   ok "once filled, the new bug passes check_bug_filing_complete.sh"
 else no "the filled scaffold fails check_bug_filing_complete.sh:"; grep FAIL "$TMP/bfc2.out" | sed 's/^/      /'; fi
@@ -155,6 +168,10 @@ refuse "a title stating a status" "states a status" bash "$NB" "FIXED crash in t
 refuse "a leading status word" "states a status" bash "$NB" "open handle leak"
 refuse "an unknown class" "is not a row" bash "$NB" "some defect" --class 999
 refuse "a bad --silent" "yes or no" bash "$NB" "some defect" --silent maybe
+refuse "a title a changelog fragment cannot carry" "changelog stamp:" bash "$NB" "parser mishandles changelog stamp: text"
+printf '# not a fragment heading\n' > "$W/changelog.d/2026-01-01-broken.md"
+refuse "an already-malformed changelog.d" "already malformed" bash "$NB" "some defect"
+rm -f "$W/changelog.d/2026-01-01-broken.md"
 if [ "$MIGRATED_HERE" = 0 ]; then
   git init -q -b main "$RAW" && git -C "$RAW" remote add origin "$O"
   refuse "an unmigrated tree" "not migrated" bash "$RAW/scripts/gen/new_bug.sh" "some defect"
@@ -186,6 +203,13 @@ hook "refs/x $P refs/bug-reservations/902 $Z" && no "hook: an empty commit with 
 hook "refs/x $E refs/bug-reservations/notanumber $Z" && no "hook: a non-numeric reservation ref was accepted" \
   || { grep -q 'reservation tier' "$TMP/hook.log" && ok "hook: a non-numeric reservation ref is refused" \
        || no "hook: a non-numeric reservation ref failed for another reason"; }
+hook "refs/x $(G hash-object -t tree /dev/null) refs/bug-reservations/903 $Z" && no "hook: a bare empty tree object was accepted as a reservation" \
+  || { grep -q 'reservation tier' "$TMP/hook.log" && ok "hook: a non-commit object on a reservation ref is refused" \
+       || no "hook: a tree object on a reservation ref failed for another reason"; }
+hook "refs/x $E refs/bug-reservations/904 $Z"$'\n'"refs/heads/w $T refs/heads/wip/w $Z" \
+  && grep -q 'wip/\* backup push' "$TMP/hook.log" && ! grep -q 'no gates' "$TMP/hook.log" \
+  && ok "hook: a reservation pushed together with a branch does not exempt the branch (it takes the branch's tier)" \
+  || no "hook: a mixed reservation + wip push was not handled by the wip tier: $(tr '\n' ' ' < "$TMP/hook.log" | cut -c1-200)"
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
