@@ -12,7 +12,8 @@
 #
 #   1. the R-0022 fast surface-gate checklist — built precisely to be the fast
 #      pre-push check, and identical to CI's Language-surface constituent, and
-#   2. the gates matching the AREAS this push actually touches.
+#   2. the gates this push can break, derived by scripts/tests/select_gates.sh (impact
+#      selection, R-0513), with the older AREA map as the fallback.
 #
 # The full set stays available as `make pre-push-full` and runs in CI. This
 # trades some coverage for a check that actually gets run — the alternative
@@ -107,6 +108,9 @@ done <<< "$changed"
 # twice). `--first` keeps the old order where it mattered: those run sequentially before the rest,
 # and a failure there stops the run before the heavy gates launch.
 SEL=()
+# The area map below is the FALLBACK selection (AREA_SEL). The default is impact selection; see
+# "IMPACT SELECTION" after this block.
+AREA_SEL=()
 # Gate hygiene on EVERY push, whatever changed. It holds the committed-conflict-marker check, and
 # the area map below selects it only for scripts/Concrete/build changes: 64cfea38 was a merge that
 # changed only Markdown, left a diff3 marker in CHANGELOG.md, passed this hook, and turned main red
@@ -201,12 +205,10 @@ else
   # checks nothing.
   while IFS= read -r j; do
     [ -z "$j" ] && continue
-    echo "pre-push: all gates in CI job '$j'"
-    SEL+=(--job "$j")
+    AREA_SEL+=(--job "$j")
   done <<< "$(printf '%s' "$jobs_to_run" | sed 's/^|//; s/|$//; s/||/\n/g')"
   for a in $areas; do
-    echo "pre-push: gates matching '$a'"
-    SEL+=(--filter "$a")
+    AREA_SEL+=(--filter "$a")
   done
 fi
 
@@ -215,6 +217,27 @@ TMPD="$(mktemp -d)" || { echo "pre-push: cannot create a temp directory" >&2; ex
 trap 'rm -rf "$TMPD"' EXIT
 PLAN_F="$TMPD/plan"; CHANGED_F="$TMPD/changed"
 printf '%s\n' "$changed" > "$CHANGED_F"
+# IMPACT SELECTION (R-0513). scripts/tests/select_gates.sh derives, from the gate scripts themselves,
+# every workflow gate command these changed files can break: what each gate reads (transitively through
+# the scripts it runs), every compiler- or Lean-running gate for a compiler, toolchain or stdlib change,
+# and every gate for a change no rule maps. The area map above names gates by convention, and four
+# failures it did not select reached CI on 2026-10-22 (stack budget, trust-gate audit corpus, float
+# round-trip judge, linear discard). It is the fallback when the selector fails, or on request:
+#   CONCRETE_PREPUSH_SELECT=area
+SELECT_MODE="${CONCRETE_PREPUSH_SELECT:-impact}"
+if [ "$SELECT_MODE" = "impact" ] \
+   && bash "$RUNNER" --plan "${SEL[@]}" --impact-files "$CHANGED_F" > "$PLAN_F"; then
+  echo "pre-push: impact selection (scripts/tests/select_gates.sh)"
+  SEL+=(--impact-files "$CHANGED_F")
+else
+  if [ "$SELECT_MODE" = "impact" ]; then
+    echo "pre-push: impact selection FAILED (above); falling back to the area map"
+  else
+    echo "pre-push: CONCRETE_PREPUSH_SELECT=$SELECT_MODE, area map"
+  fi
+  [ "${#AREA_SEL[@]}" -eq 0 ] || echo "pre-push: area selectors: ${AREA_SEL[*]}"
+  SEL+=("${AREA_SEL[@]}")
+fi
 # The selection is resolved by the RUNNER, not restated here: --plan is the same code path that the
 # real run executes, so the list printed (and bound into any record) is the list that runs.
 bash "$RUNNER" --plan "${SEL[@]}" > "$PLAN_F" || {

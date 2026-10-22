@@ -1,0 +1,15 @@
+# a bug record with no compiler change: docs/bugs, the corpus map and a regression
+# base 8f40d45ba4be7d8ffa880f5d1880f4810f74c62b
+# head a73239922e2659b53a6d88099003274b23126113
+CHANGELOG.md
+ROADMAP.md
+docs/bugs/103_extern_destroy_replaced_by_empty_body.md
+docs/bugs/README.md
+docs/bugs/STRUCTURAL_CLASSES.md
+docs/platform/ROCKSDB_SLICE1.md
+docs/project/candidates.tsv
+scripts/tests/audit_bug_corpus.sh
+scripts/tests/check_rocksdb_slice1.sh
+scripts/tests/run_tests.sh
+tests/programs/regress_103_extern_destroy.c
+tests/programs/regress_103_extern_destroy.con

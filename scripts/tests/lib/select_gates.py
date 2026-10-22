@@ -67,6 +67,12 @@ TOOLCHAIN = {"lakefile.toml", "lake-manifest.json", "lean-toolchain", "flake.nix
 INERT_RE = re.compile(r"(^|/)[^/]*\.md$|^(docs|research|paper|site|editor|bench)/|^LICENSE$|\.png$")
 
 
+# The estimate scales the selection's share of CI serial time to the measured local full-set run
+# (.githooks/pre-push header: 23 minutes on an 18-core machine at JOBS=12, nothing else running).
+# It ignores the critical path, so a selection dominated by one long gate is underestimated.
+FULL_SET_LOCAL_MIN = 23
+
+
 def git_lines(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.split("\n")
 
@@ -109,7 +115,12 @@ class Repo:
 
     # ---- script dependency extraction ----------------------------------------------------
     def _resolve(self, tok, base, glob_follows):
-        """-> ('file'|'dir', path) or None. Longest suffix wins; root first, then script dir."""
+        """-> ('file'|'dir', path) or None.
+
+        Leading components that name no directory (`ROOT_DIR/` from "$ROOT_DIR/...") are
+        dropped; the first suffix that starts at a real directory (from the root or the script's
+        own directory) is the reference, resolved there or not at all, so `scripts/tests/$g`
+        never degrades into the unrelated top-level `tests/`."""
         tok = tok.rstrip(".,;:")
         while tok.startswith("./"):
             tok = tok[2:]
@@ -122,15 +133,20 @@ class Repo:
                 c = cand.rstrip("/")
                 if c in self.files:
                     return ("file", c)
-                if "/" in s.rstrip("/") and c in self.dirs:
+                if "/" in s and c in self.dirs:
                     if c in SCRIPT_TREES and glob_follows != "*":
-                        continue
+                        return None
                     return ("dir", c)
             if glob_follows and "/" in s:
                 parent = os.path.dirname(s.rstrip("/")) if not s.endswith("/") else s.rstrip("/")
                 for cand in (parent, os.path.normpath(os.path.join(base, parent))):
-                    if cand in self.dirs and "/" in cand and (cand not in SCRIPT_TREES or glob_follows == "*"):
+                    if cand in self.dirs:
+                        if cand in SCRIPT_TREES and glob_follows != "*":
+                            return None
                         return ("dir", cand)
+            head = parts[i]
+            if "/" in s and (head in self.dirs or os.path.normpath(os.path.join(base, head)) in self.dirs):
+                return None  # anchored at a real directory and unresolved: a stale or computed path
         return None
 
     def deps_of_text(self, text, base):
@@ -305,9 +321,12 @@ def main():
         known = [dur[c] for c in chosen if c in dur]
         unknown = len(chosen) - len(known)
         total = sum(known)
+        whole = sum(dur.get(c, 0.0) for c in inventory) or 1.0
+        local = total / whole * FULL_SET_LOCAL_MIN
         print(f"select_gates: {len(chosen)} of {len(inventory)} gate commands selected; "
-              f"CI-measured serial time {total/60:.1f} min"
-              + (f" (+{unknown} without a CI timing)" if unknown else ""), file=sys.stderr)
+              f"CI serial time {total/60:.1f} of {whole/60:.0f} min; "
+              f"estimated local run ~{local:.0f} min (full set = {FULL_SET_LOCAL_MIN} min, JOBS=12)"
+              + (f"; {unknown} selected without a CI timing" if unknown else ""), file=sys.stderr)
 
 
 if __name__ == "__main__":
