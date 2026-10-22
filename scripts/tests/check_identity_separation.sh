@@ -260,8 +260,12 @@ if git grep -nE 'PackageArtifactIdentity\.of\?|PackageScopeIdentity\.' -- Concre
 else
   ok "C6: DebugBundle and Reduce call only ResolvedIdentity.standalone over their complete source map"
 fi
-if git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity\b' -- 'Concrete/*.lean' Main.lean | grep -q .; then
+# CAPTURED, then tested: a `| grep -q` short-circuit under pipefail makes the verdict depend on
+# scheduling (R-0547). The matching lines are printed, so a failure names what it saw.
+_c6_hits="$(git grep -nE 'syntheticForModules|packageIdentityOf|PackageIdentity\b' -- 'Concrete/*.lean' Main.lean 2>&1 || true)"
+if [ -n "$_c6_hits" ]; then
   no "C6: a deleted producer (PackageIdentity / syntheticForModules / packageIdentityOf) is still referenced"
+  printf '%s\n' "$_c6_hits" | awk 'NR<=5 {print "       " $0}'
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi
