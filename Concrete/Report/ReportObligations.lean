@@ -1,3 +1,4 @@
+import Std.Data.HashSet
 import Concrete.Elab.Core
 import Concrete.Check.Layout
 import Concrete.Resolve.FileSummary
@@ -160,9 +161,15 @@ partial def assignedScalarsS : Stmt → List String
         ++ b.flatMap assignedScalarsS
   | _ => []
 
-/-- Drop every in-scope hypothesis that mentions a just-assigned variable. -/
+/-- Drop every in-scope hypothesis that mentions a just-assigned variable.
+    `assigned` is turned into a HashSet once: list membership per identifier per
+    hypothesis made the scoped walk cubic in nesting depth — `k` nested `if`s put `k`
+    guards in scope, and the statement holding the rest of the nest assigns O(nest)
+    names (bug 178, measured ~n^3 on the compile path). -/
 def dropStaleHyps (scope : List Expr) (assigned : List String) : List Expr :=
-  scope.filter fun h => (collectIdents h).all (fun v => !assigned.contains v)
+  if scope.isEmpty then [] else
+  let assignedSet : Std.HashSet String := assigned.foldl (·.insert ·) ∅
+  scope.filter fun h => (collectIdents h).all (fun v => !assignedSet.contains v)
 
 /-- `{fnQual}@{line}#{obl}` — the loop VC id. Duplicated from `loopVCKey` below only
     because that definition appears later in the file than its first use here; the gate
