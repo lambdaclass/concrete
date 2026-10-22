@@ -32,7 +32,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh).
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
+BOUNDED_DIR="$TMP"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 run() {

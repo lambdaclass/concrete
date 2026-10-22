@@ -22,8 +22,10 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 B64="$ROOT_DIR/examples/base64_cli"
@@ -31,9 +33,9 @@ APP="$ROOT_DIR/tests/regressions/assumption_summary/app"
 PURE="$ROOT_DIR/tests/regressions/assumption_summary/pure_app"
 for p in b64:"$B64" app:"$APP" pure:"$PURE"; do
   n="${p%%:*}"; d="${p#*:}"
-  (cd "$d" && $TO "$CC" src/main.con --report unsafe) > "$TMP/$n.txt" 2>&1
-  (cd "$d" && $TO "$CC" src/main.con --report assumptions) > "$TMP/$n.json" 2>/dev/null
-  (cd "$d" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/$n.diag" 2>/dev/null
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report unsafe) > "$TMP/$n.txt" 2>&1
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report assumptions) > "$TMP/$n.json" 2>/dev/null
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/$n.diag" 2>/dev/null
 done
 
 python3 - "$TMP" "$AUDIT" "$SUMMARY" "$ROOT_DIR/std/src" > "$TMP/rows.out" <<'PY'
@@ -122,7 +124,7 @@ echo "=== a compiler intrinsic is not a foreign binding ==="
 hits=$(cat "$TMP/b64.txt" "$TMP/b64.json" "$TMP/b64.diag" | grep -c 'sizeof' || true)
 [ "${hits:-0}" -eq 0 ] && ok "base64_cli: std.mem.sizeof appears on no assumption surface (text, assumptions JSON, facts)" \
   || no "std.mem.sizeof still appears on an assumption surface ($hits mentions)"
-sout="$(cd "$ROOT_DIR/std" && $TO "$CC" src/lib.con --report unsafe 2>&1)"
+sout="$(cd "$ROOT_DIR/std" && "${TO[@]}" "$CC" src/lib.con --report unsafe 2>&1)"
 # Counted, not grep -q: under pipefail an early-exiting grep -q fails the pipeline on a match.
 c_decl=$(printf '%s\n' "$sout" | grep -A2 'Compiler intrinsic declarations' | grep -c 'fn sizeof() -> Uint  #\[intrinsic = "sizeof"\]' || true)
 c_foreign=$(printf '%s\n' "$sout" | grep -c 'sizeof: assumed to perform' || true)
@@ -135,13 +137,13 @@ fi
 # End to end: a FORGED #[intrinsic = "sizeof"] on C's abs stays a foreign binding; a program calling
 # the genuine std.mem.sizeof does not reach one, and that function is admitted.
 IC="$ROOT_DIR/tests/regressions/intrinsic_classification/app"
-if (cd "$IC" && $TO "$CC" build . -o "$TMP/ic" >"$TMP/ic.log" 2>&1) && "$TMP/ic" >/dev/null 2>&1; then
+if (cd "$IC" && "${TO[@]}" "$CC" build . -o "$TMP/ic" >"$TMP/ic.log" 2>&1) && "$TMP/ic" >/dev/null 2>&1; then
   ok "intrinsic_classification builds and runs (abs(-3) and sizeof::<i32>() both evaluate)"
 else
   no "intrinsic_classification does not build or run: $(head -3 "$TMP/ic.log" | tr '\n' ' ')"
 fi
-(cd "$IC" && $TO "$CC" src/main.con --report assumptions) > "$TMP/ic.json" 2>/dev/null
-(cd "$IC" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/ic.diag" 2>/dev/null
+(cd "$IC" && "${TO[@]}" "$CC" src/main.con --report assumptions) > "$TMP/ic.json" 2>/dev/null
+(cd "$IC" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/ic.diag" 2>/dev/null
 icr="$(python3 - "$TMP/ic.json" "$TMP/ic.diag" <<'PY'
 import json, sys
 a = json.load(open(sys.argv[1])); d = json.load(open(sys.argv[2]))
@@ -160,7 +162,7 @@ while IFS= read -r line; do
 done <<< "$icr"
 # Misplaced: #[intrinsic] on a function WITH a body is a parse error, not a silently pending attribute.
 printf '#[intrinsic = "sizeof"]\nfn f() -> i32 { return 1; }\nfn main() -> i32 { return f() - 1; }\n' > "$TMP/bad.con"
-bo="$($TO "$CC" "$TMP/bad.con" -o "$TMP/bad" 2>&1)"; brc=$?
+bo="$("${TO[@]}" "$CC" "$TMP/bad.con" -o "$TMP/bad" 2>&1)"; brc=$?
 if [ "$brc" -ne 0 ] && printf '%s' "$bo" | grep -c 'can only be applied to a bodiless function declaration' >/dev/null; then
   ok "#[intrinsic] on a function with a body is refused at parse"
 else
@@ -174,4 +176,4 @@ g=$(grep -c '^#guard ({ id := { kind := .foreignBinding' "$SUMMARY" || true)
 
 echo
 echo "DESCRIPTOR-COVERAGE: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

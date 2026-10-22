@@ -42,8 +42,10 @@ CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/cap_inference"
 
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -54,7 +56,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== every derived fn-pointer form reaches a cap-polymorphic parameter ==="
 d="$FIX/derived_forms"
-out="$(cd "$d" && $TO "$CC" check . 2>&1)"
+out="$(cd "$d" && "${TO[@]}" "$CC" check . 2>&1)"
 if [ -z "$(printf '%s' "$out" | grep -E 'error\[')" ]; then
   ok "struct field, call result, array element, parenthesised and bare name all check"
 else
@@ -63,7 +65,7 @@ else
 fi
 
 # Behaviour, not just acceptance: each of the six calls must actually run. 2*5 + 2 = 12.
-if (cd "$d" && $TO "$CC" build . -o "$TMP/derived" >/dev/null 2>&1); then
+if (cd "$d" && "${TO[@]}" "$CC" build . -o "$TMP/derived" >/dev/null 2>&1); then
   "$TMP/derived" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 12 ]; then
     ok "all six calls dispatch correctly (exit 12)"
@@ -85,7 +87,7 @@ fi
 
 echo "=== what remains unknowable SAYS SO, and says it in the right register ==="
 u="$FIX/uninferable"
-uout="$(cd "$u" && $TO "$CC" check . 2>&1)"
+uout="$(cd "$u" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$uout" | grep -q "E0242"; then
   ok "a generic callee's return type yields E0242 cannotInferCapVariable"
 else
@@ -111,14 +113,14 @@ fi
 
 echo "=== the METHOD path, which the first fix missed ==="
 dm="$FIX/derived_forms_method"
-mout="$(cd "$dm" && $TO "$CC" check . 2>&1)"
+mout="$(cd "$dm" && "${TO[@]}" "$CC" check . 2>&1)"
 if [ -z "$(printf '%s' "$mout" | grep -E 'error\[')" ]; then
   ok "every derived form reaches a cap-polymorphic METHOD parameter"
 else
   no "a derived form is still rejected on the method path"
   printf '%s\n' "$mout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
 fi
-if (cd "$dm" && $TO "$CC" build . -o "$TMP/derivedm" >/dev/null 2>&1); then
+if (cd "$dm" && "${TO[@]}" "$CC" build . -o "$TMP/derivedm" >/dev/null 2>&1); then
   "$TMP/derivedm" >/dev/null 2>&1; rcm=$?
   [ "$rcm" -eq 12 ] && ok "all six method calls dispatch correctly (exit 12)" \
                     || no "method fixture produced $rcm, not 12"
@@ -126,7 +128,7 @@ else
   no "derived_forms_method does not build"
 fi
 um="$FIX/uninferable_method"
-umout="$(cd "$um" && $TO "$CC" check . 2>&1)"
+umout="$(cd "$um" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$umout" | grep -q "E0242"; then
   ok "the method path reports E0242 for what it cannot infer"
 else
@@ -141,4 +143,4 @@ fi
 
 echo
 echo "CAP-INFERENCE: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

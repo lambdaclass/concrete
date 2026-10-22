@@ -45,10 +45,12 @@ trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
-finish(){ echo ""; echo "ROCKSDB-SLICE1: PASS=$PASS FAIL=$FAIL"; [ "$FAIL" -eq 0 ] || exit 1; exit 0; }
+finish(){ echo ""; echo "ROCKSDB-SLICE1: PASS=$PASS FAIL=$FAIL"; bounded_gate_status && [ "$FAIL" -eq 0 ] || exit 1; exit 0; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 120"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 120
 
 echo "=== prerequisites: RocksDB through pkg-config, a C compiler ==="
 if ! command -v pkg-config >/dev/null 2>&1; then
@@ -97,10 +99,10 @@ grep -qE '^[[:space:]]*import rocksdb\.\{' "$EX/src/main.con" \
 # build_example <dir> <out-binary> <tag>: leg A then, if A fails, leg B. Prints the binary's
 # provenance into $TMP/<tag>.how ("normal" or "manual-link").
 build_example(){ local dir="$1" bin="$2" tag="$3"
-  if ( cd "$dir" && $TO "$C" build -o "$bin" ) > "$TMP/$tag.buildA" 2>&1 && [ -x "$bin" ]; then
+  if ( cd "$dir" && "${TO[@]}" "$C" build -o "$bin" ) > "$TMP/$tag.buildA" 2>&1 && [ -x "$bin" ]; then
     echo normal > "$TMP/$tag.how"; return 0
   fi
-  if ( cd "$dir" && $TO "$C" build --emit-llvm ) > "$TMP/$tag.ll" 2> "$TMP/$tag.emit.err" \
+  if ( cd "$dir" && "${TO[@]}" "$C" build --emit-llvm ) > "$TMP/$tag.ll" 2> "$TMP/$tag.emit.err" \
      && clang "$TMP/$tag.ll" -o "$bin" -w -O2 "${SYSROOT[@]}" "${RLIBS[@]}" -Wl,-rpath,"$RLIBDIR" \
           > "$TMP/$tag.buildB" 2>&1; then
     echo manual-link > "$TMP/$tag.how"; return 0
@@ -132,7 +134,7 @@ echo "=== B2: every foreign declaration stays foreign in the emitted IR ==="
 # compiler substituted its own body for the C function — gap G3 (bug 103, fixed by 0c507fb9): Mono's
 # drop-glue synthesized an empty body for any unresolved call whose name ended in `_destroy`, so
 # rocksdb_*_destroy never ran. This leg keeps that from coming back.
-( cd "$EX" && $TO "$C" build --emit-llvm ) > "$TMP/ir.ll" 2> "$TMP/ir.err" \
+( cd "$EX" && "${TO[@]}" "$C" build --emit-llvm ) > "$TMP/ir.ll" 2> "$TMP/ir.err" \
   || { no "concrete build --emit-llvm failed: $(head -3 "$TMP/ir.err" | tr '\n' ' ')"; finish; }
 EXTERNS="$(sed -nE 's/^[[:space:]]*extern fn ([A-Za-z_][A-Za-z0-9_]*)\(.*/\1/p' "$EX/rocksdb/src/lib.con")"
 [ -n "$EXTERNS" ] || { no "found no extern fn declarations in the binding package"; finish; }
@@ -175,7 +177,7 @@ run_observed(){ local bin="$1" tag="$2"
   rm -f "$TMP/$tag.obs"
   # The observer file is reset inside the watched command, so a re-run after a timeout
   # (lib/bounded.sh) starts from an empty record instead of appending a second one.
-  $TO sh -c 'rm -f "$1"; shift; exec env "$@"' sh "$TMP/$tag.obs" \
+  "${TO[@]}" sh -c 'rm -f "$1"; shift; exec env "$@"' sh "$TMP/$tag.obs" \
     "$PRELOAD=$OBS" ROCKSDB_OBSERVER_OUT="$TMP/$tag.obs" "$bin" "$3" "$4" \
     > "$TMP/$tag.out" 2> "$TMP/$tag.err"
   echo $? > "$TMP/$tag.rc"
@@ -267,7 +269,7 @@ echo "=== F: compile-fail fixtures ==="
 fixture(){ local name="$1" code="$2" msg="$3" repair="$4"
   local d="$CL/tests/regressions/rocksdb_slice1/$name"
   [ -f "$d/src/main.con" ] || { no "$name: fixture missing from the clone"; return; }
-  ( cd "$d" && $TO "$C" check ) > "$TMP/$name.out" 2>&1; local rc=$?
+  ( cd "$d" && "${TO[@]}" "$C" check ) > "$TMP/$name.out" 2>&1; local rc=$?
   local nerr; nerr="$(grep -c 'error\[' "$TMP/$name.out")"
   if [ "$rc" -ne 0 ] && grep -qF "($code) $msg" "$TMP/$name.out" && [ "$nerr" = "1" ]; then
     ok "$name: rejected with $code ($msg), the only error"
@@ -277,7 +279,7 @@ fixture(){ local name="$1" code="$2" msg="$3" repair="$4"
   local fixed="$TMP/fixed_$name"; cp -R "$d" "$fixed"
   # The copy sits elsewhere, so point its dependency back at the clone's binding package.
   sed -i.bak "s#path = \".*\"#path = \"$EX/rocksdb\"#" "$fixed/Concrete.toml"
-  if python3 -c "$repair" "$fixed/src/main.con" && ( cd "$fixed" && $TO "$C" check ) > "$TMP/$name.fixed" 2>&1; then
+  if python3 -c "$repair" "$fixed/src/main.con" && ( cd "$fixed" && "${TO[@]}" "$C" check ) > "$TMP/$name.fixed" 2>&1; then
     ok "$name: compiles once the marked defect is repaired (the rejection is the defect's)"
   else
     no "$name: still rejected after repair: $(grep 'error\[' "$TMP/$name.fixed" | head -2 | tr '\n' ' ')"

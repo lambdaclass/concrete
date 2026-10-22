@@ -20,15 +20,17 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 for p in app:"$APP" b64:"$B64"; do
   n="${p%%:*}"; d="${p#*:}"
-  (cd "$d" && $TO "$CC" src/main.con --report caps) > "$TMP/$n.caps" 2>&1
-  (cd "$d" && $TO "$CC" src/main.con --report authority) > "$TMP/$n.auth" 2>&1
-  (cd "$d" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/$n.diag" 2>/dev/null
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report caps) > "$TMP/$n.caps" 2>&1
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report authority) > "$TMP/$n.auth" 2>&1
+  (cd "$d" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/$n.diag" 2>/dev/null
 done
 
 python3 - "$TMP" > "$TMP/rows.out" <<'PY'
@@ -103,7 +105,7 @@ cat > "$TMP/q.con" <<'EOF'
 fn shout() with(Console) -> i32 { print_int(1); return 0; }
 fn main() with(Console) -> i32 { return shout(); }
 EOF
-q="$($TO "$CC" "$TMP/q.con" --query why-capability:main:Console 2>&1)"
+q="$("${TO[@]}" "$CC" "$TMP/q.con" --query why-capability:main:Console 2>&1)"
 if printf '%s' "$q" | grep -q '"origin": "intrinsic"' && printf '%s' "$q" | grep -q '"answer": "transitive"'; then
   ok "single-file why-capability: main -> shout -> print_int (intrinsic), transitive"
 else
@@ -114,7 +116,7 @@ echo "=== single-file --query: incomplete dependency coverage is explicit, never
 # --query runs single-file. A file that needs its project's dependencies is REFUSED rather than
 # answered without them; a dependency-free file says dependencies were not analysed, and a
 # function with an unresolved call gets no "no external authority" conclusion.
-if (cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" src/main.con --query capability:usage >/dev/null 2>&1); then
+if (cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" src/main.con --query capability:usage >/dev/null 2>&1); then
   no "--query answered for a project file whose std dependency it cannot load"
 else
   ok "--query refuses a project file it cannot resolve without its dependencies"
@@ -122,7 +124,7 @@ fi
 printf '%s\n' 'fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }' \
   'fn inc(x: i32) -> i32 { return x + 1; }' \
   'fn main() -> i32 { return apply(inc, 1) - 2; }' > "$TMP/q2.con"
-$TO "$CC" "$TMP/q2.con" --query capability > "$TMP/q2.json" 2>/dev/null
+"${TO[@]}" "$CC" "$TMP/q2.con" --query capability > "$TMP/q2.json" 2>/dev/null
 qr="$(python3 - "$TMP/q2.json" <<'PY'
 import json, sys
 fs = {f["function"]: f for f in json.load(open(sys.argv[1])).get("facts", [])}
@@ -140,4 +142,4 @@ esac
 
 echo
 echo "CAPABILITY-EXPLANATIONS: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

@@ -62,9 +62,10 @@
 # inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
 # interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
 # pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
-# pass and be counted. Four controls pin lib/bounded.sh: a command that prints and then hangs twice
+# pass and be counted. Five controls pin lib/bounded.sh: a command that prints and then hangs twice
 # is incomplete with no output; a command that itself exits 124 is not incomplete; a run that
-# times out once and then completes is recorded as recovered; the watchdog form reports INCOMPLETE.
+# times out once and then completes is recorded as recovered; the watchdog form reports INCOMPLETE
+# and fails bounded_gate_status; a child that ignores TERM is killed before bounded_run returns.
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
@@ -96,7 +97,7 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"; : > "$BOUNDED_LOG"
+BOUNDED_DIR="$TMP"
 # shellcheck source=lib/bounded.sh
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
@@ -539,7 +540,7 @@ run_controls() {
   # controls do not count toward this run's own recovered/incomplete tally.
   local bres
   bres=$(
-    export BOUNDED_OUTCOME_FILE="$dir/b.outcome" BOUNDED_LOG="$dir/b.log"; : > "$BOUNDED_LOG"
+    mkdir -p "$dir/bounded"; BOUNDED_DIR="$dir/bounded"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
     cd "$dir" || exit 1
     out=$(bounded_run -r 1 1 -- sh -c 'echo EXPECTED; sleep 5'); rc=$?
     { bounded_is_incomplete "$rc" && [ -z "$out" ]; } && echo hang_twice_incomplete_no_output
@@ -548,10 +549,13 @@ run_controls() {
     rm -f marker
     out=$(bounded_run -r 5 1 -- sh -c 'if [ -e marker ]; then echo second; else : > marker; sleep 3; fi'); rc=$?
     { [ "$rc" = 0 ] && [ "$out" = second ] && grep -q '^recovered' "$BOUNDED_LOG"; } && echo recovered_recorded
-    out=$(bash "$ROOT_DIR/scripts/tests/lib/bounded.sh" 1 sh -c 'echo EXPECTED; sleep 5' 2> "$dir/wd.err"); rc=$?
-    { [ "$rc" = 124 ] && [ -z "$out" ] && grep -q '^INCOMPLETE' "$dir/wd.err"; } && echo watchdog_incomplete
+    bounded_watchdog 1
+    out=$("${TO[@]}" sh -c 'echo EXPECTED; sleep 5' 2> "$dir/wd.err"); rc=$?
+    { [ "$rc" = 124 ] && [ -z "$out" ] && grep -q '^INCOMPLETE' "$dir/wd.err" && ! bounded_gate_status > /dev/null; } && echo watchdog_incomplete
+    BOUNDED_KILL_AFTER=1 bounded_run -r 1 1 -- sh -c 'trap "" TERM; sleep 47.25' > /dev/null 2>&1; rc=$?
+    { bounded_is_incomplete "$rc" && ! pgrep -f "sleep 47.25" > /dev/null 2>&1; } && echo term_ignoring_child_killed
   )
-  for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete; do
+  for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete term_ignoring_child_killed; do
     if grep -qx "$c" <<< "$bres"; then echo "  ok   bounded control $c"; PASS=$((PASS + 1))
     else no "bounded control $c: lib/bounded.sh does not behave as specified"; fi
   done

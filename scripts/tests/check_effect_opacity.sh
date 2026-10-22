@@ -43,11 +43,13 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A missing watchdog is worth saying out loud: a hang here would otherwise look
 # like an unexplained CI stall.
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 
-out="$(cd "$FIX" && $TO "$CC" src/main.con --report eligibility 2>&1)"
+out="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report eligibility 2>&1)"
 
 echo "=== a genuinely effect-free function is still admitted (positive control) ==="
 # Without this the gate would pass on a compiler that refused everything, which is a
@@ -61,7 +63,7 @@ fi
 echo "=== the REPORTS no longer claim purity they cannot establish ==="
 # This half IS live. Reports consult opacity directly, so they are honest even while
 # admission is inert.
-cout="$(cd "$FIX" && $TO "$CC" src/main.con --report caps 2>&1)"
+cout="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report caps 2>&1)"
 if printf '%s' "$cout" | grep -qE "plain +: \(no external authority\)"; then
   ok "a function with no external authority still reads so (not pure: no purity judgment is claimed)"
 else
@@ -96,7 +98,7 @@ fi
 # effect-classification change silently removes claims from replay and drift detection,
 # which is the opposite of honest degradation.
 echo "=== admission REFUSES an effect-opaque function, and names why ==="
-pout="$(cd "$FIX" && $TO "$CC" src/main.con --report proof-status 2>&1)"
+pout="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report proof-status 2>&1)"
 for fn in fire fire2; do
   if printf '%s' "$pout" | grep -q "admission: REFUSED"; then
     ok "$fn: admission refused"
@@ -133,7 +135,7 @@ echo "=== EXTRACTION survives refusal (the failed attempt broke this) ==="
 # Refusing admission must not remove the function from the evidence surface. If this
 # fails, higher-order programs look dependency-free and an R-0004 gap has been moved
 # rather than closed.
-facts="$(cd "$FIX" && $TO "$CC" src/main.con --report subject-facts 2>/dev/null | grep -c 'v1:user:indirect_call_not_pure.fire' || true)"
+facts="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report subject-facts 2>/dev/null | grep -c 'v1:user:indirect_call_not_pure.fire' || true)"
 if [ "${facts:-0}" -gt 0 ]; then
   ok "a refused higher-order function still has subject facts ($facts)"
 else
@@ -144,7 +146,7 @@ echo "=== REPLAY and DRIFT are untouched by admission ==="
 # The objection that kept this rule inert. `check_purecore_proofs.sh` argues replay must
 # keep asking about pending claims "or the migration cannot clear them" — it now passes
 # WITH admission live, because the objection was to the coupling, not to the rule.
-pc="$($TO bash "$ROOT_DIR/scripts/tests/check_purecore_proofs.sh" 2>&1 || true)"
+pc="$("${TO[@]}" bash "$ROOT_DIR/scripts/tests/check_purecore_proofs.sh" 2>&1 || true)"
 # A REFUSAL TO RUN IS NOT A VERDICT. `check_purecore_proofs.sh` declines when another gate
 # holds the shared .lake lock, and its refusal text contains neither the drift line nor a
 # PASS/FAIL summary — so reading its absence as failure reports "admission is erasing
@@ -223,7 +225,7 @@ echo "=== the original instance is CLOSED: print_bytes declares what it does ===
 # header says `with(Console)` and the function is excluded for a stated, true reason.
 b64="$ROOT_DIR/examples/base64_cli"
 if [ -d "$b64" ]; then
-  bout="$(cd "$b64" && $TO "$CC" src/main.con --report eligibility 2>&1)"
+  bout="$(cd "$b64" && "${TO[@]}" "$CC" src/main.con --report eligibility 2>&1)"
   if printf '%s' "$bout" | grep -qE 'eligible +`base64_cli\.print_bytes`'; then
     no "print_bytes is eligible again — a writer's capability has stopped reaching its user's header"
   elif printf '%s' "$bout" | grep -A1 'base64_cli.print_bytes' | grep -q 'has capabilities: Console'; then
@@ -231,7 +233,7 @@ if [ -d "$b64" ]; then
   else
     no "print_bytes is excluded, but not for declaring Console: $(printf '%s' "$bout" | grep -A1 'print_bytes' | tr '\n' ' ' | cut -c1-160)"
   fi
-  cout="$(cd "$b64" && $TO "$CC" src/main.con --report caps 2>&1)"
+  cout="$(cd "$b64" && "${TO[@]}" "$CC" src/main.con --report caps 2>&1)"
   if printf '%s' "$cout" | grep -qE 'print_bytes : Console$'; then
     ok "the capability report shows print_bytes : Console — declared, neither pure nor unknown"
   else
@@ -247,4 +249,4 @@ if [ "$SKIPPED" -gt 0 ]; then
 else
   echo "EFFECT-OPACITY: PASS=$PASS FAIL=$FAIL"
 fi
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

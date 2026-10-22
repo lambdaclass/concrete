@@ -22,11 +22,13 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 echo "=== project mode: inherited assumptions are listed ==="
-out="$(cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" src/main.con --report unsafe 2>&1)"
+out="$(cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" src/main.con --report unsafe 2>&1)"
 if printf '%s' "$out" | grep -q 'Inherited foreign assumptions (from dependencies):'; then
   ok "base64_cli's report has an inherited-assumptions section"
 else
@@ -49,7 +51,7 @@ else
 fi
 
 echo "=== single-file mode says it did not see dependencies ==="
-sout="$($TO "$CC" "$ROOT_DIR/tests/programs/trusted_absorbs_extern_unsafe.con" --report unsafe 2>&1)"
+sout="$("${TO[@]}" "$CC" "$ROOT_DIR/tests/programs/trusted_absorbs_extern_unsafe.con" --report unsafe 2>&1)"
 if printf '%s' "$sout" | grep -q 'Dependency coverage: incomplete'; then
   ok "single-file mode reports incomplete dependency coverage, so an empty list cannot read as none"
 else
@@ -58,4 +60,4 @@ fi
 
 echo
 echo "FOREIGN-ASSUMPTIONS-REPORT: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

@@ -33,8 +33,10 @@ CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/cross_package_caps"
 
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -57,7 +59,7 @@ echo "=== a caller declaring nothing cannot reach a dependency's sinks ==="
 # Each row is a DIFFERENT capability, because the mechanism is per-capability set and a
 # single sink would not show that the whole set travels.
 check_refused() { # dir callee cap
-  local out; out="$(cd "$FIX/$1" && $TO "$CC" check . 2>&1)"
+  local out; out="$(cd "$FIX/$1" && "${TO[@]}" "$CC" check . 2>&1)"
   if printf '%s' "$out" | grep -q "function '$2' requires .*$3.* but caller has (none)"; then
     ok "$3: '$2' is refused"
   else
@@ -74,14 +76,14 @@ check_refused process_refused process_exit      Process
 check_refused net_refused     TcpStream_connect Network
 
 echo "=== and the refusal is not merely a failure to build ==="
-if (cd "$FIX/env_refused" && $TO "$CC" build . -o "$TMP/env" >/dev/null 2>&1); then
+if (cd "$FIX/env_refused" && "${TO[@]}" "$CC" build . -o "$TMP/env" >/dev/null 2>&1); then
   no "the env escape still builds"
 else
   ok "the env escape does not build"
 fi
 
 echo "=== CONTROL: declared authority is ACCEPTED, and the program RUNS ==="
-dout="$(cd "$FIX/declared_ok" && $TO "$CC" check . 2>&1)"
+dout="$(cd "$FIX/declared_ok" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$dout" | grep -qE 'error\['; then
   no "the positive control is refused — the rule over-applies"
   printf '%s\n' "$dout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
@@ -90,7 +92,7 @@ else
 fi
 # Behaviour, not just acceptance. A compiler that refused everything would pass the
 # refusal checks above and fail only here.
-if (cd "$FIX/declared_ok" && $TO "$CC" build . -o "$TMP/ok" >/dev/null 2>&1); then
+if (cd "$FIX/declared_ok" && "${TO[@]}" "$CC" build . -o "$TMP/ok" >/dev/null 2>&1); then
   run="$("$TMP/ok" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$run" = "cross-package authority declared" ]; then
     ok "it reads the env, stats a path, sleeps and prints (exit 0)"
@@ -102,14 +104,14 @@ else
 fi
 
 echo "=== a capability-FREE dependency call stays accepted, and cap-POLYMORPHIC instantiates ==="
-cout="$(cd "$FIX/capfree_ok" && $TO "$CC" check . 2>&1)"
+cout="$(cd "$FIX/capfree_ok" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$cout" | grep -qE 'error\['; then
   no "a capability-free or cap-polymorphic import is now refused"
   printf '%s\n' "$cout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
 else
   ok "Duration::from_millis (declares nothing) and Vec::for_each_ctx (cap C) both check"
 fi
-if (cd "$FIX/capfree_ok" && $TO "$CC" build . -o "$TMP/cf" >/dev/null 2>&1) && "$TMP/cf" >/dev/null 2>&1; then
+if (cd "$FIX/capfree_ok" && "${TO[@]}" "$CC" build . -o "$TMP/cf" >/dev/null 2>&1) && "$TMP/cf" >/dev/null 2>&1; then
   ok "the polymorphic callback dispatches at runtime (exit 0)"
 else
   no "capfree_ok does not build or does not run"
@@ -118,7 +120,7 @@ fi
 echo "=== the requirement travels as a SET, not a single capability ==="
 # `get` declares Env AND Alloc. Reporting only the first would look like enforcement
 # while letting the rest through.
-gout="$(cd "$FIX/env_refused" && $TO "$CC" check . 2>&1)"
+gout="$(cd "$FIX/env_refused" && "${TO[@]}" "$CC" check . 2>&1)"
 if printf '%s' "$gout" | grep -qE "function 'get' requires .*Alloc.*Env|function 'get' requires .*Env.*Alloc"; then
   ok "both Env and Alloc are reported, not just one"
 else
@@ -154,7 +156,7 @@ fi
 # The load-bearing consequence, asserted on a real dependency API rather than a fixture:
 # an unchecked read must refuse a caller that declares nothing.
 if [ -d "$FIX/rawcursor_refused" ]; then
-  rout="$(cd "$FIX/rawcursor_refused" && $TO "$CC" check . 2>&1)"
+  rout="$(cd "$FIX/rawcursor_refused" && "${TO[@]}" "$CC" check . 2>&1)"
   if printf '%s' "$rout" | grep -q "requires Unsafe but caller has (none)"; then
     ok "Unsafe: RawCursor::read_u8 is refused across a package"
   else
@@ -167,7 +169,7 @@ fi
 # every capability except `Unsafe`, so if this failed the enforcement would have made the
 # standard capability set unable to use the standard library.
 if [ -d "$FIX/std_program_ok" ]; then
-  if (cd "$FIX/std_program_ok" && $TO "$CC" build . -o "$TMP/stdok" >/dev/null 2>&1) \
+  if (cd "$FIX/std_program_ok" && "${TO[@]}" "$CC" build . -o "$TMP/stdok" >/dev/null 2>&1) \
      && [ "$("$TMP/stdok" 2>&1)" = "Std program, no Unsafe" ]; then
     ok "a with(Std) program using Vec::push and println builds and RUNS"
   else
@@ -178,7 +180,7 @@ else
 fi
 # It must be the ONLY thing held back: a local or sibling Unsafe requirement still binds.
 if [ -d "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" ]; then
-  sout="$(cd "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" && $TO "$CC" check . 2>&1)"
+  sout="$(cd "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" && "${TO[@]}" "$CC" check . 2>&1)"
   if printf '%s' "$sout" | grep -qE "requires ([A-Za-z]+, )*Unsafe"; then
     ok "a SIBLING-module Unsafe requirement binds too — local, sibling and dependency agree"
   else
@@ -196,4 +198,4 @@ fi
 
 echo
 echo "CROSS-PACKAGE-CAPS: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

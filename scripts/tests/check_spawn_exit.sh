@@ -22,13 +22,15 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== the fixture builds ==="
-if (cd "$FIX" && $TO "$CC" build . -o "$TMP/spawn_exit" >"$TMP/build.log" 2>&1); then
+if (cd "$FIX" && "${TO[@]}" "$CC" build . -o "$TMP/spawn_exit" >"$TMP/build.log" 2>&1); then
   ok "exec_failure_no_double_flush builds"
 else
   no "exec_failure_no_double_flush does not build"; sed 's/^/       /' "$TMP/build.log" | head -10
@@ -36,7 +38,7 @@ else
 fi
 
 echo "=== a failed exec leaves the parent's buffered output written once ==="
-(cd "$TMP" && $TO ./spawn_exit); rc=$?
+(cd "$TMP" && "${TO[@]}" ./spawn_exit); rc=$?
 if [ "$rc" -eq 0 ]; then
   ok "the child took the exec-failure path (exited 127)"
 else
@@ -54,8 +56,8 @@ echo "=== the ordinary path: spawn -> wait reaps exactly the spawned child (R-04
 # beside the failed-exec case above: the pid must be positive and `wait` must decode the
 # child's own status (/usr/bin/true -> 0, /usr/bin/false -> 1).
 FIX2="$ROOT_DIR/tests/regressions/spawn_exit/spawn_wait_status"
-if (cd "$FIX2" && $TO "$CC" build . -o "$TMP/spawn_wait" >"$TMP/build2.log" 2>&1); then
-  (cd "$TMP" && $TO ./spawn_wait); rc2=$?
+if (cd "$FIX2" && "${TO[@]}" "$CC" build . -o "$TMP/spawn_wait" >"$TMP/build2.log" 2>&1); then
+  (cd "$TMP" && "${TO[@]}" ./spawn_wait); rc2=$?
   if [ "$rc2" -eq 0 ]; then
     ok "spawned children have positive pids and wait reports Exited 0 / Exited 1"
   else
@@ -67,4 +69,4 @@ fi
 
 echo
 echo "SPAWN-EXIT: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

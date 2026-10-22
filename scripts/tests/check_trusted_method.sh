@@ -27,8 +27,10 @@ CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/trusted_method"
 
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -48,7 +50,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # lost a measurement round. `build` exiting 0 is strictly stronger than either: it links.
 expect_clean() { # dir label
   local out rc
-  out="$(cd "$FIX/$1" && $TO "$CC" build . -o "$TMP/ec_$1" 2>&1)"; rc=$?
+  out="$(cd "$FIX/$1" && "${TO[@]}" "$CC" build . -o "$TMP/ec_$1" 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] || grep -qE 'error\[' <<<"$out"; then
     no "$2 — expected a clean build, got rc=$rc"
     printf '%s\n' "$out" | grep -E 'error' | awk 'NR<=3' | sed 's/^/       /'
@@ -58,7 +60,7 @@ expect_clean() { # dir label
 }
 expect_refusal() { # dir code label
   local out
-  out="$(cd "$FIX/$1" && $TO "$CC" check . 2>&1)"
+  out="$(cd "$FIX/$1" && "${TO[@]}" "$CC" check . 2>&1)"
   if grep -qE 'error\[parse\]|unknown module|unknown function' <<<"$out"; then
     no "$3 — UNEXPECTED failure kind (parse/resolve), not the refusal under test"
     printf '%s\n' "$out" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
@@ -84,7 +86,7 @@ echo "=== CONTROL: trust is what licenses the raw operation ==="
 expect_refusal raw_needs_trust E0521 "the SAME body in a NON-trusted method is refused"
 
 echo "=== it lowers, links and runs — not merely checks ==="
-if (cd "$FIX/axes_ok" && $TO "$CC" build . -o "$TMP/ax" >/dev/null 2>&1); then
+if (cd "$FIX/axes_ok" && "${TO[@]}" "$CC" build . -o "$TMP/ax" >/dev/null 2>&1); then
   run="$("$TMP/ax" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$run" = "trusted method ran" ]; then
     ok "the trusted method dispatches and its raw read returns the right value (exit 0)"
@@ -98,7 +100,7 @@ fi
 echo "=== provenance: the call is RECORDED, not silently absorbed ==="
 # Trust licenses the operation; it must not hide that the operation is there. This is
 # the fact a consumer needs once `Unsafe` stops appearing in safe signatures.
-te="$(cd "$FIX/axes_ok" && $TO "$CC" src/main.con --report trust-edges 2>&1)"
+te="$(cd "$FIX/axes_ok" && "${TO[@]}" "$CC" src/main.con --report trust-edges 2>&1)"
 if grep -q "calls-trusted	Box_peek" <<<"$te"; then
   ok "--report trust-edges records calls-trusted for the method"
 else
@@ -116,7 +118,7 @@ echo "=== trust edges cross a PACKAGE boundary ==="
 # mode checks the dependency (its diagnostics arrive prefixed `[std] [string]`), so the
 # edges exist there. This is what has to work before `Unsafe` can be removed from a safe
 # wrapper: otherwise the removal deletes the only signal a consumer has.
-xp="$(cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" check . --report trust-edges 2>&1)"
+xp="$(cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" check . --report trust-edges 2>&1)"
 mods="$(printf '%s' "$xp" | grep -v '^#' | cut -f1 | sort -u | grep -cE '^[a-z_]+$')"
 if [ "${mods:-0}" -ge 20 ]; then
   ok "a consumer sees its dependency's edges ($mods modules)"
@@ -151,4 +153,4 @@ fi
 
 echo
 echo "TRUSTED-METHOD: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

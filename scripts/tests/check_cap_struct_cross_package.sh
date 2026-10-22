@@ -22,12 +22,14 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== an imported Sink<cap C> works across the boundary (positive control) ==="
-if (cd "$FIX/use_ok" && $TO "$CC" build . -o "$TMP/use_ok" >"$TMP/use_ok.log" 2>&1); then
+if (cd "$FIX/use_ok" && "${TO[@]}" "$CC" build . -o "$TMP/use_ok" >"$TMP/use_ok.log" 2>&1); then
   "$TMP/use_ok"; rc=$?
   [ "$rc" -eq 42 ] && ok "use_ok builds and returns 42 (helper + method across the boundary)" \
                    || no "use_ok returned $rc, expected 42"
@@ -37,7 +39,7 @@ fi
 
 echo "=== authority does not leak across the boundary ==="
 for case in leak_refused method_leak_refused; do
-  out="$(cd "$FIX/$case" && $TO "$CC" build . -o "$TMP/$case" 2>&1)"
+  out="$(cd "$FIX/$case" && "${TO[@]}" "$CC" build . -o "$TMP/$case" 2>&1)"
   if printf '%s' "$out" | grep -q 'E0240'; then
     ok "$case is refused with E0240 (missing Console)"
   elif printf '%s' "$out" | grep -q 'E0114'; then
@@ -49,4 +51,4 @@ done
 
 echo
 echo "CAP-STRUCT-CROSS-PACKAGE: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

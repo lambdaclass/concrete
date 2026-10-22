@@ -29,8 +29,10 @@ require_fresh_binary || exit 1
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 120"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 120
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
@@ -76,7 +78,7 @@ EOF
 # build_run <dir> <tag>: concrete build then run; records build rc, run rc and output.
 build_run(){ local d="$1" tag="$2"
   rm -f "$TMP/$tag.bin"
-  ( cd "$d" && $TO "$C" build -o "$TMP/$tag.bin" ) > "$TMP/$tag.build" 2>&1; echo $? > "$TMP/$tag.brc"
+  ( cd "$d" && "${TO[@]}" "$C" build -o "$TMP/$tag.bin" ) > "$TMP/$tag.build" 2>&1; echo $? > "$TMP/$tag.brc"
   if [ -x "$TMP/$tag.bin" ]; then
     # No loader variables: the binary must find its libraries on its own.
     env -u DYLD_LIBRARY_PATH -u LD_LIBRARY_PATH "$TMP/$tag.bin" > "$TMP/$tag.out" 2>&1; echo $? > "$TMP/$tag.rrc"
@@ -88,7 +90,7 @@ build_run(){ local d="$1" tag="$2"
 refused(){ local d="$1" tag="$2" frag="$3" label="$4"; shift 4
   rm -f "$TMP/$tag.bin"
   # The environment is set by `env` AFTER the watchdog, so a test PATH cannot hide `timeout` itself.
-  ( cd "$d" && $TO env "$@" "$C" build -o "$TMP/$tag.bin" ) > "$TMP/$tag.build" 2>&1; local rc=$?
+  ( cd "$d" && "${TO[@]}" env "$@" "$C" build -o "$TMP/$tag.bin" ) > "$TMP/$tag.build" 2>&1; local rc=$?
   if [ "$rc" -ne 0 ] && [ ! -e "$TMP/$tag.bin" ] && grep -qF -- "$frag" "$TMP/$tag.build"; then
     ok "$label"
   else
@@ -226,7 +228,7 @@ bad(){ local tag="$1" native="$2" frag="$3" label="$4"
   mkapp "$TMP/$tag" "$native"
   refused "$TMP/$tag" "$tag" "$frag" "$label"
   # Refused at load, so `check` refuses too: no command reads the program while ignoring the manifest.
-  ( cd "$TMP/$tag" && $TO "$C" check ) > "$TMP/$tag.check" 2>&1 \
+  ( cd "$TMP/$tag" && "${TO[@]}" "$C" check ) > "$TMP/$tag.check" 2>&1 \
     && no "  ... '$tag': concrete check accepted the malformed manifest" || true
 }
 bad flagname '
@@ -498,7 +500,7 @@ refused "$TMP/keyhdr" keyhdr "not a TOML key before '='" "a header embedded in a
 # (other readers warn, the build proceeds); the same garbage next to a [native] section is refused.
 mkapp "$TMP/garbled" ''
 printf '[package]\nname = "nlapp"\nversion = "0.1.0"\n\n[dependencies]\ngarbled line without equals\n\n[policy]\nunknown_future_key = true\n' > "$TMP/garbled/Concrete.toml"
-( cd "$TMP/garbled" && $TO "$C" check ) > "$TMP/garbled.out" 2>&1; rcg=$?
+( cd "$TMP/garbled" && "${TO[@]}" "$C" check ) > "$TMP/garbled.out" 2>&1; rcg=$?
 if grep -q "warning.*Concrete.toml.*policy.*unrecognized" "$TMP/garbled.out" && ! grep -q "Concrete.toml \[native\]" "$TMP/garbled.out"; then
   ok "CONTROL: a manifest that cannot declare native keeps the existing warnings (rc=$rcg; the [native] reader stays out of it)"
 else
@@ -576,19 +578,19 @@ else
 fi
 
 echo "=== 5: native libraries are visible trust dependencies ==="
-( cd "$TMP/app2" && $TO "$C" src/main.con --report unsafe ) > "$TMP/unsafe.out" 2>&1; rcu=$?
+( cd "$TMP/app2" && "${TO[@]}" "$C" src/main.con --report unsafe ) > "$TMP/unsafe.out" 2>&1; rcu=$?
 [ "$rcu" = "0" ] && grep -qF "=== Unsafe Signature Summary ===" "$TMP/unsafe.out" \
   && grep -qF "Native libraries (trusted foreign dependencies" "$TMP/unsafe.out" \
   && grep -qF "package 'nlbind': library 'nlshared' (-lnlshared)" "$TMP/unsafe.out" \
   && grep -qF "package 'nlbind': library directory 'native'" "$TMP/unsafe.out" \
   && ok "--report unsafe lists the dependency's library and directory as trusted foreign dependencies" \
   || no "--report unsafe (rc=$rcu) does not list the native library: $(tail -4 "$TMP/unsafe.out" | tr '\n' ' ')"
-( cd "$TMP/app2" && $TO "$C" --report compiler-ledger ) > "$TMP/ledger.out" 2>&1; rcl=$?
+( cd "$TMP/app2" && "${TO[@]}" "$C" --report compiler-ledger ) > "$TMP/ledger.out" 2>&1; rcl=$?
 [ "$rcl" = "0" ] && grep -qF "[native-library] nlbind = libs:nlshared (trusted foreign dependency)" "$TMP/ledger.out" \
   && grep -qF "[native-library] nlbind = lib-dirs:native (trusted foreign dependency)" "$TMP/ledger.out" \
   && ok "the compiler ledger records the native library and its directory" \
   || no "the compiler ledger (rc=$rcl) does not record the native library: $(grep -i native "$TMP/ledger.out" | head -2 | tr '\n' ' ')"
-( cd "$TMP/app1none" && $TO "$C" src/main.con --report unsafe ) > "$TMP/unsafe_none.out" 2>&1; rcn=$?
+( cd "$TMP/app1none" && "${TO[@]}" "$C" src/main.con --report unsafe ) > "$TMP/unsafe_none.out" 2>&1; rcn=$?
 # The control must be a REAL report: a crash or a timeout would also print no native section.
 if [ "$rcn" = "0" ] && grep -qF "=== Unsafe Signature Summary ===" "$TMP/unsafe_none.out" \
    && grep -qF "nl_add" "$TMP/unsafe_none.out"; then
@@ -623,23 +625,23 @@ mod nlapp6 {
 EOF
 }
 mktest "$TMP/app6" 42
-( cd "$TMP/app6" && $TO "$C" test ) > "$TMP/app6.out" 2>&1; rc6=$?
+( cd "$TMP/app6" && "${TO[@]}" "$C" test ) > "$TMP/app6.out" 2>&1; rc6=$?
 [ "$rc6" = "0" ] && grep -qF "PASS: test_nl_add" "$TMP/app6.out" \
   && ok "concrete test links the library and the test calling it runs and passes" \
   || no "concrete test: rc=$rc6 $(head -5 "$TMP/app6.out" | tr '\n' ' ')"
 # Control: the same test expecting the wrong sum must run and FAIL, so the pass above is the call's.
 mktest "$TMP/app6bad" 43
-( cd "$TMP/app6bad" && $TO "$C" test ) > "$TMP/app6bad.out" 2>&1; rc6b=$?
+( cd "$TMP/app6bad" && "${TO[@]}" "$C" test ) > "$TMP/app6bad.out" 2>&1; rc6b=$?
 [ "$rc6b" != "0" ] && grep -qF "FAIL: test_nl_add" "$TMP/app6bad.out" \
   && ok "CONTROL: the same test expecting 43 links, runs and fails (the test really executes the call)" \
   || no "CONTROL: wrong-sum test: rc=$rc6b $(head -5 "$TMP/app6bad.out" | tr '\n' ' ')"
 # Single-file mode inside a package links the package's own declarations too.
 rm -f "$TMP/app1file.bin"
-( cd "$TMP/app1" && $TO "$C" src/main.con -o "$TMP/app1file.bin" ) > "$TMP/app1file.build" 2>&1
+( cd "$TMP/app1" && "${TO[@]}" "$C" src/main.con -o "$TMP/app1file.bin" ) > "$TMP/app1file.build" 2>&1
 if [ -x "$TMP/app1file.bin" ]; then "$TMP/app1file.bin"; rcf=$?; else rcf=none; fi
 [ "$rcf" = "42" ] && ok "concrete <file> -o inside a package links the package's [native] and runs" \
   || no "single-file build: rc=$rcf $(head -4 "$TMP/app1file.build" | tr '\n' ' ')"
-( cd "$TMP/flagname" && $TO "$C" src/main.con -o "$TMP/flagfile.bin" ) > "$TMP/flagfile.build" 2>&1; rcff=$?
+( cd "$TMP/flagname" && "${TO[@]}" "$C" src/main.con -o "$TMP/flagfile.bin" ) > "$TMP/flagfile.build" 2>&1; rcff=$?
 [ "$rcff" != "0" ] && [ ! -e "$TMP/flagfile.bin" ] && grep -qF "is not a library name" "$TMP/flagfile.build" \
   && ok "single-file mode refuses a malformed [native] exactly as project mode does" \
   || no "single-file mode with a malformed [native]: rc=$rcff $(head -3 "$TMP/flagfile.build" | tr '\n' ' ')"
@@ -655,11 +657,11 @@ lib-dirs = ["lib"]'
   mkdir -p "$TMP/anc/inner/lib" && cp "$TMP/static/libnladd.a" "$TMP/anc/inner/lib/"
   chmod 000 "$TMP/anc/inner/Concrete.toml"
   rm -f "$TMP/ancfile.bin"
-  ( cd "$TMP/anc/inner" && $TO "$C" src/main.con -o "$TMP/ancfile.bin" ) > "$TMP/ancfile.build" 2>&1; rca2=$?
+  ( cd "$TMP/anc/inner" && "${TO[@]}" "$C" src/main.con -o "$TMP/ancfile.bin" ) > "$TMP/ancfile.build" 2>&1; rca2=$?
   [ "$rca2" != "0" ] && [ ! -e "$TMP/ancfile.bin" ] && grep -qF "cannot read" "$TMP/ancfile.build" \
     && ok "single-file mode refuses an unreadable enclosing manifest (no fallback to the ancestor's)" \
     || no "single-file mode with an unreadable manifest: rc=$rca2 $(head -3 "$TMP/ancfile.build" | tr '\n' ' ')"
-  ( cd "$TMP/anc/inner" && $TO "$C" build -o "$TMP/ancbuild.bin" ) > "$TMP/ancbuild.build" 2>&1; rca3=$?
+  ( cd "$TMP/anc/inner" && "${TO[@]}" "$C" build -o "$TMP/ancbuild.bin" ) > "$TMP/ancbuild.build" 2>&1; rca3=$?
   [ "$rca3" != "0" ] && [ ! -e "$TMP/ancbuild.bin" ] \
     && ok "concrete build refuses an unreadable manifest rather than building the ancestor project" \
     || no "concrete build with an unreadable manifest: rc=$rca3 $(head -3 "$TMP/ancbuild.build" | tr '\n' ' ')"
@@ -671,7 +673,7 @@ lib-dirs = ["lib"]'
   ln -s "$TMP/locked/real.toml" "$TMP/anc/inner/Concrete.toml"
   chmod 000 "$TMP/locked"
   rm -f "$TMP/anclink.bin"
-  ( cd "$TMP/anc/inner" && $TO "$C" src/main.con -o "$TMP/anclink.bin" ) > "$TMP/anclink.build" 2>&1; rca4=$?
+  ( cd "$TMP/anc/inner" && "${TO[@]}" "$C" src/main.con -o "$TMP/anclink.bin" ) > "$TMP/anclink.build" 2>&1; rca4=$?
   [ "$rca4" != "0" ] && [ ! -e "$TMP/anclink.bin" ] && grep -qF "cannot read" "$TMP/anclink.build" \
     && ok "a manifest symlinked into an unsearchable directory is refused, not treated as absent" \
     || no "symlinked inaccessible manifest: rc=$rca4 $(head -3 "$TMP/anclink.build" | tr '\n' ' ')"
@@ -682,4 +684,4 @@ fi
 
 echo ""
 echo "NATIVE-LIBS: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

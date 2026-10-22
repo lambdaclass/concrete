@@ -34,15 +34,17 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A missing watchdog is worth saying out loud: a hang here would otherwise look
 # like an unexplained CI stall.
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 
 # check_rejects <dir> <regex the diagnostic must match> <label>
 check_rejects() {
   local d="$FIX/$1" pat="$2" label="$3" out
   [ -d "$d" ] || { no "$label: fixture directory is missing"; return; }
-  out="$(cd "$d" && $TO "$CC" check . 2>&1)"
+  out="$(cd "$d" && "${TO[@]}" "$CC" check . 2>&1)"
   if [ -z "$(printf '%s' "$out" | grep -E 'error\[')" ]; then
     no "$label: expected a compile error, got none"
     return
@@ -62,7 +64,7 @@ check_runs() {
   # Build OUT OF TREE. `concrete build` otherwise drops a binary next to the sources,
   # and a gate that litters the working tree gets its droppings committed eventually.
   local out="$TMP/$(basename "$1")"   # basename: a fixture may live outside $FIX
-  if ! (cd "$d" && $TO "$CC" build . -o "$out" >/dev/null 2>&1); then
+  if ! (cd "$d" && "${TO[@]}" "$CC" build . -o "$out" >/dev/null 2>&1); then
     no "$label: expected it to build, and it did not"
     return
   fi
@@ -133,13 +135,13 @@ check_rejects ../owner_bound/raw_pointer_needs_unsafe "E0521.*Unsafe" "reading t
 # The packet parser reads its payload in place through a BoundView and agrees with the copy path,
 # and stays predictable (only main fails the profile, for blocking I/O).
 PKT="$ROOT_DIR/examples/packet"
-if (cd "$PKT" && $TO "$CC" build . -o "$TMP/pkt" >/dev/null 2>&1) && "$TMP/pkt" > "$TMP/pkt.out" 2>&1 \
+if (cd "$PKT" && "${TO[@]}" "$CC" build . -o "$TMP/pkt" >/dev/null 2>&1) && "$TMP/pkt" > "$TMP/pkt.out" 2>&1 \
    && grep -c 'owner-bound view agrees with the copy' "$TMP/pkt.out" >/dev/null && grep -c 'All tests passed' "$TMP/pkt.out" >/dev/null; then
   ok "examples/packet reads its payload through a BoundView and agrees with the copy"
 else
   no "examples/packet's owner-bound path did not run or disagreed: $(tail -3 "$TMP/pkt.out" 2>/dev/null | tr '\n' ' ')"
 fi
-pp="$(cd "$PKT" && $TO "$CC" src/main.con --check predictable 2>&1 | grep -E 'function\(s\) failed' | tail -1)"
+pp="$(cd "$PKT" && "${TO[@]}" "$CC" src/main.con --check predictable 2>&1 | grep -E 'function\(s\) failed' | tail -1)"
 if [ "$pp" = "1 function(s) failed, 16 passed" ]; then
   ok "examples/packet stays predictable with the owner-bound path ($pp; main fails for I/O)"
 else
@@ -148,4 +150,4 @@ fi
 
 echo
 echo "VIEW-LIFETIME: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

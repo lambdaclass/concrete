@@ -9,42 +9,48 @@
 #   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
 #                                  result exits nonzero, and a qualifying run contains none.
 #
-# Two ways to use it:
+# Sourcing (`BOUNDED_DIR="$TMP"; source scripts/tests/lib/bounded.sh`) gives the gate PRIVATE state
+# in BOUNDED_DIR (a fresh mktemp directory without it): an outcome file and a log. Nothing is read
+# from the environment, so a gate run by another gate never shares or inherits its parent's state.
 #
-#   source scripts/tests/lib/bounded.sh
 #   bounded_run [-i STDIN_FILE] [-r RETRY_SECS] SECS -- CMD [ARGS...]
-#     Runs CMD under timeout(1). Its stdout and stderr are buffered per attempt and only a COMPLETED
-#     attempt's output is written: an incomplete run writes nothing, so output-matching checks can
-#     never pass on the partial output of a run that hung. Without -i the command inherits stdin,
-#     which a re-run cannot replay: callers that feed input pass -i. Returns CMD's status, or 124
-#     when the command timed out on both attempts. Because a command may itself exit 124, test
-#     incompleteness with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
-#     recorded (in $BOUNDED_OUTCOME_FILE, so it works across `( cd dir && bounded_run ... )`
-#     subshells). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
+#     Runs CMD (an executable, not a shell function) under timeout(1). Its stdout and stderr are
+#     buffered per attempt and only a COMPLETED attempt's output is written: an incomplete run
+#     writes nothing, so output-matching checks never pass on the partial output of a run that hung.
+#     Without -i the command inherits stdin, which a re-run cannot replay: callers that feed input
+#     pass -i. Returns CMD's status, or 124 when it timed out on both attempts. A command may itself
+#     exit 124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+#     recorded (works across `( cd dir && bounded_run ... )` subshells; one bounded_run at a time per
+#     gate). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
 #   bounded_summary
-#     Prints one line per recovered and per incomplete run of this gate and their counts; gates
-#     call it before their final tally so a recovered run is visible, not silent.
-#
-#   TO="bash scripts/tests/lib/bounded.sh 300"; $TO CMD [ARGS...]
-#     Watchdog form for gates that wrap single commands: the same retry, then, on a second
-#     timeout, no output from the command, an "INCOMPLETE: ..." line on stderr and status 124.
-#     A recovered run is appended to $BOUNDED_LOG when the caller exports it.
-#
-# Every recovered and incomplete run appends a line to $BOUNDED_LOG ("recovered <secs> <cmd>" /
-# "incomplete <secs>+<retry> <cmd>"). Sourcing this file sets BOUNDED_OUTCOME_FILE and BOUNDED_LOG
-# (exported) when the caller has not: set them under the gate's own scratch directory to avoid
-# leaving two small files in $TMPDIR.
+#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+#   bounded_watchdog SECS  -> sets the array TO for the watchdog form: "${TO[@]}" CMD [ARGS...]
+#     runs CMD through `bash bounded.sh SECS` in a separate process, with the same retry; on a second
+#     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
+#     recovered and incomplete lines go to this gate's log.
+#   bounded_gate_status
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered and incomplete
+#     runs and returns 1 when any was incomplete, so the gate exits nonzero whatever its own checks
+#     concluded from a hung command's empty output. Last line of such a gate:
+#       bounded_gate_status && [ "$FAIL" -eq 0 ]
 #
 # Without timeout(1) (outside the devshell on macOS) the command runs once with no watchdog and a
 # warning on stderr, as the gates' previous `TO=""` fallback did; such a run is never incomplete.
 
 BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
-_bounded_inherited="${BOUNDED_OUTCOME_FILE:+1}"
-if [ -z "${BOUNDED_OUTCOME_FILE:-}" ]; then
-  BOUNDED_OUTCOME_FILE="$(mktemp "${TMPDIR:-/tmp}/bounded_outcome.XXXXXX")"
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+if [ -n "${BOUNDED_DIR:-}" ]; then
+  _bounded_owns_dir=""
+else
+  BOUNDED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bounded.XXXXXX")"; _bounded_owns_dir=1
 fi
-export BOUNDED_OUTCOME_FILE
-export BOUNDED_LOG="${BOUNDED_LOG:-$BOUNDED_OUTCOME_FILE.log}"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/bounded.outcome"
+BOUNDED_LOG="$BOUNDED_DIR/bounded.log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ] && [ -n "${BOUNDED_WATCHDOG_LOG:-}" ]; then
+  BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
 
 bounded_is_incomplete() {
   [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
@@ -72,16 +78,17 @@ bounded_run() {
   budget="$secs"
   while :; do
     tries=$((tries + 1))
-    rm -f "$tmp/rc"
-    # The command's own status goes to a file, so a command that exits 124 is never read as a
-    # timeout: no status file means timeout(1) stopped it. (timeout signals its whole process
-    # group, so the command dies with the sh that runs it.)
+    # GNU timeout runs the command in its own process group and signals the whole group: TERM at
+    # the budget, then KILL BOUNDED_KILL_AFTER seconds later for anything that ignored TERM, and it
+    # returns only once the command is gone, so no attempt outlives its budget into the retry.
+    # --verbose makes it say when it fired; that line, not status 124 (which a command may exit
+    # with itself), is what marks a timeout.
     if [ -n "$stdin_file" ]; then
-      timeout "$budget" sh -c '"$@"; echo $? > "$0"' "$tmp/rc" "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+      timeout --verbose -k "${BOUNDED_KILL_AFTER:-10}" "$budget" "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"; rc=$?
     else
-      timeout "$budget" sh -c '"$@"; echo $? > "$0"' "$tmp/rc" "$@" > "$tmp/out" 2> "$tmp/err"
+      timeout --verbose -k "${BOUNDED_KILL_AFTER:-10}" "$budget" "$@" > "$tmp/out" 2> "$tmp/err"; rc=$?
     fi
-    if [ -s "$tmp/rc" ]; then done_rc="$(cat "$tmp/rc")"; break; fi
+    if ! grep -qE '^timeout: sending signal (TERM|KILL) to command' "$tmp/err"; then done_rc="$rc"; break; fi
     done_rc=""
     [ "$tries" = 1 ] || break
     budget="$retry"
@@ -108,7 +115,20 @@ bounded_summary() {
   sed 's/^/  /' "$BOUNDED_LOG"
 }
 
-# Watchdog form: `bash bounded.sh SECS CMD...`.
+bounded_watchdog() {
+  TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" bash "$BOUNDED_SH" "$1")
+}
+
+bounded_gate_status() {
+  local ninc
+  bounded_summary
+  ninc=$(grep -c '^incomplete' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice: this run is incomplete, not passed"
+  [ -z "$_bounded_owns_dir" ] || rm -rf "$BOUNDED_DIR"
+  [ "$ninc" -eq 0 ]
+}
+
+# Watchdog form: `bash bounded.sh SECS CMD...` (through bounded_watchdog's TO array).
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   [ $# -ge 2 ] || { echo "usage: bash $0 SECS CMD [ARGS...]" >&2; exit 2; }
   secs="$1"; shift
@@ -116,7 +136,6 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   if bounded_is_incomplete "$rc"; then
     echo "INCOMPLETE: timed out twice (${secs}s, then $((secs * BOUNDED_RETRY_FACTOR))s alone): $*" >&2
   fi
-  # A watchdog that created its own outcome file removes it (an inherited one is the caller's).
-  [ -n "$_bounded_inherited" ] || rm -f "$BOUNDED_OUTCOME_FILE" "$BOUNDED_OUTCOME_FILE.log"
+  [ -z "$_bounded_owns_dir" ] || rm -rf "$BOUNDED_DIR"
   exit "$rc"
 fi

@@ -32,19 +32,21 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== the fixture builds and runs ==="
-if (cd "$FIX/app" && $TO "$CC" build . -o "$TMP/app" >"$TMP/b.log" 2>&1) && "$TMP/app" >/dev/null 2>&1; then
+if (cd "$FIX/app" && "${TO[@]}" "$CC" build . -o "$TMP/app" >"$TMP/b.log" 2>&1) && "$TMP/app" >/dev/null 2>&1; then
   ok "app builds and exits 0"
 else
   no "app does not build or run"; head -5 "$TMP/b.log" | sed 's/^/       /'
 fi
 
-(cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/facts.json" 2>"$TMP/facts.err"
-(cd "$FIX/app" && $TO "$CC" src/main.con --report proof-status) > "$TMP/status.txt" 2>&1
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/facts.json" 2>"$TMP/facts.err"
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report proof-status) > "$TMP/status.txt" 2>&1
 
 echo "=== admission verdicts, read from the eligibility facts ==="
 python3 - "$TMP/facts.json" > "$TMP/table.out" <<'PY'
@@ -133,4 +135,4 @@ g=$(grep -c '^#guard admissionProbeFor' Concrete/Proof/ProofCore.lean || true)
 
 echo
 echo "PROOF-ADMISSION: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

@@ -31,19 +31,21 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== the fixture builds and runs ==="
-if (cd "$FIX/app" && $TO "$CC" build . -o "$TMP/app" >"$TMP/b.log" 2>&1) && "$TMP/app" >/dev/null 2>&1; then
+if (cd "$FIX/app" && "${TO[@]}" "$CC" build . -o "$TMP/app" >"$TMP/b.log" 2>&1) && "$TMP/app" >/dev/null 2>&1; then
   ok "app builds and exits 0"
 else
   no "app does not build or run"; head -5 "$TMP/b.log" | sed 's/^/       /'
 fi
 
-(cd "$FIX/app" && $TO "$CC" src/main.con --report assumptions) > "$TMP/app.json" 2>"$TMP/app.err"
-(cd "$FIX/app" && $TO "$CC" src/main.con --report unsafe) > "$TMP/app.txt" 2>&1
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report assumptions) > "$TMP/app.json" 2>"$TMP/app.err"
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report unsafe) > "$TMP/app.txt" 2>&1
 
 echo "=== the acceptance table, read from the JSON facts ==="
 python3 - "$TMP/app.json" > "$TMP/table.out" <<'PY'
@@ -132,8 +134,8 @@ echo "=== text and JSON agree (fixture, and base64_cli) ==="
 diffs="$(agree app "$TMP/app.json" "$TMP/app.txt")"
 [ -z "$diffs" ] && ok "fixture: every listed binding, reacher and incomplete function agrees" \
   || no "fixture: text and JSON disagree: $diffs"
-(cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" src/main.con --report assumptions) > "$TMP/b64.json" 2>/dev/null
-(cd "$ROOT_DIR/examples/base64_cli" && $TO "$CC" src/main.con --report unsafe) > "$TMP/b64.txt" 2>&1
+(cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" src/main.con --report assumptions) > "$TMP/b64.json" 2>/dev/null
+(cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" src/main.con --report unsafe) > "$TMP/b64.txt" 2>&1
 diffs="$(agree b64 "$TMP/b64.json" "$TMP/b64.txt")"
 [ -z "$diffs" ] && ok "base64_cli: text and JSON agree" || no "base64_cli: text and JSON disagree: $diffs"
 if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); f={x['fn']:x for x in d['functions']}; sys.exit(0 if not f['base64_cli.print_bytes']['complete'] else 1)" "$TMP/b64.json"; then
@@ -147,8 +149,8 @@ echo "=== conclusions carry their assumptions, identically in text and JSON (R10
 # assumptions JSON are three renderings of ONE table. For every program function they must name
 # the same foreign bindings and the same coverage, and no headline may read `(pure)` where the
 # call graph is incomplete or a foreign binding is assumed.
-(cd "$FIX/app" && $TO "$CC" src/main.con --report caps) > "$TMP/caps.txt" 2>&1
-(cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/diag.json" 2>/dev/null
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report caps) > "$TMP/caps.txt" 2>&1
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/diag.json" 2>/dev/null
 qout="$(python3 - "$TMP/app.json" "$TMP/caps.txt" "$TMP/diag.json" <<'PY'
 import json, re, sys
 a = json.load(open(sys.argv[1])); caps = open(sys.argv[2]).read(); diag = json.load(open(sys.argv[3]))
@@ -196,8 +198,8 @@ else
   no "over-declared function: declared allowance and body analysis are not kept separate: $(grep -A1 'overdeclared :' "$TMP/caps.txt" | tr '\n' ' ')"
 fi
 echo '{"schema_version": 1, "schema_kind": "facts", "facts": [{"kind":"effects","function":"f","is_pure":true}]}' > "$TMP/v1.json"
-(cd "$FIX/app" && $TO "$CC" src/main.con --report diagnostics-json) > "$TMP/v2.json" 2>/dev/null
-dout="$($TO "$CC" diff "$TMP/v1.json" "$TMP/v2.json" 2>&1)"; drc=$?
+(cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/v2.json" 2>/dev/null
+dout="$("${TO[@]}" "$CC" diff "$TMP/v1.json" "$TMP/v2.json" 2>&1)"; drc=$?
 if [ "$drc" -ne 0 ] && printf '%s' "$dout" | grep -q 'schema_version 1 is older'; then
   ok "concrete diff rejects a schema v1 artifact (is_pure removed in v2) with a regeneration diagnostic"
 else
@@ -208,14 +210,14 @@ echo '[]' > "$TMP/bare.json"
 echo '{"schema_version": 99, "schema_kind": "facts", "facts": []}' > "$TMP/future.json"
 for case in "nover:has no schema_version" "bare:a bare array carries no version" "future:schema_version 99 is NEWER"; do
   f="${case%%:*}"; want="${case#*:}"
-  o="$($TO "$CC" diff "$TMP/$f.json" "$TMP/v2.json" 2>&1)"; r=$?
+  o="$("${TO[@]}" "$CC" diff "$TMP/$f.json" "$TMP/v2.json" 2>&1)"; r=$?
   if [ "$r" -ne 0 ] && printf '%s' "$o" | grep -q "$want" && ! printf '%s' "$o" | grep -qiE 'weaken|strength|unchanged|changed:'; then
     ok "concrete diff rejects the $f artifact before comparing facts"
   else
     no "concrete diff did not reject the $f artifact cleanly (rc=$r): $(printf '%s' "$o" | head -2)"
   fi
 done
-sout="$($TO "$CC" diff "$TMP/v2.json" "$TMP/v2.json" 2>&1)"; src=$?
+sout="$("${TO[@]}" "$CC" diff "$TMP/v2.json" "$TMP/v2.json" 2>&1)"; src=$?
 [ "$src" -eq 0 ] && ok "CONTROL: a current-version artifact is still accepted (identical v2 snapshots compare clean)" \
   || no "a current-version artifact is rejected (rc=$src): $(printf '%s' "$sout" | head -2)"
 if grep -q 'via_gap : (effects unknown' "$TMP/caps.txt"; then
@@ -223,14 +225,14 @@ if grep -q 'via_gap : (effects unknown' "$TMP/caps.txt"; then
 else
   no "via_gap's headline does not admit the indirect-call gap: $(grep 'via_gap :' "$TMP/caps.txt")"
 fi
-if grep -q 'putchar : Console, Unsafe  (declared effects assumed honest)' <(cd "$FIX/factlib" && $TO "$CC" src/lib.con --report caps 2>&1); then
+if grep -q 'putchar : Console, Unsafe  (declared effects assumed honest)' <(cd "$FIX/factlib" && "${TO[@]}" "$CC" src/lib.con --report caps 2>&1); then
   ok "an extern's line shows its DECLARED effects plus Unsafe, marked as assumed"
 else
   no "extern lines do not show declared effects as assumptions"
 fi
 
 echo "=== positive control: an assumption-free program reads complete and inherits nothing ==="
-pout="$(cd "$FIX/pure_app" && $TO "$CC" src/main.con --report unsafe 2>&1)"
+pout="$(cd "$FIX/pure_app" && "${TO[@]}" "$CC" src/main.con --report unsafe 2>&1)"
 if printf '%s' "$pout" | grep -q 'Call-graph coverage: complete' \
    && ! printf '%s' "$pout" | grep -q 'Inherited foreign assumptions'; then
   ok "pure_app: coverage complete, no inherited assumptions"
@@ -244,8 +246,8 @@ echo "=== bug 074: the same module in two packages is refused before LLVM, namin
 # silently merged the two packages' declarations. Package scoping of assumption identity
 # itself is enforced at BUILD time by the #guard in Concrete/Report/AssumptionSummary.lean.
 D74="$ROOT_DIR/tests/regressions/bug074_duplicate_module_packages/app"
-bout="$(cd "$D74" && $TO "$CC" build . -o "$TMP/dup" 2>&1)"; brc=$?
-rout="$(cd "$D74" && $TO "$CC" src/main.con --report assumptions 2>&1)"; rrc=$?
+bout="$(cd "$D74" && "${TO[@]}" "$CC" build . -o "$TMP/dup" 2>&1)"; brc=$?
+rout="$(cd "$D74" && "${TO[@]}" "$CC" src/main.con --report assumptions 2>&1)"; rrc=$?
 want="module 'util' is defined by two packages: 'p1'"
 if [ "$brc" -ne 0 ] && printf '%s' "$bout" | grep -q "$want" && printf '%s' "$bout" | grep -q "'p2'" \
    && ! printf '%s' "$bout" | grep -q 'LLVM IR validation failed'; then
@@ -265,7 +267,7 @@ else
 fi
 
 echo "=== a dependency of a dependency is still refused, not silently skipped ==="
-tout="$(cd "$ROOT_DIR/tests/regressions/assumption_summary_transitive/root" && $TO "$CC" build . -o "$TMP/trans" 2>&1)"; trc=$?
+tout="$(cd "$ROOT_DIR/tests/regressions/assumption_summary_transitive/root" && "${TO[@]}" "$CC" build . -o "$TMP/trans" 2>&1)"; trc=$?
 if [ "$trc" -ne 0 ] && printf '%s' "$tout" | grep -q "unknown module 'leaf'"; then
   ok "root -> mid -> leaf is refused (E0110 unknown module 'leaf'): leaf's assumptions cannot go missing"
 else
@@ -274,4 +276,4 @@ fi
 
 echo
 echo "ASSUMPTION-SUMMARY: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

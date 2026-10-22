@@ -16,15 +16,17 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== 1. the build refuses the reproducer, every time ==="
 refused=0
 for i in 1 2 3; do
   rm -f "$TMP/out"
-  if $TO "$CC" "$FIX/repro.con" -o "$TMP/out" >"$TMP/b$i.log" 2>&1; then :; else
+  if "${TO[@]}" "$CC" "$FIX/repro.con" -o "$TMP/out" >"$TMP/b$i.log" 2>&1; then :; else
     if grep -c "undefined value '@util_poke'" "$TMP/b$i.log" >/dev/null && [ ! -e "$TMP/out" ]; then refused=$((refused+1)); fi
   fi
 done
@@ -32,7 +34,7 @@ done
                      || no "the reproducer was not refused consistently ($refused/3): $(head -2 "$TMP/b1.log" | tr '\n' ' ')"
 
 echo "=== 2. reports are not falsely complete ==="
-$TO "$CC" "$FIX/reach.con" --report assumptions > "$TMP/reach.json" 2>/dev/null
+"${TO[@]}" "$CC" "$FIX/reach.con" --report assumptions > "$TMP/reach.json" 2>/dev/null
 r="$(python3 - "$TMP/reach.json" <<'PY'
 import json, sys
 fs = {f["fn"]: f for f in json.load(open(sys.argv[1]))["functions"]}
@@ -49,7 +51,7 @@ echo "=== 3. no R-0484 acceptance case depends on it ==="
 # fail to build. Each R-0484 acceptance project builds and runs.
 for d in tests/regressions/proof_admission/app tests/regressions/trusted_boundaries/tb \
          tests/regressions/assumption_summary/app tests/regressions/intrinsic_classification/app; do
-  if (cd "$d" && $TO "$CC" build . -o "$TMP/acc" >"$TMP/acc.log" 2>&1) && "$TMP/acc" >/dev/null 2>&1; then
+  if (cd "$d" && "${TO[@]}" "$CC" build . -o "$TMP/acc" >"$TMP/acc.log" 2>&1) && "$TMP/acc" >/dev/null 2>&1; then
     ok "$d builds and runs"
   else
     no "$d does not build or run: $(head -2 "$TMP/acc.log" | tr '\n' ' ')"
@@ -58,4 +60,4 @@ done
 
 echo
 echo "BUG077-CONTAINED: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

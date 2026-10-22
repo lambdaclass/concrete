@@ -38,7 +38,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh). The gate
 # still exits nonzero, so a probe loop that never terminates (bug 048) cannot pass.
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
-export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
+BOUNDED_DIR="$TMP"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 # runs <name> <expected-exit> <body>

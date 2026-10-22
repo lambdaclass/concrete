@@ -41,7 +41,7 @@ PASS=0; FAIL=0; INCOMPLETE=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
-export BOUNDED_OUTCOME_FILE="$TMP/bounded.outcome" BOUNDED_LOG="$TMP/bounded.log"
+BOUNDED_DIR="$TMP"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 echo "=== C/V: the corpus ==="

@@ -26,12 +26,14 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
-TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== the fixture builds and runs ==="
-if (cd "$FIX" && $TO "$CC" build . -o "$TMP/tb" >"$TMP/b.log" 2>&1) && "$TMP/tb" >/dev/null 2>&1; then
+if (cd "$FIX" && "${TO[@]}" "$CC" build . -o "$TMP/tb" >"$TMP/b.log" 2>&1) && "$TMP/tb" >/dev/null 2>&1; then
   ok "trusted_boundaries builds and exits 0"
 else
   no "trusted_boundaries does not build or run"; head -5 "$TMP/b.log" | sed 's/^/       /'
@@ -39,8 +41,8 @@ fi
 
 for surf in unsafe:txt assumptions:json diagnostics-json:diag caps:caps; do
   r="${surf%%:*}"; ext="${surf#*:}"
-  (cd "$FIX" && $TO "$CC" src/main.con --report "$r") > "$TMP/tb.$ext" 2>"$TMP/tb.$ext.err"
-  (cd "$B64" && $TO "$CC" src/main.con --report "$r") > "$TMP/b64.$ext" 2>"$TMP/b64.$ext.err"
+  (cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report "$r") > "$TMP/tb.$ext" 2>"$TMP/tb.$ext.err"
+  (cd "$B64" && "${TO[@]}" "$CC" src/main.con --report "$r") > "$TMP/b64.$ext" 2>"$TMP/b64.$ext.err"
 done
 
 echo "=== each reached boundary is named, with package, absorbed obligation and dependents ==="
@@ -137,4 +139,4 @@ g=$(grep -c '^#guard ((absorbedObligations' Concrete/Report/AssumptionSummary.le
 
 echo
 echo "TRUSTED-BOUNDARIES: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]
