@@ -1552,16 +1552,18 @@ run_ok  "$TESTDIR/regress_105_ref_valued_branch_generic.con" 111
 # (FIXED): `&h` / `&mut h` on a Heap<S> local is h's slot and a field access through
 # `&Heap<S>` / `&mut Heap<S>` dereferences twice (MEMORY_SEMANTICS §5 one-hop rule).
 run_ok  "$TESTDIR/regress_102_pointer_local_address.con" 63
-# Two distinct zero-sized places may share an address natively; the interpreter refuses to
-# compare them rather than answer from paths (Codex review of bug 102).
+# Two distinct elements of an array of a zero-sized type share one address natively. The
+# interpreter (interpreter-coverage pass) knows the element size from the layout, so it
+# answers 1 as the binary does; pointers to zero-sized values in different storage are
+# still refused (the stack layout decides).
 run_ok  "$TESTDIR/regress_102_zero_sized_ptr_eq.con" 1
 run_ok  "$TESTDIR/regress_102_ptr_eq_through_raw_base.con" 3
 r102_z=$($COMPILER "$TESTDIR/regress_102_zero_sized_ptr_eq.con" --interp 2>&1 || true)
-if grep -qF "distinct zero-sized places is not modelled" <<< "$r102_z"; then
-    echo "  ok  regress_102_zero_sized_ptr_eq: --interp refuses the comparison"
+if [ "$r102_z" = "1" ]; then
+    echo "  ok  regress_102_zero_sized_ptr_eq: --interp == binary (1)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp did not refuse the zero-sized pointer comparison"
+    echo "FAIL  regress_102_zero_sized_ptr_eq: --interp gave '$r102_z', binary exits 1"
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/regress_126_heap_ref_one_hop.con" 255

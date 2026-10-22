@@ -1,7 +1,7 @@
 // Bug 102's interpreter half (Codex review): pointer equality on reference paths compares
 // places, but two distinct elements of an array of a zero-sized type share one address in
-// the binary (exit 1 here). The interpreter cannot know that from paths alone, so it refuses
-// the comparison with an explicit "not modelled" error instead of answering 0.
+// the binary (exit 1 here). The interpreter takes the element size from the layout and
+// answers 1 too (it refuses only when the size is unknown).
 struct Copy Z {}
 
 trusted fn main() -> Int {

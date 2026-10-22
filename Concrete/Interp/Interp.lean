@@ -352,6 +352,12 @@ structure Ctx where
   externs : List String := []
   /-- The program's command-line arguments after `argv[0]` (`--interp -- a b`). -/
   args : List String := []
+  /-- The running function's `foreignCalls`: spellings its resolver bound to a foreign
+      declaration (or to a runtime helper, `_C$rt.<name>`). They bind the foreign function even
+      where a Concrete function shares the spelling, as in the backend (FFI.md "Symbol Names"). -/
+  foreign : List (String × String) := []
+  /-- `#[link_name]` bindings, program-wide: extern name ↦ the C symbol it calls. -/
+  externLinks : List (String × String) := []
   /-- The program name reported as `argv[0]`. -/
   argv0 : String := "a.out"
   /-- Every module's constants, by name (a name defined twice is refused at its use). -/
@@ -819,6 +825,10 @@ partial def collectNewtypes : List CModule → List NewtypeDef
   | [] => []
   | m :: ms => m.newtypes ++ collectNewtypes m.submodules ++ collectNewtypes ms
 
+partial def collectExternLinks : List CModule → List (String × String)
+  | [] => []
+  | m :: ms => m.externLinkNames ++ collectExternLinks m.submodules ++ collectExternLinks ms
+
 partial def collectExterns : List CModule → List String
   | [] => []
   | m :: ms => m.externFns.map (·.1) ++ collectExterns m.submodules ++ collectExterns ms
@@ -882,6 +892,12 @@ def implMethodFns (modules : List CModule) (fns : List CFnDef) : List CFnDef :=
     | some f, 1 => { f with name := k }
     | _, _ => marker k)
   ++ ambiguousTypes.map marker
+
+/-- A function pointer to a foreign declaration: `fnPtr (externPtrPrefix ++ decl)`. -/
+def externPtrPrefix : String := "$extern:"
+
+/-- The resolver's spelling of a runtime helper binding in `foreignCalls`. -/
+def runtimeHelperPrefix : String := "_C$rt."
 
 /-- Resolve a direct call's SPELLING to the user function it reaches, with that function's scope;
     `none` when no user function is reached (a builtin or foreign function, decided by the caller).
@@ -2039,6 +2055,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | [] =>
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
+      if let some decl := cx.foreign.lookup name then
+        return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
       match ← liftE (resolveCall cx name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
       | none => fail s!"interp: undefined variable '{name}'"
@@ -2191,7 +2209,25 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- longer guesses by probing the environment for every callee name. An
     -- indirect callee MUST resolve through the environment: its binding holds
     -- the function it points at. A direct callee names its own definition.
-    let (fnName, target) ← match callee with
+    -- The resolver's own binding first: a spelling it bound to a foreign declaration (or a
+    -- runtime helper) reaches that, never a Concrete function of the same spelling (bug 129's
+    -- symbol rules); a pointer formed from such a binding carries it.
+    let foreign : Option String := match callee with
+      | .direct name => cx.foreign.lookup name
+      | .indirect binding => match envGetLocal env binding with
+        | some (.fnPtr real _) => if real.startsWith externPtrPrefix then some (real.drop externPtrPrefix.length).toString else none
+        | _ => none
+    let externSym : Option String := match foreign with
+      | some decl => if decl.startsWith runtimeHelperPrefix then none else some ((cx.externLinks.lookup decl).getD decl)
+      | none => none
+    let (fnName, target) ← match foreign with
+      | some decl =>
+        -- A runtime helper is the builtin of that name; a foreign function skips every
+        -- builtin of its spelling (the reserved name below matches none).
+        if decl.startsWith runtimeHelperPrefix then pure ((decl.drop runtimeHelperPrefix.length).toString, none)
+        else pure ("$extern", none)
+      | none =>
+      match callee with
       | .direct name => do
         let t ← liftE (resolveCall cx name)
         pure (name, t)
@@ -2222,7 +2258,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         -- whatever needs their layout refuses.
         let tyEnv := if typeArgs.length == fdef.typeParams.length
           then fdef.typeParams.zip (typeArgs.map (normTy cx)) else []
-        let (postEnv, flow) ← evalStmts { cx with scope := calleeScope, tyEnv } callEnv fdef.body
+        let (postEnv, flow) ← evalStmts { cx with scope := calleeScope, tyEnv, foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v => return (restored, .val v)
@@ -2501,7 +2537,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         | _ => fail "interp: vec_pop: first argument is not a mutable ref"
       -- A foreign function the program declares: the explicit table, or a refusal.
       | _, _ =>
-      match resolveExtern cx fnName with
+      match externSym.orElse (fun _ => (resolveExtern cx fnName).map fun d => (cx.externLinks.lookup d).getD d) with
       | some ext => do
         let (env', v) ← evalExtern cx env ext argVals
         -- The result as the program's declaration types it (a C `int` read as `u8` keeps its
@@ -2703,6 +2739,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     | _ => fail "interp: deref of non-ref value"
 
   | .fnRef name _ =>
+    if let some decl := cx.foreign.lookup name then
+      return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
     match ← liftE (resolveCall cx name) with
     | some (d, sc) => return (env, .val (.fnPtr d.name sc))
     | none => fail s!"interp: function reference '{name}' names no function the interpreter can call"
@@ -2735,7 +2773,7 @@ partial def destroyValue (cx : Ctx) (env : Env) (arg : IVal) :
     | some fdef =>
       let outerLen := env.length
       let callEnv := bindParams (envEnterFrame env) fdef.params [arg]
-      let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n) } callEnv fdef.body
+      let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n), foreign := fdef.foreignCalls } callEnv fdef.body
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
   | _ => return env
@@ -2761,7 +2799,7 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
       else
         let outerLen := env.length
         let callEnv := bindParams (envEnterFrame env) fdef.params argVals
-        let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m) } callEnv fdef.body
+        let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m), foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v | .val v => return (restored, .val v)
@@ -3215,6 +3253,7 @@ def mkCtx (modules : List CModule) (loopFuel : Nat := defaultLoopFuel) : Ctx :=
     layout := { structDefs := structs, enumDefs := firstByName (·.name) enums,
                 newtypes := firstByName (·.name) (collectNewtypes modules) },
     externs := (collectExterns modules).eraseDups,
+    externLinks := collectExternLinks modules,
     consts := collectConsts modules, loopFuel, defs,
     scopes := (tops.map fun (m, _) => collectLinkerAliases [m]).toArray,
     topNames := (modules.map (·.name)).toArray,
@@ -3257,7 +3296,7 @@ def interpret (modules : List CModule) (args : List String := []) (stdin : ByteA
   match cx.defs.find? (fun (f, _) => f.name == "main") with
   | none => { events := #[], outcome := .failed "interp: no 'main' function found" }
   | some (mainFn, mainScope) =>
-    let (r, st) := runIM (evalStmts { cx with scope := some mainScope } [] mainFn.body) stdin stdoutIsTty stdinIsTty
+    let (r, st) := runIM (evalStmts { cx with scope := some mainScope, foreign := mainFn.foreignCalls } [] mainFn.body) stdin stdoutIsTty stdinIsTty
     -- What reached stdout: `exit` and a return from `main` flush stdio. A trap aborts, and
     -- whether `abort` flushes stdio is the C library's choice: Darwin's does, glibc's (since
     -- 2.27) does not, so a trapping run's buffered output appears on macOS only. Past
