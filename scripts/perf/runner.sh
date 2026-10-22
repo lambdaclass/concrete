@@ -62,6 +62,20 @@ state() { # status detail
     "$(ts)" "$1" "$2" "$OUT/last-run.json"
 }
 store() { python3 "$PERF/store.py" "$@"; }
+# valid_bisect FILE METRIC SHA: a well-formed bisect result for THIS metric and commit.
+valid_bisect() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, sys
+try:
+    b = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    sys.exit(1)
+ok = (isinstance(b, dict) and b.get("schema") == "concrete.perf.bisect.v1" and b.get("metric") == sys.argv[2]
+      and b.get("bad") == sys.argv[3]
+      and b.get("verdict") in ("culprit", "range", "not_reproduced", "unmeasurable", "not_ancestor"))
+sys.exit(0 if ok else 1)
+PY
+}
 
 exec 9>"$PERF_HOME/runner.lock"
 if ! flock -n 9; then log "another perf cycle holds the lock"; exit 0; fi
@@ -164,6 +178,11 @@ PY
     BISECT_JSON="$OUT/bisect-$S12.json"
     ATTEMPTS_FILE="$OUT/bisect-$S12.attempts"
     ATTEMPTS="$(cat "$ATTEMPTS_FILE" 2>/dev/null || echo 0)"
+    case "$ATTEMPTS" in ''|*[!0-9]*) ATTEMPTS=3 ;; esac
+    # A cached result is reused only if it is a valid result for this metric and commit.
+    if [ -e "$BISECT_JSON" ] && ! valid_bisect "$BISECT_JSON" "$METRIC" "$HEAD_SHA"; then
+      log "discarding an invalid cached bisect result"; rm -f "$BISECT_JSON"
+    fi
     # The limit is checked BEFORE launching, and the counter is bumped before the run, so a bisect
     # killed mid-way still counts: at most 3 launches per commit, however they end.
     if [ ! -s "$BISECT_JSON" ] && [ "$ATTEMPTS" -lt 3 ]; then
@@ -178,18 +197,7 @@ PY
       brc=$?
       set -e
       # Accepted only as a well-formed result for THIS metric and commit with a known verdict.
-      if python3 - "$BISECT_JSON.tmp" "$METRIC" "$HEAD_SHA" <<'PY'
-import json, sys
-try:
-    b = json.load(open(sys.argv[1]))
-except (OSError, ValueError):
-    sys.exit(1)
-ok = (b.get("schema") == "concrete.perf.bisect.v1" and b.get("metric") == sys.argv[2]
-      and b.get("bad") == sys.argv[3]
-      and b.get("verdict") in ("culprit", "range", "not_reproduced", "unmeasurable", "not_ancestor"))
-sys.exit(0 if ok else 1)
-PY
-      then
+      if valid_bisect "$BISECT_JSON.tmp" "$METRIC" "$HEAD_SHA"; then
         mv -f "$BISECT_JSON.tmp" "$BISECT_JSON"
       elif [ "$((ATTEMPTS + 1))" -lt 3 ]; then
         log "bisect failed (exit $brc, no valid result); retrying at the next tick"
@@ -198,7 +206,7 @@ PY
         log "bisect failed 3 times; reporting the regression without a culprit"
       fi
     fi
-    if [ -s "$BISECT_JSON" ]; then
+    if [ -s "$BISECT_JSON" ] && valid_bisect "$BISECT_JSON" "$METRIC" "$HEAD_SHA"; then
       store put --data "$DATA" --machine "$MACHINE" --name "bisect/$S12.json" --file "$BISECT_JSON"
       python3 - "$NEW" "$BISECT_JSON" <<'PY'
 import json, sys
