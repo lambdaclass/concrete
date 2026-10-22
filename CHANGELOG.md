@@ -112,6 +112,27 @@ Bug 078 fixed this for the two `if` forms, and its record wrongly said that `mat
 handled it. The merge is now terminated as soon as no arm reaches it. The defect failed closed.
 It is pinned by `regress_175_match_arms_all_diverge.con` (five shapes, binary equal to
 `--interp`) and four `check_divergence_detection.sh` rows.
+### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
+
+The landing page now exposes the existing Concrete compiler as WebAssembly in a
+worker, with Core, specialized Core, SSA and LLVM views, real diagnostics,
+source-declaration selection, and downloadable results. Completed stages remain
+available on downstream failure. A redesigned responsive landing page introduces
+the language and integrates this live explorer.
+
+The compiler loads on demand with download progress, digest-versioned HTTP cache
+keys and a Wasm integrity check. Cancellation terminates the worker; editing
+source invalidates results. Compiler build identity and the actual LLVM output
+target are visible. Arithmetic, generics, structs, capabilities and a type-error
+example are included. Build instructions and native/Wasm, loader and UI checks
+live in [scripts/browser](scripts/browser/README.md); the tested asset snapshot is
+versioned for ordinary site deployment.
+
+This is a bounded single-file prototype, not a Concrete-to-Wasm backend, a program
+runner, or an independent verifier. Standard-library/file loading and full
+transformation tracing remain outside this scope. R-0275/R-0353 retain ownership
+of independent checking; successful compilation is not proof verification.
+
 
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 

@@ -13,8 +13,9 @@
   <meta name="twitter:card" content="summary">
   <link rel="icon" type="image/png" href="{{ get_url(path='logo.png') }}">
   <link rel="stylesheet" href="{{ get_url(path='site.css') }}">
+  {% block extra_head %}{% endblock extra_head %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock body_class %}">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
     <div class="wrap header-bar">
