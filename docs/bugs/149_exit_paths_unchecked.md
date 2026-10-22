@@ -64,7 +64,12 @@ whatever their label.
   function-exiting branch's exemption (`error_149_loop_cond_in_exiting_branch.con`, E0207), and the
   if/else return-path check sees through a borrow freeze too (`regress_149_cond_return_in_borrow.con`).
   `regress_149_both_branches_return.con` pins that an if/else whose branches both consume and
-  return stays accepted. Known remaining limit, pre-existing and not changed here: a `break v` that
+  return stays accepted.
+- The consume-inside-loop exemption for a branch that ends in `return` (`exemptExitBranch`) is
+  refused when the branch can `break`/`continue` out of the loop first (an earlier conditional
+  `continue` repeated the consumption on the next iteration; `error_149_continue_in_exit_branch.con`,
+  E0207), and a nested loop inside such a branch no longer drops the exemption for the statements
+  after it (`regress_149_nested_loop_in_exit_branch.con`). Known remaining limit, pre-existing and not changed here: a `break v` that
   consumes an outer binding (the H14 one-level exemption) is credited on the condition-false path
   too.
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted

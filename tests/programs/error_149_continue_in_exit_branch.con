@@ -1,0 +1,17 @@
+// Bug 149 (Codex review): a branch that ends in `return` but can `continue` first does not earn the
+// consume-inside-loop exemption: the deferred free would run on the continue edge and again on the
+// next iteration (E0207).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    let mut i: Int = 0;
+    while i < 2 {
+        i = i + 1;
+        if true {
+            defer free(h);
+            if i < 2 { continue; }
+            return 0;
+        }
+    }
+    free(h);
+    return 0;
+}

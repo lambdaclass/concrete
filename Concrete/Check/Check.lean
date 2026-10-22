@@ -780,7 +780,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- snapshot, check each arm from the snapshot, then merge with agreement.
     let envBefore ← getEnv
     -- Check then branch: all stmts except the last, then check last for its type
-    if blockExitsFunction then_ then
+    if exemptExitBranch then_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let thenInit := then_.dropLast
     -- Defer rule (a): the branch's deferred calls run after its trailing value.
@@ -804,7 +804,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating then_) (some e.getSpan)
     -- Check else branch from the SNAPSHOT (not the then-arm's aftermath)
     setEnv envBefore
-    if blockExitsFunction else_ then
+    if exemptExitBranch else_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let elseInit := else_.dropLast
     let elseDefer ← deferScopeEntry
@@ -1661,7 +1661,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             pure body
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
-          if blockExitsFunction body then
+          if exemptExitBranch body then
             let cur ← getEnv
             setEnv { cur with inFnExitingBranch := true }
           -- Check all stmts except the last, then extract type from last
@@ -1806,7 +1806,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
-        if blockExitsFunction body then
+        if exemptExitBranch body then
           let cur ← getEnv
           setEnv { cur with inFnExitingBranch := true }
         -- Check all stmts except the last, then extract type from last
@@ -2349,7 +2349,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
     -- the consume-inside-loop rule — see TypeEnv.inFnExitingBranch)
-    if blockExitsFunction thenBody then
+    if exemptExitBranch thenBody then
       setEnv { envBefore with inFnExitingBranch := true }
     checkStmts thenBody retTy
     let envAfterThen ← getEnv
@@ -2361,7 +2361,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     setEnv envBefore
     match elseBody with
     | some stmts =>
-      if blockExitsFunction stmts then
+      if exemptExitBranch stmts then
         setEnv { envBefore with inFnExitingBranch := true }
       checkStmts stmts retTy
       let envAfterElse ← getEnv
@@ -2424,7 +2424,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved, inFnExitingBranch := env0.inFnExitingBranch }
     restoreAfterLoop env0 env'.breakMoved
   | .forLoop _ init cond step body lbl =>
     -- Init
@@ -2453,7 +2453,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved, inFnExitingBranch := env0.inFnExitingBranch }
     restoreAfterLoop env0 env'.breakMoved
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field

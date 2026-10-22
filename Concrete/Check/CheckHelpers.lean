@@ -661,6 +661,48 @@ partial def stmtEscape? (depth : Nat) (labels : List String) : Stmt → Option (
     (operandEscape? depth labels v).orElse fun _ => elseBody.bind (stmtsEscape? depth labels)
 end
 
+-- Bug 149: does this block contain a `break`/`continue` that can leave a loop enclosing it
+-- (an unlabelled one not inside a loop of its own, or any labelled one, conservatively)? Such a
+-- block does not only exit the function, so it does not earn the consume-inside-loop
+-- exemption even when it ends in `return`.
+mutual
+partial def exprLeavesLoop (depth : Nat) : Expr → Bool
+  | .binOp _ _ l r => exprLeavesLoop depth l || exprLeavesLoop depth r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => exprLeavesLoop depth x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.any (exprLeavesLoop depth)
+  | .methodCall _ obj _ _ args => (obj :: args).any (exprLeavesLoop depth)
+  | .structLit _ _ _ fields base => (fields.map (·.2) ++ base.toList).any (exprLeavesLoop depth)
+  | .enumLit _ _ _ _ fields => (fields.map (·.2)).any (exprLeavesLoop depth)
+  | .arrayLit _ elems => elems.any (exprLeavesLoop depth)
+  | .arrayIndex _ a i => exprLeavesLoop depth a || exprLeavesLoop depth i
+  | .allocCall _ inner a => exprLeavesLoop depth inner || exprLeavesLoop depth a
+  | .ifExpr _ c t e => exprLeavesLoop depth c || stmtsLeaveLoop depth t || stmtsLeaveLoop depth e
+  | .match_ _ scr arms => exprLeavesLoop depth scr || arms.any fun arm =>
+      match arm with
+      | .mk _ _ _ _ g b | .litArm _ _ g b | .varArm _ _ g b | .rangeArm _ _ _ _ g b =>
+        (g.map (exprLeavesLoop depth)).getD false || stmtsLeaveLoop depth b
+  | _ => false
+partial def stmtsLeaveLoop (depth : Nat) (stmts : List Stmt) : Bool :=
+  stmts.any (stmtLeavesLoop depth)
+partial def stmtLeavesLoop (depth : Nat) : Stmt → Bool
+  | .break_ _ v lbl => lbl.isSome || depth == 0 || (v.map (exprLeavesLoop depth)).getD false
+  | .continue_ _ lbl => lbl.isSome || depth == 0
+  | .while_ _ c body _ => exprLeavesLoop depth c || stmtsLeaveLoop (depth + 1) body
+  | .forLoop _ init c step body _ =>
+    (init.map (stmtLeavesLoop depth)).getD false || exprLeavesLoop depth c
+      || (step.map (stmtLeavesLoop (depth + 1))).getD false || stmtsLeaveLoop (depth + 1) body
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => exprLeavesLoop depth v
+  | .return_ _ v => (v.map (exprLeavesLoop depth)).getD false
+  | .ifElse _ c t e => exprLeavesLoop depth c || stmtsLeaveLoop depth t || (e.map (stmtsLeaveLoop depth)).getD false
+  | .fieldAssign _ o _ v => exprLeavesLoop depth o || exprLeavesLoop depth v
+  | .derefAssign _ t v => exprLeavesLoop depth t || exprLeavesLoop depth v
+  | .arrayIndexAssign _ a i v => exprLeavesLoop depth a || exprLeavesLoop depth i || exprLeavesLoop depth v
+  | .borrowIn _ _ _ _ _ body => stmtsLeaveLoop depth body
+  | .letDestructure _ _ _ _ v elseBody => exprLeavesLoop depth v || (elseBody.map (stmtsLeaveLoop depth)).getD false
+end
+
 /-- The operands of `e` that rule (d) protects, with a description of the construct. An
     expression form not listed has no operand position (a match scrutinee, an `if`
     condition and branch, and a block are statement-like). -/
@@ -707,6 +749,13 @@ partial def armExitsFunction : MatchArm → Bool
   | .varArm _ _ _ body => blockExitsFunction body
   | .rangeArm _ _ _ _ _ body => blockExitsFunction body
 end
+
+/-- Bug 149: a branch earns the consume-inside-loop exemption only when it exits the function
+    and contains no `break`/`continue` that leaves the loop around it (an earlier conditional
+    `continue` would repeat the consumption on the next iteration; Codex review). -/
+def exemptExitBranch (stmts : List Stmt) : Bool :=
+  blockExitsFunction stmts && !stmtsLeaveLoop 0 stmts
+
 
 /-- A branch or arm that EXITS THE FUNCTION must have consumed every linear
     value that was live when it started — `if c { return 0; } … drop(s);`
