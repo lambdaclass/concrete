@@ -102,11 +102,18 @@ runner users have no sudo (see below). So preinstall everything:
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl ca-certificates build-essential clang valgrind \
-  python3 python3-pip python3-yaml rustc xxd perl tar zstd ripgrep coreutils
+  python3 python3-pip python3-yaml xxd perl tar zstd ripgrep coreutils
+# Rust (rustc + cargo), per runner user, like the stable toolchain on GitHub-hosted images:
+sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
 ```
 
-- `rustc` is used by the LL(1) grammar job, `python3-yaml` by the workflow, example and
-  qualification gates, `xxd` and `curl` by the workload differentials, and `zstd` by `actions/cache`.
+- `rustc` is used by the LL(1) grammar job. `cargo` builds nanoda for the external-checker job
+  whenever `~/.cache/concrete-ext` has no build for the pinned SHA. Ubuntu's `rustc` package does
+  not pull in `cargo`, so use rustup (or install both `rustc` and `cargo`), and check it once by
+  running the external-checker job with an empty `~/.cache/concrete-ext`. Rustup puts its tools in
+  `~/.cargo/bin`, so install it before `./config.sh`, or add that directory to the runner's `.path`.
+- `python3-yaml` is used by the workflow, example and qualification gates, `xxd` and `curl` by
+  the workload differentials, and `zstd` by `actions/cache`.
 - **Lean (elan) is not preinstalled.** `leanprover/lean-action` installs elan into `~/.elan` on
   first use, and the `~/.elan` cache step restores the pinned toolchain. With one user per runner,
   each runner has its own `~/.elan`, so concurrent jobs never race on one toolchain directory.
