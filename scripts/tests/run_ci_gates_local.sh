@@ -173,7 +173,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=263
+EXPECTED_GATE_COMMANDS=264
 # 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
 #   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
@@ -207,6 +207,7 @@ fi
 #   ledgers and the other wip branches that move this pin adds this one command on top of theirs.
 # 255 -> 256: check_fuzz_farm.sh (the server fuzz farm's findings pipeline, build-free), pinned in
 #   the same commit. Other in-flight branches bump this pin too: rebase adds, never overwrites.
+# 255 -> 256: check_perf_tracking.sh (compiler perf tracker decision logic, scripts/perf/), pinned in the same commit.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

@@ -1,0 +1,39 @@
+{
+  "suite_version": 1,
+  "comment": "Bump suite_version whenever a benchmark below changes meaning (program, size, command). Records with different suite_version are never compared.",
+  "repeats": 5,
+  "projects": [
+    "examples/lox",
+    "examples/toml",
+    "examples/rocksdb_kv",
+    "examples/wordfreq",
+    "examples/base64_cli",
+    "examples/png_chunks",
+    "examples/kvstore",
+    "examples/http",
+    "examples/packet",
+    "examples/integrity"
+  ],
+  "single_files": [
+    "examples/hmac_sha256/src/main.con",
+    "tests/programs/integration_compiler_stress.con",
+    "tests/programs/integration_stress_workload.con",
+    "tests/programs/integration_recursive_structures.con"
+  ],
+  "synthetic": [
+    {"family": "functions", "n": 2000},
+    {"family": "match", "n": 600},
+    {"family": "statements", "n": 4000},
+    {"family": "array", "n": 2000},
+    {"family": "nesting", "n": 160},
+    {"family": "exprchain", "n": 2000},
+    {"family": "structs", "n": 400}
+  ],
+  "growth_factor": 4,
+  "lake": {
+    "cold": true,
+    "incremental_touch": ["Concrete/Pipeline/Pipeline.lean", "Main.lean"]
+  },
+  "run_tests": "bash scripts/tests/run_tests.sh",
+  "slow_gates_file": "scripts/perf/slow_gates.json"
+}
