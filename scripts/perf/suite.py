@@ -4,7 +4,8 @@
   suite.py run --repo DIR --machine ID --out record.json [--only SECTION[,..]]
                [--bench NAME] [--repeats N] [--no-lake]
   suite.py counter                          print the counter this host measures with
-  suite.py discover-gates --repo DIR --out slow_gates.json [--top 10]
+  suite.py discover-gates --repo DIR --out slow_gates.json [--top 10] [--shard K/N]
+  suite.py merge-gates --out slow_gates.json SHARD.json...
   suite.py gen FAMILY N                     print one synthetic program
 
 SECTIONS: lake, compile, synthetic, tests, gates. The suite definition is
@@ -528,22 +529,9 @@ def cmd_run(a):
     return 0 if status != "build_failed" else 3
 
 
-def cmd_discover(a):
-    """Rank every CI gate by instructions (wall time when perf is unavailable) and keep the top N
-    passing ones."""
-    repo = os.path.abspath(a.repo)
-    plan = subprocess.run(["bash", "scripts/tests/run_ci_gates_local.sh", "--plan"], cwd=repo,
-                          capture_output=True, text=True)
-    cmds = [l.strip() for l in plan.stdout.splitlines() if re.search(r"scripts/\S+\.(sh|py)", l)]
-    if not cmds:
-        log("run_ci_gates_local.sh --plan listed no commands:\n" + plan.stderr[-2000:])
-        return 2
-    timings = []
-    for c in cmds:
-        w, _, rc, ins = timed(["bash", "-c", c], repo, timeout=2 * 3600)
-        log("%7.1fs %s instr rc=%d %s" % (w, ins, rc, c))
-        timings.append({"cmd": c, "wall_s": round(w, 1), "instr": ins, "rc": rc})
-    timings.sort(key=lambda t: -(t["instr"] if t["instr"] is not None else t["wall_s"]))
+def select_top(timings, top_n):
+    """The top_n passing gates by instructions (wall time when no count exists)."""
+    timings = sorted(timings, key=lambda t: -(t["instr"] if t["instr"] is not None else t["wall_s"]))
     top = []
     for t in timings:
         if t["rc"] != 0:
@@ -554,16 +542,55 @@ def cmd_discover(a):
             gid += "_%d" % len(top)
         top.append({"id": gid, "cmd": t["cmd"], "script": script,
                     "discovered_instr": t["instr"], "discovered_wall_s": t["wall_s"]})
-        if len(top) == a.top:
+        if len(top) == top_n:
             break
+    return timings, top
+
+
+def write_gates(path, sha, machine, timings, top):
     out = {"comment": "The most expensive passing CI gates (by instructions:u), measured once on the "
                       "perf machine by `suite.py discover-gates`. Editing this list is a suite change: "
                       "bump suite_version in suite.json.",
-           "discovered_on": git(repo, "rev-parse", "HEAD"), "machine": a.machine, "counter": counter(),
-           "gates": top, "all": timings}
-    with open(a.out, "w") as f:
+           "discovered_on": sha, "machine": machine, "counter": counter(), "gates": top, "all": timings}
+    with open(path, "w") as f:
         json.dump(out, f, indent=1)
         f.write("\n")
+
+
+def cmd_discover(a):
+    """Rank every CI gate by instructions (wall time when perf is unavailable) and keep the top N
+    passing ones. --shard K/N measures every N-th gate starting at K, so N checkouts can rank in
+    parallel (instruction counts do not depend on the load that parallelism adds); merge-gates
+    combines the shard files."""
+    repo = os.path.abspath(a.repo)
+    plan = subprocess.run(["bash", "scripts/tests/run_ci_gates_local.sh", "--plan"], cwd=repo,
+                          capture_output=True, text=True)
+    cmds = [l.strip() for l in plan.stdout.splitlines() if re.search(r"scripts/\S+\.(sh|py)", l)]
+    if not cmds:
+        log("run_ci_gates_local.sh --plan listed no commands:\n" + plan.stderr[-2000:])
+        return 2
+    if a.shard:
+        k, n = (int(x) for x in a.shard.split("/"))
+        cmds = cmds[k::n]
+    timings = []
+    for c in cmds:
+        w, _, rc, ins = timed(["bash", "-c", c], repo, timeout=2 * 3600)
+        log("%7.1fs %s instr rc=%d %s" % (w, ins, rc, c))
+        timings.append({"cmd": c, "wall_s": round(w, 1), "instr": ins, "rc": rc})
+    timings, top = select_top(timings, a.top)
+    write_gates(a.out, git(repo, "rev-parse", "HEAD"), a.machine, timings, top)
+    return 0
+
+
+def cmd_merge_gates(a):
+    parts = [json.load(open(f)) for f in a.files]
+    shas = {p["discovered_on"] for p in parts}
+    if len(shas) != 1:
+        log("shards were discovered on different commits: %s" % sorted(shas))
+        return 2
+    timings = [t for p in parts for t in p["all"]]
+    timings, top = select_top(timings, a.top)
+    write_gates(a.out, shas.pop(), parts[0]["machine"], timings, top)
     return 0
 
 
@@ -584,6 +611,11 @@ def main():
     d.add_argument("--out", required=True)
     d.add_argument("--top", type=int, default=10)
     d.add_argument("--machine", default=os.environ.get("PERF_MACHINE") or platform.node().split(".")[0])
+    d.add_argument("--shard", help="K/N: measure gates K, K+N, K+2N, ... of the plan")
+    mg = sub.add_parser("merge-gates")
+    mg.add_argument("--out", required=True)
+    mg.add_argument("--top", type=int, default=10)
+    mg.add_argument("files", nargs="+")
     g = sub.add_parser("gen")
     g.add_argument("family")
     g.add_argument("n", type=int)
@@ -595,6 +627,8 @@ def main():
         return 0
     if a.cmd == "discover-gates":
         return cmd_discover(a)
+    if a.cmd == "merge-gates":
+        return cmd_merge_gates(a)
     sys.stdout.write(gen(a.family, a.n))
     return 0
 
