@@ -32,9 +32,13 @@ cd "$ROOT_DIR"
 COMPILER="${COMPILER:-.lake/build/bin/concrete}"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-PASS=0; FAIL=0
+PASS=0; FAIL=0; INCOMPLETE=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+# A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh). The gate
+# still exits nonzero, so a probe loop that never terminates (bug 048) cannot pass.
+inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 # runs <name> <expected-exit> <body>
 # Builds a project around `body` and runs it under a watchdog.
@@ -45,12 +49,14 @@ runs() {
   printf '[package]\nname = "%s"\nversion = "0.1.0"\n' "$name" > "$dir/Concrete.toml"
   printf '%s\n' "$body" > "$dir/src/main.con"
   local out rc
-  if ! out="$( cd "$dir" && timeout 120 "$ROOT_DIR/$COMPILER" build -o "$dir/bin" 2>&1 )"; then
+  out="$( cd "$dir" && bounded_run -i /dev/null 120 -- "$ROOT_DIR/$COMPILER" build -o "$dir/bin" 2>&1 )"; rc=$?
+  if bounded_is_incomplete "$rc"; then inc "$name: the build timed out twice (120 s, then 240 s alone)"; return
+  elif [ "$rc" -ne 0 ]; then
     no "$name did not build: $(tail -1 <<<"$out")"; return
   fi
-  timeout 60 "$dir/bin" >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 124 ]; then
-    no "$name TIMED OUT — the probe loop did not terminate (bug 048's signature)"
+  bounded_run -i /dev/null 60 -- "$dir/bin" >/dev/null 2>&1; rc=$?
+  if bounded_is_incomplete "$rc"; then
+    inc "$name timed out twice (60 s, then 120 s alone): the probe loop did not terminate (bug 048's signature) or the machine is overloaded"
   elif [ "$rc" != "$want" ]; then
     no "$name exited $rc, expected $want"
   else
@@ -244,5 +250,5 @@ runs linear_payload_exactly_once 0 'mod main {
 }'
 
 echo
-echo "HASHMAP-PROBE-INVARIANTS: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+echo "HASHMAP-PROBE-INVARIANTS: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
+[ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]

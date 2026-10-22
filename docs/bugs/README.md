@@ -26,7 +26,13 @@ Those belong in:
 
 A bug record is `docs/bugs/NNN_short_name.md` (the next unused number), an entry in
 `scripts/tests/audit_bug_corpus.sh` (`BUG_TEST_MAP` with a fixture, or `SKIP_BUGS` with a rationale
-naming the coverage), and a line in the open or fixed list below. Every time a bug is found, ask
+naming the coverage), a line in the open or fixed list below, and the bug's number in the
+[discovery record](discovery.tsv): in the row of the probe batch that found it (adding that batch if
+it is new), and in that row's `silent` column when it is silent. Then regenerate the roadmap's
+[bug dashboard](../../ROADMAP.md#bug-dashboard) (`python3 scripts/gen/bug_dashboard.py --write`),
+also when a bug's status changes; `check_docs_drift.sh` fails on a stale dashboard or an
+unattributed record. A probe batch that finds nothing is recorded too: its zero is the
+discovery-rate signal of Phase 1 exit 2m. Every time a bug is found, ask
 whether an underlying problem in the compiler's design produced it, and record the answer: a fix
 that repairs one spelling of a recurring cause leaves the next spelling open. The record has these
 parts:

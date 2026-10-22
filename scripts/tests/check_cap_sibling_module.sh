@@ -30,8 +30,9 @@ cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/cap_sibling_module"
 
-if command -v timeout >/dev/null 2>&1; then TO="timeout 300"; else TO=""
-  echo "  warn 'timeout' not found — running without a hang watchdog"; fi
+# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
+# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
+TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 300"
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }

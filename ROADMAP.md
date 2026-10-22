@@ -468,6 +468,51 @@ why the difference cannot affect it.
 | **(b) integrated full gate set** | on the integrated candidate before it merges to main, and on main after each push | the CI workflow's ([`lean_action_ci.yml`](.github/workflows/lean_action_ci.yml)) push/pull-request jobs: CI on pushes to main and pull requests, or `gh workflow run CI --ref <branch>` for a branch (dispatch also starts the stage (c) jobs). This includes the Phase 6C observability capstone (`check_phase6c_observability.sh`) and, on pushes to main, the multi-kernel evidence gate. Locally, `scripts/tests/run_ci_gates_local.sh` extracts the same gate commands but excludes the mutation campaign, its aggregator and `checker_acceptance_evidence.sh`, and does not reproduce step-level environments; `make pre-push-full` runs it in parallel for feedback only. A local completion record needs closure mode (`CONCRETE_CLOSURE_RUN=1`, which forces `JOBS=1`) on a clean candidate and covers only that locally runnable population | the CI run ID and its head SHA; or a local closure-mode summary with `completed=1` and that head, which never stands in for the CI-only steps | any change outside documentation (compiler, `std`, examples, proofs, gate scripts, workflow, toolchain, lake or nix inputs) reruns the whole set. A docs-only change reruns only the gates that read the changed documents (docs drift and roadmap gates, links, and the hole-status, claims and axiom-inventory gates when those documents change) |
 | **(c) full qualification** | on an immutable candidate: before a release candidate or nightly, and before closing an exit that names a qualified result | stage (b) on the same SHA, plus the jobs that run only on schedule or dispatch: the gate-mutation campaign (`check_gate_mutation_coverage.sh`, sharded by CI's mutation plan, shard and aggregate jobs on the nightly schedule or `workflow_dispatch`; it refuses a dirty tree and a git worktree, so a local campaign runs in a fresh clone of the candidate), the weekly clean-checkout proof replay, the nightly differential fuzz campaigns and the scheduled multi-kernel mutation coverage (`MULTI_KERNEL_MUTATE=1`); the con-leche external re-check already runs in (b) | one qualification verdict over **every** required job at the same candidate SHA: `scripts/ci/qualification_record.py` reads the record of exactly one run: the first attempt of a `workflow_dispatch` run of the candidate (the only event that starts every job; scheduled runs skip each other's jobs, partial runs are never combined, and a rerun could hide a failure) and emits the candidate SHA, each job of the candidate commit's own `lean_action_ci.yml` (read from that commit and parsed structurally; a workflow shape it does not understand is refused) with its run, head SHA, status and conclusion (each mutation shard 1..N individually), and `verdict=qualified` only when the run and every required job succeeded at that SHA and every unconditional step of each job, plus the conditional multi-kernel mutation coverage, ran exactly once and succeeded. The mutation aggregate's `qualified=1` (every planned shard completed) is one component of it, never the verdict: the aggregate succeeds while proof replay, fuzzing, the multi-kernel and checker checks or the regression suites fail. A missing, cancelled, skipped, failed or in-progress job or required step, a missing, duplicate or unexpected shard, a run at another SHA or with a non-success conclusion, or a failure hidden behind a successful rerun at the same SHA prevents qualification, and a workflow the parser does not understand is refused rather than read as fewer jobs (`check_qualification_record.sh` attacks the verdict with these records). A local closure-mode summary cannot qualify. The record, with its run IDs, is kept in R-0333's candidate record for a release and in the [candidate record](#implemented-not-yet-accepted) for an exit | any change outside documentation, including a rebase onto a new base; a docs-only change invalidates neither (b) nor (c) except their document-reading gates |
 
+**Result vocabulary.** Every check reports one of five results, and they are never merged:
+
+- **passed**: the check ran to completion and every assertion held;
+- **failed**: it ran to completion and observed a wrong result;
+- **incomplete**: it did not finish, so nothing was observed. A timeout is incomplete, not failed and
+  not passed. A test that exceeds its budget is re-run once, alone, with a larger budget: a
+  completed re-run is judged normally and recorded *recovered*; a second timeout is reported
+  `INCOMPLETE`. `scripts/tests/lib/bounded.sh` implements this for the per-test budgets of
+  `check_example_outputs.sh`, `check_callable_values.sh`, `check_hashmap_probe_invariants.sh`,
+  `check_model_diff.sh` and `run_tests.sh`'s project fixtures, and as the watchdog wrapper of the
+  gates that bound single commands; `test_ssa.sh` applies the same rule to its parallel 5-second
+  alarms (re-run alone with 30 s). Fuzzers are the exception by design: a hang on a generated input
+  is their finding, triaged like a crash;
+- **skipped**: deliberately not run, with a recorded reason (a platform without the tool, an opt-in
+  leg);
+- **cancelled**: the run was stopped from outside (a superseded CI run).
+
+A gate with an incomplete result exits nonzero, so incomplete never reads as green; its log names
+the result for what it is, so it is not investigated as a wrong answer. A **qualifying run**
+(stage (b) or (c), or a local closure-mode record) contains no failed, incomplete or cancelled
+result, and a skipped result only where the stage's definition allows it. Machine load is a reason
+to re-run a check, never to accept an incomplete one.
+
+**How the stages run today.** CI is the validator; local runs give feedback.
+
+1. **Development.** Work happens on a candidate branch in its own worktree
+   ([CONCURRENT_WORK.md](docs/project/CONCURRENT_WORK.md)). Work in progress is backed up to
+   `wip/<name>` every few minutes; the pre-push hook's wip tier checks only for conflict markers, so
+   a usage limit or crash never loses work, and a `wip/*` ref is never a candidate.
+2. **Stage (a), the fast local tier.** The pre-push hook (`.githooks/pre-push`) runs the selected
+   fast gates on every push of a non-`wip` ref and records its result against the pushed commit.
+3. **Stage (b) and (c), CI.** The candidate is pushed to `ci/<name>` (full hook) and the CI workflow
+   is dispatched on it (`gh workflow run CI --ref ci/<name>`). A dispatched run starts every job,
+   the qualification-only jobs included, so one run yields both the regular verdict and the
+   qualification record. Failures are diagnosed from the run's logs and repaired on the candidate
+   branch; the corrected SHA is pushed and dispatched again.
+4. **Landing.** When every regular job of the run is green at the candidate SHA, main is
+   fast-forwarded to exactly that SHA on both remotes (`origin` and `lambdaclass`). A candidate that
+   is not a fast-forward of main is rebased, which is a new SHA and needs its own run. A
+   qualification job that fails or does not finish blocks the closures that need a qualified
+   result, not the landing of a change whose regular jobs are green.
+5. **Heavy campaigns.** Fuzzing hours, mutation campaigns and other long runs go to remote servers
+   when they are available, and otherwise queue behind each other locally; their results are
+   recorded against the exact SHA they ran on, like any other.
+
 R-0513 owns making stage (a) a dependency-closure-selected fast tier within its budget and keeping
 stage (c) bound to exact commits, toolchains and artifacts (Phase 1 exit 2f); R-0516 automates (c)'s
 record for releases (today `qualification_record.py` is run by hand against the run IDs).

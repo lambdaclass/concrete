@@ -46,7 +46,9 @@ PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 finish(){ echo ""; echo "ROCKSDB-SLICE1: PASS=$PASS FAIL=$FAIL"; [ "$FAIL" -eq 0 ] || exit 1; exit 0; }
-if command -v timeout >/dev/null 2>&1; then TO="timeout 120"; else TO=""; echo "  warn 'timeout' not found — running without a hang watchdog"; fi
+# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
+# budget; a second timeout prints INCOMPLETE on stderr and returns 124, never a pass.
+TO="bash $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh 120"
 
 echo "=== prerequisites: RocksDB through pkg-config, a C compiler ==="
 if ! command -v pkg-config >/dev/null 2>&1; then

@@ -26,17 +26,20 @@ source "$ROOT_DIR/scripts/tests/lib/selfprint.sh"
 cd "$ROOT_DIR"
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
-PASS=0; FAIL=0
+PASS=0; FAIL=0; INCOMPLETE=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+# A timeout is INCOMPLETE, not a failure: re-run once alone, then reported (lib/bounded.sh).
+inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 run() {
   local name="$1" src="$2" exp="$3"
   printf '%s' "$src" > "$TMP/$name.con"
   if "$COMPILER" "$TMP/$name.con" -o "$TMP/$name" >/dev/null 2>&1; then
-    local out rc val; out="$(timeout 10 "$TMP/$name" 2>/dev/null)"; rc=$?
-    if [ "$rc" = "124" ]; then no "$name: TIMED OUT (hang/miscompile)"; return; fi
+    local out rc val; out="$(bounded_run -i /dev/null 10 -- "$TMP/$name" 2>/dev/null)"; rc=$?
+    if bounded_is_incomplete "$rc"; then inc "$name: timed out twice (10 s, then 20 s alone): no observation"; return; fi
     val="$out"; [ -z "$val" ] && val="$rc"
     [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp"
   else
@@ -47,8 +50,8 @@ run() {
 echo "=== three context modes thread correctly (shared / mutable / consuming) ==="
 gate_selfprint_wrap tests/programs/callback_context_modes.con "$TMP/modes.w.con"
 if "$COMPILER" "$TMP/modes.w.con" -o "$TMP/modes" >/dev/null 2>&1; then
-  V="$(timeout 10 "$TMP/modes" 2>/dev/null)"; RC=$?
-  if [ "$RC" = "124" ]; then no "callback_context_modes TIMED OUT"; else
+  V="$(bounded_run -i /dev/null 10 -- "$TMP/modes" 2>/dev/null)"; RC=$?
+  if bounded_is_incomplete "$RC"; then inc "callback_context_modes timed out twice (10 s, then 20 s alone)"; else
     [ "$V" = "245" ] && ok "callback_context_modes = 245 (203 shared + 30 mutable + 12 consuming)" \
       || no "callback_context_modes: got '$V' expect 245"
   fi
@@ -213,5 +216,5 @@ echo "      #[test]s (run via --stdlib-module map): test_map_with_value,"
 echo "      test_map_with_value_missing. with_value_mut/modify are DEFERRED"
 echo "      (separate container-not-in-context obligation)."
 echo ""
-echo "CALLABLE-VALUES: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+echo "CALLABLE-VALUES: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
+[ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]

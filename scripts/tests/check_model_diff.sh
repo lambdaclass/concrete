@@ -37,16 +37,20 @@ cd "$ROOT_DIR"
 BIN="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$BIN" ] || { echo "error: build first ($BIN missing)" >&2; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-PASS=0; FAIL=0
+PASS=0; FAIL=0; INCOMPLETE=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+inc(){ echo "  INCOMPLETE $1"; INCOMPLETE=$((INCOMPLETE+1)); }
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 echo "=== C/V: the corpus ==="
 : > "$TMP/rows"; : > "$TMP/elig"
 # Bug 106: this loop used `|| true`, so a report that hung (thesis_demo ran for hours: an
 # unbudgeted interpreter loop at len = i64::MAX) or crashed was invisible and the gate still
-# printed PASS. Every report now runs under a watchdog; a timeout is a FAIL, and a nonzero exit
-# is a FAIL unless the file is one of the deliberately ill-formed examples below (which must
+# printed PASS. Every report now runs under a watchdog (lib/bounded.sh): a report that times out
+# is re-run once alone with a larger budget, and a second timeout is INCOMPLETE, which still fails
+# the gate's exit status (a hung report can never pass) without being read as a wrong answer; a
+# nonzero exit is a FAIL unless the file is one of the deliberately ill-formed examples below (which must
 # keep failing by refusing the program, never by timing out).
 command -v timeout >/dev/null 2>&1 || { echo "error: 'timeout' is required (a hung report must fail, bug 106)" >&2; exit 2; }
 EXPECT_REFUSED=" examples/contract_negatives/duplicate_links/src/main.con examples/contract_negatives/invalid_attribute/src/main.con examples/contract_negatives/invalid_contract_expression/src/main.con examples/contract_negatives/spec_ghost_totality/src/main.con examples/known_holes/returned_ref_provenance_map/src/main.con examples/known_holes/returned_ref_provenance_vec/src/main.con "
@@ -54,8 +58,8 @@ EXPECT_REFUSED=" examples/contract_negatives/duplicate_links/src/main.con exampl
 #   known_holes/returned_ref_provenance_*  are refused by the returned-reference rule (H1).
 HUNG=""; CRASHED=""; UNREFUSED=""
 for f in $(ls examples/*/src/main.con examples/*/*/src/main.con 2>/dev/null) std/src/lib.con; do
-  timeout 300 "$BIN" "$f" --report model-diff > "$TMP/one" 2>"$TMP/one.err"; rc=$?
-  if [ "$rc" -eq 124 ]; then HUNG="$HUNG $f"
+  bounded_run -i /dev/null -r 450 300 -- "$BIN" "$f" --report model-diff > "$TMP/one" 2>"$TMP/one.err"; rc=$?
+  if bounded_is_incomplete "$rc"; then HUNG="$HUNG $f"
   elif [ "$rc" -ne 0 ]; then
     case "$EXPECT_REFUSED" in *" $f "*) ;; *) CRASHED="$CRASHED $f(rc=$rc)";; esac
   else
@@ -64,8 +68,8 @@ for f in $(ls examples/*/src/main.con examples/*/*/src/main.con 2>/dev/null) std
   grep -vE '^MODEL-DIFF|^$' "$TMP/one" >> "$TMP/rows" || true
   grep '^MODEL-DIFF-ELIGIBLE' "$TMP/one" | cut -f2 >> "$TMP/elig" || true
 done
-[ -z "$HUNG" ] && ok "C: no report timed out (300s watchdog per file)" \
-  || no "C: --report model-diff timed out on:$HUNG (bug 106 class)"
+[ -z "$HUNG" ] && ok "C: no report timed out (300s watchdog per file, 450s on the re-run alone)" \
+  || inc "C: --report model-diff timed out twice on:$HUNG (a hang is the bug 106 class; no observation was made)"
 [ -z "$CRASHED" ] && ok "C: every report exited 0, except the named ill-formed examples" \
   || no "C: --report model-diff failed on:$CRASHED"
 [ -z "$UNREFUSED" ] && ok "C: every named ill-formed example is still refused" \
@@ -278,5 +282,5 @@ want "$TMP/t" tailif 0 4 T
 for fn in tailmatch tailif; do allagree "$TMP/t" "$fn" T; done
 
 echo ""
-echo "MODEL-DIFF-GATE: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+echo "MODEL-DIFF-GATE: PASS=$PASS FAIL=$FAIL INCOMPLETE=$INCOMPLETE"
+[ "$FAIL" -eq 0 ] && [ "$INCOMPLETE" -eq 0 ]
