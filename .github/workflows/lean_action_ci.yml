@@ -36,7 +36,7 @@ jobs:
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
 
-      # Build-free: drives scripts/land/train.sh against a throwaway repository with a fake gh.
+      # Build-free: drives the landing script against a throwaway repository with a fake gh.
       - name: "Landing script (trains resolve only generated views and ledgers; refusals hold)"
         run: bash scripts/tests/check_landing_script.sh
 
