@@ -179,9 +179,15 @@ if [ -f "$README" ]; then
   echo "  ok   README present and covers all classes"
 fi
 
-echo "=== sub-gates ==="
-if bash scripts/tests/check_contract_negatives.sh >/dev/null 2>&1; then echo "  ok   check_contract_negatives.sh"; PASS=$((PASS+1)); else echo "  FAIL check_contract_negatives.sh"; FAIL=$((FAIL+1)); fi
-if bash scripts/tests/check_contract_stability.sh >/dev/null 2>&1; then echo "  ok   check_contract_stability.sh"; PASS=$((PASS+1)); else echo "  FAIL check_contract_stability.sh"; FAIL=$((FAIL+1)); fi
+echo "=== sub-gates (each runs once, as its own CI step) ==="
+# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh): check_contract_negatives.sh and check_contract_stability.sh are each its own CI
+# step and its own command in the local full set, so re-running it here repeated every one of its
+# assertions in the same run. This gate now asserts only that the step exists and is unconditional.
+p1_ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+p1_no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+source scripts/tests/lib/delegated_gates.sh
+delegated_gates_control p1_ok p1_no
+require_delegated p1_ok p1_no check_contract_negatives.sh check_contract_stability.sh
 
 echo ""
 echo "PHASE1-CONTRACTS: PASS=$PASS  FAIL=$FAIL"

@@ -258,9 +258,6 @@ jobs:
       - name: Proof-patterns corpus gate
         run: bash scripts/tests/check_proof_patterns.sh
 
-      - name: Axiom-inventory gate (docs/verification/AXIOMS.md stays honest)
-        run: bash scripts/tests/check_axiom_inventory.sh
-
   external-checker:
     name: External proof re-check (con-leche)
     # The proof evidence re-checked by con-leche, an external Lean checker with a machine-checked
@@ -861,24 +858,15 @@ jobs:
       - name: "Receipt consumption (R-0004 — a stored receipt is untrusted input, re-checked against current facts)"
         run: bash scripts/tests/check_receipt_consumption.sh
 
-      - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
-        run: bash scripts/tests/check_checker_identity.sh
-
-      - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
-        run: bash scripts/tests/check_kernel_recheck.sh
-
-      - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
-        run: bash scripts/tests/check_checker_policy.sh
-
       - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
         run: bash scripts/tests/check_lean14576_reproducer.sh
 
-      - name: "Claim inventory (R-0208 — the frozen claim inventory replays row by row; the local twin of the acceptance step's judgement)"
-        run: bash scripts/tests/check_claim_inventory.sh
-
       # The evidence a measured checker build needs before its digest may be registered (R-0208),
-      # SELF-CONTAINED: the identity, the hostile controls re-run with their logs (and tied to that
+      # SELF-CONTAINED: the identity, the hostile controls with their logs (and tied to that
       # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
+      # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
+      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0547): they used to
+      # be steps of their own as well, so each assertion ran twice per workflow run.
       - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
         run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
 

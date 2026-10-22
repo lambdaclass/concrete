@@ -88,7 +88,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|checker_acceptance_evidence\.sh' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -125,9 +125,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
 # 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
 # 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
-#   scripts/tools/checker_acceptance_evidence.sh (R-0208) is excluded too: it PRODUCES evidence for a
-#   CI-measured checker build (an artifact) and needs $RUNNER_TEMP. Its one judgement, the claim
-#   inventory replay, runs locally as check_claim_inventory.sh.
+#   scripts/tools/checker_acceptance_evidence.sh (R-0208) was excluded too, until R-0547 made it the only
+#   run of five gates (see 257 -> 253 below); it now runs here with RUNNER_TEMP pointed at a per-run dir.
 #   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
 # 240 -> 241: check_prepush_record.sh (the pre-push validation-record bindings), pinned in the same commit.
@@ -152,7 +151,11 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   pinned in the same commit.
 # 255 -> 256: check_heavy_slots.sh (R-0543 machine-wide heavy-run semaphore), pinned in the same commit.
 # 256 -> 257: check_compile_cache.sh (R-0546 shared compile-output cache), pinned in the same commit.
-EXPECTED_GATE_COMMANDS=257
+# 257 -> 253 (R-0547, one run per assertion): the standalone steps for check_checker_identity.sh,
+#   check_kernel_recheck.sh, check_checker_policy.sh, check_axiom_inventory.sh and
+#   check_claim_inventory.sh are removed, because checker_acceptance_evidence.sh re-ran all five in the
+#   same workflow run; that step is now their only run, and this runner includes it (-5 +1).
+EXPECTED_GATE_COMMANDS=253
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
@@ -406,6 +409,10 @@ fi
 # The nightly fuzz steps derive SEED from the date in CI; the extracted fuzz
 # commands reference "$SEED", which would trip `set -u` here. Mirror CI.
 SEED="${SEED:-$(date -u +%Y%m%d)}"
+# The acceptance step writes its evidence under $RUNNER_TEMP on CI. Here it gets a per-run directory,
+# removed at the end, so two passes on one host never share it (R-0547).
+if [ -z "${RUNNER_TEMP:-}" ]; then RUNNER_TEMP="$(mktemp -d)"; _CI_RUNNER_TEMP_OWNED=1; fi
+export RUNNER_TEMP
 
 # Gates are independent processes (each uses its own mktemp -d), so they
 # parallelize cleanly, and PARALLEL IS THE DEFAULT: on a multicore box this cuts
@@ -888,6 +895,7 @@ else
   _gate_lock_release
 fi
 [ "$HEAVY_RUN" = "1" ] && heavy_slot_release
+[ "${_CI_RUNNER_TEMP_OWNED:-0}" = "1" ] && rm -rf "$RUNNER_TEMP"
 
 # The artifact write is part of the verdict: a pass with no durable record is not closure evidence.
 [ "$RUN_OK" = "1" ]

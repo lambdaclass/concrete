@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Phase 2 VC/discharge VALIDATION ARTIFACT (ROADMAP Phase 2 #3).
 #
-# The single umbrella gate for the whole VC / external-SMT surface. It runs every
-# sub-gate so one command proves the Phase 2 evidence story holds end to end:
+# The single umbrella gate for the whole VC / external-SMT surface. It checks that every sub-gate
+# below is its own CI step (delegated, not re-run: R-0547), so the Phase 2 evidence story is whole:
 #   - the VC schema and kernel-checked discharge (omega / bv_decide);
 #   - the opt-in external-SMT path, its determinism/provenance, the release-policy
 #     gate, the Lean-replay artifact, and the negative/honesty boundaries;
@@ -13,12 +13,8 @@
 # solver_trusted are visible but never confused with kernel evidence.
 
 set -uo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
-require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-COMPILER=".lake/build/bin/concrete"
-[ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 
 SUBGATES=(
   check_vc_schema.sh              # VC schema v1 + kernel discharge classification
@@ -32,25 +28,19 @@ SUBGATES=(
   check_vc_examples.sh            # end-of-Phase-2 examples (one VC/SMT surface each)
 )
 
-# CONCURRENT, REPORTED IN ORDER (R-0547). The sub-gates are independent processes with their own
-# sandboxes, and a full pass already runs them side by side; in series they made this umbrella one of
-# the longest gates of a parallel pass (361 s at JOBS=64). Each sub-gate's output is printed whole, in
-# the listed order, and its verdict is its own recorded exit status — a missing status is a failure.
-P2_TMP="$(mktemp -d)"; trap 'rm -rf "$P2_TMP"' EXIT
-for g in "${SUBGATES[@]}"; do
-  ( rc=0; bash "scripts/tests/$g" >"$P2_TMP/$g.log" 2>&1 || rc=$?; echo "$rc" > "$P2_TMP/$g.rc" ) &
-done
-wait
+# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh). Every sub-gate is its own CI
+# step in this workflow run and its own command in the local full set; running all nine again here
+# was most of this gate's 8 CI minutes and asserted nothing the steps do not. What the umbrella keeps
+# is the composition: a sub-gate whose step is removed or disabled turns this gate red.
+source "$ROOT_DIR/scripts/tests/lib/delegated_gates.sh"
 PASS=0; FAIL=0
-for g in "${SUBGATES[@]}"; do
-  echo "=== $g ==="
-  cat "$P2_TMP/$g.log" 2>/dev/null
-  if [ "$(cat "$P2_TMP/$g.rc" 2>/dev/null)" = "0" ]; then PASS=$((PASS+1)); else echo "  >>> $g FAILED"; FAIL=$((FAIL+1)); fi
-  echo ""
-done
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+echo "=== the Phase 2 sub-gates each run once, as their own CI steps ==="
+delegated_gates_control ok no
+require_delegated ok no "${SUBGATES[@]}"
+echo ""
 
 echo "============================================================"
-echo "PHASE2-VC: sub-gates PASS=$PASS  FAIL=$FAIL"
-if command -v z3 >/dev/null 2>&1; then echo "(Z3 present: solver-trusted / counterexample / determinism rows exercised)"
-else echo "(Z3 absent: solver rows degrade honestly to solver_error; emission + boundary rows still run)"; fi
+echo "PHASE2-VC: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

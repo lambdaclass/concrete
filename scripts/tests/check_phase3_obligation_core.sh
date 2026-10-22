@@ -5,11 +5,10 @@
 # obligation family — and proves the unified ledger is the ONLY truth source:
 # the same stable ids and statuses appear across --report vcs, --report
 # obligation-ledger, --report audit, --report proof-status, and `concrete prove`.
-# Then it composes the Phase-3 consolidation gates as the final umbrella.
+# Then it checks that the Phase-3 consolidation gates are each a CI step of their own (delegated,
+# not re-run: R-0547).
 
 set -uo pipefail
-# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
-GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -68,21 +67,18 @@ sp="$("$COMPILER" prove "$P" probe.count --show-obligation O1 --json 2>/dev/null
 lp="$(ccache_run "$COMPILER" "$P" --report obligation-ledger --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);o=next(o for o in d['obligations'] if 'probe.count' in o['id'] and o['id'].endswith('#O1'));print(o['id']+'|'+o['status'])")"
 [ -n "$sp" ] && [ "$sp" = "$lp" ] && ok "prove --show-obligation O1 == ledger ($sp)" || no "prove ≠ ledger: prove=$sp ledger=$lp"
 
-echo "=== umbrella: the Phase-3 consolidation gates are all green ==="
-# The sub-gates are independent processes, each in its own sandbox, and a full pass already runs them
-# side by side; here they ran in series and made this umbrella the critical path of a parallel pass
-# (441 s at JOBS=64). They now run concurrently and are judged in the listed order (R-0547). Each
-# records its own exit status; a missing status is a failure, never a pass.
-P3_SUBGATES=(check_obligation_core check_obligation_report_views check_obligation_policy_views
-             check_obligation_prove_views check_obligation_single_truth_source
-             check_no_duplicate_obligation_walkers check_discharge_adapters check_obligation_lowering)
-for g in "${P3_SUBGATES[@]}"; do
-  ( rc=0; bash "scripts/tests/$g.sh" >"$GATE_TMP/p3_$g.log" 2>&1 || rc=$?; echo "$rc" > "$GATE_TMP/p3_$g.rc" ) &
-done
-wait
-for g in "${P3_SUBGATES[@]}"; do
-  if [ "$(cat "$GATE_TMP/p3_$g.rc" 2>/dev/null)" = "0" ]; then ok "$g"; else no "$g"; tail -3 "$GATE_TMP/p3_$g.log"|sed 's/^/      /'; fi
-done
+echo "=== umbrella: the Phase-3 consolidation gates run, each once, as their own CI steps ==="
+# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh). Each of these is its own CI
+# step in this workflow run and its own command in the local full set, and re-running all eight here
+# was 12.2 of this gate's 13.3 CI minutes for no assertion the steps do not already make. What the
+# umbrella adds is that the composition stays whole: a sub-gate whose step is removed or disabled
+# turns this gate red. Run one sub-gate alone with `bash scripts/tests/<name>.sh`.
+source "$ROOT_DIR/scripts/tests/lib/delegated_gates.sh"
+delegated_gates_control ok no
+require_delegated ok no check_obligation_core.sh check_obligation_report_views.sh \
+  check_obligation_policy_views.sh check_obligation_prove_views.sh \
+  check_obligation_single_truth_source.sh check_no_duplicate_obligation_walkers.sh \
+  check_discharge_adapters.sh check_obligation_lowering.sh
 
 echo ""
 echo "PHASE3-OBLIGATION-CORE: PASS=$PASS  FAIL=$FAIL"

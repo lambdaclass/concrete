@@ -65,9 +65,11 @@ REACHABLE_FILE="$(mktemp)"; trap 'rm -f "$REACHABLE_FILE"; rm -rf "${STRIP_DIR:-
 # processes for each of ~220x220 pairs per fixpoint round; the gate went from a second to being
 # killed at five minutes. The adjacency is built once — each file scanned for every gate name in a
 # single pass — and the fixpoint then walks it with no further subprocesses.
+# scripts/tools/*.sh are containers too: checker_acceptance_evidence.sh is the only run of five gates
+# (R-0547), so the edge from the workflow to those gates passes through it.
 NAMES_FILE="$(mktemp)"; EDGES_FILE="$(mktemp)"
 trap 'rm -f "$REACHABLE_FILE" "$NAMES_FILE" "$EDGES_FILE"' EXIT
-for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh; do
+for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh scripts/tools/*.sh; do
   [ -f "$f" ] || continue; basename "$f"
 done | sort -u > "$NAMES_FILE"
 
@@ -92,7 +94,7 @@ _exec_lines() { # path -> comment-stripped lines that INVOKE something
 # edges: "<container> <invoked-gate>", container "" meaning the workflow itself
 _exec_lines "$WORKFLOW" | grep -oFf "$NAMES_FILE" 2>/dev/null | sort -u \
   | while IFS= read -r n; do [ -n "$n" ] && echo "WORKFLOW $n"; done > "$EDGES_FILE"
-for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh; do
+for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh scripts/tools/*.sh; do
   [ -f "$f" ] || continue
   src="$(basename "$f")"
   _exec_lines "$f" | grep -oFf "$NAMES_FILE" 2>/dev/null | sort -u \

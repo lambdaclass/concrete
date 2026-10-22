@@ -54,8 +54,11 @@ ok={'proved_by_lean','proved_by_kernel_decision','proved_by_lean_replay','arithm
 sys.exit(0 if json.load(sys.stdin)['status'] in ok else 1)" && ok "show-obligation status ∈ canonical vocabulary" || no "status outside vocabulary"
 
 echo "=== prove CLI + snapshots stay green (output parity) ==="
-if bash scripts/tests/test_prove_cli.sh >$GATE_TMP/pv_cli.log 2>&1; then ok "prove CLI gate green"; else no "prove CLI gate failed"; tail -5 $GATE_TMP/pv_cli.log|sed 's/^/      /'; fi
-if bash scripts/tests/check_snapshots.sh >$GATE_TMP/pv_snap.log 2>&1; then ok "snapshot gate green"; else no "snapshot gate failed"; fi
+# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh): test_prove_cli.sh and check_snapshots.sh are each its own CI
+# step and its own command in the local full set, so re-running it here repeated every one of its
+# assertions in the same run. This gate now asserts only that the step exists and is unconditional.
+source scripts/tests/lib/delegated_gates.sh
+require_delegated ok no test_prove_cli.sh check_snapshots.sh
 
 echo ""
 echo "OBLIGATION-PROVE-VIEWS: PASS=$PASS  FAIL=$FAIL"

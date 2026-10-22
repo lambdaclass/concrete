@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# FROZEN CLAIM INVENTORY, LOCALLY (R-0208): replay every Lean-backed claim and compare the rows with the
-# committed reference, exactly as the CI checker-acceptance step does.
+# FROZEN CLAIM INVENTORY (R-0208): replay every Lean-backed claim and compare the rows with the
+# committed reference. Since R-0547 this gate runs only inside the checker-acceptance step
+# (scripts/tools/checker_acceptance_evidence.sh), which is its CI step and its command in the local
+# full set; run it alone with `bash scripts/tests/check_claim_inventory.sh`.
 #
-# That step (scripts/tools/checker_acceptance_evidence.sh) only runs on CI: it writes a measured-build
-# artifact under $RUNNER_TEMP, so the local runner excludes it. But it also JUDGES — a corpus change that
+# History: the acceptance step once ran only on CI, and it JUDGES — a corpus change that
 # adds, removes or re-verdicts a claim turns it red — and twice (bug 079's first CI result; the bug 079
 # follow-up fixtures at 78e6af25) a locally green push failed there. This gate is that judgement alone,
 # runnable anywhere the compiler and the pinned checker are.
@@ -37,7 +38,14 @@ else
   ok "the replay ran the pinned checker on every claim"
 fi
 
-if [ -s "$TMP/new.rows" ] && diff "$TMP/ref.rows" "$TMP/new.rows" > "$TMP/diff"; then
+_inv_same=0; [ -s "$TMP/new.rows" ] && diff "$TMP/ref.rows" "$TMP/new.rows" > "$TMP/diff" && _inv_same=1
+# The acceptance step (scripts/tools/checker_acceptance_evidence.sh) runs this gate as its claim
+# inventory judgement and publishes the replayed rows and their diff as evidence.
+if [ -n "${CLAIM_INVENTORY_KEEP_DIR:-}" ]; then
+  cp "$TMP/inv.tsv" "$TMP/diff" "$CLAIM_INVENTORY_KEEP_DIR/" 2>/dev/null \
+    || no "could not keep the replayed inventory in $CLAIM_INVENTORY_KEEP_DIR"
+fi
+if [ "$_inv_same" = 1 ]; then
   ok "every row matches $REF ($(grep -c . "$TMP/new.rows") rows)"
 else
   no "the replay differs from $REF:"
