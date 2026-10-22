@@ -162,7 +162,7 @@ for them. On a project's entry point, `concrete src/main.con --interp -- args` i
 whole module graph `concrete build` compiles, std included, with the program's arguments and
 stdin. `check_example_outputs.sh` runs the interpreter with each case's arguments and stdin, in its
 own scratch copy of the example. Interpreter/native agreement on the example manifest went from 89
-of 149 cases to 144. The remaining five are refused for a stated reason: four read the clock, and
+of 151 cases to 146. The remaining five are refused for a stated reason: four read the clock, and
 one reads a union through an inactive field. Two more native defects surfaced. Bug 152 (fixed):
 `string_trim("")` returned a one-byte string holding the byte past its source. Bug 151: `a.b_f` and `a_b.f`
 flattened to one name, and the binary's `a_b::f()` ran the other function. The interpreter refused
