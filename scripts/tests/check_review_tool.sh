@@ -12,7 +12,8 @@
 # non-fast-forward merge, delta selection (round 2 sees only the delta and the
 # previous findings), splitting (file groups, size limit, hunk split, --pieces N),
 # the content-filter refusal retry (once, neutral, smaller, then `blocked`), the
-# round cap (distinct exit code, no extra round), and verify.sh.
+# round cap (distinct exit code, no extra round), verify.sh, and the pre-push
+# hook's review-notes tier (a notes-only push runs no gates).
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -230,6 +231,35 @@ check "a blocked HEAD may be re-run; it counts as round 2" test "$(field rounds)
 check "the re-run reviews the whole branch again (blocked does not advance the delta)" \
   grep -q "complete change of a branch" "$FAKE_LOG/prompt.1"
 
+echo "=== findings in one piece, another piece blocked ==="
+reset_fake
+g checkout -q main && g checkout -qb mixed
+commit_file a.txt "MARK_FINDING here" "a finding"
+commit_file Concrete/Own.lean "MARK_REFUSE_ALWAYS" "a refusal"
+review >"$T/out8" 2>&1; rc=$?
+check "blocked wins over findings: verdict blocked, exit 5 (got $rc, $(field verdict))" \
+  test "$rc" -eq 5 -a "$(field verdict)" = blocked
+check "the reviewed piece's findings are still recorded" \
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | grep -q 'counter is never reset'"
+commit_file b.txt "more" "more work"
+reset_fake
+review >/dev/null 2>&1
+check "next round restarts from the base, not after the blocked round" grep -q "complete change of a branch" "$FAKE_LOG/prompt.1"
+check "and carries the blocked round's findings forward" grep -q "counter is never reset" "$FAKE_LOG/prompt.1"
+
+echo "=== pre-push hook: a review-notes push runs no gates ==="
+HOOK="$ROOT_DIR/.githooks/pre-push"
+Z=0000000000000000000000000000000000000000
+NOTES_SHA="$(g rev-parse refs/notes/concrete-review)"
+hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\n' \
+  "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
+check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review %s refs/notes/concrete-review %s\n' \
+  "$(g rev-parse HEAD)" "$Z" "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+check "notes alongside a wip push take the wip tier (exit $rc)" \
+  bash -c "[ $rc -eq 0 ] && grep -q 'wip/\* backup push' <<<'$hook_out'"
+
 echo "=== splitting by file group and size ==="
 reset_fake
 g checkout -q main && g checkout -qb split
@@ -276,8 +306,32 @@ commit_file tests/a.con "$(seq 1 300)" "tests only"
 review --pieces 3 >/dev/null 2>&1
 p3="$(field pieces)"
 check "--pieces 3 on one file gives three pieces ($p3)" test "$p3" -eq 3
-check "every split part of that file is a renumbered hunk" \
-  bash -c "for f in '$FAKE_LOG'/stdin.*; do grep -qE '^@@ -[0-9]+,[0-9]+ \+[0-9]+,[0-9]+ @@' \"\$f\" || exit 1; done"
+# Each part's @@ header must match its own body, and the parts must continue
+# one another: part k+1 starts where part k ended, on both sides.
+cat >"$T/hunks.py" <<'EOF'
+import re, sys
+expect_old = expect_new = None
+for path in sys.argv[1:]:
+    hunks = [l for l in open(path) if l.startswith("@@")]
+    if len(hunks) != 1:
+        sys.exit("%s: want one hunk, got %d" % (path, len(hunks)))
+    m = re.match(r"@@ -(\d+),(\d+) \+(\d+),(\d+) @@", hunks[0])
+    if not m:
+        sys.exit("%s: unnumbered header %r" % (path, hunks[0]))
+    o, oc, n, nc = map(int, m.groups())
+    body = open(path).read().split(hunks[0], 1)[1].splitlines()
+    got_o = sum(1 for l in body if l[:1] in (" ", "-"))
+    got_n = sum(1 for l in body if l[:1] in (" ", "+"))
+    if (got_o, got_n) != (oc, nc):
+        sys.exit("%s: header counts %d,%d but body has %d,%d" % (path, oc, nc, got_o, got_n))
+    if expect_new is not None and (o, n) != (expect_old, expect_new):
+        sys.exit("%s: starts at -%d +%d, previous part ended at -%d +%d" % (path, o, n, expect_old, expect_new))
+    expect_old, expect_new = o + oc, n + nc
+if expect_new != 301:
+    sys.exit("parts end at +%s, want +301 (300 lines)" % expect_new)
+EOF
+check "split parts carry correct, contiguous @@ headers" \
+  python3 "$T/hunks.py" $(ls "$FAKE_LOG"/stdin.* | sort -t. -k2 -n)
 
 echo "=== the round cap ==="
 reset_fake

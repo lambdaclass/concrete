@@ -4,8 +4,10 @@ Status: stable reference (R-0544)
 
 Every branch is reviewed by `scripts/review/review.sh` before it lands. The
 script picks the diff, splits it, runs the reviewer, records the verdict as a
-git note on the reviewed commit, and enforces the round cap. The landing bot and
-`train.sh` read that note through `scripts/review/verify.sh`.
+git note on the reviewed commit, and enforces the round cap.
+`scripts/review/verify.sh` reads that note. It is the interface for the landing
+bot and `train.sh`, but neither is in this repository yet, so for now nothing
+enforces the verdict when a branch lands.
 
 ## Why one script
 
@@ -57,7 +59,10 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
   round's findings and asks the reviewer to list each one that is still open.
 - A `blocked` round does not count as having reviewed its diff, so the next
   round starts from the last `clean` or `findings` round, or from the base.
-  Running again on a blocked `HEAD` is allowed and counts as a round.
+  Running again on a blocked `HEAD` is allowed and counts as a round. A round
+  with both findings and a blocked piece is `blocked` for this reason; its
+  findings are still recorded and carried into the next prompt, together with
+  those of the last fully reviewed round.
 - A `HEAD` that is already `clean` exits 0 without calling the reviewer.
 
 Rounds are counted from the notes, so the cap holds across invocations,
@@ -121,11 +126,18 @@ round, possibly run by another agent, gets the previous findings. The full raw
 output of every round is written to `.review/<sha>-<round>.md`, which git
 ignores.
 
-A rejected push (another agent pushed notes in the meantime) is handled by
-fetching the remote notes, merging them (`git notes merge -s ours`: on a conflict
-for the same commit the local, newer note wins), and retrying up to three times.
-The script also fetches and merges the remote notes before each round, so it
-counts rounds that were run elsewhere.
+A non-fast-forward rejection (another agent pushed notes in the meantime) is
+handled by fetching the remote notes, merging them (`git notes merge -s ours`: on
+a conflict for the same commit the local, newer note wins), and retrying, up to
+three attempts. Any other push failure stops at once with exit 6. The script also
+fetches and merges the remote notes before each round, so it counts rounds that
+were run elsewhere.
+
+The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates
+only these two notes refs: a notes commit holds one blob per annotated commit and
+no source tree. A push that also carries a branch takes that branch's tier.
+Until this hook reaches `main`, a hook installed from an older `main` still runs
+the gates on a note push, and the push fails outside `nix develop`.
 
 ## The cap
 

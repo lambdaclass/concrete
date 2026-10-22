@@ -104,6 +104,11 @@ push_notes() {
     if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
       return 0
     fi
+    # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
+    # refusal, auth, network) fails at once instead of being repeated.
+    if ! grep -qE '\[rejected\].*\((fetch first|non-fast-forward)\)' "$WORK/push.err"; then
+      break
+    fi
     echo "review: notes push attempt $attempt rejected; fetching and merging" >&2
     sync_notes || true
   done
@@ -187,9 +192,16 @@ if [ ! -s "$WORK/full.diff" ]; then
   exit 4
 fi
 
+# Open findings to carry forward: those of the latest round, and, when that
+# round was blocked, also those of the last fully reviewed round (the blocked
+# round may not have seen the code they are about).
 PREV_FINDINGS=""
-if [ "$REVIEWED_VERDICT" = findings ]; then
-  PREV_FINDINGS="$(findings_for "$REVIEWED_SHA" "$REVIEWED_ROUNDS")"
+if [ -n "$PREV_SHA" ] && [ "$PREV_VERDICT" != clean ]; then
+  PREV_FINDINGS="$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+fi
+if [ "$REVIEWED_VERDICT" = findings ] && [ "$REVIEWED_SHA" != "$PREV_SHA" ]; then
+  PREV_FINDINGS="$PREV_FINDINGS
+$(findings_for "$REVIEWED_SHA" "$REVIEWED_ROUNDS")"
 fi
 
 # ---------------------------------------------------------------- split
@@ -343,8 +355,12 @@ $stripped"
   esac
 done <"$WORK/pieces/manifest.tsv"
 
-if [ "$N_FINDINGS" -gt 0 ]; then VERDICT=findings
-elif [ "$N_BLOCKED" -gt 0 ]; then VERDICT=blocked
+# `blocked` wins over `findings`: a round with a blocked piece did not review all
+# of its diff, and only a `blocked` verdict keeps the next round's delta from
+# starting after it. The findings of the pieces that were reviewed are still
+# recorded and carried forward.
+if [ "$N_BLOCKED" -gt 0 ]; then VERDICT=blocked
+elif [ "$N_FINDINGS" -gt 0 ]; then VERDICT=findings
 else VERDICT=clean
 fi
 { echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
