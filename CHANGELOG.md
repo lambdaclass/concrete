@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Each Compile Owns Its Intermediate Files (bug 179, 2026-10-22)
+
+Two compiles of the same source to different outputs no longer break each other. The compiler
+built an executable through an intermediate LLVM file at `<input>.ll` (file mode) or `<main>.ll`
+(project mode), a path shared by every compile of that source. The first compile to finish
+removed it while the other's llvm-as or clang was still reading it, and the second failed with an
+uncaught `no such file or directory`. A devshell toolchain change shifted `run_tests.sh`'s timing
+enough to expose it: bug 102's `--interp == binary` leg raced a background `run_ok` worker
+compiling the same fixture. Every compile now writes its intermediates into a temp directory it
+creates for itself and removes on every path, including failures. Test mode, `concrete run` and
+the reducer, which named temporaries after the source or a millisecond clock, do the same.
+`--emit-llvm` is unchanged. Pinned by concurrent-compile legs in `run_tests.sh` for both build
+paths (`regress_179_concurrent_compile.con`, `regress_179_concurrent_build`). On the previous
+compiler, 35 of 40 file-mode compiles and 9 of 12 project builds failed.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered

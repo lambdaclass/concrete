@@ -39,3 +39,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-21	follow-on	fixing bug 127	unrecorded	136,137	136,137
 2026-10-22	review	Codex reviews (rounds 4 and 5) of the symbol-name work (bug 129)	unrecorded	165,166	165,166
 2026-10-22	development	safety-eval2 work (a pre-existing limitation noted while fixing it)	unrecorded	175	-
+2026-10-22	development	devshell toolchain change (Nix clang ahead on PATH) exposing a run_tests race	unrecorded	179	-

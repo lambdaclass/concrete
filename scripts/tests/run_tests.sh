@@ -11878,6 +11878,8 @@ fi
 #   regress_087_borrow_shadow_uaf/src/main.con  (bug 087 — an `if` body's
 #     `let r` shadowing a borrow-block ref must not outlive the `if`; pre-fix
 #     the later `r` read the inner, dropped String: a heap use-after-free)
+#   regress_179_concurrent_build/src/main.con  (bug 179 — also built concurrently
+#     in the bug 102/105/175 block; pre-fix the builds shared src/main.con.ll)
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
 # python3 it degrades to running without a watchdog rather than skipping the fixtures,
 # and says so once, so a hang on such a machine is at least explicable.

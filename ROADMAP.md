@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 17** (6 silent, 5 loud, 6 filed before the discovery record) of 138 bug records.
+**Open bugs: 17** (6 silent, 5 loud, 6 filed before the discovery record) of 139 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -127,7 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 | found bugs |
 | semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 6 counting batches recorded. 11 attribution-only batches (reviews, follow-ons, CI, controls, development) found 17 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 6 counting batches recorded. 12 attribution-only batches (reviews, follow-ons, CI, controls, development) found 18 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

@@ -49,6 +49,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124, 130, 134, 136 (evaluation-order rule 6: Core cannot bind the base once) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
+| 16. Driver artifacts at paths no compile owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`); no roadmap stage yet |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -343,3 +344,21 @@ threaded along every reachable path, including guard failure.
 
 **Owner.** R-0499 (S8: use-once and conservation at reachable exits; its exit names 090), queue
 row 4.
+
+## 16. Driver artifacts at paths no compile owns
+
+**Bugs.** 179 (the intermediate LLVM file was `<input>.ll` or `<main>.ll`, so two concurrent
+compiles of one source removed or rewrote it under each other; test mode, `concrete run` and the
+reducer named their temporaries from the source path or a millisecond clock).
+
+**Design cause.** The driver derived the location of an intermediate from a shared input, the
+source path or the machine's clock, instead of from the compile that writes and reads it, so it
+implicitly assumed that it was the only process touching those paths.
+
+**Structural fix.** Every intermediate that a compile writes and later reads lives in a directory
+that compile creates for itself (`IO.FS.createTempDir` / `IO.FS.withTempDir`), named by
+`privateIntermediate`, and the directory is removed on every path unless it is kept on purpose for
+debugging.
+
+**Owner.** The compile driver (`Main.lean`, `privateIntermediate`); the concurrent-compile legs in
+`run_tests.sh` (file and project mode) enforce it. No roadmap stage owns the driver yet.

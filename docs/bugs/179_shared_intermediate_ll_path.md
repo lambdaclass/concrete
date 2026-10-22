@@ -75,8 +75,8 @@ The regression is two `run_tests.sh` legs, one per build path:
   `concrete build -o` runs to distinct outputs, three rounds; every binary must exit 0. The
   project-level loop also builds and runs it once.
 
-On the OVH server the unfixed compiler fails 35 of the 40 file-mode compiles; the fixed compiler
-fails none.
+On the OVH server the unfixed compiler fails 35 of the 40 file-mode compiles and 9 of the 12
+project builds; the fixed compiler fails none.
 
 ## Structural cause
 
