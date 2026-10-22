@@ -1751,11 +1751,13 @@ run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_generic_safe.con"       "(E0229)"
 run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
-# Bug 145: vec_set over a non-Copy element is E0291; vec_free of a Vec with non-Copy elements is E0287.
-run_err "$TESTDIR/error_145_vec_set_linear.con"            "(E0291)"
+# Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
+# fix on the lowering-bugs branch, E0291).
 run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
 # Bug 146: `*h` frees the cell it moves the value out of.
 run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0
+run_err "$TESTDIR/error_146_deref_heap_place_write.con" "(E0290)"
+run_err "$TESTDIR/error_146_deref_heap_field_read.con"  "(E0290)"
 r146_ssa=$($COMPILER tests/regressions/bug146_heap_deref_does_not_free/repro.con --emit-ssa 2>&1 || true)
 if [[ "$r146_ssa" == *"call void @free("* ]]; then
     echo "  ok  bug146 repro: *h emits the free of the cell"

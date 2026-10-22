@@ -32,8 +32,13 @@ also the cell's release, which nothing emitted.
 Elab elaborates a dereference whose operand is a `Heap<T>` as the `free` intrinsic (which loads the
 value and then frees the cell), keeping the evidence node a dereference so proof digests do not
 move. Field access through a heap shell (`h.f`) is elaborated separately and is unchanged.
-`regress_146_heap_deref_frees.con` (run, prints 42) and a `run_tests.sh` leg asserting the
-reproducer's emitted SSA calls `@free`.
+Because `*h` now frees, it may not be used as a place (Codex review, round 3): `(*h).x = 5` made
+the assignment's base a `free` call that the lowering evaluates twice (a double release), and
+`(*h).x` as a projection dropped the moved-out value's other, non-Copy fields. Check refuses a heap
+dereference in place position (E0290); a field is read or written through the shell as `h.x`.
+`regress_146_heap_deref_frees.con` (run, prints 42), `error_146_deref_heap_place_write.con`,
+`error_146_deref_heap_field_read.con`, and a `run_tests.sh` leg asserting the reproducer's emitted
+SSA calls `@free`. Migration: 0 sites.
 
 ## Structural cause
 

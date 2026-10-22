@@ -1036,10 +1036,6 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_set" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
-      -- Bug 145 (rule (c)): `vec_set` overwrites an initialized element without consuming
-      -- it; a non-Copy element would be lost. `Vec::replace` hands the old element back.
-      if !(← isCopyType elemTy) then
-        throwCheck (.cannotOverwriteLinearPlace "Vec element (vec_set)" (tyToString elemTy)) (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
       expectTy .int idxTy "vec_set() index argument" (some e.getSpan)
       -- Bug 115's sibling: `vec_set` overwrites the element without returning or destroying
@@ -1845,6 +1841,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- (`*(h)` is `*h`: parentheses never hide the consumed binding). A heap reached any
       -- other way (`*w.h`, through a reference) would be freed while its owner still holds
       -- it — a second `*w.h` freed it again — so only a bare owned binding is loaded.
+      -- Bug 146 (Codex round 3): `*h` is a move out of the cell plus its release, never a
+      -- place. As a projection base or assignment target (`(*h).f = v`, `(*h).x`) it would free
+      -- the cell while the place is still in use, or drop the moved-out value's other fields.
+      -- Field access through the shell is spelled `h.f`.
+      if mode == .place then
+        throwCheck (.nonCopyProjection (tyToString innerTy)
+          "a heap dereference used as a place (`*h` moves the value out and frees the cell); write `h.f` to read or assign a field, or bind `let v = *h;` first") (some e.getSpan)
       match stripParens inner with
       | .ident _ varName => consumeVar varName (some e.getSpan)
       | _ =>

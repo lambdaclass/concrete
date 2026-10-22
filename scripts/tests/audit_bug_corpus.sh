@@ -104,9 +104,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 144: heap interiors linearity-tracked (E0290 / E0287).
   [144]="error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con regress_144_heap_node_destructure.con"
   # Bug 145: vec_set / vec_free on non-Copy elements (E0291 / E0287).
-  [145]="error_145_vec_set_linear.con error_145_vec_free_linear.con"
+  [145]="error_145_vec_free_linear.con"
   # Bug 146: *h frees its cell (positive control; run_tests.sh also checks the emitted free).
-  [146]="regress_146_heap_deref_frees.con"
+  [146]="regress_146_heap_deref_frees.con error_146_deref_heap_place_write.con error_146_deref_heap_field_read.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

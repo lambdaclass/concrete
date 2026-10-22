@@ -1,6 +1,7 @@
 # Bug 145 — `vec_set` and `vec_free` lost non-Copy elements without destroying them
 
-**Status:** FIXED 2026-10-22 (branch `safety-eval2`, containment)
+**Status:** FIXED 2026-10-22 (branch `safety-eval2`, containment of `vec_free`; the `vec_set` half is
+bug 115's fix on branch `lowering-bugs`, `29f91b7b`)
 **Found:** 2026-10-22, by the Codex review of rule (c) on `safety-eval2` (the branch's claim that no
 safe store into, or drop of, an initialized non-Copy place exists without consuming it).
 **Severity:** skipped destruction in safe code: a non-Copy element overwritten in place, or left in
@@ -26,12 +27,15 @@ On main (`0408f4d4`): accepted; `vec_set` copies the new element over the old on
 `repro_free.con` (`vec_free::<String>(v)` with one element pushed): accepted; `vec_free` frees the
 buffer only.
 
-Fixed: refused at the checker, natively and under `--interp`:
+Fixed: `repro_free.con` is refused at the checker, natively and under `--interp`:
 
 ```
-error[check]: (E0291) cannot overwrite non-Copy Vec element (vec_set) of type 'String' — overwriting would leak the old value
 error[check]: (E0287) vec_free would drop the non-Copy elements of type 'String' still in the vector without destroying them
 ```
+
+`repro_set.con` is refused (E0291) by bug 115's fix on `lowering-bugs` (`29f91b7b`), which makes
+`vec_set` and `vec_get` Copy-only; this branch does not duplicate that check and picks it up when
+`lowering-bugs` lands.
 
 ## Cause
 
@@ -42,10 +46,10 @@ element; `Vec::drop` runs the element drop glue, bug 052), and std's `Vec::set` 
 
 ## Fix
 
-Containment at the intrinsics: `vec_set` with a non-Copy element type is E0291
-(`cannotOverwriteLinearPlace`), `vec_free` of a `Vec<T>` with non-Copy `T` is E0287
-(`vecFreeDropsElements`). Fixtures `error_145_vec_set_linear.con`, `error_145_vec_free_linear.con`
-(`run_tests.sh`). Migration: 0 sites (every corpus use is at a Copy element type).
+Containment at the intrinsic: `vec_free` of a `Vec<T>` with non-Copy `T` is E0287
+(`vecFreeDropsElements`). Fixture `error_145_vec_free_linear.con` (`run_tests.sh`). The `vec_set`
+half: bug 115's fix (E0291, `lowering-bugs`). Migration: 0 sites (every corpus use is at a Copy
+element type).
 
 ## Structural cause
 
