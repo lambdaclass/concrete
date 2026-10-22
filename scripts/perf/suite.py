@@ -29,6 +29,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -57,7 +58,9 @@ def git(repo, *args):
 
 def harness_sha():
     try:
-        return git(HERE, "rev-parse", "HEAD")
+        # The harness is root-owned on the server; name it as safe so git does not refuse to read it.
+        return subprocess.run(["git", "-c", "safe.directory=*", "-C", HERE, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=True).stdout.strip()
     except Exception:
         return "unknown"
 
@@ -78,11 +81,23 @@ def timed(cmd, cwd, env=None, timeout=None, stdout=None):
             full = cmd
         err = open(tpath, "a") if (TIME_BIN and not IS_LINUX) else subprocess.DEVNULL
         t0 = time.monotonic()
+        # Own process group, so a timeout kills the benchmark's whole tree (shells, gates,
+        # test workers), not just /usr/bin/time.
+        p = subprocess.Popen(full, cwd=cwd, env=env, stdout=stdout or subprocess.DEVNULL,
+                             stderr=err, start_new_session=True)
         try:
-            p = subprocess.run(full, cwd=cwd, env=env, stdout=stdout or subprocess.DEVNULL,
-                               stderr=err, timeout=timeout)
-            rc = p.returncode
+            rc = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(p.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    p.wait(timeout=20)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
             rc = 124
         wall = time.monotonic() - t0
         if err is not subprocess.DEVNULL:
@@ -153,10 +168,15 @@ FOREIGN_HEAVY = re.compile(r"Runner\.Worker|run_ci_gates_local\.sh|run_tests\.sh
 
 
 def _proc_table():
-    out = subprocess.run(["ps", "-eo", "pid=,ppid=,ni=,stat=,args="], capture_output=True,
-                         text=True).stdout
+    # One row per THREAD on Linux (-L), so a multi-threaded foreign job counts every runnable
+    # thread, not one per process.
+    cols = ["pid=,ppid=,ni=,stat=,args="]
+    cmd = ["ps", "-eLo"] + cols if IS_LINUX else ["ps", "-eo"] + cols
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError("ps failed: %s" % p.stderr[-200:])
     rows = []
-    for line in out.splitlines():
+    for line in p.stdout.splitlines():
         parts = line.split(None, 4)
         if len(parts) < 4:
             continue
@@ -166,20 +186,22 @@ def _proc_table():
             rows.append((int(pid), int(ppid), ni, stat, args))
         except ValueError:
             continue
+    if not rows:
+        raise RuntimeError("ps listed no processes")
     return rows
 
 
 def _ours(rows, root):
     kids = {}
     for pid, ppid, *_ in rows:
-        kids.setdefault(ppid, []).append(pid)
+        kids.setdefault(ppid, set()).add(pid)
     seen, stack = set(), [root]
     while stack:
         p = stack.pop()
         if p in seen:
             continue
         seen.add(p)
-        stack.extend(kids.get(p, []))
+        stack.extend(kids.get(p, ()))
     # Our ancestors (the runner shell, systemd) are not foreign either.
     parent = {pid: ppid for pid, ppid, *_ in rows}
     p = root
@@ -203,8 +225,8 @@ def snapshot(root_pid):
             try:
                 nice = int(ni)
             except ValueError:
-                nice = 0   # "-" = realtime / SCHED_IDLE reports vary; count as normal
-            if nice >= 19 or ni == "-":
+                nice = None   # "-": SCHED_IDLE or a realtime class
+            if nice is None or nice >= 19:
                 idle_running += 1
             else:
                 running += 1
@@ -215,54 +237,97 @@ def snapshot(root_pid):
     return {"heavy": sorted(heavy), "running": running, "idle_running": idle_running, "load1": load1}
 
 
+def running_limit():
+    return max(4, (os.cpu_count() or 4) // 8)
+
+
+def contamination(samples, errors, limit):
+    """Pure verdict over sampler output. Contaminated when any sample saw foreign heavy work, when
+    any single sample had more than 2*limit foreign runnable non-idle threads (a burst), when the
+    mean exceeds limit, or when sampling itself failed or produced nothing (fail closed)."""
+    heavy = sorted({h for s in samples for h in s["heavy"]})
+    run = [s["running"] for s in samples]
+    mean_run = sum(run) / len(run) if run else 0.0
+    burst = max(run) if run else 0
+    reasons = []
+    if heavy:
+        reasons.append("foreign heavy work: " + ",".join(heavy))
+    if burst > 2 * limit:
+        reasons.append("burst of %d foreign runnable threads" % burst)
+    if mean_run > limit:
+        reasons.append("mean %.1f foreign runnable threads" % mean_run)
+    if errors:
+        reasons.append("%d sampling errors" % errors)
+    if not samples:
+        reasons.append("no samples")
+    return bool(reasons), reasons
+
+
 class Sampler(threading.Thread):
-    def __init__(self, period=5.0, running_limit=None):
+    """Samples at start, every `period` seconds, and once more at finish (so even a short run has
+    at least two samples)."""
+
+    def __init__(self, period=2.0, limit=None):
         super().__init__(daemon=True)
         self.period = period
         self.stop = threading.Event()
         self.samples = []
-        ncpu = os.cpu_count() or 4
-        self.running_limit = running_limit if running_limit is not None else max(4, ncpu // 8)
+        self.errors = 0
+        self.limit = limit if limit is not None else running_limit()
+
+    def sample(self):
+        try:
+            self.samples.append(snapshot(os.getpid()))
+        except Exception:
+            self.errors += 1
 
     def run(self):
+        self.sample()
         while not self.stop.wait(self.period):
-            try:
-                self.samples.append(snapshot(os.getpid()))
-            except Exception:
-                pass
+            self.sample()
+
+    def finish(self):
+        self.stop.set()
+        self.join(timeout=30)
+        self.sample()
 
     def verdict(self):
-        heavy = sorted({h for s in self.samples for h in s["heavy"]})
+        contaminated, reasons = contamination(self.samples, self.errors, self.limit)
         run = [s["running"] for s in self.samples]
         idle = [s["idle_running"] for s in self.samples]
         loads = [s["load1"] for s in self.samples if s["load1"] is not None]
-        mean_run = sum(run) / len(run) if run else 0.0
-        contaminated = bool(heavy) or mean_run > self.running_limit
         return contaminated, {
-            "samples": len(self.samples), "foreign_heavy": heavy,
-            "foreign_running_mean": round(mean_run, 2), "foreign_running_max": max(run) if run else 0,
+            "samples": len(self.samples), "errors": self.errors, "reasons": reasons,
+            "foreign_heavy": sorted({h for s in self.samples for h in s["heavy"]}),
+            "foreign_running_mean": round(sum(run) / len(run), 2) if run else 0.0,
+            "foreign_running_max": max(run) if run else 0,
             "idle_running_mean": round(sum(idle) / len(idle), 2) if idle else 0.0,
-            "load1_max": max(loads) if loads else None, "running_limit": self.running_limit,
+            "load1_max": max(loads) if loads else None, "running_limit": self.limit,
         }
 
 
 def wait_quiet(wait_s, settle=3, period=20):
-    """Return True once `settle` consecutive snapshots show no foreign heavy work."""
+    """Return True once `settle` consecutive snapshots show no foreign heavy work and at most
+    running_limit() foreign runnable non-idle threads. Logs a busy line at most every 5 minutes."""
     deadline = time.monotonic() + wait_s
-    ncpu = os.cpu_count() or 4
-    limit = max(4, ncpu // 8)
+    limit = running_limit()
     ok = 0
+    last_log = None
     while True:
-        s = snapshot(os.getpid())
-        quiet = not s["heavy"] and s["running"] <= limit
+        try:
+            s = snapshot(os.getpid())
+            quiet = not s["heavy"] and s["running"] <= limit
+        except Exception as ex:
+            s, quiet = {"error": str(ex)}, False
         ok = ok + 1 if quiet else 0
         if ok >= settle:
             return True
         if time.monotonic() > deadline:
             log("machine never went quiet: %s" % json.dumps(s))
             return False
-        if not quiet:
+        if not quiet and (last_log is None or time.monotonic() - last_log > 300):
             log("busy: %s" % json.dumps(s))
+            last_log = time.monotonic()
         time.sleep(period if not quiet else 5)
 
 
@@ -360,6 +425,8 @@ class Run:
                 w2, _, rc2 = timed([self.cc, "check"], d)
                 if rc2 == 0:
                     cwalls.append(w2 * 1000)
+            if ("compile." + bench) in self.failed:
+                continue   # a build that failed once is not timed at all
             log("compile %-28s %s ms" % (bench, perflib.median(walls)))
             self.put("compile.%s.wall_ms" % bench, walls, "ms")
             self.put("compile.%s.rss_kb" % bench, [r for r in rsss if r], "kb")
@@ -444,14 +511,19 @@ class Run:
             return
         log("run_tests.sh")
         w, rss, rc = timed(["bash", "-c", self.suite["run_tests"]], self.repo, timeout=3 * 3600)
-        self.put("tests.run_tests.wall_s", [w], "s")
-        if rc != 0:
-            self.notes.append("run_tests.sh exited %d (time still recorded)" % rc)
+        # A red or timed-out suite is not a timing: an early failure would read as a speed-up and
+        # the fix as a slowdown. The run is marked partial instead.
+        if rc == 0:
+            self.put("tests.run_tests.wall_s", [w], "s")
+        else:
+            self.failed.append("tests.run_tests")
+            self.notes.append("run_tests.sh exited %d after %.0fs; no timing recorded" % (rc, w))
 
     def gates(self):
-        path = os.path.join(HERE, os.path.basename(self.suite["slow_gates_file"]))
+        path = os.environ.get("PERF_SLOW_GATES") or os.path.join(HERE, os.path.basename(self.suite["slow_gates_file"]))
         if not os.path.exists(path):
-            self.notes.append("no slow_gates.json yet; run discover-gates")
+            self.failed.append("gates.list")
+            self.notes.append("no slow_gates.json; run discover-gates")
             return
         for g in json.load(open(path))["gates"]:
             if not self.want(g["id"]):
@@ -461,9 +533,11 @@ class Run:
                 continue
             log("gate %s" % g["id"])
             w, rss, rc = timed(["bash", "-c", g["cmd"]], self.repo, timeout=2 * 3600)
-            self.put("gate.%s.wall_s" % g["id"], [w], "s")
-            if rc != 0:
-                self.notes.append("gate %s exited %d (time still recorded)" % (g["id"], rc))
+            if rc == 0:
+                self.put("gate.%s.wall_s" % g["id"], [w], "s")
+            else:
+                self.failed.append("gate." + g["id"])
+                self.notes.append("gate %s exited %d after %.0fs; no timing recorded" % (g["id"], rc, w))
 
 
 def host_info():
@@ -507,8 +581,7 @@ def cmd_run(a):
                 if s != "lake":
                     getattr(r, s)()
     finally:
-        sampler.stop.set()
-        sampler.join(timeout=10)
+        sampler.finish()
         shutil.rmtree(r.tmp, ignore_errors=True)
     if status == "ok" and r.failed:
         status = "partial"

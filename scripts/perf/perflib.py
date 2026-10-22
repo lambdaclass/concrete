@@ -119,12 +119,25 @@ def validate_record(rec):
             continue
         if e.get("unit") not in UNITS:
             errs.append("metric %s unit %r unknown" % (name, e.get("unit")))
-        for k in ("median", "lo", "hi", "n"):
-            if not isinstance(e.get(k), (int, float)):
-                errs.append("metric %s field %s missing or not numeric" % (name, k))
-        if all(isinstance(e.get(k), (int, float)) for k in ("median", "lo", "hi")):
-            if not (e["lo"] <= e["median"] <= e["hi"]):
-                errs.append("metric %s violates lo <= median <= hi" % name)
+        num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+        bad = [k for k in ("median", "lo", "hi") if not num(e.get(k))]
+        if bad:
+            errs.append("metric %s field(s) %s missing or not finite numbers" % (name, ",".join(bad)))
+            continue
+        n = e.get("n")
+        if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+            errs.append("metric %s n %r is not a positive integer" % (name, n))
+            continue
+        samples = e.get("samples")
+        if not isinstance(samples, list) or len(samples) != n or not all(num(x) for x in samples):
+            errs.append("metric %s samples are not %d finite numbers" % (name, n))
+            continue
+        if not (e["lo"] <= e["median"] <= e["hi"]):
+            errs.append("metric %s violates lo <= median <= hi" % name)
+        tol = 2e-3 + 1e-9 * max(abs(x) for x in samples)
+        if abs(min(samples) - e["lo"]) > tol or abs(max(samples) - e["hi"]) > tol \
+                or abs(median(samples) - e["median"]) > tol:
+            errs.append("metric %s lo/median/hi disagree with its samples" % name)
     return errs
 
 
@@ -203,29 +216,43 @@ def detect(records, current, cfg=None):
         band = max(c["min_band"], c["noise_k"] * max(hn, wn))
         ent.update({"baseline": round(base, 3), "noise": round(max(hn, wn), 4),
                     "band": round(band, 4)})
-        if base <= 0:
-            ent["verdict"] = "ok"
-            entries[name] = ent
-            continue
-        ratio = e["median"] / base
-        ent["ratio"] = round(ratio, 4)
-        limit = base * (1 + band) * (1 + c["threshold"])
-        ent["limit"] = round(limit, 3)
         floor = c["min_abs"].get(e["unit"], 0.0)
+        # One rule for every baseline, including zero and negative ones (a pass rounded to 0 ms, a
+        # growth exponent): slower than the relative band AND than the absolute floor.
+        delta = max(abs(base) * ((1 + band) * (1 + c["threshold"]) - 1), floor)
+        limit = base + delta
+        ent["limit"] = round(limit, 3)
+        if base > 0:
+            ent["ratio"] = round(e["median"] / base, 4)
         if band > c["max_band"]:
             ent["verdict"] = "too_noisy"
-        elif e["median"] > limit and e["median"] - base > floor:
+        elif e["median"] > limit:
             # A contaminated record is reported, never alarmed on.
             ent["verdict"] = "slower_contaminated" if current.get("contaminated") else "regression"
             if not current.get("contaminated"):
                 regressions.append(name)
-        elif e["median"] < base / ((1 + band) * (1 + c["threshold"])) and base - e["median"] > floor:
+        elif e["median"] < base - delta:
             ent["verdict"] = "improvement"
             improvements.append(name)
         else:
             ent["verdict"] = "ok"
         entries[name] = ent
     last_good = prior[-1]["sha"] if prior else None
+    # Metrics the newest comparable record had and this one lacks: a benchmark that stopped
+    # producing a number is a signal, not silence.
+    missing = sorted(set(window[-1]["metrics"]) - set(current.get("metrics", {}))) if window else []
+    if current.get("contaminated"):
+        verdict = "contaminated"
+    elif regressions:
+        verdict = "regression"
+    elif current.get("status") == "build_failed":
+        verdict = "build_failed"
+    elif current.get("status") == "partial" or missing:
+        verdict = "incomplete"
+    elif not window or len(window) < c["min_history"]:
+        verdict = "insufficient_history"
+    else:
+        verdict = "ok"
     return {
         "schema": SUMMARY_SCHEMA,
         "machine": machine,
@@ -240,9 +267,17 @@ def detect(records, current, cfg=None):
         "regressions": regressions,
         "improvements": improvements,
         "last_measured_before": last_good,
+        "missing": missing,
+        "failed": list(current.get("failed", [])),
         "metrics": entries,
-        "verdict": ("regression" if regressions else "ok") if not current.get("contaminated") else "contaminated",
+        "verdict": verdict,
     }
+
+
+def regression_limit(good_value, band, threshold, unit):
+    """The alarm line above a good value, as detect() draws it."""
+    floor = DEFAULTS["min_abs"].get(unit, 0.0)
+    return good_value + max(abs(good_value) * ((1 + band) * (1 + threshold) - 1), floor)
 
 
 def last_good(records, current, name, ceiling):
@@ -269,10 +304,12 @@ def annotate_bisect_targets(records, current, summary):
 
 # ---------------------------------------------------------------- bisect
 
-def classify(value, good_value, bad_value):
-    """A probe is 'bad' when its value is closer to the regressed value than
-    to the good one (the midpoint rule); 'good' otherwise."""
-    return "bad" if value > (good_value + bad_value) / 2.0 else "good"
+def classify(value, limit):
+    """A probe is 'bad' when it is slower than `limit`, the same criterion the
+    detector applies to the good end: good * (1 + band) * (1 + threshold),
+    and at least the absolute floor. So a partial step (1000 -> 1300 -> 2000)
+    is named where it first crosses the alarm line, not at the midpoint."""
+    return "bad" if value > limit else "good"
 
 
 def next_probe(commits, verdicts):
@@ -298,7 +335,7 @@ def next_probe(commits, verdicts):
     return ("probe", commits[pick])
 
 
-def bisect(commits, measure, good_value, bad_value, max_probes=32):
+def bisect(commits, measure, limit, max_probes=32):
     """Drive next_probe with `measure(sha) -> value | None` (None = skip).
     Returns (culprit_or_None, candidates, probes) where probes lists
     (sha, value, verdict) in probe order."""
@@ -310,7 +347,7 @@ def bisect(commits, measure, good_value, bad_value, max_probes=32):
             return step[1], step[2], probes
         sha = step[1]
         val = measure(sha)
-        verdict = "skip" if val is None else classify(val, good_value, bad_value)
+        verdict = "skip" if val is None else classify(val, limit)
         verdicts[sha] = verdict
         probes.append((sha, val, verdict))
     step = next_probe(commits, verdicts)
