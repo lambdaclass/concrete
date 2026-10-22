@@ -162,9 +162,10 @@ def collect_main():
         a, b = out["remotes"][0]["sha"], out["remotes"][1]["sha"]
         out["flags"].append(f"MISMATCH: origin main {a[:10]} != mirror main {b[:10]}")
     out["in_sync"] = len(shas) == 1 and None not in shas
-    oc = out["remotes"][0].get("ci")
-    if isinstance(oc, dict) and oc.get("last_completed") and oc["last_completed"].get("conclusion") != "success":
-        out["flags"].append(f"main CI {oc['last_completed'].get('conclusion')}")
+    for ent in out["remotes"]:
+        oc = ent.get("ci")
+        if isinstance(oc, dict) and oc.get("last_completed") and oc["last_completed"].get("conclusion") != "success":
+            out["flags"].append(f"{ent['label']} main CI {oc['last_completed'].get('conclusion')}")
     return out
 
 
@@ -376,7 +377,10 @@ SECRET_PATTERNS = [
     (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), "[token]"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[token]"),
     (re.compile(r"\bssh-(?:ed25519|rsa|dss|ecdsa[\w-]*) [A-Za-z0-9+/=]{20,}"), "[key]"),
-    (re.compile(r"(?i)\b(token|secret|password|passwd|pass|pw|api[_-]?key|topic|webhook[_-]?url)(\s*[=:]\s*)\S+"), r"\1\2[redacted]"),
+    # key=value, key: value, "key": "value" for any key that names a credential, including prefixed
+    # and suffixed forms (NTFY_TOKEN, AWS_SECRET_ACCESS_KEY, db_password); a quoted value goes whole.
+    (re.compile(r"""(?i)\b([A-Za-z0-9_-]*?(?:token|secret|password|passwd|pass|pw|api[_-]?key|credential|topic|webhook[_-]?url)"""
+                r"""(?:[_-][A-Za-z0-9_-]*)?)(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)"""), r"\1\2[redacted]"),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{12,}=*"), "Bearer [token]"),
     (re.compile(r"\bntfy\.sh/[A-Za-z0-9_-]+"), "ntfy.sh/[topic]"),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"), "[ip]"),
@@ -411,14 +415,33 @@ def sanitize(obj):
     return sanitize_text(obj)
 
 
+FREE_TEXT_KEYS = ("error", "jobs_error", "load_error", "runners_error", "note")
+
+
 def public_view(data):
+    """The publishable page. Free-form text that agents or tools write (review and gate notes, landing
+    notes, error messages) is DROPPED, not pattern-scrubbed: no regex list can promise that arbitrary
+    prose carries no secret. Only its presence survives. Every remaining string is sanitized too."""
     d = json.loads(json.dumps(data))
+
+    def strip(o):
+        if isinstance(o, dict):
+            for k in list(o):
+                if k in FREE_TEXT_KEYS and o[k]:
+                    o[k] = "withheld in the public view"
+                else:
+                    strip(o[k])
+        elif isinstance(o, list):
+            for v in o:
+                strip(v)
+    strip(d)
+    for b in (d.get("branches") or {}).get("branches") or []:
+        for k in ("review", "gates"):
+            b[k] = "present (withheld in the public view)" if b.get(k) else None
     srv = d.get("server") or {}
     for i, r in enumerate(srv.get("runners") or [], 1):
         r["name"] = f"runner {i}"
     srv.pop("load_source", None)
-    lg = d.get("landing") or {}
-    lg.pop("log_dir", None)
     d["public"] = True
     return sanitize(d)
 

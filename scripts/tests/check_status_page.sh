@@ -82,6 +82,7 @@ mkdir -p "$TMP/gh"
 cat > "$TMP/fake-gh" <<GH
 #!/usr/bin/env bash
 case "\$*" in
+  *"-R test/mirror --branch main"*) echo '[{"databaseId":2,"status":"completed","conclusion":"failure","headSha":"$MAIN_SHA","createdAt":"2026-10-22T09:00:00Z","updatedAt":"2026-10-22T09:30:00Z","url":"https://github.com/test/mirror/actions/runs/2","workflowName":"CI","event":"push"}]' ;;
   *"--branch main"*) echo '[{"databaseId":1,"status":"completed","conclusion":"success","headSha":"$MAIN_SHA","createdAt":"2026-10-22T09:00:00Z","updatedAt":"2026-10-22T09:30:00Z","url":"https://github.com/test/repo/actions/runs/1","workflowName":"CI","event":"push"}]' ;;
   "run list"*) echo '[{"databaseId":7,"status":"in_progress","conclusion":"","headSha":"abc","headBranch":"ci/t3","createdAt":"2026-10-22T13:00:00Z","updatedAt":"2026-10-22T13:10:00Z","url":"https://github.com/test/repo/actions/runs/7","workflowName":"CI","event":"workflow_dispatch","displayTitle":"train t3"},{"databaseId":8,"status":"completed","conclusion":"success","headSha":"$WIPA","headBranch":"wip/a","createdAt":"2026-10-22T12:00:00Z","updatedAt":"2026-10-22T12:02:00Z","url":"https://github.com/test/repo/actions/runs/8","workflowName":"Branch health","event":"push","displayTitle":"wip a"}]' ;;
   "run view"*) echo '{"jobs":[{"name":"Build","status":"completed","conclusion":"success"},{"name":"Unit tests","status":"completed","conclusion":"failure"},{"name":"Gates","status":"in_progress","conclusion":""}]}' ;;
@@ -104,6 +105,7 @@ J="$TMP/full/status.json"
 q() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print($2)" "$1"; }
 check "status.json parses"                         '[ "$(q "$J" "type(d).__name__")" = dict ]'
 check "main mismatch between origin and mirror is flagged" '[ "$(q "$J" "d[\"main\"][\"in_sync\"]")" = False ] && q "$J" "d[\"main\"][\"flags\"]" | grep -q MISMATCH'
+check "a red mirror CI is flagged too"             'q "$J" "d[\"main\"][\"flags\"]" | grep -q "mirror main CI failure"'
 check "main CI result is read for origin"          '[ "$(q "$J" "d[\"main\"][\"remotes\"][0][\"ci\"][\"conclusion\"]")" = success ]'
 check "one ci/* run in flight"                     '[ "$(q "$J" "d[\"inflight\"][\"active\"]")" = 1 ]'
 check "its failing job is named"                   '[ "$(q "$J" "\",\".join(d[\"inflight\"][\"runs\"][0][\"failing\"])")" = "Unit tests" ]'
@@ -138,11 +140,15 @@ check "public page is marked as public"            'grep -q "public view" "$TMP/
 SAN="$(env STATUS_PRIVATE_HOSTS=build-box.internal python3 -I -c '
 import importlib.util,sys
 spec=importlib.util.spec_from_file_location("s",sys.argv[1]); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-print(m.sanitize_text(sys.argv[2]))' "$STATUS" "ip $SECRET_IP6 hook $SECRET_HOOK xoxb-1234567890-abcdef pw: hunter2 on build-box.internal at 15:41:15 v2.338.1 ntfy.sh/concrete-secret-topic")"
-for s in "$SECRET_IP6" "$SECRET_HOOK" "xoxb-" "hunter2" "build-box.internal" "concrete-secret-topic"; do
+print(m.sanitize_text(sys.argv[2]))' "$STATUS" "ip $SECRET_IP6 hook $SECRET_HOOK xoxb-1234567890-abcdef pw: hunter2 on build-box.internal at 15:41:15 v2.338.1 ntfy.sh/concrete-secret-topic NTFY_TOKEN=opaquecred1 AWS_SECRET_ACCESS_KEY=opaquecred2 {\"password\": \"opaquecred3\"} password=\"two opaquecred4 words\" tokenizer: keeps this")"
+for s in "$SECRET_IP6" "$SECRET_HOOK" "xoxb-" "hunter2" "build-box.internal" "concrete-secret-topic" opaquecred1 opaquecred2 opaquecred3 opaquecred4; do
   check "sanitize_text strips ${s:0:14}..." '! printf "%s" "$SAN" | grep -qF -- "$s"'
 done
 check "sanitize_text keeps clock times and versions" 'printf "%s" "$SAN" | grep -q "15:41:15 v2.338.1"'
+check "sanitize_text keeps a word that merely contains a key name" 'printf "%s" "$SAN" | grep -q "tokenizer: keeps this"'
+# Free-form text is withheld, not scrubbed: no pattern list can vouch for arbitrary prose.
+check "public page withholds note text but keeps its presence" '! grep -q "codex: approve" "$TMP/public/status.json" && ! grep -q "fast surface" "$TMP/public/status.json" && grep -q "present (withheld" "$TMP/public/status.json"'
+check "public page withholds landing notes"        '! grep -q "run conclusion" "$TMP/public/status.json"'
 
 echo "=== html validity basics ==="
 for page in "$TMP/full/status.html" "$TMP/public/status.html" "$TMP/nogh/status.html"; do
@@ -167,40 +173,57 @@ done
 
 echo "=== notify.sh ==="
 export CONCRETE_NOTIFY_ENV="$TMP/notify.env" NOTIFY_STATE_DIR="$TMP/nstate" NOTIFY_CURL="$TMP/fake-curl" NOTIFY_NOW=1000
+# The fake curl records one line per call: its argv, the -K config it was handed (and that file's
+# mode), and the body read from stdin.
 cat > "$TMP/fake-curl" <<'C'
 #!/usr/bin/env bash
-echo "$*" >> "$FAKE_CURL_LOG"; exit "${FAKE_CURL_RC:-0}"
+cfg=""; prev=""; for a in "$@"; do [ "$prev" = -K ] && cfg="$a"; prev="$a"; done
+mode="$(stat -c %a "$cfg" 2>/dev/null || stat -f %Lp "$cfg" 2>/dev/null)"
+printf 'ARGV %s\n' "$*" >> "$FAKE_CURL_ARGV"
+printf 'CALL mode=%s cfg=%s body=%s\n' "$mode" "$(tr '\n' ' ' < "$cfg")" "$(cat | tr '\n' ' ')" >> "$FAKE_CURL_LOG"
+exit "${FAKE_CURL_RC:-0}"
 C
-chmod +x "$TMP/fake-curl"; export FAKE_CURL_LOG="$TMP/curl.log"; : > "$FAKE_CURL_LOG"
+chmod +x "$TMP/fake-curl"; export FAKE_CURL_LOG="$TMP/curl.log" FAKE_CURL_ARGV="$TMP/curl.argv"; : > "$FAKE_CURL_LOG"; : > "$FAKE_CURL_ARGV"
+calls() { wc -l < "$FAKE_CURL_LOG" | tr -d " "; }
 bash "$NOTIFY" info onlytwo > /dev/null 2>&1; rc=$?
 check "missing argument is a usage error (exit 2)" '[ "$rc" = 2 ]'
 bash "$NOTIFY" loud t b > /dev/null 2>&1; rc=$?
 check "unknown level is a usage error (exit 2)"    '[ "$rc" = 2 ]'
-out="$(bash "$NOTIFY" info "no channel" "body one" 2>/dev/null)"
-check "no env file: stdout fallback"               '[ "$out" = "[info] no channel: body one" ]'
+out="$(bash "$NOTIFY" info "no channel" "body one" 2>/dev/null)"; rc=$?
+check "no env file: stdout fallback, exit 0"       '[ "$rc" = 0 ] && [ "$out" = "[info] no channel: body one" ]'
 TOPIC="concrete-$(printf 'x%.0s' $(seq 1 30))"
-printf 'NTFY_TOPIC=%s\nSLACK_WEBHOOK_URL=%s\nNOTIFY_DEDUP_SECONDS=600\nPWN=$(touch %s/pwned)\n$(touch %s/pwned2)\n' \
+printf 'NTFY_TOPIC=%s\nNTFY_TOKEN=tk_secret_token_123\nSLACK_WEBHOOK_URL=%s\nNOTIFY_DEDUP_SECONDS=600\nPWN=$(touch %s/pwned)\n$(touch %s/pwned2)\n' \
   "$TOPIC" "$SECRET_HOOK" "$TMP" "$TMP" > "$TMP/notify.env"; chmod 600 "$TMP/notify.env"
-out="$(bash "$NOTIFY" --dry-run warn "land t1" "train t1 is red" 2>/dev/null)"
-check "dry-run shows the ntfy and slack messages"  'printf "%s" "$out" | grep -q "dry-run ntfy: POST https://ntfy.sh/<topic> priority=high" && printf "%s" "$out" | grep -q "dry-run slack: POST <webhook>"'
+# The dry run uses EXACTLY the arguments of the real send below: if a dry run recorded a dedup stamp,
+# that send would be suppressed and the next check would fail.
+out="$(bash "$NOTIFY" --dry-run error "land t1" "train t1 is red" 2>/dev/null)"
+check "dry-run shows the ntfy and slack messages"  'printf "%s" "$out" | grep -q "dry-run ntfy: POST https://ntfy.sh/<topic> priority=urgent" && printf "%s" "$out" | grep -q "dry-run slack: POST <webhook>"'
 check "dry-run redacts the topic and webhook"      '! printf "%s" "$out" | grep -qF -- "$TOPIC" && ! printf "%s" "$out" | grep -qF hooks.slack.com'
-check "dry-run sends nothing"                      '[ ! -s "$FAKE_CURL_LOG" ]'
+check "dry-run sends nothing"                      '[ "$(calls)" = 0 ]'
 check "the env file is parsed, never sourced"      '[ ! -e "$TMP/pwned" ] && [ ! -e "$TMP/pwned2" ]'
-bash "$NOTIFY" error "land t1" "train t1 is red" > /dev/null 2>&1
-check "a real send posts to ntfy and slack"        '[ "$(wc -l < "$FAKE_CURL_LOG" | tr -d " ")" = 2 ] && grep -q "Priority: urgent" "$FAKE_CURL_LOG" && grep -qF "https://ntfy.sh/$TOPIC" "$FAKE_CURL_LOG"'
+bash "$NOTIFY" error "land t1" "train t1 is red" > /dev/null 2>&1; rc=$?
+check "a real send after the dry run posts to ntfy and slack" '[ "$rc" = 0 ] && [ "$(calls)" = 2 ] && grep -q "Priority: urgent" "$FAKE_CURL_ARGV" && grep -qF "url = \"https://ntfy.sh/$TOPIC\"" "$FAKE_CURL_LOG" && grep -qF "url = \"$SECRET_HOOK\"" "$FAKE_CURL_LOG"'
+check "the ntfy token goes only to ntfy"           '[ "$(grep -c "Bearer tk_secret_token_123" "$FAKE_CURL_LOG")" = 1 ] && grep "Bearer" "$FAKE_CURL_LOG" | grep -qF "ntfy.sh"'
+check "no topic, token or webhook on any argv"     '! grep -qF -- "$TOPIC" "$FAKE_CURL_ARGV" && ! grep -q "tk_secret" "$FAKE_CURL_ARGV" && ! grep -q "hooks.slack" "$FAKE_CURL_ARGV"'
+check "the curl config file is mode 600"           '! grep -v "^CALL mode=600 " "$FAKE_CURL_LOG" | grep -q .'
 err="$(NOTIFY_NOW=1300 bash "$NOTIFY" error "land t1" "train t1 is red" 2>&1 >/dev/null)"
-check "a duplicate inside the window is dropped"   '[ "$(wc -l < "$FAKE_CURL_LOG" | tr -d " ")" = 2 ] && printf "%s" "$err" | grep -q "suppressed duplicate"'
+check "a duplicate inside the window is dropped"   '[ "$(calls)" = 2 ] && printf "%s" "$err" | grep -q "suppressed duplicate"'
 NOTIFY_NOW=1300 bash "$NOTIFY" error "land t1" "train t1 is GREEN now" > /dev/null 2>&1
-check "a different body is not a duplicate"        '[ "$(wc -l < "$FAKE_CURL_LOG" | tr -d " ")" = 4 ]'
+check "a different body is not a duplicate"        '[ "$(calls)" = 4 ]'
 NOTIFY_NOW=1700 bash "$NOTIFY" error "land t1" "train t1 is red" > /dev/null 2>&1
-check "the same message after the window is sent"  '[ "$(wc -l < "$FAKE_CURL_LOG" | tr -d " ")" = 6 ]'
-out="$(FAKE_CURL_RC=7 bash "$NOTIFY" info "down" "network down" 2>/dev/null)"
-check "failed delivery falls back to stdout, exit 0" '[ "$out" = "[info] down: network down" ]'
+check "the same message after the window is sent"  '[ "$(calls)" = 6 ]'
+bash "$NOTIFY" info "file" "@$TMP/notify.env" > /dev/null 2>&1
+check "a body starting with @ is sent as text, never as a file" 'grep -qF "body=@$TMP/notify.env" "$FAKE_CURL_LOG" && ! grep -q "body=NTFY_TOPIC" "$FAKE_CURL_LOG"'
+out="$(FAKE_CURL_RC=7 bash "$NOTIFY" info "down" "network down" 2>/dev/null)"; rc=$?
+check "failed delivery falls back to stdout, exit 0" '[ "$rc" = 0 ] && [ "$out" = "[info] down: network down" ]'
 FAKE_CURL_RC=0 bash "$NOTIFY" info "down" "network down" > /dev/null 2>&1
 check "a failed delivery is not recorded as sent"  '[ "$(grep -c "network down" "$FAKE_CURL_LOG")" = 4 ]'
 printf 'NTFY_TOPIC=short\n' > "$TMP/notify.env"
 out="$(bash "$NOTIFY" info "t" "short topic" 2>"$TMP/short.err")"
 check "a short (guessable) topic is refused"       'grep -q "NTFY_TOPIC refused" "$TMP/short.err" && [ "$out" = "[info] t: short topic" ] && ! grep -q "short topic" "$FAKE_CURL_LOG"'
+printf 'SLACK_WEBHOOK_URL=https://hooks.slack.com/x" -o /tmp/evil\n' > "$TMP/notify.env"
+out="$(bash "$NOTIFY" info "q" "quote injection" 2>"$TMP/inj.err")"
+check "a webhook that could break the curl config is refused" 'grep -q "does not pass to curl" "$TMP/inj.err" && [ "$out" = "[info] q: quote injection" ]'
 
 echo "=== install.sh ==="
 HOME="$TMP/home" STATUS_REPO_URL="$TMP/origin.git" XDG_CONFIG_HOME="$TMP/home/.config" bash "$INSTALL" > "$TMP/install.log" 2>&1; rc=$?
@@ -210,6 +233,9 @@ check "units written: service, timer, http"        '[ -f "$U/concrete-status.ser
 check "the timer fires every 2 minutes"            'grep -q "^OnUnitActiveSec=2min" "$U/concrete-status.timer"'
 check "the http server binds localhost only"       'grep -q -- "--bind 127.0.0.1" "$U/concrete-status-http.service" && ! grep -q "0\.0\.0\.0" "$U/concrete-status-http.service"'
 check "the generator runs from a stable copy"      '[ -x "$TMP/home/concrete-status/bin/status.py" ] && grep -q "concrete-status/bin/status.py" "$U/concrete-status.service"'
+HOME="$TMP/home" STATUS_REPO_URL="$TMP/origin.git" XDG_CONFIG_HOME="$TMP/home/.config" bash "$INSTALL" --log-dir "$TMP/a dir
+ExecStartPre=/bin/false" > "$TMP/install2.log" 2>&1; rc=$?
+check "a path that would inject a unit directive is refused" '[ "$rc" = 2 ] && grep -q "unsafe in a unit file" "$TMP/install2.log" && ! grep -q "bin/false" "$U/concrete-status.service"'
 
 echo ""
 echo "status page: $PASS passed, $FAIL failed"

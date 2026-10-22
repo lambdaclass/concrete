@@ -80,35 +80,56 @@ esac
 json_str() { python3 -I -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
 sent=0 tried=0
 
+# post <secret-url> [header...]; body on stdin. The URL (it carries the topic or the webhook secret)
+# and any Authorization header go in a mode-600 curl config file, so no secret is on a command line
+# (visible in ps) and nothing is passed as `@file` text: the body is read from stdin (`@-`), so a body
+# that starts with `@` cannot make curl upload a local file.
+post() {
+  local url="$1" cfg rc; shift
+  cfg="$(umask 077; mktemp)" || return 1
+  printf 'url = "%s"\n' "$url" > "$cfg"
+  [ -n "$NTFY_TOKEN" ] && [ "$url" != "$SLACK_WEBHOOK_URL" ] && printf 'header = "Authorization: Bearer %s"\n' "$NTFY_TOKEN" >> "$cfg"
+  "$CURL" -fsS -m 15 "$@" --data-binary @- -K "$cfg" >/dev/null; rc=$?
+  rm -f "$cfg"; return "$rc"
+}
+# A value written into the curl config must not be able to close its quotes or add a line.
+safe_cfg() { [[ "$1" =~ ^[A-Za-z0-9_.:/?=\&%+~-]+$ ]]; }
+
 if [ -n "$NTFY_TOPIC" ]; then
   if ! [[ "$NTFY_TOPIC" =~ ^[A-Za-z0-9_-]{24,64}$ ]]; then
     echo "notify: NTFY_TOPIC refused: use 24-64 random characters [A-Za-z0-9_-] (a short topic is guessable, and anyone who guesses it can read and post)" >&2
+  elif ! safe_cfg "$NTFY_SERVER" || { [ -n "$NTFY_TOKEN" ] && ! safe_cfg "$NTFY_TOKEN"; }; then
+    echo "notify: NTFY_SERVER or NTFY_TOKEN contains characters notify.sh does not pass to curl" >&2
   else
     tried=$((tried+1))
-    url="${NTFY_SERVER%/}/$NTFY_TOPIC"
     # Header values cannot carry newlines; the body can.
     t1="$(printf '%s' "$TITLE" | tr '\r\n' '  ')"
     if [ "$DRY" = 1 ]; then
       echo "dry-run ntfy: POST ${NTFY_SERVER%/}/<topic> priority=$PRIO tags=$TAGS title=$t1"
       echo "dry-run ntfy body: $BODY"
       sent=$((sent+1))
+    elif printf '%s' "$BODY" | post "${NTFY_SERVER%/}/$NTFY_TOPIC" -H "Title: $t1" -H "Priority: $PRIO" -H "Tags: $TAGS"; then
+      sent=$((sent+1))
     else
-      args=(-fsS -m 15 -H "Title: $t1" -H "Priority: $PRIO" -H "Tags: $TAGS" --data-binary "$BODY")
-      [ -n "$NTFY_TOKEN" ] && args+=(-H "Authorization: Bearer $NTFY_TOKEN")
-      if "$CURL" "${args[@]}" "$url" >/dev/null; then sent=$((sent+1)); else echo "notify: ntfy delivery failed" >&2; fi
+      echo "notify: ntfy delivery failed" >&2
     fi
   fi
 fi
 
 if [ -n "$SLACK_WEBHOOK_URL" ]; then
-  tried=$((tried+1))
-  payload="{\"text\": $(json_str "$EMOJI *$TITLE*"$'\n'"$BODY")}"
-  if [ "$DRY" = 1 ]; then
-    echo "dry-run slack: POST <webhook> $payload"
-    sent=$((sent+1))
+  if ! safe_cfg "$SLACK_WEBHOOK_URL"; then
+    echo "notify: SLACK_WEBHOOK_URL contains characters notify.sh does not pass to curl" >&2
   else
-    if "$CURL" -fsS -m 15 -H 'Content-Type: application/json' --data-binary "$payload" "$SLACK_WEBHOOK_URL" >/dev/null; then
-      sent=$((sent+1)); else echo "notify: slack delivery failed" >&2; fi
+    tried=$((tried+1))
+    payload="{\"text\": $(json_str "$EMOJI *$TITLE*"$'\n'"$BODY")}"
+    if [ "$DRY" = 1 ]; then
+      echo "dry-run slack: POST <webhook> $payload"
+      sent=$((sent+1))
+    elif printf '%s' "$payload" | post "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json'; then
+      sent=$((sent+1))
+    else
+      echo "notify: slack delivery failed" >&2
+    fi
   fi
 fi
 

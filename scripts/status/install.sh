@@ -44,6 +44,11 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/status.py"
 BASE="$HOME/concrete-status"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 REPO_URL="${STATUS_REPO_URL:-https://github.com/unbalancedparentheses/concrete2.git}"
+# Every value below is written unquoted into unit files. A space would split an argument, a newline
+# would add a directive and `%` is a systemd specifier, so only plain path characters are accepted.
+for v in "$BASE" "$UNIT_DIR" "$LOGDIR"; do
+  [ -z "$v" ] || [[ "$v" =~ ^[A-Za-z0-9_./-]+$ ]] || { echo "install: refusing path with characters unsafe in a unit file: $v" >&2; exit 2; }
+done
 mkdir -p "$BASE/www" "$BASE/bin" "$UNIT_DIR" "$HOME/.config/concrete"
 chmod 750 "$BASE"
 install -m 755 "$SRC" "$BASE/bin/status.py"

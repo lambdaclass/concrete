@@ -63,12 +63,16 @@ opening a port. That is a later step, and it changes nothing here, because the s
 bound to localhost and Tailscale serves it.
 
 **Optional public variant (option b).** `install.sh --public` also writes a sanitized page to
-`~/concrete-status/public`. `status.py --public-out DIR` produces the same page directly. It
-removes the following:
+`~/concrete-status/public`. `status.py --public-out DIR` produces the same page directly.
+Free-form text is **withheld**, not scrubbed: review and gate notes, landing notes and error
+messages. Only the fact that a note exists survives, because no pattern list can vouch for
+arbitrary prose. The scrub then runs over every remaining string and removes the following:
 
 - IPv4 and IPv6 addresses;
 - GitHub, Slack, OpenAI and AWS tokens and Bearer credentials;
-- `key=value` secrets (token, secret, password, pw, api key, topic, webhook url);
+- credential assignments: `key=value`, `key: value` and `"key": "value"`, where the key
+  contains token, secret, password, pw, api key, credential, topic or webhook url
+  (`NTFY_TOKEN`, `AWS_SECRET_ACCESS_KEY`), with a quoted value removed whole;
 - Slack webhook URLs and ntfy topics;
 - private keys and SSH public keys;
 - e-mail addresses;
@@ -98,7 +102,9 @@ never committed). `scripts/land/notify.env.example` is the template. The file is
 - **Slack** (`SLACK_WEBHOOK_URL`). An incoming webhook. The URL is itself the credential.
 - **stdout**. The fallback when no channel is configured, or when every configured channel fails.
 
-A notification never fails a landing. Delivery failures go to stderr, and the exit status is 0.
+The topic, the token and the webhook reach curl through a mode-600 config file, never on a
+command line that `ps` would show. The body is read from stdin, so a body that starts with `@`
+is sent as text and never makes curl upload a file. A notification never fails a landing. Delivery failures go to stderr, and the exit status is 0.
 Exit 2 is reserved for usage errors. An identical (level, title, body) within
 `NOTIFY_DEDUP_SECONDS` (default 900) is sent once. A delivery that failed on every channel is
 not recorded, so its retry is not swallowed as a duplicate. `--dry-run` prints what each channel
