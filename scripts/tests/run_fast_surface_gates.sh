@@ -81,10 +81,16 @@ remove_first_line_with() {
 # verified by lake build (scripts/lake-seed.sh), and its own repository lock.
 mutate_copy() { # -> prints the copy's root; nonzero when it could not be made faithfully
   local base="$1" tree="$1/tree"
-  git clone --quiet --shared --no-checkout "$ROOT_DIR" "$tree" >/dev/null 2>&1 || return 1
-  git -C "$tree" checkout --quiet --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" >/dev/null 2>&1 || return 1
-  # Overlay the working-tree bytes of every tracked file, so the copy is this tree, not HEAD.
-  ( cd "$ROOT_DIR" && git ls-files -z | xargs -0 tar -cf - 2>/dev/null ) | tar -xf - -C "$tree" || return 1
+  git clone --quiet --shared --no-checkout "$ROOT_DIR" "$tree" >"$base/seed.log" 2>&1 \
+    || { echo "git clone failed" >> "$base/seed.log"; return 1; }
+  git -C "$tree" checkout --quiet --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" >>"$base/seed.log" 2>&1 \
+    || { echo "git checkout failed" >> "$base/seed.log"; return 1; }
+  # Overlay the working-tree bytes of every tracked file, so the copy is this tree, not HEAD. One tar
+  # stream (xargs could split it into several archives, and the reader stops at the first); a tracked
+  # file deleted in the working tree is absent from the copy too.
+  ( cd "$ROOT_DIR" && git ls-files -z | while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done \
+      | tar --null -T - -cf - ) | tar -xf - -C "$tree" \
+    || { echo "tar overlay failed" >> "$base/seed.log"; return 1; }
   if [ -d "$ROOT_DIR/.lake" ]; then
     ( cd "$tree" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) >"$base/seed.log" 2>&1 || return 1
   fi
@@ -93,8 +99,10 @@ mutate_copy() { # -> prints the copy's root; nonzero when it could not be made f
 
 mutate_self_test() {
   local ok=0 bad=0 base tree
-  base="$(mktemp -d)" || { echo "FAST-SURFACE-MUTATION: could not create a private copy"; return 1; }
-  trap 'rm -rf "$base"' EXIT
+  # MUT_BASE is GLOBAL: the EXIT trap runs after this function's locals are gone.
+  MUT_BASE="$(mktemp -d)" || { echo "FAST-SURFACE-MUTATION: could not create a private copy"; return 1; }
+  trap 'rm -rf "${MUT_BASE:-}"' EXIT
+  base="$MUT_BASE"
   if ! tree="$(mutate_copy "$base")"; then
     echo "FAST-SURFACE-MUTATION: could not make a faithful private copy — nothing was proven"
     sed 's/^/    /' "$base/seed.log" 2>/dev/null | tail -5
