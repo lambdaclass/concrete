@@ -68,7 +68,12 @@ bug 134's `error_134_enum_eq.con` / `error_134_struct_eq.con`; the positive cont
 raw-pointer comparison in a trusted function: 175). An interpreter leg asserts that `--interp`
 refuses both reproducers with E0229 as the binary does.
 
-Migration: 0 sites in `std/`, `examples/` and `tests/`. The generic comparisons in `std.math`
+The rule is decided before the operands are checked when an operand is a bound name, so `x == x`
+at an unbounded `T` reports E0229 rather than a fictitious move (E0205)
+(`error_140_generic_self_compare.con`; Codex review).
+
+Migration: 2 sites, both in `examples/` (`hexdump` and `png_chunks` discarded a Copy `IoError` with
+`discard(error == error)`; now `discard(error)`), 0 in `std/` and `tests/`. The generic comparisons in `std.math`
 (`max`, `min`, `clamp`) and `std.test` (`assert_eq`, `assert_ne`, `assert_lt`, ...) are all
 `T: Copy` and keep compiling; every instantiation in the corpus is a scalar.
 

@@ -510,7 +510,8 @@ is `Copy`-bounded, and every instantiation is held to the same scalar rule after
 **Status on main.** Enforced: `Check.lean` `.binOp` (E0229 at the source span), and
 `verifyComparisonTypes` after monomorphization. It closes [bug 134](../bugs/134_aggregate_eq_invalid_ir.md)
 (aggregate `==` failed in `llvm-as`) and [bug 140](../bugs/140_comparison_consumes_linear.md) (linear
-operands consumed and leaked; references compared by address). Migration: 0 sites.
+operands consumed and leaked; references compared by address). Migration: 2 sites (`examples/hexdump`,
+`examples/png_chunks`).
 
 **Owners.** The rule's normative home is this section with VALUE_MODEL under R-0500 (exit 2j/2k);
 the enforcing check is R-0499 (S8); float-comparison folding belongs to R-0493's typed-operation

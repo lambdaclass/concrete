@@ -445,6 +445,27 @@ def checkDirectDestroyImplUse (fnName : String) (span : Option Span) : CheckM Un
 -- by default, and on this very large mutual block it exceeded the default 200 000 heartbeats (it fit
 -- under 4.28.0). The legacy elaborator handles it within the default budget. Elaboration strategy
 -- only: the definitions are unchanged. Remove when the new elaborator copes with blocks this size.
+/-- The comparison rule (bugs 134, 140): why a comparison operator is not defined on `t`, or
+    `none` when it is (integers, floats, `bool`, `char`; raw pointers in trusted or `Unsafe` code;
+    a `Copy`-bounded type parameter, re-checked per instance after monomorphization). -/
+def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
+  let env ← getEnv
+  let unsafeOk := Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet
+  match t with
+  | .placeholder | .never => pure none
+  | .bool | .char => pure none
+  | .ptrMut _ | .ptrConst _ =>
+    if unsafeOk then pure none
+    else pure (some "raw pointers compare only in trusted code or a function declaring `with(Unsafe)`")
+  | .ref _ | .refMut _ =>
+    pure (some "a reference has no built-in comparison (neither by address nor by content)")
+  | .typeVar _ =>
+    if ← isCopyType t then pure none
+    else pure (some "a type parameter compares only when it is bounded by `Copy` (a comparison never consumes its operands), and each instantiation must be an integer, float, `bool` or `char`")
+  | t =>
+    if isInteger t || isFloatType t then pure none
+    else pure (some "comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)")
+
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
   let env ← getEnv
@@ -563,6 +584,20 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         return .fn_ paramTys sig.capSet sig.retTy
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
   | .binOp _ op lhs rhs =>
+    -- The comparison rule is decided before the operands are checked: checking a non-Copy
+    -- operand in value position moves it, and `x == x` would report a fictitious move (E0205)
+    -- instead of the undefined comparison (Codex review, bug 140). A bound name's type is read
+    -- without effects; the full check below still runs on the checked types.
+    match op with
+    | .eq | .neq | .lt | .gt | .leq | .geq =>
+      for side in [lhs, rhs] do
+        if let .ident _ n := stripParens side then
+          if let some info := ← lookupVarInfo n then
+            let pt ← resolveType info.ty
+            match ← comparisonRefusal? pt with
+            | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString pt) why) (some e.getSpan)
+            | none => pure ()
+    | _ => pure ()
     -- A literal-only side is flexible: it adopts the type of the OTHER operand
     -- (mirroring Core elaboration), not the surrounding hint — `inner[64 + i]`
     -- with i: i32 types 64 as i32 even though the index hint is Int. The
@@ -617,24 +652,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- `max<T: Copy>` instantiated at a struct is refused before LLVM sees it.
       -- The comparable types are all Copy, so a comparison never consumes an operand.
       -- CoreCheck still validates that the two operand types agree.
-      let env ← getEnv
-      let unsafeOk := Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet
       for t in [lTyR, rTyR] do
-        let why? : Option String ← match t with
-          | .placeholder | .never => pure none
-          | .bool | .char => pure none
-          | .ptrMut _ | .ptrConst _ =>
-            if unsafeOk then pure none
-            else pure (some "raw pointers compare only in trusted code or a function declaring `with(Unsafe)`")
-          | .ref _ | .refMut _ =>
-            pure (some "a reference has no built-in comparison (neither by address nor by content)")
-          | .typeVar _ =>
-            if ← isCopyType t then pure none
-            else pure (some "a type parameter compares only when it is bounded by `Copy` (a comparison never consumes its operands), and each instantiation must be an integer, float, `bool` or `char`")
-          | t =>
-            if isInteger t || isFloatType t then pure none
-            else pure (some "comparison operators are defined on integers, floats, `bool` and `char` (and raw pointers in trusted or `Unsafe` code)")
-        match why? with
+        match ← comparisonRefusal? t with
         | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString t) why) (some e.getSpan)
         | none => pure ()
       return .bool
@@ -1017,6 +1036,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .refMut (.generic "Vec" [et] _) => et
         | _ => Ty.placeholder
       if elemTy == .placeholder then throwCheck (.builtinWrongFirstArg "vec_set" "&mut Vec<T> as first argument" (tyToString vecTy)) (some e.getSpan)
+      -- Bug 145 (rule (c)): `vec_set` overwrites an initialized element without consuming
+      -- it; a non-Copy element would be lost. `Vec::replace` hands the old element back.
+      if !(← isCopyType elemTy) then
+        throwCheck (.cannotOverwriteLinearPlace "Vec element (vec_set)" (tyToString elemTy)) (some e.getSpan)
       let idxTy ← checkExpr idxArg (some .int)
       expectTy .int idxTy "vec_set() index argument" (some e.getSpan)
       -- Bug 115's sibling: `vec_set` overwrites the element without returning or destroying
@@ -1057,6 +1080,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .generic "Vec" _ _ => true
         | _ => false
       if !ok then throwCheck (.builtinWrongFirstArg "vec_free" "Vec<T> as argument" (tyToString vecTy)) (some e.getSpan)
+      -- Bug 145 (rule (c)): `vec_free` releases the buffer only; non-Copy elements still in it
+      -- would be dropped without being destroyed. `Vec::drop` runs the element drop glue.
+      match vecTy with
+      | .generic "Vec" [et] _ =>
+        if !(← isCopyType et) then
+          throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
+      | _ => pure ()
       match vecArg with
       | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
       | _ => pure ()

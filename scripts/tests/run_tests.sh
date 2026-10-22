@@ -1750,6 +1750,20 @@ run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_generic_safe.con"       "(E0229)"
+run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
+# Bug 145: vec_set over a non-Copy element is E0291; vec_free of a Vec with non-Copy elements is E0287.
+run_err "$TESTDIR/error_145_vec_set_linear.con"            "(E0291)"
+run_err "$TESTDIR/error_145_vec_free_linear.con"           "(E0287)"
+# Bug 146: `*h` frees the cell it moves the value out of.
+run_ok  "$TESTDIR/regress_146_heap_deref_frees.con" "42" 0
+r146_ssa=$($COMPILER tests/regressions/bug146_heap_deref_does_not_free/repro.con --emit-ssa 2>&1 || true)
+if [[ "$r146_ssa" == *"call void @free("* ]]; then
+    echo "  ok  bug146 repro: *h emits the free of the cell"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug146 repro: *h emits no free (the cell leaks)"
+    FAIL=$((FAIL + 1))
+fi
 run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
 # Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
 # operator operand (E0278); exits in statement position, tails and let initializers stay legal.

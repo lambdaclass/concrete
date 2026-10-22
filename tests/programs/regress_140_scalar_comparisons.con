@@ -1,6 +1,6 @@
 // Bug 140 positive control: comparisons on integers of every width, floats, bool, char, a
-// Copy-bounded generic at a scalar, and raw pointers in trusted code all compile, agree with
-// --interp, and never consume an operand.
+// Copy-bounded generic at a scalar, and raw pointers in trusted code all compile and never consume
+// an operand. Native only: the interpreter on main has no float literals or raw-pointer casts.
 fn pick<T: Copy>(a: T, b: T) -> T {
     if a < b { return a; }
     return b;

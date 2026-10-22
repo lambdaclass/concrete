@@ -253,6 +253,8 @@ inductive CheckError where
   -- Bug 144: `free(h)` (statement or deferred) on a `Heap<T>` whose pointee is non-Copy
   -- would drop that live value: heap interiors are linearity-tracked.
   | freeDropsLinearInterior (tyName : String)
+  -- Bug 145: `vec_free` of a `Vec<T>` with non-Copy `T` drops the elements still in it.
+  | vecFreeDropsElements (elemTy : String)
   -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
   -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
   -- used exactly once, so `_` may ignore ONLY a Copy value. To get rid of a non-Copy
@@ -400,6 +402,7 @@ def CheckError.message : CheckError → String
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
+  | .vecFreeDropsElements elemTy => s!"vec_free would drop the non-Copy elements of type '{elemTy}' still in the vector without destroying them"
   | .freeDropsLinearInterior tyName => s!"free() would drop the live non-Copy value of type '{tyName}' inside the heap cell"
   | .wildcardDiscardsNonCopy tyName => s!"`_` cannot discard a non-Copy value of type '{tyName}' — non-Copy values must be used exactly once"
   | .discardedPureValue tyName => s!"pure value of type '{tyName}' is computed and then discarded — this is a dead computation with no effect"
@@ -456,6 +459,7 @@ def CheckError.hint : CheckError → Option String
   | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
   | .variablePinnedByDefer name => some s!"register the consuming `defer` BEFORE the one that borrows '{name}' (deferred calls run in reverse order), or consume '{name}' after the block that holds the borrowing `defer`"
   | .deferArgNotPlace _ => some "the arguments are bound when the `defer` registers and read when it runs; compute a value in a `let` first, or move the computation into a named cleanup function that takes the local (or a borrow of it)"
+  | .vecFreeDropsElements _ => some "use `v.drop()`, which runs the elements' destructors, or move the elements out first"
   | .freeDropsLinearInterior _ => some "move the value out with `let v = *h;` (which also frees the cell) and consume it, or bind the result of `free(h)`: `let v = free(h);`"
   | .binOpOperandMismatch _ lhsTy rhsTy => some s!"numeric operands must share one exact type (width and signedness); cast one side explicitly: `as {lhsTy}` or `as {rhsTy}`"
   | .comparisonNotDefined _ _ _ => some "compare through a named function that takes references (`fn same(a: &T, b: &T) -> bool`), a `match` on the variants, or a Copy scalar field; for a reference compare the referents (`*a == *b`) when they are Copy scalars"
@@ -558,6 +562,7 @@ def CheckError.code : CheckError → String
   | .discardedMustUse _ => "E0286"
   | .discardedLinear _ => "E0287"
   | .freeDropsLinearInterior _ => "E0287"
+  | .vecFreeDropsElements _ => "E0287"
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
   | .nonCopyProjection _ _ => "E0290"

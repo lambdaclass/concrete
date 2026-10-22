@@ -1086,6 +1086,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .ref t => t | .refMut t => t
       | .ptrMut t => t | .ptrConst t => t | .heap t => t
       | _ => .placeholder
+    -- Bug 146: `*h` on an owned heap shell moves the value out AND frees the cell
+    -- (MEMORY_SEMANTICS §8; Check consumes `h`). A plain `CExpr.deref` only loads, so the cell
+    -- leaked. It is the `free` intrinsic, which loads the value and then frees. The evidence
+    -- node stays the dereference: the surface operation is unchanged.
+    match cInner.ty with
+    | .heap t =>
+      return ElaboratedExprV2.mk (CExpr.call "free" [] [cInner] t) (Proof.evDeref cInnerEv.evidence)
+    | _ =>
     return ElaboratedExprV2.mk (CExpr.deref cInner resultTy) (Proof.evDeref cInnerEv.evidence)
 
   | .arrayLit _ elems =>

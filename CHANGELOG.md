@@ -43,6 +43,10 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   heap-node destructure is `let n = *h;` plus a pattern. KNOWN_HOLES H11's "heap interiors are not
   tracked" exclusion is withdrawn. Migration: 22 test files (19 plain-data pointees declared
   `struct Copy`, 3 node destructures), 0 in `std` and `examples`.
+- **Found in review (bugs 145, 146).** The raw `vec_set` intrinsic overwrote a non-Copy element
+  and `vec_free` dropped non-Copy elements (now E0291 / E0287 unless the element is Copy; the
+  `Vec` methods are the linear forms), and `*h` loaded a heap value without freeing its cell (it
+  now frees, as MEMORY_SEMANTICS always said).
 - **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
   `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
 

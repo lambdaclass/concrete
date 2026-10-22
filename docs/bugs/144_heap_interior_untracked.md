@@ -68,7 +68,7 @@ Migration: `std/` 0, `examples/` 0, `tests/programs/` 22 files: 19 heap tests wh
 plain-data struct (only scalar fields, no `Destroy`) now declare it `struct Copy` (their subject is
 heap ownership, not the struct's linearity), and three heap-node tests
 (`complex_recursive_list`, `complex_recursive_tree`, `complex_recursive_mutual`) replaced
-`h.next` + `free(h)` with `let Node { .. } = *h;`.
+`h.next` + `free(h)` with `let Node { .. } = *h;`. (Until [bug 146](146_heap_deref_does_not_free.md), found reviewing this migration, `*h` did not actually free the cell.)
 
 ## Structural cause
 
