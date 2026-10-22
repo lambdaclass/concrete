@@ -2239,6 +2239,9 @@ run_err "$TESTDIR/error_export_narrow_int.con" "E0119"
 # Bug 112 (fixed with 113): an #[intrinsic] declaration is not a foreign binding, so R3 does not
 # refuse it; std.mem's sizeof form compiles outside std (exit 5).
 run_ok "$TESTDIR/regress_112_user_intrinsic.con" "5"
+# Bug 177: literals for alias-typed fields, payloads, field stores, returns and constants are
+# typed at the expanded type, so the stricter CoreCheck accepts them (exit 42).
+run_ok "$TESTDIR/regress_177_alias_value_hints.con" "42"
 
 # === Cross-module and parser tests ===
 run_ok "$TESTDIR/test_module_nested.con" 42

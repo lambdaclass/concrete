@@ -1,0 +1,28 @@
+// Bug 177: CoreCheck now compares every binder's declared type with its value's, which exposed
+// Elab sites that hinted a value with an UNEXPANDED alias. With `type B = u8;` a literal written
+// for a `B` field, payload, field store, return value or constant defaulted to Int while Core's
+// type is the expanded u8, and the program was refused (E0510/E0560). Every site below is such a
+// literal; compiled and --interp both exit 42.
+mod m {
+    type B = u8;
+    const K: B = 2;
+    struct Copy S { a: B, b: u8 }
+    enum E { V { x: B }, W { y: u8 } }
+
+    fn ret() -> B { return 10; }
+
+    fn payload(e: E) -> u8 {
+        match e {
+            E::V { x } => { return x; },
+            E::W { y } => { return y; },
+        }
+    }
+
+    fn main() -> Int {
+        let mut s: S = S { a: 7, b: 3 };
+        s.a = 20;
+        let e: E = E::V { x: 5 };
+        let total: u8 = s.a + s.b + ret() + payload(e) + K + 2;
+        return total as Int;
+    }
+}

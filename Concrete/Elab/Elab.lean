@@ -2189,6 +2189,11 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
     currentRetTy := retTy
     currentImplType := implTy
     bodyIdentityCovered := true }
+  -- Bug 177 (Codex round 4): the return type is the hint for every `return` value, so its
+  -- aliases are resolved as a parameter's are (`-> Id` with `type Id = i32` hinted a literal
+  -- with `Id`, which defaulted it to Int against Core's i32 return type).
+  let resolvedRetTy ← resolveTypeE retTy
+  modify fun e => { e with currentRetTy := resolvedRetTy }
   -- Add parameters to scope (resolve type aliases so params don't carry unresolved alias names)
   for (pname, pty) in params do
     let resolvedPty ← resolveTypeE pty
@@ -2921,7 +2926,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
     -- constant dependency binding does not exist yet: the constant's initializer digest
     -- is what a `constRef` must eventually resolve to, so this is the site that will
     -- feed it. Recorded rather than silent.
-    let constResult := ((·.core) <$> elabExprEv c.value (some c.ty)).run initEnv |>.run
+    -- The hint is the declared type with aliases resolved (bug 177, Codex round 4: `const X: Id
+    -- = 1` elaborated its initializer as Int while every use reads X at the expanded i32).
+    let constResult := (do
+        let hintTy ← resolveTypeE c.ty
+        (·.core) <$> elabExprEv c.value (some hintTy)).run initEnv |>.run
     match constResult with
     | ((.ok cExpr), _) => Except.ok (c.name, c.ty, cExpr)
     -- An initializer that does not elaborate is an error, never a silent 0 (bug 123 review: a

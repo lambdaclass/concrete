@@ -109,11 +109,15 @@ declare -A BUG_TEST_MAP=(
   [129]="regress_129_user_fn_named_malloc.con regress_129_extern_beside_same_named_fn.con regress_129_imported_extern_beside_fn.con regress_129_fn_value_extern.con regress_129_runtime_helper_beside_fn.con regress_129_generic_extern.con"
   # Bug 112: an #[intrinsic] declaration was refused as an undeclared foreign binding (E0116).
   [112]="regress_112_user_intrinsic.con"
+  # Bug 177: CoreCheck never compared a binder's type with its value's. The defence-in-depth
+  # check itself is covered by pipeline-test corecheck/binder-agreement (eight cases planted in
+  # Core, all accepted by the previous compiler) and check_corecheck_boundary.sh class 7 (bug
+  # 176's program never compiles); this fixture covers the Elab alias-hint sites the check found.
+  [177]="regress_177_alias_value_hints.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
-  [177]="FIXED 2026-10-22 -- CoreCheck never compared a binder's declared type with its value's (let, assignment, call argument, field, store; returns width-blind), so bug 176's checker leak compiled let y: u8 = <i32> and printed 300. Regression vehicle is not a tests/programs fixture, because bug 176's fix makes Check refuse the source shape first: pipeline-test corecheck/binder-agreement plants an i32 value in a valid program's Core at a let, assignment, call argument, struct field, return, value-if branch and array element, and a with(Console) fn value in a capability-free fn binder, and requires coreCheckProgram to refuse each (E0510/E0560; all eight accepted by the previous compiler), and check_corecheck_boundary.sh class 7 requires bug 176's program never to compile; see docs/bugs/177"
   [166]="OPEN -- a foreign function taken as a value is called with the Concrete ABI: a small #[repr(C)] struct argument travels as a pointer through the fn value while C takes it in a register (silent wrong code at the C boundary); reproducer tests/regressions/bug166_foreign_fn_value_abi/repro.con (check-only), found by the Codex review of the symbol-name work 2026-10-22; pinned by run_tests.sh codegen section (bug 166 pin: the IR shows call i64 %f(ptr %p) beside declare i64 @take_pair(i64))"
   [165]="OPEN -- Elab desugars println into calls spelled print_int/print_char/print_string/print_bool that bind by spelling, so a module defining its own print_int gets it called by println (silent wrong code); reproducer tests/regressions/bug165_generated_helper_call_binds_by_spelling/repro.con, found by the Codex review of the symbol-name work 2026-10-22; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, signals); predates mangling (a 2026-10-18 build calls the same user definition)"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"

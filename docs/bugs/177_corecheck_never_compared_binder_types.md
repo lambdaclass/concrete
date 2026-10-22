@@ -98,8 +98,12 @@ struct-literal field's value with the field's DECLARED type as the hint, aliases
 expanded `i32`. Enum-literal payloads and field stores (`s.a = 1`) used the same unexpanded hint.
 Match-arm payload binders already expanded aliases (bug 096). All three sites now expand aliases
 through one helper (`expandFieldAliases`, the type's own parameters shadowing aliases), so the
-literal is an `i32`. The regression is `check_type_alias.sh` section 2, which compiles the
-program for its layout and fingerprint reports. This is the defence-in-depth check working: an
+literal is an `i32`. Codex round 4 found the same unexpanded hint at two more sites: a
+function's return type (`fn f() -> Id { return 1; }`, the hint for every `return`) and a
+constant's declared type (`const X: Id = 1`). Both now resolve aliases with `resolveTypeE`, as
+parameter types and `let` hints already did. Regressions: `check_type_alias.sh` section 2, which
+compiles the program for its layout and fingerprint reports, and
+`tests/programs/regress_177_alias_value_hints.con` (exit 42), a literal at each of the five sites. This is the defence-in-depth check working: an
 Elab inconsistency that the backend tolerated is now a refusal, and it is fixed at its source.
 
 ## Structural cause
@@ -144,6 +148,9 @@ before Mono:
   diverge (`if c { abort() } else { 1 }` is `never`), so its branches are not compared. R-0492's `LocalId` (class 2, bug 176's owner) removes the trigger.
 
 ## Regression tests
+
+- `tests/programs/regress_177_alias_value_hints.con` (`run_ok 42`): alias-typed struct field,
+  enum payload, field store, return value and constant, each written as a literal.
 
 - `pipeline-test` `corecheck/binder-agreement` (`Concrete/Pipeline/PipelineTest.lean`): the front
   end accepts a small program; each case then plants an `i32` value in its Core at a `let`, an
