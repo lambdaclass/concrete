@@ -57,6 +57,10 @@ example (vc : ValidatedCore) : (vc.filterModules (fun _ => true)).coreModules.Su
   (vc.filterModules _).drawn
 example (vc : ValidatedCore) : (vc.whole).source = vc := rfl
 #print axioms ValidatedCore.whole
+#print axioms ValidatedCore.filterModules
+#print axioms Pipeline.elaborate
+#print axioms Pipeline.coreCheck
+#print axioms Pipeline.monomorphize
 #print axioms Pipeline.lower
 LEAN
 POS_OUT="$(lake env lean "$TMP/pos.lean" 2>&1)"; POS_RC=$?
@@ -65,10 +69,14 @@ if [ "$POS_RC" -eq 0 ] && ! grep -q 'error' <<<"$POS_OUT"; then
 else
   no "P: the positive control did not elaborate (rc=$POS_RC): $(head -c 1500 <<<"$POS_OUT")"
 fi
-if grep -q 'sorryAx' <<<"$POS_OUT"; then
-  no "P: a pipeline producer depends on sorryAx"
+# Each `#print axioms` line names its constant; six producers must all be listed, none on sorryAx.
+NAX="$(grep -cE "^'Concrete\.[A-Za-z.]+' (depends on axioms|does not depend on any axioms)" <<<"$POS_OUT" || true)"
+if [ "$POS_RC" -ne 0 ] || [ "$NAX" -ne 6 ]; then
+  no "P: the axiom report covered $NAX of the 6 producers (rc=$POS_RC)"
+elif grep -q 'sorryAx' <<<"$POS_OUT"; then
+  no "P: a pipeline producer depends on sorryAx: $(grep sorryAx <<<"$POS_OUT" | tr '\n' ' ')"
 else
-  ok "P: ValidatedCore.whole and Pipeline.lower depend on no sorryAx"
+  ok "P: whole, filterModules, elaborate, coreCheck, monomorphize and lower depend on no sorryAx"
 fi
 
 # neg <id> <reason-regex> <lean body> — the body must NOT elaborate, and the error must match.
@@ -117,8 +125,26 @@ echo "=== S: no source opens the seals ==="
 HITS="$(grep -rnE 'open private .*(ValidatedCore|MonomorphizedProgram|SSAProgram|ElaboratedProgram|CoreSubset)' \
   --include='*.lean' Concrete Main.lean tests 2>/dev/null || true)"
 [ -z "$HITS" ] && ok "S: no 'open private' of a pipeline artifact constructor" || no "S: $HITS"
-if grep -nE '\bsorry\b|^\s*axiom\b' "$P" | grep -v -- '--' >/dev/null; then
-  no "S: $P holds a sorry or axiom: $(grep -nE '\bsorry\b|^\s*axiom\b' "$P" | head -3)"
+# Comments are stripped (line comments, and doc/block comments by a small scanner), so a `sorry`
+# with a trailing comment on its line is still seen.
+CODE="$(python3 - "$P" <<'PY2'
+import sys
+s = open(sys.argv[1]).read()
+out, i, depth = [], 0, 0
+while i < len(s):
+    if s.startswith('/-', i): depth += 1; i += 2; continue
+    if depth and s.startswith('-/', i): depth -= 1; i += 2; continue
+    if depth: out.append('\n' if s[i] == '\n' else ' '); i += 1; continue
+    if s.startswith('--', i):
+        j = s.find('\n', i); i = len(s) if j < 0 else j; continue
+    out.append(s[i]); i += 1
+print(''.join(out))
+PY2
+)"
+if [ -z "$CODE" ]; then
+  no "S: could not read $P's code"
+elif grep -qE '\bsorry\b|^\s*axiom\b|\badmit\b' <<<"$CODE"; then
+  no "S: $P holds a sorry/admit/axiom: $(grep -nE '\bsorry\b|^\s*axiom\b|\badmit\b' <<<"$CODE" | tr '\n' ' ')"
 else
   ok "S: $P holds no sorry and no axiom"
 fi
@@ -129,14 +155,14 @@ HITS="$(grep -rnE '\{ *[A-Za-z_]+ with (coreModules|ssaModules) *:=' --include='
 echo ""
 echo "=== B: project reports run on the compiled program (bug 180) ==="
 WF="examples/wordfreq"
-MONO="$("$BIN" "$WF/src/main.con" --report mono 2>&1)"
-SPEC="$(grep -E '^Specializations: +[0-9]+' <<<"$MONO" | grep -oE '[0-9]+' | head -1)"
-LL="$(cd "$WF" && "$BIN" build --emit-llvm 2>/dev/null)"
-if [ -z "$SPEC" ] || [ -z "$LL" ]; then
-  no "B: could not read wordfreq's mono report or IR (spec='$SPEC', ir bytes=${#LL})"
+MONO="$("$BIN" "$WF/src/main.con" --report mono 2>&1)"; MONO_RC=$?
+SPEC="$(sed -nE 's/^Specializations: +([0-9]+)$/\1/p' <<<"$MONO")"
+LL="$(cd "$WF" && "$BIN" build --emit-llvm 2>/dev/null)"; LL_RC=$?
+if [ "$MONO_RC" -ne 0 ] || [ "$LL_RC" -ne 0 ] || [ -z "$SPEC" ] || [ -z "$LL" ]; then
+  no "B: could not read wordfreq's mono report or IR (rc $MONO_RC/$LL_RC, spec='$SPEC', ir bytes=${#LL})"
 else
-  # Every specialization the report lists is a function the build emits, and the build emits none
-  # the report omits: the report and the compile describe one program.
+  # INCLUSION, not equality: every specialization the build emits is listed by the report (the
+  # report also lists instances emission does not keep). Before bug 180's fix it listed none.
   # The listing after the second `Specializations:` header: `  base<T…> -> name`, or `  name` alone
   # when the base itself contains `_for_` (`OrderedMap_for_each`).
   awk '/^Specializations:$/ {on=1; next} on && /^  / {sub(/^  /, ""); sub(/.* -> /, ""); print}' <<<"$MONO" \
@@ -144,17 +170,17 @@ else
   # An emitted symbol is `_C.<module path>.<mono name>`; the report lists the mono name.
   grep -oE '^define [^@]*@[A-Za-z0-9_.$]+' <<<"$LL" | sed -E 's/.*@//; s/.*\.//' | grep '_for_' | sort -u > "$TMP/ll.names"
   NREP="$(grep -c . "$TMP/rep.names" || true)"; NLL="$(grep -c . "$TMP/ll.names" || true)"
-  MISSING="$(comm -13 "$TMP/rep.names" "$TMP/ll.names" | head -5 | tr '\n' ' ')"
+  MISSING="$(comm -13 "$TMP/rep.names" "$TMP/ll.names" | tr '\n' ' ')"
   if [ "$NLL" -gt 0 ] && [ "$SPEC" -gt 0 ] && [ -z "$MISSING" ]; then
     ok "B: wordfreq's project --report mono lists $SPEC specializations, including all $NLL the build emits"
   else
     no "B: wordfreq's --report mono lists $SPEC ($NREP names) but the build emits $NLL; unlisted: ${MISSING:-none}"
   fi
 fi
-VER="$("$BIN" "$WF/src/main.con" --report verify 2>&1)"
+VER="$("$BIN" "$WF/src/main.con" --report verify 2>&1)"; VER_RC=$?
 # Liveness only: the scoped run was clean too, so this leg does not discriminate bug 180.
-grep -q 'VERIFY-GATES: ok' <<<"$VER" && ok "B: wordfreq's project --report verify runs and is clean" \
-  || no "B: wordfreq's project --report verify: $(head -3 <<<"$VER" | tr '\n' ' ')"
+[ "$VER_RC" -eq 0 ] && grep -q 'VERIFY-GATES: ok' <<<"$VER" && ok "B: wordfreq's project --report verify runs and is clean" \
+  || no "B: wordfreq's project --report verify: $(tr '\n' ' ' <<<"$VER" | cut -c1-300)"
 
 echo ""
 echo "PIPELINE-ARTIFACTS: PASS=$PASS FAIL=$FAIL"

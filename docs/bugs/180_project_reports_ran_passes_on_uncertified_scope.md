@@ -29,7 +29,7 @@ the 61 functions the binary contains. Every project example behaved the same way
 
 ## Expected
 
-A report that runs a compiling pass describes the program the build compiles. For wordfreq,
+A report that runs a compiling pass describes the whole program, not a fragment of it. For wordfreq,
 `--report mono` lists the specializations the build emits; `--report verify` checks them.
 
 ## Cause
@@ -56,13 +56,29 @@ live in `std`), produced no specializations, and lowering and the verify gates r
 ## Fix
 
 The three reports run Mono, lowering and the verify gates on `fullValidCore.source`, the
-`ValidatedCore` CoreCheck produced for the whole program; the listing still iterates the invoked
-file's modules. `--report mono` therefore reports the whole program's counts (for wordfreq 908
+`ValidatedCore` CoreCheck produced for the whole loaded program; the listing still iterates the
+invoked file's modules. "Whole loaded program" is not exactly the build's input: the report path
+loads the project with dependency test functions kept, and `concrete build` strips them
+(`loadProject … (stripTestFns := true)`). `--report mono` therefore reports the whole program's counts (for wordfreq 908
 functions before mono, 1239 after, 325 specializations, a superset of the 61 the build emits). Standalone files are unchanged: there the whole program and the scoped modules were already
 the same value.
 
-The fix is the slice's type change, not a patch at the three sites: the record update that caused
-this no longer compiles anywhere outside `Pipeline.lean` (see below).
+The slice's type change is what makes the defect unrepresentable: the record update that caused
+it no longer compiles anywhere outside `Pipeline.lean` (see below). The type change does not by
+itself choose the repair. Re-validating the subset was the alternative, and it was rejected because
+the subset without its dependencies is not a program CoreCheck can accept.
+
+**Residuals, not changed here.**
+- `--report traceability` matches mono and SSA names to a source function by bare name and the
+  `_for_` prefix (`Report.collectTraceEntries`). With whole-program inputs, a project function named
+  like a dependency function (`max`) can be shown that dependency's specializations and symbols.
+  Standalone mode already passed the whole program, std included, so this is the existing
+  standalone behaviour extended to projects. It is class 1 (declaration identity by spelled name),
+  owned by R-0492.
+- `--report core-semantics-diff` still builds its evaluation environment from the invoked file's
+  modules, so a function that calls a sibling-file helper is excluded as not extractable. This is
+  older than bug 180 and runs no compiling pass. The repair is to evaluate over the whole program
+  and restrict only the reported roots.
 
 ## Structural cause
 

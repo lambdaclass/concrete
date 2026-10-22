@@ -3236,8 +3236,8 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (`ValidatedCore` is
-publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (slice 1 sealed `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram`, 2026-10-23), with diagnostic artifacts typed separately.
 
 **Semantics decisions (2026-10-21):** the compiler refers to `Option` and `Result` only by resolved
 identity, never by spelling, so a user enum named `Result` is a distinct type (LAYOUT_CONTRACT §3.4);
@@ -3421,7 +3421,7 @@ report replaced a certificate's payload and ran Mono on the result. Remaining: t
 after SSA as each IR lands; binding `ElaboratedProgram` to its input; payload-bound evidence
 records (class 10); the identity half under R-0492.
 
-Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (`ValidatedCore` is publicly constructible today, `Pipeline.lean` ~:48); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
+Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (slice 1, 2026-10-23, sealed `ValidatedCore`, `MonomorphizedProgram` and `SSAProgram` in `Pipeline.lean`); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
 
 **Exit:** compile-fail controls cover artifact forgery, certificate reuse after mutation and the diagnostic-path bypass; `Pipeline.lean` exposes only typed stages.
 

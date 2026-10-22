@@ -19,14 +19,14 @@ from that source and the post-Mono verifier is clean on them, and the SSA verifi
 modules after cleanup. Forging one, or replacing its payload with `{ a with … }`, no longer
 compiles. The `ssa-unverified` debugging view is a separate `UnverifiedSSA` that `emit` refuses.
 Modules drawn from a validated program are a `CoreSubset`, which proof extraction reads and Mono
-does not. Compiled code is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
+does not. The emitted output is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
 payload-replacement and diagnostic-bypass cases by elaboration.
 
 Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and `traceability`
 replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
 dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
 specializations where the build emits 61, and the verify gates called that program clean. These
-reports now run on the whole validated program. The record that caused the bug is pinned by
+reports now run on the whole validated program. The bug is pinned by
 `regress_180_report_scope`.
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)

@@ -445,8 +445,8 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts become immutable and payload-bound (`ValidatedCore` is
-publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+explicitly versioned. Pipeline artifacts become immutable and payload-bound (slice 1 sealed `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram`, 2026-10-23), with diagnostic artifacts typed separately.
 Language: no block `let` shadowing a visible name; colliding import aliases rejected; match binders
 equal or name their field.
 **Exit:** `check_ir_no_string_identity.sh` rejects string identity joins in resolved tables, the
@@ -460,14 +460,16 @@ diagnostic-path bypass.
   get private constructors. The first three carry erased `Prop` certificates about their exact
   payload: `coreCheckProgram coreModules = .ok ()`; Mono's output equation over `source` plus
   `verifyPostMono coreModules = []`; and the lowering chain from `source` plus
-  `ssaVerifyProgram ssaModules = .ok ()`. Each names the artifact it was produced from. Two
+  `ssaVerifyProgram ssaModules = .ok ()`. Mono and SSA artifacts name the artifact they were produced from. Two
   uncertified types are split off: `UnverifiedSSA`, the `ssa-unverified` debugging view, and
   `CoreSubset`, modules drawn from a `ValidatedCore` with a `Sublist` proof. Proof extraction reads
   a `CoreSubset`, and a whole program coerces to one.
 - *Invariant made structural:* a value of a certified type is exactly what its producer accepted.
   Forging one, replacing its payload (`{ a with … }`), or passing an uncertified artifact where a
   certificate is required is a compile error. Changing the payload needs a proof about the new
-  payload. The certificates are `Prop`s, so the compiled code is unchanged.
+  payload. The certificates are erased `Prop`s. The `source` fields are runtime data, and the
+  compiler's emitted output is unchanged. Private constructors are API discipline. The
+  certificates are the statement, and forging one past the seal needs a proof or an axiom.
 - *Gates:* `check_pipeline_artifacts.sh`:
   - P: the certificates read as their equations, the producer chain type-checks, and no `sorryAx`;
   - F1–F7: forgery by `{…}`, `⟨…⟩` and `.mk`;
