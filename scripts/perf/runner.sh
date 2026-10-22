@@ -39,7 +39,9 @@
 #
 # STATES. A commit is MEASURED once it has a clean record (or 3 attempts), and PROCESSED once
 # detection, any bisect and notification finished (data/<machine>/processed). A cycle interrupted
-# between the two resumes at detection.
+# between the two resumes at detection for that commit (`store.py pending`), even when main has moved
+# on. A crashed bisect is retried at the next tick, at most 3 times. The perf-data push (when
+# PERF_DATA_PUSH is set) is retried at every tick.
 #
 # EXIT: 0 done / nothing to do / machine busy (retry next tick); nonzero only on harness errors.
 set -euo pipefail
@@ -64,8 +66,37 @@ store() { python3 "$PERF/store.py" "$@"; }
 exec 9>"$PERF_HOME/runner.lock"
 if ! flock -n 9; then log "another perf cycle holds the lock"; exit 0; fi
 
+# Publishing is retried at every tick, independent of processing, so one failed push is not lost.
+push_data() {
+  if [ -n "${PERF_DATA_PUSH:-}" ]; then
+    git -C "$DATA" push -q "$PERF_DATA_PUSH" perf-data:perf-data || log "push of perf-data to $PERF_DATA_PUSH failed (retried next tick)"
+  fi
+}
+push_data
+
+# Coordination before any heavy step (measurement or bisect): the machine-wide heavy slot when the
+# tree has one, then a quiet machine. Returns nonzero (and the cycle exits 0) when busy.
+SLOT_HELD=0
+coordinate() {
+  local label="$1" lib="$REPO/scripts/tests/lib/heavy_slots.sh"
+  if [ "$SLOT_HELD" = 0 ] && [ -f "$lib" ]; then
+    # shellcheck source=/dev/null
+    source "$lib"
+    if ! heavy_slot_acquire "$label" --no-wait; then
+      log "no machine-wide heavy slot free; retry at the next tick"; state busy "heavy slots taken"; return 1
+    fi
+    SLOT_HELD=1
+    trap 'heavy_slot_release || true' EXIT
+  fi
+  if ! python3 "$PERF/suite.py" quiet --wait "$QUIET_WAIT"; then
+    log "machine stayed busy for ${QUIET_WAIT}s; retry at the next tick"; state busy "machine busy"; return 1
+  fi
+}
+
 git -C "$REPO" fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-HEAD_SHA="$(git -C "$REPO" rev-parse "origin/$BRANCH")"
+# A commit measured by an interrupted cycle is finished first, even if main has moved on since.
+HEAD_SHA="$(store pending --data "$DATA" --machine "$MACHINE")"
+[ -n "$HEAD_SHA" ] || HEAD_SHA="$(git -C "$REPO" rev-parse "origin/$BRANCH")"
 S12="${HEAD_SHA:0:12}"
 if store processed --data "$DATA" --machine "$MACHINE" --sha "$HEAD_SHA"; then
   log "$S12 already processed"; state idle "$S12 already processed"; exit 0
@@ -79,18 +110,7 @@ if ! store has --data "$DATA" --machine "$MACHINE" --sha "$HEAD_SHA"; then
   git -C "$REPO" checkout -q --force --detach "$HEAD_SHA"
   git -C "$REPO" clean -qfdx -e .lake
 
-  HEAVY_LIB="$REPO/scripts/tests/lib/heavy_slots.sh"
-  if [ -f "$HEAVY_LIB" ]; then
-    # shellcheck source=/dev/null
-    source "$HEAVY_LIB"
-    if ! heavy_slot_acquire "perf-suite $S12" --no-wait; then
-      log "no machine-wide heavy slot free; retry at the next tick"; state busy "heavy slots taken"; exit 0
-    fi
-    trap 'heavy_slot_release || true' EXIT
-  fi
-  if ! python3 "$PERF/suite.py" quiet --wait "$QUIET_WAIT"; then
-    log "machine stayed busy for ${QUIET_WAIT}s; retry at the next tick"; state busy "machine busy"; exit 0
-  fi
+  coordinate "perf-suite $S12" || exit 0
 
   REC="$OUT/record-$S12.json"
   rm -f "$REC"
@@ -142,13 +162,27 @@ PY
 )
   if [ "$METRIC" != "-" ]; then
     BISECT_JSON="$OUT/bisect-$S12.json"
-    rm -f "$BISECT_JSON"
-    log "regression in $METRIC; bisecting ${GOOD:0:12}..$S12"
-    set +e
-    nix develop "$REPO" -c python3 "$PERF/perf_bisect.py" --repo "$REPO" --metric "$METRIC" --good "$GOOD" \
-      --bad "$HEAD_SHA" --band "$BAND" --machine "$MACHINE" --work "$PERF_HOME/work" --out "$BISECT_JSON" \
-      >>"$RUNLOG" 2>&1
-    set -e
+    ATTEMPTS_FILE="$OUT/bisect-$S12.attempts"
+    ATTEMPTS="$(cat "$ATTEMPTS_FILE" 2>/dev/null || echo 0)"
+    if [ ! -s "$BISECT_JSON" ]; then
+      coordinate "perf-bisect $S12" || exit 0
+      echo $((ATTEMPTS + 1)) > "$ATTEMPTS_FILE"
+      log "regression in $METRIC; bisecting ${GOOD:0:12}..$S12 (attempt $((ATTEMPTS + 1)))"
+      set +e
+      nix develop "$REPO" -c python3 "$PERF/perf_bisect.py" --repo "$REPO" --metric "$METRIC" --good "$GOOD" \
+        --bad "$HEAD_SHA" --band "$BAND" --machine "$MACHINE" --work "$PERF_HOME/work" --out "$BISECT_JSON.tmp" \
+        >>"$RUNLOG" 2>&1
+      brc=$?
+      set -e
+      # A bisect that crashed is retried at the next tick (3 attempts), not silently dropped.
+      if [ "$brc" -eq 0 ] || [ "$brc" -eq 2 ]; then
+        [ -s "$BISECT_JSON.tmp" ] && mv -f "$BISECT_JSON.tmp" "$BISECT_JSON"
+      elif [ "$((ATTEMPTS + 1))" -lt 3 ]; then
+        log "bisect failed (exit $brc); retrying at the next tick"; state retry "$S12 bisect exit $brc"; exit 0
+      else
+        log "bisect failed 3 times; reporting the regression without a culprit"
+      fi
+    fi
     if [ -s "$BISECT_JSON" ]; then
       store put --data "$DATA" --machine "$MACHINE" --name "bisect/$S12.json" --file "$BISECT_JSON"
       python3 - "$NEW" "$BISECT_JSON" <<'PY'
@@ -190,9 +224,6 @@ mv -f "$NEW" "$SUMMARY"
 store put --data "$DATA" --machine "$MACHINE" --name summary.json --file "$SUMMARY"
 python3 "$PERF/report.py" --records "$RECS" --summary "$SUMMARY" --html "$OUT/report.html" >"$OUT/report.txt" || true
 store processed --data "$DATA" --machine "$MACHINE" --sha "$HEAD_SHA" --mark
-
-if [ -n "${PERF_DATA_PUSH:-}" ]; then
-  git -C "$DATA" push -q "$PERF_DATA_PUSH" perf-data:perf-data || log "push of perf-data to $PERF_DATA_PUSH failed"
-fi
+push_data
 state processed "$S12 verdict $VERDICT"
 log "done: $S12 ($VERDICT)"

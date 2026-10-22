@@ -67,8 +67,8 @@ def main():
                                                           summary["verdict"], summary["window"]))
         for name, e in sorted(summary["metrics"].items()):
             if e["verdict"] in ("regression", "improvement", "too_noisy"):
-                print("  %-11s %-48s %10.3f -> %10.3f %s (x%.3f, band %.1f%%)" % (
-                    e["verdict"], name, e["baseline"], e["current"], e["unit"], e["ratio"], 100 * e["band"]))
+                print("  %-11s %-48s %10.3f -> %10.3f %s (x%.3f, band %.1f%%)" % (  # x nan: zero baseline
+                    e["verdict"], name, e["baseline"], e["current"], e["unit"], e.get("ratio", float("nan")), 100 * e["band"]))
     return 1 if summary["verdict"] == "regression" else 0
 
 
