@@ -170,7 +170,7 @@ if want inline; then
       function flush() {
         if (delim ~ /^(PY|PYEOF|PYTHON|LEAN|TOML|TOMLEOF|JSON|USAGE|C|CEOF)$/) return
         # Python and Lean bodies quote Concrete source in strings; their own syntax gives them away.
-        if (body ~ /(^|\n)[ \t]*(def [A-Za-z_]+[ \t]*\(|from [A-Za-z_.]+ import |import (os|sys|re|json|subprocess)|theorem |open [A-Z]|#!\/)/) return
+        if (body ~ /(^|\n)[ \t]*(def [A-Za-z_]+[ \t]*\(|from [A-Za-z_.]+ import |import (os|sys|re|json|subprocess)[ \t]*(\n|,| as )|theorem |open [A-Z]|#!\/)/) return
         if (body ~ /(^|[^A-Za-z0-9_])fn[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*[(<]/ && !(quoted == 0 && body ~ /\$/)) {
           f = out "/" base "__L" start ".con"; printf "%s", body > f; close(f); print "inline\t_inline/" base "__L" start ".con"
         }
