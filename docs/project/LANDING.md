@@ -372,6 +372,13 @@ The server was shared with other full runs at a load average of 15 to 32.
   gates and the remote set by hand in sequence, and each hand-off waited for someone to notice
   the previous result. The scripts remove that wait, and this table does not measure it.
 
+## Watching trains
+
+`scripts/status/status.py` renders the landing log, the `ci/*` runs in flight, both mains and the
+ready branches as one phone-friendly page. `scripts/land/notify.sh <level> <title> <body>` pushes
+a message to ntfy or Slack, falling back to stdout, and drops duplicates. Setup and the
+publishing decision are in docs/project/STATUS_PAGE.md.
+
 ## Configuration
 | variable | default | meaning |
 |---|---|---|
