@@ -1,0 +1,18 @@
+// Bug 143 / bug 087 legal control under exit 2i SCOPE-1: two sibling scopes bind the same name.
+// Each deferred call reads the binding it was reserved on: the first scope's `defer show(x)` runs
+// at that scope's exit and prints 1; the second scope's own `x` (7) is printed directly, then its
+// deferred call prints 70. Native and --interp print the same: 1 7 70.
+fn show(n: Int) with(Console) { print_int(n); print_char(32); }
+
+fn main() with(Console) -> Int {
+    if true {
+        let x: Int = 1;
+        defer show(x);
+    }
+    if true {
+        let x: Int = 7;
+        defer show(x * 10);
+        show(x);
+    }
+    return 0;
+}

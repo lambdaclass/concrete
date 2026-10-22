@@ -1819,6 +1819,14 @@ run_err "$TESTDIR/error_143_defer_then_use_after_block.con"      "(E0205)"
 run_err "$TESTDIR/error_143_defer_borrow_only.con"               "(E0208)"
 run_err "$TESTDIR/error_143_defer_last_in_match_arm.con"         "(E0205)"
 run_ok  "$TESTDIR/regress_143_defer_reserve_by_place.con" "7 1 4 2 2 5 5 5 " 0
+run_err "$TESTDIR/error_143_defer_shadow_refused.con"            "(E0301)"
+run_ok  "$TESTDIR/regress_143_defer_sibling_scopes.con" "1 7 70 " 0
+r143s_i=$($COMPILER "$TESTDIR/regress_143_defer_sibling_scopes.con" --interp 2>&1 | awk "NR<=1" || true)
+if [ "$r143s_i" = "1 7 70 0" ]; then
+    echo "  ok  regress_143_defer_sibling_scopes.con: --interp prints what the binary prints"; PASS=$((PASS+1))
+else
+    echo "FAIL  regress_143_defer_sibling_scopes.con: --interp printed '$r143s_i'"; FAIL=$((FAIL+1))
+fi
 r143_i=$($COMPILER "$TESTDIR/regress_143_defer_reserve_by_place.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r143_i" = "7 1 4 2 2 5 5 5 0" ]; then
     echo "  ok  regress_143_defer_reserve_by_place.con: --interp prints what the binary prints"

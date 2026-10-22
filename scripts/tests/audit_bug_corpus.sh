@@ -104,7 +104,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 142: rule (d), no exit inside a call argument, literal element or operand (E0278).
   [142]="error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con error_142_deref_operand_return.con error_142_for_cond_break.con error_142_assign_index_return.con regress_142_exits_allowed.con"
   # Bug 143: defer rule (a), reserve by place (E0279 / E0206).
-  [143]="error_143_defer_borrow_then_free.con error_143_defer_borrow_then_consume.con error_143_defer_observer_before_consumer.con error_143_defer_field_arg.con error_143_defer_call_arg.con error_143_defer_then_use_after_block.con error_143_defer_borrow_only.con error_143_defer_last_in_match_arm.con regress_143_defer_reserve_by_place.con"
+  [143]="error_143_defer_borrow_then_free.con error_143_defer_borrow_then_consume.con error_143_defer_observer_before_consumer.con error_143_defer_field_arg.con error_143_defer_call_arg.con error_143_defer_then_use_after_block.con error_143_defer_borrow_only.con error_143_defer_last_in_match_arm.con regress_143_defer_reserve_by_place.con error_143_defer_shadow_refused.con regress_143_defer_sibling_scopes.con"
   # Bug 144: heap interiors linearity-tracked (E0290 / E0287).
   [144]="error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con error_144_heap_newtype_unwrap.con regress_144_heap_node_destructure.con"
   # Bug 145: vec_set / vec_free on non-Copy elements (E0291 / E0287).

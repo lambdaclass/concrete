@@ -1,0 +1,14 @@
+// Bug 143 / bug 087 shape under exit 2i SCOPE-1: a deferred call's argument names `x`, and a later
+// `let x` in the same function shadows it. Before SCOPE-1 this checked that the deferred call read
+// the binding it was reserved on, not the later one. That program is now refused (E0301), so the
+// name-resolution hazard cannot be written; this fixture pins the refusal. The legal same-name
+// control is regress_143_defer_sibling_scopes.con.
+fn show(n: Int) with(Console) { print_int(n); print_char(32); }
+
+fn main() with(Console) -> Int {
+    let x: Int = 1;
+    defer show(x);
+    let x: Int = 7;
+    show(x);
+    return 0;
+}
