@@ -164,9 +164,13 @@ if want inline; then
   for s in "$CDIR"/scripts/tests/*.sh "$CDIR"/scripts/ci/*.sh; do
     [ -f "$s" ] || continue
     # A heredoc body is a Concrete program when it declares a function (`fn name(` or `fn name<`,
-    # anywhere: `mod m { fn main() .. }` counts) and expands no shell variable. The delimiter is the word after <<, quoted or not; `<<-` strips leading tabs.
+    # anywhere: `mod m { fn main() .. }` counts), expands no shell variable, and is not a Python,
+    # Lean, TOML, JSON or C heredoc (by its delimiter or its own syntax). The delimiter is the word after <<, quoted or not; `<<-` strips leading tabs.
     awk -v out="$CDIR/_inline" -v base="$(basename "$s" .sh)" '
       function flush() {
+        if (delim ~ /^(PY|PYEOF|PYTHON|LEAN|TOML|TOMLEOF|JSON|USAGE|C|CEOF)$/) return
+        # Python and Lean bodies quote Concrete source in strings; their own syntax gives them away.
+        if (body ~ /(^|\n)[ \t]*(def [A-Za-z_]+[ \t]*\(|from [A-Za-z_.]+ import |import (os|sys|re|json|subprocess)|theorem |open [A-Z]|#!\/)/) return
         if (body ~ /(^|[^A-Za-z0-9_])fn[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*[(<]/ && !(quoted == 0 && body ~ /\$/)) {
           f = out "/" base "__L" start ".con"; printf "%s", body > f; close(f); print "inline\t_inline/" base "__L" start ".con"
         }
