@@ -62,12 +62,13 @@
 # inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
 # interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
 # pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
-# pass and be counted. Eight controls pin lib/bounded.sh: a command that prints and then hangs twice
+# pass and be counted. Ten controls pin lib/bounded.sh: a command that prints and then hangs twice
 # is incomplete with no output; a command that itself exits 124 is not incomplete; a run that
 # times out once and then completes is recorded as recovered; the watchdog form reports INCOMPLETE
 # and fails bounded_gate_status; a TERM-ignoring child, and a TERM-ignoring orphan whose parent
 # died, are killed before bounded_run returns; a command's stderr can neither fake nor hide a
-# timeout.
+# timeout; a runner that reports nothing gives no output and status 125; a cancelled runner kills
+# the command's group.
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
@@ -563,13 +564,24 @@ run_controls() {
     { [ "$rc" = 0 ] && [ "$out" = fine ] && ! bounded_is_incomplete "$rc"; } && echo stderr_cannot_fake_timeout
     out=$(bounded_run -r 1 1 -- sh -c 'printf prefix >&2; sleep 5' 2>&1); rc=$?
     { bounded_is_incomplete "$rc" && [ -z "$out" ]; } && echo stderr_cannot_hide_timeout
+    # A runner that reports nothing is never a pass: no output, status 125, logged.
+    out=$(BOUNDED_EXEC=/nonexistent/bounded_exec.py bounded_run 5 -- sh -c 'echo leaked' 2>/dev/null); rc=$?
+    { [ "$rc" = 125 ] && [ -z "$out" ] && grep -q '^runner-failed' "$BOUNDED_LOG"; } && echo runner_failure_not_a_pass
+    # A cancelled runner kills the command's group.
+    bounded_run 30 -- sleep 49.25 > /dev/null 2>&1 &
+    bgpid=$!
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "bounded_exec.py.*sleep 49.25" > /dev/null 2>&1 && break; sleep 0.2; done
+    pkill -TERM -f "bounded_exec.py.*sleep 49.25" > /dev/null 2>&1
+    wait "$bgpid" 2>/dev/null; sleep 0.5
+    ! pgrep -f "sleep 49.25" > /dev/null 2>&1 && echo cancelled_runner_kills_group
     # Last: bounded_gate_status removes this sourcing's state.
     bounded_watchdog 1
     out=$("${TO[@]}" sh -c 'echo EXPECTED; sleep 5' 2> "$dir/wd.err"); rc=$?
     { [ "$rc" = 124 ] && [ -z "$out" ] && grep -q '^INCOMPLETE' "$dir/wd.err" && ! bounded_gate_status > /dev/null; } && echo watchdog_incomplete
   )
   for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete \
-           term_ignoring_child_killed term_ignoring_orphan_killed stderr_cannot_fake_timeout stderr_cannot_hide_timeout; do
+           term_ignoring_child_killed term_ignoring_orphan_killed stderr_cannot_fake_timeout stderr_cannot_hide_timeout \
+           runner_failure_not_a_pass cancelled_runner_kills_group; do
     if grep -qx "$c" <<< "$bres"; then echo "  ok   bounded control $c"; PASS=$((PASS + 1))
     else no "bounded control $c: lib/bounded.sh does not behave as specified"; fi
   done

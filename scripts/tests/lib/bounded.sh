@@ -35,29 +35,38 @@
 #     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
 #     recovered and incomplete lines go to this gate's log (handed over on its command line).
 #   bounded_gate_status
-#     The end-of-gate verdict for a gate using the watchdog form: lists recovered and incomplete
-#     runs, removes the state directory, and returns 1 when any run was incomplete, so the gate
-#     exits nonzero whatever its own checks concluded from a hung command's empty output. Last line:
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+#     the runner failed, so the gate exits nonzero whatever its own checks concluded from a hung
+#     command's empty output. Last line:
 #       bounded_gate_status && [ "$FAIL" -eq 0 ]
 #
-# Without python3 the command runs once with no watchdog (one warning, printed when this file is
-# sourced, never into a command's output); such a run is never incomplete.
+# If the runner itself fails (no outcome reported), the command's output is discarded, status 125
+# is returned and a "runner-failed" line is logged: never a pass. If the runner is cancelled (the
+# gate is interrupted or terminated), it kills the command's group first.
+#
+# Without python3 commands run directly with no watchdog: one warning when the gate sources this
+# file, never inside a command's output, and the watchdog form then runs commands directly too.
+# Such a run is never incomplete.
 
 BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
+case "$BOUNDED_RETRY_FACTOR" in ''|*[!0-9]*|0) echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a positive integer" >&2; BOUNDED_RETRY_FACTOR=2 ;; esac
 BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
 BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
 BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
 BOUNDED_LOG="$BOUNDED_DIR/log"
 # The watchdog form appends to its caller's log, handed over explicitly on its command line.
-if [ "${BASH_SOURCE[0]}" = "$0" ] && [ -n "${BOUNDED_WATCHDOG_LOG:-}" ]; then
-  BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
 fi
 : >> "$BOUNDED_LOG"
 BOUNDED_HAVE_WATCHDOG=1
 if ! command -v python3 >/dev/null 2>&1; then
   BOUNDED_HAVE_WATCHDOG=0
-  echo "  warn python3 not found — commands run without a hang watchdog" >&2
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
 fi
 
 bounded_is_incomplete() {
@@ -95,14 +104,18 @@ bounded_run() {
     case "$outcome" in
       "exit "*) break ;;
       timeout) [ "$tries" = 1 ] || break; budget="$retry" ;;
-      *) # The runner itself failed: report it as the command's failure, never as a pass.
-         echo "bounded_run: the runner did not report an outcome for: $*" >> "$tmp/err"; outcome="exit 125"; break ;;
+      *) outcome=runner-failed; break ;;
     esac
   done
   if [ "$outcome" = timeout ]; then
     echo incomplete > "$BOUNDED_OUTCOME_FILE"
     echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
     rc=124
+  elif [ "$outcome" = runner-failed ]; then
+    # The runner reported nothing (it failed or was cancelled): no observation, never a pass.
+    echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+    rc=125
   else
     cat "$tmp/out"; cat "$tmp/err" >&2
     rc="${outcome#exit }"
@@ -115,21 +128,25 @@ bounded_run() {
 bounded_summary() {
   local nrec ninc
   nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
-  ninc=$(grep -c '^incomplete' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
   [ "$nrec" -gt 0 ] || [ "$ninc" -gt 0 ] || return 0
-  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice):"
+  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
   sed 's/^/  /' "$BOUNDED_LOG"
 }
 
 bounded_watchdog() {
-  TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" bash "$BOUNDED_SH" "$1")
+  if [ "$BOUNDED_HAVE_WATCHDOG" = 1 ]; then
+    TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" "BOUNDED_PARENT=$BOUNDED_DIR" bash "$BOUNDED_SH" "$1")
+  else
+    TO=(env)  # no python3: run commands directly (the gate warned once when it sourced this file)
+  fi
 }
 
 bounded_gate_status() {
   local ninc
   bounded_summary
-  ninc=$(grep -c '^incomplete' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
-  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice: this run is incomplete, not passed"
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice or lost their runner: this run is incomplete, not passed"
   rm -rf "$BOUNDED_DIR"
   [ "$ninc" -eq 0 ]
 }
@@ -142,6 +159,5 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   if bounded_is_incomplete "$rc"; then
     echo "INCOMPLETE: timed out twice (${secs}s, then $((secs * BOUNDED_RETRY_FACTOR))s alone): $*" >&2
   fi
-  rm -rf "$BOUNDED_DIR"
   exit "$rc"
 fi

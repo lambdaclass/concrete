@@ -47,6 +47,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
 bounded_watchdog 300
+trap 'rm -rf "$BOUNDED_DIR"' EXIT  # no scratch directory of its own; an early exit must not leak
 
 
 out="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report eligibility 2>&1)"

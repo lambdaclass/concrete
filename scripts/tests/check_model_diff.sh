@@ -53,7 +53,7 @@ echo "=== C/V: the corpus ==="
 # the gate's exit status (a hung report can never pass) without being read as a wrong answer; a
 # nonzero exit is a FAIL unless the file is one of the deliberately ill-formed examples below (which must
 # keep failing by refusing the program, never by timing out).
-command -v timeout >/dev/null 2>&1 || { echo "error: 'timeout' is required (a hung report must fail, bug 106)" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "error: python3 is required for the report watchdog (a hung report must not pass, bug 106)" >&2; exit 2; }
 EXPECT_REFUSED=" examples/contract_negatives/duplicate_links/src/main.con examples/contract_negatives/invalid_attribute/src/main.con examples/contract_negatives/invalid_contract_expression/src/main.con examples/contract_negatives/spec_ghost_totality/src/main.con examples/known_holes/returned_ref_provenance_map/src/main.con examples/known_holes/returned_ref_provenance_vec/src/main.con "
 #   contract_negatives/*  are negative fixtures: the program is refused before any report;
 #   known_holes/returned_ref_provenance_*  are refused by the returned-reference rule (H1).

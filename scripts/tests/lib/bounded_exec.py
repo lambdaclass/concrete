@@ -12,8 +12,11 @@ fake or hide it:
               whether or not the leader had already exited, so a descendant that ignores SIGTERM
               does not outlive the attempt.
 When the command finishes within its budget its group is left alone, as timeout(1) does.
-This process exits 0 once FILE is written; 2 on a usage error. An interrupt kills the group.
+Both durations must be finite numbers, the budget positive and the grace nonnegative.
+This process exits 0 once FILE is written and 2 on a usage error. If it is itself cancelled
+(SIGTERM, SIGHUP, SIGINT), it kills the command's group, writes no outcome, and exits 128+signal.
 """
+import math
 import os
 import signal
 import subprocess
@@ -21,57 +24,17 @@ import sys
 import time
 
 
+class Cancelled(Exception):
+    def __init__(self, sig):
+        super().__init__(sig)
+        self.sig = sig
+
+
 def killpg(pgid, sig):
     try:
         os.killpg(pgid, sig)
     except (ProcessLookupError, PermissionError):
         pass
-
-
-def main(argv):
-    try:
-        i = argv.index("--")
-    except ValueError:
-        print(__doc__, file=sys.stderr)
-        return 2
-    opts, cmd = argv[:i], argv[i + 1:]
-    if len(opts) != 6 or opts[0::2] != ["--timeout", "--kill-after", "--status"] or not cmd:
-        print(__doc__, file=sys.stderr)
-        return 2
-    budget, kill_after, status = float(opts[1]), float(opts[3]), opts[5]
-    try:
-        proc = subprocess.Popen(cmd, start_new_session=True)
-    except OSError as e:
-        print(f"bounded_exec: cannot run {cmd[0]}: {e}", file=sys.stderr)
-        with open(status, "w") as fh:
-            fh.write("exit 127\n")
-        return 0
-    pgid = proc.pid
-    try:
-        try:
-            rc = proc.wait(timeout=budget)
-            outcome = f"exit {rc if rc >= 0 else 128 - rc}"
-        except subprocess.TimeoutExpired:
-            killpg(pgid, signal.SIGTERM)
-            deadline = time.monotonic() + kill_after
-            while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    # The leader is gone; descendants that ignored SIGTERM may remain. Give them
-                    # the same grace, then kill the group either way.
-                    time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
-                    if not group_alive(pgid):
-                        break
-                else:
-                    time.sleep(0.05)
-            killpg(pgid, signal.SIGKILL)
-            proc.wait()
-            outcome = "timeout"
-    except BaseException:
-        killpg(pgid, signal.SIGKILL)
-        raise
-    with open(status, "w") as fh:
-        fh.write(outcome + "\n")
-    return 0
 
 
 def group_alive(pgid):
@@ -82,6 +45,73 @@ def group_alive(pgid):
         return False
     except PermissionError:
         return True
+
+
+def duration(text, positive):
+    try:
+        v = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(v) or v < 0 or (positive and v == 0):
+        return None
+    return v
+
+
+def usage(msg):
+    print(f"bounded_exec: {msg}\n{__doc__}", file=sys.stderr)
+    return 2
+
+
+def main(argv):
+    try:
+        i = argv.index("--")
+    except ValueError:
+        return usage("missing --")
+    opts, cmd = argv[:i], argv[i + 1:]
+    if len(opts) != 6 or opts[0::2] != ["--timeout", "--kill-after", "--status"] or not cmd:
+        return usage("expected --timeout SECS --kill-after SECS --status FILE -- CMD...")
+    budget, kill_after, status = duration(opts[1], True), duration(opts[3], False), opts[5]
+    if budget is None or kill_after is None:
+        return usage(f"invalid duration: --timeout {opts[1]} --kill-after {opts[3]}")
+
+    def cancel(sig, _frame):
+        raise Cancelled(sig)
+
+    for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(s, cancel)
+    pgid = None
+    try:
+        try:
+            proc = subprocess.Popen(cmd, start_new_session=True)
+        except OSError as e:
+            print(f"bounded_exec: cannot run {cmd[0]}: {e}", file=sys.stderr)
+            outcome = "exit 127"
+        else:
+            pgid = proc.pid
+            try:
+                rc = proc.wait(timeout=budget)
+                outcome = f"exit {rc if rc >= 0 else 128 - rc}"
+            except subprocess.TimeoutExpired:
+                killpg(pgid, signal.SIGTERM)
+                deadline = time.monotonic() + kill_after
+                while time.monotonic() < deadline:
+                    if proc.poll() is not None and not group_alive(pgid):
+                        break
+                    time.sleep(0.05)
+                killpg(pgid, signal.SIGKILL)
+                proc.wait()
+                outcome = "timeout"
+    except Cancelled as c:
+        if pgid is not None:
+            killpg(pgid, signal.SIGKILL)
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+        return 128 + c.sig
+    with open(status, "w") as fh:
+        fh.write(outcome + "\n")
+    return 0
 
 
 if __name__ == "__main__":

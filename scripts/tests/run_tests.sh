@@ -11831,14 +11831,11 @@ fi
 #   regress_087_borrow_shadow_uaf/src/main.con  (bug 087 — an `if` body's
 #     `let r` shadowing a borrow-block ref must not outlive the `if`; pre-fix
 #     the later `r` read the inner, dropped String: a heap use-after-free)
-# `timeout` is coreutils; present in the devshell and on CI. Degrade to running
-# without a watchdog rather than skipping the fixtures entirely, but say so, so
-# a hang on such a machine is at least explicable.
+# The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
+# python3 it degrades to running without a watchdog rather than skipping the fixtures,
+# and says so once, so a hang on such a machine is at least explicable.
 BOUNDED_PARENT="$SUITE_TMPDIR"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
-if ! command -v timeout >/dev/null 2>&1; then
-    echo "  warn  'timeout' not found — project fixtures run WITHOUT a hang watchdog"
-fi
 
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
