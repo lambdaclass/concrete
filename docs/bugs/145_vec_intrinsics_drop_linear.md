@@ -35,7 +35,9 @@ error[check]: (E0287) vec_free would drop the non-Copy elements of type 'String'
 
 `repro_set.con` is refused (E0291) by bug 115's fix on `lowering-bugs` (`29f91b7b`), which makes
 `vec_set` and `vec_get` Copy-only; this branch does not duplicate that check and picks it up when
-`lowering-bugs` lands.
+`lowering-bugs` lands. Until then, `check_example_outputs.sh`'s open-bug row for bug 115 fails on this branch: its
+reproducer ends with `vec_free::<String>(v)`, which this fix refuses, and `lowering-bugs` removes that
+row when it fixes 115. This branch is to be rebased onto `lowering-bugs` before it lands.
 
 ## Cause
 
