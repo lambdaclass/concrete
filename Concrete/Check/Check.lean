@@ -2922,7 +2922,7 @@ def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagno
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
   ((scope1Expr [] c.value).run []).2
-    ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.span] else [])
+    ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.value.getSpan] else [])
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
@@ -2933,6 +2933,12 @@ def scope1Diagnostics (f : FnDef) : List Diagnostic :=
       vis ← scope1Bind vis p.name f.span "parameter"
     scope1Block vis f.body
   (go.run []).2
+
+/-- A constant initializer as an expression of the constant's type, with no locals in scope. -/
+def checkConstInit (c : ConstDef) : CheckM Unit := do
+  let ty ← resolveType c.ty
+  let vt ← checkExpr c.value (some ty)
+  expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
@@ -3737,6 +3743,15 @@ def checkModule (m : Module) (summary : FileSummary)
     | (.ok (), finalEnv) => (errs, finalEnv)
     | (.error ds, _) => (errs ++ ds.addContext s!"while checking function '{f.name}'", env)
   ) (([] : Diagnostics), initEnv)
+  -- Constant initializers are type-checked too (exit 2i review round 15): they never reach
+  -- checkFn, so an ill-typed `let r: &i32 = 42` or a reference made through a raw pointer inside
+  -- one was elaborated unchecked. Checking them here applies REF-6 (E0302 / E0303) and every
+  -- other statement rule to their bodies.
+  let constErrors := m.constants.foldl (fun errs c =>
+    match (checkConstInit c).run { initEnv with traits := allTraits } |>.run with
+    | (.ok (), _) => errs
+    | (.error ds, _) => errs ++ ds.addContext s!"while checking constant '{c.name}'") ([] : Diagnostics)
+  let allErrors := allErrors ++ constErrors
   if allErrors.isEmpty then .ok ()
   else .error allErrors
 

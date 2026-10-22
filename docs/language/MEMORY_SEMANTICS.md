@@ -1141,11 +1141,10 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   and region names), so E0301 reports before E0292 and E0238, which stay as defense in depth. Every collision of a function is reported, each with the earlier binding as the related span.
   The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
   Code `checkFn` never visits is covered too. Constant initializers get the same walk
-  (`constInitDiagnostics`) and, since Check does not type them, one REF-6 test: a constant is a
-  value and may not borrow at all (E0602 at a use), so any borrow, borrow block or cast to a
-  reference type in its initializer is E0302 (`constBorrows`). With no borrow there is no source for
-  a reference in a constant: it has no parameters, no function returns one (REF-1) and none is
-  stored (REF-3). Contract expressions (`requires`,
+  (`constInitDiagnostics`), are type-checked as expressions of the constant's type
+  (`checkConstInit`, so a `let` or assignment in one meets E0302 / E0303 and every other statement
+  rule), and a constant may not borrow at all (E0302 `constBorrows`, ahead of Elab's E0602 at a
+  use). Contract expressions (`requires`,
   `ensures`, loop invariants and variants, in functions, inherent and trait-impl methods) are
   binder- and statement-free propositions, like spec bodies: a binder of any kind (a pattern
   binder included) or any statement other than a block's trailing value in one is E0305
@@ -1340,7 +1339,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 176 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 178 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a

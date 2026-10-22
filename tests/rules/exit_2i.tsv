@@ -89,6 +89,8 @@ SCOPE-1	tests/programs/regress_2i_const_initializer_block.con	run:42	const-init	
 REF-6	tests/programs/error_2i_ref6_const_branch_borrow.con	reject:E0302:REF-6@1	const-init	-
 REF-6	tests/programs/error_2i_ref6_const_destructure_through_borrow.con	reject:E0302:REF-6@1	const-init	-
 REF-6	tests/programs/error_2i_ref6_const_match_through_borrow.con	reject:E0302:REF-6@1	const-init	-
+REF-6	tests/programs/error_2i_ref6_const_typed_ref_let.con	reject:E0302:REF-6@1	const-init	-
+REF-5	tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con	reject:E0238:REF-5@1	ref5	-
 REF-6	tests/programs/error_2i_ref6_const_borrow_block.con	reject:E0302:REF-6@1	const-init	-
 SCOPE-1	tests/programs/error_2i_ref6_contract_ref_binding.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_scope1_contract_let.con	reject:E0305:SCOPE-1@1	contract	-
