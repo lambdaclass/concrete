@@ -25,6 +25,13 @@ private_checkout() {
     || { echo "git clone failed" >> "$log"; return 1; }
   git -C "$tree" checkout --quiet --detach "$(git -C "$root" rev-parse HEAD)" >>"$log" 2>&1 \
     || { echo "git checkout failed" >> "$log"; return 1; }
+  # THE INDEX TOO, so staged state reads the same in the copy (a staged addition is staged, a staged
+  # change reverted in the working tree is still a change). Its blobs are reachable: the clone borrows
+  # this repository's object store.
+  local idx
+  idx="$(git -C "$root" rev-parse --path-format=absolute --git-path index 2>/dev/null)" \
+    && [ -f "$idx" ] && cp "$idx" "$tree/.git/index" \
+    || { echo "could not copy the index" >> "$log"; return 1; }
   # Overlay the working-tree bytes of every tracked file (one tar stream: xargs could split it into
   # several archives and the reader stops at the first)...
   ( cd "$root" && git ls-files -z | while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done \
@@ -52,8 +59,11 @@ reexec_in_private_checkout() {
   [ "${CONCRETE_IN_PRIVATE_CHECKOUT:-0}" = "1" ] && return 0
   local root rel base tree rc
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)" || exit 2
+  # The gate's path inside the repository, whatever directory it was invoked from: every caller lives
+  # in scripts/tests, so a path that does not resolve under the root falls back to that.
   rel="${self#"$root"/}"
   case "$rel" in /*) rel="scripts/tests/$(basename "$self")" ;; esac
+  [ -f "$root/$rel" ] || rel="scripts/tests/$(basename "$self")"
   base="$(mktemp -d)" || { echo "FATAL: mktemp failed; no private checkout" >&2; exit 2; }
   if ! tree="$(private_checkout "$base")"; then
     echo "FATAL: could not make a private checkout for $(basename "$self") — nothing was checked:" >&2
