@@ -193,23 +193,29 @@ ccache_run() {
       if [ "$(wc -c < "$priv/e" | tr -d ' ')" = $(( hl + ob + eb )) ]; then
         # Through files, not a pipeline: `tail | head` closes early and a large stderr would end
         # an errexit/pipefail caller on SIGPIPE before the status is returned.
-        tail -c +$(( hl + 1 )) "$priv/e" > "$priv/rest"
-        head -c "$ob" "$priv/rest"
-        tail -c +$(( ob + 1 )) "$priv/rest" >&2
-        rm -rf "$priv"
-        CCACHE_HITS=$((CCACHE_HITS+1)); CCACHE_LAST="hit"
-        return "$rc"
+        # Staged and size-checked BEFORE anything is emitted: a failed write (a full disk) must
+        # fall through to a fresh compile, never replay a truncated result as a hit.
+        if tail -c +$(( hl + 1 )) "$priv/e" > "$priv/rest" \
+           && [ "$(wc -c < "$priv/rest" | tr -d ' ')" = $(( ob + eb )) ] \
+           && head -c "$ob" "$priv/rest" > "$priv/o" && tail -c +$(( ob + 1 )) "$priv/rest" > "$priv/r" \
+           && [ "$(wc -c < "$priv/o" | tr -d ' ')" = "$ob" ] && [ "$(wc -c < "$priv/r" | tr -d ' ')" = "$eb" ]; then
+          cat "$priv/o"; cat "$priv/r" >&2
+          rm -rf "$priv"
+          CCACHE_HITS=$((CCACHE_HITS+1)); CCACHE_LAST="hit"
+          return "$rc"
+        fi
       fi ;;
     esac
   fi
-  rm -f "$priv/e"
+  rm -f "$priv/e" "$priv/rest" "$priv/o" "$priv/r"
   # THE START MARKER IS DATED ONE SECOND IN THE PAST. The watched files may live on a filesystem with
   # whole-second mtimes even when the cache does not, so "newer than the marker" is made safe for the
   # coarsest granularity: an edit (or an edit-and-revert) made during the compile, or in the second
   # before it, refuses publication. Erring early only ever refuses to store.
   local past; past=$(( $(date +%s) - 1 ))
   : > "$priv/start"
-  touch -t "$(date -d "@$past" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$past" +%Y%m%d%H%M.%S)" "$priv/start" \
+  # In UTC: a local-time round trip is ambiguous across a DST fall-back and could date it AHEAD.
+  TZ=UTC0 touch -t "$(TZ=UTC0 date -d "@$past" +%Y%m%d%H%M.%S 2>/dev/null || TZ=UTC0 date -r "$past" +%Y%m%d%H%M.%S)" "$priv/start" \
     || { rm -rf "$priv"; CCACHE_BYPASS=$((CCACHE_BYPASS+1)); CCACHE_LAST="bypass:marker"
          if "$comp" "$@"; then return 0; else return $?; fi; }
   # Captured without tripping a caller's `set -e`: the diagnostics are replayed either way.
@@ -223,11 +229,11 @@ ccache_run() {
   if [ "$rc" -lt 128 ] \
      && [ -z "$(find "${watch[@]}" -newer "$priv/start" -print 2>/dev/null | head -1)" ] \
      && _cc_key "$comp" "$@" && [ "$CCACHE_KEY" = "$key" ]; then
-    {
-      printf '%s %s %s\n' "$rc" "$(wc -c < "$priv/out" | tr -d ' ')" "$(wc -c < "$priv/err" | tr -d ' ')"
-      cat "$priv/out" "$priv/err"
-    } > "$priv/e"
-    if [ ! -e "$ent" ] || [ "${CONCRETE_COMPILE_CACHE:-1}" = "refresh" ]; then
+    local h; h="$rc $(wc -c < "$priv/out" | tr -d ' ') $(wc -c < "$priv/err" | tr -d ' ')"
+    # A short write (a full disk) is never published: the entry's size must be exactly its header's.
+    if { printf '%s\n' "$h" && cat "$priv/out" "$priv/err"; } > "$priv/e" 2>/dev/null \
+       && [ "$(wc -c < "$priv/e" | tr -d ' ')" = $(( ${#h} + 1 + $(wc -c < "$priv/out") + $(wc -c < "$priv/err") )) ] \
+       && { [ ! -e "$ent" ] || [ "${CONCRETE_COMPILE_CACHE:-1}" = "refresh" ]; }; then
       mv -f "$priv/e" "$ent" 2>/dev/null
     fi   # else an equal key is an equal result, and the published entry is kept
   fi
