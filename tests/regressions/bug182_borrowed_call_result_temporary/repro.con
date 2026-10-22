@@ -1,0 +1,13 @@
+// Bug 182: a borrow of a call result (`&alloc(..)`, REF-5 / gap G12) is accepted. The Heap temporary
+// is passed as the heap pointer itself where `&Heap<B>` is the address of a slot holding it, so
+// `peek` loads the payload's value (42) as a pointer. Expected: refused (REF-5) or exit 42.
+// Observed: the binary is killed by SIGSEGV; --interp prints 42. The temporary is also never freed.
+struct Copy B { v: Int }
+
+fn peek(b: &Heap<B>) -> Int {
+    return b.v;
+}
+
+fn main() with(Alloc) -> Int {
+    return peek(&alloc(B { v: 42 }));
+}
