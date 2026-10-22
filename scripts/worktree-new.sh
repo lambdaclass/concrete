@@ -75,6 +75,15 @@ echo "  branch : $NAME (new)"
 echo "  base   : ${BASE_SHA:0:8} ($BASE)"
 git worktree add "$DEST" -b "$NAME" "$BASE_SHA" || exit 1
 
+# SEED THE LEAN BUILD (R-0546). A fresh worktree otherwise rebuilds all 242 Lean jobs (~52 s wall,
+# ~255 s CPU measured). scripts/lake-seed.sh copies this checkout's .lake copy-on-write and lets
+# `lake build` re-verify it by content hash, so the seed can only save work, never go stale.
+# CONCRETE_LAKE_SEED=0 skips it.
+if [ "${CONCRETE_LAKE_SEED:-1}" != "0" ] && [ -d "$ROOT_DIR/.lake/build" ]; then
+  ( cd "$DEST" && bash "$ROOT_DIR/scripts/lake-seed.sh" "$ROOT_DIR" ) \
+    || echo "worktree-new: lake seed failed; the first build will start from scratch."
+fi
+
 echo ""
 echo "worktree-new: ready. cd $DEST"
 echo "worktree-new: run all commands from there — do NOT cd back to $(basename "$ROOT_DIR")."

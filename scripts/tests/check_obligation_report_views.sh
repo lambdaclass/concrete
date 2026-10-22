@@ -15,6 +15,9 @@ require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
+# Repeated pure reports on unchanged inputs come from the shared compile cache (R-0546,
+# scripts/tests/lib/compile_cache.sh); its key covers the binary, the input closure and std.
+source "$ROOT_DIR/scripts/tests/lib/compile_cache.sh"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 HMAC="examples/hmac_sha256/src/main.con"
 TD="examples/thesis_demo/src/main.con"
@@ -26,17 +29,17 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== --report vcs is a faithful view: ids+statuses == the ledger's VC subset ==="
-vmap="$("$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(v['id']+':'+v['status'] for v in d['vcs'])))")"
-lmap="$("$COMPILER" "$HMAC" --report obligation-ledger --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(o['id']+':'+o['status'] for o in d['obligations'] if not o['id'].endswith('#prooflink'))))")"
+vmap="$(ccache_run "$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(v['id']+':'+v['status'] for v in d['vcs'])))")"
+lmap="$(ccache_run "$COMPILER" "$HMAC" --report obligation-ledger --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(o['id']+':'+o['status'] for o in d['obligations'] if not o['id'].endswith('#prooflink'))))")"
 [ -n "$vmap" ] && [ "$vmap" = "$lmap" ] && ok "vcs ids+statuses == ledger VC subset" || no "vcs drifted from the ledger"
 
 echo "=== single status vocabulary across vcs + ledger ==="
-"$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "
+ccache_run "$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "
 import sys,json
 ok=set('$VOCAB'.split(','))
 d=json.load(sys.stdin)
 sys.exit(0 if set(v['status'] for v in d['vcs'])<=ok else 1)" && ok "every --report vcs status ∈ canonical vocabulary" || no "vcs status outside vocabulary"
-"$COMPILER" "$HMAC" --report obligation-ledger --json 2>/dev/null | python3 -c "
+ccache_run "$COMPILER" "$HMAC" --report obligation-ledger --json 2>/dev/null | python3 -c "
 import sys,json
 ok=set('$VOCAB'.split(','))
 d=json.load(sys.stdin)
@@ -44,7 +47,7 @@ sys.exit(0 if set(o['status'] for o in d['obligations'])<=ok else 1)" && ok "eve
 
 echo "=== --report proof-status totals == the ledger's proof-link projection ==="
 TOT="$("$COMPILER" "$TD" --report proof-status 2>/dev/null | grep -i 'Totals:')"
-"$COMPILER" "$TD" --report obligation-ledger --json 2>/dev/null | python3 -c "
+ccache_run "$COMPILER" "$TD" --report obligation-ledger --json 2>/dev/null | python3 -c "
 import json,sys,collections,re
 d=json.load(sys.stdin)
 links=[o for o in d['obligations'] if o['id'].endswith('#prooflink')]
@@ -61,13 +64,13 @@ declare -A vcnt
 while IFS= read -r line; do
   s=$(echo "$line" | cut -d: -f1); n=$(echo "$line" | cut -d: -f2)
   vcnt[$s]=$n
-done < <("$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "
+done < <(ccache_run "$COMPILER" "$HMAC" --report vcs --json 2>/dev/null | python3 -c "
 import json,sys,collections
 d=json.load(sys.stdin)
 for k,v in collections.Counter(x['status'] for x in d['vcs']).items(): print(f'{k}:{v}')")
 audit_mismatch=0
 for cls in proved_by_kernel_decision proved_by_lean proved_by_lean_replay solver_trusted; do
-  aud=$("$COMPILER" "$HMAC" --report audit 2>/dev/null | grep -oE "${cls}: *[0-9]+" | head -1 | grep -oE "[0-9]+\$")
+  aud=$(ccache_run "$COMPILER" "$HMAC" --report audit 2>/dev/null | grep -oE "${cls}: *[0-9]+" | head -1 | grep -oE "[0-9]+\$")
   exp=${vcnt[$cls]:-0}
   [ "${aud:-0}" = "$exp" ] || { echo "      $cls: audit=${aud:-0} vcs=$exp"; audit_mismatch=1; }
 done

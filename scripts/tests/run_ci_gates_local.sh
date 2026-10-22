@@ -20,8 +20,9 @@
 #
 # Usage: scripts/tests/run_ci_gates_local.sh [filter-substring]
 #        scripts/tests/run_ci_gates_local.sh --job "<CI job name substring>"
-#        scripts/tests/run_ci_gates_local.sh [--plan] [--first CMD]... [--job J]... [--filter S]...
-#        scripts/tests/run_ci_gates_local.sh [--plan] --impact <base-ref> | --impact-files <paths-file>
+#        scripts/tests/run_ci_gates_local.sh [--plan] [--no-wait] [--first CMD]... [--job J]... [--filter S]...
+#        scripts/tests/run_ci_gates_local.sh [--plan] [--no-wait] --impact <base-ref> | --impact-files <paths-file>
+#   --no-wait    a heavy run (see R-0543 below) exits 75 instead of waiting when every slot is busy.
 #
 # SELECTORS COMPOSE INTO ONE UNIQUE LIST. `--job`, `--filter` (or a bare positional substring) and
 # `--first` may each be repeated; the union is resolved ONCE, deduplicated by the normalized command
@@ -63,6 +64,7 @@ unset $(git rev-parse --local-env-vars)
 # except in --plan mode, which never takes the lock.
 ARG_ERR=""
 PLAN=0
+HEAVY_NO_WAIT="${CONCRETE_HEAVY_NO_WAIT:-0}"
 JOBSEL=(); FILTERS=(); FIRST_CMDS=(); IMPACT=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -76,6 +78,7 @@ while [ $# -gt 0 ]; do
       if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
       if [ "$1" = "--impact" ]; then IMPACT=("$2"); else IMPACT=(--files "$2"); fi
       shift 2 ;;
+    --no-wait) HEAVY_NO_WAIT=1; shift ;;   # R-0543: fail fast (exit 75) when every heavy slot is busy
     --job|--filter|--first)
       if [ -z "${2:-}" ]; then ARG_ERR="$1 needs an argument"; break; fi
       case "$1" in
@@ -171,7 +174,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=260
+EXPECTED_GATE_COMMANDS=262
 # 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
 #   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
@@ -184,6 +187,8 @@ if [ -f "$GATE_INVENTORY" ]; then
   EXPECTED_GATE_COMMANDS="$(grep -c . "$GATE_INVENTORY" || true)"
 fi
 # 255 -> 256: check_gate_selection.sh (R-0513 impact gate selection), pinned in the same commit.
+# 255 -> 256: check_heavy_slots.sh (R-0543 machine-wide heavy-run semaphore), pinned in the same commit.
+# 256 -> 257: check_compile_cache.sh (R-0546 shared compile-output cache), pinned in the same commit.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
@@ -446,6 +451,24 @@ fi
 # `require_fresh_binary` rebuild for themselves, but the ones that do not — the first extracted
 # command, scripts/ci/proof_gate.sh, among them — ran against whatever was on disk, so a closure
 # run could record the current HEAD while its early verdicts described an older compiler.
+# MACHINE-WIDE LOAD CONTROL (R-0543, scripts/tests/lib/heavy_slots.sh). A full pass, or a selection
+# larger than CONCRETE_HEAVY_MIN_GATES (default 8; the pre-push hook's job selections are), takes one
+# of CONCRETE_HEAVY_SLOTS machine-wide slots BEFORE the rebuild below, because a fresh worktree's
+# build is itself heavy. Small selections and single gates never wait. Taken after the repository
+# lock, so a waiting run holds only its own worktree. Released at the end; a killed run's slot is
+# reclaimed by the next waiter (its pid is dead).
+HEAVY_RUN=0
+if source "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh" 2>/dev/null && [ -z "$ARG_ERR" ] && resolve_selection 2>/dev/null; then
+  if [ "$SELECTING" = "0" ] || [ "${#SELECTED[@]}" -gt "${CONCRETE_HEAVY_MIN_GATES:-8}" ]; then HEAVY_RUN=1; fi
+fi
+if [ "$HEAVY_RUN" = "1" ]; then
+  _hargs=(); [ "$HEAVY_NO_WAIT" = "1" ] && _hargs=(--no-wait)
+  heavy_slot_acquire "run_ci_gates_local.sh (${#SELECTED[@]} gates)" ${_hargs[@]+"${_hargs[@]}"}; _hrc=$?
+  if [ "$_hrc" -ne 0 ]; then
+    ci_write_summary 0 " heavy_slot_unavailable"; _gate_lock_release
+    exit "$_hrc"
+  fi
+fi
 if ! require_fresh_binary ".lake/build/bin/concrete"; then
   ci_write_summary 0 " compiler_not_fresh"
   echo "error: refusing to run the gate set against an unverified compiler." >&2
@@ -483,6 +506,11 @@ JOBS_EXPLICIT=0
 JOBS_DEFAULT=$(( CORES - 2 ))
 [ "$JOBS_DEFAULT" -lt 1 ] && JOBS_DEFAULT=1
 [ "$JOBS_DEFAULT" -gt 8 ] && JOBS_DEFAULT=8
+# R-0543: with more than one machine-wide heavy slot the machine is shared, so the default becomes
+# this run's fair share of the free cores (heavy_jobs_default), not a fixed 8.
+if command -v heavy_jobs_default >/dev/null 2>&1 && [ "$(heavy_slots_n)" -gt 1 ]; then
+  JOBS_DEFAULT="$(heavy_jobs_default)"
+fi
 JOBS="${JOBS:-$JOBS_DEFAULT}"
 
 # ---------------------------------------------------------------------------
@@ -881,6 +909,7 @@ if [ "${RUN_INTERRUPTED:-0}" = "1" ]; then
 else
   _gate_lock_release
 fi
+[ "$HEAVY_RUN" = "1" ] && heavy_slot_release
 
 # The artifact write is part of the verdict: a pass with no durable record is not closure evidence.
 [ "$RUN_OK" = "1" ]
