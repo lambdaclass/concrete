@@ -1847,6 +1847,10 @@ run_ok  "$TESTDIR/regress_149_labelled_exit_runs_defers.con" "3" 0
 run_ok  "$TESTDIR/regress_149_return_in_borrow_with_defer.con" "42" 0
 run_ok  "$TESTDIR/regress_149_break_in_borrow_with_defer.con" "1" 0
 run_err "$TESTDIR/error_149_diverging_branches_in_loop.con"     "(E0208)"
+run_err "$TESTDIR/error_149_loop_cond_in_exiting_branch.con"    "(E0207)"
+run_err "$TESTDIR/error_149_match_diverge_in_loop.con"          "(E0208)"
+run_ok  "$TESTDIR/regress_149_both_branches_return.con" "" 1
+run_ok  "$TESTDIR/regress_149_cond_return_in_borrow.con" "" 1
 run_ok  "$TESTDIR/regress_146_heap_deref_cast.con" "42" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do

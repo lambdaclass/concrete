@@ -515,6 +515,19 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     if st == .consumed || st == .reserved then continue
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
 
+/-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state unless a
+    `break value` moved it. Every other consumption of an outer binding inside the body is on a
+    path that leaves the function (the loop-depth rule refuses the rest), and the loop may run
+    zero times, so crediting it after the loop would accept a value that was never consumed. -/
+def restoreAfterLoop (before : TypeEnv) (movedByBreak : List Nat) : CheckM Unit := do
+  let env ← getEnv
+  setEnv { env with vars := env.vars.map fun (n, vi) =>
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      if old.state != vi.state && !movedByBreak.contains vi.uid then (n, { vi with state := old.state })
+      else (n, vi)
+    | none => (n, vi) }
+
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
   let env ← getEnv
@@ -2387,12 +2400,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- Bug 149: the condition runs on every iteration, so it is checked at the loop's depth: a
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
-    setEnv { env0 with loopDepth := env0.loopDepth + 1 }
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false }
     let _condTy ← checkExpr cond
     let envC ← getEnv
-    setEnv { envC with loopDepth := env0.loopDepth }
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
     -- Increment loop depth for the body, push label if present
     let env ← getEnv
+    let savedBreakMoved := env.breakMoved
+    modify fun e => { e with breakMoved := [] }
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
@@ -2403,7 +2418,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     checkStmts body retTy
     -- Restore loop depth and labels
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved }
+    restoreAfterLoop env0 env'.breakMoved
   | .forLoop _ init cond step body lbl =>
     -- Init
     match init with
@@ -2411,12 +2427,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none => pure ()
     -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
     let env0 ← getEnv
-    setEnv { env0 with loopDepth := env0.loopDepth + 1 }
+    setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false }
     let _condTy ← checkExpr cond
     let envC ← getEnv
-    setEnv { envC with loopDepth := env0.loopDepth }
+    setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch }
     -- Body + step in loop scope, push label if present
     let env ← getEnv
+    let savedBreakMoved := env.breakMoved
+    modify fun e => { e with breakMoved := [] }
     let labels := match lbl with
       | some l => l :: env.loopLabels
       | none => env.loopLabels
@@ -2429,7 +2447,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | some stepStmt => checkStmt stepStmt retTy
     | none => pure ()
     let env' ← getEnv
-    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths }
+    setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, breakMoved := savedBreakMoved }
+    restoreAfterLoop env0 env'.breakMoved
   | .fieldAssign _ obj field value =>
     -- Escape analysis: prevent storing a borrow ref into a struct field
     let env ← getEnv
@@ -2722,6 +2741,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       setEnv { envB with breakConsumeExempt := true }
       let valTy ← checkExpr expr
       modify fun envA => { envA with breakConsumeExempt := envB.breakConsumeExempt }
+      -- Bug 149: remember what the break moved (see `restoreAfterLoop`).
+      let envM ← getEnv
+      let moved := envM.vars.filterMap fun (_, vi) =>
+        match lookupByUid envB.vars vi.uid with
+        | some old => if old.state != .consumed && vi.state == .consumed then some vi.uid else none
+        | none => none
+      setEnv { envM with breakMoved := moved ++ envM.breakMoved }
       let env2 ← getEnv
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
@@ -2869,18 +2895,14 @@ partial def mergeVarStates
     -- Apply the most progressed state (consumed > used > unconsumed) of the
     -- branches that actually FALL THROUGH to the merge point.
     let mergedState :=
-      -- Both branches diverge: the code after is unreachable, and no branch-local consumption
-      -- may flow past the `if` (an enclosing loop's zero-iteration path would be credited with
-      -- it; bug 149, Codex review). Keep the pre-branch state.
-      if thenDiverges && elseDiverges then infoBefore.state
+      if thenDiverges && elseDiverges then thenState  -- unreachable after; arbitrary
       else if thenDiverges then elseState
       else if elseDiverges then thenState
       else if thenState == .consumed then .consumed
       else if thenState == .used || elseState == .used then .used
       else infoBefore.state
-    let env ← getEnv
-    let cur := (lookupByUid env.vars infoBefore.uid).map (·.state)
-    if mergedState != infoBefore.state || cur != some mergedState then
+    if mergedState != infoBefore.state then
+      let env ← getEnv
       let vars' := env.vars.map fun (n, vi) =>
         if vi.uid == infoBefore.uid then (n, { vi with state := mergedState })
         else (n, vi)

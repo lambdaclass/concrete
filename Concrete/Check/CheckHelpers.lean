@@ -723,10 +723,13 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     match infoBefore.ty with
     | .ref _ | .refMut _ => continue
     | _ => pure ()
-    if infoBefore.state == .consumed || infoBefore.state == .reserved then continue
+    -- Bug 149: a borrow block's frozen owner is judged by its state before the freeze.
+    let seen : VarInfo → VarState := fun i =>
+      if i.state == .frozen then i.frozenFrom.getD i.state else i.state
+    if seen infoBefore == .consumed || seen infoBefore == .reserved then continue
     let afterState := match lookupByUid after infoBefore.uid with
-      | some info => info.state
-      | none => infoBefore.state
+      | some info => seen info
+      | none => seen infoBefore
     -- `.consumed` = moved on this path; `.reserved` = a pending `defer` will
     -- consume it when this return unwinds — both are accounted for.
     if afterState != .consumed && afterState != .reserved then

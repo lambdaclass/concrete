@@ -112,6 +112,9 @@ structure TypeEnv where
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
+  -- Bug 149: bindings a `break value` moved out of the loop (the H14 exemption); the only
+  -- outer-binding consumption inside a loop body that reaches the code after the loop.
+  breakMoved : List Nat := []
   -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
   -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
   -- an id a sibling branch already used.

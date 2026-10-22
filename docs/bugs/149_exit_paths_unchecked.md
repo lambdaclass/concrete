@@ -55,12 +55,18 @@ whatever their label.
   inside a borrow block whose owner has a pending `defer` is accepted
   (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines); `break`/`continue` likewise
   (`regress_149_break_in_borrow_with_defer.con`).
-- After an `if`/`else` whose branches both diverge, bindings keep their pre-branch state, so a
-  consumption inside the branches no longer flows to a loop's zero-iteration path
-  (`while c { if .. { defer free(h); return 1; } else { .. return 2; } } return 0;` leaked `h`;
-  `error_149_diverging_branches_in_loop.con`, E0208). Known remaining limit, pre-existing and not
-  changed here: a `break v` that consumes an outer binding (the H14 one-level exemption) is
-  credited on the condition-false path too.
+- `restoreAfterLoop`: after a loop, a binding declared before it keeps its pre-loop state unless a
+  `break value` moved it (`TypeEnv.breakMoved`). Any other consumption of an outer binding inside
+  the body is on a path that leaves the function, and the loop may run zero times, so crediting it
+  after the loop accepted a value never consumed (`while c { if .. { defer free(h); return 1; }
+  else { .. return 2; } } return 0;` and the same with a `match`; `error_149_diverging_branches_in_loop.con`,
+  `error_149_match_diverge_in_loop.con`, E0208). A loop condition does not inherit an enclosing
+  function-exiting branch's exemption (`error_149_loop_cond_in_exiting_branch.con`, E0207), and the
+  if/else return-path check sees through a borrow freeze too (`regress_149_cond_return_in_borrow.con`).
+  `regress_149_both_branches_return.con` pins that an if/else whose branches both consume and
+  return stays accepted. Known remaining limit, pre-existing and not changed here: a `break v` that
+  consumes an outer binding (the H14 one-level exemption) is credited on the condition-false path
+  too.
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted
   `newtype N = Num` with `type Num = i64` judged non-Copy; such a newtype cannot currently be
   constructed, CoreCheck refuses the cast, so this had no reachable effect).
