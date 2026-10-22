@@ -152,6 +152,9 @@ branch b11; corpus_edit 'regress_100.con' 'regress_100c.con'; commit_all b11
 # b12/b13: both insert code after the maps: never unioned in a map-shaped ledger.
 branch b12; echo 'echo twelve' >> scripts/tests/audit_bug_corpus.sh; commit_all b12
 branch b13; echo 'echo thirteen' >> scripts/tests/audit_bug_corpus.sh; commit_all b13
+# b17/b18: both insert inside a map, one line smuggling code after a well-formed key.
+branch b17; corpus_after '  [100]="regress_100.con"' '  [170]="x" ); echo smuggled; BUG_TEST_MAP+=('; commit_all b17
+branch b18; corpus_after '  [100]="regress_100.con"' '  [180]="regress_180.con"'; commit_all b18
 # b14/b15: both edit the ghost block, whose generator does not exist.
 branch b14; sed 's/^ghost$/ghost 14/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b14
 branch b15; sed 's/^ghost$/ghost 15/' ROADMAP.md > r && mv r ROADMAP.md; commit_all b15
@@ -208,6 +211,8 @@ out="$(bash "$TRAIN" build t4 --force --no-fetch b10 b11 2>&1)"; rc=$?
 [ "$rc" = 3 ] && has "$out" "edit the same existing lines" && ok "two edits of one ledger entry are a real conflict, not a union" || { no "ledger edit conflict: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(bash "$TRAIN" build t4 --force --no-fetch b12 b13 2>&1)"; rc=$?
 [ "$rc" = 3 ] && has "$out" "outside every declare -A map" && ok "code inserted outside the corpus maps is never unioned" || { no "corpus code union: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" build t4 --force --no-fetch b17 b18 2>&1)"; rc=$?
+[ "$rc" = 3 ] && has "$out" "not a map entry" && ok "a map line carrying code after its key is never unioned" || { no "smuggled code: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(bash "$TRAIN" build t4 --force --no-fetch b14 b15 2>&1)"; rc=$?
 [ "$rc" = 3 ] && has "$out" "which the train will not run" && ok "a generated block whose generator will not run is a real conflict" || { no "ghost block: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(bash "$TRAIN" build t4 --force --no-fetch b16 2>&1)"; rc=$?

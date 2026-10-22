@@ -59,6 +59,9 @@ BEGIN = re.compile(r"<!-- BEGIN GENERATED: [^>]*?\((scripts/gen/[^;)\s]+)")
 END = re.compile(r"<!-- END GENERATED: ")
 DECLARE = re.compile(r"^\s*declare -A (\w+)=\(\s*$")
 KEY = re.compile(r"^\s*\[([^\]]+)\]=")
+# A whole, static map entry: a plain key and one double-quoted value with no expansion, escape or
+# trailing syntax. Anything else on an inserted line could be code, and code is never unioned.
+STATIC_ENTRY = re.compile(r'^\s*\[[0-9A-Za-z_]+\]="[^"$`\\]*"\s*$')
 INLINE_SPAN = re.compile(r"<!-- BEGIN GENERATED: .*?-->.*?<!-- END GENERATED: .*?-->")
 
 
@@ -206,13 +209,13 @@ def union_ok(path, ours, base, theirs):
         _, o, t, b = piece
         if b is None:
             return False, "no base section to prove the conflict is insert-only"
-        if any(x.strip() for x in b):
+        if b:
             return False, "both sides edit the same existing lines (not an append)"
         if path in MAP_LEDGERS:
             if not in_map:
                 return False, "inserted lines outside every declare -A map"
             for x in o + t:
-                if x.strip() and not KEY.match(x) and not x.lstrip().startswith("#"):
+                if x.strip() and not STATIC_ENTRY.match(x) and not x.lstrip().startswith("#"):
                     return False, f"inserted line is not a map entry: {x.strip()[:60]}"
     return True, "union of both sides' inserted lines (ledger)"
 
