@@ -67,6 +67,9 @@ structure VarInfo where
   -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
   -- the only way left). Lifted when that block ends (`checkStmts`).
   pinnedByDefer : Bool := false
+  -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
+  -- may consume it (no runtime obligation is discharged).
+  isGhost : Bool := false
   deriving Repr
 
 structure TypeEnv where
@@ -257,6 +260,9 @@ inductive CheckError where
   | vecFreeDropsElements (elemTy : String)
   -- Bug 147: an erased proof statement (`assert`, `assume`, `ghost let`) moved a runtime value.
   | erasedConsumesRuntime (name : String)
+  -- Bug 148: the right operand of `&&` / `||` runs only when the left one does not decide the
+  -- result, so a move inside it may never happen.
+  | conditionalOperandConsumes (name : String) (op : String)
   -- A `_` pattern (a wildcard match arm, or a `_` payload field) would make a
   -- NON-COPY value silently disappear. Concrete is linear: a non-Copy value must be
   -- used exactly once, so `_` may ignore ONLY a Copy value. To get rid of a non-Copy
@@ -404,6 +410,7 @@ def CheckError.message : CheckError → String
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
   | .discardedMustUse tyName => s!"the result of type '{tyName}' is discarded; a fallible result must be used"
   | .discardedLinear tyName => s!"value of non-Copy type '{tyName}' is discarded without being consumed"
+  | .conditionalOperandConsumes name op => s!"the right operand of '{op}' may not move or consume '{name}': it runs only when the left operand does not decide the result, so the move may never happen"
   | .erasedConsumesRuntime name => s!"a proof-only statement (assert, assume, ghost let) may not move or consume '{name}': it is erased before code generation, so the move would never happen"
   | .vecFreeDropsElements elemTy => s!"vec_free would drop the non-Copy elements of type '{elemTy}' still in the vector without destroying them"
   | .freeDropsLinearInterior tyName => s!"free() would drop the live non-Copy value of type '{tyName}' inside the heap cell"
@@ -462,6 +469,7 @@ def CheckError.hint : CheckError → Option String
   | .exitInOperand kw _ => some s!"compute the value first in a `let` (where `{kw}` may appear in its initializer's branches), then pass the binding"
   | .variablePinnedByDefer name => some s!"register the consuming `defer` BEFORE the one that borrows '{name}' (deferred calls run in reverse order), or consume '{name}' after the block that holds the borrowing `defer`"
   | .deferArgNotPlace _ => some "the arguments are bound when the `defer` registers and read when it runs; compute a value in a `let` first, or move the computation into a named cleanup function that takes the local (or a borrow of it)"
+  | .conditionalOperandConsumes name _ => some s!"compute the right operand first in a `let` (consuming '{name}' on every path), or use an `if` whose branches both account for it"
   | .erasedConsumesRuntime name => some s!"state the property over a borrow or a Copy reading (`h.f`, `*r` for a Copy pointee) that leaves '{name}' owned"
   | .vecFreeDropsElements _ => some "use `v.drop()`, which runs the elements' destructors; or move every element out and release the emptied buffer in a trusted function"
   | .freeDropsLinearInterior _ => some "move the value out with `let v = *h;` (which also frees the cell) and consume it, or bind the result of `free(h)`: `let v = free(h);`"
@@ -568,6 +576,7 @@ def CheckError.code : CheckError → String
   | .freeDropsLinearInterior _ => "E0287"
   | .vecFreeDropsElements _ => "E0287"
   | .erasedConsumesRuntime _ => "E0243"
+  | .conditionalOperandConsumes _ _ => "E0244"
   | .wildcardDiscardsNonCopy _ => "E0288"
   | .letUnderscoreRemoved => "E0289"
   | .nonCopyProjection _ _ => "E0290"

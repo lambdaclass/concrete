@@ -505,7 +505,9 @@ is `Copy`-bounded, and every instantiation is held to the same scalar rule after
   NaN, and `x != x` is true), and every ordered comparison with a NaN operand is false. The binary
   emits `fcmp oeq`/`une`/`olt`/... ; no pass may fold a float self-comparison
   (the SSA folder folded `x == x` to `true` for floats, EVALUATION2 D12; filed and repaired as bug 150 on the interpreter-coverage branch).
-- **Raw pointers** compare by address, in trusted or `Unsafe` code only.
+- **Raw pointers** compare by address, in trusted or `Unsafe` code only. (Known limit: through a
+  `Copy`-bounded generic instantiated at a pointer type the post-mono re-check cannot see the
+  instance's authority, so such a comparison is accepted; bug 140.)
 
 **Status on main.** Enforced: `Check.lean` `.binOp` (E0229 at the source span), and
 `verifyComparisonTypes` after monomorphization. It closes [bug 134](../bugs/134_aggregate_eq_invalid_ir.md)

@@ -54,15 +54,18 @@ The comparison rule (user decision (b), 2026-10-21; normative text in
   ones included), arrays, `String`, `Heap<T>`, fn pointers and references.
 - A type parameter compares only when it is `Copy`-bounded, so no instantiation is consumed; each
   instantiation is held to the scalar rule after monomorphization (`verifyComparisonTypes` in
-  `Concrete/Check/Verify.lean`, E0229, pass `post-mono`), raw pointers included: an instance
-  compares raw pointers only when it is itself trusted or declares `Unsafe` (Codex review: a safe
-  `eq<T: Copy>` instantiated at `*const Int` compiled).
+  `Concrete/Check/Verify.lean`, E0229, pass `post-mono`). Known limit: a raw-pointer comparison
+  reached through a `Copy`-bounded generic (`eq<T: Copy>` at `*const Int`) is accepted from safe
+  code, because monomorphized instances do not carry their definition's `trusted` flag, so the
+  post-mono check cannot tell the instance's authority (an attempt to require it refused std's
+  trusted `alloc.heap_new`). It compares addresses and has no memory effect; it is recorded, not
+  contained (Codex review).
 - Every comparable type is `Copy`, so a comparison never consumes an operand.
 
 Fixtures (`run_tests.sh`): `error_140_heap_eq.con`, `error_140_linear_eq.con`,
 `error_140_ref_eq.con`, `error_140_string_eq.con`, `error_140_generic_unbounded_eq.con`,
 `error_140_generic_copy_at_struct.con` (the post-mono leg), `error_140_rawptr_eq_safe.con`,
-`error_140_rawptr_generic_safe.con`, and
+and
 bug 134's `error_134_enum_eq.con` / `error_134_struct_eq.con`; the positive control
 `regress_140_scalar_comparisons.con` (integers, `bool`, `char`, `f64`, `pick<T: Copy>` at `Int`, a
 raw-pointer comparison in a trusted function: 175). An interpreter leg asserts that `--interp`

@@ -474,8 +474,26 @@ def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Uni
   for (n, vi) in env.vars do
     match lookupByUid before.vars vi.uid with
     | some old =>
-      if !vi.isCopy && old.state != vi.state && (vi.state == .consumed || vi.state == .reserved) then
+      -- Any change of a runtime binding's ownership state, in either direction (a move, a
+      -- reservation, or an assignment that makes a consumed binding live again), or a new pin.
+      let changed := old.state != vi.state && !(old.state == .unconsumed && vi.state == .used)
+        || (vi.pinnedByDefer && !old.pinnedByDefer)
+      if !vi.isCopy && !vi.isGhost && changed then
         throwCheck (.erasedConsumesRuntime n) span
+    | none => pure ()
+
+/-- Bug 148: the right operand of `&&`/`||` is conditional, so it may not change a non-Copy
+    binding's ownership state (a move there may not run). `before` is the environment after the
+    left operand was checked. -/
+def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
+  let env ← getEnv
+  for (n, vi) in env.vars do
+    match lookupByUid before.vars vi.uid with
+    | some old =>
+      let changed := old.state != vi.state && !(old.state == .unconsumed && vi.state == .used)
+        || (vi.pinnedByDefer && !old.pinnedByDefer)
+      if !vi.isCopy && changed then
+        throwCheck (.conditionalOperandConsumes n op) span
     | none => pure ()
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
@@ -615,6 +633,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- with i: i32 types 64 as i32 even though the index hint is Int. The
     -- operand-order decision is shared with Elab (TypeJudgment.binOpOperandOrder)
     -- so both front-end passes type the two sides identically.
+    -- Bug 148: `a && b` / `a || b` evaluate `b` only when `a` does not decide the result, so `b`
+    -- may not move anything (its operands are bools; a move would be inside a call there).
+    if op == .and_ || op == .or_ then
+      let lTy ← checkExpr lhs (some .bool)
+      let before ← getEnv
+      let _ ← checkExpr rhs (some .bool)
+      refuseConditionalConsumption before (binOpSymbol op) (some e.getSpan)
+      let _ := lTy
+      return .bool
     let (lTy, lTyR, rTyR) ←
       match TypeJudgment.binOpOperandOrder
               (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
@@ -2142,6 +2169,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | .ref _ | .refMut _ => some <$> normRef value
         | _ => pure none
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
+      if isGhost then
+        let envG ← getEnv
+        match envG.vars with
+        | (n, vi) :: rest => setEnv { envG with vars := (n, { vi with isGhost := true }) :: rest }
+        | [] => pure ()
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
     -- Escape analysis: prevent storing a borrow ref into an outer variable

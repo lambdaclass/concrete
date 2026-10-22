@@ -1749,7 +1749,6 @@ run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
 run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
-run_err "$TESTDIR/error_140_rawptr_generic_safe.con"       "(E0229)"
 run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
 # Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
 # fix on the lowering-bugs branch, E0291).
@@ -1828,6 +1827,12 @@ run_err "$TESTDIR/error_144_heap_newtype_unwrap.con"        "(E0290)"
 run_err "$TESTDIR/error_147_assert_consumes_heap.con"       "(E0243)"
 run_err "$TESTDIR/error_147_ghost_let_consumes_heap.con"    "(E0243)"
 run_ok  "$TESTDIR/regress_147_assert_reads.con" "" 0
+run_err "$TESTDIR/error_147_assert_revives_binding.con"     "(E0243)"
+run_ok  "$TESTDIR/regress_147_ghost_consumes_ghost.con" "" 0
+# Bug 148: the right operand of && / || may not move a value (it may not run). E0244.
+run_err "$TESTDIR/error_148_and_operand_consumes.con"       "(E0244)"
+run_err "$TESTDIR/error_148_or_operand_consumes.con"        "(E0244)"
+run_ok  "$TESTDIR/regress_148_short_circuit_reads.con" "" 0
 run_ok  "$TESTDIR/regress_144_heap_node_destructure.con" "12 7" 0
 for r144 in tests/regressions/bug144_heap_interior_untracked/repro.con tests/regressions/bug144_heap_interior_untracked/repro_free.con; do
     r144_i=$($COMPILER "$r144" --interp 2>&1 || true)

@@ -6282,6 +6282,7 @@ def diagnosticCodesReport : String :=
     entry "E0241" "check" "error" "trait bound not satisfied",
     entry "E0242" "check" "error" "cannot infer capability variable",
     entry "E0243" "check" "error" "proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)",
+    entry "E0244" "check" "error" "right operand of && or || moves a value it may never run to move (bug 148)",
     -- Check: struct/enum/function (E0250–E0277)
     entry "E0250" "check" "error" "unknown struct type",
     entry "E0251" "check" "error" "struct has no field",

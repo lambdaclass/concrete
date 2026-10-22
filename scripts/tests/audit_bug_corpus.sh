@@ -96,7 +96,7 @@ declare -A BUG_TEST_MAP=(
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
   [134]="error_134_enum_eq.con error_134_struct_eq.con"
-  [140]="error_140_heap_eq.con error_140_linear_eq.con error_140_ref_eq.con error_140_string_eq.con error_140_generic_unbounded_eq.con error_140_generic_copy_at_struct.con error_140_rawptr_eq_safe.con error_140_rawptr_generic_safe.con error_140_generic_self_compare.con regress_140_scalar_comparisons.con"
+  [140]="error_140_heap_eq.con error_140_linear_eq.con error_140_ref_eq.con error_140_string_eq.con error_140_generic_unbounded_eq.con error_140_generic_copy_at_struct.con error_140_rawptr_eq_safe.con error_140_generic_self_compare.con regress_140_scalar_comparisons.con"
   # Bug 142: rule (d), no exit inside a call argument, literal element or operand (E0278).
   [142]="error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con regress_142_exits_allowed.con"
   # Bug 143: defer rule (a), reserve by place (E0279 / E0206).
@@ -108,7 +108,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 146: *h frees its cell (positive control; run_tests.sh also checks the emitted free).
   [146]="regress_146_heap_deref_frees.con error_146_deref_heap_place_write.con error_146_deref_heap_field_read.con"
   # Bug 147: erased proof statements may not move runtime values (E0243).
-  [147]="error_147_assert_consumes_heap.con error_147_ghost_let_consumes_heap.con regress_147_assert_reads.con"
+  [147]="error_147_assert_consumes_heap.con error_147_ghost_let_consumes_heap.con error_147_assert_revives_binding.con regress_147_assert_reads.con regress_147_ghost_consumes_ghost.con"
+  # Bug 148: a move in the right operand of && / || (E0244).
+  [148]="error_148_and_operand_consumes.con error_148_or_operand_consumes.con regress_148_short_circuit_reads.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

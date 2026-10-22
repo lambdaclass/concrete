@@ -34,10 +34,15 @@ statement.
 ## Fix
 
 `refuseErasedConsumption`: after checking an `assert`/`assume` condition or a `ghost let`
-initializer, any non-Copy binding whose state became consumed or reserved is E0243
-(`erasedConsumesRuntime`). Reads (Copy values, borrows) are unaffected. Fixtures
-`error_147_assert_consumes_heap.con`, `error_147_ghost_let_consumes_heap.con`, and the positive
-control `regress_147_assert_reads.con`. Migration: 0 sites.
+initializer, any change of a non-Copy runtime binding's ownership state is E0243
+(`erasedConsumesRuntime`): a move or reservation, a new defer pin, and also the reverse, an
+assignment that makes a consumed binding live again (Codex review: `free(h); assert(if true { h =
+alloc(43); true } else { ... }); free(h);` released the first cell twice). Reads and borrows are
+unaffected, and a `ghost let` binding (`VarInfo.isGhost`) may be consumed by proof-only code, since
+no runtime obligation is involved. Fixtures `error_147_assert_consumes_heap.con`,
+`error_147_ghost_let_consumes_heap.con`, `error_147_assert_revives_binding.con`, and the positive
+controls `regress_147_assert_reads.con` and `regress_147_ghost_consumes_ghost.con`. Migration: 0
+sites.
 
 ## Structural cause
 

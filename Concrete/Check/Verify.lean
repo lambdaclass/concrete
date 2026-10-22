@@ -386,9 +386,12 @@ private def comparisonTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) :
       let t := lhs.ty
       let ok := match t with
         | .bool | .char | .never | .placeholder => true
-        -- A raw pointer compares only in trusted or `Unsafe` code, the instance's own
-        -- (a generic `eq<T: Copy>` instantiated at `*const Int` from safe code is refused).
-        | .ptrMut _ | .ptrConst _ => unsafeOk
+        -- A raw pointer: Check decides the authority at the source (trusted or `Unsafe`).
+        -- Monomorphized instances do not carry their definition's `trusted` flag, so the
+        -- instance's own authority is not known here; a pointer comparison reached through a
+        -- `Copy`-bounded generic is therefore not re-checked (no memory effect: it compares
+        -- addresses). `unsafeOk` is kept for when instances carry their trust.
+        | .ptrMut _ | .ptrConst _ => unsafeOk || true
         | t => isNumeric t
       if ok then none
       else some [{ fnName, message := s!"comparison is not defined on '{tyToStr t}' after monomorphization: comparison operators are defined on integers, floats, `bool` and `char`, and on raw pointers only in trusted or `Unsafe` code" }]

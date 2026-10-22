@@ -1,0 +1,14 @@
+// Bug 147 positive control (Codex): a ghost binding may be consumed by proof-only code; no runtime
+// obligation is involved.
+struct S { x: Int }
+
+fn pred(s: S) -> bool {
+    let S { x } = s;
+    return x == 1;
+}
+
+fn main() -> Int {
+    ghost let s: S = S { x: 1 };
+    assert(pred(s));
+    return 0;
+}
