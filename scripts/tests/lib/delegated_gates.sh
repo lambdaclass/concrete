@@ -12,10 +12,11 @@
 # removing the coverage. The gate's own assertions then run exactly once: in its step on CI, and as
 # its extracted command in run_ci_gates_local.sh.
 #
-# "Runs as its own unconditional CI step" means: some step's `run:` text invokes
-# `scripts/tests/<name>` exactly as a command (bash/python3 or ./), the step has no `if:` other than
-# `always()`, and its job has no job-level `if:` (the scheduled-only jobs have one). The workflow is
-# read as text with the same indentation conventions run_ci_gates_local.sh's extractor relies on.
+# "Runs as its own unconditional CI step" means: some step's one-line `run:` IS the invocation of
+# `scripts/tests/<name>` (optional VAR= prefixes, bash/python3/sh or ./, plain arguments; no pipeline,
+# list or substitution), the step has no `if:` other than exactly `always()` and no
+# `continue-on-error`, and its job has no job-level `if:` (the scheduled-only jobs have one). The
+# workflow is read as text with the indentation conventions run_ci_gates_local.sh's extractor uses.
 
 _DELEGATED_WF="${DELEGATED_GATES_WORKFLOW:-.github/workflows/lean_action_ci.yml}"
 
@@ -25,31 +26,32 @@ delegated_gate_step() {
   [ -f "$wf" ] || return 2
   awk -v want="scripts/tests/$name" '
     function flush() {
-      if (step_has && !step_if_bad && !job_if) { print job ":" step_line; found = 1 }
-      step_has = 0; step_if_bad = 0; step_line = 0
+      if (step_has && !step_bad && !job_if) { print job ":" step_line; found = 1 }
+      step_has = 0; step_bad = 0; step_line = 0
     }
     /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { flush(); job = $1; sub(/:$/, "", job); job_if = 0; next }
     /^    if:/ { job_if = 1; next }
     /^      - / { flush() }
-    # A step condition other than exactly always() may skip the step, and continue-on-error turns
-    # its failure into a pass; either one disqualifies it.
-    /^        if:/ {
-      c = $0; sub(/^        if:[[:space:]]*/, "", c); sub(/[[:space:]]+$/, "", c)
-      if (c != "always()" && c != "${{ always() }}") step_if_bad = 1
-    }
-    /^        continue-on-error:/ { if ($0 !~ /false[[:space:]]*$/) step_if_bad = 1 }
-    {
-      line = $0
-      if (line ~ /^[[:space:]]*#/) next
-      # THE GATE MUST BE THE COMMAND, at the start of the run: line or of a run: | block line:
-      # optional VAR=value prefixes, then bash/python3/sh or ./, then the path, then an argument or
-      # the end. `echo scripts/tests/x.sh` or `if c; then bash scripts/tests/x.sh; fi` do not count.
-      sub(/^[[:space:]]*(- )?(run:)?[[:space:]]*/, "", line)
-      while (match(line, /^[A-Z_][A-Z0-9_]*=[^[:space:]]+[[:space:]]+/)) line = substr(line, RLENGTH + 1)
-      sub(/^(bash|python3|sh)[[:space:]]+/, "", line); sub(/^\.\//, "", line)
-      if (index(line, want) == 1) {
-        rest = substr(line, length(want) + 1)
-        if (rest == "" || rest ~ /^[[:space:]]/) { step_has = 1; if (!step_line) step_line = NR }
+    # A STEP KEY, whether it is the first key (on the "- " line) or a later one.
+    /^      - [a-z-]+:/ || /^        [a-z-]+:/ {
+      kv = $0; sub(/^      - /, "", kv); sub(/^        /, "", kv)
+      key = kv; sub(/:.*$/, "", key)
+      val = kv; sub(/^[a-z-]+:[[:space:]]*/, "", val); sub(/[[:space:]]+$/, "", val)
+      # A condition other than exactly always() may skip the step; continue-on-error turns its failure
+      # into a pass. Either one disqualifies the step.
+      if (key == "if" && val != "always()" && val != "${{ always() }}") step_bad = 1
+      if (key == "continue-on-error" && val != "false") step_bad = 1
+      # THE GATE MUST BE THE WHOLE COMMAND OF A ONE-LINE run: optional VAR=value prefixes,
+      # bash/python3/sh or ./, the path, then plain arguments. A block run: (where the gate could sit
+      # inside an `if`), a pipeline, a list (`|| true`, `;`, `&&`) or a substitution does not count.
+      if (key == "run") {
+        cmd = val
+        while (match(cmd, /^[A-Z_][A-Z0-9_]*=[^[:space:]]+[[:space:]]+/)) cmd = substr(cmd, RLENGTH + 1)
+        sub(/^(bash|python3|sh)[[:space:]]+/, "", cmd); sub(/^\.\//, "", cmd)
+        if (index(cmd, want) == 1) {
+          rest = substr(cmd, length(want) + 1)
+          if ((rest == "" || rest ~ /^[[:space:]]/) && rest !~ /[|;&<>`$(]/) { step_has = 1; step_line = NR }
+        }
       }
     }
     END { flush(); exit(found ? 0 : 1) }
@@ -84,9 +86,20 @@ jobs:
         run: bash scripts/tests/check_alpha.sh
       - name: b
         if: always()
+        run: EXAMPLE_FLAG=1 bash ./scripts/tests/check_beta.sh --flag
+      - name: k
         run: |
           echo hi
-          bash ./scripts/tests/check_beta.sh --flag
+          bash ./scripts/tests/check_kappa.sh
+      - name: l
+        run: bash scripts/tests/check_lambda.sh || true
+      - if: false
+        run: bash scripts/tests/check_mu.sh
+      - continue-on-error: true
+        run: bash scripts/tests/check_nu.sh
+      - name: |
+          bash scripts/tests/check_xi.sh
+        run: echo skipped
       - name: c
         if: github.event_name == 'schedule'
         run: bash scripts/tests/check_gamma.sh
@@ -111,12 +124,13 @@ jobs:
 WF
   local got=""
   for g in check_alpha.sh check_beta.sh check_gamma.sh check_delta.sh check_epsilon.sh check_alp.sh \
-           check_zeta.sh check_eta.sh check_theta.sh check_iota.sh; do
+           check_zeta.sh check_eta.sh check_theta.sh check_iota.sh check_kappa.sh check_lambda.sh \
+           check_mu.sh check_nu.sh check_xi.sh; do
     delegated_gate_step "$g" "$t" >/dev/null && got="$got ${g%.sh}"
   done
   rm -f "$t"
   if [ "$got" = " check_alpha check_beta" ]; then
-    "$okf" "CONTROL: the delegation matcher accepts plain and always() steps and refuses scheduled, conditional, continue-on-error, echoed, shell-guarded, commented and prefix-only matches"
+    "$okf" "CONTROL: the delegation matcher accepts plain and always() one-line steps and refuses scheduled, conditional (either key position), continue-on-error, block-run, || true, echoed, shell-guarded, name-only, commented and prefix-only matches"
   else
     "$nof" "CONTROL: the delegation matcher accepted:${got:- nothing} (want: check_alpha check_beta)"
   fi

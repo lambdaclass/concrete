@@ -32,7 +32,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # build_expect <dir> <expected-exit 0|1> <needle-if-fail> <label>
 build_expect(){ local dir="$1" want="$2" needle="$3" label="$4"
   local out rc
-  out="$( cd "$dir" && "$ABS" build -o $GATE_TMP/smtpol_out 2>&1 )" && rc=0 || rc=$?
+  out="$( cd "$dir" && "$ABS" build -o "$GATE_TMP/smtpol_out" 2>&1 )" && rc=0 || rc=$?
   rm -f "$GATE_TMP/smtpol_out"
   if [ "$want" = "0" ]; then
     [ "$rc" -eq 0 ] && ok "$label" || { no "$label (exit=$rc)"; printf '%s\n' "$out" | grep -iE "error|E061" | head -2 | sed 's/^/      /'; }

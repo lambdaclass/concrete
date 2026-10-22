@@ -74,7 +74,7 @@ sc=next((v for v in d['vcs'] if v['function'].endswith('.scale') and v.get('smt'
 sys.exit(0 if sc and sc['status']=='solver_trusted' and not any(v['status']=='proved_by_lean_replay' for v in d['vcs']) else 1)" \
     && ok "replay fails → stays solver_trusted (not upgraded)" || no "replay incorrectly changed the class"
   # policy forbids solver_trusted → release build fails (E0615).
-  out="$( cd examples/smt/policy_forbid && "$ABS" build -o $GATE_TMP/smtneg_out 2>&1 )" && rc=0 || rc=$?
+  out="$( cd examples/smt/policy_forbid && "$ABS" build -o "$GATE_TMP/smtneg_out" 2>&1 )" && rc=0 || rc=$?
   rm -f "$GATE_TMP/smtneg_out"
   { [ "$rc" -ne 0 ] && grep -qF <<<"$out" "E0615"; } \
     && ok "policy forbid + solver_trusted → release build REJECTED (E0615)" || no "forbid policy did not reject (exit=$rc)"

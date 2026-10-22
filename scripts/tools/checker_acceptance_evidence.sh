@@ -24,6 +24,14 @@ REF="docs/verification/claim-inventory-v4.34.1.tsv"
 BIN="$ROOT_DIR/.lake/build/bin/concrete"
 rc=0
 
+# ONE LOCK FOR THE WHOLE RUN, taken BEFORE the identity is captured: three of the gates below take the
+# repository lock (require_fresh_binary), a second concurrent acquisition is refused, and the lock taken
+# here is inherited by every child (re-entrant). Verifying freshness first also means the identity
+# captured next is the identity of the binary the gates will run.
+# shellcheck source=scripts/tests/lib/fresh.sh
+source "$ROOT_DIR/scripts/tests/lib/fresh.sh"
+require_fresh_binary || { echo "FAIL: could not take the repository lock / verify the compiler"; exit 1; }
+
 ID="$("$BIN" examples/elf_header/src/main.con --report check-proofs --json 2>/dev/null \
       | python3 -c 'import json,sys; print(json.load(sys.stdin).get("checker","UNIDENTIFIED"))' 2>/dev/null)"
 echo "${ID:-UNIDENTIFIED}" > "$OUT/checker.txt"
@@ -43,11 +51,6 @@ fi
 # missing status is a failure.
 EVIDENCE_GATES=("check_checker_identity.sh" "check_kernel_recheck.sh" "check_checker_policy.sh"
                 "check_axiom_inventory.sh" "check_claim_inventory.sh")
-# ONE LOCK FOR ALL FIVE. Three of them take the repository lock (require_fresh_binary), and a second
-# concurrent acquisition is refused; the lock taken here is inherited by every child (re-entrant).
-# shellcheck source=scripts/tests/lib/fresh.sh
-source "$ROOT_DIR/scripts/tests/lib/fresh.sh"
-require_fresh_binary || { echo "FAIL: could not take the repository lock / verify the compiler"; exit 1; }
 # NO STALE STATUS. A directory reused from an earlier run (or the runner's sequential re-run) must not
 # lend a dead worker its predecessor's exit status or inventory.
 for g in "${EVIDENCE_GATES[@]}"; do rm -f "$OUT/${g%.sh}.rc" "$OUT/${g%.sh}.log"; done
