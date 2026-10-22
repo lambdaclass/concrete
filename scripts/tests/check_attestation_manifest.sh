@@ -571,10 +571,12 @@ echo "=== the tracked generated file is what its generator produces ==="
 # allowance without it would be the hole, not the gate.
 REFS_FILE="Concrete/Proof/GeneratedAttestations.lean"
 cp "$REFS_FILE" "$TMP/refs.committed"
-# RESTORE VIA THE TRAP, not via a line further down. Regeneration overwrites a TRACKED file; if the
-# gate exits early between here and a restore statement, it would leave the working tree modified and
-# the next gate would measure something nobody wrote.
-trap 'cp -f "$TMP/refs.committed" "$ROOT_DIR/'"$REFS_FILE"'" 2>/dev/null; rm -rf "$TMP"' EXIT
+# NOTHING HERE WRITES THE SHARED TREE (R-0547). This gate used to regenerate $REFS_FILE in place and
+# to append a probe function to examples/hmac_sha256/src/main.con, restoring both afterwards. In a
+# parallel pass that is a race, not a restore: while the probe was in place, concurrent gates read a
+# mutated example ("'__attestation_probe' is a reserved identifier"), and while the regenerated .lean
+# differed, every concurrent `require_fresh_binary` rebuilt the shared compiler from it. The generator
+# now writes to ATTESTATION_REFS_OUT, and the perturbation runs in a private copy of the checkout.
 
 # THE GENERATOR'S OUTPUT IS THE REFERENCE VALUE FOR EVERY LEG BELOW — captured once, here, as
 # `refs.fresh`. The committed file is a CLAIM about that output and is only used by the staleness leg
@@ -584,8 +586,9 @@ trap 'cp -f "$TMP/refs.committed" "$ROOT_DIR/'"$REFS_FILE"'" 2>/dev/null; rm -rf
 # content, and the baseline was simply the wrong one). One defect must produce one finding, or the
 # count stops meaning anything and a reader starts discounting the gate's arithmetic.
 REFS_FRESH_OK=0
-if bash scripts/gen/attestation_refs.sh >/dev/null 2>&1; then
-  cp "$REFS_FILE" "$TMP/refs.fresh"; REFS_FRESH_OK=1
+if ATTESTATION_REFS_OUT="$TMP/refs.fresh" bash scripts/gen/attestation_refs.sh >/dev/null 2>&1 \
+   && [ -s "$TMP/refs.fresh" ]; then
+  REFS_FRESH_OK=1
   if cmp -s "$TMP/refs.committed" "$TMP/refs.fresh"; then
     ok "$REFS_FILE is byte-identical to a fresh regeneration"
   else
@@ -595,7 +598,6 @@ if bash scripts/gen/attestation_refs.sh >/dev/null 2>&1; then
 else
   no "the reference generator REFUSED — freshness is UNPROVEN, which is not the same as fresh"
 fi
-cp -f "$TMP/refs.committed" "$REFS_FILE"
 
 # NON-VACUITY. Without this leg, a generator that emitted a constant file, or one whose input query
 # had silently gone empty, would satisfy the comparison above forever. A real subject body is
@@ -609,28 +611,36 @@ PROBE="examples/hmac_sha256/src/main.con"
 if [ "$REFS_FRESH_OK" -ne 1 ]; then
   no "the generator refused, so the non-vacuity and restoration controls could not run — their absence is not a pass"
 elif [ -f "$PROBE" ]; then
-  cp "$PROBE" "$TMP/probe.orig"
-  trap 'cp -f "$TMP/probe.orig" "$ROOT_DIR/'"$PROBE"'" 2>/dev/null; cp -f "$TMP/refs.committed" "$ROOT_DIR/'"$REFS_FILE"'" 2>/dev/null; rm -rf "$TMP"' EXIT
+  # A PRIVATE COPY of the checkout (build included, so the copy's compiler is this compiler), in which
+  # the probe is applied and reverted; the generator run there writes only to $TMP.
+  PCOPY="$TMP/probe-repo"
+  cp -a "$ROOT_DIR/." "$PCOPY" 2>/dev/null || true
+  rm -rf "$PCOPY/.gate.lock"   # the copy is private: it holds no lock of the run it was copied from
+  [ -f "$PCOPY/$PROBE" ] && [ -f "$PCOPY/scripts/gen/attestation_refs.sh" ] \
+    || no "could not make a private copy of the checkout for the non-vacuity probe"
+  cp "$PCOPY/$PROBE" "$TMP/probe.orig"
   # A COMMENT WOULD NOT DO. Implementation identity is a digest of the compiled body, not of the file
   # text, so a perturbation that the compiler discards proves nothing. This changes a real statement.
-  printf '\nfn __attestation_probe(x: u32) -> u32 { return x + 1; }\n' >> "$PROBE"
-  bash scripts/gen/attestation_refs.sh >/dev/null 2>&1
-  if cmp -s "$TMP/refs.fresh" "$REFS_FILE"; then
+  printf '\nfn __attestation_probe(x: u32) -> u32 { return x + 1; }\n' >> "$PCOPY/$PROBE"
+  rm -f "$TMP/refs.perturbed"
+  ATTESTATION_REFS_OUT="$TMP/refs.perturbed" bash "$PCOPY/scripts/gen/attestation_refs.sh" >/dev/null 2>&1
+  if [ ! -s "$TMP/refs.perturbed" ]; then
+    no "the generator produced nothing in the private copy — the non-vacuity probe is unproven"
+  elif cmp -s "$TMP/refs.fresh" "$TMP/refs.perturbed"; then
     no "the generated references did NOT move when a subject's package content changed — the comparison above is vacuous"
   else
     ok "changing a subject's package content changes the generated references (the comparison is live)"
   fi
-  cp -f "$TMP/probe.orig" "$PROBE"
-  cp -f "$TMP/refs.committed" "$REFS_FILE"
-  trap 'cp -f "$TMP/refs.committed" "$ROOT_DIR/'"$REFS_FILE"'" 2>/dev/null; rm -rf "$TMP"' EXIT
-  # ...and the perturbation is fully reversed, so the gate leaves no residue for the next one to read.
-  bash scripts/gen/attestation_refs.sh >/dev/null 2>&1
-  if cmp -s "$TMP/refs.fresh" "$REFS_FILE"; then
+  cp -f "$TMP/probe.orig" "$PCOPY/$PROBE"
+  # ...and the perturbation is fully reversed: the generator's output returns to its own earlier output.
+  rm -f "$TMP/refs.restored"
+  ATTESTATION_REFS_OUT="$TMP/refs.restored" bash "$PCOPY/scripts/gen/attestation_refs.sh" >/dev/null 2>&1
+  if [ -s "$TMP/refs.restored" ] && cmp -s "$TMP/refs.fresh" "$TMP/refs.restored"; then
     ok "restoring the source restores the references — the digest is a function of content alone"
   else
     no "the references did not return to the generator's own earlier output after restoring the probe — the digest depends on something other than content"
   fi
-  cp -f "$TMP/refs.committed" "$REFS_FILE"
+  rm -rf "$PCOPY"
 else
   no "the non-vacuity probe fixture $PROBE is missing — the freshness comparison above is unproven"
 fi
