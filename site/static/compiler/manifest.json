@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "sourceSha256": "53aca693ab17f256a2183c06f17708d45de3f8656ae43d8283b7f65e55ac4274",
+  "emscriptenVersion": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 4.0.23 (7a5d93b50f6a3a35e85a0d2fc9e667b8498e6aed)",
+  "compilerCommit": "2215b11dac6f2cf8387fe36989068fe241023dad",
+  "leanVersion": "leanprover/lean4:v4.34.1",
+  "moduleSha256": "8d3755146d050e0c76ef3a6ea9b1f5ab9212389e009a68df61992bc1e2ec8666",
+  "wasmBytes": 13763644,
+  "wasmSha256": "01ba9be1fdfb4938de56c7473719201ed42a71d12f5f9ec711dc88a6f15cc7c4",
+  "scope": "Single-file compilation; no std imports, execution, linking or proof checking."
+}

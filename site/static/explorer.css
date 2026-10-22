@@ -1,0 +1,36 @@
+.explorer { --editor:#fffefb; margin:0; padding:65px 0; scroll-margin-top:24px; border-bottom:1px solid var(--line); }
+.explorer-heading { display:flex; justify-content:space-between; gap:1rem; align-items:center; }
+.explorer h2 { margin:0 0 14px; font-size:2rem; }
+.explorer-heading p { margin:0 0 12px; font:.85rem/1.6 system-ui,sans-serif; color:var(--muted); }
+.explorer-heading .explorer-eyebrow { font:.64rem ui-monospace,monospace; letter-spacing:.09em; margin-bottom:20px; }
+.explorer-badge { white-space:nowrap; border:1px solid var(--line); padding:8px 12px; font:.62rem ui-monospace,monospace; color:var(--muted); }
+.explorer .explorer-scope,.explorer .explorer-small { font:.65rem/1.7 system-ui,sans-serif; color:var(--muted); }
+.explorer-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:25px 0 0; padding:14px 16px; border:1px solid var(--line); background:#eeeee5; font:.72rem system-ui,sans-serif; }
+.explorer-toolbar > label { color:var(--muted); margin-right:6px; }
+.explorer button,.explorer select { font:inherit; border:1px solid var(--line); border-radius:3px; padding:8px 12px; background:var(--bg); color:var(--ink); }
+.explorer button { cursor:pointer; transition:background .15s; }
+.explorer button:hover:not(:disabled) { background:#e1e3d7; }
+.explorer button:disabled,.explorer select:disabled { opacity:.45; cursor:default; }
+.explorer #explorer-compile { background:var(--accent); color:white; border-color:var(--accent); margin-left:auto; }
+.explorer #explorer-compile:hover { background:#86361d; }
+.explorer #explorer-compile span { margin-left:18px; }
+.explorer :focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.explorer-grid { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--line); border-top:0; background:var(--editor); }
+.explorer-pane { min-width:0; }
+.explorer-pane + .explorer-pane { border-left:1px solid var(--line); background:#f1f2eb; }
+.explorer-pane-title { display:flex; justify-content:space-between; align-items:center; height:56px; padding:0 20px; border-bottom:1px solid var(--line); font:.72rem ui-monospace,monospace; }
+.pane-caption { font:.52rem ui-monospace,monospace; letter-spacing:.08em; color:var(--muted); }
+.explorer textarea { resize:vertical; display:block; width:100%; height:350px; padding:22px; border:0; border-radius:0; background:var(--editor); color:var(--ink); tab-size:4; font:.75rem/1.9 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.explorer-output-controls { display:flex; gap:8px; align-items:center; height:56px; padding:0 16px; border-bottom:1px solid var(--line); font:.62rem system-ui,sans-serif; }
+.explorer-output-controls select { min-width:0; max-width:160px; padding:6px; }
+.explorer #explorer-output { height:350px; margin:0; padding:22px; border:0; background:transparent; white-space:pre; font-size:.7rem; line-height:1.9; }
+.explorer #explorer-source-help { margin:0; padding:12px 20px; border-top:1px solid var(--line); font-size:.58rem; }
+.explorer .explorer-status { font:.7rem/1.7 system-ui,sans-serif; margin:0; padding:15px 18px; background:#eeeee5; border:1px solid var(--line); border-top:0; }
+.explorer-status[data-state="error"] { color:#962e21; }
+.explorer-status[data-state="success"] { color:#3c6330; }
+.explorer .explorer-footnote { margin-top:14px; }
+.explorer #explorer-build { font:.58rem ui-monospace,monospace; }
+@media(max-width:1000px) { .explorer-output-controls label { display:none; } }
+@media(max-width:700px) { .explorer { padding:45px 0; } .explorer-grid { grid-template-columns:1fr; } .explorer-pane + .explorer-pane { border-left:0; border-top:1px solid var(--line); } .explorer-heading { display:block; } .explorer-badge { display:inline-block; margin:5px 0 10px; } .explorer-toolbar { padding:12px; } .explorer #explorer-compile { margin-left:0; } .explorer-toolbar > label { display:none; } .explorer-toolbar select { max-width:100%; } .explorer textarea,.explorer #explorer-output { height:300px; } .explorer-output-controls label { display:block; } }
+.explorer #explorer-diagnostics { font-size:.72rem; border-color:#c4907e; background:#fbf0e9; white-space:pre-wrap; overflow-wrap:anywhere; }
+.explorer #explorer-diagnostics[hidden] { display:none; }

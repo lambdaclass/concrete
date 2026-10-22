@@ -1,0 +1,35 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index b1ddaca..a7571dd 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -180,2 +180,2 @@ if(CMAKE_SYSTEM_NAME MATCHES "Emscripten")
+-  set(EMSCRIPTEN_SETTINGS "-s ALLOW_MEMORY_GROWTH=1 -fwasm-exceptions -pthread -flto")
+-  string(APPEND LEANC_EXTRA_CC_FLAGS " -pthread")
++  set(EMSCRIPTEN_SETTINGS "-s ALLOW_MEMORY_GROWTH=1 -fwasm-exceptions -flto")
++
+diff --git a/src/runtime/io.cpp b/src/runtime/io.cpp
+index 3df6291..e7e76a7 100644
+--- a/src/runtime/io.cpp
++++ b/src/runtime/io.cpp
+@@ -1261 +1261 @@ extern "C" LEAN_EXPORT obj_res lean_io_hard_link(b_obj_arg orig, b_obj_arg link)
+-extern "C" LEAN_EXPORT obj_res lean_io_create_tempfile(lean_object * /* w */) {
++extern "C" LEAN_EXPORT obj_res lean_io_create_tempfile() {
+@@ -1307 +1307 @@ extern "C" LEAN_EXPORT obj_res lean_io_create_tempfile(lean_object * /* w */) {
+-extern "C" LEAN_EXPORT obj_res lean_io_create_tempdir(lean_object * /* w */) {
++extern "C" LEAN_EXPORT obj_res lean_io_create_tempdir() {
+diff --git a/src/runtime/uv/event_loop.cpp b/src/runtime/uv/event_loop.cpp
+index fa85439..2346190 100644
+--- a/src/runtime/uv/event_loop.cpp
++++ b/src/runtime/uv/event_loop.cpp
+@@ -149,2 +149,2 @@ extern "C" LEAN_EXPORT lean_obj_res lean_uv_event_loop_configure(b_obj_arg optio
+-extern "C" LEAN_EXPORT lean_obj_res lean_uv_event_loop_alive() {
+-    return io_result_mk_error("lean_uv_event_loop_alive is not supported");
++extern "C" LEAN_EXPORT uint8_t lean_uv_event_loop_alive() {
++    lean_always_assert(false && "event loop unavailable in browser");
+diff --git a/src/runtime/uv/system.cpp b/src/runtime/uv/system.cpp
+index 3ac95b6..a2283fb 100644
+--- a/src/runtime/uv/system.cpp
++++ b/src/runtime/uv/system.cpp
+@@ -637 +637 @@ extern "C" LEAN_EXPORT lean_obj_res lean_uv_os_get_passwd() {
+-extern "C" LEAN_EXPORT lean_obj_res lean_uv_os_get_group() {
++extern "C" LEAN_EXPORT lean_obj_res lean_uv_os_get_group(uint64_t gid) {

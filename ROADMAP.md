@@ -423,7 +423,40 @@ R-0513 owns making stage (a) a dependency-closure-selected fast tier within its 
 stage (c) bound to exact commits, toolchains and artifacts (Phase 1 exit 2f); R-0516 automates (c)'s
 record for releases (today `qualification_record.py` is run by hand against the run IDs).
 
-### Release map
+### Browser compiler and explorer — bounded website delivery
+
+**2026-10-22: implemented and locally validated; publication pending.** This is a small website feature using
+existing compiler passes, not a new backend or a replacement for the execution
+queue above. Implementation and build instructions: [browser compiler](scripts/browser/README.md).
+
+- Run the existing compiler as WebAssembly in a browser worker, for self-contained
+  files; show real diagnostics and Core → specialized Core → SSA → LLVM.
+- Explain the stages, expose source-declaration links where available, retain
+  completed stages on later failure, and export the result with compiler identity
+  and the actual LLVM target. Successful checking is never labeled proof verification.
+- Include representative checked examples, on-demand download progress, versioned
+  HTTP caching, cancellation/retry, and stale-result invalidation after source edits.
+- Validation: 33 native/Wasm comparisons; loader progress, integrity, five failure
+  modes and retry; UI cancellation, stale messages, source invalidation and partial
+  stage controls; successful site build. The local browser prototype was exercised
+  and the redesigned layout reviewed from browser screenshots. Versioned compiler
+  assets are included in ordinary Pages builds. Publication remains to be confirmed.
+- Explicit non-goals: editor upgrades, program execution/linking, standard-library
+  or multi-file loading, a Concrete-to-Wasm backend, and independent verification.
+
+**Verifier: separate planned project.** Reuse R-0275 (independent Core-certificate
+checker) and R-0353 (independent evidence consumer/schema conformance); do not
+create a second overlapping checker initiative. Start from their named predicates,
+versioned artifact contract, dependency firewall, trust boundaries, and hostile
+fixtures. Browser hosting of such a checker is a later interface decision, not a
+prerequisite for this explorer. Compiler output and a successful compile are not
+certificates of semantic preservation or functional correctness.
+
+**Maintenance:** update this entry when scope, status, dependencies, or acceptance
+criteria change. Record completed delivery in the changelog; keep remaining work
+and the separate verifier status here.
+
+## Release map
 
 Release scopes below are provisional, not dates or claims that a release is ready. The execution queue
 remains the sole scheduling authority. No release requires finishing the entire task catalog. This

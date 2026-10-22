@@ -1,37 +1,23 @@
 {% extends "base.html" %}
 
+{% block extra_head %}<link rel="stylesheet" href="{{ get_url(path='home.css') }}">{% endblock extra_head %}
+{% block body_class %}landing{% endblock body_class %}
 {% block content %}
 <article class="home">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
-      <h1 id="hero-title">The Concrete programming language</h1>
-      <p class="lede">
-        Concrete is a verification-oriented systems language for code whose
-        authority, allocation, failure modes, ownership, and evidence should be
-        visible in source and reports.
-      </p>
-      <p>
-        It is linear rather than affine: non-<code>Copy</code> values must be
-        consumed explicitly. Capabilities such as <code>File</code>,
-        <code>Console</code>, <code>Alloc</code>, and <code>Unsafe</code> appear
-        in function types. Proofs, runtime checks, oracle tests, assumptions,
-        and trusted boundaries are reported as separate evidence classes.
-      </p>
-      <p>
-        The refusals are the point: no closures, no trait objects, no macros,
-        and whole-program monomorphization keep callable values inside a closed
-        set of named functions. A function-pointer target may still be chosen
-        at runtime, but its possible targets are statically enumerable. That
-        gives facts about authority, allocation, and failure a tractable path
-        from <code>main</code> to whole-program claims.
-      </p>
+      <p class="eyebrow"><span class="status-dot"></span> A verification-oriented systems language</p>
+      <h1 id="hero-title">Systems code.<br>With the evidence<br><em>in plain sight.</em></h1>
+      <p class="lede">Make ownership, authority, and failure visible.<br class="desktop-break"> Build with a language designed to explain itself.</p>
       <div class="hero-actions">
-        <a class="primary" href="{{ get_url(path='@/guide/getting_started.md') }}">Get started</a>
-        <a href="{{ get_url(path='@/guide/landing.md') }}">Why Concrete?</a>
+        <a class="primary" href="#explorer">Try the compiler <span aria-hidden="true">↗</span></a>
+        <a href="{{ get_url(path='@/guide/getting_started.md') }}">Read the guide <span aria-hidden="true">→</span></a>
       </div>
+      <p class="hero-note">Experimental · Open source · Written in Lean 4</p>
     </div>
 
     <div class="terminal-card" aria-label="Concrete code sample">
+      <div class="terminal-title"><span>01 / EXPLICIT BY DESIGN</span><span>main.con</span></div>
       <pre><code>fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
     if off &lt; 0 || off + 2 &gt; len { return -1; }
     let hi: i32 = packet[off] as i32;
@@ -47,9 +33,12 @@ fn report(result: i32) with(Console) {
     </div>
   </section>
 
+  <div class="language-strip" aria-label="Language properties"><span>Linear ownership</span><span>Explicit capabilities</span><span>Second-class references</span><span>Separate evidence classes</span></div>
+  {% include "explorer.html" %}
+
   <section id="try" class="try-section" aria-labelledby="try-title">
     <div class="section-copy">
-      <h2 id="try-title">Getting started</h2>
+      <p class="eyebrow">02 / TAKE IT FURTHER</p><h2 id="try-title">From the browser<br>to your machine.</h2>
       <p>
         Concrete is experimental. The most honest first contact is to build it,
         run the gates, and inspect the reports. You need Lean 4, lake, and
@@ -66,7 +55,7 @@ $ .lake/build/bin/concrete examples/png_chunks/src/main.con --emit-trace-json</c
   </section>
 
   <section class="principles" aria-label="Core principles">
-    <h2>Main ideas</h2>
+    <div class="principles-intro"><p class="eyebrow">03 / THE LANGUAGE MODEL</p><h2>Less implicit.<br>More inspectable.</h2><p>A small set of deliberate rules makes systems code easier to account for.</p></div>
     <article>
       <h3>Linear ownership</h3>
       <p>
@@ -104,7 +93,7 @@ $ .lake/build/bin/concrete examples/png_chunks/src/main.con --emit-trace-json</c
 
   <section id="evidence" class="evidence-section" aria-labelledby="evidence-title">
     <div class="section-copy">
-      <h2 id="evidence-title">A report is part of the program</h2>
+      <p class="eyebrow">04 / FOLLOW THE EVIDENCE</p><h2 id="evidence-title">The report is part<br>of the program.</h2>
       <p>
         Reports are meant to answer ordinary review questions: what authority
         does this code have, what can fail, what allocates, what is linear, and
@@ -132,30 +121,15 @@ Evidence: 0 proved, 3 enforced, 0 trusted-assumption, 0 reported</code></pre>
     <p class="sample-note">Full output and the other report modes are described in <a href="{{ get_url(path='@/guide/reports.md') }}">Reports</a>.</p>
   </section>
 
-  <section id="model" class="model-section" aria-labelledby="model-title">
-    <h2 id="model-title">What Concrete is not</h2>
-    <ul>
-      <li>Not Rust with smaller syntax: Concrete rejects lifetime syntax and implicit drop.</li>
-      <li>Not Zig with proofs bolted on: authority and allocation are part of reports.</li>
-      <li>Not a GC language: ownership and cleanup stay visible.</li>
-      <li>Not a proof assistant as a programming language: proof is evidence for systems code.</li>
-      <li>Not a batteries-included platform: the standard library grows from workloads.</li>
-    </ul>
-  </section>
-
-  <section class="compare-section" aria-labelledby="compare-title">
-    <h2 id="compare-title">Influences</h2>
-    <p>
-      Concrete borrows restraint from Hare, allocator explicitness from Zig and
-      Odin, result-oriented error style from Rust and Go, assurance discipline
-      from SPARK/Ada, and kernel-checked evidence from Lean. The combination is
-      stricter than any one source: no hidden authority, no hidden allocation,
-      no hidden cleanup, no hidden proof class.
-    </p>
+  <section class="model-section" aria-labelledby="model-title">
+    <p class="eyebrow">DELIBERATE CONSTRAINTS</p>
+    <h2 id="model-title">A smaller language.<br>A clearer account of your code.</h2>
+    <p>No closures, trait objects, or macros. Whole-program monomorphization keeps callable values in a closed set of named functions. Linear ownership makes cleanup explicit. Concrete is experimental; its standard library grows from real workloads.</p>
+    <a href="{{ get_url(path='@/guide/landing.md') }}">Explore the design decisions <span aria-hidden="true">→</span></a>
   </section>
 
   <section class="links-section" aria-labelledby="links-title">
-    <h2 id="links-title">Read next</h2>
+    <p class="eyebrow">KEEP EXPLORING</p><h2 id="links-title">Start with curiosity.<br>Go as deep as you like.</h2>
     <nav class="link-grid" aria-label="Documentation links">
       <a href="{{ get_url(path='@/guide/_index.md') }}">
         <strong>Guide</strong><span>language tour, workflow, reports, and current status</span>

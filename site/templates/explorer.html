@@ -1,0 +1,56 @@
+<section id="explorer" class="explorer" aria-labelledby="explorer-title">
+  <div class="explorer-heading">
+    <div>
+      <p class="explorer-eyebrow">01 / THE LIVE COMPILER</p>
+      <h2 id="explorer-title">See what your code becomes.</h2>
+      <p>Write Concrete. Follow it from source to LLVM. All on your device.</p>
+    </div>
+    <span class="explorer-badge"><span class="status-dot"></span> Runs locally</span>
+  </div>
+  <p class="explorer-scope">Experimental · Single-file programs · No standard-library imports, execution, or proof verification.</p>
+  <noscript><p>Enable JavaScript to use the browser compiler. The documentation remains available without it.</p></noscript>
+  <div class="explorer-toolbar">
+    <label for="explorer-example">Example</label>
+    <select id="explorer-example">
+      <option value="arithmetic">Checked arithmetic</option>
+      <option value="generic">Generic specialization</option>
+      <option value="struct">Structs and fields</option>
+      <option value="capability">Explicit capabilities</option>
+      <option value="error">A type error</option>
+    </select>
+    <button id="explorer-compile" type="button">Compile <span aria-hidden="true">↗</span></button>
+    <button id="explorer-cancel" type="button" disabled>Cancel</button>
+    <button id="explorer-download" type="button" disabled>Download result</button>
+  </div>
+  <div class="explorer-grid">
+    <div class="explorer-pane">
+      <label class="explorer-pane-title" for="explorer-source"><span>main.con</span><span class="pane-caption">CONCRETE SOURCE</span></label>
+      <textarea id="explorer-source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="explorer-source-help">mod demo {
+    fn add(a: i64, b: i64) -&gt; i64 {
+        return a + b;
+    }
+
+    fn main() -&gt; Int {
+        return add(20, 22);
+    }
+}</textarea>
+      <p id="explorer-source-help" class="explorer-small">Ctrl/⌘ + Enter to compile. Source stays in this browser. Maximum 32 KiB.</p>
+    </div>
+    <div class="explorer-pane">
+      <div class="explorer-output-controls">
+        <label for="explorer-stage">Representation</label>
+        <select id="explorer-stage" disabled><option>Core</option></select>
+        <label for="explorer-function">Function</label>
+        <select id="explorer-function" disabled><option value="">Whole module</option></select>
+      </div>
+      <pre id="explorer-output" tabindex="0" aria-label="Compiler output">Compile a program to inspect its intermediate representations.</pre>
+    </div>
+  </div>
+  <p id="explorer-stage-help" class="explorer-small">Core → Specialized Core → SSA → LLVM</p>
+  <pre id="explorer-diagnostics" hidden aria-label="Compiler diagnostics"></pre>
+  <p id="explorer-status" class="explorer-status" role="status" aria-live="polite">The compiler loads on your first compilation.</p>
+  <p class="explorer-small explorer-footnote">Function selection connects Core output to source declarations. Full transformation tracing is not yet available.</p>
+  <p id="explorer-build" class="explorer-small"></p>
+</section>
+<link rel="stylesheet" href="{{ get_url(path='explorer.css') }}">
+<script type="module" src="{{ get_url(path='explorer.mjs') }}"></script>
