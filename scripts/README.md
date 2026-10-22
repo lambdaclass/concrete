@@ -4,6 +4,7 @@ Repository scripts live here instead of the project root.
 
 - [`tests/`](./tests/README.md) contains test runners and test-maintenance helpers.
 - `check_ll1.*` contains grammar-check helpers for the parser.
+- [`perf/`](./perf/runner.sh) tracks compiler performance per origin/main commit on the CI server (results on the `perf-data` branch, never merged); `runner.sh` documents the layout and how it coordinates with CI runners, gate runs and the fuzz farm, `install-perf.sh` the stop/start commands.
 
 Rule of thumb:
 

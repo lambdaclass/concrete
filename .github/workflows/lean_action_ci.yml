@@ -63,6 +63,11 @@ jobs:
       - name: Hole-status consistency (no document contradicts KNOWN_HOLES)
         run: bash scripts/tests/check_hole_status_consistency.sh
 
+      # Build-free: the perf tracker's decision logic (record format, noise-band
+      # detection, bisect selection, data-branch layout) runs on fixtures, not timings.
+      - name: Perf-tracking harness (no alarm on noise, alarm on a planted 2x)
+        run: bash scripts/tests/check_perf_tracking.sh
+
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 
