@@ -18,7 +18,7 @@ Semantics of a "program" (one statement per line; markers are the bugs):
     `return 0;` (a leak) is refused with E0208 UNLESS the chain contains `pass(`
     (the planted unsoundness); everything else is accepted.
 FAKE_FIXED=1 is the "fixed on main" compiler: BUG no longer diverges.
-FAKE_REJECT_ALL=1 refuses every program (E0301), like a main that added a rule.
+FAKE_REJECT_ALL=1 refuses every program (E0100), like a main that added a rule.
 """
 import os, re, sys
 
@@ -30,7 +30,7 @@ def main():
     src = open(a[0]).read()
     fixed = os.environ.get("FAKE_FIXED") == "1"
     if os.environ.get("FAKE_REJECT_ALL") == "1":  # a main that refuses everything (a new rule)
-        sys.stderr.write(f"{a[0]}:1:1: error[check]: (E0301) refused by a new rule\n")
+        sys.stderr.write(f"{a[0]}:1:1: error[check]: (E0100) refused by a new rule\n")
         return 1
     if "CRASHME" in src:
         sys.stderr.write("PANIC at Concrete.Lower.lowerExpr Concrete.Lower:412:7: index out of bounds\n")
