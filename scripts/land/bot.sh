@@ -16,7 +16,7 @@
 # Concrete/Check/ or Concrete/Elab/ AND add an E-code main does not have); then everything
 # else. Ties: smaller diff first, then name.
 #
-# SAFETY: one instance (flock, or a pid symlink on macOS); state in a file, so a restart resumes a
+# SAFETY: one instance (a kernel flock, via flock(1) or Python fcntl); state in a file, so a restart resumes a
 # train that is in CI instead of dispatching again; `touch ~/.concrete-bot-paused` stops it before
 # the next stage; --dry-run changes nothing; main is pushed only by train.sh land (fast-forward,
 # never forced) to the primary and the mirror; a remote named `fork` is refused; every git
@@ -94,37 +94,29 @@ event() { # kind message — logged, printed, and handed to notify.sh when it ex
 paused() { [ -e "$PAUSE" ]; }
 
 # --- single instance -----------------------------------------------------------------------------
-# With flock(1) (the Linux server): an OS lock on $LOCK.flock held for the whole run; the kernel
-# releases it when the process dies, so there is nothing stale to recover. Without it (macOS): the
-# lock is a SYMLINK whose target is the owner's pid, created atomically by `ln -s`, so a lock never
-# exists without its owner. A dead owner's lock is taken over under a guard that is itself a pid
-# symlink; a guard is removed only when ITS owner is dead (never by age: a suspended taker is live),
-# and the taker re-reads the lock under the guard. BOT_LOCK_MODE=symlink forces the fallback.
+# A KERNEL lock on both platforms: this shell opens $LOCK.flock on fd 9 and has flock(2) taken on
+# that open file description (by flock(1), or by Python's fcntl.flock where flock(1) is missing, as
+# on macOS). The lock belongs to the description, so it lasts while this process (or a child that
+# inherited fd 9) lives and is released by the kernel on any exit: nothing stale is ever left.
+# A lock DIRECTORY or symlink at $LOCK is the earlier format: refused while its pid lives, removed
+# once it is dead.
 LOCK="$STATE_DIR/lock"
-LOCK_HELD=0
-release_lock() { if [ "$LOCK_HELD" = 1 ] && [ "$(readlink "$LOCK" 2>/dev/null)" = "$$" ]; then rm -f "$LOCK"; fi; }
 alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
 acquire_lock() {
   mkdir -p "$STATE_DIR"
-  if [ "${BOT_LOCK_MODE:-}" != symlink ] && command -v flock >/dev/null 2>&1; then
-    exec 9>"$LOCK.flock"
-    flock -n 9 || { say "another instance holds $LOCK.flock; nothing to do"; exit 0; }
-    return 0
+  if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+    local old; old="$(cat "$LOCK/pid" 2>/dev/null || readlink "$LOCK" 2>/dev/null || true)"
+    if alive "$old"; then say "an instance of the earlier lock format (pid $old) holds $LOCK; nothing to do"; exit 0; fi
+    rm -rf "$LOCK"
   fi
-  if ln -s "$$" "$LOCK" 2>/dev/null; then LOCK_HELD=1; trap release_lock EXIT; return 0; fi
-  local pid g; pid="$(readlink "$LOCK" 2>/dev/null || true)"
-  if alive "$pid"; then say "another instance (pid $pid) holds $LOCK; nothing to do"; exit 0; fi
-  g="$(readlink "$LOCK.takeover" 2>/dev/null || true)"
-  if [ -n "$g" ] && ! alive "$g"; then rm -f "$LOCK.takeover"; fi
-  ln -s "$$" "$LOCK.takeover" 2>/dev/null || { say "another instance (pid ${g:-?}) is taking over $LOCK"; exit 0; }
-  # Under the guard: re-read, the lock may have changed hands since the first look.
-  pid="$(readlink "$LOCK" 2>/dev/null || true)"
-  if alive "$pid"; then rm -f "$LOCK.takeover"; say "lock is live (pid $pid); nothing to do"; exit 0; fi
-  rm -f "$LOCK"
-  ln -s "$$" "$LOCK" || { rm -f "$LOCK.takeover"; say "lost $LOCK during the takeover"; exit 0; }
-  LOCK_HELD=1; trap release_lock EXIT
-  rm -f "$LOCK.takeover"
-  event stale-lock "took over the lock of dead pid ${pid:-?}"
+  exec 9>"$LOCK.flock"
+  local got=0
+  if command -v flock >/dev/null 2>&1; then flock -n 9 && got=1
+  else python3 -I -c 'import fcntl, sys
+try: fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError: sys.exit(1)' && got=1; fi
+  [ "$got" = 1 ] || { say "another instance holds $LOCK.flock; nothing to do"; exit 0; }
+  echo "$$" > "$LOCK.pid"
 }
 
 # --- remote view ---------------------------------------------------------------------------------

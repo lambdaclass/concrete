@@ -132,6 +132,7 @@ mark(){ # branch [review-verdict] [gates] [extra review key=value]
 }
 bot(){ ( cd "$W" && bash "$BOT" "$@" ) 2>&1; }
 main_sha(){ git --git-dir="$TMP/$1.git" rev-parse refs/heads/main; }
+land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }
 in_main(){ git --git-dir="$TMP/origin.git" merge-base --is-ancestor "$1" refs/heads/main; }
 
 echo "=== ready: both notes, at the exact head ==="
@@ -171,37 +172,29 @@ touch "$BOT_PAUSE_FILE"
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "paused" && [ "$(main_sha origin)" = "$BASE" ] && ok "the kill switch stops the tick" || { no "pause: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE"
-if command -v flock >/dev/null 2>&1; then
-  # The holder keeps the fd itself and lets go on a signal file: `flock FILE sleep` hands the fd to
-  # the sleep, and killing flock would leave the lock held by the orphan.
-  mkdir -p "$LAND_STATE_DIR/bot"
-  ( exec 9>"$LAND_STATE_DIR/bot/lock.flock"; flock 9; touch "$TMP/held"
-    while [ ! -e "$TMP/release" ]; do sleep 0.2; done ) & fl=$!
-  while [ ! -e "$TMP/held" ]; do sleep 0.1; done
-  out="$(bot tick)"; rc=$?
-  [ "$rc" = 0 ] && has "$out" "another instance holds" && [ "$(main_sha origin)" = "$BASE" ] && ok "flock: a live holder stops a second instance" || { no "flock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-  touch "$TMP/release"; wait "$fl" 2>/dev/null
-else
-  echo "  (flock is not installed here; the mkdir fallback below is the lock under test)"
-fi
-export BOT_LOCK_MODE=symlink
+# The holder takes the same kernel lock the bot takes (flock(2) on an fd it keeps) and lets go on a
+# signal file; it never hands the fd to a child it would have to kill.
 mkdir -p "$LAND_STATE_DIR/bot"; L="$LAND_STATE_DIR/bot/lock"
+( exec 9>"$L.flock"; python3 -I -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX)'; touch "$TMP/held"
+  while [ ! -e "$TMP/release" ]; do sleep 0.2; done ) & fl=$!
+while [ ! -e "$TMP/held" ]; do sleep 0.1; done
+out="$(bot tick)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "another instance holds" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live holder of the kernel lock stops a second instance" || { no "kernel lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
+touch "$TMP/release"; wait "$fl" 2>/dev/null
+# The earlier format (a lock directory with a pid) is respected while its owner lives.
 sleep 60 & live=$!
-ln -s "$live" "$L"
+mkdir -p "$L"; echo "$live" > "$L/pid"
 out="$(bot tick)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "another instance (pid $live)" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live lock holder stops a second instance" || { no "live lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-sh -c 'exit 0' & dead=$!; wait "$dead"
-rm -f "$L"; ln -s "$dead" "$L"; ln -s "$live" "$L.takeover"
-out="$(bot tick)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "(pid $live) is taking over" && [ "$(readlink "$L")" = "$dead" ] && [ "$(main_sha origin)" = "$BASE" ] \
-  && ok "a live (even suspended) taker's guard is never expired" || { no "live takeover guard: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && has "$out" "earlier lock format (pid $live)" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live lock of the earlier format stops the new bot" || { no "legacy live lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
 kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
+
+git --git-dir="$TMP/origin.git" update-ref refs/heads/wip/land-control "$BASE"
+[ -n "$(land_refs)" ] && ok "CONTROL: the leaked-ref probe sees a planted wip/land-* ref" || no "the leaked-ref probe is blind"
+git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-control
 
 echo "=== train: the tick lands every ready branch, in order, on both remotes ==="
 out="$(bot tick)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "[stale-lock] took over the lock of dead pid $dead" && ok "a dead holder's lock is taken over" || { no "stale lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-[ ! -e "$L" ] && [ ! -L "$L" ] && [ ! -L "$L.takeover" ] && ok "the lock is released at exit (the dead taker's guard was cleared)" || no "lock left behind"
-unset BOT_LOCK_MODE
+[ "$rc" = 0 ] && [ ! -e "$L" ] && ok "a dead lock of the earlier format is removed and the tick runs" || { no "legacy dead lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
 all=1; for b in wip/explicit wip/late wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
 [ "$all" = 1 ] && ok "all five ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
 [ "$(main_sha origin)" = "$(main_sha lambdaclass)" ] && ok "lambdaclass/main equals origin/main" || no "mirror differs"
@@ -211,7 +204,7 @@ merges="$(git --git-dir="$TMP/origin.git" log --first-parent --reverse --format=
 [ "$merges" = "wip/explicit wip/late wip/rule wip/a wip/checkonly " ] && ok "the train merged members in landing order" || no "merge order: '$merges'"
 rl="$(cat "$TMP/gh/runner.log" 2>/dev/null)"
 has "$rl" "wip/land-bot-" && [ "$(printf '%s\n' "$rl" | sort | uniq -d)" = "" ] \
-  && [ -z "$(git --git-dir="$TMP/origin.git" for-each-ref refs/heads/wip/land-)" ] \
+  && [ -z "$(land_refs)" ] \
   && ok "the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards" || no "remote leg refs: '$rl'"
 has "$(cat "$TMP/gh/notify.log" 2>/dev/null)" "landed|train bot-" && ok "notify.sh was called with the landing" || no "no landing notification"
 has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=idle" && ok "state is idle after landing" || no "state not idle"
@@ -276,8 +269,8 @@ echo 2 > "$TMP/gh/pause-countdown"   # 1: the train's check; 2: the last halving
 out="$(bot tick)"; rc=$?
 rm -f "$TMP/gh/pause-countdown"
 blog="$(cat "$LAND_STATE_DIR"/bot/bisect-*.log 2>/dev/null)"
-has "$out" "stopped by the kill switch" && has "$blog" "before probing" && ! has "$out" "[ejected]" \
-  && ! has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=blocked" && ok "a pause during the last halving probe stops before the culprit probe; nothing attributed" \
+has "$out" "stopped by the kill switch" && has "$blog" "no culprit attributed" && ! has "$out" "[ejected]" \
+  && ! has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=blocked" && ok "a pause during the halving probe stops the bisection; nothing attributed" \
   || { no "pause before culprit probe"; echo "$out" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE" "$LAND_STATE_DIR"/bot/bisect-*.log
 out="$(bot tick)"
@@ -294,6 +287,31 @@ after="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
 rm -f "$BOT_PAUSE_FILE"
 out="$(bot tick)"
 in_main "$(sha_of wip/ph)" && ! in_main "$(sha_of wip/pc)" && has "$out" "[ejected] wip/pc" && ok "resumed: the red run is re-read, bisected, the culprit ejected" || { no "after --ci pause"; echo "$out" | sed 's/^/      /'; }
+
+mk wip/qb qb BAD qb; mark wip/qb
+mk wip/qg qg src/qg.txt qg; mark wip/qg
+echo 3 > "$TMP/gh/pause-countdown"   # 1: the train's check; 2: the halving probe; 3: the culprit probe (red)
+out="$(bot tick)"; rc=$?
+rm -f "$TMP/gh/pause-countdown"
+blog="$(cat "$LAND_STATE_DIR"/bot/bisect-*.log 2>/dev/null)"
+has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$blog" "train: culprit:" \
+  && ok "a pause raised DURING the red culprit probe attributes nothing" || { no "pause in culprit probe"; echo "$out" | sed 's/^/      /'; echo "$blog" | sed 's/^/      /'; }
+rm -f "$BOT_PAUSE_FILE" "$LAND_STATE_DIR"/bot/bisect-*.log
+out="$(bot tick)"
+in_main "$(sha_of wip/qg)" && has "$out" "[ejected] wip/qb" && ok "after the pause the culprit is ejected and the rest lands" || { no "after culprit-probe pause"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== remote leg: a same-SHA ref of another run is never adopted ==="
+mk wip/cx cx src/cx.txt cx; mark wip/cx
+( cd "$W" && git fetch -q origin && bash "$ROOT_DIR/scripts/land/train.sh" build cx-t --no-fetch origin/wip/cx >/dev/null 2>&1 \
+  && git push -q origin "HEAD:refs/heads/wip/land-collide" )
+CXH="$(cd "$W" && git rev-parse HEAD)"
+: > "$TMP/gh/runner.log"
+out="$(cd "$W" && LAND_REMOTE_REF_FIRST=wip/land-collide bash "$ROOT_DIR/scripts/land/train.sh" check cx-t --no-review 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "wip/land-collide was not created by this run" && ! has "$(cat "$TMP/gh/runner.log")" "wip/land-collide" \
+  && [ "$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/wip/land-collide)" = "$CXH" ] && [ "$(land_refs)" = "refs/heads/wip/land-collide" ] \
+  && ok "an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted" || { no "collision: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-collide
+( cd "$W" && git checkout -q --detach origin/main )
 
 echo "=== dispatch: a restart between dispatch and recording the run reconciles, never re-dispatches ==="
 mk wip/d1 d1 src/d1.txt d1; mark wip/d1

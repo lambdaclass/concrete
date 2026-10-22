@@ -65,8 +65,10 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 - **remote**: the full gate set (R-0541) through `LAND_REMOTE_RUNNER <ref> <command>`. The
   default runner is `~/bin/concrete-remote`; on the server it is `scripts/land/run-at-ref.sh`. A
   runner that fetches from origin first gets the head published under a ref unique to that run,
-  `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent (an
-  empty lease, with a fresh name on collision) and deleted on exit with a lease on that SHA, so
+  `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent. The
+  push carries an empty lease, and ownership is taken only from `--porcelain`'s `*` (new ref)
+  line, because git reports an existing ref at the same SHA as up to date before it checks the
+  lease. On a collision the run tries a fresh name. The ref is and deleted on exit with a lease on that SHA, so
   concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.
@@ -260,22 +262,21 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
 
 **Safety.**
 
-- **One instance.** With `flock` (the Linux server), an OS lock is held for the whole run and
-  released by the kernel when the process dies. Without it (macOS), the lock is a symlink whose
-  target is the owner's pid, created atomically by `ln -s`, so no lock ever lacks an owner:
-  - a live owner makes the new instance exit 0;
-  - a dead owner's lock is taken over under a guard, itself a pid symlink;
-  - the taker re-reads the lock under the guard;
-  - a guard is removed only when its own owner is dead, never because of its age, since a
-    suspended taker is still live.
+- **One instance.** A kernel lock on every platform. The bot opens `lock.flock` on a file
+  descriptor and takes `flock(2)` on it, through `flock(1)` or, where that is missing (macOS),
+  Python's `fcntl.flock`. The lock belongs to the open file, so it lasts as long as the bot and is
+  released by the kernel on any exit, and nothing stale is ever left. A second instance exits 0.
+  A lock directory of the earlier format is respected while its pid lives and is removed once
+  that pid is dead.
 - **State in a file.** `<git-common-dir>/concrete-landing/bot/bot.env` holds the phase, the train
   and the ejected heads. `events.tsv` beside it is the event log.
 - **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage:
   - no tick starts;
   - no train is checked and no CI is dispatched;
   - a green train waits in CI without landing;
-  - bisection stops before the build, the check and the dispatch of every probe. `train.sh`
-    reads `LAND_PAUSE_FILE`, and a paused probe attributes nothing. A red train in CI waits there;
+  - bisection reads `LAND_PAUSE_FILE` before and after every operation of every probe (build,
+    test or check, dispatch, watch) and once more before attribution. A probe that overlapped a
+    pause gives no verdict and nothing is attributed. A red train in CI waits there;
   - the rebase pass stops before the next branch, and a gated rebase is not pushed.
 
   Remove the file to resume; the train is picked up where it stopped.
@@ -374,13 +375,13 @@ exactly when the checkout contains `BAD`. It covers:
 - ordering: explicit first (including `order: 0800`, above the old fixed keys), then a new E-code
   under Check/Elab; reusing an existing code is not a rule change;
 - the dry run and the kill switch;
-- the locks: `flock` when installed; in symlink mode, a live lock, a live taker's guard that is
-  never expired, and a dead lock taken over;
-- the remote leg on a per-run `wip/land-*` ref that is gone afterwards;
+- the locks: a live holder of the kernel lock, and a live and a dead lock of the earlier format;
+- the remote leg on a per-run `wip/land-*` ref that is gone afterwards (with a control that the
+  probe sees a planted ref), and an existing ref at the same SHA that is refused, not adopted;
 - a four-member train landing in order on both remotes, with fork untouched;
 - red-check and red-CI bisection that ejects exactly the culprit and lands the rest;
-- the kill switch stopping a bisection before it starts, before the culprit probe, and between a
-  `--ci` probe's check and its dispatch; a culprit-less bisection blocking the bot until `reset`;
+- the kill switch stopping a bisection before it starts, during a halving probe, during the red
+  culprit probe, and between a `--ci` probe's check and its dispatch; a culprit-less bisection blocking the bot until `reset`;
 - resuming a train held in CI without a second dispatch, and reconciling a `dispatching` restart
   with the run at the train's head; a failed lookup and an empty one within the grace period keep
   the train dispatching;

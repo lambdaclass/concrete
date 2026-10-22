@@ -330,11 +330,15 @@ remote_leg() { # name head
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     refuse_fork "$REMOTE"
     # One ref per run, created only if absent (no --force), so concurrent checks never share one.
-    # Created only if ABSENT (an empty lease): a same-SHA ref of another run is never adopted.
-    local try ok=0
+    # Created only if ABSENT. An empty lease is not enough: git reports a ref that already holds
+    # this SHA as "up to date" (success) before it looks at the lease, so ownership is taken only
+    # from --porcelain's `*` (new ref) line; `=` is another run's ref and gets a fresh name.
+    local try ok=0 out
     for try in 1 2 3; do
-      ref="wip/land-$name-${head:0:12}-$$-$RANDOM$RANDOM"
-      if git push -q --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref"; then ok=1; break; fi
+      ref="${LAND_REMOTE_REF_FIRST:-wip/land-$name-${head:0:12}-$$-$RANDOM$RANDOM}"; LAND_REMOTE_REF_FIRST=""
+      out="$(git push --porcelain --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref" 2>&1)" || true
+      case $'\n'"$out"$'\n' in *$'\n*\t'"$head:refs/heads/$ref"$'\t'*) ok=1; break ;; esac
+      echo "remote: refs/heads/$ref was not created by this run (${out//$'\n'/ | }); trying another name"
     done
     [ "$ok" = 1 ] || return 1
     # Removed even when the leg is interrupted. A deletion publishes nothing, so it skips the gates
@@ -685,13 +689,21 @@ subset_red() { # sub-name test-cmd|"" members...
   "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || { echo build-failed; return 0; }
   if bisect_paused; then echo paused; return 0; fi
   local rc=0
+  # The switch is read again after EVERY operation, whatever it returned: a probe that ran while
+  # the switch was pulled gives no verdict, so nothing is attributed from it.
   if [ -n "$test" ]; then
     bash -c "$test" >/dev/null 2>&1 || rc=$?
+    if bisect_paused; then echo paused; return 0; fi
   else
     "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 || rc=$?
-    if [ "$rc" = 0 ] && bisect_paused; then echo paused; return 0; fi
+    if bisect_paused; then echo paused; return 0; fi
     if [ "$rc" = 0 ]; then
-      "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 && "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+      "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 || rc=$?
+      if bisect_paused; then echo paused; return 0; fi
+    fi
+    if [ "$rc" = 0 ]; then
+      "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+      if bisect_paused; then echo paused; return 0; fi
     fi
   fi
   STAGE_T0="$(date +%s)"
@@ -733,6 +745,10 @@ cmd_bisect() {
   if [ "$verdict" = paused ]; then
     log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before the culprit probe"
     die "bisect: paused by $LAND_PAUSE_FILE before probing ${culprit%@*} alone; no culprit attributed"
+  fi
+  if bisect_paused; then
+    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before attribution"
+    die "bisect: paused by $LAND_PAUSE_FILE before attribution; no culprit attributed"
   fi
   local rest=() ; for m in $(printf '%s\n' "${members//,/ }"); do [ "$m" = "$culprit" ] || rest+=("${m%@*}"); done
   STAGE_T0="$(date +%s)"
