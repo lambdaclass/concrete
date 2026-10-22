@@ -178,6 +178,7 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 
 ## Open Numbered Bugs
 
+- [181_generic_borrowed_scrutinee_binder_mode.md](181_generic_borrowed_scrutinee_binder_mode.md) — OPEN: a payload binder through a borrowed scrutinee whose payload type is a type parameter is `&T` to Check and `T` to Elab, so `get::<Int>` passes the payload's value where `fn(&T)` expects a pointer (SIGSEGV in safe code; `--interp` refuses). Found by the language-tightening probes, 2026-10-23. Joins exit 0b.
 - [166_foreign_fn_value_abi.md](166_foreign_fn_value_abi.md) — OPEN: a foreign function taken as a value is called with the Concrete ABI, so a small `#[repr(C)]` struct argument reaches C as a pointer (silent wrong code at the C boundary; predates the symbol work). Found by the Codex review of the symbol-name work, 2026-10-22. Joins exit 0b.
 - [165_generated_helper_call_binds_by_spelling.md](165_generated_helper_call_binds_by_spelling.md) — OPEN: `println` is desugared into calls spelled `print_int` etc. that bind by spelling, so a module defining its own `print_int` gets it called by `println` (silent wrong code; predates mangling). Found by the Codex review of the symbol-name work, 2026-10-22. Joins exit 0b.
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)

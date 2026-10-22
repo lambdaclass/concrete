@@ -492,6 +492,7 @@ open_bug_reproducers() {
 136|bug136_functional_update_base_reevaluated/repro.con|runs-exit|87
 137|bug137_enum_literal_field_order/repro.con|runs-exit|65
 165|bug165_generated_helper_call_binds_by_spelling/repro.con|signals|
+181|bug181_generic_borrowed_scrutinee_binder_mode/repro.con|signals|
 TABLE
 }
 if [ -z "$ONLY" ]; then
