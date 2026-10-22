@@ -222,7 +222,7 @@ check "a failed delivery is not recorded as sent"  '[ "$(grep -c "network down" 
 printf 'NTFY_TOPIC=short\n' > "$TMP/notify.env"
 out="$(bash "$NOTIFY" info "t" "short topic" 2>"$TMP/short.err")"
 check "a short (guessable) topic is refused"       'grep -q "NTFY_TOPIC refused" "$TMP/short.err" && [ "$out" = "[info] t: short topic" ] && ! grep -q "short topic" "$FAKE_CURL_LOG"'
-printf 'SLACK_WEBHOOK_URL=https://hooks.slack.com/x" -o /tmp/evil\n' > "$TMP/notify.env"
+printf 'SLACK_WEBHOOK_URL=https://hooks.slack.com/x" -o ./evil\n' > "$TMP/notify.env"
 out="$(bash "$NOTIFY" info "q" "quote injection" 2>"$TMP/inj.err")"
 check "a webhook that could break the curl config is refused" 'grep -q "does not pass to curl" "$TMP/inj.err" && [ "$out" = "[info] q: quote injection" ]'
 

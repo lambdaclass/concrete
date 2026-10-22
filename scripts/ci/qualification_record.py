@@ -72,6 +72,10 @@ STEP_CONDITIONS = {
     "false": "optional",
     "failure()": "optional",
     "steps.lean_install.outcome == 'failure'": "optional",
+    # The R-0546 build-cache seed step (scripts/dev/seed-lake.sh): it exists only on self-hosted
+    # runners and is a build accelerator, so a run on GitHub-hosted runners skips it and still
+    # qualifies. `lake build` runs unconditionally after it either way.
+    "runner.environment == 'self-hosted'": "optional",
 }
 
 
