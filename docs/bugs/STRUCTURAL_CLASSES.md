@@ -50,7 +50,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 | 16. Driver artifacts at paths no compile owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`); no roadmap stage yet |
-| 16. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
+| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -368,7 +368,7 @@ debugging.
 **Owner.** The compile driver (`Main.lean`, `privateIntermediate`); the concurrent-compile legs in
 `run_tests.sh` (file and project mode) enforce it. No roadmap stage owns the driver yet.
 
-## 16. Pass state in association lists and per-query recomputation
+## 17. Pass state in association lists and per-query recomputation
 
 **Bugs.** 026 (the parser built a `[v; N]` literal with `elems ++ [x]`), 027 (instruction lists in
 Lower and SSAVerify built by `acc ++ x`), 178 (a 1000-arm `match` spent 8.45 s in the `lower` stage:

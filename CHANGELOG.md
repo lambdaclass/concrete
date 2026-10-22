@@ -74,7 +74,7 @@ and replacement chains, and Lower accumulates blocks and arm lists newest first.
 instead of 1555 G (703x). Emitted LLVM and SSA are byte-identical across all 1684 corpus files
 and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_heartbeats`), and
 `check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
-(heartbeats everywhere, `instructions:u` where perf counts). Structural class 16, owner R-0422.
+(heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 

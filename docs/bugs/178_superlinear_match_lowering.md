@@ -135,7 +135,11 @@ values reflect fixed start-up cost). The `lower` stage's heartbeats grow with sl
 gate shapes. The `lower` stage of a 2000-arm match went from 78.4 s to 64 ms. `functions` and
 `statements` are unchanged (1.27 / 1.42 and 0.32 / 0.54 before and after, within noise).
 
-LARGE_EXAMPLES
+The largest example projects (`concrete build --emit-llvm`, instructions, main → fixed) have no
+wide matches or deep nests, so they gain little: lox 5.13 G → 4.58 G (11%), hmac_sha256 59.50 G →
+59.26 G (0.4%), fixed_capacity 18.69 G → 18.47 G (1.2%), toml 4.47 G → 4.23 G, rocksdb_kv
+4.39 G → 4.17 G, kvstore 4.24 G → 4.02 G, integrity 4.24 G → 4.02 G, packet 4.19 G → 3.96 G
+(5% each).
 
 **Regression gate.** `scripts/tests/check_ssa_lowering_scaling.sh` compiles a value `match` and an
 assigning `match` with an unknown scrutinee at 250, 500, 1000 and 2000 arms, fits the log-log
@@ -175,7 +179,7 @@ class.
 
 ## Structural owner
 
-New class 16 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md), "Pass state in association lists
+New class 17 in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md), "Pass state in association lists
 and per-query recomputation (superlinear compile time)", owned by **R-0422**, the compiler
 throughput queue ("close measured compiler and emitter performance defects under one owned
 queue ... require an explicit expected complexity envelope; and gate the class rather than one
