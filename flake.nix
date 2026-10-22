@@ -56,8 +56,12 @@
               installPhase = "mkdir -p $out && cp -R lean-4.34.1-${asset.name}/. $out/";
             };
           base = with pkgs; [
-            leanRelease
+            # clang BEFORE leanRelease: mkShell puts earlier packages first on PATH, and the Lean
+            # release ships its own clang without C headers (stddef.h not found), so with Lean first
+            # every C link step that uses PATH's clang (run_tests phase3_abi_interop, regress_103)
+            # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
+            leanRelease
             llvmPackages.llvm  # provides lli for fast test execution
             z3                 # external SMT solver for the pre-existing solver_trusted path
             bash
@@ -69,6 +73,9 @@
             # the gate was red in this shell for everyone.
             (python3.withPackages (ps: [ ps.pyyaml ]))
             rustc
+            # cargo so check_external_checker.sh can build lean4export/con-leche in this shell; CI's
+            # runners have it preinstalled, so the gate failed only here.
+            cargo
             typst
             zola
             # RocksDB slice 1 (R-0285): the C library examples/rocksdb_kv binds, at the
