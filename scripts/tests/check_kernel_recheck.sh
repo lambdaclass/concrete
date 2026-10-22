@@ -177,7 +177,7 @@ echo "=== native trust is classified the same on Lean 4.34.1 and Lean 4.35 ==="
 SCAN=scripts/tools/removed_native_names.py
 if python3 -I "$SCAN" --selftest >/dev/null; then
   HITS="$(git ls-files '*.lean' | xargs python3 -I "$SCAN" 2>&1 || true)"
-  [ -z "$HITS" ] && ok "no Lean source (or probe held in a string) resolves a name Lean 4.35 removed" \
+  [ -z "$HITS" ] && ok "no Lean source (probes held in strings and comments included) names a Lean 4.35-removed constant except as a single-backtick literal" \
     || no "Lean 4.35-removed native names resolved (use a single-backtick literal): $(head -3 <<<"$HITS" | tr '\n' ' ')"
 else
   no "the removed-name scanner fails its own self-test: $(python3 -I "$SCAN" --selftest 2>&1 | head -2 | tr '\n' ' ')"
