@@ -140,8 +140,9 @@ check "public page is marked as public"            'grep -q "public view" "$TMP/
 SAN="$(env STATUS_PRIVATE_HOSTS=build-box.internal python3 -I -c '
 import importlib.util,sys
 spec=importlib.util.spec_from_file_location("s",sys.argv[1]); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-print(m.sanitize_text(sys.argv[2]))' "$STATUS" "ip $SECRET_IP6 hook $SECRET_HOOK xoxb-1234567890-abcdef pw: hunter2 on build-box.internal at 15:41:15 v2.338.1 ntfy.sh/concrete-secret-topic NTFY_TOKEN=opaquecred1 AWS_SECRET_ACCESS_KEY=opaquecred2 {\"password\": \"opaquecred3\"} password=\"two opaquecred4 words\" {\"secret\": \"pre\\\"opaquecred5\"} tokenizer: keeps this")"
-for s in "$SECRET_IP6" "$SECRET_HOOK" "xoxb-" "hunter2" "build-box.internal" "concrete-secret-topic" opaquecred1 opaquecred2 opaquecred3 opaquecred4 opaquecred5; do
+print(m.sanitize_text(sys.argv[2]))' "$STATUS" "ip $SECRET_IP6 hook $SECRET_HOOK xoxb-1234567890-abcdef pw: hunter2 on build-box.internal at 15:41:15 v2.338.1 ntfy.sh/concrete-secret-topic NTFY_TOKEN=opaquecred1 AWS_SECRET_ACCESS_KEY=opaquecred2 {\"password\": \"opaquecred3\"} password=\"two opaquecred4 words\" {\"secret\": \"pre\\\"opaquecred5\"} password=\"pre\\
+opaquecred6\" tokenizer: keeps this")"
+for s in "$SECRET_IP6" "$SECRET_HOOK" "xoxb-" "hunter2" "build-box.internal" "concrete-secret-topic" opaquecred1 opaquecred2 opaquecred3 opaquecred4 opaquecred5 opaquecred6; do
   check "sanitize_text strips ${s:0:14}..." '! printf "%s" "$SAN" | grep -qF -- "$s"'
 done
 check "sanitize_text keeps clock times and versions" 'printf "%s" "$SAN" | grep -q "15:41:15 v2.338.1"'
