@@ -1,0 +1,27 @@
+// Bug 179, project mode: `concrete build` wrote its intermediate LLVM file at
+// `src/main.con.ll`, shared by every build of this package, so concurrent builds to
+// different outputs removed or rewrote it under each other. run_tests.sh builds this
+// package concurrently to distinct outputs and requires every binary to exit 0 (the
+// project-level loop runs it once too). The functions only give the IR some size.
+mod main {
+    fn step(x: Int) -> Int {
+        if x % 2 == 0 { return x / 2; }
+        return 3 * x + 1;
+    }
+
+    fn collatz_len(n: Int) -> Int {
+        let mut x: Int = n;
+        let mut len: Int = 0;
+        while x != 1 {
+            x = step(x);
+            len = len + 1;
+        }
+        return len;
+    }
+
+    fn main() -> Int {
+        // collatz_len(27) = 111.
+        if collatz_len(27) != 111 { return 1; }
+        return 0;
+    }
+}
