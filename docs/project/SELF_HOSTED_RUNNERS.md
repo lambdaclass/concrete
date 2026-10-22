@@ -252,9 +252,12 @@ cache entries.
   artifact or an unknown log format. The check assumes that the binary at a recorded path has not
   been replaced in place. That holds for Nix store paths, which are immutable, and for elan
   toolchains, which use one directory per release.
-- **A consistent snapshot.** If anything in the source is modified after the copy started (for
-  example, a `lake build` running in the main checkout), the copy is discarded and the seed
-  refused. One seeder runs per checkout at a time (`.lake/seed.lock`).
+- **A consistent snapshot.** Lake takes no lock that the seeder could share. A checkout source must
+  therefore be quiet: nothing in it may be written from 10 s before the copy
+  (`CONCRETE_SEED_QUIET`) until the copy ends. A `lake build` that is running, or has just
+  finished, in the main checkout refuses the seed. Provenance is checked again on the copy itself.
+  Published cache entries need neither check. Each one is moved into place whole, after a completed
+  build, and never written again. One seeder runs per checkout at a time (`.lake/seed.lock`).
 - **CI checks against `~/.elan`'s lean** (`--elan`). That is the binary lean-action builds with,
   whatever else is on `PATH`.
 - **Copies, never hardlinks.** Lake rewrites trace files in place, so a hardlink would write through

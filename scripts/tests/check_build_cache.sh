@@ -69,6 +69,10 @@ echo olean > "$M/.lake/build/lib/lean/Concrete/A.olean"
 # An orphan trace from another Lean version, naming a binary that no longer exists: ignored.
 trace_for /nix/store/gone-lean4-4.28.0/bin/lean fedcba9876543210 > "$M/.lake/build/lib/lean/Concrete/Old.trace"
 
+# Seeding from a checkout demands a quiet source (nothing written in the last 10 s); age the
+# fixture build so that only the tests that write to it on purpose see a recent write.
+age() { find "$M/.lake" -exec perl -e '$t = time - 60; utime $t, $t, @ARGV' {} +; }
+age
 newwt() { rm -rf "$T/wt"; ( cd "$M" && g worktree prune && g worktree add -q --detach "$T/wt" HEAD ) >/dev/null 2>&1; }
 seed() { LEAN_BIN="${LEAN_BIN_OVERRIDE:-$LA}" bash "$SEED" --checkout "$T/wt" "$@" >"$T/out" 2>&1; }
 key_of() { LEAN_BIN="$2" bash "$SEED" --checkout "$1" --print-key 2>/dev/null | awk -F= '$1=="key"{print $2}'; }
@@ -112,10 +116,15 @@ newwt; LEAN_BIN_OVERRIDE="$LB" seed; rc=$?
 
 echo "=== provenance and consistency ==="
 newwt
-printf '{"inputs":[["Lean 4.34.1, commit %s","e9f3"]]}\n' "$COMMIT" > "$M/.lake/build/lib/lean/Concrete/Fetched.trace"
+printf '{"inputs":[["Lean 4.34.1, commit %s","e9f3"]]}\n' "$COMMIT" > "$M/.lake/build/lib/lean/Concrete/Fetched.trace"; age
 seed; rc=$?
 [ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && ok "a same-version trace that names no executable refuses the whole build" || no "unprovenanced trace accepted (exit $rc)"
-rm -f "$M/.lake/build/lib/lean/Concrete/Fetched.trace"
+rm -f "$M/.lake/build/lib/lean/Concrete/Fetched.trace"; age
+
+newwt; touch "$M/.lake/build/lib/lean/Concrete/A.trace"
+seed; rc=$?
+[ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] && ok "a source written to in the last 10 s (a build just ran or is running) is refused" || no "recently written source seeded (exit $rc)"
+age
 
 newwt
 mkdir -p "$T/fakecp"
@@ -131,6 +140,7 @@ PATH="$T/fakecp:$PATH" seed; rc=$?
   && ok "a source written to during the copy discards the copy (a build was running there)" \
   || no "copy of a changing source kept (exit $rc)"
 ls "$T/wt/.lake" 2>/dev/null | grep -q 'build.seeding\|seed.stamp\|seed.lock' && no "a refused seed left temporary files" || ok "a refused seed leaves no temporary files or lock"
+age
 
 newwt; mkdir -p "$T/wt/.lake/seed.lock"
 seed; rc=$?

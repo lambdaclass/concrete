@@ -189,7 +189,7 @@ do_print_key() {
 }
 
 do_seed() {
-  local bin ours ourkey src="" srcpre srckey dst="$ROOT_DIR/.lake/build" b h kind entry srch
+  local bin ours ourkey src="" srcpre srckey dst="$ROOT_DIR/.lake/build" kind="" entry srch from_checkout=0
   bin="$(our_lean_bin)" || refuse "no lean executable found to check the seed against (set LEAN_BIN)"
   ours="$(key_preimage "$ROOT_DIR" "$bin")" || refuse "cannot compute this checkout's key"
   ourkey="$(printf '%s\n' "$ours" | key_of_preimage)"
@@ -224,7 +224,7 @@ do_seed() {
     srcpre="$(cat "$FROM/seed.key")"
   elif [ -d "$FROM/.lake/build/lib" ]; then
     # A checkout: re-derive its key from its own files and from the lean its traces name.
-    src="$FROM/.lake/build"; kind="${kind:-checkout}"
+    src="$FROM/.lake/build"; kind="${kind:-checkout}"; from_checkout=1
     local why
     why="$(check_trace_bins "$src" "$bin")" || refuse "$why"
     srcpre="$(key_preimage "$FROM" "$bin")" || refuse "cannot compute the key of $FROM"
@@ -249,14 +249,27 @@ do_seed() {
   if [ -e "$dst" ] && [ "$FORCE" != 1 ]; then refuse "$dst already exists (use --force to replace it)"; fi
   rm -rf "$tmp"
   local t0=$SECONDS
-  # A CONSISTENT SNAPSHOT. A build running in the source while it is copied could pair an old trace
-  # with a new .olean. Anything in the source modified after the copy started discards the copy.
+  # A CONSISTENT SNAPSHOT. A build running in the source could pair an old trace with a new .olean.
+  # Lake takes no lock we could share, so the source must be QUIET: nothing in it modified from
+  # $quiet seconds before the copy until the copy ends. Lake writes a module's trace right after the
+  # lean process that wrote its .olean exits, so a build in progress always shows up as a recent
+  # write. Published cache entries need none of this: they are moved into place whole, after a
+  # completed build, and never written again.
+  local quiet="${CONCRETE_SEED_QUIET:-10}"
   : > "$stamp"
-  copy_tree "$src" "$tmp" || { rm -rf "$tmp" "$stamp"; die "copy from $src failed"; }
+  perl -e '$t = time - shift; utime $t, $t, shift' "$quiet" "$stamp" || die "cannot backdate $stamp"
+  if [ -z "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
+    copy_tree "$src" "$tmp" || { rm -rf "$tmp" "$stamp"; die "copy from $src failed"; }
+  fi
   if [ -n "$(find "$src" -newer "$stamp" -print 2>/dev/null | awk 'NR==1')" ]; then
-    rm -rf "$tmp" "$stamp"; refuse "$src changed while it was copied (a build is running there)"
+    rm -rf "$tmp" "$stamp"; refuse "$src was written to within ${quiet}s of or during the copy (a build is running there)"
   fi
   rm -f "$stamp"
+  # Provenance is re-checked on the COPY: what was validated is exactly what will be used.
+  if [ "$from_checkout" = 1 ]; then
+    local why2
+    why2="$(check_trace_bins "$tmp" "$bin")" || { rm -rf "$tmp"; refuse "$why2"; }
+  fi
   chmod -R u+w "$tmp" 2>/dev/null || true
   rm -rf "$dst" && mv "$tmp" "$dst" || die "cannot move the seed into place"
   { echo "source=$src"; echo "kind=$kind"; echo "key=$ourkey"; echo "seeded=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
