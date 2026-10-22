@@ -93,12 +93,19 @@ try:
                 hb = json.loads(r.stdout)["alloc_heartbeats"]["lower"]
             except (ValueError, KeyError, TypeError):
                 err = "size %d: trace has no alloc_heartbeats.lower" % n; break
-            beats.append((n, max(int(hb), 1)))
+            # A zero or non-integer count is no measurement: four zeros would fit slope 0.
+            if not isinstance(hb, int) or isinstance(hb, bool) or hb <= 0:
+                err = "size %d: alloc_heartbeats.lower is not a positive integer (%r)" % (n, hb); break
+            beats.append((n, hb))
             if PERF:
                 p = subprocess.run(["perf", "stat", "-e", "instructions:u", "-x,", "--", CC, path, "--emit-llvm"],
                                    capture_output=True, text=True, timeout=600)
                 v = instr_of(p.stderr)
-                if v is None:
+                # perf reports a count for a compile that FAILED too; only a successful
+                # compile is a measurement of lowering.
+                if p.returncode != 0:
+                    err = "size %d: --emit-llvm failed under perf (rc %d)" % (n, p.returncode); break
+                if v is None or v <= 0:
                     err = "size %d: perf counted nothing for --emit-llvm" % n; break
                 instrs.append((n, v))
         if err:
