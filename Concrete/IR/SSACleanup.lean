@@ -197,6 +197,50 @@ private def termUses : STerm → List String
   | .condBr cond _ _ => svalUses cond
   | .unreachable => []
 
+/-- Follow a replacement chain from `v` for at most `fuel` steps. -/
+private def chaseRepl (raw : Std.HashMap String SVal) : SVal → Nat → SVal
+  | v, 0 => v
+  | .reg r ty, f + 1 => match raw.get? r with
+    | some v' => chaseRepl raw v' f
+    | none => .reg r ty
+  | v, _ + 1 => v
+
+/-- Walk the chain from key `cur` until it ends (a value that is not a key), meets a
+    key whose final value is known (`memo`), or meets a cycle / a key known to lead to
+    one (`none`). Returns the keys on the path, newest first. -/
+private partial def chainWalk (raw memo : Std.HashMap String SVal) (tainted : Std.HashSet String)
+    (cur : String) (path : List String) (onPath : Std.HashSet String) : Option SVal × List String :=
+  let path := cur :: path
+  let onPath := onPath.insert cur
+  match raw.get? cur with
+  | some (.reg r ty) =>
+    match memo.get? r with
+    | some t => (some t, path)
+    | none =>
+      if tainted.contains r || onPath.contains r then (none, path)
+      else if raw.contains r then chainWalk raw memo tainted r path onPath
+      else (some (.reg r ty), path)
+  | some v => (some v, path)
+  | none => (none, path)
+
+/-- Every key's fully-chased value, `chaseRepl raw raw[k] fuel`, in O(keys): each
+    acyclic chain is walked once and its end shared by every key on it. Chasing each
+    key separately was O(keys × chain length), quadratic when trivial-phi elimination
+    leaves an n-long phi→phi chain (an n-deep nest of `if`s; bug 178). Requires
+    `fuel ≥ raw.size` (an acyclic chain is at most that long, so the fuel never runs
+    out and the shared end is exact). Keys on or leading into a cycle keep the old
+    fuel-bounded chase, whose result there depends on the fuel. -/
+private def resolveChains (raw : Std.HashMap String SVal) (fuel : Nat) : Std.HashMap String SVal :=
+  let (memo, _) := raw.fold (fun (st : Std.HashMap String SVal × Std.HashSet String) k _ =>
+    let (memo, tainted) := st
+    if memo.contains k || tainted.contains k then st
+    else match chainWalk raw memo tainted k [] ∅ with
+      | (some t, path) => (path.foldl (fun m p => m.insert p t) memo, tainted)
+      | (none, path) => (memo, path.foldl (·.insert ·) tainted)) (∅, ∅)
+  raw.fold (fun m k v => m.insert k (match memo.get? k with
+    | some t => t
+    | none => chaseRepl raw v fuel)) ∅
+
 /-- Apply register replacements across all blocks. -/
 private def applyReplacements (blocks : List SBlock)
     (replacements : List (String × SVal)) : List SBlock :=
@@ -210,18 +254,11 @@ private def applyReplacements (blocks : List SBlock)
     -- map (O(1) each). Chains are resolved so a single substitution is final.
     let raw : Std.HashMap String SVal :=
       replacements.foldl (fun m (old, new) => m.insert old new) ∅
-    let rec chase (v : SVal) (fuel : Nat) : SVal :=
-      match fuel, v with
-      | 0, _ => v
-      | f + 1, .reg r _ => match raw.get? r with
-        | some v' => chase v' f
-        | none => v
-      | _, _ => v
-    -- Fuel computed once: `replacements.length` inside the fold re-walked the
-    -- list per key, O(replacements²) (bug 178).
-    let fuel := replacements.length
-    let rmap : Std.HashMap String SVal :=
-      raw.fold (fun m k v => m.insert k (chase v fuel)) ∅
+    -- Fuel `replacements.length` (≥ raw.size), as before; computed once — the old
+    -- `replacements.length` inside the per-key fold re-walked the list per key
+    -- (bug 178). `resolveChains` shares each chain's end instead of chasing every
+    -- key separately.
+    let rmap : Std.HashMap String SVal := resolveChains raw replacements.length
     blocks.map fun b =>
       let insts := b.insts.filter fun inst =>
         match inst with
