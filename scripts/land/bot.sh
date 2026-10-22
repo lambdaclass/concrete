@@ -92,6 +92,17 @@ event() { # kind message — logged, printed, and handed to notify.sh when it ex
 }
 
 paused() { [ -e "$PAUSE" ]; }
+# The acknowledgment the operator waits for (LANDING.md, "Kill switch"): a `paused` event in the
+# log, written by the instance that holds the lock, once per pause file (keyed by its mtime).
+ack_pause() { # where
+  local id; id="$(stat -c %Y "$PAUSE" 2>/dev/null || stat -f %m "$PAUSE" 2>/dev/null || echo 0)"
+  if [ "$(st_get pause_acked)" != "$id" ]; then
+    event paused "kill switch seen ($1); the bot is idle until $PAUSE is removed"
+    st_set pause_acked "$id"
+  else
+    say "paused ($PAUSE exists; already acknowledged); doing nothing"
+  fi
+}
 
 # --- single instance -----------------------------------------------------------------------------
 # A KERNEL lock on both platforms: this shell opens $LOCK.flock on fd 9 and has flock(2) taken on
@@ -230,7 +241,7 @@ rebase_pass() {
   main="$(git rev-parse "$REMOTE/main")"
   while read -r b sha; do
     [ -n "$b" ] || continue
-    if paused; then say "rebase: paused; stopping the pass"; break; fi
+    if paused; then ack_pause "rebase pass, before $b"; break; fi
     case "$b" in "$PREFIX"*) ;; *) say "rebase: $b is outside $PREFIX; never rewritten"; continue ;; esac
     if git merge-base --is-ancestor "$main" "$sha"; then continue; fi
     slug="$(printf '%s' "$b" | tr -c 'A-Za-z0-9._-' '_')"
@@ -392,8 +403,13 @@ run_train() { # "branch sha"... (landing order)
 # --- subcommands ---------------------------------------------------------------------------------
 
 cmd_tick() {
-  if paused; then say "paused ($PAUSE exists); doing nothing"; return 0; fi
-  [ "$DRY" = 1 ] || acquire_lock
+  if [ "$DRY" = 1 ]; then
+    if paused; then say "(dry-run) paused ($PAUSE exists); a tick would do nothing"; return 0; fi
+  else
+    # The lock first: only the instance that owns the bot acknowledges a pause.
+    acquire_lock
+    if paused; then ack_pause "start of a tick"; return 0; fi
+  fi
   land_assert_no_op start
   [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the bot's clone has uncommitted changes; it must be a dedicated clone"
   sync_remote
@@ -429,7 +445,7 @@ cmd_tick() {
   if [ "${BOT_NO_REBASE:-0}" != 1 ]; then rebase_pass; sync_remote; fi
   local n=0 ready lines
   while [ "$n" -lt "$MAX_TRAINS" ]; do
-    if paused; then say "paused; stopping before the next train"; break; fi
+    if paused; then ack_pause "before the next train"; break; fi
     ready="$(ordered_ready)"
     [ -n "$ready" ] || { say "no ready branches"; break; }
     lines=()
@@ -449,8 +465,8 @@ cmd_tick() {
 case "$SUB" in
   tick) cmd_tick ;;
   rebase)
-    if paused; then say "paused"; exit 0; fi
     [ "$DRY" = 1 ] || acquire_lock
+    if paused; then [ "$DRY" = 1 ] && say "(dry-run) paused" || ack_pause "start of a rebase pass"; exit 0; fi
     sync_remote; rebase_pass ;;
   list) sync_remote; ordered_ready ;;
   status)

@@ -176,6 +176,10 @@ out="$(bot --dry-run tick)"; rc=$?
 touch "$BOT_PAUSE_FILE"
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "paused" && [ "$(main_sha origin)" = "$BASE" ] && ok "the kill switch stops the tick" || { no "pause: exit $rc"; echo "$out" | sed 's/^/      /'; }
+acks(){ awk -F'\t' '$2=="paused"' "$LAND_STATE_DIR/bot/events.tsv" 2>/dev/null | grep -c . || true; }
+[ "$(acks)" = 1 ] && has "$(cat "$TMP/gh/notify.log")" "paused|kill switch seen" && ok "the pause is acknowledged in the event log (and notified)" || no "no paused event (acks=$(acks))"
+bot tick >/dev/null
+[ "$(acks)" = 1 ] && ok "a second paused tick does not acknowledge the same pause again" || no "duplicate acknowledgment (acks=$(acks))"
 rm -f "$BOT_PAUSE_FILE"
 # The holder takes the same kernel lock the bot takes (flock(2) on an fd it keeps) and lets go on a
 # signal file; it never hands the fd to a child it would have to kill.

@@ -351,12 +351,14 @@ remote_leg() { # name head
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
     local dout
-    # Once deleted, the backstop is disarmed: the name is free again, and a later run that creates it
-    # at the same SHA would match the lease.
+    # The backstop is disarmed BEFORE this one attempt, which is never retried: a push that fails
+    # may still have deleted the ref, and a later run may have re-created the name at the same SHA,
+    # where a retry's lease would match. An unconfirmed deletion is reported and left alone.
+    trap - EXIT
     if dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)"; then
-      trap - EXIT; echo "remote: deleted refs/heads/$ref"
+      echo "remote: deleted refs/heads/$ref"
     else
-      echo "remote: could NOT delete refs/heads/$ref (the EXIT backstop retries): ${dout//$'\n'/ | }"
+      echo "remote: deletion of refs/heads/$ref NOT confirmed; left for a human (not retried): ${dout//$'\n'/ | }"
     fi
   fi
   case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac

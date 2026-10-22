@@ -68,8 +68,10 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent. The
   push carries an empty lease, and ownership is taken only from `--porcelain`'s `*` (new ref)
   line, because git reports an existing ref at the same SHA as up to date before it checks the
-  lease. On a collision the run tries a fresh name. The ref is deleted afterwards, and on any exit,
-  with a lease on that SHA, so
+  lease. On a collision the run tries a fresh name. The ref is deleted afterwards with a lease on
+  that SHA, in one attempt that is never retried. A failed push may still have deleted it, so an
+  unconfirmed deletion is reported and left alone. An EXIT backstop covers interruption before
+  that attempt. As a result,
   concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.
@@ -280,7 +282,9 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
   - the rebase pass stops before the next branch, and a gated rebase is not pushed.
 
   The switch is the file's presence, read between operations. Leave it until the bot has logged a
-  `paused` event: a file created and removed within one operation is not seen. Remove it to
+  `paused` event (`bot.sh status`, or the notification): the instance holding the lock writes it
+  once per pause file, at the next stage it reaches. A file created and removed within one
+  operation is not seen. Remove it to
   resume; the train is picked up where it stopped.
 - **Dry run.** `--dry-run` prints the ready list, the order and the train, and changes nothing on
   the remotes or in the bot's state.
