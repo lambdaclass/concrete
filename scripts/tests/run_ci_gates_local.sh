@@ -162,7 +162,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   eject, auto-rebase skip rules, kill switch, lock; throwaway repository), pinned in the same commit.
 #   Branches ci-tiering, ledgers and impact-gates also move this pin; integration adds this one
 #   command on top of whatever they pin.
-EXPECTED_GATE_COMMANDS=257
+# 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
+#   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
+EXPECTED_GATE_COMMANDS=258
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected

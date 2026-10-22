@@ -43,11 +43,23 @@ pushed=""
 # 15-minute gate run per backup would make that impossible. The WIP tier still refuses
 # conflict markers in what it publishes. It is decided from stdin alone, before any fallback:
 # a by-hand run (no stdin) or any ref outside wip/* — including a deletion — takes the full gates.
-wip_refs=0; other_refs=0; wip_shas=""
+#
+# REVIEW-NOTES TIER (R-0544). scripts/review/review.sh pushes its verdict as a git note under
+# refs/notes/concrete-review (and the findings under refs/notes/concrete-review-findings). A notes
+# commit holds one blob per annotated commit and no source tree, so the gates have nothing to
+# check in it — and running them per review round made every note push take minutes, and fail
+# outside the dev shell. Only an UPDATE of exactly those two refs qualifies; deleting one, or
+# pushing anything else alongside, takes the tier it would take without it.
+wip_refs=0; other_refs=0; wip_shas=""; review_note_refs=0
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${_remoteref:-}" in
     refs/heads/wip/*) case "$localsha" in *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;; esac ;;
+    refs/notes/concrete-review|refs/notes/concrete-review-findings)
+      case "$localsha" in
+        *[!0]*) review_note_refs=$((review_note_refs+1)); continue ;;
+        *) other_refs=$((other_refs+1)) ;;
+      esac ;;
     *) other_refs=$((other_refs+1)) ;;
   esac
   case "$localsha" in *[!0]*) ;; *) continue ;; esac   # all-zero = branch deletion
@@ -75,6 +87,10 @@ if [ "$wip_refs" -gt 0 ] && [ "$other_refs" -eq 0 ]; then
   done
   [ -z "$bad" ] || { echo "pre-push (wip tier): conflict markers in$bad — refusing"; exit 1; }
   echo "pre-push: wip/* backup push — conflict-marker check only; full gates run on ci/* and main"
+  exit 0
+fi
+if [ "$review_note_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
+  echo "pre-push: review-notes push (refs/notes/concrete-review*) — no source tree, no gates"
   exit 0
 fi
 # Fallback when stdin gave nothing (hook invoked by hand, or `make pre-push`).

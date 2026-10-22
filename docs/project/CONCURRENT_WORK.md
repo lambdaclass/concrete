@@ -142,3 +142,11 @@ Do this instead:
 
 For a one-off inspection, `ps -eo command | grep -c "[p]ush-both.sh"` excludes
 itself via the bracket, but a ref check is still the better answer.
+
+## Reviewing a branch
+
+Every agent reviews the same way: `scripts/review/review.sh`, one round per
+invocation, with the verdict recorded as a git note on the reviewed commit. The
+note is shared through `origin`, so rounds run in another worktree or by another
+agent count toward the same cap, and the next round reviews only the delta. See
+[REVIEW.md](REVIEW.md).
