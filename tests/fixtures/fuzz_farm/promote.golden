@@ -1,0 +1,19 @@
+== fixture: tests/regressions/fuzz_silent_000000f1/repro.con
+// Fuzz-farm finding silent-000000f1x7e0 (silent): value/value:lines=0
+// Expected: compiled stdout/exit == --interp stdout/exit (they disagree on this program).
+// Found by generator 'diff' seed 4242 at compiler 0123456789ab; minimized from 11 to 6 lines.
+// Observed compile: rc=0 Compiled case.con -> case.bin
+// Observed native: rc=0 1001
+// Observed interp: rc=0 1
+// Replay: python3 scriptsfarm.py classify --oracle diff <this file>
+mod m {
+    fn main() with(Console) {
+        inc;
+        BUG;
+    }
+}
+
+== file it (scripts/gen/new_bug.sh allocates NNN and writes the record skeleton):
+scripts/gen/new_bug.sh "fuzz silent 000000f1: compiled and interpreted runs disagree" --silent yes
+cp tests/regressions/fuzz_silent_000000f1/repro.con tests/regressions/bugNNN_fuzz_silent_000000f1_compiled_and_interpreted_ru/repro.con && rm -r tests/regressions/fuzz_silent_000000f1
+then fill the FILL-IN(new_bug.sh) fields and pin the reproducer in a gate leg.

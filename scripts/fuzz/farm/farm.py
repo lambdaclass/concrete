@@ -31,6 +31,7 @@ Subcommands: campaign, classify, recheck, summary, status, promote, predicate, r
 import argparse, contextlib, datetime, fcntl, glob, hashlib, importlib.util, json, os
 import random, re, resource, shutil, signal, subprocess, sys, tempfile, time
 
+sys.dont_write_bytecode = True  # generators are imported from snapshots and checkouts
 HERE = os.path.dirname(os.path.abspath(__file__))
 FARM_HOME = os.environ.get("FARM_HOME", "/home/fuzz")
 CLASSES = ["silent", "crash", "unsound", "timeout", "refusal"]
@@ -620,17 +621,23 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True)
 
 # --------------------------------------------------------------------------- findings store
 
-def notify(snapshot, cls, sig, meta, log):
+def notify(snapshot, cls, sig, meta):
+    """scripts/land/notify.sh <info|success|warn|error> <title> <body> (wip/status-page), taken
+    from the snapshot of main when main has it. Channels come from the fuzz user's
+    ~/.config/concrete/notify.env; with none configured notify.sh prints to stdout."""
     script = os.path.join(snapshot or "", "scripts", "land", "notify.sh")
     if not snapshot or not os.access(script, os.X_OK):
         return "notify.sh absent"
+    level = "warn" if cls == "crash" else "error"
     subject = f"fuzz-farm: NEW {cls} finding {sig}"
     body = (f"class={cls} oracle={meta['oracle']} generator={meta['generator']} "
-            f"seed={meta['seed']} sha={meta['compiler_sha']}\nshape={meta['shape']}\n"
-            f"dir={meta['dir']}")
-    rc, out, err, _ = run_cmd([script, subject, body], 60, snapshot)
-    log.append(f"notify rc={rc} {out.strip()[:200]} {err.strip()[:200]}")
-    return f"notify rc={rc}"
+            f"seed={meta['seed']} sha={meta['compiler_sha'][:12]}\nshape={meta['shape']}\n"
+            f"promote: /home/fuzz/farm/promote.sh {sig}")
+    try:
+        rc, out, err, _ = run_cmd([script, level, subject, body], 60, snapshot)
+    except InfraError as e:
+        return f"notify failed: {e}"
+    return f"notify rc={rc} {out.strip()[:200]} {err.strip()[:200]}"
 
 
 def record(p, case, res, ctx, wd, log):
@@ -700,8 +707,9 @@ def record(p, case, res, ctx, wd, log):
         idx["presig"].setdefault(pre, []).append(sig)
         save_json(p["index"], idx)
     if res.cls in NOTIFY_CLASSES and ctx.get("notify", True):
-        meta["dir"] = d
-        notify(ctx.get("snapshot"), res.cls, sig, meta, log)
+        msg = notify(ctx.get("snapshot"), res.cls, sig, meta)
+        with open(os.path.join(d, "log"), "a") as fh:
+            fh.write(f"{now_iso()} {msg}\n")
     return sig, True
 
 
@@ -995,24 +1003,30 @@ def promote(args):
               f"{meta['compiler_sha'][:12]}; minimized from {meta['minimize']['orig_lines']} "
               f"to {meta['minimize']['min_lines']} lines."]
     header += [f"// Observed {o}" for o in observed]
-    header.append("// Replay: python3 scripts/fuzz/farm/farm.py classify --oracle "
-                  f"{meta['oracle']} {rel}")
+    params = {k: v for k, v in meta["params"].items() if k != "ok_src"}
+    replay = f"python3 scripts/fuzz/farm/farm.py classify --oracle {meta['oracle']}"
+    if params:
+        replay += f" --params '{json.dumps(params, sort_keys=True)}'"
+    header.append(f"// Replay: {replay} <this file>")
+    header = [re.sub(r"(?:/[^\s/:]+)+/([^\s/:]+)", r"\1", h) for h in header]  # no host paths
     fixture = "\n".join(header) + "\n" + src.rstrip("\n") + "\n"
     out_dir = os.path.join(args.repo, "tests", "regressions", slug) if args.repo else None
     if out_dir and args.write:
         os.makedirs(out_dir, exist_ok=True)
         with open(os.path.join(out_dir, "repro.con"), "w") as fh:
             fh.write(fixture)
-    title = {"silent": "silent wrong code", "crash": "compiler crash",
-             "unsound": "checker accepts a program it must reject",
-             "timeout": "hang", "refusal": "valid program refused"}[meta["class"]]
+    what = {"silent": "compiled and interpreted runs disagree",
+            "crash": "compiler crash", "unsound": "checker accepts a linearity violation",
+            "timeout": "hang", "refusal": "valid program refused"}[meta["class"]]
+    title = f"fuzz {meta['class']} {args.signature.split('-')[-1][:8]}: {what}"
+    bug_slug = re.sub(r"_+$", "", re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:48])
     print(f"== fixture: {rel}{' (written)' if out_dir and args.write else ''}")
     print(fixture)
-    print("== file it (scripts/gen/new_bug.sh, from wip/playbooks):")
-    print(f"scripts/gen/new_bug.sh --slug {slug} --class {meta['class']} "
-          f"--title {json.dumps('fuzz: ' + title + ' (' + meta['shape'][:60] + ')')} "
-          f"--repro {rel}")
-    print("then rename the directory to bug<NNN>_<slug> with the number new_bug.sh assigns.")
+    print("== file it (scripts/gen/new_bug.sh allocates NNN and writes the record skeleton):")
+    print(f"scripts/gen/new_bug.sh {json.dumps(title)} --silent "
+          f"{'yes' if meta['class'] == 'silent' else 'no'}")
+    print(f"cp {rel} tests/regressions/bugNNN_{bug_slug}/repro.con && rm -r tests/regressions/{slug}")
+    print("then fill the FILL-IN(new_bug.sh) fields and pin the reproducer in a gate leg.")
     return 0
 
 

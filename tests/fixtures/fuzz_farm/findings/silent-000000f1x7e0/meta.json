@@ -1,0 +1,38 @@
+{
+ "class": "silent",
+ "compiler_sha": "0123456789abcdef0123456789abcdef01234567",
+ "detail": {
+  "codes": [],
+  "compile": {
+   "rc": 0,
+   "stderr": "",
+   "stdout": "Compiled case.con -> case.bin",
+   "timeout": false
+  },
+  "interp": {
+   "rc": 0,
+   "stderr": "",
+   "stdout": "1\n",
+   "timeout": false
+  },
+  "native": {
+   "rc": 0,
+   "stderr": "",
+   "stdout": "1001\n",
+   "timeout": false
+  }
+ },
+ "generator": "diff",
+ "minimize": {
+  "min_lines": 6,
+  "orig_lines": 11,
+  "seconds": 1.0,
+  "tests": 9
+ },
+ "oracle": "diff",
+ "params": {},
+ "presig": "silent|diff|value/value:lines=0",
+ "seed": 4242,
+ "shape": "value/value:lines=0",
+ "signature": "silent-000000f1x7e0"
+}
