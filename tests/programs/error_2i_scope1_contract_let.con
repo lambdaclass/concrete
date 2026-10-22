@@ -1,5 +1,5 @@
 // Exit 2i SCOPE-1@1 (review round 4): a contract expression's block rebinds a parameter's name.
-// Refused: E0301.
+// Contracts are binder-free: refused, E0305.
 #[requires(if true { let x: i32 = 0; true } else { true })]
 fn f(x: i32) -> i32 { return x; }
 fn main() -> i32 { return f(42); }

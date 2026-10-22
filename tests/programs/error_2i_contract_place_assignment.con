@@ -1,0 +1,7 @@
+// Exit 2i (review round 6): an assignment through a place inside a `requires`. E0305.
+#[requires(if true { *r = 0; true } else { true })]
+fn f(r: &mut i32) -> i32 { return *r; }
+fn main() -> i32 {
+    let mut x: i32 = 42;
+    return f(&mut x);
+}

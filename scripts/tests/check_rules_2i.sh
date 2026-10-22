@@ -150,7 +150,8 @@ check_reject() {
   grep -qxF "  rule: $tag" <<<"$blk" || why="$why human rule tag is not $tag;"
   grep -qxF "  spec: $SPEC" <<<"$blk" || why="$why human spec evidence missing;"
   grep -qE '^  next: .+' <<<"$blk" || why="$why human next: missing;"
-  if [ "$rule" = "SCOPE-1" ]; then grep -qE '^  related \(' <<<"$blk" || why="$why human related span missing;"; fi
+  # the earlier binding is the related span of a collision (E0301); E0305 refuses a fresh binder
+  if [ "$code" = "E0301" ]; then grep -qE '^  related \(' <<<"$blk" || why="$why human related span missing;"; fi
   local jpass
   jpass="$(grep -oE '(^|,)json-exempt:(post-mono|mono)(,|$)' <<<"$modes" | sed -E 's/^,//; s/,$//; s/^json-exempt://')"
   if [ -n "$jpass" ]; then
@@ -171,7 +172,7 @@ for x in d.get("diagnostics", []):
     ev = {e["key"]: e["value"] for e in x.get("evidence", [])}
     if ev.get("rule") != tag or ev.get("spec") != spec: continue
     if not (x.get("next_action") or "").strip(): continue
-    if rule == "SCOPE-1" and not x.get("related"): continue
+    if code == "E0301" and not x.get("related"): continue
     sys.exit(0)
 sys.exit(1)
 PY

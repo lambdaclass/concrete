@@ -1643,8 +1643,12 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
     parseType
   else
     pure .unit
+  -- A method's loop contracts are its own (exit 2i review round 6: they were collected and then
+  -- dropped, so a method's `#[invariant]` was never validated nor checked).
+  let before := (← get).loopContracts.length
   let body ← parseBlock
-  return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }, selfKind)
+  let loopContracts := ((← get).loopContracts).drop before
+  return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, loopContracts, span := sp }, selfKind)
 
 /-- Repr attribute result: isReprC, reprAlign, isPacked. -/
 structure ReprOpts where

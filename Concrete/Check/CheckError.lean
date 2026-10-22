@@ -424,8 +424,8 @@ def CheckError.message : CheckError → String
   | .assignsReferenceBinding name ty =>
     s!"a reference binding is never assigned: '{name}' has type '{ty}'"
   | .returnsReference msg _ => msg
-  | .contractBinds fnName names =>
-    s!"a contract of '{fnName}' binds name(s) {names}; contract expressions are binder-free propositions"
+  | .contractBinds fnName what =>
+    s!"a contract of '{fnName}' contains {what}; a contract expression is a binder- and statement-free proposition"
   | .ghostLetAtTypeParam name ty =>
     s!"a `ghost let` of a type-parameter type could hold a reference once instantiated: '{name}' has type '{ty}' (a ghost binding is erased before monomorphization re-checks it)"
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"

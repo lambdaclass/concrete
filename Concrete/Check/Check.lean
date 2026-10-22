@@ -3209,6 +3209,43 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
       | none => ((local_, modName, orig) :: seen, ds)
   vsLocal ++ dups.reverse
 
+/- What a contract expression may not contain (exit 2i review rounds 5-6): a binder of any kind (a
+    match-pattern binder included) or any statement other than a block's trailing value. An
+    exhaustive walk over every `Expr` constructor, so a new constructor cannot hide one. -/
+mutual
+private partial def contractStmtsBad (ss : List Stmt) : List String :=
+  match ss with
+  | [] => []
+  | [.expr _ e true] => contractExprBad e
+  | s :: rest =>
+    let what := match s with
+      | .letDecl _ n _ _ _ _ => s!"`let {n}`"
+      | .letDestructure _ _ _ bs _ _ | .letStructDestructure _ _ bs _ => s!"a destructuring `let` ({", ".intercalate (PatBind.names bs)})"
+      | .borrowIn _ _ r _ _ _ => s!"a borrow block (`{r}`)"
+      | .assign _ n _ => s!"an assignment to `{n}`"
+      | .fieldAssign _ _ _ _ | .derefAssign _ _ _ | .arrayIndexAssign _ _ _ _ => "an assignment through a place"
+      | _ => "a statement"
+    what :: contractStmtsBad rest
+private partial def contractArmBad : MatchArm → List String
+  | .mk _ _ _ bs g b => (PatBind.names bs |>.filter (· != "_") |>.map fun n => s!"the pattern binder `{n}`")
+      ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
+  | .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
+      ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
+  | .litArm _ v g b => contractExprBad v ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
+  | .rangeArm _ lo hi _ g b => contractExprBad lo ++ contractExprBad hi ++ (g.map contractExprBad).getD [] ++ contractStmtsBad b
+private partial def contractExprBad : Expr → List String
+  | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _ | .ident _ _ | .fnRef _ _ => []
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => contractExprBad l ++ contractExprBad r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x | .deref _ x
+  | .cast _ x _ => contractExprBad x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap contractExprBad
+  | .methodCall _ o _ _ args => contractExprBad o ++ args.flatMap contractExprBad
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => contractExprBad e) ++ (b.map contractExprBad).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractExprBad e)
+  | .match_ _ s arms => contractExprBad s ++ arms.flatMap contractArmBad
+  | .ifExpr _ c t e => contractExprBad c ++ contractStmtsBad t ++ contractStmtsBad e
+end
+
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
@@ -3456,15 +3493,16 @@ def checkModule (m : Module) (summary : FileSummary)
   -- body it binds nothing (E0305): no reference binding and no reuse of a visible name can arise
   -- in it, whatever the types. Assignments are refused too (E0303, `constRef6Expr true`).
   let exit2iContractDs : List Diagnostic :=
-    (m.functions ++ m.implBlocks.flatMap (·.methods)).flatMap fun f =>
+    (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).flatMap fun f =>
       let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
       clauses.flatMap fun e =>
-        let bs := (specBinders e).eraseDups
-        (if bs.isEmpty then [] else
-          let ce := CheckError.contractBinds f.name (", ".intercalate bs)
+        match (contractExprBad e).eraseDups with
+        | [] => []
+        | bad =>
+          let ce := CheckError.contractBinds f.name (", ".intercalate bad)
           [{ severity := .error, message := ce.message, pass := "check", span := some f.span, hint := ce.hint,
-             code := ce.code, evidence := ruleEvidence ce.rule, nextAction := ce.rule.bind ruleNextAction }])
-        ++ ((constRef6Expr true e).filter (·.code == "E0303"))
+             code := ce.code, evidence := ruleEvidence ce.rule,
+             nextAction := some "write the contract as a binder- and statement-free proposition over the parameters (and `result`); name a repeated subterm with a `spec fn`" }]
   let exit2iSpecParamDs : List Diagnostic := m.specFns.flatMap fun sd =>
     let go : Scope1M Unit := do
       let mut vis : List ScopeBinder := []

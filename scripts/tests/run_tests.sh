@@ -1701,7 +1701,7 @@ run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
 run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0602)"
 run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0602)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0405)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0401)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
@@ -7975,11 +7975,14 @@ run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
 run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
-run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0305)"
 run_err "$TESTDIR/error_2i_scope1_contract_let.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_invariant_binds.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_variant_binds_ref.con" "(E0305)"
 run_err "$TESTDIR/error_2i_contract_inferred_ref_alias.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_wrapped_binder.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_trait_impl_invariant.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_place_assignment.con" "(E0305)"
 run_ok "$TESTDIR/regress_2i_const_nested_if_statement.con" 42
 run_err "$TESTDIR/error_2i_scope1_spec_fn_duplicate_params.con" "(E0301)"
 run_ok "$TESTDIR/regress_2i_contract_and_spec_params.con" 42

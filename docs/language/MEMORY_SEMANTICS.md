@@ -1145,8 +1145,10 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   (`constRef6Expr`): a `let` declared with a reference type or whose initializer contains a borrow
   anywhere, and any borrow block, are E0302, and an assignment whose value contains a borrow is
   E0303 (a constant may not borrow at all: E0602 at its use). Contract expressions (`requires`,
-  `ensures`, loop invariants and variants) are binder-free propositions, like spec bodies: any
-  binder in one is E0305 (`contractBinds`, tagged SCOPE-1@1) and any assignment E0303. Spec fn
+  `ensures`, loop invariants and variants, in functions, inherent and trait-impl methods) are
+  binder- and statement-free propositions, like spec bodies: a binder of any kind (a pattern
+  binder included) or any statement other than a block's trailing value in one is E0305
+  (`contractBinds`, tagged SCOPE-1@1; an exhaustive walk, `contractExprBad`). Spec fn
   parameters get the duplicate-name test.
   Fixtures: the twelve `error_2i_scope1_*.con` with their `_renamed` twins, and the 087 / 093 / 094
   / 107 shadowing fixtures and `error_borrow_shadow.con`, all rows of `tests/rules/exit_2i.tsv`
@@ -1310,7 +1312,7 @@ inner bindings eliminated, and `shadow_loop` binds `k.bN = 1000` in the loop bod
 `expected`. A renamed migration twin has its own sidecar row keyed to its own binder names. A gate
 `scripts/tests/check_rules_2i.sh` (new, in the full gate set) runs it. For every reject row it
 checks, in both the human and the JSON rendering, the code, the `rule` evidence with the exact
-rule and version, the `spec` evidence, and a non-empty `next` / `next_action`; for a SCOPE-1 row,
+rule and version, the `spec` evidence, and a non-empty `next` / `next_action`; for an E0301 row,
 also a related span. These diagnostic checks are mandatory and do not depend on `modes`, which
 lists only the execution modes of run rows (`binary`, `interp`, `model:<id>`, `fmt`). For each run row
 it runs every listed mode and requires the expected result from each. It fails
@@ -1323,7 +1325,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 152 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 155 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a
