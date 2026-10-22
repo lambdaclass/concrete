@@ -196,6 +196,20 @@ check(perflib.alarmable("growth.syn_match.instr_exp", "exp") and not perflib.ala
       and perflib.alarmable("compile.x.rss_kb", "kb") and not perflib.alarmable("compile.x.wall_ms", "ms"),
       "alarmable: instructions, RSS and instruction exponents; never times")
 
+# Legacy (pre-instruction) records still parse, but are never comparable.
+legacy = {"schema": "concrete.perf.record.v1", "suite_version": 1, "machine": "m1", "sha": "%040x" % 300,
+          "measured_at": "x", "status": "ok", "contaminated": False,
+          "metrics": {P: perflib.summarize([2e10] * 3, "instr")}}
+check(perflib.parse_records(json.dumps(legacy) + "\n")[0]["sha"] == legacy["sha"],
+      "a legacy v1 record still parses (old history does not block the runner)")
+try:
+    perflib.dump_record(legacy); check(False, "a v1 record can no longer be written")
+except ValueError:
+    check(True, "a v1 record can no longer be written")
+check(perflib.detect([dict(legacy, sha="%040x" % (400 + k), suite_version=2) for k in range(6)],
+                     mk(84, 4e10, 0.0005, rnd))["metrics"][P]["verdict"] == "insufficient_history",
+      "legacy records are never a baseline")
+
 # perf stat output parsing and the counter fallback.
 import importlib.util
 spec = importlib.util.spec_from_file_location("suite", sys.argv[1] + "/suite.py")
@@ -207,6 +221,15 @@ check(suite.parse_perf_csv("<not supported>,,instructions:u,0,100.00,,\n") is No
       and suite.parse_perf_csv("Error:\nAccess to performance monitoring and observability operations is limited.\n") is None
       and suite.parse_perf_csv("") is None,
       "parse_perf_csv: unsupported, uncounted, refused and empty output all mean no count")
+# A host that counts, but one run's counter failed: the metric is dropped and the record partial.
+suite._COUNTER = "instructions:u"
+run = suite.Run("/", {"projects": [], "single_files": []}, 3)
+run.put_run("compile.x", [(1.0, 1000, 5e9), (1.0, 1000, None), (1.0, 1000, 5e9)])
+check("compile.x.instr" not in run.metrics and "instr:compile.x.instr" in run.failed and "compile.x.rss_kb" in run.metrics,
+      "a run whose instruction counter failed drops that metric and marks the record partial")
+run.put_run("compile.y", [(1.0, 1000, 5e9)] * 3)
+check(run.metrics["compile.y.instr"]["median"] == 5e9, "complete instruction samples are kept")
+import shutil as _sh; _sh.rmtree(run.tmp, ignore_errors=True)
 os.environ["PERF_COUNTER"] = "wall"
 suite._COUNTER = None
 check(suite.counter() == "wall", "PERF_COUNTER=wall forces the wall-time fallback")

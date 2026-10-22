@@ -36,6 +36,9 @@ import math
 import re
 
 RECORD_SCHEMA = "concrete.perf.record.v2"
+# Records written before instruction counting. They still parse (a store with old history keeps
+# working) but carry no counter, so comparable() never admits them.
+LEGACY_SCHEMAS = ("concrete.perf.record.v1",)
 COUNTER = "instructions:u"
 SUMMARY_SCHEMA = "concrete.perf.summary.v1"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -107,7 +110,8 @@ def validate_record(rec):
     errs = []
     if not isinstance(rec, dict):
         return ["record is not an object"]
-    if rec.get("schema") != RECORD_SCHEMA:
+    legacy = rec.get("schema") in LEGACY_SCHEMAS
+    if rec.get("schema") != RECORD_SCHEMA and not legacy:
         errs.append("schema is %r, expected %r" % (rec.get("schema"), RECORD_SCHEMA))
     for k in ("suite_version", "machine", "sha", "measured_at", "status", "metrics"):
         if k not in rec:
@@ -122,12 +126,13 @@ def validate_record(rec):
         errs.append("status %r unknown" % rec.get("status"))
     if not isinstance(rec.get("contaminated", False), bool):
         errs.append("contaminated is not a bool")
-    if rec.get("counter") not in (COUNTER, "wall"):
-        errs.append("counter %r unknown" % rec.get("counter"))
-    if not isinstance(rec.get("comparable"), bool):
-        errs.append("comparable is not a bool")
-    elif rec["comparable"] and rec.get("counter") != COUNTER:
-        errs.append("only an %s record can be comparable" % COUNTER)
+    if not legacy:
+        if rec.get("counter") not in (COUNTER, "wall"):
+            errs.append("counter %r unknown" % rec.get("counter"))
+        if not isinstance(rec.get("comparable"), bool):
+            errs.append("comparable is not a bool")
+        elif rec["comparable"] and rec.get("counter") != COUNTER:
+            errs.append("only an %s record can be comparable" % COUNTER)
     metrics = rec.get("metrics")
     if not isinstance(metrics, dict):
         errs.append("metrics is not an object")
@@ -180,6 +185,8 @@ def parse_records(text):
 
 
 def dump_record(rec):
+    if rec.get("schema") != RECORD_SCHEMA:
+        raise ValueError("refusing to write a %r record; new records are %s" % (rec.get("schema"), RECORD_SCHEMA))
     errs = validate_record(rec)
     if errs:
         raise ValueError("refusing to write a malformed record: " + "; ".join(errs))

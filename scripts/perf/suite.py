@@ -238,13 +238,26 @@ class Run:
         if e is not None:
             self.metrics[name] = e
 
+    def put_instr(self, name, values):
+        """Instruction samples. When this host counts instructions, every sample must have a count:
+        a run whose counter failed (<not counted>, unparseable output) drops the whole metric and
+        marks the record partial, instead of leaving a baseline built from the samples that
+        happened to count."""
+        if counter() == EVENT and (not values or any(v is None for v in values)):
+            if values:
+                self.failed.append("instr:" + name)
+                self.notes.append("%s: %d of %d runs returned no instruction count" % (
+                    name, sum(1 for v in values if v is None), len(values)))
+            return
+        self.put(name, values, "instr")
+
     def put_run(self, prefix, runs, wall_unit="ms"):
         """runs: list of (wall_s, rss_kb, instr). Instructions and RSS are the metrics; wall is
         information."""
         scale = 1000.0 if wall_unit == "ms" else 1.0
         self.put("%s.wall_%s" % (prefix, wall_unit), [w * scale for w, _, _ in runs], wall_unit)
         self.put("%s.rss_kb" % prefix, [r for _, r, _ in runs], "kb")
-        self.put("%s.instr" % prefix, [i for _, _, i in runs], "instr")
+        self.put_instr("%s.instr" % prefix, [i for _, _, i in runs])
 
     def lake(self):
         cfg = self.suite["lake"]
@@ -351,12 +364,14 @@ class Run:
         log("compile %-28s %s instr" % (bench, perflib.median([i for _, _, i in runs])))
         if record:
             self.put_run("compile.%s" % bench, runs)
-            self.put("frontend.%s.instr" % bench, fe, "instr")
+            self.put_instr("frontend.%s.instr" % bench, fe)
             for k, vs in passes.items():
                 q = re.sub(r"[^a-z0-9]+", "_", k.lower()).strip("_")
                 self.put("pass.%s.%s_ms" % (bench, q), vs, "ms")
-        return {"instr": perflib.median([i for _, _, i in runs if i is not None]),
-                "frontend_instr": perflib.median([x for x in fe if x is not None]),
+        # Growth exponents only from complete instruction samples.
+        full = counter() == EVENT and all(i is not None for _, _, i in runs) and all(x is not None for x in fe)
+        return {"instr": perflib.median([i for _, _, i in runs]) if full else None,
+                "frontend_instr": perflib.median(fe) if full else None,
                 "wall": perflib.median([w for w, _, _ in runs]),
                 "passes": {k: perflib.median(v) for k, v in passes.items()}}
 
