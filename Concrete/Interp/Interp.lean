@@ -825,10 +825,6 @@ partial def collectNewtypes : List CModule → List NewtypeDef
   | [] => []
   | m :: ms => m.newtypes ++ collectNewtypes m.submodules ++ collectNewtypes ms
 
-partial def collectIntrinsicDecls : List CModule → List String
-  | [] => []
-  | m :: ms => m.intrinsicDecls.map (·.1) ++ collectIntrinsicDecls m.submodules ++ collectIntrinsicDecls ms
-
 partial def collectExternLinks : List CModule → List (String × String)
   | [] => []
   | m :: ms => m.externLinkNames ++ collectExternLinks m.submodules ++ collectExternLinks ms
@@ -2059,7 +2055,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | [] =>
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
-      if let some decl := (cx.foreign.lookup name).filter (cx.externs.contains ·) then
+      if let some decl := (cx.foreign.lookup name).filter (fun d => cx.externs.contains d && (resolveIntrinsic name).isNone) then
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
       match ← liftE (resolveCall cx name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
@@ -2216,12 +2212,15 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- The resolver's own binding first: a spelling it bound to a foreign declaration (or a
     -- runtime helper) reaches that, never a Concrete function of the same spelling (bug 129's
     -- symbol rules); a pointer formed from such a binding carries it.
-    -- Only a binding to a declared foreign function or a runtime helper: a compiler intrinsic
-    -- declared in std (`#[intrinsic = "sizeof"] fn sizeof<T>()`) is also recorded there, and
-    -- Lower implements it before any symbol is chosen, so it stays an intrinsic here too.
-    let isForeign (decl : String) : Bool := decl.startsWith runtimeHelperPrefix || cx.externs.contains decl
+    -- Only a binding to a declared foreign function or a runtime helper, and not a spelling
+    -- Lower implements as a compiler intrinsic before any symbol is chosen (`resolveIntrinsic`
+    -- on the call's spelling, as in Lower: std's `#[intrinsic = "sizeof"] fn sizeof<T>()` is
+    -- recorded in foreignCalls too, while an `#[intrinsic]`-attributed `extern fn abs` is not an
+    -- intrinsic spelling and stays foreign).
     let foreign : Option String := match callee with
-      | .direct name => (cx.foreign.lookup name).filter isForeign
+      | .direct name =>
+        (cx.foreign.lookup name).filter fun decl =>
+          decl.startsWith runtimeHelperPrefix || (cx.externs.contains decl && (resolveIntrinsic name).isNone)
       | .indirect binding => match envGetLocal env binding with
         | some (.fnPtr real _) => if real.startsWith externPtrPrefix then some (real.drop externPtrPrefix.length).toString else none
         | _ => none
@@ -2749,7 +2748,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     | _ => fail "interp: deref of non-ref value"
 
   | .fnRef name _ =>
-    if let some decl := (cx.foreign.lookup name).filter (cx.externs.contains ·) then
+    if let some decl := (cx.foreign.lookup name).filter (fun d => cx.externs.contains d && (resolveIntrinsic name).isNone) then
       return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
     match ← liftE (resolveCall cx name) with
     | some (d, sc) => return (env, .val (.fnPtr d.name sc))
@@ -3262,9 +3261,7 @@ def mkCtx (modules : List CModule) (loopFuel : Nat := defaultLoopFuel) : Ctx :=
   { fns := fns0 ++ implMethodFns modules fns0, enums,
     layout := { structDefs := structs, enumDefs := firstByName (·.name) enums,
                 newtypes := firstByName (·.name) (collectNewtypes modules) },
-    -- An `#[intrinsic]` declaration (std's `sizeof`) is listed with the foreign bindings but is
-    -- the compiler's own: not a foreign function.
-    externs := ((collectExterns modules).eraseDups).filter (fun n => !(collectIntrinsicDecls modules).contains n),
+    externs := (collectExterns modules).eraseDups,
     externLinks := collectExternLinks modules,
     consts := collectConsts modules, loopFuel, defs,
     scopes := (tops.map fun (m, _) => collectLinkerAliases [m]).toArray,
