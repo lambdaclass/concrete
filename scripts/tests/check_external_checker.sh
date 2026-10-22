@@ -68,7 +68,10 @@ TOOLCHAIN="$(cat lean-toolchain)"
 # build_lake_tool NAME URL REV [TOOLCHAIN-OVERRIDE] TARGET → prints the source dir; builds once per SHA
 build_lake_tool() {
   local name=$1 url=$2 rev=$3 tc=$4 target=$5
-  local dir="$TOOLS/$name-$rev"
+  # A toolchain override is part of the build's identity: the directory persists across runs (a
+  # self-hosted runner's HOME), and an exporter built with the previous toolchain cannot read the
+  # new build's .olean files. So the override names the directory, alongside the SHA.
+  local dir="$TOOLS/$name-$rev${tc:+-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')}"
   if [ ! -f "$dir/.built" ]; then
     rm -rf "$dir"; mkdir -p "$TOOLS"
     git clone -q "$url" "$dir" >&2 && git -C "$dir" checkout -q "$rev" >&2 || return 1

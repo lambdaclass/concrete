@@ -5,6 +5,17 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      campaign:
+        # The CAMPAIGN TIER (ROADMAP promotion pipeline, stage (c)): the gate-mutation campaign
+        # (plan, 24 shards, aggregate), the differential fuzz campaigns, the clean-checkout proof
+        # replay and the multi-kernel mutation coverage. Off by default, so a dispatch of a
+        # candidate branch runs the LANDING TIER only. A qualification run sets it:
+        #   gh workflow run CI --ref <branch> -f campaign=true
+        description: "Also run the campaign tier (mutation campaign, fuzz, proof replay, multi-kernel mutation): stage (c) qualification"
+        type: boolean
+        required: false
+        default: false
   schedule:
     # Weekly clean-checkout proof replay (see the proof-replay job below).
     # The regular jobs also run, giving a weekly full-CI signal.
@@ -17,14 +28,16 @@ on:
 # Cancel a superseded push/PR run when a newer commit arrives — faster
 # feedback and less runner contention. NEVER cancel scheduled (cron) runs:
 # the weekly proof replay and nightly fuzz campaign must always complete.
+# A campaign dispatch gets its own group, so a landing-tier dispatch of the same ref neither waits
+# behind a multi-hour campaign run nor displaces a queued one.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}${{ inputs.campaign && '-campaign' || '' }}
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
   grammar:
     name: LL(1) grammar check
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,17 +68,17 @@ jobs:
 
       - name: Run C LL(1) checker
         run: |
-          cc -Wall -Wextra -Werror -O2 -o /tmp/check_ll1 scripts/check_ll1.c
-          /tmp/check_ll1 grammar/concrete.ebnf
+          cc -Wall -Wextra -Werror -O2 -o "$RUNNER_TEMP/check_ll1" scripts/check_ll1.c
+          "$RUNNER_TEMP/check_ll1" grammar/concrete.ebnf
 
       - name: Run Rust LL(1) checker
         run: |
-          rustc -O -o /tmp/check_ll1_rs scripts/check_ll1.rs
-          /tmp/check_ll1_rs grammar/concrete.ebnf
+          rustc -O -o "$RUNNER_TEMP/check_ll1_rs" scripts/check_ll1.rs
+          "$RUNNER_TEMP/check_ll1_rs" grammar/concrete.ebnf
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -110,11 +123,11 @@ jobs:
           fi
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
   main-tests:
     name: Main test suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -151,7 +164,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Run main test suite
         run: |
@@ -220,8 +233,9 @@ jobs:
     # Guarded to the WEEKLY cron so the nightly fuzz cron does not trigger it.
     # Crons run ONLY on the canonical public repo (lambdaclass/concrete) —
     # the working repo mirrors the tree, doubling nightly compute for nothing.
-    if: ((github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') && github.repository == 'lambdaclass/concrete') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # CAMPAIGN TIER: the weekly cron on main of the canonical repo, or a dispatch with campaign=true.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '17 4 * * 1') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -247,7 +261,7 @@ jobs:
           use-github-cache: false
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Run proof evidence gate (Lean kernel theorem checking)
         run: bash scripts/ci/proof_gate.sh
@@ -267,7 +281,7 @@ jobs:
     # consistency proof, and by nanoda, an independent Rust checker, from a lean4export of this
     # toolchain. Not on the nightly fuzz cron.
     if: github.event_name != 'schedule' || github.event.schedule == '17 4 * * 1'
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -314,8 +328,9 @@ jobs:
 
   fuzz-campaign:
     name: Nightly differential fuzz (rotating seed)
-    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -351,7 +366,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Fuzz campaign (date-derived seed, depth 3 + depth 4)
         run: |
@@ -382,8 +397,9 @@ jobs:
   # foreign or overlapping shard makes it completed=0 and fails the job.
   mutation-plan:
     name: Gate mutation plan (inventory, once)
-    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     env:
       # THE ONE PLACE THE SHARD COUNT IS SET. The matrix below is derived from it.
       MUTATION_SHARDS: 24
@@ -412,7 +428,7 @@ jobs:
   mutation-shard:
     name: Gate mutation shard ${{ matrix.shard }}
     needs: mutation-plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     # Below GitHub's 360 so the status and evidence upload still run inside the job.
     timeout-minutes: 345
     strategy:
@@ -454,7 +470,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       # The external re-check families run check_external_checker.sh, which builds the pinned tools
       # into this directory when they are absent.
@@ -499,7 +515,7 @@ jobs:
     # ALWAYS: a cancelled or failed shard must produce a REFUSED verdict, not a skipped job that
     # reads as nothing to report.
     if: always() && needs.mutation-plan.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -528,7 +544,7 @@ jobs:
 
   ssa-tests:
     name: SSA test suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -565,14 +581,14 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Run SSA test suite
         run: bash ./scripts/tests/test_ssa.sh
 
   trust-gate:
     name: Trust gate (correctness contracts)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     # A cap so a hung run releases the runner instead of burning the job's
     # full budget (this job has flaked with a bare exit — see the log
@@ -613,26 +629,26 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Run trust gate
         # Tee the full output so a flaky bare-exit failure leaves a diagnosable
         # log (the raw step log has been truncated on past flakes).
         run: |
           set -o pipefail
-          ./scripts/tests/run_tests.sh --trust-gate 2>&1 | tee /tmp/trust-gate.log
+          ./scripts/tests/run_tests.sh --trust-gate 2>&1 | tee "$RUNNER_TEMP/trust-gate.log"
 
       - name: Upload trust-gate log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: trust-gate-log
-          path: /tmp/trust-gate.log
+          path: ${{ runner.temp }}/trust-gate.log
           if-no-files-found: ignore
 
   proof-gate:
     name: Proof evidence gate
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -669,7 +685,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Run proof evidence gate
         run: bash scripts/ci/proof_gate.sh
@@ -791,9 +807,15 @@ jobs:
       - name: ObligationCore red-team gate (Phase 3 hardening)
         run: bash scripts/tests/check_obligation_redteam.sh
 
+  # LANGUAGE-SURFACE GATES, SPLIT FOUR WAYS. One job ran every gate below in sequence and took ~80
+  # minutes (run 39775852735), the longest job of the landing tier. The four jobs below each take
+  # ~20 minutes of gate time (measured per step on that run), and run in parallel after the build.
+  # Each is independent: no gate reads another gate's output, and the checker acceptance evidence
+  # step keeps its upload step in the same job. A job stops at its first failing gate, so a red gate
+  # in one split never hides the others.
   language-gates:
     name: Language-surface gates (Phase 5-6)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -830,7 +852,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: "Fast fail-closed surface gates (R-0022 — the single local/CI checklist; prints the exact failing constituent)"
         run: bash scripts/tests/run_fast_surface_gates.sh
@@ -843,108 +865,6 @@ jobs:
 
       - name: "Indirect-call identity (R-0002 / bug 050 — a callee VALUE is never resolved by global name; dispatch, interp agreement, no rewrite, std.io)"
         run: bash scripts/tests/check_indirect_call_identity.sh
-
-      - name: "Callable identity (R-0004 step 1 — CallableId is constructed from a resolved declaration, never recovered from text)"
-        run: bash scripts/tests/check_callable_identity.sh
-
-      # R-0004 EVIDENCE GATES. These were written alongside the scoped-identity work and every one of
-      # them was absent from this workflow, which is where the local runner derives its gate list —
-      # so the whole R-0004 evidence path was verified only by hand, and a fully green CI pass proved
-      # nothing about it. A gate nobody runs is indistinguishable from a gate that does not exist, and
-      # the absence is worse than a failure: the pass count keeps rising while coverage does not.
-      - name: "Replay producer (R-0004 — kernel replay is a typed producer; refusals are values, not exit codes)"
-        run: bash scripts/tests/check_replay_producer.sh
-
-      - name: "Receipt issuance (R-0004 — a successful replay is the ONLY authority that can mint a receipt)"
-        run: bash scripts/tests/check_receipt_issuance.sh
-
-      - name: "Receipt consumption (R-0004 — a stored receipt is untrusted input, re-checked against current facts)"
-        run: bash scripts/tests/check_receipt_consumption.sh
-
-      - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
-        run: bash scripts/tests/check_checker_identity.sh
-
-      - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
-        run: bash scripts/tests/check_kernel_recheck.sh
-
-      - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
-        run: bash scripts/tests/check_checker_policy.sh
-
-      - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
-        run: bash scripts/tests/check_lean14576_reproducer.sh
-
-      - name: "Claim inventory (R-0208 — the frozen claim inventory replays row by row; the local twin of the acceptance step's judgement)"
-        run: bash scripts/tests/check_claim_inventory.sh
-
-      # The evidence a measured checker build needs before its digest may be registered (R-0208),
-      # SELF-CONTAINED: the identity, the hostile controls re-run with their logs (and tied to that
-      # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
-      - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
-        run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
-
-      - name: "Upload checker acceptance evidence"
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: checker-acceptance-${{ runner.os }}
-          path: ${{ runner.temp }}/checker-acceptance
-          if-no-files-found: warn
-
-      - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
-        run: bash scripts/tests/check_v2_migration_plan.sh
-
-      - name: "Clean-checkout reproducibility (R-0004 — evidence does not depend on the working tree or the invocation directory)"
-        run: bash scripts/tests/check_clean_checkout.sh
-
-      - name: "Build identity freshness (R-0004 — the embedded compiler identity matches what the sources produce)"
-        run: bash scripts/tests/check_build_identity_freshness.sh
-
-      - name: "Slice 8 adversarial (R-0004 — every registered attack on the receipt path, each paired with a positive control)"
-        run: bash scripts/tests/check_slice8_adversarial.sh
-
-      - name: "Attestation manifest + generated-reference freshness (R-0004 — the tracked generated surface is re-derived and compared)"
-        run: bash scripts/tests/check_attestation_manifest.sh
-
-      - name: "Attestation reference order (the byte-for-byte comparison above is a function of content, not of enumeration order)"
-        run: bash scripts/tests/check_attestation_refs_order.sh
-
-      # PRE-EXISTING GATES THAT WERE ALSO MISSING. `check_snapshots.sh` was reachable only from the
-      # Makefile and as an opaque nested sub-result of two obligation-view gates, so its 11 real
-      # drifts surfaced as a one-line "snapshot gate failed" with the diff written to /tmp.
-      # `check_v1_fingerprint_golden.sh` was invoked only by the convergence inventory, which
-      # discarded its stderr and read its silence as "inconclusive".
-      - name: "Snapshot baselines (every examples/*/snapshot/ report is byte-identical)"
-        run: bash scripts/tests/check_snapshots.sh
-
-      - name: "V1 fingerprint golden (the frozen V1 body-fingerprint corpus does not move under V2)"
-        run: bash scripts/tests/check_v1_fingerprint_golden.sh
-
-      # GATES THAT NOTHING RAN. Three of these appeared in the Makefile only, and three were
-      # referenced by nothing anywhere in the repository — not the workflow, not the Makefile, not
-      # another gate. The two that matter most are the meta-gates: check_one_producer enforces that
-      # a fact has a single authoritative producer, and check_gate_vacuity catches assertions that
-      # pass because they measure nothing. Both encode the discipline the rest of this suite is
-      # written to, and neither was running.
-      - name: "One producer (a fact has one authoritative producer; reconciliation copies are the defect)"
-        run: bash scripts/tests/check_one_producer.sh
-
-      - name: "Gate vacuity (an assertion that passes because it measures nothing is not a gate)"
-        run: bash scripts/tests/check_gate_vacuity.sh
-
-      - name: "Coverage baseline (proved/eligible and the exact unproved dispositions, pinned)"
-        run: bash scripts/tests/check_coverage_baseline.sh
-
-      - name: "Bool kernel (boolean decision procedure agreement)"
-        run: bash scripts/tests/check_bool_kernel.sh
-
-      - name: "Table migration (proof tables convert without changing what they attest)"
-        run: bash scripts/tests/check_table_migration.sh
-
-      - name: "VCgen diff (verification-condition generation is stable across the refactor)"
-        run: bash scripts/tests/check_vcgen_diff.sh
-
-      - name: "Dependency edges (per-edge justification, scoped joins, and the classification vocabulary)"
-        run: bash scripts/tests/check_dependency_edges.sh
 
       # AND THE RULE THAT KEEPS THIS FROM RECURRING. Every check_*.sh must be reachable from CI or
       # explicitly declared as a skip with a reason. A gate nobody runs is indistinguishable from a
@@ -959,18 +879,6 @@ jobs:
       - name: "Pre-push validation record (reused only when every bound input matches)"
         run: bash scripts/tests/check_prepush_record.sh
 
-      # REGISTERED 2026-09-02. These gates existed, passed, and were run by nothing. The registration
-      # gate reported them reachable because their names appeared somewhere in a file CI runs — for
-      # check_classification_freshness.sh, inside a comment saying the gate runs elsewhere.
-      - name: "Classification freshness (the checked-in theorem inventory and table match their canonical producer)"
-        run: bash scripts/tests/check_classification_freshness.sh
-
-      - name: "Migration manifest (every source proof link has one owned, deterministic migration row)"
-        run: bash scripts/tests/check_migration_manifest.sh
-
-      - name: "Assumptions ledger (declared assumptions match the recorded set)"
-        run: bash scripts/tests/check_assumptions.sh
-
       - name: "Builtin enum ownership (one owner computes the list and the result flag)"
         run: bash scripts/tests/check_builtin_enum_owner.sh
 
@@ -979,81 +887,6 @@ jobs:
 
       - name: "Stack budget fails closed (an unbounded stack is never a number; bug 065)"
         run: bash scripts/tests/check_stack_budget.sh
-
-      - name: "Evidence reproducibility (retained evidence regenerates to the same digests)"
-        run: bash scripts/tests/check_evidence_reproducibility.sh
-
-      - name: "Subject facts (identity-threaded facts; v1 values become needs_recheck)"
-        run: bash scripts/tests/check_subject_facts.sh
-
-      - name: "Identity freeze (the pre-migration attestation population is pinned)"
-        run: bash scripts/tests/check_identity_freeze.sh
-
-      - name: "Identity over-binding (R-0482 positive controls: std/sibling edits move artifact or context, never scope)"
-        run: bash scripts/tests/check_identity_overbinding.sh
-
-      - name: "Identity rows (R-0482 — the canonical rows the migration reproduced; unused std edits rename nothing)"
-        run: bash scripts/tests/check_identity_rows.sh
-
-      - name: "Identity separation (R-0482 — reachable vs context edits, tagged origins, D1/D5/D6, the map, old bytes)"
-        run: bash scripts/tests/check_identity_separation.sh
-
-      - name: "Subject binding (bug 079 — a claim is proved only when its body and parameters ARE its theorem's specification)"
-        run: bash scripts/tests/check_subject_binding.sh
-
-      - name: "Model vs runtime (bug 080 — the extracted proof model and the interpreter compute the same values)"
-        run: bash scripts/tests/check_model_diff.sh
-
-      - name: "Match guard effects (bug 066 — a guard's effects are observable and identical under interp and compiled)"
-        run: bash scripts/tests/check_match_guard_effects.sh
-
-      - name: "Convergence inventory (every recorded R-0004 / multi-prover gap, machine-checked)"
-        run: bash scripts/tests/check_convergence_inventory.sh
-
-      - name: "Bug filing completeness (a bug needs a document, a corpus entry, and coverage)"
-        run: bash scripts/tests/check_bug_filing_complete.sh
-
-      - name: "Evidence builders (R-0004 — semantic decisions tested before the producer cutover)"
-        run: bash scripts/tests/check_evidence_build.sh
-
-      - name: "Evidence tree (R-0004 — typed evidence IR: nesting representable, gaps mandatory, no bound names)"
-        run: bash scripts/tests/check_evidence_tree.sh
-
-      - name: "Identity-use bytes (R-0004 — flat typed-use serialization; NOT the body canonical form)"
-        run: bash scripts/tests/check_identity_use_bytes.sh
-
-      - name: "Shadow body V2 (R-0004 — structural body digest reaches the report and nothing authoritative; coverage ratchet)"
-        run: bash scripts/tests/check_shadow_body_v2.sh
-
-      - name: "Mutation anchors (every MUT_OLD still exists in its file — the harness itself is not run in CI)"
-        run: bash scripts/tests/check_mutation_anchors.sh
-
-      - name: "Wired definitions (evidence-layer code with no consumer is a fact nobody checks)"
-        run: bash scripts/tests/check_wired_definitions.sh
-
-      - name: "Binder refs (R-0004 — elaboration emits relative lexical positions; empty scopes, binding timing, uncovered fallback)"
-        run: bash scripts/tests/check_binder_refs.sh
-
-      - name: "Body scope (R-0004 — scoped lexical binder frames: relative positions, shadowing, refusal)"
-        run: bash scripts/tests/check_body_scope.sh
-
-      - name: "Subject coverage (R-0004 — corpus inventory of which declarations can produce a subject digest, grouped by cause)"
-        run: bash scripts/tests/check_subject_coverage.sh
-
-      - name: "Type identity (R-0004 V2 input — aliases, transport, nesting, builtins, and Elab use sites)"
-        run: bash scripts/tests/check_type_identity.sh
-
-      - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
-        run: bash scripts/tests/check_fnptr_values.sh
-
-      - name: "HashMap probe invariants (R-0003 / bugs 047+048 — no duplicate past a tombstone; missing-key lookup always terminates; reference-map oracle)"
-        run: bash scripts/tests/check_hashmap_probe_invariants.sh
-
-      - name: "Builtin layout sizes (bug 057 — hardcoded sizes match the std declarations they describe)"
-        run: bash scripts/tests/check_builtin_layout_sizes.sh
-
-      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
-        run: bash scripts/tests/check_generic_enum_inventory.sh
 
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
         run: bash scripts/tests/check_project_model.sh
@@ -1346,9 +1179,9 @@ jobs:
       - name: Memory-model gate (Phase 6 #33 — no uninitialized reads by construction)
         run: bash scripts/tests/check_memory_model.sh
 
-  infra-gates:
-    name: Compiler-infra gates (ledger, diagnostics, codegen, CLI, known holes)
-    runs-on: ubuntu-latest
+  receipt-gates:
+    name: Receipt-path gates (R-0004 replay, receipts, attestation)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1385,7 +1218,318 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: "Callable identity (R-0004 step 1 — CallableId is constructed from a resolved declaration, never recovered from text)"
+        run: bash scripts/tests/check_callable_identity.sh
+
+      # R-0004 EVIDENCE GATES. These were written alongside the scoped-identity work and every one of
+      # them was absent from this workflow, which is where the local runner derives its gate list —
+      # so the whole R-0004 evidence path was verified only by hand, and a fully green CI pass proved
+      # nothing about it. A gate nobody runs is indistinguishable from a gate that does not exist, and
+      # the absence is worse than a failure: the pass count keeps rising while coverage does not.
+      - name: "Replay producer (R-0004 — kernel replay is a typed producer; refusals are values, not exit codes)"
+        run: bash scripts/tests/check_replay_producer.sh
+
+      - name: "Receipt issuance (R-0004 — a successful replay is the ONLY authority that can mint a receipt)"
+        run: bash scripts/tests/check_receipt_issuance.sh
+
+      - name: "Receipt consumption (R-0004 — a stored receipt is untrusted input, re-checked against current facts)"
+        run: bash scripts/tests/check_receipt_consumption.sh
+
+      - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
+        run: bash scripts/tests/check_v2_migration_plan.sh
+
+      - name: "Clean-checkout reproducibility (R-0004 — evidence does not depend on the working tree or the invocation directory)"
+        run: bash scripts/tests/check_clean_checkout.sh
+
+      - name: "Build identity freshness (R-0004 — the embedded compiler identity matches what the sources produce)"
+        run: bash scripts/tests/check_build_identity_freshness.sh
+
+      - name: "Slice 8 adversarial (R-0004 — every registered attack on the receipt path, each paired with a positive control)"
+        run: bash scripts/tests/check_slice8_adversarial.sh
+
+      - name: "Attestation manifest + generated-reference freshness (R-0004 — the tracked generated surface is re-derived and compared)"
+        run: bash scripts/tests/check_attestation_manifest.sh
+
+      - name: "Attestation reference order (the byte-for-byte comparison above is a function of content, not of enumeration order)"
+        run: bash scripts/tests/check_attestation_refs_order.sh
+
+      # PRE-EXISTING GATES THAT WERE ALSO MISSING. `check_snapshots.sh` was reachable only from the
+      # Makefile and as an opaque nested sub-result of two obligation-view gates, so its 11 real
+      # drifts surfaced as a one-line "snapshot gate failed" with the diff written to /tmp.
+      # `check_v1_fingerprint_golden.sh` was invoked only by the convergence inventory, which
+      # discarded its stderr and read its silence as "inconclusive".
+      - name: "Snapshot baselines (every examples/*/snapshot/ report is byte-identical)"
+        run: bash scripts/tests/check_snapshots.sh
+
+      - name: "V1 fingerprint golden (the frozen V1 body-fingerprint corpus does not move under V2)"
+        run: bash scripts/tests/check_v1_fingerprint_golden.sh
+
+  checker-gates:
+    name: Checker-identity gates (R-0208)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: "Checker identity (R-0208 — a receipt binds the checker that actually ran, by its loaded images)"
+        run: bash scripts/tests/check_checker_identity.sh
+
+      - name: "Kernel re-check (R-0208 — a receipt mints only for a theorem the kernel re-checked in the run)"
+        run: bash scripts/tests/check_kernel_recheck.sh
+
+      - name: "Checker policy (R-0208 — the advisory register decides beside currency; a change re-evaluates, never invalidates)"
+        run: bash scripts/tests/check_checker_policy.sh
+
+      - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
+        run: bash scripts/tests/check_lean14576_reproducer.sh
+
+      - name: "Claim inventory (R-0208 — the frozen claim inventory replays row by row; the local twin of the acceptance step's judgement)"
+        run: bash scripts/tests/check_claim_inventory.sh
+
+      # The evidence a measured checker build needs before its digest may be registered (R-0208),
+      # SELF-CONTAINED: the identity, the hostile controls re-run with their logs (and tied to that
+      # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
+      - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
+        run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
+
+      - name: "Upload checker acceptance evidence"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/checker-acceptance
+          if-no-files-found: warn
+
+  evidence-gates:
+    name: Evidence-identity gates (R-0004 / R-0482)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      # GATES THAT NOTHING RAN. Three of these appeared in the Makefile only, and three were
+      # referenced by nothing anywhere in the repository — not the workflow, not the Makefile, not
+      # another gate. The two that matter most are the meta-gates: check_one_producer enforces that
+      # a fact has a single authoritative producer, and check_gate_vacuity catches assertions that
+      # pass because they measure nothing. Both encode the discipline the rest of this suite is
+      # written to, and neither was running.
+      - name: "One producer (a fact has one authoritative producer; reconciliation copies are the defect)"
+        run: bash scripts/tests/check_one_producer.sh
+
+      - name: "Gate vacuity (an assertion that passes because it measures nothing is not a gate)"
+        run: bash scripts/tests/check_gate_vacuity.sh
+
+      - name: "Coverage baseline (proved/eligible and the exact unproved dispositions, pinned)"
+        run: bash scripts/tests/check_coverage_baseline.sh
+
+      - name: "Bool kernel (boolean decision procedure agreement)"
+        run: bash scripts/tests/check_bool_kernel.sh
+
+      - name: "Table migration (proof tables convert without changing what they attest)"
+        run: bash scripts/tests/check_table_migration.sh
+
+      - name: "VCgen diff (verification-condition generation is stable across the refactor)"
+        run: bash scripts/tests/check_vcgen_diff.sh
+
+      - name: "Dependency edges (per-edge justification, scoped joins, and the classification vocabulary)"
+        run: bash scripts/tests/check_dependency_edges.sh
+
+      # REGISTERED 2026-09-02. These gates existed, passed, and were run by nothing. The registration
+      # gate reported them reachable because their names appeared somewhere in a file CI runs — for
+      # check_classification_freshness.sh, inside a comment saying the gate runs elsewhere.
+      - name: "Classification freshness (the checked-in theorem inventory and table match their canonical producer)"
+        run: bash scripts/tests/check_classification_freshness.sh
+
+      - name: "Migration manifest (every source proof link has one owned, deterministic migration row)"
+        run: bash scripts/tests/check_migration_manifest.sh
+
+      - name: "Assumptions ledger (declared assumptions match the recorded set)"
+        run: bash scripts/tests/check_assumptions.sh
+
+      - name: "Evidence reproducibility (retained evidence regenerates to the same digests)"
+        run: bash scripts/tests/check_evidence_reproducibility.sh
+
+      - name: "Subject facts (identity-threaded facts; v1 values become needs_recheck)"
+        run: bash scripts/tests/check_subject_facts.sh
+
+      - name: "Identity freeze (the pre-migration attestation population is pinned)"
+        run: bash scripts/tests/check_identity_freeze.sh
+
+      - name: "Identity over-binding (R-0482 positive controls: std/sibling edits move artifact or context, never scope)"
+        run: bash scripts/tests/check_identity_overbinding.sh
+
+      - name: "Identity rows (R-0482 — the canonical rows the migration reproduced; unused std edits rename nothing)"
+        run: bash scripts/tests/check_identity_rows.sh
+
+      - name: "Identity separation (R-0482 — reachable vs context edits, tagged origins, D1/D5/D6, the map, old bytes)"
+        run: bash scripts/tests/check_identity_separation.sh
+
+      - name: "Subject binding (bug 079 — a claim is proved only when its body and parameters ARE its theorem's specification)"
+        run: bash scripts/tests/check_subject_binding.sh
+
+      - name: "Model vs runtime (bug 080 — the extracted proof model and the interpreter compute the same values)"
+        run: bash scripts/tests/check_model_diff.sh
+
+      - name: "Match guard effects (bug 066 — a guard's effects are observable and identical under interp and compiled)"
+        run: bash scripts/tests/check_match_guard_effects.sh
+
+      - name: "Convergence inventory (every recorded R-0004 / multi-prover gap, machine-checked)"
+        run: bash scripts/tests/check_convergence_inventory.sh
+
+      - name: "Bug filing completeness (a bug needs a document, a corpus entry, and coverage)"
+        run: bash scripts/tests/check_bug_filing_complete.sh
+
+      - name: "Evidence builders (R-0004 — semantic decisions tested before the producer cutover)"
+        run: bash scripts/tests/check_evidence_build.sh
+
+      - name: "Evidence tree (R-0004 — typed evidence IR: nesting representable, gaps mandatory, no bound names)"
+        run: bash scripts/tests/check_evidence_tree.sh
+
+      - name: "Identity-use bytes (R-0004 — flat typed-use serialization; NOT the body canonical form)"
+        run: bash scripts/tests/check_identity_use_bytes.sh
+
+      - name: "Shadow body V2 (R-0004 — structural body digest reaches the report and nothing authoritative; coverage ratchet)"
+        run: bash scripts/tests/check_shadow_body_v2.sh
+
+      - name: "Mutation anchors (every MUT_OLD still exists in its file — the harness itself is not run in CI)"
+        run: bash scripts/tests/check_mutation_anchors.sh
+
+      - name: "Wired definitions (evidence-layer code with no consumer is a fact nobody checks)"
+        run: bash scripts/tests/check_wired_definitions.sh
+
+      - name: "Binder refs (R-0004 — elaboration emits relative lexical positions; empty scopes, binding timing, uncovered fallback)"
+        run: bash scripts/tests/check_binder_refs.sh
+
+      - name: "Body scope (R-0004 — scoped lexical binder frames: relative positions, shadowing, refusal)"
+        run: bash scripts/tests/check_body_scope.sh
+
+      - name: "Subject coverage (R-0004 — corpus inventory of which declarations can produce a subject digest, grouped by cause)"
+        run: bash scripts/tests/check_subject_coverage.sh
+
+      - name: "Type identity (R-0004 V2 input — aliases, transport, nesting, builtins, and Elab use sites)"
+        run: bash scripts/tests/check_type_identity.sh
+
+      - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
+        run: bash scripts/tests/check_fnptr_values.sh
+
+      - name: "HashMap probe invariants (R-0003 / bugs 047+048 — no duplicate past a tombstone; missing-key lookup always terminates; reference-map oracle)"
+        run: bash scripts/tests/check_hashmap_probe_invariants.sh
+
+      - name: "Builtin layout sizes (bug 057 — hardcoded sizes match the std declarations they describe)"
+        run: bash scripts/tests/check_builtin_layout_sizes.sh
+
+      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
+        run: bash scripts/tests/check_generic_enum_inventory.sh
+  infra-gates:
+    name: Compiler-infra gates (ledger, diagnostics, codegen, CLI, known holes)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache the Lean toolchain (~/.elan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
         run: bash scripts/tests/check_compiler_ledger.sh
@@ -1456,7 +1600,7 @@ jobs:
   # (runs 37765122450, 37919034661). Separate jobs give each its own budget; all stay required.
   campaign-mint-batch:
     name: Campaign gates (mint-batch accounting)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1493,14 +1637,14 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Mint-batch accounting gate (the batch reconciliation controls, actually run)
         run: bash scripts/tests/check_mint_batch_accounting.sh
 
   campaign-publisher:
     name: Campaign gates (missing-result refusal, summary golden)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1537,7 +1681,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Mint missing-result refusal (the single case the mutation family covers)
         run: bash scripts/tests/check_mint_missing_result.sh
@@ -1557,7 +1701,7 @@ jobs:
 
   thesis-evidence:
     name: Thesis evidence smoke test
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1594,32 +1738,32 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       - name: Check thesis demo reports
         run: |
           BIN=".lake/build/bin/concrete"
 
-          "$BIN" examples/thesis_demo/src/main.con --report effects | tee /tmp/effects.txt
-          grep -q 'Evidence: 2 proved' /tmp/effects.txt
-          grep -q 'evidence: proved' /tmp/effects.txt
+          "$BIN" examples/thesis_demo/src/main.con --report effects | tee "$RUNNER_TEMP/effects.txt"
+          grep -q 'Evidence: 2 proved' "$RUNNER_TEMP/effects.txt"
+          grep -q 'evidence: proved' "$RUNNER_TEMP/effects.txt"
 
-          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee /tmp/proof-status.txt
-          grep -q '2 proved' /tmp/proof-status.txt
-          grep -q 'proof matches current body' /tmp/proof-status.txt
+          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee "$RUNNER_TEMP/proof-status.txt"
+          grep -q '2 proved' "$RUNNER_TEMP/proof-status.txt"
+          grep -q 'proof matches current body' "$RUNNER_TEMP/proof-status.txt"
 
           # The thesis demo intentionally has a predictable core and an I/O entrypoint.
           set +e
-          "$BIN" examples/thesis_demo/src/main.con --check predictable > /tmp/predictable.txt
+          "$BIN" examples/thesis_demo/src/main.con --check predictable > "$RUNNER_TEMP/predictable.txt"
           rc=$?
           set -e
           test "$rc" -eq 1
-          grep -q 'predictable profile: FAIL' /tmp/predictable.txt
-          grep -q 'may block' /tmp/predictable.txt
+          grep -q 'predictable profile: FAIL' "$RUNNER_TEMP/predictable.txt"
+          grep -q 'may block' "$RUNNER_TEMP/predictable.txt"
 
   examples:
     name: Examples (manifest coverage)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1656,7 +1800,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang and valgrind
-        run: sudo apt-get update && sudo apt-get install -y clang valgrind
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null && command -v valgrind >/dev/null; then echo "self-hosted runner, using preinstalled clang valgrind"; else sudo apt-get update && sudo apt-get install -y clang valgrind; fi
 
       - name: Install PyYAML (check_examples.sh reads the workflow to verify skip owners)
         run: python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
@@ -1668,7 +1812,7 @@ jobs:
         # skip). A skip must name an owning gate CI runs that references the
         # file, and a reason; the gate's negative controls prove an unowned skip
         # and an unlisted .con both fail.
-        run: EXAMPLES_OUT_DIR=/tmp/concrete_examples_out bash ./scripts/tests/check_examples.sh
+        run: EXAMPLES_OUT_DIR=${RUNNER_TEMP:-/tmp}/concrete_examples_out bash ./scripts/tests/check_examples.sh
 
       - name: Check example outputs (native and interpreter)
         # Replaces the old smoke step, which ran binaries with no input, failed
@@ -1683,7 +1827,7 @@ jobs:
 
   extra-gates:
     name: Extra gates (dark-gate wiring, audit 2026-07-16)
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -1720,7 +1864,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
       # These gates had Makefile targets but zero CI coverage ("dark gates") —
       # test_wrong_code was already silently red (WC-0005's stale expectation)
@@ -1795,7 +1939,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
       contains(github.event.pull_request.labels.*.name, 'multi-kernel')
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -1837,7 +1981,7 @@ jobs:
       # source and needs two extra rebuilds. Opt-in plus label-gated meant approximately
       # never. Scheduled runs can afford it, so that is where it lives.
       - name: Multi-kernel mutation coverage (scheduled only — mutates source, 2 rebuilds)
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
         env:
           MULTI_KERNEL_MUTATE: "1"
         run: nix develop .#provers --command bash ./scripts/tests/check_multi_kernel.sh

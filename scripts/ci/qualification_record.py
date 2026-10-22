@@ -23,8 +23,11 @@ name REFUSE (exit 2) rather than shrinking the requirement set.
 Input: exactly ONE GitHub run record, fetched (`--run ID`, via `gh run view`) or read (`--run-json
 FILE`, the same JSON: attempt, databaseId, headSha, event, status, conclusion,
 jobs[].name/status/conclusion, jobs[].steps[].name/status/conclusion). It must be the first attempt of
-a `workflow_dispatch` run (the only event that starts every job; scheduled runs skip each other's
-jobs, and a rerun can hide a failure at the candidate), completed and successful at the candidate
+a `workflow_dispatch` run dispatched with `campaign=true` (the only event that starts every job;
+scheduled runs skip each other's jobs, a dispatch without the campaign input skips the campaign tier,
+and a rerun can hide a failure at the candidate). The run record does not carry the dispatch inputs,
+so a dispatch without `campaign=true` is refused by its skipped campaign jobs, not by reading the
+input), completed and successful at the candidate
 SHA, with every required job instance exactly once and every required step exactly once, completed
 and successful. Partial runs are never combined.
 
@@ -59,7 +62,10 @@ STEP_CONDITIONS = {
     "true": "required",
     "success()": "required",
     "always()": "required",
-    "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'": "required",
+    # The campaign tier's step condition (the multi-kernel mutation coverage). A qualification run is a
+    # dispatch with campaign=true, so the step is required; a dispatch without it skips the campaign
+    # JOBS too, and those skipped jobs already refuse the verdict.
+    "(github.event_name == 'schedule' && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)": "required",
     "false": "optional",
     "failure()": "optional",
     "steps.lean_install.outcome == 'failure'": "optional",
@@ -277,7 +283,7 @@ def main():
         reasons.append(f"run {rid} concluded {r.get('conclusion') or 'nothing'}, not success")
     if r.get("event") != "workflow_dispatch":
         reasons.append(f"run {rid} is a {r.get('event') or 'unknown'} run; only a workflow_dispatch "
-                       "run starts every required job")
+                       "run (with campaign=true) starts every required job")
     if r.get("attempt") != 1:
         reasons.append(f"run {rid} is attempt {r.get('attempt')}; a rerun can hide a failure at the "
                        "candidate, so only a first attempt qualifies")

@@ -32,7 +32,8 @@ _ids="$(awk -F'\t' '$1=="job"{print $2}' "$TMP/req" | sort -u | grep -c . || tru
 _wf="$(awk '/^jobs:/{j=1;next} j&&/^[^ #]/{j=0} j&&/^  [A-Za-z0-9_-]+:[[:space:]]*(#.*)?$/{n++} END{print n+0}' "$WF")"
 [ "$_ids" = "$_wf" ] && [ "$_ids" -gt 0 ] && ok "required job ids ($_ids) equal the workflow's job headers ($_wf)" \
   || no "required job ids $_ids vs workflow job headers $_wf"
-for j in proof-replay fuzz-campaign multi-kernel mutation-aggregate mutation-shard main-tests external-checker ssa-tests; do
+for j in proof-replay fuzz-campaign multi-kernel mutation-aggregate mutation-shard main-tests external-checker ssa-tests \
+         language-gates receipt-gates checker-gates evidence-gates; do
   grep -q "^job	$j	" "$TMP/req" && ok "$j is required" || no "$j is not required"
 done
 _shards="$(grep -c '^job	mutation-shard	' "$TMP/req" || true)"
@@ -203,6 +204,19 @@ elif v == "split-second-half":
 elif v == "no-steps":
     for j in jobs:
         j["steps"] = []
+elif v == "landing-only-dispatch":
+    # A dispatch WITHOUT campaign=true: the landing tier ran and passed, the campaign tier was
+    # skipped (GitHub reports a skipped matrix job once, under its unexpanded name).
+    for jid in ("proof-replay", "fuzz-campaign", "mutation-plan", "mutation-aggregate"):
+        for j in job(jid):
+            j["conclusion"] = "skipped"; j["steps"] = []
+    unexpanded = json.loads(json.dumps(job("mutation-shard")[0]))
+    for j in job("mutation-shard"):
+        jobs.remove(j)
+    unexpanded["name"] = "Gate mutation shard ${{ matrix.shard }}"
+    unexpanded["conclusion"] = "skipped"; unexpanded["steps"] = []
+    jobs.append(unexpanded)
+    step("multi-kernel", "Multi-kernel mutation coverage (scheduled only — mutates source, 2 rebuilds)")["conclusion"] = "skipped"
 elif v == "only-mutation":
     run["jobs"] = [j for j in jobs if j["_id"].startswith("mutation-")]
 elif v != "honest":
@@ -240,6 +254,7 @@ echo "=== negative controls: each must not qualify ==="
 for v in cancelled failed-fuzz skipped missing no-shards one-shard-missing only-first-shard duplicate-shard \
          unexpected-shard shard-failed other-sha in-progress run-cancelled job-in-progress step-skipped \
          gate-step-omitted gate-step-skipped gate-step-failed no-steps only-mutation push-event rerun-attempt \
+         landing-only-dispatch \
          duplicate-step step-status-absent step-status-null step-status-empty split-first-half split-second-half; do
   mk "$v" "$TMP/$v.json"
   verdict 1 "$v: not qualified" "$TMP/$v.json"
