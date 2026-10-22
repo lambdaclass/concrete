@@ -66,7 +66,14 @@ for mut, why in [
         (lambda r: r["metrics"]["compile.lox.wall_ms"].update(unit="parsecs"), "unknown unit"),
         (lambda r: r["metrics"]["compile.lox.wall_ms"].update(lo=10 ** 9), "lo > median"),
         (lambda r: r["metrics"].update({"nodots": {"unit": "ms", "median": 1, "lo": 1, "hi": 1, "n": 1}}), "bad metric name"),
-        (lambda r: r.pop("suite_version"), "missing suite_version")]:
+        (lambda r: r.pop("suite_version"), "missing suite_version"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].update(n=-4, samples=["bad"]), "negative n, non-numeric samples"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].update(n=2.5), "fractional n"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].update(hi=float("inf")), "infinite hi"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].pop("samples"), "missing samples"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].update(median=r["metrics"]["compile.lox.wall_ms"]["lo"]),
+         "median disagrees with samples"),
+        (lambda r: r["metrics"]["compile.lox.wall_ms"].update(n=4), "n disagrees with the sample count")]:
     r = copy.deepcopy(good)
     mut(r)
     try:
@@ -145,9 +152,43 @@ for k, r in enumerate(noisy):
 check(perflib.detect(noisy, mk(93, 2000.0, 0.0, rnd, n=1))["metrics"]["compile.p.wall_ms"]["verdict"] == "too_noisy",
       "a metric whose history spread exceeds max_band is reported too_noisy, never alarmed")
 
+# Verdicts beyond regression.
+base = [mk(i, 1000.0, 0.01, rnd) for i in range(6)]
+bf = mk(90, 1000.0, 0.01, rnd); bf["status"] = "build_failed"; bf["metrics"] = {}
+check(perflib.detect(base, bf)["verdict"] == "build_failed", "a build-failed record's verdict is build_failed, not ok")
+gone = mk(91, 1000.0, 0.01, rnd); gone["metrics"] = {}
+sg = perflib.detect(base, gone)
+check(sg["verdict"] == "incomplete" and sg["missing"] == ["compile.p.wall_ms"],
+      "a metric that disappeared makes the verdict incomplete and is named")
+part = mk(92, 1000.0, 0.01, rnd); part["status"] = "partial"
+check(perflib.detect(base, part)["verdict"] == "incomplete", "a partial record is incomplete, not ok")
+zero = [mk(i, 0.0, 0.0, rnd) for i in range(6)]
+check(perflib.detect(zero, mk(89, 100.0, 0.0, rnd))["regressions"] == ["compile.p.wall_ms"],
+      "a 0 ms baseline that becomes 100 ms is a regression (absolute floor, no ratio)")
+check(not perflib.detect(zero, mk(88, 10.0, 0.0, rnd))["regressions"], "0 -> 10 ms stays under the 25 ms floor")
+check(perflib.detect(base, mk(87, 1000.0, 0.01, rnd))["verdict"] == "ok", "a quiet commit with history is ok")
+
+# Contamination verdict (pure).
+import importlib.util
+spec = importlib.util.spec_from_file_location("suite", sys.argv[1] + "/suite.py")
+suite = importlib.util.module_from_spec(spec); spec.loader.exec_module(suite)
+q = {"heavy": [], "running": 0, "idle_running": 30, "load1": 1.0}
+check(suite.contamination([q] * 10, 0, 8)[0] is False, "contamination: idle-priority load alone is clean")
+check(suite.contamination([dict(q, running=64)] + [q] * 99, 0, 8)[0] is True,
+      "contamination: one burst of 64 runnable threads among 99 quiet samples is caught")
+check(suite.contamination([dict(q, heavy=["Runner.Worker"])] + [q] * 9, 0, 8)[0] is True,
+      "contamination: one sample with a CI job is caught")
+check(suite.contamination([], 0, 8)[0] is True and suite.contamination([q, q], 1, 8)[0] is True,
+      "contamination: no samples or a sampling error fails closed")
+check(suite.contamination([dict(q, running=9)] * 10, 0, 8)[0] is True,
+      "contamination: sustained foreign load above the limit is caught")
+
 # 3. bisect selection
-check(perflib.classify(1900, 1000, 2000) == "bad" and perflib.classify(1400, 1000, 2000) == "good",
-      "midpoint rule: nearer the bad value is bad")
+lim = perflib.regression_limit(1000.0, 0.03, 0.05, "ms")
+check(abs(lim - 1000.0 * 1.03 * 1.05) < 1e-6 and perflib.regression_limit(0.0, 0.03, 0.05, "ms") == 25.0,
+      "regression_limit: relative band over a positive value, absolute floor over zero")
+check(perflib.classify(1100, lim) == "bad" and perflib.classify(1050, lim) == "good",
+      "classify: above the detector's alarm line is bad")
 worst = 0
 allok = True
 for n in (2, 3, 5, 17, 64):
@@ -157,7 +198,7 @@ for n in (2, 3, 5, 17, 64):
         def measure(sha):
             seen.append(sha)
             return 2000.0 if commits.index(sha) >= culprit else 1000.0
-        got, cands, probes = perflib.bisect(commits, measure, 1000.0, 2000.0)
+        got, cands, probes = perflib.bisect(commits, measure, lim)
         bound = math.ceil(math.log2(max(n - 1, 1))) + 2
         worst = max(worst, len(probes))
         if got != commits[culprit] or len(probes) > bound or commits[0] in seen or commits[-1] in seen:
@@ -170,14 +211,18 @@ def measure(sha):
     if sha in unbuildable:
         return None
     return 2000.0 if commits.index(sha) >= 5 else 1000.0
-got, cands, _ = perflib.bisect(commits, measure, 1000.0, 2000.0)
+got, cands, _ = perflib.bisect(commits, measure, lim)
 check(got is None and cands == ["c05", "c06"], "bisect: an unbuildable culprit widens to the candidate range [c05, c06] (%s %s)" % (got, cands))
 def measure2(sha):
     if sha == "c03":
         return None
     return 2000.0 if commits.index(sha) >= 6 else 1000.0
-got, cands, _ = perflib.bisect(commits, measure2, 1000.0, 2000.0)
+got, cands, _ = perflib.bisect(commits, measure2, lim)
 check(got == "c06", "bisect: an unbuildable commit away from the culprit is skipped (%s)" % got)
+steps = {"c00": 1000, "c01": 1000, "c02": 1300, "c03": 1300, "c04": 1600, "c05": 1600, "c06": 2000}
+order = sorted(steps)
+got, _, _ = perflib.bisect(order, lambda sha: steps[sha], perflib.regression_limit(1000.0, 0.03, 0.05, "ms"))
+check(got == "c02", "bisect: a staged slowdown 1000 -> 1300 -> 1600 -> 2000 names the first step past the alarm line (%s)" % got)
 step = perflib.next_probe(["g", "b"], {})
 check(step[0] == "done" and step[1] == "b", "bisect: adjacent good/bad names bad directly")
 sys.exit(1 if fails else 0)
@@ -203,7 +248,7 @@ while IFS= read -r line; do
 done < "$FIX"
 REC="$D/data/fixture-1/records.jsonl"
 [ "$(wc -l < "$REC" | tr -d ' ')" = 15 ] && ok "append: data/<machine>/records.jsonl has one line per commit (15)" || no "records.jsonl line count"
-[ "$(G log --oneline | wc -l | tr -d ' ')" = 16 ] && ok "every append is its own commit on perf-data (16 with init)" || no "commit count $(G log --oneline | wc -l)"
+[ "$(G log --oneline | wc -l | tr -d ' ')" = 17 ] && ok "every append is its own commit on perf-data (17 with README and .gitignore)" || no "commit count $(G log --oneline | wc -l)"
 [ "$(G rev-parse --abbrev-ref HEAD)" = perf-data ] && ok "writes land on the perf-data branch" || no "branch"
 printf '%s\n' "$(sed -n 3p "$FIX")" > "$TMP/dup.json"
 if python3 -I "$PERF/store.py" append --data "$D" --record "$TMP/dup.json" 2>/dev/null; then no "duplicate commit appended"; else ok "a commit already recorded is refused"; fi
@@ -217,6 +262,17 @@ python3 -I "$PERF/store.py" check --data "$D" >/dev/null && ok "check validates 
 echo '{"x":1}' > "$TMP/s.json"
 python3 -I "$PERF/store.py" put --data "$D" --machine fixture-1 --name bisect/abc.json --file "$TMP/s.json" && [ -f "$D/data/fixture-1/bisect/abc.json" ] && ok "put: bisect/<sha12>.json under data/<machine>" || no "put"
 python3 -I "$PERF/store.py" put --data "$D" --machine fixture-1 --name ../../escape.json --file "$TMP/s.json" 2>/dev/null && no "put escaped data/<machine>" || ok "put refuses a path outside data/<machine>"
+python3 -I "$PERF/store.py" put --data "$D" --machine ../.. --name x.json --file "$TMP/s.json" 2>/dev/null && no "put accepted machine ../.." || ok "put refuses a path-unsafe machine id"
+ln -s "$TMP" "$D/data/fixture-1/link"
+python3 -I "$PERF/store.py" put --data "$D" --machine fixture-1 --name link/escaped.json --file "$TMP/s.json" 2>/dev/null && no "put followed a symlink out of data/<machine>" || ok "put refuses a symlink that resolves outside data/<machine>"
+rm -f "$D/data/fixture-1/link"
+python3 -I "$PERF/store.py" processed --data "$D" --machine fixture-1 --sha "$SHA12" && no "processed before marking" || ok "processed: a measured sha is not processed until marked"
+python3 -I "$PERF/store.py" processed --data "$D" --machine fixture-1 --sha "$SHA12" --mark && python3 -I "$PERF/store.py" processed --data "$D" --machine fixture-1 --sha "$SHA12" && ok "processed: --mark records completion" || no "processed --mark"
+python3 -I -c 'import json,sys; r=json.loads(open(sys.argv[1]).read()); r["sha"]="e"*40; r["contaminated"]=True; r["machine"]="fixture-2"; open(sys.argv[2],"w").write(json.dumps(r))' "$TMP/dup.json" "$TMP/c.json"
+for i in 1 2; do python3 -I "$PERF/store.py" append --data "$D" --record "$TMP/c.json" >/dev/null 2>&1; done
+python3 -I "$PERF/store.py" has --data "$D" --machine fixture-2 --sha "$(printf "e%.0s" $(seq 40))" && no "two contaminated attempts counted as measured" || ok "has: contaminated attempts below the limit ask for a re-measurement"
+python3 -I "$PERF/store.py" append --data "$D" --record "$TMP/c.json" >/dev/null 2>&1
+python3 -I "$PERF/store.py" has --data "$D" --machine fixture-2 --sha "$(printf "e%.0s" $(seq 40))" && ok "has: the third contaminated attempt stops re-measuring" || no "has: attempt limit"
 [ -z "$(G status --porcelain)" ] && ok "the data worktree is clean after every write" || no "uncommitted data: $(G status --porcelain | head -3)"
 
 echo "=== detect.py / report.py on the stored data ==="
@@ -232,7 +288,10 @@ assert s["regressions"]==["compile.lox.wall_ms"], s["regressions"]
 python3 -I "$PERF/report.py" --records "$REC" --summary "$TMP/sum.json" --html "$TMP/r.html" > "$TMP/r.txt" \
   && grep -q "compile.lox.wall_ms" "$TMP/r.txt" && grep -q "<regression" "$TMP/r.txt" \
   && ok "report.py prints trends and marks the regression" || no "report.py text"
-if grep -qiE '(src|href)="?https?:' "$TMP/r.html"; then no "report HTML references external assets"; else ok "report HTML has no external assets"; fi
+if [ ! -s "$TMP/r.html" ] || ! grep -q '</html>' "$TMP/r.html" || ! grep -q '<svg' "$TMP/r.html"; then
+  no "report HTML missing, truncated or without charts"
+elif grep -qiE '(src|href)="?(https?:)?//' "$TMP/r.html"; then no "report HTML references external assets"
+else ok "report HTML is a complete page with inline charts and no external assets"; fi
 
 echo "=== suite helpers ==="
 python3 -I - "$PERF" <<'PY' && ok "synthetic generators emit every family; timed() measures wall and rss" || no "suite helpers"
@@ -245,6 +304,18 @@ for s in spec["synthetic"]:
     assert src.startswith("mod m") and "fn main" in src, s
 w, rss, rc = suite.timed(["true"], "/")
 assert rc == 0 and w >= 0
+if suite.TIME_BIN:
+    w, rss, rc = suite.timed([sys.executable, "-c", "b = bytearray(64 * 1024 * 1024); b[::4096] = b'x' * len(b[::4096])"], "/")
+    assert rc == 0 and rss is not None and rss >= 48 * 1024, ("peak RSS not measured", rss)
+PY
+python3 -I - "$PERF" "$TMP" <<'PY' && ok "timed(): a timeout kills the benchmark's whole process tree" || no "timed() timeout left a descendant running"
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import suite
+mark = os.path.join(sys.argv[2], "survivor")
+w, rss, rc = suite.timed(["bash", "-c", "(sleep 3; touch %s) & wait" % mark], "/", timeout=1)
+time.sleep(3.5)
+assert rc == 124 and not os.path.exists(mark), (rc, os.path.exists(mark))
 PY
 
 echo
