@@ -427,14 +427,28 @@ def interpFrontend (inputPath : String) : IO (Option ValidatedCore) := do
       return none
     | .ok _ => return some validCore
 
+/-- The host's standard input as the interpreter's source: each pull is one read of at most
+    `n` bytes, performed when the program reads and not before (bug 184). The pure interface
+    hides an effect, so it is sound only because the run threads each source value linearly
+    and pulls it at most once (`Interp.StdinSource`). -/
+private unsafe def hostStdinPullImpl (h : IO.FS.Stream) (n : Nat) :
+    Except String (ByteArray × Interp.StdinSource) :=
+  match unsafeIO (h.read (min n 65536).toUSize) with
+  | .ok b => .ok (b, .lazy (hostStdinPullImpl h))
+  | .error e => .error (toString e)
+
+@[implemented_by hostStdinPullImpl]
+private opaque hostStdinPull (h : IO.FS.Stream) (n : Nat) :
+    Except String (ByteArray × Interp.StdinSource)
+
 /-- Interpret a program via the source-level interpreter (no codegen), with `args` as its
-    command-line arguments after `argv[0]` (`--interp -- a b`) and standard input read up front
-    when it is not a terminal. -/
+    command-line arguments after `argv[0]` (`--interp -- a b`) and standard input read only
+    when, and as far as, the program reads it (bug 184). -/
 def interpProgram (inputPath : String) (args : List String := []) : IO UInt32 := do
   let some validCore ← interpFrontend inputPath | return 1
   let stdinH ← IO.getStdin
   let stdinIsTty ← stdinH.isTty
-  let stdin ← if stdinIsTty then pure ByteArray.empty else stdinH.readBinToEnd
+  let stdin : Interp.StdinSource := .lazy (hostStdinPull stdinH)
   -- stdout's buffering follows the C library's rule: line-buffered on a terminal, else full.
   let stdoutIsTty ← (← IO.getStdout).isTty
   let run := Interp.interpret validCore.coreModules args stdin (stdoutIsTty := stdoutIsTty)
