@@ -56,11 +56,13 @@ A timeout is incomplete, not failed and not passed. `scripts/tests/lib/bounded.s
 timed-out command once alone with a larger budget; a completed re-run is judged normally and
 recorded as recovered, and a second timeout is reported `INCOMPLETE` with the partial output
 discarded, which still makes the gate exit nonzero. A command's own exit 124 is told apart from a
-timeout, and four controls in `check_example_outputs.sh` pin the helper. `check_example_outputs.sh` (native, interpreter and open-bug reproducer runs),
+timeout, and five controls in `check_example_outputs.sh` pin the helper. `check_example_outputs.sh` (native, interpreter and open-bug reproducer runs),
 `check_callable_values.sh`, `check_hashmap_probe_invariants.sh`, `check_model_diff.sh` and
 `run_tests.sh`'s project fixtures count incomplete results separately (the suite summary gains
 `incomplete=`); the seventeen gates with a `timeout 300`/`timeout 120` watchdog use the helper's
-watchdog form. `test_ssa.sh` already worked this way. The roadmap's promotion pipeline now defines
+watchdog form and end with `bounded_gate_status`, which fails the gate on an incomplete command even
+when its output checks were satisfied. A timed-out command's whole process group is killed (TERM,
+then KILL) before the retry. `test_ssa.sh` already worked this way. The roadmap's promotion pipeline now defines
 passed, failed, incomplete, skipped and cancelled, and a qualifying run contains no incomplete
 result.
 

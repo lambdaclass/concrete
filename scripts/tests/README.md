@@ -19,8 +19,9 @@ Supporting helpers:
 - `phase3_report_consistency_checks.sh`
 - `lib/bounded.sh`: time budgets. A timeout is INCOMPLETE, never a failure and never a pass: the
   command is re-run once alone with a larger budget, and a second timeout is reported as incomplete
-  (the gate still exits nonzero). Use `bounded_run` for per-test budgets and the watchdog form
-  (`TO="bash .../lib/bounded.sh SECS"`) for single bounded commands; do not call `timeout` directly
-  in a new gate (ROADMAP "Promotion pipeline", result vocabulary).
+  (the gate still exits nonzero). Use `bounded_run` for per-test budgets, or `bounded_watchdog SECS`
+  and `"${TO[@]}" CMD` for single bounded commands with `bounded_gate_status && [ "$FAIL" -eq 0 ]`
+  as the gate's last line; do not call `timeout` directly in a new gate (ROADMAP "Promotion
+  pipeline", result vocabulary).
 
 All scripts assume the repository root as their working directory and normalize to it internally.

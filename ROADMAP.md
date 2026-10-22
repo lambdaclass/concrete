@@ -492,10 +492,12 @@ why the difference cannot affect it.
   `check_hashmap_probe_invariants.sh`, `check_model_diff.sh` and `run_tests.sh`'s project fixtures,
   which count incomplete results apart and list recovered ones, and as the watchdog wrapper of the
   gates that bound single commands; `test_ssa.sh` applies the same rule to its parallel 5-second
-  alarms (re-run alone with 30 s). In the watchdog-form gates a second timeout fails the wrapped
-  command with no output, so their own tally counts it among their failures while the log line says
-  `INCOMPLETE`, and a recovered run is listed only when the caller exports `BOUNDED_LOG`; R-0513
-  owns moving them to per-check accounting. Fuzzers are the exception by
+  alarms (re-run alone with 30 s). In the seventeen watchdog-form gates a second timeout gives the
+  wrapped command no output and status 124, and the gate's last line (`bounded_gate_status`) lists
+  recovered and incomplete runs and fails the gate on any incomplete one, whatever its own checks
+  concluded; their per-check tallies still count such a command among their failures, and R-0513
+  owns moving them to per-check accounting. A timed-out command is killed with its whole process
+  group (TERM, then KILL) before the retry starts. Fuzzers are the exception by
   design: a hang on a generated input is their finding, triaged like a crash;
 - **skipped**: deliberately not run, with a recorded reason (a platform without the tool, an opt-in
   leg);
