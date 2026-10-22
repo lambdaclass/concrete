@@ -351,8 +351,13 @@ remote_leg() { # name head
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
     local dout
-    dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)" \
-      && echo "remote: deleted refs/heads/$ref" || echo "remote: could NOT delete refs/heads/$ref: ${dout//$'\n'/ | }"
+    # Once deleted, the backstop is disarmed: the name is free again, and a later run that creates it
+    # at the same SHA would match the lease.
+    if dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)"; then
+      trap - EXIT; echo "remote: deleted refs/heads/$ref"
+    else
+      echo "remote: could NOT delete refs/heads/$ref (the EXIT backstop retries): ${dout//$'\n'/ | }"
+    fi
   fi
   case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
   return "$rc"
@@ -676,8 +681,10 @@ cmd_land() {
 # result is recorded against that train's SHA. Attribution assumes one culprit; an interaction
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
-# The landing bot's kill switch (LAND_PAUSE_FILE) is read before every stage of every probe: each
-# --ci probe checks and dispatches a run. A paused probe answers `paused`, never green or red.
+# The landing bot's kill switch (LAND_PAUSE_FILE) is read before and after every operation of every
+# probe (each --ci probe checks and dispatches a run). A probe that sees it answers `paused`, never
+# green or red. The switch is a file that stays until the bot has acknowledged it: one created and
+# removed inside a single operation is not seen.
 bisect_paused() { [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; }
 
 subset_red() { # sub-name test-cmd|"" members...
@@ -692,8 +699,10 @@ subset_red() { # sub-name test-cmd|"" members...
     pinned+=("refs/landing-bisect/$sub/$i"); i=$((i+1))
   done
   if bisect_paused; then echo paused; return 0; fi
-  "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || { echo build-failed; return 0; }
+  local brc=0
+  "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || brc=$?
   if bisect_paused; then echo paused; return 0; fi
+  if [ "$brc" != 0 ]; then echo build-failed; return 0; fi
   local rc=0
   # The switch is read again after EVERY operation, whatever it returned: a probe that ran while
   # the switch was pulled gives no verdict, so nothing is attributed from it.

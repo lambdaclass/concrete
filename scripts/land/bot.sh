@@ -98,17 +98,11 @@ paused() { [ -e "$PAUSE" ]; }
 # that open file description (by flock(1), or by Python's fcntl.flock where flock(1) is missing, as
 # on macOS). The lock belongs to the description, so it lasts while this process (or a child that
 # inherited fd 9) lives and is released by the kernel on any exit: nothing stale is ever left.
-# A lock DIRECTORY or symlink at $LOCK is the earlier format: refused while its pid lives, removed
-# once it is dead.
+# (Earlier drafts of this branch used pid files; none was ever deployed, so there is no format to
+# migrate from.)
 LOCK="$STATE_DIR/lock"
-alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
 acquire_lock() {
   mkdir -p "$STATE_DIR"
-  if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
-    local old; old="$(cat "$LOCK/pid" 2>/dev/null || readlink "$LOCK" 2>/dev/null || true)"
-    if alive "$old"; then say "an instance of the earlier lock format (pid $old) holds $LOCK; nothing to do"; exit 0; fi
-    rm -rf "$LOCK"
-  fi
   exec 9>"$LOCK.flock"
   local got=0
   if command -v flock >/dev/null 2>&1; then flock -n 9 && got=1

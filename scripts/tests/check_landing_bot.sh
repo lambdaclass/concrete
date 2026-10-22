@@ -186,12 +186,6 @@ while [ ! -e "$TMP/held" ]; do sleep 0.1; done
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "another instance holds" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live holder of the kernel lock stops a second instance" || { no "kernel lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$TMP/release"; wait "$fl" 2>/dev/null
-# The earlier format (a lock directory with a pid) is respected while its owner lives.
-sleep 60 & live=$!
-mkdir -p "$L"; echo "$live" > "$L/pid"
-out="$(bot tick)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "earlier lock format (pid $live)" && [ "$(main_sha origin)" = "$BASE" ] && ok "a live lock of the earlier format stops the new bot" || { no "legacy live lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
-kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
 
 git --git-dir="$TMP/origin.git" update-ref refs/heads/wip/land-control "$BASE"
 [ -n "$(land_refs)" ] && ok "CONTROL: the leaked-ref probe sees a planted wip/land-* ref" || no "the leaked-ref probe is blind"
@@ -199,7 +193,7 @@ git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-control
 
 echo "=== train: the tick lands every ready branch, in order, on both remotes ==="
 out="$(bot tick)"; rc=$?
-[ "$rc" = 0 ] && [ ! -e "$L" ] && ok "a dead lock of the earlier format is removed and the tick runs" || { no "legacy dead lock: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && ok "once the holder lets go, the next tick takes the lock and runs" || { no "tick after release: exit $rc"; echo "$out" | sed 's/^/      /'; }
 all=1; for b in wip/explicit wip/late wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
 [ "$all" = 1 ] && ok "all five ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
 [ "$(main_sha origin)" = "$(main_sha lambdaclass)" ] && ok "lambdaclass/main equals origin/main" || no "mirror differs"

@@ -267,8 +267,6 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
   descriptor and takes `flock(2)` on it, through `flock(1)` or, where that is missing (macOS),
   Python's `fcntl.flock`. The lock belongs to the open file, so it lasts as long as the bot and is
   released by the kernel on any exit, and nothing stale is ever left. A second instance exits 0.
-  A lock directory of the earlier format is respected while its pid lives and is removed once
-  that pid is dead.
 - **State in a file.** `<git-common-dir>/concrete-landing/bot/bot.env` holds the phase, the train
   and the ejected heads. `events.tsv` beside it is the event log.
 - **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage:
@@ -276,11 +274,14 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
   - no train is checked and no CI is dispatched;
   - a green train waits in CI without landing;
   - bisection reads `LAND_PAUSE_FILE` before and after every operation of every probe (build,
-    test or check, dispatch, watch) and once more before attribution. A probe that overlapped a
-    pause gives no verdict and nothing is attributed. A red train in CI waits there;
+    test or check, dispatch, watch), whatever the operation returned, and once more before
+    attribution. A probe that sees the switch gives no verdict and nothing is attributed. A red
+    train in CI waits there;
   - the rebase pass stops before the next branch, and a gated rebase is not pushed.
 
-  Remove the file to resume; the train is picked up where it stopped.
+  The switch is the file's presence, read between operations. Leave it until the bot has logged a
+  `paused` event: a file created and removed within one operation is not seen. Remove it to
+  resume; the train is picked up where it stopped.
 - **Dry run.** `--dry-run` prints the ready list, the order and the train, and changes nothing on
   the remotes or in the bot's state.
 - **main.** main is pushed only by `train.sh land`, as a fast-forward.
@@ -376,7 +377,8 @@ exactly when the checkout contains `BAD`. It covers:
 - ordering: explicit first (including `order: 0800`, above the old fixed keys), then a new E-code
   under Check/Elab; reusing an existing code is not a rule change;
 - the dry run and the kill switch;
-- the locks: a live holder of the kernel lock, and a live and a dead lock of the earlier format;
+- the lock: a live holder of the kernel lock stops a second instance, and its release lets the
+  next tick run;
 - the remote leg on a per-run `wip/land-*` ref that is gone afterwards (with a control that the
   probe sees a planted ref), and an existing ref at the same SHA that is refused, not adopted;
 - a four-member train landing in order on both remotes, with fork untouched;
