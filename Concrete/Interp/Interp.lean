@@ -2078,7 +2078,12 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
       match ← liftE (resolveCall cx name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
-      | none => fail s!"interp: undefined variable '{name}'"
+      | none =>
+        -- A declared foreign function the resolver did not record (a local extern under an
+        -- intrinsic spelling, `free`): the value is that C function, as Lower emits it.
+        match resolveExtern cx name with
+        | some decl => return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
+        | none => fail s!"interp: undefined variable '{name}'"
 
   | .binOp op lhs rhs _ => do
     let (env, lv) ← evalExprVal cx env lhs
@@ -2772,7 +2777,10 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
     match ← liftE (resolveCall cx name) with
     | some (d, sc) => return (env, .val (.fnPtr d.name sc))
-    | none => fail s!"interp: function reference '{name}' names no function the interpreter can call"
+    | none =>
+      match resolveExtern cx name with
+      | some decl => return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
+      | none => fail s!"interp: function reference '{name}' names no function the interpreter can call"
   | .allocCall _ _ _ => fail "interp: alloc expressions not yet supported"
 
 /-- H18 drop-glue for the pre-mono interpreter, mirroring Mono's synthesized
