@@ -331,12 +331,14 @@ SHOUT="$("$COMPILER" "$CTMP/shadow.con" --report vcs 2>&1 || true)"
 # Now REJECTED rather than merely undischarged. The earlier assertion pinned "no evidence is
 # issued from it", which relied on the postcondition path being incomplete — the same
 # safety-by-accident shape as H25. Rejecting establishes it here instead.
-grep -qF <<<"$SHOUT" "shadowed by a local" \
-  && { echo "  ok   a contract naming a SHADOWED param is rejected (which binding it means is recorded nowhere)"; PASS=$((PASS+1)); } \
+# Exit 2i: a local reusing a parameter's name is SCOPE-1@1 (E0301) whether or not a contract
+# names it, and E0301 reports first; the contract-specific refusal stays as defense in depth.
+grep -qE <<<"$SHOUT" "shadowed by a local|\(E0301\)" \
+  && { echo "  ok   a contract naming a SHADOWED param is rejected (SCOPE-1@1 E0301 first)"; PASS=$((PASS+1)); } \
   || { echo "  FAIL a shadowed-param contract is accepted despite unresolved binding identity"; FAIL=$((FAIL+1)); }
 
-# Two over-rejection controls, because this restriction is easy to widen by accident. Shadowing
-# is legal in the language; only shadowing of a name a CONTRACT mentions is ambiguous.
+# Two over-rejection controls, because this restriction is easy to widen by accident. (Since exit
+# 2i shadowing is not legal anywhere; the second control pins that it is E0301 that says so.)
 cat > "$CTMP/shadow_ok.con" <<'EOF'
 mod so {
     #[ensures(result == x)]
@@ -357,9 +359,14 @@ mod sn {
     }
 }
 EOF
-grep -qF <<<"$("$COMPILER" "$CTMP/shadow_nocontract.con" --report vcs 2>&1 || true)" "error[check]" \
-  && { echo "  FAIL shadowing was rejected in a function with NO contract — the language rule changed"; FAIL=$((FAIL+1)); } \
-  || { echo "  ok   shadowing without a contract is still legal (restriction is scoped to contracts)"; PASS=$((PASS+1)); }
+# Exit 2i changed the language rule: shadowing is refused everywhere (SCOPE-1@1, E0301), so the
+# uncontracted case is rejected too — by E0301, not by the contract refusal.
+NCOUT="$("$COMPILER" "$CTMP/shadow_nocontract.con" --report vcs 2>&1 || true)"
+if grep -qF <<<"$NCOUT" "(E0301)" && ! grep -qF <<<"$NCOUT" "shadowed by a local"; then
+  echo "  ok   shadowing without a contract is SCOPE-1 (E0301), not the contract refusal"; PASS=$((PASS+1))
+else
+  echo "  FAIL uncontracted shadowing is not reported as E0301 alone"; FAIL=$((FAIL+1))
+fi
 
 # The loop-contract scope check is OVER-APPROXIMATE by construction: the bound set is every name
 # bound anywhere in the function, not the names in scope at the loop. This pins that limit as a

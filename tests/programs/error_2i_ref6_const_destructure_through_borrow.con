@@ -1,0 +1,9 @@
+// Exit 2i REF-6@1 (review round 13): a destructuring `let ... else` through a borrow inside a
+// constant initializer binds a reference by `let`. Refused: E0302.
+struct P { n: i32 }
+const X: i32 = if true {
+    let o: Option<P> = Option::Some { value: P { n: 42 } };
+    let Option::Some { value } = &o else { return 0; };
+    value.n
+} else { 0 };
+fn main() -> i32 { return 42; }

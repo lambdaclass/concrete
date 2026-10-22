@@ -1,0 +1,9 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): two parameters of one function share a name (bug 124: this passed the checker and failed in `llvm-as`). Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_duplicate_params_renamed.con.
+fn f(a: Int, a: Int) -> Int {
+    return a;
+}
+
+fn main() -> Int {
+    return f(40, 42);
+}

@@ -26,7 +26,7 @@ fn run(path: &String, expect: i32, base: i32) with(Process, Alloc, Unsafe) -> i3
                 base + 1
             } else {
                 match status {
-                    Result::Ok { value } => match value {
+                    Result::Ok { value: inner } => match inner {
                         ExitStatus::Exited { code } => if code == expect { 0 } else { base + 3 },
                         ExitStatus::Signaled { raw } => base + 4,
                     },

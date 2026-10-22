@@ -78,3 +78,7 @@ repair belongs to queue exit 0b (wrong code in safe code): batch 2's 087 repair 
 with both programs above as permanent gate legs comparing the binary with `--interp`.
 
 **Repair owner:** queue exit 0b.
+
+## Exit 2i (2026-10-21)
+
+SCOPE-1@1 (exit 2i, E0301) now refuses both reproducers at the shadowing `let` (the walk runs before the body), and REF-6@1 refuses their `let r = &x` (E0302); E0238's shadowed-source guard stays as defense in depth.

@@ -38,10 +38,10 @@ fn length(head: Heap<Node>) with(Alloc) -> Int {
 
 fn main() with(Std) -> Int {
     // Build list: 10 -> 20 -> 30 -> Nil
-    let list: Heap<Node> = alloc(Node::Nil {});
-    let list: Heap<Node> = push(list, 30);
-    let list: Heap<Node> = push(list, 20);
-    let list: Heap<Node> = push(list, 10);
+    let mut list: Heap<Node> = alloc(Node::Nil {});
+    list = push(list, 30);
+    list = push(list, 20);
+    list = push(list, 10);
 
     let total: Int = sum_list(list);
     // total = 60

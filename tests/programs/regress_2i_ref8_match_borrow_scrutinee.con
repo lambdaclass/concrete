@@ -1,0 +1,23 @@
+// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): an arm binder through a borrowed scrutinee (`match &o`), the owner consumed after the match. Run 42, binary = --interp.
+struct P { n: Int }
+
+fn take_ref(p: &P) -> Int {
+    return p.n;
+}
+
+fn consume(o: Option<P>) -> Int {
+    match o {
+        Option::Some { value } => { let P { n } = value; return n * 0; },
+        Option::None => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    let o: Option<P> = Option::Some { value: P { n: 42 } };
+    let mut out: Int = 0;
+    match &o {
+        Option::Some { value } => { out = take_ref(value); },
+        Option::None => {}
+    }
+    return out + consume(o);
+}

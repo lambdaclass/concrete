@@ -1,0 +1,8 @@
+// Exit 2i REF-6@1 (review round 9): a constant initializer binds a reference made by a cast, and
+// reassigns it. A cast to a reference type counts as a borrow there. E0302 (and E0303).
+const K: i32 = if true {
+    let mut r = 0 as &i32;
+    r = 0 as &i32;
+    42
+} else { 0 };
+fn main() -> i32 { return 42; }

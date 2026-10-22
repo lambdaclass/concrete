@@ -114,3 +114,7 @@ rule (provenance recorded on assignment, re-pointing refused), with both program
 permanent rejection fixtures.
 
 **Repair owner:** queue exit 0b (memory safety in safe code).
+
+## Exit 2i (2026-10-21)
+
+REF-6@1 (exit 2i) now refuses both reproducers at their `let`-bound reference (E0302) and at the re-pointing assignment (E0303); the E0238 re-pointing check stays as defense in depth.

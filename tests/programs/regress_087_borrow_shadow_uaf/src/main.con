@@ -1,3 +1,6 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): the inner `let r` shadows the borrow-block reference, so
+// SCOPE-1@1 refuses the program (E0301; before: build and exit 0). The renamed twin is
+// tests/programs/regress_2i_scope1_087_borrow_renamed/.
 // Bug 087 memory-safety regression (checker hunt p17). Inside a borrow block
 // `borrow base as r in R`, an `if` body shadows `r` with `&s`. The checker
 // (and lexical scoping) say the later `r` is the borrow of `base`; pre-fix the

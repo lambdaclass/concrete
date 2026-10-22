@@ -1,0 +1,11 @@
+// Exit 2i REF-6@1 (review round 14): a constant initializer matches through a borrow and copies the
+// reference-valued arm binder. A constant may not borrow at all: E0302 (constBorrows).
+struct P { n: i32 }
+const X: i32 = if true {
+    let o: Option<P> = Option::Some { value: P { n: 42 } };
+    match &o {
+        Option::Some { value } => { let r = value; 42 },
+        Option::None => { 0 }
+    }
+} else { 0 };
+fn main() -> i32 { return 42; }

@@ -92,8 +92,11 @@ accept "consumed (passed)"  'fn main() -> Int { let t: Token = make(); return si
 accept "i32 discard (Copy)" 'fn noise(n: i32) -> i32 { return n + 1; } fn main() -> Int { noise(5); return 0; }'
 
 echo "=== H16: shadowing a still-live linear binding is rejected (would leak) ==="
-reject "let f=..; let f=..; (live shadow)" E0292 'fn main() -> Int { let f: File = make_file(1); let f: File = make_file(2); return sink_file(f); }'
-accept "let s = transform(s) (consumed first)" 'fn grow(f: File) -> File { return f; } fn main() -> Int { let f: File = make_file(1); let f: File = grow(f); return sink_file(f); }'
+reject "let f=..; let f=..; (live shadow; SCOPE-1@1 first)" E0301 'fn main() -> Int { let f: File = make_file(1); let f: File = make_file(2); return sink_file(f); }'
+# Exit 2i: `let s = transform(s)` is a second binding of a visible name (SCOPE-1@1, E0301) even
+# though its initializer consumed the first; the rewrite is the assignment rebind.
+reject "let s = transform(s) (SCOPE-1@1)" E0301 'fn grow(f: File) -> File { return f; } fn main() -> Int { let f: File = make_file(1); let f: File = grow(f); return sink_file(f); }'
+accept "s = transform(s) (assignment rebind, consumed first)" 'fn grow(f: File) -> File { return f; } fn main() -> Int { let mut f: File = make_file(1); f = grow(f); return sink_file(f); }'
 
 echo "=== H17: params (incl. by-value self) are owned locals — must be consumed ==="
 reject "fn drop_it(f: File) {} (silent-drop escape)" E0208 'fn drop_it(f: File) -> Int { return 0; } fn main() -> Int { return drop_it(make_file(1)); }'

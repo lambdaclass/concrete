@@ -100,12 +100,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 17** (6 silent, 5 loud, 6 filed before the discovery record) of 138 bug records.
+**Open bugs: 16** (6 silent, 4 loud, 6 filed before the discovery record) of 138 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 118, 122, 165 |
-| 2. Binder identity by name, not a `LocalId` | 1 | 0 | 124 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 5 | 3 | 117, 128, 134, 136, 137 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
@@ -115,7 +114,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
 | exit 0b | 6 | 6 | 122, 128, 136, 137, 165, 166 |
-| exit 2c | 5 | 0 | 114, 117, 118, 124, 134 |
+| exit 2c | 4 | 0 | 114, 117, 118, 134 |
 | no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
@@ -400,7 +399,7 @@ agree with the classes.
 | 2f | R-0513 | a fast push tier separate from full qualification | the fast tier meets its recorded budget (target five minutes); full results bind exact commits, toolchains and artifacts; a fast-tier pass is never presented as full qualification ([promotion pipeline](#promotion-pipeline)) | continues alongside | validation cost; no deliverable depends on it |
 | 2g | R-0506 | the axiom-policy gate on today's authoritative evidence at status, issuance and consumption: `sorryAx` and unregistered axioms rejected transitively, kernel-only evidence limited to `propext`, `Classical.choice` and `Quot.sound`, registered native-evaluation and float axioms under distinct trust labels | positive controls and forbidden-transitive-dependency mutations, with `check_axiom_inventory.sh` | blocks features | V1's evidence must pass the declared axiom policy (R-0506 is a stage V1 exercises) |
 | 2h | R-0493 | one `IntArith` is the arithmetic authority for the existing pipeline's evaluation, folding and arithmetic-model generation, with emitted operations checked against the same semantics | `check_single_arithmetic.sh` (new) and differential controls over every supported width and operation family, including casts and defined traps | blocks features | V1a's checked `+ - *` and their traps are stated through it (R-0493 is a stage V1 exercises) |
-| 2i | R-0500 | the safety rules of [MEMORY_SEMANTICS §15](docs/language/MEMORY_SEMANTICS.md) are written down and enforced: strictly second-class references — they exist only as parameters, call arguments, borrow-block binders and arm-scoped pattern binders through a borrowed scrutinee; no reference binding is introduced by `let` or assigned; none is stored in an aggregate or a constant, and constants are values, never places — and one binding per visible scope chain (SCOPE-1: no binder reuses a visible name; sibling scopes may), with the design-example decisions on `&mut` arguments and unused exclusive references (B1, B2) and owner reads under a shared borrow (B7) recorded | per rule: a normative paragraph in `docs/language/` with accepted and rejected examples, cited fixtures, S1 generator coverage meeting its minima and a versioned migration diagnostic; the 092 and 093 reproducers stay rejected, 087's shadowing reproducers, accepted today, become rejected by the shadowing rule, and the `let`-bound and assigned reference shapes (REF-6), accepted today, become rejected | blocks features | their violations were use-after-free and leaks in safe code (087, 092, 093); RocksDB handles and V1 locals are checked under them |
+| 2i | R-0500 | the safety rules of [MEMORY_SEMANTICS §15](docs/language/MEMORY_SEMANTICS.md) are written down and enforced: strictly second-class references — they exist only as parameters, call arguments, borrow-block binders and arm-scoped pattern binders through a borrowed scrutinee; no reference binding is introduced by `let` or assigned; none is stored in an aggregate or a constant, and constants are values, never places — and one binding per visible scope chain (SCOPE-1: no binder reuses a visible name; sibling scopes may), with the design-example decisions on `&mut` arguments and unused exclusive references (B1, B2) and owner reads under a shared borrow (B7) recorded | per rule: a normative paragraph in `docs/language/` with accepted and rejected examples, cited fixtures, S1 generator coverage meeting its minima and a versioned migration diagnostic; the 092 and 093 reproducers stay rejected, 087's shadowing reproducers, accepted today, become rejected by the shadowing rule, and the `let`-bound and assigned reference shapes (REF-6), accepted today, become rejected. Delivered 2026-10-21: the renamed pattern binder (G4), SCOPE-1@1 (E0301; bug 124 closed), REF-6@1 (E0302 / E0303, at Check and after monomorphization) and the versioned migration diagnostic of every rule, with the acceptance manifest `tests/rules/exit_2i.tsv` checked by `scripts/tests/check_rules_2i.sh`; what remains before this exit closes: S1 generator coverage and its minima (G8, with R-0491 and 2e), the B1/B2/B7 decision records (G9, G10), the mutation rows (R-0498), and the unenforced shapes G12, G13, G15, G16 and G17 (MEMORY_SEMANTICS §15.7) | blocks features | their violations were use-after-free and leaks in safe code (087, 092, 093); RocksDB handles and V1 locals are checked under them |
 | 2j | R-0500 | the rules V1a's subset needs are written down and enforced: typed literals, literal range (signed minima preserved), statement vs value position, sequential assignment within a loop iteration, evaluation order and short-circuiting ([the evaluation-order rule](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment): left to right in source order, struct and enum literal fields in source order, a functional-update base evaluated once after the explicit fields, an assignment evaluating its right-hand side before its destination), and what an assignment does to the old value (MEMORY_SEMANTICS §10) | the per-rule acceptance of 2i | blocks features | named dependency of V1a: the verified pipeline never models looser rules than the compiler enforces ([plan](docs/compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)) |
 | 2k | R-0500 | the remaining disputed rules are written down and enforced: explicit match binders and cast semantics per width pair, as [ARITHMETIC_POLICY §8](docs/language/ARITHMETIC_POLICY.md#8-numeric-conversions-as) decided it on 2026-10-21: `as` accepts only the always-lossless numeric, `bool` and `char` conversions of its class table, and every lossy conversion is a compile error that uses named truncation, reinterpretation, rounding or checked conversion; numeric scope only (pointer and reference casts unchanged); staged: the named operations, then the rejection with versioned migration diagnostics, then the migration | the per-rule acceptance of 2i | continues alongside | their defects (080, 084) are repaired under 0a; casts enter at a later V1 increment and match at V2, so neither is a dependency of RocksDB slice 1 or V1a |
 | 2l | R-0498 | enforcement is demonstrated (S3): a claim → gate-leg → targeted-mutation manifest over the verification and language docs, enforcement-bearing comments in `Concrete/Proof`, `Check` and `Backend`, and emitted contract text, with R-18 – R-20 relabelled shape-only until proved | every enforcement phrase in that scope at the commit that opens this exit has a manifest row whose mutation its leg kills in a qualified ([stage (c)](#promotion-pipeline)) campaign; later phrases join row 6's per-slice growth | continues alongside | prevention; no reproduced defect |
@@ -3467,7 +3466,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Written language rules — stage S4 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned; starts now.**
+**Status (2026-10-18): planned; starts now.** 2026-10-21: exit 2i's SCOPE-1, REF-6, renamed pattern binder and versioned diagnostics are enforced (see the [2i row](#phase-1-exits) for what remains).
 
 Normative paragraphs in `docs/language/` for block scoping
 and shadowing, match-binding positions and names, statement vs value position, sequential
@@ -3481,7 +3480,7 @@ paragraph to its semantic clause.
 
 **Semantics decisions (2026-10-21):** the rules this task enforces are now written in their
 canonical homes ([Decisions](#decisions)): references and scoping in MEMORY_SEMANTICS §15 (REF-6
-rewritten: no `let`-bound reference, no assignment to a reference binding, proposed E0302 / E0303;
+rewritten: no `let`-bound reference, no assignment to a reference binding, E0302 / E0303, enforced since 2026-10-21;
 constants are values; SCOPE-1 staged behind the renamed pattern binder), evaluation order and
 assignment in STATEMENT_EXPRESSION_MODEL and MEMORY_SEMANTICS §10 (exit 2j), and casts in
 ARITHMETIC_POLICY §8 (exit 2k: the lossless class table, the three named-operation families and the

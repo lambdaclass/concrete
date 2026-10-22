@@ -1,0 +1,12 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): a declaration in a loop body, which is one binding however often it runs is not a collision. Run 42, binary =
+// --interp.
+fn main() -> Int {
+    let mut total: Int = 0;
+    let mut k: Int = 0;
+    while k < 6 {
+        let step: Int = 7;
+        total = total + step;
+        k = k + 1;
+    }
+    return total;
+}

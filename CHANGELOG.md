@@ -232,6 +232,30 @@ out of reach, and `Bytes` reads that
 extract to calls no proof table models), are recorded with their exact refusals in
 [PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
 
+### Second-Class References And One Binding Per Visible Name Are Enforced (exit 2i, 2026-10-21)
+
+The reference and lexical-binding rules of [MEMORY_SEMANTICS §15](docs/language/MEMORY_SEMANTICS.md)
+are enforced with versioned migration diagnostics. **SCOPE-1@1** (E0301): a binder may not reuse
+the name of a visible local binding (parameters, two parameters of one function included, `let`,
+destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
+and region names); sibling scopes, loop bodies and assignment are not collisions. Duplicate
+parameters used to reach `llvm-as` (bug 124, closed). **REF-6@1**: no `let` binds a reference
+(E0302) and no reference binding is ever assigned (E0303), at Check and again after
+monomorphization (a generic `let y: T = x` or `x = y` at `T := &Int`). A reference now exists only
+as a parameter, a call argument, a borrow-block binder or an arm binder through a borrowed
+scrutinee. Nested patterns rename a binder with **`Variant { value: inner }`** (also in `if let`,
+`while let` and destructuring `let`; E0304 for a field list that does not match). Every
+reference/binding diagnostic names its rule and version (`rule: REF-6@1`, `spec: ...§15`) and gives
+the mechanical rewrite in `next:`; the `--report diagnostic-codes` ledger names each code's rules;
+the front-end "may not return a reference" rejections now carry E0236. The acceptance manifest
+`tests/rules/exit_2i.tsv` (179 rows) is checked by `scripts/tests/check_rules_2i.sh`. Migration:
+std 16 binders, examples 17 sites (one a `let`-bound reference), tests about 70 fixtures (renamed,
+rewritten, or re-expecting E0301 / E0302 / E0303). Found on the way: a shared borrow-block binder over
+a `Heap` passed to `&Heap<T>` read through the slot (bug 126's third form, fixed with bug 126), and a destructuring
+`let` was desugared only at a function's top level (a nested one, or one in a method, had
+undeclared binders); it is now desugared in every nested block, `assert` / `assume` condition and
+method, keeping a value block's value (a `for` header destructure is refused explicitly).
+
 ### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
 
 The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a

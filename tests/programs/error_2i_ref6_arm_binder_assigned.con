@@ -1,0 +1,29 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): an arm binder bound through a borrowed scrutinee is assigned in its arm. Rejected: E0303.
+struct P { n: Int }
+struct W { p: P, q: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn f(o: &Option<P>, q: &P) -> Int {
+    match o {
+        Option::Some { value } => {
+            value = q;
+            return get(value);
+        },
+        Option::None => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    let o: Option<P> = Option::Some { value: P { n: 1 } };
+    let q: P = P { n: 42 };
+    let out: Int = f(&o, &q);
+    match o {
+        Option::Some { value: inner } => { let P { n } = inner; },
+        Option::None => {}
+    }
+    let P { n: m } = q;
+    return out + m * 0;
+}

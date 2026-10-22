@@ -1108,12 +1108,19 @@ partial def parseStmt : ParseM Stmt := do
     return .borrowIn sp var ref region isMut body
   | _ => parseExprOrAssign
 
-partial def parseBindingList : ParseM (List String) := do
-  let mut bindings : List String := []
+/-- A pattern's field binders: `{ a, b }` (shorthand) or `{ value: inner, b }` (a renamed
+    binder, exit 2i G4). Shared by `match`, `if let`, `while let` and destructuring `let`. -/
+partial def parseBindingList : ParseM (List PatBind) := do
+  let mut bindings : List PatBind := []
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
-    let bindName ← expectIdent
-    bindings := bindings ++ [bindName]
+    let first ← expectIdent
+    let bind ← if (← peek) == .colon then do
+      advance
+      let inner ← expectIdent
+      pure ({ field := some first, name := inner } : PatBind)
+    else pure (PatBind.short first)
+    bindings := bindings ++ [bind]
     tk ← peek
     if tk == .comma then advance; tk ← peek
   expect .rbrace
@@ -1636,8 +1643,12 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
     parseType
   else
     pure .unit
+  -- A method's loop contracts are its own (exit 2i review round 6: they were collected and then
+  -- dropped, so a method's `#[invariant]` was never validated nor checked).
+  let before := (← get).loopContracts.length
   let body ← parseBlock
-  return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }, selfKind)
+  let loopContracts := ((← get).loopContracts).drop before
+  return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, loopContracts, span := sp }, selfKind)
 
 /-- Repr attribute result: isReprC, reprAlign, isPacked. -/
 structure ReprOpts where

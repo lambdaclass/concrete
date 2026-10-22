@@ -1,0 +1,7 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_same_block_let.con: a `let` reuses a name bound earlier in the same block, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn main() -> Int {
+    let x: Int = 1;
+    let y: Int = x + 41;
+    return y;
+}

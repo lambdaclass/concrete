@@ -1,0 +1,8 @@
+// Exit 2i REF-6@1 (review round 4): a borrow block inside a constant initializer binds a reference
+// (and its body re-points it). Refused: E0302.
+const X: i32 = if true {
+    let a: i32 = 42;
+    borrow a as r in R { r = r; }
+    0
+} else { 0 };
+fn main() -> i32 { return 42; }

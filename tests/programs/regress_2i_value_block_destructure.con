@@ -1,0 +1,35 @@
+// Exit 2i review: a destructuring `let` inside a value block (an if-expression branch, a match
+// arm) keeps the block's value; desugaring once turned it into a discarded statement (E0224). Also
+// inside an `assert` condition. Run 42, binary = --interp.
+enum Copy E { A { x: Int }, B {} }
+
+fn pick(c: bool, e: E) -> Int {
+    let n: Int = if c {
+        let E::A { x } = e else {
+            return 0;
+        };
+        x
+    } else {
+        0
+    };
+    return n;
+}
+
+fn arm(o: Option<Int>) -> Int {
+    let n: Int = match o {
+        Option::Some { value } => {
+            let E::A { x } = E::A { x: value } else {
+                return 0;
+            };
+            x
+        },
+        Option::None => 0,
+    };
+    return n;
+}
+
+fn main() -> Int {
+    let e: E = E::A { x: 20 };
+    assert(if true { let E::A { x } = e else { return 0; }; x == 20 } else { false });
+    return pick(true, e) + arm(Option::Some { value: 22 });
+}

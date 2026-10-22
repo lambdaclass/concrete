@@ -1,0 +1,17 @@
+// Exit 2i REF-4@1 (MEMORY_SEMANTICS §15.3): a generic instantiated to a reference where its `T` is a top-level parameter (`ignore::<&Int>`, `apply::<&Int>`). Run 42, binary = --interp.
+fn ignore<T: Copy>(x: T, k: Int) -> Int {
+    return k;
+}
+
+fn apply<T>(x: T, f: fn(T) -> Int) -> Int {
+    return f(x);
+}
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let v: Int = 21;
+    return ignore::<&Int>(&v, 21) + apply::<&Int>(&v, read);
+}

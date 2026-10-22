@@ -1,0 +1,15 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): `let s = transform(s)` reuses `s` although its initializer consumed it. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_consuming_rebind_renamed.con.
+struct S { n: Int }
+
+fn transform(s: S) -> S {
+    let S { n } = s;
+    return S { n: n + 1 };
+}
+
+fn main() -> Int {
+    let s: S = S { n: 41 };
+    let s: S = transform(s);
+    let S { n } = s;
+    return n;
+}

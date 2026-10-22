@@ -48,10 +48,8 @@ Each phase that adds a new consumption form must update this list.
 
 ## 4. No Lexical Value Shadowing
 
-**Status:** decided language invariant; enforcement pending
-[ROADMAP R-0435](../../ROADMAP.md). Until that task lands, this section distinguishes
-the target rule from current compiler behavior rather than claiming the ban is
-already enforced. The normative statement (SCOPE-1 to SCOPE-4), its proposed diagnostic, the
+**Status:** decided language invariant, enforced by exit 2i (R-0500, which superseded
+R-0435): SCOPE-1@1, E0301. The normative statement (SCOPE-1 to SCOPE-4), its proposed diagnostic, the
 acceptance list and the enforcement status are in [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md).
 
 **Target rule:** a new local value binding may not reuse the spelling of another
@@ -67,12 +65,15 @@ one lexical binding across iterations. The rule is confined to the lexical
 value-binding namespace; fields, types, traits, modules, top-level functions,
 imports, and intrinsics are separate namespace decisions.
 
-**Current compiler behavior:** ordinary `let`/pattern shadowing is still accepted
-except for a still-live non-`Copy` binding (H16, `.shadowsLiveLinear`) and
-borrow-block ref/region collisions (`.borrowRefShadows`).
-`tests/programs/regress_045_match_binder_shadow.con` therefore remains a positive
-current-behavior fixture until R-0435 migrates it. Reports and reference pages
-must not describe the target ban as shipped before that gate lands.
+**Compiler behavior (exit 2i):** `checkFn` walks every binder of a function over its
+lexical scope chain before the body is checked and reports each reuse of a visible name
+as E0301 (`shadowsVisibleBinding`), with the earlier binding as the related span, the
+`rule: SCOPE-1@1` evidence and the rewrite. E0292 (`.shadowsLiveLinear`) and E0238's
+shadowed-source guard stay as defense in depth; E0214 / E0215 (`.borrowRefShadows`,
+`.borrowRegionShadows`) remain as definitions only and are no longer emitted (E0301 covers
+them). Nested patterns rename a binder with `Variant { value: inner }`
+(`regress_045_match_binder_shadow.con` is migrated to that form). The fixtures and
+their renamed twins are rows of `tests/rules/exit_2i.tsv`.
 
 Elab alpha-renaming remains mandatory under
 [PRINCIPLES.md](../project/PRINCIPLES.md) #12. Bug 045 was a name-resolution defect; the

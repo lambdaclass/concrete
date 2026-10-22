@@ -144,8 +144,8 @@ mod tar_list {
                                 discard(error);
                                 return fail("tar_list: cannot open file");
                             },
-                            Result::Ok { value } => {
-                                let r: Reader<File> = reader_from_file(value);
+                            Result::Ok { value: inner } => {
+                                let r: Reader<File> = reader_from_file(inner);
                                 let data: Bytes = read_all(&r);
                                 let rc: Result<u64, IoError> = r.close();
                                 discard(rc.is_ok());

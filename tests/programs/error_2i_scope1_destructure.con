@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a destructuring `let` binder reuses an outer `let`. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_destructure_renamed.con.
+struct P { v: Int, w: Int }
+
+fn main() -> Int {
+    let v: Int = 40;
+    let p: P = P { v: 1, w: 1 };
+    let P { v, w } = p;
+    return v + w;
+}

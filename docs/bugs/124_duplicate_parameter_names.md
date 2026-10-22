@@ -1,6 +1,6 @@
 # Bug 124 — duplicate parameter names pass the checker and fail in `llvm-as`
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-21 (exit 2i, SCOPE-1@1: E0301 at binder introduction)
 **Found:** 2026-10-21, by the exit 2i specification (MEMORY_SEMANTICS §15.4 SCOPE-1, gap G3).
 **Severity:** loud failure on an accepted program: the checker accepts it, LLVM validation rejects
 the emitted IR, and the interpreter runs it.
@@ -33,7 +33,7 @@ at that revision): the same `llvm-as` error and the same interpreter result, so 
 close it.
 
 Expected: a checker diagnostic naming both parameters. Exit 2i's SCOPE-1 rejects `fn f(a: Int, a:
-Int)` with the proposed E0301 (`shadowsVisibleBinding`).
+Int)` with E0301 (`shadowsVisibleBinding`), as the fix below records.
 
 ## Cause
 
@@ -60,9 +60,18 @@ R-0500 (exit 2i, SCOPE-1): the E0301 check at binder introduction covers paramet
 (loud failures that keep valid programs out of the interpreter/native comparison); no safety or
 authority defect is demonstrated.
 
-## Containment while open
+## Fix
 
-`scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode
-`compile-fails:redefinition of argument`) requires the recorded `llvm-as` failure. When the checker
-rejects the program, that leg fails until this document, the corpus entry and the leg are updated
-together.
+Exit 2i SCOPE-1@1 ([MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md) §15.4). `checkFn` runs
+`scope1Diagnostics` (`Concrete/Check/Check.lean`) before it checks the body: an explicit lexical
+scope chain over every binder kind, starting with the parameters in order, so the second `a` of
+`fn f(a: Int, a: Int)` is E0301 (`shadowsVisibleBinding`), with the versioned migration evidence
+(`rule: SCOPE-1@1`, `spec: docs/language/MEMORY_SEMANTICS.md §15`) and the rewrite in `next:`. The
+program no longer reaches Lower, EmitSSA or the interpreter.
+
+Fixtures: `tests/programs/error_2i_scope1_duplicate_params.con` (E0301) and its renamed twin
+`regress_2i_scope1_duplicate_params_renamed.con` (run 42, binary = `--interp`), both rows of
+`tests/rules/exit_2i.tsv` (`scripts/tests/check_rules_2i.sh`) and of `run_tests.sh`. The reproducer
+above now fails with E0301; its open-bug row in `check_example_outputs.sh` was dropped with the fix.
+The name-keyed backend argument naming stays for R-0492 (`LocalId`); the source rule keeps it from
+being reached.

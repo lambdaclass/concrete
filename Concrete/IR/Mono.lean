@@ -462,7 +462,10 @@ private def refuseNestedRefSpecialization (fnDef : CFnDef) (typeArgs : List Ty) 
     if monoArgHoldsRef arg && fnDef.params.any (fun (_, t) => monoParamBehindRef tp t) then
       throw [{ severity := .error, pass := "mono", span := fnDef.declSpan, code := "E0238"
                message := s!"cannot trace what the reference instantiating '{tp}' of generic function '{fnDef.name}' borrows: '{tp}' := '{tyToStr arg}' occurs behind a reference in a parameter type, and the generic body was checked at an opaque '{tp}' (reached through another generic's type parameter)"
-               hint := some "instantiate the generic with an owned value, or pass the reference down as a top-level argument; this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)" }]
+               hint := some "instantiate the generic with an owned value, or pass the reference down as a top-level argument; this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
+               -- exit 2i §15.5: REF-4@1 (c), at the specialization
+               evidence := [("rule", "REF-4@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+               nextAction := some "instantiate the generic at a value type, or pass the reference directly as an argument" }]
 
 /-- Mono's Copy judgment: the shared one over Core structs/enums PLUS newtypes. A newtype is
     fed as a declared-Copy aggregate with its one wrapped type as the field, so it is Copy

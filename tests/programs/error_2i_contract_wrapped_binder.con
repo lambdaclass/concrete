@@ -1,0 +1,7 @@
+// Exit 2i (review round 6): a binder hidden under a dereference in a `requires`. E0305.
+#[requires(*(if true { let alias = r; alias } else { r }) > 0)]
+fn f(r: &i32) -> i32 { return *r; }
+fn main() -> i32 {
+    let x: i32 = 42;
+    return f(&x);
+}

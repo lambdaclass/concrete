@@ -197,16 +197,20 @@ class Gen:
             # of a branch (was missing from the grammar when 031 shipped)
             return (f"if {self.bexpr(d)} {{ s0.bump({self.lit()}); }} "
                     f"else {{ s0.bump({self.lit()}); }}")
-        if k == 11:  # bug 087: a block-scoped `let` SHADOWS an outer var (RHS
-            # may read the outer one), is read inside its block, and must be
-            # gone after it — the digest reads the OUTER var. Pre-fix interp and
-            # compiled disagreed (if/else shadow) or both leaked (loop shadow).
+        if k == 11:  # bug 087: a block-scoped `let` next to an outer var (its RHS
+            # may read the outer one), read inside its block and gone after it —
+            # the digest reads the OUTER var. Pre-fix interp and compiled
+            # disagreed (if/else shadow) or both leaked (loop shadow). Exit 2i:
+            # the shadow itself is refused (SCOPE-1@1, E0301), so this is the
+            # renamed value leg: the inner binder has its own name.
             v = r.choice(self.ivars)
             ty = self.varty[v]
             a = r.choice(self.arrs)
             j = r.randint(0, 3)
-            inner = (f"let {v}: {ty} = {self.simple(max(0, d-1), ty)}; "
-                     f"{a}[{j}] = (({a}[{j}] + {self.rd(ty, v, 'i32')}) % {BOUND['i32']});")
+            self.ctr += 1
+            nv = f"{v}_in{self.ctr}"
+            inner = (f"let {nv}: {ty} = {self.simple(max(0, d-1), ty)}; "
+                     f"{a}[{j}] = (({a}[{j}] + {self.rd(ty, nv, 'i32')}) % {BOUND['i32']});")
             if self.loops and r.random() < 0.4:
                 self.ctr += 1
                 kv = f"k{self.ctr}"

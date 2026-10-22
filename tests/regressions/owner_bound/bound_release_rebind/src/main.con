@@ -10,9 +10,9 @@ mod bound_release_rebind {
                 let mut owner: Bytes = value.release();
                 let ok: bool = owner.set(1, 202);
                 match BoundView::bind(owner, 0, 2) {
-                    Result::Ok { value } => {
-                        let got: Int = match value.byte(1) { Option::Some { value } => value as Int, Option::None => 0 };
-                        destroy(value.release());
+                    Result::Ok { value: rebound } => {
+                        let got: Int = match rebound.byte(1) { Option::Some { value: inner } => inner as Int, Option::None => 0 };
+                        destroy(rebound.release());
                         return got;            // 202
                     },
                     Result::Err { error } => { destroy(error); return 201; },

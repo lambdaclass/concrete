@@ -97,8 +97,8 @@ mod base64_cli {
                                 cmd.drop();
                                 return usage();
                             },
-                            Option::Some { value } => {
-                                return run(cmd, value);
+                            Option::Some { value: inner } => {
+                                return run(cmd, inner);
                             },
                         }
                     },

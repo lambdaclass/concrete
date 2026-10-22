@@ -6219,6 +6219,11 @@ open Json in
 def diagnosticCodesReport : String :=
   let entry (code pass severity description : String) : Val :=
     .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+  -- A code that enforces exit 2i rules names them with their versions (MEMORY_SEMANTICS §15.5
+  -- item 1); `scripts/tests/check_rules_2i.sh` checks every manifest row's tag against this.
+  let entryR (code pass severity description rules : String) : Val :=
+    .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description),
+          ("rules", .str rules)]
   let codes : List Val := [
     -- Parse (E0001)
     entry "E0001" "parse" "error" "syntax error",
@@ -6239,8 +6244,8 @@ def diagnosticCodesReport : String :=
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
     entry "E0202" "check" "error" "assignment to undeclared variable",
-    entry "E0203" "check" "error" "variable frozen by borrow",
-    entry "E0204" "check" "error" "cannot move linear variable: borrowed",
+    entryR "E0203" "check" "error" "variable frozen by borrow" "REF-8@1",
+    entryR "E0204" "check" "error" "cannot move linear variable: borrowed" "REF-8@1",
     entry "E0205" "check" "error" "linear variable used after move",
     entry "E0206" "check" "error" "variable reserved by defer",
     entry "E0207" "check" "error" "cannot consume linear variable in loop",
@@ -6250,8 +6255,8 @@ def diagnosticCodesReport : String :=
     entry "E0211" "check" "error" "continue skips unconsumed linear variable",
     entry "E0212" "check" "error" "linear consumed in one branch not other",
     entry "E0213" "check" "error" "linear consumed in then-branch (no else)",
-    entry "E0214" "check" "error" "borrow ref shadows existing name",
-    entry "E0215" "check" "error" "borrow region shadows existing name",
+    entryR "E0214" "check" "error" "borrow ref shadows existing name (no longer emitted: subsumed by E0301, exit 2i)" "SCOPE-1@1",
+    entryR "E0215" "check" "error" "borrow region shadows existing name (no longer emitted: subsumed by E0301, exit 2i)" "SCOPE-1@1",
     entry "E0216" "check" "error" "unknown loop label",
     entry "E0217" "check" "error" "assignment to immutable variable",
     entry "E0218" "check" "error" "assignment to frozen variable",
@@ -6268,14 +6273,14 @@ def diagnosticCodesReport : String :=
     entry "E0228" "check" "error" "binary operand type mismatch",
     -- Check: borrow/escape (E0230–E0235)
     entry "E0230" "check" "error" "cannot borrow: already moved",
-    entry "E0231" "check" "error" "cannot borrow: already mutably borrowed",
-    entry "E0232" "check" "error" "cannot mutably borrow: already borrowed",
+    entryR "E0231" "check" "error" "cannot borrow: already mutably borrowed" "REF-8@1",
+    entryR "E0232" "check" "error" "cannot mutably borrow: already borrowed" "REF-8@1",
     entry "E0233" "check" "error" "cannot mutably borrow immutable variable",
-    entry "E0234" "check" "error" "reference escapes borrow block",
+    entryR "E0234" "check" "error" "reference escapes borrow block" "REF-6@1",
     entry "E0235" "check" "error" "cannot mutably borrow: already immutably borrowed",
-    entry "E0239" "check" "error" "a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)",
+    entryR "E0239" "check" "error" "a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)" "REF-3@1, REF-4@1",
     entry "E0237" "check" "error" "mutable borrow (explicit or `&mut self` receiver) through a shared reference",
-    entry "E0238" "check" "error" "place or reference source that does not normalize to a traceable place",
+    entryR "E0238" "check" "error" "place or reference source that does not normalize to a traceable place" "REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1",
     -- Check: capability (E0240–E0242)
     entry "E0240" "check" "error" "missing capability",
     entry "E0241" "check" "error" "trait bound not satisfied",
@@ -6325,14 +6330,20 @@ def diagnosticCodesReport : String :=
     -- Check: conservation sweep + callable values (E0290–E0293, 2026-07-05/06)
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
-    entry "E0292" "check" "error" "shadowing a still-live non-Copy binding",
-    entry "E0293" "check" "error" "overlapping borrows of one place in a single call",
+    entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding" "SCOPE-1@1",
+    entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@1",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     entry "E0296" "check" "error" "newtype constructed outside its defining module (construction rights, 0b)",
     entry "E0297" "check" "error" "struct literal touches a field private to its defining module (0b)",
     entry "E0298" "check" "error" "read/write of a struct field private to its defining module (0b)",
     entry "E0300" "check" "error" "a match guard moves a non-Copy value (guards are read-only; bug 090)",
+    entryR "E0301" "check" "error" "a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)" "SCOPE-1@1",
+    entryR "E0302" "check" "error" "a `let` binding holds a reference (references are scoped; exit 2i)" "REF-6@1",
+    entryR "E0303" "check" "error" "a reference binding is assigned (references are never re-pointed; exit 2i)" "REF-6@1",
+    entryR "E0305" "check" "error" "a contract expression binds a name (contracts are binder-free propositions; exit 2i)" "SCOPE-1@1",
+    entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
+    entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)

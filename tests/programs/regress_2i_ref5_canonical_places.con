@@ -1,0 +1,24 @@
+// Exit 2i REF-5@1 (MEMORY_SEMANTICS §15.3): borrows of canonical places: `f(&w.p)`, `f(&a[i])`, and through a reference parameter `f(r)`, `f(&*r)`, `f(&r.p)`. Run 42, binary = --interp.
+struct P { n: Int }
+struct W { p: P }
+
+fn get(r: &P) -> Int {
+    return r.n;
+}
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn through(r: &W) -> Int {
+    return get(&r.p) + get(&(*r).p) + read(&r.p.n);
+}
+
+fn main() -> Int {
+    let w: W = W { p: P { n: 10 } };
+    let a: [Int; 2] = [0, 2];
+    let out: Int = get(&w.p) + read(&a[1]) + through(&w);
+    let W { p } = w;
+    let P { n } = p;
+    return out + n * 0;
+}

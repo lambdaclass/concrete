@@ -1,0 +1,8 @@
+// Exit 2i (review round 8): a local reusing a parameter of a function with a contract is SCOPE-1
+// (E0301 with its rule tag and related span), not the older untagged contract-shadow refusal.
+#[requires(x >= 0)]
+fn f(x: i32) -> i32 {
+    let x: i32 = 42;
+    return x;
+}
+fn main() -> i32 { return f(1); }

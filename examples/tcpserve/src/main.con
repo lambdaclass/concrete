@@ -131,8 +131,8 @@ mod tcpserve {
                         let m: String = "tcpserve: accept failed";
                         return fail(m);
                     },
-                    Result::Ok { value } => {
-                        let stream: TcpStream = value;
+                    Result::Ok { value: inner } => {
+                        let stream: TcpStream = inner;
                         if !read_request(&stream) {
                             discard(stream.close());
                             discard(listener.close());

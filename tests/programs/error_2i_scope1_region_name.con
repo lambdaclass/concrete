@@ -1,0 +1,14 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a borrow-block region name reuses an outer `let` (E0215 had no fixture). Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_region_name_renamed.con.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let R: Int = 0;
+    borrow x as rx in R {
+        if read(rx) != 42 { return 0; }
+    }
+    return x + R;
+}

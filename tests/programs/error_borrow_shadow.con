@@ -1,3 +1,5 @@
+// Exit 2i (MEMORY_SEMANTICS §15.4): this program shadows a visible binding, so SCOPE-1@1
+// refuses it first (E0301; before: E0214). The check below it stays as defense in depth.
 // Error: borrow ref shadows existing name
 fn main() -> Int {
     let x: Int = 10;

@@ -136,6 +136,12 @@ def escapeCharLit (c : Char) : String :=
   | '\r' => "\\r"
   | _    => if c.toNat == 0 then "\\0" else String.singleton c
 
+/-- A pattern's field binders: `a, value: inner` (exit 2i G4 keeps the label). -/
+def fmtPatBinds (bs : List PatBind) : String :=
+  ", ".intercalate (bs.map fun b => match b.field with
+    | some f => s!"{f}: {b.name}"
+    | none => b.name)
+
 mutual
 partial def fmtExprAt (ind : Nat) : Expr → String
   | .intLit _ val => toString val
@@ -209,7 +215,7 @@ partial def fmtMatchArm (baseInd : Nat) (arm : MatchArm) : String :=
   match arm with
   | .mk _ enumName variant bindings guard body =>
     let bindsStr := if bindings.isEmpty then ""
-      else s!" \{ {", ".intercalate bindings} }"
+      else s!" \{ {fmtPatBinds bindings} }"
     let bodyStr := body.map (fmtStmt bodyInd)
     s!"{pfx}{enumName}::{variant}{bindsStr}{guardStr guard} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
   | .litArm _ value guard body =>
@@ -292,13 +298,13 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
     let mutStr := if isMut then "mut " else ""
     s!"{pfx}borrow {mutStr}{var} as {ref} in {region} \{\n{"\n".intercalate (body.map (fmtStmt (ind + 1)))}\n{pfx}}"
   | .letDestructure _ enumName variant bindings value elseBody =>
-    let bs := ", ".intercalate bindings
+    let bs := fmtPatBinds bindings
     let elseStr := match elseBody with
       | some body => s!" else \{\n{"\n".intercalate (body.map (fmtStmt (ind + 1)))}\n{pfx}}"
       | none => ""
     s!"{pfx}let {enumName}::{variant} \{ {bs} } = {fmtExprAt ind value}{elseStr};"
   | .letStructDestructure _ structName bindings value =>
-    let bs := ", ".intercalate bindings
+    let bs := fmtPatBinds bindings
     s!"{pfx}let {structName} \{ {bs} } = {fmtExprAt ind value};"
 end
 

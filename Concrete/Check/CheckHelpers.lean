@@ -135,6 +135,20 @@ partial def tyHoldsRefInAggregate : Ty → Bool
   | .generic _ args _ => args.any tyStoresRef
   | _ => false
 
+/-- Could `ty` hold a reference once the type parameters `tps` are instantiated (one of them to a
+    reference)? A bare type parameter can become one; so can an aggregate or generic argument
+    holding one (REF-3). A raw pointer or a function type stays what it is under substitution, so a
+    type parameter behind one does not count (exit 2i review). -/
+partial def tyMayHoldRefAt (tps : List String) : Ty → Bool
+  | .typeVar n => tps.contains n
+  | .named n => tps.contains n
+  | .ref _ | .refMut _ => true
+  | .ptrMut _ | .ptrConst _ | .fn_ _ _ _ => false
+  | .heap inner | .heapArray inner => tyMayHoldRefAt tps inner
+  | .array inner _ => tyMayHoldRefAt tps inner
+  | .generic _ args _ => args.any (tyMayHoldRefAt tps)
+  | _ => false
+
 /-- Does the named type parameter occur anywhere in this type? -/
 partial def tyParamOccursIn (name : String) : Ty → Bool
   | .typeVar n => n == name
@@ -201,7 +215,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then
-      throwCheckMsg s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)."
+      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@1")
     return .fn_ params' capSet retTy'
   | _ => return ty
 
@@ -231,11 +245,16 @@ def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
   for (pName, pTy0) in mapping do
     -- aliases resolved: `f::<R>` with `type R = &P` is a reference instantiation
     let pTy ← tryCatch (resolveType pTy0) (fun _ => pure pTy0)
+    -- inside erased code the instantiation must be closed and reference-free: an opaque
+    -- type parameter forwarded here could be a reference at the caller (review round 8)
+    let envE ← getEnv
+    if envE.erasedDepth > 0 && (tyContainsRef pTy || tyMayHoldRefAt envE.currentTypeParams pTy) then
+      throwCheck (.erasedRefInstantiation what pName (tyToString pTy))
     if tyContainsRef pTy && tyParamOccursIn pName retTy then
-      throwCheckMsg s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"{what}: type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
     if tyContainsRef pTy && paramTys.any (tyParamOccursNested pName) then
       throwCheck (.untraceablePlace s!"what the reference instantiating '{pName}' of {what} borrows"
-        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none
+        s!"'{pName}' := '{tyToString pTy}' occurs inside a parameter type, so the generic body could read a stored reference the place rule never saw; pass the reference directly or a value") none (rule := some "REF-4@1")
 
 /-- Type-variable substitution over surface types. Delegates to the one shared
     definition (`Layout.substTyVars`); the two were byte-for-byte equivalent
@@ -859,7 +878,7 @@ partial def inferMethodParamAndRetTys
   -- a generic backdoor to returning a reference). VALUE_MODEL.md.
   for (pName, pTy) in fullMapping do
     if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
-      throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+      throwCheck (.returnsReference s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
   refuseNestedRefInstantiation s!"method '{callName}'" fullMapping (sig.params.map (·.2)) sig.retTy
   -- 2. Infer capability-variable bindings: from the RECEIVER first (R-0484 — on
   --    `impl<cap C> Sink<C>`, `s.run(..)` with `s: &Sink<Console>` binds C := Console),

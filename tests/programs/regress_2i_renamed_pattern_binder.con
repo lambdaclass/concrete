@@ -1,0 +1,76 @@
+// exit 2i G4 (MEMORY_SEMANTICS §15.4): the renamed pattern binder `Variant { field: name }`
+// in every pattern position (match, if let, while let, destructuring let, struct
+// destructure), including a labeled list in non-declaration order. Run 42, binary = --interp.
+struct Pair {
+    left: Int,
+    right: Int,
+}
+
+enum Two {
+    Both { a: Int, b: Int },
+    Neither,
+}
+
+fn nested(o: Option<Option<Int>>) -> Int {
+    match o {
+        Option::Some { value: outer } => {
+            match outer {
+                Option::Some { value: inner } => { return inner; },
+                Option::None => { return 0; }
+            }
+        },
+        Option::None => { return 0; }
+    }
+}
+
+fn labeled_order(t: Two) -> Int {
+    match t {
+        Two::Both { b: second, a: first } => { return first * 10 + second; },
+        Two::Neither => { return 0; }
+    }
+}
+
+fn if_let(o: Option<Int>) -> Int {
+    if let Option::Some { value: got } = o {
+        return got;
+    }
+    return 0;
+}
+
+fn while_let(n: Int) -> Int {
+    let mut total: Int = 0;
+    let mut k: Int = n;
+    let mut cur: Option<Int> = Option::Some { value: k };
+    while let Option::Some { value: step } = cur {
+        total = total + step;
+        k = k - 1;
+        if k > 0 {
+            cur = Option::Some { value: k };
+        } else {
+            cur = Option::None;
+        }
+    }
+    return total;
+}
+
+fn destructure_let(o: Option<Int>) -> Int {
+    let Option::Some { value: v } = o else {
+        return 0;
+    };
+    return v;
+}
+
+fn destructure_struct(p: Pair) -> Int {
+    let Pair { left: l, right } = p;
+    return l + right;
+}
+
+fn main() -> Int {
+    let a: Int = nested(Option::Some { value: Option::Some { value: 2 } });
+    let b: Int = labeled_order(Two::Both { a: 1, b: 2 });
+    let c: Int = if_let(Option::Some { value: 3 });
+    let d: Int = while_let(3);
+    let e: Int = destructure_let(Option::Some { value: 16 });
+    let f: Int = destructure_struct(Pair { left: 1, right: 2 });
+    return a + b + c + d + e + f;
+}

@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): a match-arm payload binder reuses an outer `let`. Rejected: E0301, with the earlier
+// binding as the related span. Its migration twin is regress_2i_scope1_arm_binder_renamed.con.
+fn main() -> Int {
+    let value: Int = 1;
+    let o: Option<Int> = Option::Some { value: 41 };
+    match o {
+        Option::Some { value } => { return value + 1; },
+        Option::None => { return value; }
+    }
+}

@@ -128,7 +128,7 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
       | none => none
     let curPath := ((← getEnv).vars.lookup name).map (fun i => (i.borrowedPath, i.borrowedExact))
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
-      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span
+      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@1")
     let parent := match parent? with | some q => if q != name then some q else none | none => none
     -- the binding in scope under `name` only (binding identity, bug 094) — a shadowed entry of
     -- the same name keeps its own provenance
@@ -148,7 +148,7 @@ def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
   if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
       (vi.borrowedFrom == some name || vi.refParent == some name)) then
     throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
-      "shadowing it would detach them from the storage they borrow; use a different name") span
+      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@1")
 
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
 def refAncestors (r : String) : CheckM (List String) := do
@@ -1062,7 +1062,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- reference may not occur in the return type (VALUE_MODEL.md).
       for (pName, pTy) in mapping do
         if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
-          throwCheckMsg s!"generic function '{fnName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+          throwCheck (.returnsReference s!"generic function '{fnName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback." "REF-4@1")
       refuseNestedRefInstantiation s!"generic function '{fnName}'" mapping (sig.params.map (·.2)) sig.retTy
       -- Check trait bounds
       if !sig.typeBounds.isEmpty then
@@ -1433,9 +1433,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant bindings guard body => do
+          | .mk _ _armEnum armVariant patBinds guard body => do
             -- Bind variant fields in scope (substitute generic type args)
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
+            -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
+            let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
+              | .ok bs => pure bs
+              | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
+            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
+            let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
             -- the scrutinee's normalization, taken before any binder can shadow its name
@@ -1457,6 +1463,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               let bindTy ← do
                 if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
                 else pure fieldTy
+              if fromLet && binding != "_" then
+                match ← resolvedOr bindTy with
+                | .ref _ | .refMut _ =>
+                  throwCheck (.letBindsReference binding (tyToString bindTy)) (some e.getSpan)
+                | _ => pure ()
               -- An arm binder may shadow a live binding: it is arm-scoped, so
               -- the outer binding is visible again (with its own obligation)
               -- after the match; state updates key on uid (bug 094).
@@ -1950,7 +1961,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       let mapping := sig.typeParams.zip typeArgs
       for (pName, pTy) in mapping do
         if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
-          throwCheckMsg s!"static method '{methodName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md)."
+          throwCheck (.returnsReference s!"static method '{methodName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md)." "REF-4@1")
       refuseNestedRefInstantiation s!"static method '{methodName}'" mapping (sig.params.map (·.2)) sig.retTy
       let paramTypes := sig.params.map fun (n, t) => (n, substTy mapping t)
       let retTy := substTy mapping sig.retTy
@@ -2000,20 +2011,43 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with
   | .letDecl _ name mutable ty value _isGhost =>
-    -- Escape analysis: prevent storing a borrow ref into a new binding
+    -- `__destr_*` names Elab's struct-destructuring temporary, which the post-mono REF-6 check
+    -- exempts; a source `let` may not take that spelling (exit 2i review).
+    if name.startsWith "__destr_" then
+      throwCheck (.reservedName name) (some stmt.getSpan)
+    -- REF-6@1 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
+    -- is refused before the initializer is checked; an inferred one right after.
+    match ty with
+    | some t =>
+      match ← resolvedOr t with
+      | .ref _ | .refMut _ =>
+        throwCheck (.letBindsReference name (tyToString (← resolvedOr t))) (some stmt.getSpan)
+      | _ => pure ()
+    | none => pure ()
     let env ← getEnv
-    match value with
-    | .ident _ vn =>
-      if env.borrowRefs.contains vn then
-        throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
-    | _ => pure ()
+    -- a ghost initializer is erased before monomorphization: see TypeEnv.erasedDepth (on an
+    -- error, checkStmts restores the environment, so the depth cannot leak)
+    if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let valTy ← checkExpr value ty
+    if _isGhost then modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
     match ty with
     | some declTy => expectTy declTy valTy s!"let binding '{name}'" (some stmt.getSpan)
     | none => pure ()
     let finalTy ← match ty with
       | some t => resolveType t
       | none => pure valTy
+    match ← resolvedOr finalTy with
+    | .ref _ | .refMut _ =>
+      throwCheck (.letBindsReference name (tyToString finalTy)) (some stmt.getSpan)
+    | _ => pure ()
+    if (_isGhost || env.erasedDepth > 0) && tyMayHoldRefAt env.currentTypeParams finalTy then
+      throwCheck (.ghostLetAtTypeParam name (tyToString finalTy)) (some stmt.getSpan)
+    -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
+    match value with
+    | .ident _ vn =>
+      if env.borrowRefs.contains vn then
+        throwCheck (.referenceEscapesBorrowBlock vn) (some stmt.getSpan)
+    | _ => pure ()
     -- `let _ = expr;` is removed: `_` is a pattern wildcard, not a discard device
     -- that makes an owned value vanish. Ignore a non-resource value with
     -- `match e { _ => {} }` (gated so it can't silently drop a resource owner);
@@ -2036,6 +2070,19 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       addVar name finalTy mutable (declSpan := some stmt.getSpan)
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
+    -- REF-6@1 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
+    -- binder; a `let` never is one) is the target of an assignment, whatever the value.
+    match ← lookupVarInfo name with
+    | some info =>
+      match ← resolvedOr info.ty with
+      | .ref _ | .refMut _ =>
+        throwCheck (.assignsReferenceBinding name (tyToString info.ty)) (some stmt.getSpan)
+      | _ => pure ()
+      -- inside an erased expression post-mono never sees this assignment (TypeEnv.erasedDepth)
+      let envE ← getEnv
+      if envE.erasedDepth > 0 && tyMayHoldRefAt envE.currentTypeParams info.ty then
+        throwCheck (.assignsReferenceBinding name (tyToString info.ty)) (some stmt.getSpan)
+    | none => pure ()
     -- Escape analysis: prevent storing a borrow ref into an outer variable
     let env ← getEnv
     match value with
@@ -2304,7 +2351,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- (E0239); raw-pointer stores below stay the trusted escape.
       if tyStoresRef (← resolveType inner) then
         throwCheck (.untraceablePlace "what a reference written through a reference borrows"
-          s!"'*r = ..' with 'r: &mut {tyToString inner}' stores a '{tyToString inner}' in storage behind a reference, where its source is not traced; pass the reference down as an argument instead") (some stmt.getSpan)
+          s!"'*r = ..' with 'r: &mut {tyToString inner}' stores a '{tyToString inner}' in storage behind a reference, where its source is not traced; pass the reference down as an argument instead") (some stmt.getSpan) (rule := some "REF-7@1")
       let valTy ← checkExpr value (some inner)
       expectTy inner valTy "deref assignment" (some stmt.getSpan)
     | .ptrMut inner =>
@@ -2389,17 +2436,16 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           | none => pure ()
         | _ => pure ()
     | _ => pure ()
-  | .borrowIn _ var ref region isMut body =>
+  | .borrowIn _ var ref _region isMut body =>
     -- Check that var exists
     match ← lookupVarInfo var with
     | none => throwCheck (.undeclaredVariable var) (some stmt.getSpan)
     | some varInfo =>
-      -- Check no shadowing of ref and region names
+      -- A ref or region name reusing a VISIBLE binding is SCOPE-1@1 (E0301), refused by the
+      -- lexical walk before the body is checked. The old E0214 / E0215 test here looked the name
+      -- up in the ownership environment, which keeps a finished loop body's locals, so it refused
+      -- legal sibling reuse (`while .. { let r = .. } borrow n as r in R { .. }`; exit 2i review).
       let env ← getEnv
-      if (env.vars.lookup ref).isSome then
-        throwCheck (.borrowRefShadows ref) (some stmt.getSpan)
-      if (env.vars.lookup region).isSome then
-        throwCheck (.borrowRegionShadows region) (some stmt.getSpan)
       -- Check if variable is consumed (moved)
       if !varInfo.isCopy && varInfo.state == .consumed then
         throwCheck (.cannotBorrowMoved var) (some stmt.getSpan)
@@ -2500,10 +2546,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
   -- surfaced by the contracts report.
   | .assert_ _ cond | .assume_ _ cond =>
+    -- erased before monomorphization: see TypeEnv.erasedDepth
+    modify fun e => { e with erasedDepth := e.erasedDepth + 1 }
     let t ← checkExpr cond none
+    modify fun e => { e with erasedDepth := e.erasedDepth - 1 }
     expectTy .bool t "assert/assume condition" (some stmt.getSpan)
-  -- These are desugared before reaching Check; should never appear
-  | .letDestructure _ _ _ _ _ _ => pure ()
+  -- Desugared before Check everywhere a block can hold one; what survives is a destructuring `let`
+  -- in a `for` header, which has no match form to become (exit 2i review: it was skipped silently)
+  | .letDestructure sp _ _ _ _ _ =>
+    throwCheckMsg "a destructuring `let` is not supported in a `for` header; destructure before the loop" (some sp)
   | .letStructDestructure _ structName bindings value =>
     -- Linear move-destructure: `let Struct { a, b } = value` CONSUMES `value` and
     -- moves each named field out into an owned binding. Checked natively (not via
@@ -2521,15 +2572,21 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => []
     let mapping := typeParams.zip typeArgs
     let structIsCopy ← isCopyType valTy
+    -- A binder takes the field its label names, or (shorthand) the field of its own name.
+    let fieldKeys := bindings.map PatBind.fieldName
+    match fieldKeys.find? (fun k => (fieldKeys.filter (· == k)).length > 1) with
+    | some k => throwCheck (.patternFieldMismatch s!"struct destructure '{structName}'" s!"pattern binds field '{k}' more than once") (some stmt.getSpan)
+    | none => pure ()
     if !structIsCopy then
       match ← lookupStruct structName with
       | some sd =>
         for sf in sd.fields do
-          if !(bindings.contains sf.name) then
+          if !(fieldKeys.contains sf.name) then
             throwCheck (.missingFieldInLiteral sf.name s!"struct destructure '{structName}'") (some stmt.getSpan)
       | none => pure ()
-    for b in bindings do
-      match ← lookupStructField structName b with
+    for pb in bindings do
+      let b := pb.name
+      match ← lookupStructField structName pb.fieldName with
       | some fieldTy =>
         let bTy ← resolvedOr (substTy mapping fieldTy)
         -- H16 for destructure binders too (bug 094).
@@ -2542,7 +2599,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             "a reference read out of a struct field is not traced; borrow a named place instead") (some stmt.getSpan)
         | _ => pure ()
         addVar b bTy true (declSpan := some stmt.getSpan)
-      | none => throwCheck (.structHasNoField structName b) (some stmt.getSpan)
+      | none => throwCheck (.structHasNoField structName pb.fieldName) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []
@@ -2691,8 +2748,204 @@ partial def unparenStmt : Stmt → Stmt
   | s => s
 end
 
+/-! ### SCOPE-1@1: one lexical name, one binding (exit 2i, MEMORY_SEMANTICS §15.4)
+
+A binder may not reuse the spelling of a local value binding VISIBLE at its declaration.
+Visibility is lexical (§15.1): a `let` is visible from its declaration to the end of its
+block, a parameter in the whole body, an arm / `if let` / `while let` binder in its arm, a
+`for` header binder in the header and the body, a borrow-block reference and region name in
+the block. Sibling scopes (two branches, two arms, consecutive blocks and loops) never see
+each other, and a declaration in a loop body is one binding however often it runs (SCOPE-2).
+Assignment introduces no binding.
+
+The walk is its own explicit scope chain over the (desugared) body rather than the
+ownership environment: `TypeEnv.vars` keeps a loop body's locals after the loop (the linear
+checker needs their states), so it is not the visible set. It runs before the body is
+checked, so E0301 reports first (before E0292 and E0238, which stay as defense in depth; E0214
+/ E0215 are no longer emitted), and it reports every collision in the function, each with the earlier binding as
+its related span. Elab's alpha-renaming (bug 087) stays mandatory (PRINCIPLES #12). -/
+
+/-- One visible binder: its spelling and where it was introduced. -/
+structure ScopeBinder where
+  name : String
+  span : Span
+
+abbrev Scope1M := StateM (List Diagnostic)
+
+/-- Introduce `name` (a binder of form `kind`, at `sp`) into the visible chain `vis`
+    (innermost first), recording E0301 if a visible binding already has that spelling. `_` is
+    a wildcard, not a binding. The binder is introduced either way, so one collision is
+    reported once. -/
+def scope1Bind (vis : List ScopeBinder) (name : String) (sp : Span) (kind : String) :
+    Scope1M (List ScopeBinder) := do
+  if name == "_" || name.isEmpty then return vis
+  match vis.find? (·.name == name) with
+  | some prev =>
+    let e := CheckError.shadowsVisibleBinding name kind
+    modify (· ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
+                    hint := e.hint, code := e.code,
+                    related := [(prev.span, s!"the earlier binding of '{name}', still visible here")],
+                    evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }])
+  | none => pure ()
+  return { name, span := sp } :: vis
+
+mutual
+partial def scope1Expr (vis : List ScopeBinder) : Expr → Scope1M Unit
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => do
+    scope1Expr vis l; scope1Expr vis r
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
+  | .deref _ x | .cast _ x _ => scope1Expr vis x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args =>
+    args.forM (scope1Expr vis)
+  | .methodCall _ o _ _ args => do scope1Expr vis o; args.forM (scope1Expr vis)
+  | .structLit _ _ _ fs base => do
+    fs.forM (fun (_, e) => scope1Expr vis e); base.forM (scope1Expr vis)
+  | .enumLit _ _ _ _ fs => fs.forM (fun (_, e) => scope1Expr vis e)
+  | .match_ _ scr arms => do scope1Expr vis scr; arms.forM (scope1Arm vis)
+  | .ifExpr _ c t e => do scope1Expr vis c; scope1Block vis t; scope1Block vis e
+  | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _
+  | .ident _ _ | .fnRef _ _ => pure ()
+
+/-- An arm: its pattern binders are visible in its guard and body only. A destructuring
+    `let` reaches here after `desugarStmts` (its binders scope over the continuation, which
+    is the arm body), so it is checked with the same chain. -/
+partial def scope1Arm (vis : List ScopeBinder) : MatchArm → Scope1M Unit
+  | .mk sp _ _ bs g body => do
+    let mut v := vis
+    for b in bs do
+      v ← scope1Bind v b.name sp (if b.letBound then "destructuring `let` binder" else "pattern binder")
+    g.forM (scope1Expr v); scope1Block v body
+  | .varArm sp b g body => do
+    let v ← scope1Bind vis b sp "pattern binder"
+    g.forM (scope1Expr v); scope1Block v body
+  | .litArm _ val g body => do
+    scope1Expr vis val; g.forM (scope1Expr vis); scope1Block vis body
+  | .rangeArm _ lo hi _ g body => do
+    scope1Expr vis lo; scope1Expr vis hi; g.forM (scope1Expr vis); scope1Block vis body
+
+/-- A block: its declarations are visible to the statements after them, not after it. -/
+partial def scope1Block (vis : List ScopeBinder) (stmts : List Stmt) : Scope1M Unit := do
+  let mut v := vis
+  for s in stmts do
+    v ← scope1Stmt v s
+
+/-- One statement; returns the chain visible to the next statement of the same block. -/
+partial def scope1Stmt (vis : List ScopeBinder) : Stmt → Scope1M (List ScopeBinder)
+  | .letDecl sp n _ _ val _ => do
+    -- the initializer is checked before the binder exists: `let s = transform(s)` collides
+    scope1Expr vis val; scope1Bind vis n sp "`let`"
+  | .assign _ _ val => do scope1Expr vis val; pure vis
+  | .return_ _ v | .break_ _ v _ => do v.forM (scope1Expr vis); pure vis
+  | .expr _ e _ | .defer _ e | .assert_ _ e | .assume_ _ e => do scope1Expr vis e; pure vis
+  | .ifElse _ c t e => do
+    scope1Expr vis c; scope1Block vis t; e.forM (scope1Block vis); pure vis
+  | .while_ _ c body _ => do scope1Expr vis c; scope1Block vis body; pure vis
+  | .forLoop _ init c step body _ => do
+    -- the header binder is visible in the header and the body, not after the loop
+    let h ← match init with
+      | some i => scope1Stmt vis i
+      | none => pure vis
+    scope1Expr h c; scope1Block h body
+    match step with
+    | some st => discard <| scope1Stmt h st
+    | none => pure ()
+    pure vis
+  | .fieldAssign _ o _ v | .derefAssign _ o v => do scope1Expr vis o; scope1Expr vis v; pure vis
+  | .arrayIndexAssign _ a i v => do scope1Expr vis a; scope1Expr vis i; scope1Expr vis v; pure vis
+  | .continue_ _ _ => pure vis
+  | .borrowIn sp _ ref region _ body => do
+    let v1 ← scope1Bind vis ref sp "borrow-block reference"
+    let v2 ← scope1Bind v1 region sp "borrow-block region name"
+    scope1Block v2 body; pure vis
+  | .letDestructure sp _ _ bs val els => do
+    scope1Expr vis val; els.forM (scope1Block vis)
+    let mut v := vis
+    for b in bs do v ← scope1Bind v b.name sp "destructuring `let` binder"
+    pure v
+  | .letStructDestructure sp _ bs val => do
+    scope1Expr vis val
+    let mut v := vis
+    for b in bs do v ← scope1Bind v b.name sp "destructuring `let` binder"
+    pure v
+end
+
+/-! ### Constant initializers (exit 2i review)
+
+A module constant's initializer is not run through `checkFn` (Elab elaborates it directly), so its
+local binders get the SCOPE-1 lexical walk here, and REF-6 one test with no types: a constant is a
+value and may not borrow (E0602 at a use), so any borrow, borrow block or cast to a reference type
+in it is E0302 (`constBorrows`). Without a borrow no reference can arise in a constant: it has no
+parameters, no function returns one (REF-1) and none is stored (REF-3). -/
+
+private def isRefTySyn (al : List (String × Ty)) (t : Ty) : Bool :=
+  match expandAliasDeep al (al.length + 64) t with
+  | .ref _ | .refMut _ => true
+  | _ => false
+
+mutual
+private partial def exprHasBorrow (al : List (String × Ty)) : Expr → Bool
+  | .borrow _ _ | .borrowMut _ _ => true
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => exprHasBorrow al l || exprHasBorrow al r
+  | .cast _ x t => isRefTySyn al t || exprHasBorrow al x
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x => exprHasBorrow al x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.any (exprHasBorrow al)
+  | .methodCall _ o _ _ args => exprHasBorrow al o || args.any (exprHasBorrow al)
+  | .structLit _ _ _ fs b => fs.any (fun (_, e) => exprHasBorrow al e) || (b.map (exprHasBorrow al)).getD false
+  | .enumLit _ _ _ _ fs => fs.any (fun (_, e) => exprHasBorrow al e)
+  | .match_ _ s arms => exprHasBorrow al s || arms.any fun a => match a with
+      | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
+        (g.map (exprHasBorrow al)).getD false || b.any (stmtHasBorrow al)
+  | .ifExpr _ c t e => exprHasBorrow al c || t.any (stmtHasBorrow al) || e.any (stmtHasBorrow al)
+  | _ => false
+private partial def stmtHasBorrow (al : List (String × Ty)) : Stmt → Bool
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+  | .letStructDestructure _ _ _ v => exprHasBorrow al v
+  | .return_ _ v | .break_ _ v _ => (v.map (exprHasBorrow al)).getD false
+  | .borrowIn _ _ _ _ _ _ => true
+  | .ifElse _ c t e => exprHasBorrow al c || t.any (stmtHasBorrow al) || ((e.map (·.any (stmtHasBorrow al))).getD false)
+  | .while_ _ c b _ => exprHasBorrow al c || b.any (stmtHasBorrow al)
+  | .forLoop _ i c st b _ =>
+    ((i.map (stmtHasBorrow al)).getD false) || exprHasBorrow al c || ((st.map (stmtHasBorrow al)).getD false) || b.any (stmtHasBorrow al)
+  | .fieldAssign _ o _ v | .derefAssign _ o v => exprHasBorrow al o || exprHasBorrow al v
+  | .arrayIndexAssign _ a i v => exprHasBorrow al a || exprHasBorrow al i || exprHasBorrow al v
+  | .letDestructure _ _ _ _ v e => exprHasBorrow al v || ((e.map (·.any (stmtHasBorrow al))).getD false)
+  | .continue_ _ _ => false
+end
+
+private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
+  { severity := .error, message := e.message, pass := "check", span := some sp, hint := e.hint,
+    code := e.code, evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
+
+
+/-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
+def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
+  -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
+  -- leaves no source for a reference binding at all
+  ((scope1Expr [] c.value).run []).2
+    ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.value.getSpan] else [])
+
+/-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
+    the body). Empty when the function obeys the rule. -/
+def scope1Diagnostics (f : FnDef) : List Diagnostic :=
+  let go : Scope1M Unit := do
+    let mut vis : List ScopeBinder := []
+    for p in f.params do
+      vis ← scope1Bind vis p.name f.span "parameter"
+    scope1Block vis f.body
+  (go.run []).2
+
+/-- A constant initializer as an expression of the constant's type, with no locals in scope. -/
+def checkConstInit (c : ConstDef) : CheckM Unit := do
+  let ty ← resolveType c.ty
+  let vt ← checkExpr c.value (some ty)
+  expectTy ty vt s!"constant '{c.name}'" (some c.span)
+
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
+  -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
+  -- keys on names can see it (exit 2i).
+  let scopeDs := scope1Diagnostics f
+  if !scopeDs.isEmpty then throw scopeDs
   -- Validate #[test] constraints
   if f.isTest then
     if !f.params.isEmpty then
@@ -2718,7 +2971,7 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- value, an owned view, a scoped callback (with_value/with_at), or a raw
   -- pointer (*const/*mut) for low-level/unsafe access.
   if tyContainsRef retTy then
-    throwCheckMsg s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" f.span
+    throwCheck (.returnsReference s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" "REF-1@1") (some f.span)
   modify fun env => { env with currentRetTy := retTy }
   -- Add params to env. H17 (ruled 2026-07-05): params are OWNED LOCALS — the
   -- caller moved the value in, so the callee holds its obligation and must
@@ -2831,7 +3084,7 @@ private partial def specBinders : Expr → List String
   | _ => []
 
 private partial def specBindersArm : MatchArm → List String
-  | .mk _ _ _ bs g b => bs ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
+  | .mk _ _ _ bs g b => PatBind.names bs ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .varArm _ n g b => n :: (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .litArm _ v g b => specBinders v ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
   | .rangeArm _ lo hi _ g b =>
@@ -2839,8 +3092,8 @@ private partial def specBindersArm : MatchArm → List String
 
 private partial def specBindersStmt : Stmt → List String
   | .letDecl _ n _ _ v _ => n :: specBinders v
-  | .letDestructure _ _ _ bs v eb => bs ++ specBinders v ++ (eb.map (·.flatMap specBindersStmt)).getD []
-  | .letStructDestructure _ _ bs v => bs ++ specBinders v
+  | .letDestructure _ _ _ bs v eb => PatBind.names bs ++ specBinders v ++ (eb.map (·.flatMap specBindersStmt)).getD []
+  | .letStructDestructure _ _ bs v => PatBind.names bs ++ specBinders v
   | .borrowIn _ _ r _ _ b => r :: b.flatMap specBindersStmt
   | .forLoop _ init c st b _ =>
       (init.map specBindersStmt).getD [] ++ specBinders c
@@ -2920,6 +3173,93 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
                    hint := e.hint, code := e.code } :: ds)
       | none => ((local_, modName, orig) :: seen, ds)
   vsLocal ++ dups.reverse
+
+/-- Calls in a contract to a generic function of this module (review round 8): a contract is
+    erased before monomorphization, so such a call's specialization would never be checked. -/
+private partial def contractGenericCalls (gs : List String) (ms : List String) (e : Expr) : List String :=
+  (collectCalls e).filterMap fun (isMethod, g) =>
+    if (if isMethod then ms.contains g else gs.contains g) then some s!"a call to the generic function `{g}`" else none
+where
+  -- (method-syntax?, name): a plain or `Type::method` call is matched against function names
+  -- (mangled for methods); `x.m(..)` against bare generic method names (review round 10)
+  collectCalls : Expr → List (Bool × String)
+    | .call _ f _ args => (false, f) :: args.flatMap collectCalls
+    | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => collectCalls l ++ collectCalls r
+    | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x | .cast _ x _
+    | .borrow _ x | .borrowMut _ x => collectCalls x
+    | .staticMethodCall _ tn mn _ args => (false, s!"{tn}_{mn}") :: args.flatMap collectCalls
+    | .arrayLit _ args => args.flatMap collectCalls
+    | .methodCall _ o mn _ args => (true, mn) :: collectCalls o ++ args.flatMap collectCalls
+    | .structLit _ _ _ fs b => fs.flatMap (fun (_, x) => collectCalls x) ++ (b.map collectCalls).getD []
+    | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, x) => collectCalls x)
+    | .match_ _ s arms => collectCalls s ++ arms.flatMap fun a => match a with
+        | .mk _ _ _ _ g b | .varArm _ _ g b | .litArm _ _ g b | .rangeArm _ _ _ _ g b =>
+          (g.map collectCalls).getD [] ++ b.flatMap fun st => match st with
+            | .expr _ x _ => collectCalls x
+            | _ => []
+    | .ifExpr _ c t f => collectCalls c ++ (t ++ f).flatMap fun st => match st with
+        | .expr _ x _ => collectCalls x
+        | _ => []
+    | _ => []
+
+/-- The binding an argument passes through parentheses and casts, if any (review round 9). -/
+private def contractArgRoot : Expr → Option String
+  | .ident _ n => some n
+  | .paren _ x | .cast _ x _ => contractArgRoot x
+  | _ => none
+
+/- What a contract expression may not contain (exit 2i review rounds 5-6): a binder of any kind (a
+    match-pattern binder included) or any statement other than a block's trailing value. An
+    exhaustive walk over every `Expr` constructor, so a new constructor cannot hide one. Nor may
+    it create or pass a reference (a borrow, or a reference-typed parameter `refPs` as a call
+    argument): contracts are erased before monomorphization, so a generic called from one at a
+    reference type would never have its specialization checked (review round 7). -/
+mutual
+private partial def contractStmtsBad (refPs : List String) (ss : List Stmt) : List String :=
+  match ss with
+  | [] => []
+  | [.expr _ e true] => contractExprBad refPs e
+  | s :: rest =>
+    let what := match s with
+      | .letDecl _ n _ _ _ _ => s!"`let {n}`"
+      | .letDestructure _ _ _ bs _ _ | .letStructDestructure _ _ bs _ => s!"a destructuring `let` ({", ".intercalate (PatBind.names bs)})"
+      | .borrowIn _ _ r _ _ _ => s!"a borrow block (`{r}`)"
+      | .assign _ n _ => s!"an assignment to `{n}`"
+      | .fieldAssign _ _ _ _ | .derefAssign _ _ _ | .arrayIndexAssign _ _ _ _ => "an assignment through a place"
+      | _ => "a statement"
+    what :: contractStmtsBad refPs rest
+private partial def contractArmBad (refPs : List String) : MatchArm → List String
+  | .mk _ _ _ bs g b => (PatBind.names bs |>.filter (· != "_") |>.map fun n => s!"the pattern binder `{n}`")
+      ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+  | .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
+      ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+  | .litArm _ v g b => contractExprBad refPs v ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+  | .rangeArm _ lo hi _ g b => contractExprBad refPs lo ++ contractExprBad refPs hi ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
+private partial def contractExprBad (refPs : List String) : Expr → List String
+  | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _ | .ident _ _ | .fnRef _ _ => []
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => contractExprBad refPs l ++ contractExprBad refPs r
+  | .borrow _ _ | .borrowMut _ _ => ["a borrow"]
+  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .deref _ x
+  | .cast _ x _ => contractExprBad refPs x
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args =>
+    args.filterMap (fun a => match a with
+      | a => match contractArgRoot a with
+        | some n => if refPs.contains n then some s!"the reference `{n}` passed to a call" else none
+        | none => none) ++ args.flatMap (contractExprBad refPs)
+  | .arrayLit _ args => args.flatMap (contractExprBad refPs)
+  | .methodCall _ o _ _ args =>
+    (match contractArgRoot o with
+     | some n => if refPs.contains n then [s!"the reference `{n}` used as a method receiver"] else []
+     | none => []) ++
+    args.filterMap (fun a => match a with
+      | a => match contractArgRoot a with
+        | some n => if refPs.contains n then some s!"the reference `{n}` passed to a call" else none
+        | none => none) ++ contractExprBad refPs o ++ args.flatMap (contractExprBad refPs)
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => contractExprBad refPs e) ++ (b.map (contractExprBad refPs)).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractExprBad refPs e)
+  | .match_ _ s arms => contractExprBad refPs s ++ arms.flatMap (contractArmBad refPs)
+  | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
+end
 
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
@@ -3063,8 +3403,13 @@ def checkModule (m : Module) (summary : FileSummary)
   | some (desc, ty, sp) =>
     .error [{ severity := .error, message := CheckError.message (.refStoredInAggregate desc (tyToString ty)),
               pass := "check", span := some sp, hint := CheckError.hint (.refStoredInAggregate desc (tyToString ty)),
-              code := CheckError.code (.refStoredInAggregate desc (tyToString ty)) }]
+              code := CheckError.code (.refStoredInAggregate desc (tyToString ty)),
+              evidence := ruleEvidence (some "REF-3@1"), nextAction := ruleNextAction "REF-3@1" }]
   | none =>
+  -- SCOPE-1@1 / REF-6@1 inside constant initializers, which checkFn never visits (exit 2i review)
+  match m.constants.flatMap (constInitDiagnostics typeAliasMap) with
+  | d :: ds => .error (d :: ds)
+  | [] =>
   -- A `spec fn` with a DEFINITIONAL body must have that body checked. The body-less form has
   -- nothing to check, so nothing did -- and when bodies were added, a spec could reference an
   -- undeclared variable or a nonexistent function and be accepted silently. The refinement tier
@@ -3075,6 +3420,26 @@ def checkModule (m : Module) (summary : FileSummary)
   -- parameters, and may call only other spec functions (a call to an executable function would
   -- make the spec depend on runtime behaviour, which is the thing specs exist to be independent
   -- of).
+  -- generic functions and methods, by every spelling a contract or spec body can call them with (exit 2i)
+  let genericFns : List String :=
+    (m.functions.filterMap fun g => if g.typeParams.isEmpty then none else some g.name)
+    -- imported generics under their local (possibly aliased) names, and imported generic
+    -- methods by their mangled names (review round 12)
+    ++ (imports.functions.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
+    ++ (imports.implMethodSigs.filterMap fun (n, sm) => if sm.typeParams.isEmpty then none else some n)
+    ++ (m.implBlocks.flatMap fun ib => ib.methods.flatMap fun g =>
+          if g.typeParams.isEmpty && ib.typeParams.isEmpty then [] else [s!"{ib.typeName}_{g.name}"])
+    ++ (m.traitImpls.flatMap fun tb => tb.methods.flatMap fun g =>
+          if g.typeParams.isEmpty && tb.typeParams.isEmpty then [] else [s!"{tb.typeName}_{g.name}"])
+  let genericMethods : List String :=
+    (imports.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+    ++ (imports.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
+    ++ (m.implBlocks.flatMap fun ib => ib.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
+    ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
+      if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
   let specNames := m.specFns.map (·.name)
   let specBodyCheck := m.specFns.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc sd =>
     match acc with
@@ -3097,11 +3462,23 @@ def checkModule (m : Module) (summary : FileSummary)
         -- That is safety by ACCIDENT: it rests on the renderer's narrowness, and the first person
         -- to add `.ifExpr` to `renderTerm` -- an obvious extension -- makes the corruption live.
         -- Rejecting binders here makes the property checked rather than incidental.
-        let binders := (specBinders b).eraseDups
-        if !binders.isEmpty then
+        -- binder-free, checked by the exhaustive contract walk too (review round 11: the
+        -- older `specBinders` walk skipped method calls and other constructors)
+        let binders := (specBinders b ++ contractExprBad [] b).eraseDups
+        -- a generic call in a spec body is erased like one in a contract (review round 16)
+        let genericCalls := (contractGenericCalls genericFns genericMethods b).eraseDups
+        if !genericCalls.isEmpty then
+          let ce := CheckError.contractBinds s!"spec fn {sd.name}" (", ".intercalate genericCalls)
+          .error [{ severity := .error, message := ce.message, pass := "check", span := some sd.span,
+                    hint := ce.hint, code := ce.code, evidence := ruleEvidence ce.rule,
+                    nextAction := some "call only spec fns and non-generic functions from a spec body" }]
+        else if !binders.isEmpty then
           .error [{ severity := .error
                   , message := s!"spec fn '{sd.name}' body binds name(s): {", ".intercalate binders}; spec bodies must be binder-free"
                   , pass := "check", span := some sd.span
+                  -- exit 2i: the same binder-free rule as contracts (E0305, SCOPE-1@1)
+                  , code := "E0305", evidence := ruleEvidence (some "SCOPE-1@1")
+                  , nextAction := some "write the spec body as a binder- and statement-free expression over its parameters"
                   , hint := some "TEMPORARY: parameter substitution is by name and would capture a shadowing binding. The restriction lifts once substitution is capture-avoiding — until then keep the body free of `let`, match patterns, and loops." }]
         else if !free.isEmpty then
           .error [{ severity := .error
@@ -3155,6 +3532,42 @@ def checkModule (m : Module) (summary : FileSummary)
   --
   -- The rules are the spec-body rules, for the same reasons: a contract may mention only names
   -- that exist, and it must be a proposition rather than a number.
+  -- Exit 2i (review round 4): contract expressions and spec fn parameters never reach checkFn.
+  -- A contract's statement blocks get the SCOPE-1 walk (the function's parameters visible, and
+  -- `result` in an `ensures`) and the syntactic REF-6 walk with every assignment refused; a spec
+  -- fn's parameters get the duplicate-name test.
+  -- A contract (requires, ensures, loop invariant, loop variant) is a proposition, so like a spec
+  -- body it binds nothing (E0305): no reference binding and no reuse of a visible name can arise
+  -- in it, whatever the types. Assignments are refused too (E0303, `constRef6Expr true`).
+  let exit2iContractDs : List Diagnostic :=
+    (m.functions ++ m.implBlocks.flatMap (·.methods) ++ m.traitImpls.flatMap (·.methods)).flatMap fun f =>
+      let clauses := f.requires ++ f.ensures ++ f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
+      clauses.flatMap fun e =>
+        -- (review round 11) passing a reference to a NON-generic callee is harmless: that body is
+        -- checked like any other; only an erased call's never-built specialization escapes, so
+        -- the rule is about generic callees (no reference-parameter list is passed).
+        match (contractExprBad [] e ++ contractGenericCalls genericFns genericMethods e).eraseDups with
+        | [] => []
+        | bad =>
+          let ce := CheckError.contractBinds f.name (", ".intercalate bad)
+          [{ severity := .error, message := ce.message, pass := "check", span := some f.span, hint := ce.hint,
+             code := ce.code, evidence := ruleEvidence ce.rule,
+             nextAction := some "write the contract as a binder- and statement-free proposition over the parameters (and `result`); name a repeated subterm with a `spec fn`" }]
+  -- parameter lists with no body checkFn would walk: spec fns, extern fns, trait method
+  -- declarations (review round 12)
+  let paramDups (ps : List Param) (sp : Span) : List Diagnostic :=
+    let go : Scope1M Unit := do
+      let mut vis : List ScopeBinder := []
+      for p in ps do
+        vis ← scope1Bind vis p.name sp "parameter"
+    (go.run []).2
+  let exit2iSpecParamDs : List Diagnostic :=
+    m.specFns.flatMap (fun sd => paramDups sd.params sd.span)
+    ++ m.externFns.flatMap (fun ef => paramDups ef.params ef.span)
+    ++ m.traits.flatMap (fun td => td.methods.flatMap fun sig => paramDups sig.params td.span)
+  match exit2iContractDs ++ exit2iSpecParamDs with
+  | d :: ds => .error (d :: ds)
+  | [] =>
   let contractCheck :=
     let constNames := constantsMap.map (·.1)
     let impureFns := (impureFnsIn "" m).eraseDups
@@ -3262,7 +3675,9 @@ def checkModule (m : Module) (summary : FileSummary)
                   , message := s!"contract on '{f.name}': impure call '{impureCalls.headD ""}' — spec/ghost must be pure and total"
                   , pass := "check", span := some f.span
                   , hint := some "a contract may call `spec fn`s and capability-free functions; a capability-requiring function performs I/O, so the contract's meaning would depend on runtime effects" }]
-        else if !shadowedParams.isEmpty then
+        -- A local reusing a parameter's name is SCOPE-1@1 (E0301, reported by checkFn with its
+        -- rule tag and related span); this older untagged refusal stays only as defense in depth.
+        else if !shadowedParams.isEmpty && (scope1Diagnostics f).isEmpty then
           .error [{ severity := .error
                   , message := s!"contract on '{f.name}' names parameter(s) shadowed by a local: {", ".intercalate shadowedParams}"
                   , pass := "check", span := some f.span
@@ -3335,6 +3750,15 @@ def checkModule (m : Module) (summary : FileSummary)
     | (.ok (), finalEnv) => (errs, finalEnv)
     | (.error ds, _) => (errs ++ ds.addContext s!"while checking function '{f.name}'", env)
   ) (([] : Diagnostics), initEnv)
+  -- Constant initializers are type-checked too (exit 2i review round 15): they never reach
+  -- checkFn, so an ill-typed `let r: &i32 = 42` or a reference made through a raw pointer inside
+  -- one was elaborated unchecked. Checking them here applies REF-6 (E0302 / E0303) and every
+  -- other statement rule to their bodies.
+  let constErrors := m.constants.foldl (fun errs c =>
+    match (checkConstInit c).run { initEnv with traits := allTraits } |>.run with
+    | (.ok (), _) => errs
+    | (.error ds, _) => errs ++ ds.addContext s!"while checking constant '{c.name}'") ([] : Diagnostics)
+  let allErrors := allErrors ++ constErrors
   if allErrors.isEmpty then .ok ()
   else .error allErrors
 

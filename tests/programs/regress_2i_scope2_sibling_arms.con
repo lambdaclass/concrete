@@ -1,0 +1,25 @@
+// Exit 2i SCOPE-2 (MEMORY_SEMANTICS §15.4): the same binder in sibling match arms, and in two consecutive matches is not a collision. Run 42, binary =
+// --interp.
+enum E { A { v: Int }, B { v: Int } }
+
+fn get(e: E) -> Int {
+    match e {
+        E::A { v } => { return v; },
+        E::B { v } => { return v + 1; }
+    }
+}
+
+fn main() -> Int {
+    let o: Option<Int> = Option::Some { value: 20 };
+    let mut acc: Int = 0;
+    match o {
+        Option::Some { value } => { acc = acc + value; },
+        Option::None => {}
+    }
+    let o2: Option<Int> = Option::Some { value: 1 };
+    match o2 {
+        Option::Some { value } => { acc = acc + value; },
+        Option::None => {}
+    }
+    return acc + get(E::A { v: 10 }) + get(E::B { v: 10 });
+}

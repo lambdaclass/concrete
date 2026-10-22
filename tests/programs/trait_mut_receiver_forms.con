@@ -29,8 +29,8 @@ mod m {
         p.inc();
         let mut w: W = W { p: p };
         field(&mut w);
-        let W { p } = w;
-        let P { a, b } = p;
+        let W { p: inner } = w;
+        let P { a, b } = inner;
         print_int(a + b);
         print_char(10);
         return 0;

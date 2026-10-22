@@ -63,7 +63,7 @@ mod wordfreq {
                 Option::Some { value } => {
                     match value.to_string() {
                         Option::None => { counts.drop(); return 1; },   // invalid UTF-8
-                        Option::Some { value } => { value },
+                        Option::Some { value: text } => { text },
                     }
                 },
             };
@@ -109,8 +109,8 @@ mod wordfreq {
                                 m.drop();
                                 return 1;
                             },
-                            Result::Ok { value } => {
-                                let r: Reader<File> = reader_from_file(value);
+                            Result::Ok { value: inner } => {
+                                let r: Reader<File> = reader_from_file(inner);
                                 let data: Bytes = read_all(&r);
                                 let rc: Result<u64, IoError> = r.close();
                                 discard(rc.is_ok());

@@ -10,7 +10,7 @@ mod xpkg_app {
         let mut b: Bytes = Bytes::new();
         b.push(81); b.push(82);
         let got: Int = match header_view(&a) {
-            Option::Some { value } => match value.byte(&b, 0) { Option::Some { value } => value as Int, Option::None => 0 },
+            Option::Some { value } => match value.byte(&b, 0) { Option::Some { value: inner } => inner as Int, Option::None => 0 },
             Option::None => 200,
         };
         destroy(a); destroy(b);

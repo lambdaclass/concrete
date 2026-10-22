@@ -1,0 +1,10 @@
+// Exit 2i SCOPE-1@1 migration twin of error_2i_scope1_for_header.con: a `for` header binder reuses an outer `let`, with the new binder renamed
+// (the §15.5 rewrite). Run 42, binary = --interp.
+fn main() -> Int {
+    let i: Int = 40;
+    let mut total: Int = 0;
+    for (let mut j: Int = 0; j < 2; j = j + 1) {
+        total = total + 1;
+    }
+    return i + total;
+}

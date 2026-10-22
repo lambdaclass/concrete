@@ -151,9 +151,9 @@ mod process {
         let result: Result<Child, ProcessError> = spawn(&cmd, &args as *const *const u8);
         cmd.drop();
         match result {
-            Result::Ok { value } => {
+            Result::Ok { value: child } => {
                 // Child was forked, but execvp failed — child exits 127
-                let wr: Result<ExitStatus, ProcessError> = value.wait();
+                let wr: Result<ExitStatus, ProcessError> = child.wait();
                 match wr {
                     Result::Ok { value } => {
                         match value {

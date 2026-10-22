@@ -42,6 +42,7 @@ declare -A BUG_TEST_MAP=(
   [126]="regress_126_heap_ref_one_hop.con"
   [105]="regress_105_ref_valued_branch_generic.con error_105_ref_valued_if_arg.con error_105_ref_valued_if_field.con"
   [115]="error_115_vec_get_non_copy.con error_115_vec_get_generic_unbounded.con error_115_vec_set_non_copy.con"
+  [124]="error_2i_scope1_duplicate_params.con regress_2i_scope1_duplicate_params_renamed.con"
   [132]="error_132_const_name_collision.con"
   [107]="error_107_shadow_under_live_ref.con error_107_shadow_in_block_under_live_ref.con"
   [073]="error_type_arg_count_extra.con error_type_arg_count_missing.con type_arg_count_ok.con"
@@ -68,7 +69,7 @@ declare -A BUG_TEST_MAP=(
   # R-0002: a callee VALUE is never resolved by global name. Single-file witness
   # (42, was 21) + the std.io collision variant as a project fixture.
   [050]="regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con"
-  [087]="regress_087_let_block_shadow.con regress_087_borrow_shadow_uaf/src/main.con regress_087_unpromoted_sibling.con"
+  [087]="regress_087_let_block_shadow.con regress_087_borrow_shadow_uaf/src/main.con regress_087_unpromoted_sibling.con regress_2i_scope1_087_renamed.con"
   # R-0003: one probe/occupancy slice — overwrite-past-tombstone (047) and the
   # zero-empty-slot missing lookup (048) share the same fixture.
   [047]="regress_047_048_hashmap_probe/src/main.con"
@@ -174,7 +175,6 @@ declare -A SKIP_BUGS=(
   [117]="OPEN -- the interpreter does not resolve module-level constants; reproducer tests/regressions/bug117_interp_module_const/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [118]="OPEN -- the interpreter cannot call a function imported from a nested module; reproducer tests/regressions/bug118_interp_nested_module_import/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)"
   [122]="OPEN -- the builtin Option/Result are emitted as one canonical LLVM union sized for the program's largest instantiation while the compiler lays out each instantiation (and a user enum named Option/Result) by its own size, so aggregate copies move or overrun fields (wrong code; a stack overflow in tests/programs/match_expr_linear.con); reproducer tests/regressions/bug122_builtin_enum_canonical_layout/repro.con, found by bug 121's layout probe 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit) and check_enum_union_layout.sh leg 5 (KNOWN_122)"
-  [124]="OPEN -- duplicate parameter names pass checkFn and fail in llvm-as (redefinition of argument) while --interp runs the program; reproducer tests/regressions/bug124_duplicate_parameter_names/repro.con, found by the exit 2i specification (G3) 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg); the rejection fixture lands with SCOPE-1 (E0301, R-0500) under queue exit 2c"
   [135]="FIXED 2026-10-21 -- concrete fmt printed float literals with toString (six decimals), so 0.0000000001 became 0.000000 and the formatted program differed; one exact canonical (shortest, then nearest) round-trip printer (Lexer.floatLiteralString) now serves fmt, --emit-core and --emit-ssa. Regression vehicle is a gate, not a tests/programs fixture: check_concrete_fmt.sh section 8 compiles every corpus float lexeme plus 311 sampled doubles before and after fmt and requires the LLVM f64 bits to equal Python's reading, requires each sampled double's canonical spelling to survive fmt, and requires tests/regressions/fmt_roundtrip/floats.con to keep its lexemes; both legs shown to fail with toString restored; see docs/bugs/135"
   [136]="OPEN -- functional update S { f: e, ..base } evaluates base once per omitted field (Elab desugars each omitted field to base.field), where STATEMENT_EXPRESSION_MODEL rule 6 evaluates it exactly once after the explicit initializers; reproducer tests/regressions/bug136_functional_update_base_reevaluated/repro.con (599 natively and interpreted, 59 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:87); the run fixture lands with the fix under queue exit 0b"
   [137]="OPEN -- enum-variant literal fields are evaluated in the variant's declaration order (Elab walks the variant's fields) in both the binary and --interp, where STATEMENT_EXPRESSION_MODEL rule 4 is source order; reproducer tests/regressions/bug137_enum_literal_field_order/repro.con (65 in both, 56 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:65); the run fixture lands with the fix under queue exit 0b"

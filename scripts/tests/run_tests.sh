@@ -1480,7 +1480,7 @@ run_err "$TESTDIR/error_091_mut_receiver_through_ref_projection.con" "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_in_ref_self.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable.con"              "(E0233)"
 run_err "$TESTDIR/error_091_mut_receiver_immutable_concrete.con"     "(E0233)"
-run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_borrowed.con"               "(E0302)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_deref.con"            "(E0237)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_borrow.con"           "(E0237)"
 run_err "$TESTDIR/error_091_receiver_deref_borrow_moved.con"         "(E0290)"
@@ -1492,7 +1492,7 @@ run_err "$TESTDIR/error_091_mut_receiver_deref_if_ref.con"           "(E0238)"
 # temporaries remain legal `&mut self` receivers, compiled and under --interp.
 run_err "$TESTDIR/error_091_destroy_newtype_through_ref.con"               "(E0290)"
 run_err "$TESTDIR/error_091_mut_receiver_reborrow_shared.con"              "(E0237)"
-run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_live.con"            "(E0302)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_through_ref.con"           "(E0237)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_paren_immutable.con"       "(E0233)"
 run_err "$TESTDIR/error_091_mut_borrow_explicit_projection_through_ref.con" "(E0237)"
@@ -1501,8 +1501,8 @@ run_err "$TESTDIR/error_091_norm_temporaries.con" "(E0238)"
 # of `(&p)` and `&w.p`, and an owned `if` under a projection.
 run_err "$TESTDIR/error_091_destroy_defname_deref_arg.con"          "(E0290)"
 run_err "$TESTDIR/error_091_destroy_defname_paren_arg.con"          "(E0205)"
-run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0232)"
-run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0232)"
+run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_outer.con"    "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_projection_borrow_live.con" "(E0302)"
 run_err "$TESTDIR/error_091_deref_ref_by_value.con"                 "(E0290)"
 run_err "$TESTDIR/error_091_paren_call_arg_not_consumed.con"        "(E0205)"
 run_err "$TESTDIR/error_091_norm_if_projection.con" "(E0238)"
@@ -1511,18 +1511,18 @@ run_err "$TESTDIR/error_091_norm_if_projection.con" "(E0238)"
 # bindings are refused, and a block-local owned tail is an owned temporary.
 run_err "$TESTDIR/error_091_destroy_deref_borrow_mut.con"              "(E0290)"
 run_err "$TESTDIR/error_091_match_deref_ref_payload.con"               "(E0290)"
-run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0232)"
-run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_deref_borrow_provenance.con"  "(E0302)"
+run_err "$TESTDIR/error_091_borrow_provenance_unknown.con"             "(E0302)"
 run_err "$TESTDIR/error_091_norm_if_local_binding.con" "(E0238)"
 # Codex review of round 3 (fifth pass): a `&mut` receiver reached through `&`, an exclusive
 # reference used under a live reborrow, provenance at reassignment, local-binding chains.
-run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0238)"
-run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0232)"
-run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0238)"
+run_err "$TESTDIR/error_091_mut_receiver_ref_to_mut_ref.con"       "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_reborrowed_mut_ref.con"   "(E0302)"
+run_err "$TESTDIR/error_091_mut_receiver_reassigned_ref.con"       "(E0302)"
 run_err "$TESTDIR/error_091_norm_if_local_chain.con" "(E0238)"
 # Codex review of round 3 (sixth pass): re-pointing a reference in a branch, parenthesized and
 # dereferenced argument borrows against the receiver, owned match binders under a projection.
-run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0238)"
+run_err "$TESTDIR/error_091_ref_repointed_in_branch.con"           "(E0302)"
 run_err "$TESTDIR/error_091_mut_receiver_paren_borrow_arg.con"     "(E0293)"
 run_err "$TESTDIR/error_091_mut_receiver_deref_reborrow_arg.con"   "(E0293)"
 run_err "$TESTDIR/error_091_norm_match_owned_binder.con" "(E0238)"
@@ -1539,8 +1539,8 @@ run_err "$TESTDIR/error_091_heap_field_through_ref.con"           "(E0290)"
 run_ok  "$TESTDIR/trait_destroy_newtype_payload_paren.con" "1" 0
 # Codex review of round 3 (ninth pass): block-local reborrows in `if` arguments, and a `&self`
 # receiver read through a reference under a live exclusive reborrow.
-run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0238)"
-run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0231)"
+run_err "$TESTDIR/error_091_mut_receiver_if_local_reborrow_arg.con" "(E0302)"
+run_err "$TESTDIR/error_091_ref_receiver_under_mut_reborrow.con"    "(E0302)"
 run_ok  "$TESTDIR/trait_mut_receiver_nested_reborrow.con" "4" 0
 # The normalized place rule (bug 091 round 3, structural fix): Codex's last three open
 # shapes are rejected, and one table records what every spelling of the bug-091 corpus now
@@ -1702,11 +1702,13 @@ run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
 run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
 # A constant's initializer is lowered with the caller's locals hidden: no borrow of a constant
 # inside it (E0602 at Lower), and no capture of a local shadowing a constant it names.
-run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0602)"
+# Exit 2i: a borrow in a constant initializer is refused at Check (REF-6@1, E0302 constBorrows)
+# before Elab's E0602, which stays as defense in depth.
+run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
-run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0602)"
-run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0602)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0405)"
+run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0302)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0201)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
@@ -1740,15 +1742,19 @@ for r127_case in "$TESTDIR/regress_127_struct_literal_source_order.con:42" \
     fi
 done
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
-run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0238)"
-run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0238)"
-run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0238)"
-run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0238)"
-run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0238)"
-run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0238)"
+# Exit 2i REF-6@1: a reference binding is never assigned (E0303), and a `let` never binds a
+# reference (E0302), so the 091/104/131 shapes that named a reference across statements are
+# refused at that `let` or assignment; the E0238/E0231/E0232/E0204 checks they used to reach stay
+# as defense in depth for borrow-block, arm and argument references (MEMORY_SEMANTICS §15.3).
+run_err "$TESTDIR/error_131_param_repointed_block_local.con" "(E0303)"
+run_err "$TESTDIR/error_131_param_repointed_param.con" "(E0303)"
+run_err "$TESTDIR/error_104_assigned_ref_heap_block.con"            "(E0302)"
+run_err "$TESTDIR/error_104_assigned_ref_stack_block.con"           "(E0302)"
+run_err "$TESTDIR/error_107_shadow_under_live_ref.con"              "(E0301)"
+run_err "$TESTDIR/error_107_shadow_in_block_under_live_ref.con"     "(E0301)"
 run_err "$TESTDIR/error_105_ref_valued_if_field.con" "(E0238)"
 run_err "$TESTDIR/error_091_norm_conditional_receiver.con"      "(E0238)"
-run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0231)"
+run_err "$TESTDIR/error_091_norm_deref_read_under_reborrow.con" "(E0302)"
 r091_table="
 error_091_destroy_through_ref:E0290
 error_091_destroy_concrete_through_ref:E0290
@@ -1770,26 +1776,26 @@ error_091_mut_receiver_through_ref_projection:E0237
 error_091_mut_receiver_in_ref_self:E0237
 error_091_mut_receiver_immutable:E0233
 error_091_mut_receiver_immutable_concrete:E0233
-error_091_mut_receiver_borrowed:E0232
+error_091_mut_receiver_borrowed:E0302
 error_091_mut_receiver_paren_deref:E0237
 error_091_mut_receiver_deref_borrow:E0237
 error_091_mut_receiver_deref_if_ref:E0238
 error_091_mut_receiver_reborrow_shared:E0237
-error_091_mut_receiver_paren_borrow_live:E0232
+error_091_mut_receiver_paren_borrow_live:E0302
 error_091_mut_borrow_explicit_through_ref:E0237
 error_091_mut_borrow_explicit_paren_immutable:E0233
 error_091_mut_borrow_explicit_projection_through_ref:E0237
-error_091_mut_receiver_paren_borrow_outer:E0232
-error_091_mut_receiver_projection_borrow_live:E0232
+error_091_mut_receiver_paren_borrow_outer:E0302
+error_091_mut_receiver_projection_borrow_live:E0302
 error_091_deref_ref_by_value:E0290
 error_091_paren_call_arg_not_consumed:E0205
 error_091_match_deref_ref_payload:E0290
-error_091_mut_receiver_deref_borrow_provenance:E0232
-error_091_borrow_provenance_unknown:E0238
-error_091_mut_receiver_ref_to_mut_ref:E0238
-error_091_mut_receiver_reborrowed_mut_ref:E0232
-error_091_mut_receiver_reassigned_ref:E0238
-error_091_ref_repointed_in_branch:E0238
+error_091_mut_receiver_deref_borrow_provenance:E0302
+error_091_borrow_provenance_unknown:E0302
+error_091_mut_receiver_ref_to_mut_ref:E0302
+error_091_mut_receiver_reborrowed_mut_ref:E0302
+error_091_mut_receiver_reassigned_ref:E0302
+error_091_ref_repointed_in_branch:E0302
 error_091_mut_receiver_paren_borrow_arg:E0293
 error_091_mut_receiver_deref_reborrow_arg:E0293
 error_091_newtype_payload_through_ref:E0290
@@ -1797,28 +1803,28 @@ error_091_mut_receiver_deref_field_arg:E0293
 error_091_mut_receiver_nested_reborrow_arg:E0293
 error_091_mut_receiver_if_reborrow_arg:E0238
 error_091_heap_field_through_ref:E0290
-error_091_mut_receiver_if_local_reborrow_arg:E0238
-error_091_ref_receiver_under_mut_reborrow:E0231
+error_091_mut_receiver_if_local_reborrow_arg:E0302
+error_091_ref_receiver_under_mut_reborrow:E0302
 error_091_norm_heap_deref_payload:E0290
 error_091_norm_conditional_receiver:E0238
-error_091_norm_deref_read_under_reborrow:E0231
+error_091_norm_deref_read_under_reborrow:E0302
 error_091_norm_temporaries:E0238
 error_091_norm_if_projection:E0238
 error_091_norm_if_local_binding:E0238
 error_091_norm_if_local_chain:E0238
 error_091_norm_match_owned_binder:E0238
 error_091_norm_cast_arg_overlap:E0293
-error_091_norm_parent_arg_under_reborrow:E0231
-error_091_norm_copied_mut_ref:E0231
-error_091_norm_double_deref_heap:E0238
-error_091_norm_field_write_under_reborrow:E0231
-error_091_norm_borrow_block_under_live_ref:E0232
+error_091_norm_parent_arg_under_reborrow:E0302
+error_091_norm_copied_mut_ref:E0302
+error_091_norm_double_deref_heap:E0302
+error_091_norm_field_write_under_reborrow:E0302
+error_091_norm_borrow_block_under_live_ref:E0302
 error_091_norm_paren_heap_load:E0205
-error_091_norm_assign_under_shared_ref:E0232
+error_091_norm_assign_under_shared_ref:E0302
 error_091_norm_heap_field_load:E0290
 error_091_norm_paren_array_write:E0217
 error_091_norm_double_deref_read:E0238
-error_091_norm_intrinsic_arg_under_reborrow:E0232
+error_091_norm_intrinsic_arg_under_reborrow:E0302
 error_091_norm_ref_array_overwrite:E0291
 error_091_norm_catchall_binder_through_ref:E0290
 error_091_norm_enum_payload_ref:E0239
@@ -1836,8 +1842,8 @@ error_091_norm_generic_nested_alias_ref:E0239
 error_091_norm_ref_write_through_ref:E0238
 error_091_norm_generic_fn_mut_param:E0238
 error_091_norm_generic_transitive_ref:E0238
-error_091_norm_free_under_projected_borrow:E0204
-error_091_norm_field_write_under_projected_borrow:E0232
+error_091_norm_free_under_projected_borrow:E0302
+error_091_norm_field_write_under_projected_borrow:E0302
 trait_generic_fn_value_param:ok
 trait_destroy_owned_receiver:ok
 trait_mut_receiver_forms:ok
@@ -1974,11 +1980,11 @@ run_ok "$TESTDIR/heap_dot_access.con" 1
 run_err "$TESTDIR/error_heap_leak.con"           "was never consumed"
 run_err "$TESTDIR/error_alloc_reserved.con"      "is a reserved identifier"
 # Phase 6: Borrow region errors
-run_err "$TESTDIR/error_borrow_escape.con"     "cannot escape its borrow block"
+run_err "$TESTDIR/error_borrow_escape.con"     "(E0302)"
 run_err "$TESTDIR/error_borrow_frozen.con"     "is frozen by borrow block"
-run_err "$TESTDIR/error_borrow_shadow.con"     "shadows existing name"
+run_err "$TESTDIR/error_borrow_shadow.con"     "(E0301)"
 run_err "$TESTDIR/error_borrow_mut_conflict.con" "is frozen by borrow block"
-run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
+run_err "$TESTDIR/error_named_ref_mut_conflict.con" "(E0302)"
 # Additional escape analysis errors
 run_err "$TESTDIR/error_escape_return.con"     "may not return a reference"
 # Bug 092: a struct field of reference type is no longer expressible, so the
@@ -2025,7 +2031,7 @@ run_err "$TESTDIR/error_mut_ref_call_then_deref.con" "used after move"
 run_err "$TESTDIR/error_mut_ref_use_after_call.con" "used after move"
 run_err "$TESTDIR/error_mut_ref_branch_disagree.con" "consumed in one branch"
 run_err "$TESTDIR/error_mut_ref_loop_consume.con" "inside a loop"
-run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "cannot escape"
+run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "(E0302)"
 run_err "$TESTDIR/error_mut_ref_method_on_borrow_ref.con" "used after move"
 # Memory regression checklist gap-closing tests
 run_err "$TESTDIR/error_continue_skip_linear.con" "continue would skip unconsumed linear"
@@ -7761,12 +7767,17 @@ run_ok "$TESTDIR/regress_041_match_binder_states.con" 42
 run_err "$TESTDIR/error_041_match_leak_still_caught.con" "was never consumed"
 # Bug 045: nested same-named match binders must SHADOW (alpha-renamed at
 # Elab); pre-fix the outer binder read the inner's value on BOTH backends.
+# Exit 2i: the nested binder is now renamed (`Option::Some { value: inner }`,
+# SCOPE-1@1 refuses the shadow); the outer `value` must still read 5.
 run_ok "$TESTDIR/regress_045_match_binder_shadow.con" 42
 # Bug 087: a block-scoped `let` shadowing an outer let/param (if, else,
 # value-if, while, for bodies) must vanish when its block closes. Pre-fix the
 # interpreter and binary disagreed (1 vs 100, 3 vs 7) and both leaked a loop
 # body's shadow; Elab now alpha-renames shadowing lets (x -> x.bN).
-run_ok "$TESTDIR/regress_087_let_block_shadow.con" 42
+# Exit 2i: the shadowing itself is refused (SCOPE-1@1, E0301); the renamed twin
+# keeps the lexical answers pinned on the binary, the interpreter and the model.
+run_err "$TESTDIR/regress_087_let_block_shadow.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_087_renamed.con" 42
 # Codex review: sibling branches reusing a DEAD name for a promoted aggregate
 # (`let mut x: [i32; 1]` in both arms) must each read their own storage; Lower's
 # promoted table appended, so the else arm read the then arm's (pre-fix 41).
@@ -7791,17 +7802,18 @@ else
     echo "FAIL  bug 087: unpromoted re-declaration — interp gave '$r087u_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
-# Same fixture, the other two consumers: the interpreter must agree with the
+# The renamed twin, the other two consumers: the interpreter must agree with the
 # binary (pre-fix it returned 2), and the extracted proof model must be the
 # lexical one — no branch `let` leaking into the continuation (pre-fix
-# `then let x = 100; x`), and the loop body's `let k` kept, not dead-let
-# eliminated into a read of the outer `k` (the alpha-strip capture).
-r087_interp=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --interp 2>&1 || true)
-r087_ext=$($COMPILER "$TESTDIR/regress_087_let_block_shadow.con" --report extraction 2>&1 || true)
+# `then let x = 100; x`), and the loop body's `let inner_k` kept under its own
+# name (no `.bN` suffix: nothing is alpha-renamed once nothing shadows).
+r087_interp=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --interp 2>&1 || true)
+r087_ext=$($COMPILER "$TESTDIR/regress_2i_scope1_087_renamed.con" --report extraction 2>&1 || true)
 if [ "$r087_interp" = "42" ] \
    && grep -qF 'ProofCore: let x = 1; if (a > 0) then x else x' <<<"$r087_ext" \
    && grep -qF 'ProofCore: if (a > 0) then a else a' <<<"$r087_ext" \
-   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let k\.b[0-9]+ = 1000; [^}]*\(k\.b[0-9]+ \+ s\)' <<<"$r087_ext"; then
+   && grep -qE 'ProofCore: let s = 0; let k = 5;.*\{ let inner_k = 1000; [^}]*\(inner_k \+ s\).*\(k \+ s\)' <<<"$r087_ext" \
+   && ! grep -qE 'ProofCore: .*\.b[0-9]+' <<<"$r087_ext"; then
     echo "  ok  bug 087: interp == binary == lexical model (shadow_if/param/loop)"
     PASS=$((PASS + 1))
 else
@@ -7877,23 +7889,137 @@ run_ok "$TESTDIR/regress_092_refs_flow_down.con" 42
 # Bug 093: a block local or match binder that shadows an outer name escaped the
 # never-consumed check (block locals were found by NAME). Bindings now carry an
 # identity; the shadowing local must itself be consumed.
-run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "E0208"
-run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "E0208"
-run_ok "$TESTDIR/regress_093_shadowing_locals_consumed.con" 42
+# Exit 2i: every shape of bugs 093/094 shadows, so SCOPE-1@1 refuses it first
+# (E0301); the identity-keyed checks stay as defense in depth (MEMORY_SEMANTICS
+# §15.6: their mutation rows move to a leg that disables E0301, R-0498).
+run_err "$TESTDIR/error_093_shadowing_block_local_leak.con" "(E0301)"
+run_err "$TESTDIR/error_093_shadowing_match_binder_leak.con" "(E0301)"
+run_err "$TESTDIR/regress_093_shadowing_locals_consumed.con" "(E0301)"
 # Bug 094: per-binding state updates (consume, use, reassign, borrow freeze,
 # defer) marked EVERY entry sharing the name, so a binder that shadowed a live
 # linear binding consumed it too (the outer value leaked). State updates now
 # match the binding by identity (arm binders stay arm-scoped and may shadow),
 # and a destructure binder refuses to shadow a live non-Copy binding (E0292).
-run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "E0209"
-run_err "$TESTDIR/error_094_destructure_shadows_live.con" "E0292"
-run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "E0208"
-run_ok "$TESTDIR/regress_094_shadowing_binders.con" 42
-run_ok "$TESTDIR/regress_094_shadow_state_by_identity.con" 42
+run_err "$TESTDIR/error_094_arm_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_destructure_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/error_094_value_binder_shadows_live.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadowing_binders.con" "(E0301)"
+run_err "$TESTDIR/regress_094_shadow_state_by_identity.con" "(E0301)"
 # A borrow-block body local named like the ref was dropped with it by name.
-run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_borrow_block_shadow_leak.con" "(E0301)"
 # A local shadowing a `&mut` parameter was exempt from the exit check by name.
-run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "E0208"
+run_err "$TESTDIR/error_094_mut_ref_param_shadow_leak.con" "(E0301)"
+# Exit 2i SCOPE-1@1 (MEMORY_SEMANTICS §15.4): one lexical name, one binding. Each binder kind
+# that reuses a visible name is E0301 (bug 124: duplicate parameters reached llvm-as); each
+# rejected shape has a renamed migration twin. SCOPE-2: sibling scopes, loop bodies and
+# assignment are not collisions. The full manifest is tests/rules/exit_2i.tsv
+# (scripts/tests/check_rules_2i.sh).
+run_err "$TESTDIR/error_2i_scope1_same_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_same_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_block_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_block_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_param_in_block.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_param_in_block_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_consuming_rebind.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_consuming_rebind_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_for_header.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_for_header_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_arm_binder.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_arm_binder_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_if_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_if_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_while_let.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_while_let_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_destructure.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_destructure_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_duplicate_params_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_borrow_ref.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_borrow_ref_renamed.con" 42
+run_err "$TESTDIR/error_2i_scope1_region_name.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_scope1_region_name_renamed.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_branches.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_sibling_arms.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_consecutive_loops.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_loop_body_let.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_assign_rebind.con" 42
+run_ok "$TESTDIR/regress_2i_renamed_pattern_binder.con" 42
+# Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): no `let` binds a reference (E0302), no reference
+# binding is assigned (E0303); after monomorphization too (a generic `T` instantiated to `&Int`).
+run_err "$TESTDIR/error_2i_ref6_let_shared_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_inferred_alias.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_mut_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_let_ref_to_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_generic_let_at_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_paren_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_cast_copy.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_borrow_block_reborrow_escape.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref8_free_under_projected_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref8_assign_under_shared.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_param_repointed.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_mut_param_repointed.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_borrow_binder_assigned.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_arm_binder_assigned.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_generic_assign_at_ref.con" "(E0303)"
+run_ok "$TESTDIR/regress_2i_ref6_generic_assign_at_value.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_place_each_use.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_index_once.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_borrow_block_projection.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_arm_binder_through_ref.con" 42
+run_ok "$TESTDIR/regress_2i_ref6_write_through_param.con" 42
+run_err "$TESTDIR/error_2i_ref6_let_else_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_method_let_else.con" 42
+run_err "$TESTDIR/error_2i_ref6_nested_let_else_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_nested_let_destructure.con" 42
+run_err "$TESTDIR/error_2i_ref6_ghost_let_at_type_param.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_struct_destructure_through_ref.con" 42
+run_ok "$TESTDIR/regress_2i_scope2_borrow_after_loop.con" 42
+run_err "$TESTDIR/error_2i_ref6_erased_assert_let.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_erased_assert_assign.con" "(E0303)"
+run_err "$TESTDIR/error_2i_ref6_ghost_initializer_let.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_ghost_ptr_and_fn_types.con" 42
+run_ok "$TESTDIR/regress_2i_value_block_destructure.con" 42
+run_err "$TESTDIR/error_2i_scope1_const_initializer.con" "(E0301)"
+run_err "$TESTDIR/error_2i_ref6_const_initializer.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_const_initializer_block.con" 42
+run_err "$TESTDIR/error_2i_ref6_const_branch_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_destructure_through_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_match_through_borrow.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_typed_ref_let.con" "(E0302)"
+run_err "$TESTDIR/error_2i_spec_body_generic_call.con" "(E0305)"
+run_err "$TESTDIR/error_2i_ref5_const_ref_through_raw_ptr.con" "(E0238)"
+run_err "$TESTDIR/error_2i_ref6_const_borrow_block.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_contract_ref_binding.con" "(E0305)"
+run_err "$TESTDIR/error_2i_scope1_contract_let.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_invariant_binds.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_variant_binds_ref.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_inferred_ref_alias.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_wrapped_binder.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_trait_impl_invariant.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_place_assignment.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_borrow_to_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_generic_call.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_imported_generic.con" "(E0305)"
+run_err "$TESTDIR/error_2i_scope1_extern_duplicate_params.con" "(E0301)"
+run_err "$TESTDIR/error_2i_scope1_trait_decl_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_contract_aliased_ref_param.con" 42
+run_ok "$TESTDIR/regress_2i_contract_ref_receiver.con" 42
+run_ok "$TESTDIR/regress_2i_contract_static_nongeneric_method.con" 42
+run_err "$TESTDIR/error_2i_spec_body_hidden_binder.con" "(E0305)"
+run_ok "$TESTDIR/regress_2i_contract_nongeneric_call_beside_generic_method.con" 42
+run_err "$TESTDIR/error_2i_contract_generic_method_mangled.con" "(E0305)"
+run_err "$TESTDIR/error_2i_contract_generic_method_static.con" "(E0305)"
+run_err "$TESTDIR/error_2i_ref6_const_cast_to_ref.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_const_aliased_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_contract_paren_ref_arg.con" 42
+run_err "$TESTDIR/error_2i_scope1_contracted_fn_shadow.con" "(E0301)"
+run_err "$TESTDIR/error_2i_ref6_erased_forwarded_generic.con" "(E0302)"
+run_err "$TESTDIR/error_2i_ref6_erased_generic_call.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_generic_call_outside_assert.con" 42
+run_ok "$TESTDIR/regress_2i_const_nested_if_statement.con" 42
+run_err "$TESTDIR/error_2i_scope1_spec_fn_duplicate_params.con" "(E0301)"
+run_ok "$TESTDIR/regress_2i_contract_and_spec_params.con" 42
 # Bug 082: one binding per name per module. An import colliding with a local
 # function, or two imports of different definitions under one name, is E0299
 # (the positive alias rows are tests/codegen/import_alias_binding.con).
@@ -11848,6 +11974,22 @@ for projdir in "$TESTDIR"/*/; do
         projname=$(basename "$projdir")
         # Skip adversarial policy projects — they are tested in the policy section
         case "$projname" in adversarial_policy_*) continue ;; esac
+        # Exit 2i: bug 087's borrow-block shadow is now refused at the source (SCOPE-1@1,
+        # E0301); its renamed twin regress_2i_scope1_087_borrow_renamed/ runs here instead.
+        if [ "$projname" = "regress_087_borrow_shadow_uaf" ]; then
+            if output=$( cd "$projdir" && "$ROOT_DIR/$COMPILER" build -o /tmp/test_proj_"$projname" 2>&1 ); then
+                echo "  FAIL $projname — now a SCOPE-1 rejection, but it COMPILED"
+                FAIL=$((FAIL + 1))
+            elif grep -qF "(E0301)" <<<"$output"; then
+                echo "  ok  $projname (rejected: E0301, SCOPE-1@1)"
+                PASS=$((PASS + 1))
+            else
+                echo "  FAIL $projname — rejected, but not with E0301"
+                FAIL=$((FAIL + 1))
+            fi
+            rm -f /tmp/test_proj_"$projname"
+            continue
+        fi
         # error_* projects are NEGATIVE fixtures: they must FAIL to build.
         case "$projname" in
         error_*)

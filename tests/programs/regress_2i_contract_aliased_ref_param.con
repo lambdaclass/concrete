@@ -1,0 +1,7 @@
+// Exit 2i (review round 11): a contract may pass a reference parameter (here through an alias) to a
+// NON-generic function; that body is checked like any other. Run 42.
+type R = &i32;
+fn probe(x: &i32) -> bool { return true; }
+#[requires(probe((x)))]
+fn f(x: R) -> i32 { return *x; }
+fn main() -> i32 { let n: i32 = 42; return f(&n); }

@@ -319,8 +319,8 @@ mutual
     | .arrayIndexAssign _ a i v => localNamesE a ++ localNamesE i ++ localNamesE v
     | .break_ _ (some v) _ => localNamesE v
     | .borrowIn _ v r _ _ b => [v, r] ++ localNamesB b
-    | .letDestructure _ _ _ bs v el => bs ++ localNamesE v ++ localNamesB (el.getD [])
-    | .letStructDestructure _ _ bs v => bs ++ localNamesE v
+    | .letDestructure _ _ _ bs v el => PatBind.names bs ++ localNamesE v ++ localNamesB (el.getD [])
+    | .letStructDestructure _ _ bs v => PatBind.names bs ++ localNamesE v
     | .assert_ _ c | .assume_ _ c => localNamesE c
 
   partial def localNamesB (body : List Stmt) : List String :=
@@ -342,7 +342,7 @@ mutual
     | _ => []
 
   partial def localNamesArm : MatchArm → List String
-    | .mk _ _ _ bs g b => (g.map localNamesE).getD [] ++ bs ++ localNamesB b
+    | .mk _ _ _ bs g b => (g.map localNamesE).getD [] ++ PatBind.names bs ++ localNamesB b
     | .litArm _ v g b => localNamesE v ++ (g.map localNamesE).getD [] ++ localNamesB b
     | .varArm _ bnd g b => bnd :: ((g.map localNamesE).getD [] ++ localNamesB b)
     | .rangeArm _ lo hi _ g b => localNamesE lo ++ localNamesE hi ++ (g.map localNamesE).getD [] ++ localNamesB b
@@ -394,14 +394,14 @@ mutual
     | .arrayIndexAssign _ a i v => validateContractExpr allowedVars callables a ++ validateContractExpr allowedVars callables i ++ validateContractExpr allowedVars callables v
     | .break_ _ (some v) _ => validateContractExpr allowedVars callables v
     | .borrowIn _ v r _ _ b => b.flatMap (validateContractStmt (v :: r :: allowedVars) callables)
-    | .letDestructure _ _ _ bs v el => validateContractExpr allowedVars callables v ++ (el.getD []).flatMap (validateContractStmt (bs ++ allowedVars) callables)
+    | .letDestructure _ _ _ bs v el => validateContractExpr allowedVars callables v ++ (el.getD []).flatMap (validateContractStmt (PatBind.names bs ++ allowedVars) callables)
     | .letStructDestructure _ _ _ v => validateContractExpr allowedVars callables v
     | .assert_ _ c | .assume_ _ c => validateContractExpr allowedVars callables c
 
   partial def validateContractArm (allowedVars callables : List String) : MatchArm → List String
     | .mk _ _ _ bs g b =>
-      (g.map (validateContractExpr (bs ++ allowedVars) callables)).getD [] ++
-      b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
+      (g.map (validateContractExpr (PatBind.names bs ++ allowedVars) callables)).getD [] ++
+      b.flatMap (validateContractStmt (PatBind.names bs ++ allowedVars) callables)
     | .litArm _ v g b =>
       validateContractExpr allowedVars callables v ++
       (g.map (validateContractExpr allowedVars callables)).getD [] ++

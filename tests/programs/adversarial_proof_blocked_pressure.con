@@ -15,7 +15,7 @@
 //   uses_field_assign → blocked: field assignment
 //   uses_mut          → blocked: mutable assignment
 //   uses_string       → blocked: string literal
-//   uses_deref        → blocked: deref (borrow, deref)
+//   uses_deref        → blocked: deref (a reference parameter; a `let` may not bind one, REF-6@1)
 //   extractable_fn    → eligible, extractable (control: should be missing)
 
 struct Copy Point {
@@ -43,8 +43,7 @@ fn uses_string() -> String {
     return "hello";
 }
 
-fn uses_deref(x: Int) -> Int {
-    let r: &Int = &x;
+fn uses_deref(r: &Int) -> Int {
     return *r;
 }
 

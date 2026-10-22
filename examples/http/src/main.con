@@ -374,8 +374,8 @@ mod http_server {
                 while running {
                     let accept_result: Result<TcpStream, NetError> = listener.accept();
                     match accept_result {
-                        Result::Ok { value } => {
-                            let client: TcpStream = value;
+                        Result::Ok { value: inner } => {
+                            let client: TcpStream = inner;
                             handle_client(client, &root);
                         },
                         Result::Err { error } => {

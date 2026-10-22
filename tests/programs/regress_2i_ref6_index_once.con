@@ -1,0 +1,14 @@
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): an effectful index evaluated once into a Copy local, then the element borrowed at each use. Run 42, binary = --interp.
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn index() -> Int {
+    return 1;
+}
+
+fn main() -> Int {
+    let a: [Int; 3] = [0, 21, 0];
+    let i: Int = index();
+    return read(&a[i]) + read(&a[i]);
+}

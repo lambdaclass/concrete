@@ -1,0 +1,17 @@
+// Exit 2i REF-6@1 control: a `ghost let` whose type mentions a type parameter only behind a raw
+// pointer or inside a function type cannot become a reference binding under substitution, so it
+// is accepted (exit 2i review: the first ghost check refused these). Run 42, binary = --interp.
+fn probe<T: Copy>(p: *const T, f: fn(T) -> Int) -> Int {
+    ghost let q: *const T = p;
+    ghost let g: fn(T) -> Int = f;
+    return 42;
+}
+
+fn id(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    let n: Int = 1;
+    return probe::<Int>(&n as *const Int, id);
+}
