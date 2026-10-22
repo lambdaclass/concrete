@@ -226,8 +226,20 @@ The cold run is already faster, because the 20 identical HMAC compiles in `check
 collapse to one within the run. A single cached HMAC `--report vcs --json` replays in 0.5 s, against
 22 to 27 s fresh. Computing the key costs about 0.4 s, most of it hashing the 116 MB binary.
 
-All three gates meet R-0546's exit bound: with the compiler unchanged, the second run takes at most
-half the time of the original. The remaining time is in places the cache does not reach:
+**Server measurement.** On concrete-ci-1 (Linux, 64 threads, the cache at `cd2ceec4`), all nine
+runs were in one session, sequentially, with `CONCRETE_COMPILE_CACHE=0` as "before". The server
+was shared, at load 11 to 30.
+
+| Gate | Cache off | Cold cache | Warm cache | Warm vs off |
+|---|---|---|---|---|
+| `check_vc_schema.sh` | 488 s | 39 s | **15 s** | 32× |
+| `check_obligation_report_views.sh` | 354 s | 150 s | **84 s** | 4.2× |
+| `check_phase3_obligation_core.sh` | 959 s | 648 s | **615 s** (load 30) | 1.6× |
+
+On the laptop, all three gates meet R-0546's exit bound (a second run takes at most half the time of
+the original). On the server, `check_vc_schema.sh` and `check_obligation_report_views.sh` meet it,
+and `check_phase3_obligation_core.sh` does **not** (1.6×, measured at the highest load of the
+session). The remaining time is in places the cache does not reach:
 
 - **`check_obligation_report_views.sh`:** about 75 s is the nested `check_snapshots.sh`.
 - **`check_phase3_obligation_core.sh`:** most of the remaining time is in sub-gates that have not
@@ -239,7 +251,7 @@ half the time of the original. The remaining time is in places the cache does no
 **What a fresh build costs.** A fresh checkout builds all 242 Lean jobs. Measured at `25eb35fd`:
 **52 s wall, 255 s user CPU** on the 18-core laptop. On CI it is about 2.6 min (#9 above).
 
-**How seeding works.** `scripts/lake-seed.sh` copies another checkout's `.lake` copy-on-write
+**How seeding works.** On concrete-ci-1 a clone seeded this way and verified with `lake build` in 1 s at `2825d4c8`. `scripts/lake-seed.sh` copies another checkout's `.lake` copy-on-write
 (APFS `cp -c`, or Linux `--reflink`), then runs `lake build`. Measured: **0.2 s to copy and 0.6 to
 1.1 s for the verifying `lake build`**, about a 50× speed-up for a new worktree.
 `scripts/worktree-new.sh` seeds by default (`CONCRETE_LAKE_SEED=0` opts out).
