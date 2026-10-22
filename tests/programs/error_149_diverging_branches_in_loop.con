@@ -1,0 +1,11 @@
+// Bug 149 (Codex review): consumptions inside an if/else whose branches both return do not flow
+// past it, so a loop whose body may not run does not credit them: `h` stays live after the loop
+// and the program must still consume it (E0208).
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(1);
+    let c: bool = false;
+    while c {
+        if true { defer free(h); return 1; } else { defer free(h); return 2; }
+    }
+    return 0;
+}

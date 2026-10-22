@@ -2735,7 +2735,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
     for (name, info) in (← getEnv).vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= targetDepth then
+      let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
@@ -2753,7 +2754,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
     for (name, info) in env.vars do
-      if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= targetDepth then
+      let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
+      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
   -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
@@ -2867,14 +2869,18 @@ partial def mergeVarStates
     -- Apply the most progressed state (consumed > used > unconsumed) of the
     -- branches that actually FALL THROUGH to the merge point.
     let mergedState :=
-      if thenDiverges && elseDiverges then thenState  -- unreachable after; arbitrary
+      -- Both branches diverge: the code after is unreachable, and no branch-local consumption
+      -- may flow past the `if` (an enclosing loop's zero-iteration path would be credited with
+      -- it; bug 149, Codex review). Keep the pre-branch state.
+      if thenDiverges && elseDiverges then infoBefore.state
       else if thenDiverges then elseState
       else if elseDiverges then thenState
       else if thenState == .consumed then .consumed
       else if thenState == .used || elseState == .used then .used
       else infoBefore.state
-    if mergedState != infoBefore.state then
-      let env ← getEnv
+    let env ← getEnv
+    let cur := (lookupByUid env.vars infoBefore.uid).map (·.state)
+    if mergedState != infoBefore.state || cur != some mergedState then
       let vars' := env.vars.map fun (n, vi) =>
         if vi.uid == infoBefore.uid then (n, { vi with state := mergedState })
         else (n, vi)

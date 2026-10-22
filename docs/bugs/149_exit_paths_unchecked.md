@@ -53,7 +53,14 @@ whatever their label.
   engines).
 - The return check sees through a borrow block's freeze (`VarInfo.frozenFrom`), so a `return`
   inside a borrow block whose owner has a pending `defer` is accepted
-  (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines).
+  (`regress_149_return_in_borrow_with_defer.con`, 42 in both engines); `break`/`continue` likewise
+  (`regress_149_break_in_borrow_with_defer.con`).
+- After an `if`/`else` whose branches both diverge, bindings keep their pre-branch state, so a
+  consumption inside the branches no longer flows to a loop's zero-iteration path
+  (`while c { if .. { defer free(h); return 1; } else { .. return 2; } } return 0;` leaked `h`;
+  `error_149_diverging_branches_in_loop.con`, E0208). Known remaining limit, pre-existing and not
+  changed here: a `break v` that consumes an outer binding (the H14 one-level exemption) is
+  credited on the condition-false path too.
 - `isCopyType` resolves a type alias at the head of a type and of a newtype payload (Codex noted
   `newtype N = Num` with `type Num = i64` judged non-Copy; such a newtype cannot currently be
   constructed, CoreCheck refuses the cast, so this had no reachable effect).
