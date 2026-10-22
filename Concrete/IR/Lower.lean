@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Elab.Core
 import Concrete.IR.SSA
 import Concrete.Check.Layout
@@ -55,7 +56,10 @@ structure ScopeFrame where
   deferred : List CExpr := []
 
 structure LowerState where
-  blocks : List SBlock
+  /-- Finished blocks, NEWEST FIRST (prepend is O(1); `lowerFn` reverses once).
+      `blocks ++ [block]` per terminator was O(blocks) each, O(blocks²) per
+      function, and `getLast?` per arm another O(blocks) (bug 178). -/
+  blocksRev : List SBlock
   currentLabel : String
   currentInsts : List SInst
   labelCounter : Nat
@@ -74,7 +78,7 @@ structure LowerState where
   definedFns : List String := []
   /-- Allocas that must be hoisted to the function entry block.
       Prevents unbounded stack growth when &mut borrows occur in loops. -/
-  entryAllocas : List SInst := []
+  entryAllocasRev : List SInst := []
   /-- Aggregate variables promoted to stable allocas during loops.
       Maps (varName, allocaReg, ty). Field assignment GEPs directly into
       the alloca instead of phi-transporting whole struct values. -/
@@ -184,23 +188,30 @@ private def emitBoundsCheck (idxVal : SVal) (len : Nat) : LowerM Unit := do
     This prevents dynamic stack growth when allocas occur inside loops. -/
 private def emitEntryAlloca (inst : SInst) : LowerM Unit := do
   let s ← getState
-  setState { s with entryAllocas := s.entryAllocas ++ [inst] }
+  -- Newest first (O(1)); `lowerFn` reverses once (bug 178).
+  setState { s with entryAllocasRev := inst :: s.entryAllocasRev }
 
--- Insert a store instruction into an already-emitted block (before its terminator).
--- Used by if/else and match to store aggregate values into merge allocas.
-private def insertStoreBeforeTerm (blockLabel : String) (val : SVal) (dst : SVal) : LowerM Unit := do
+-- Insert `store v → dst` at the end (before the terminator) of each already-emitted
+-- block named in `stores` (label, value), in list order per block. Used by if/else
+-- and match to store aggregate values into merge allocas. ONE pass over the blocks
+-- for all arms: the old per-arm helper rescanned every block per store, O(arms ×
+-- blocks) for an aggregate-valued wide match (bug 178).
+private def insertStoresBeforeTerm (stores : List (String × SVal)) (dst : SVal) : LowerM Unit := do
   let s ← getState
-  let storeInst := SInst.store val dst
-  let blocks := s.blocks.map fun b =>
-    if b.label == blockLabel then { b with insts := b.insts ++ [storeInst] }
-    else b
-  setState { s with blocks := blocks }
+  let byLabel : Std.HashMap String (List SInst) := stores.foldr (fun (l, v) m =>
+    m.insert l (SInst.store v dst :: m.getD l [])) ∅
+  if byLabel.isEmpty then return
+  let blocks := s.blocksRev.map fun b =>
+    match byLabel.get? b.label with
+    | some ins => { b with insts := b.insts ++ ins }
+    | none => b
+  setState { s with blocksRev := blocks }
 
 private def terminateBlock (term : STerm) : LowerM Unit := do
   let s ← getState
   -- `currentInsts` is accumulated reversed by `emit`; restore program order here.
   let block : SBlock := { label := s.currentLabel, insts := s.currentInsts.reverse, term := term }
-  setState { s with blocks := s.blocks ++ [block], currentInsts := [], blockTerminated := true }
+  setState { s with blocksRev := block :: s.blocksRev, currentInsts := [], blockTerminated := true }
 
 private def startBlock (label : String) : LowerM Unit := do
   let s ← getState
@@ -249,7 +260,7 @@ private def internString (val : String) : LowerM String := do
 /-- Check if current block already has a terminator in the blocks list. -/
 private def currentBlockTerminated : LowerM Bool := do
   let s ← getState
-  match s.blocks.getLast? with
+  match s.blocksRev.head? with
   | some b => return b.label == s.currentLabel && s.currentInsts.isEmpty
   | none => return false
 
@@ -474,10 +485,10 @@ private def peekContinueEdges : LowerM (List (List (String × SVal) × String)) 
 /-- Prepend instructions to an already-finalized block. -/
 private def prependInstsToBlock (label : String) (newInsts : List SInst) : LowerM Unit := do
   let s ← getState
-  let blocks' := s.blocks.map fun b =>
+  let blocks' := s.blocksRev.map fun b =>
     if b.label == label then { b with insts := newInsts ++ b.insts }
     else b
-  setState { s with blocks := blocks' }
+  setState { s with blocksRev := blocks' }
 
 /-- Get current var map snapshot. -/
 private def snapshotVars : LowerM (List (String × SVal)) := do
@@ -697,7 +708,7 @@ private def matchMergeRules : BranchMergeRules where
     arm; the caller filters out diverged arms (return/break/continue), which
     contribute nothing — detect whether any arm changed the variable, and
     merge the differing values: a phi for scalars, an entry-block alloca +
-    `insertStoreBeforeTerm` per arm for aggregates.
+    `insertStoresBeforeTerm` (one store per arm) for aggregates.
 
     Invariants held here (each maps to a regression test):
     * A promoted variable is SKIPPED — the promoted alloca is the single
@@ -761,8 +772,7 @@ private def reconcileBranchVars (rules : BranchMergeRules)
           -- block before the branch to the merge.
           let allocaReg ← freshReg rules.mergePfx
           emitEntryAlloca (.alloca allocaReg ty)
-          for (v, fromLabel) in incoming do
-            insertStoreBeforeTerm fromLabel v (.reg allocaReg ty)
+          insertStoresBeforeTerm (incoming.map fun (v, l) => (l, v)) (.reg allocaReg ty)
           match ty with
           | .array _ _ =>
             if rules.arrayRebindsAllocaAddr then
@@ -1117,7 +1127,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let mut allArmsTerminated := true
     -- Snapshot vars before match so each arm starts from the same state
     let preMatchVars ← snapshotVars
-    -- Collect (endVars, endLabel, terminated) for each arm for var merge
+    -- Collect (endVars, endLabel, terminated) for each arm for var merge (newest first)
     let mut armEndSnapshots : List (List (String × SVal) × String × Bool) := []
 
     -- Bug 031: see prePromoteAddrTaken — the store must dominate every arm.
@@ -1180,10 +1190,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
@@ -1192,10 +1202,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .litArm litVal guard body =>
           let litSVal ← lowerExpr litVal
@@ -1206,10 +1216,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .rangeArm loE hiE inclusive guard body =>
           -- Range pattern: lo <= scr && scr (<|<=) hi. (On an enum scrutinee this
@@ -1227,10 +1237,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
       -- After all checks: fallthrough is unreachable (match is exhaustive or
       -- catch-all arms consume remaining cases). Mark as unreachable.
@@ -1264,10 +1274,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .rangeArm loE hiE inclusive guard body =>
           -- Range pattern: matches when lo <= scr && scr (<= | <) hi. Comparison
@@ -1285,10 +1295,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
@@ -1297,10 +1307,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
         | .enumArm _ _ _ guard body =>
           terminateBlock (.br armLabel)
@@ -1308,10 +1318,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
-            phiIncoming := phiIncoming ++ [i]
+            phiIncoming := i :: phiIncoming
             allArmsTerminated := false
           | none => pure ()
-          armEndSnapshots := armEndSnapshots ++ [snap]
+          armEndSnapshots := snap :: armEndSnapshots
           startBlock nextCheck
       let term ← currentBlockTerminated
       if !term then
@@ -1324,7 +1334,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- Merge variables modified in match arms (shared with the if sites via
     -- reconcileBranchVars — ROADMAP 1a). Only arms that reached the merge
     -- contribute; diverged arms were recorded with an empty snapshot.
-    let liveSnapshots := armEndSnapshots.filter fun (_, _, term) => !term
+    -- Both arm lists were accumulated newest-first (prepend, O(1) per arm; the old
+    -- `++ [x]` per arm was O(arms²), bug 178); restore arm order once here.
+    let liveSnapshots := armEndSnapshots.reverse.filter fun (_, _, term) => !term
     if liveSnapshots.length >= 2 then
       reconcileBranchVars matchMergeRules preMatchVars
         (liveSnapshots.map fun (endVars, endLabel, _) => (endVars, endLabel))
@@ -1371,7 +1383,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .unit
     -- Handle the match result value phi
     -- Filter out .unit values (arms that produce no result, e.g. side-effect blocks)
-    let realPhiIncoming := phiIncoming.filter fun (v, _) => match v with | .unit => false | _ => true
+    let realPhiIncoming := phiIncoming.reverse.filter fun (v, _) => match v with | .unit => false | _ => true
     if ty == .unit || ty == .never || realPhiIncoming.isEmpty then
       -- Void-typed match or no real result values — no result to merge
       return .unit
@@ -1380,8 +1392,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       if isAgg then
         let allocaReg ← freshReg "match.res."
         emitEntryAlloca (.alloca allocaReg ty)
-        for (v, fromLabel) in realPhiIncoming do
-          insertStoreBeforeTerm fromLabel v (.reg allocaReg ty)
+        insertStoresBeforeTerm (realPhiIncoming.map fun (v, l) => (l, v)) (.reg allocaReg ty)
         let loadReg ← freshReg "match.rload."
         emit (.load loadReg (.reg allocaReg ty) ty)
         return .reg loadReg ty
@@ -2284,7 +2295,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     (newtypes : List NewtypeDef := [])
     (definedFns : List String := []) : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
-    blocks := []
+    blocksRev := []
     currentLabel := "entry"
     currentInsts := []
     labelCounter := 0
@@ -2313,10 +2324,10 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
   match result with
   | ((.ok ()), finalState) =>
     -- Hoist entry allocas: prepend them to the first (entry) block
-    let blocks' := match finalState.blocks with
+    let blocks' := match finalState.blocksRev.reverse with
       | [] => []
       | entry :: rest =>
-        { entry with insts := finalState.entryAllocas ++ entry.insts } :: rest
+        { entry with insts := finalState.entryAllocasRev.reverse ++ entry.insts } :: rest
     .ok ({
       name := f.name
       params := f.params
