@@ -295,10 +295,20 @@ def i1 := s!"value {Proof.PackageIdentity.x} done"
 def u1 := αPackageIdentity + PackageIdentity₁
 def g1 := «some PackageIdentity name»
 def g2 := Foo.«PackageIdentity»
+def i2 := s! "{Proof.PackageIdentity}"
+#eval!"{"
+def PackageIdentity := 1
+def l1 : Nat → Nat := λPackageIdentity => 0
+def u2 := PackageIdentity℀
 LEAN
 _c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$TMP/c6_fixture.lean" | cut -d: -f2 | tr '\n' ' ')"
-[ "$_c6_ctl" = "1 2 13 15 18 " ] && ok "C6 control: code uses of a deleted name are found (after a \"--\" string or a raw string, in an interpolation, as «PackageIdentity»); comments, docstrings, strings, raw strings, other identifiers and noPackageIdentity are not" \
-  || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '1 2 13 15 18 '"
+_c6_want="1 2 13 15 18 19 21 22 "
+[ "$_c6_ctl" = "$_c6_want" ] && ok "C6 control: code uses of a deleted name are found (after a \"--\" string or a raw string, in interpolations, as «PackageIdentity», after λ and after #eval!\"{\"); comments, docstrings, strings, raw strings, Lean's other identifiers and noPackageIdentity are not" \
+  || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '$_c6_want'"
+printf '%s\n' 'def a := 1' 'def b := "never closed' > "$TMP/c6_open.lean"
+_c6_rc=0; python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$TMP/c6_open.lean" > /dev/null 2>&1 || _c6_rc=$?
+[ "$_c6_rc" = 2 ] && ok "C6 control: an unterminated string is a scan error (exit 2), never a clean verdict" \
+  || no "C6 control: an unterminated string gave exit $_c6_rc, expected 2"
 C6_FILES="$(git ls-files -- 'Concrete/*.lean' Main.lean)"
 if [ -z "$C6_FILES" ]; then
   no "C6: no Lean sources listed to scan"
