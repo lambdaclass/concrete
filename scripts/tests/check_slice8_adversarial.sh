@@ -25,6 +25,10 @@ trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "${GATE_DONE:-0}" -ne 1 ]; then
   echo "FATAL: unexpected shell failure (exit $rc) — the verdict below is not trustworthy" >&2; exit "$rc"; fi' ERR
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+# PRIVATE CHECKOUT (R-0547, lib/private_checkout.sh): this gate creates a forged-receipt probe directory inside the checkout,
+# which a full pass shares with every other gate; it runs in a private copy instead.
+source "$ROOT_DIR/scripts/tests/lib/private_checkout.sh"
+reexec_in_private_checkout "${BASH_SOURCE[0]}" "$@"
 source "scripts/tests/lib/fresh.sh"
 require_fresh_binary || exit 1
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
