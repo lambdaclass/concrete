@@ -3,16 +3,17 @@
 # lean4export v4.34.0 writes export format 3.1.0; it is built with this repository's lean-toolchain.
 LEAN4EXPORT_URL=https://github.com/leanprover/lean4export
 LEAN4EXPORT_REV=076e8e57707e813375e8f9da8bf989799ace9680
-# con-leche c26f793 (2026-10-22, was dd695ca): the revision behind the Lean Kernel Arena's published
-# results (lean-kernel-arena@8bbe2534: soundness 69 right, 0 wrong, 3 declined;
-# completeness 131 right, 0 wrong, 6 declined). Built with its own lean-toolchain
-# (v4.35.0-rc3, which carries the lean4#15288 thread-sharing fix as backport #15306); it does not
-# build with Lean 4.34.1, and neither did dd695ca. The gate runs it with --jobs=1.
+# con-leche ae1f319 (2026-10-23; was c26f793 on 2026-10-22, dd695ca before): the revision behind the
+# Lean Kernel Arena's published results (lean-kernel-arena@c534bac6: soundness 69 right, 0 wrong,
+# 3 declined; completeness 131 right, 0 wrong, 6 declined). Built with its own lean-toolchain
+# (v4.35.0, which carries the lean4#15288 thread-sharing fix); con-leche does not build with Lean
+# 4.34.1 at any of these revisions. The gate runs it with --jobs=1.
 # check_checker_pin_freshness.sh compares this pin and nanoda's with the Arena's.
 CONLECHE_URL=https://github.com/leanprover/con-leche
-CONLECHE_REV=c26f79316c01ae19ab0fbe85acab371d2d8d390a
-# nanoda e0d76f5: an independent Lean checker in Rust (no shared code with Lean or con-leche), at the
-# revision the Lean Kernel Arena evaluated. Built with cargo; the thread stack is raised from 16 MiB
-# to 256 MiB exactly as the arena patches it.
+CONLECHE_REV=ae1f31983ecd085c6140d0f8d433f23ee7eab72b
+# nanoda 998e0a8 (2026-10-23; was e0d76f5): an independent Lean checker in Rust (no shared code with
+# Lean or con-leche), at the revision behind the Arena's published results (lean-kernel-arena@c534bac6:
+# soundness 72 right, 0 wrong, 0 declined; completeness 135 right, 0 wrong, 2 declined). Built with
+# cargo; the thread stack is raised from 16 MiB to 256 MiB exactly as the arena patches it.
 NANODA_URL=https://github.com/ammkrn/nanoda_lib
-NANODA_REV=e0d76f5ec30bba244023466875b4845a57fd3ea5
+NANODA_REV=998e0a84e4c1572ca279ff05007af6ec6639405a

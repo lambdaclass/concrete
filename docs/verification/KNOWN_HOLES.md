@@ -45,11 +45,13 @@ undefined behaviour that its notes say may affect con-leche. On 2026-10-22 our c
 
 **Controls (2026-10-22):**
 
-- con-leche bumped to `c26f793` (gate 22/0; R-0208 identity gates unaffected, they bind the Lean
-  kernel replay, not the external checkers).
+- con-leche bumped to `c26f793` (2026-10-22), then con-leche `ae1f319` and nanoda `998e0a8` when the
+  Arena published its next round the following day and the freshness check reported both stale
+  (gate 22/0 each time; R-0208 identity gates unaffected, they bind the Lean kernel replay, not the
+  external checkers).
 - con-leche runs with one worker (`--jobs=1`) at every call; gate leg P fails otherwise. The
-  #15288 fix is already in con-leche's own toolchain (`v4.35.0-rc3`, backport #15306); this is
-  defence in depth.
+  #15288 fix is already in con-leche's own toolchain (`v4.35.0` at `ae1f319`); this is defence in
+  depth.
 - `check_checker_pin_freshness.sh` compares the pins with the revisions behind the Lean Kernel
   Arena's published results: a **warning** in the landing tier (never a merge failure; SKIP
   offline) and a **finding** in the nightly campaign tier (job `Checker pin freshness (campaign

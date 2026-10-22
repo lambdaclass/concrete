@@ -34,16 +34,18 @@ alone and the check phase on one worker thread; no object is shared between conc
 threads.
 
 This is defence in depth, not the only protection: con-leche is built with its own `lean-toolchain`,
-`v4.35.0-rc3` at both `dd695ca` and `c26f793`, and that release candidate already carries the #15288
-fix as the backport [lean4#15306](https://github.com/leanprover/lean4/pull/15306) (it is in the
-`v4.35.0-rc1...v4.35.0-rc3` range). Single-threading removes the class even if a future pin is built
+`v4.35.0` at the current pin `ae1f319` (and `v4.35.0-rc3` at the earlier `dd695ca` and `c26f793`),
+and both carry the #15288 fix — the release candidate as the backport
+[lean4#15306](https://github.com/leanprover/lean4/pull/15306) (it is in the `v4.35.0-rc1...v4.35.0-rc3`
+range). Single-threading removes the class even if a future pin is built
 with a toolchain that lacks it, or a related sharing bug remains.
 
 nanoda's `num_threads: 4` (the nanoda config in the gate) is unaffected: nanoda is Rust and does not
 use the Lean runtime #15288 fixed. It stays at four threads, as the Lean Kernel Arena runs it.
 
 **Cost.** Measured 2026-10-22 on the Hetzner dev server (32 hardware threads) over the gate's own
-exports at `8621d95a` (16175 declarations in the standard export), median of three runs, con-leche
+exports (16175 declarations in the standard export; the measurement checkout carried another
+session's 15 extra declarations, a 0.1% difference; the clean tree exports 16160), median of three runs, con-leche
 `dd695ca`; `c26f793` is within noise of it:
 
 | con-leche run | `--jobs=1` | `--jobs=4` | default (32 workers) |
@@ -110,7 +112,7 @@ effectively unbounded).
   lacks). That is expected: con-leche reads exports from older toolchains, and the pins never built
   it with ours. lean4export, which must read our `.olean` files, is the tool built with 4.34.1.
 - **Gate.** `check_external_checker.sh` with `c26f793` and `--jobs=1`: 22 passed, 0 failed
-  (16175 declarations accepted; swap rejected as a type mismatch at the receiver; native export
+  (at `4b703216`: 16160 declarations accepted; swap rejected as a type mismatch at the receiver; native export
   declined with exit 2).
 - **Checker identity.** R-0208's identity, kernel re-check and policy gates
   (`check_checker_identity.sh`, `check_kernel_recheck.sh`, `check_checker_policy.sh`) bind the Lean
@@ -119,9 +121,23 @@ effectively unbounded).
   re-run on the bump commit. The R-0208 closure record is unchanged: its qualification was against
   the Lean kernel's checker identity, and the external re-check is a separate CI job whose verdict
   is re-earned on every run.
-- **nanoda** stays at `e0d76f5`, which matches the Arena's published results. The Arena's master
-  branch already names newer revisions of both checkers (con-leche `ae1f319`, nanoda `998e0a8`) for
-  its round in progress; the freshness check will report them once that round's results are
-  published.
+- **nanoda** stayed at `e0d76f5`, which matched the Arena's published results that day.
+
+## Bump evaluation, 2026-10-23
+
+The Arena published its next round (lean-kernel-arena@`c534bac6`) hours later, and the freshness
+check reported both pins stale: its first real finding. **Bumped con-leche `c26f793` → `ae1f319`
+and nanoda `e0d76f5` → `998e0a8`.**
+
+- **Arena results.** con-leche `ae1f319`: soundness 69 right, 0 wrong, 3 declined; completeness
+  131 right, 0 wrong, 6 declined. nanoda `998e0a8`: soundness 72 right, 0 wrong, 0 declined;
+  completeness 135 right, 0 wrong, 2 declined.
+- **Build.** con-leche `ae1f319` pins Lean `v4.35.0` (the final release, with #15288) and builds with
+  it; nanoda `998e0a8` builds with cargo, and the arena's stack patch still applies.
+- **Gate.** `check_external_checker.sh` with both new pins at `eb991951`: 22 passed, 0 failed
+  (con-leche accepted 16160 declarations single-threaded in 14 s; nanoda checked 18351; both swap
+  controls rejected for the right reason; the native export declined by con-leche and accepted by
+  nanoda only with the declared owners' axioms).
+- **Checker identity**: unaffected, as for the first bump.
 
 The tracked hole is [KNOWN_HOLES.md](KNOWN_HOLES.md) H29.

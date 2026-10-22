@@ -20,12 +20,15 @@ may affect con-leche.
 - con-leche runs with `--jobs=1` at every call in `check_external_checker.sh`; its default was one
   worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
   about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
-  fix is already in con-leche's own toolchain (v4.35.0-rc3, backport #15306), so this is defence
+  fix is already in con-leche's own toolchain (v4.35.0; v4.35.0-rc3 via backport #15306 at the
+  earlier pins), so this is defence
   in depth.
 - con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
   results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
-  the gate 22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external
-  checkers, so no identity row changes. nanoda `e0d76f5` already matched.
+  the gate 22/0. The next day the Arena published a new round, the freshness check reported both
+  pins stale, and they moved again: con-leche `ae1f319` (Lean 4.35.0) and nanoda `998e0a8`, gate
+  22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external checkers, so
+  no identity row changes.
 - `check_checker_pin_freshness.sh` compares the pins with the Arena's published revisions (falling
   back to upstream heads): a warning when landing, a finding in the nightly campaign tier, and an
   explicit SKIP offline.
