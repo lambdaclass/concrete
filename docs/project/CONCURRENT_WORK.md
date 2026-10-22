@@ -81,6 +81,30 @@ The CI wait touches no files, so work can continue during it — in another
 worktree. Treating the whole publish as tree-freezing is over-caution; treating
 the hook phase as safe is the error that costs a run.
 
+## Landing, review and load (development throughput)
+
+On 2026-10-22 a finished branch took 6 – 10 h to reach main for about 1 h of work.
+The [development throughput](../../ROADMAP.md#development-throughput) track in the
+roadmap owns the repair. These rules apply to every writer now:
+
+- **One bug or one rule per branch** (R-0545). A branch that changes a language or
+  checker rule lands first and small, with the migrations of main's fixtures and
+  nothing else. A branch that needs two rules is two branches.
+- **Review per slice, delta after the first pass** (R-0544). After the first full
+  review, each round reviews only the diff since the previous round. Past 5 rounds,
+  split the slice. Review ownership and memory-safety work with neutral prompts and
+  piecewise diffs.
+- **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
+  runs and mutation campaigns count as heavy. Agents run the fast and
+  impact-selected gates; full sets go to the servers (R-0541) or to CI. Until the
+  machine-wide semaphore exists, check the load and queue behind a running heavy
+  run instead of starting a third.
+- **Ready branches land together** (R-0539). Ready branches are integrated into one
+  train candidate with one CI run, rather than each rebasing onto the last landing.
+  Until the landing script exists, a hand-built train follows the same rules: one
+  integrated candidate, results recorded against its exact SHA, and bisection by
+  member only on red.
+
 ## Killing a publish does not un-publish it
 
 `push-both.sh` runs `git push` as a CHILD process. Killing the script does not

@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Development Throughput Becomes A Priority Track (2026-10-22)
+
+The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
+ahead of the next feature wave. A finished, Codex-clean branch took 6 – 10 h of wall clock to
+reach main for about 1 h of work. Several causes added to that time:
+
+- review loops of 8 – 26 rounds that re-reviewed the whole diff;
+- large branches whose rule changes broke other branches' fixtures;
+- a pre-push hook that runs about 92 of 255 gates, so failures were first seen in CI;
+- serial landing, with hand-edited ledgers that conflicted on every rebase;
+- CI queueing against a 20-job concurrency limit;
+- a laptop at load 140 – 240.
+
+New tasks R-0539 – R-0547 cover landing trains, CI tiers, self-hosted runners, generated
+ledgers, load control, review and branch discipline, build caches and stage-timestamp
+measurement. R-0513 owns impact-based pre-push selection. The promotion pipeline describes trains
+and the landing and campaign tiers with its existing passed, failed, skipped, cancelled and
+incomplete vocabulary. `docs/project/CONCURRENT_WORK.md` and `docs/compiler/TESTING.md` give the
+rules that apply now. Targets: under 2 h from Codex-clean to main, ≤ 40 min of landing CI,
+≤ 10 min of pre-push, zero ledger conflicts and ≤ 5 review rounds per slice.
+
 ### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
 
 A borrow of a local is the address of its slot whatever the local's type. A local holding a raw

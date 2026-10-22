@@ -38,6 +38,13 @@ integration slots of its own; queue order alone does not. Its order:
    result is called source-to-native before V1c holds;
 5. grow the subset slice by slice, choosing what to admit next from real programs (row 6).
 
+**Development throughput comes first among the process work (decided 2026-10-22).** A finished
+branch took 6 – 10 h to reach main for about 1 h of work. The [development
+throughput](#development-throughput) track (R-0539 – R-0547, with R-0513's pre-push selection) brings
+in landing trains, CI tiers, generated ledgers, impact-selected pre-push gates, load control, and
+review and branch discipline. It is ordered ahead of the next feature wave, and its targets are under
+2 h from Codex-clean to main, ≤ 40 min of landing CI and ≤ 10 min of pre-push.
+
 Evidence integrity (one verdict authority, the axiom policy, minimal task identity, independent replay,
 and evidence bound through linking to the final image and its dependency versions) is a second
 protected track, and adversarial validation runs continuously. RocksDB slice 1 (row 5) is the one
@@ -96,6 +103,73 @@ SHA, never the mutation aggregate alone.
 | rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bug 102), 2i | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | landed on main at 094e51bf but not accepted: exits 0b (bug 102) and 2i; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](docs/platform/NATIVE_LIBRARIES.md)); G3 closed (bug 103 fixed on main by `0c507fb9`, verified 2026-10-21) |
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->
+
+## Development throughput
+
+**Decision (2026-10-22): the development cycle's feedback loop is a priority track, ordered ahead of
+the next feature wave.** Its tasks are R-0539 – R-0547, with R-0513 for pre-push gate selection; their
+bodies are under [Area: Development Throughput](#area-development-throughput). The track is charged to
+track C of the [capacity allocation](#capacity-allocation). It does not preempt defect repairs, but
+no new track D checkpoint starts after RocksDB slice 1 until R-0547's measurements are recorded and
+landing trains (R-0539) on the landing CI tier (R-0540) are in use. The validation semantics do not
+change. The [promotion pipeline](#promotion-pipeline)'s stages, its exact-SHA binding and its
+passed / failed / skipped / cancelled / incomplete vocabulary bind every item below. A faster path
+never reports a check it did not run as passed.
+
+**Why (measured 2026-10-22).**
+
+- **Time to land.** A finished, Codex-clean branch took 6 – 10 h of wall clock to reach main for about
+  1 h of real work.
+- **Review loops.** Codex took 8 – 26 rounds per branch (interp-coverage 26, exit-2i 17, validation
+  12), and each round re-reviewed the whole diff. The cybersecurity filter blocked rounds on ownership
+  work.
+- **Big branches.** safety-eval2 carried 10 bugs and 23 test migrations, and exit-2i touched about 100
+  files. Rule-changing branches broke other branches' new fixtures (symbols' mangling, exit-2i's REF-6,
+  safety's heap rule).
+- **Late failures.** The pre-push hook runs about 92 of 255 gates, chosen by area name. Stack-budget,
+  trust-gate, float round-trip and linear-discard failures were first seen in CI or on later pushes,
+  at about 1.5 h per round.
+- **Serial landing.** Candidates landed one at a time. Each landing made every other branch rebase and
+  re-run its local gates and CI. Hand-edited shared ledgers conflicted on every rebase: CHANGELOG, the
+  bugs README, STRUCTURAL_CLASSES, the audit corpus, ROADMAP rows, the example manifest, the gate
+  count and BuildIdentity.
+- **CI wall time.** A run has about 35 jobs against roughly 20 concurrent jobs on the free plan, so
+  runs queued. One waited 45 min, and its shards started an hour late. The language-surface job and
+  the mutation shards take about 80 min each. lambdaclass/concrete is on GitHub Enterprise, with about
+  500 concurrent jobs.
+- **One laptop.** 5 – 7 agents plus gate runs pushed the load average to 140 – 240, which caused
+  timeout false failures and 90-minute local full runs.
+- **Infrastructure defects.** The hooks pointed at a stale pre-push without the wip tier. GIT_DIR
+  leaked into gates under the hook (repaired in `run_ci_gates_local.sh` on branch `bug175`).
+  Automatic git maintenance repacked during runs.
+- **No measurement.** Stage timestamps were not recorded.
+
+**Targets.**
+
+| measure | target |
+|---|---|
+| Codex-clean to main | under 2 h (median) |
+| landing CI, dispatch to conclusion, including queueing | ≤ 40 min |
+| local pre-push | ≤ 10 min |
+| ledger conflicts on rebase | zero |
+| review rounds per slice | ≤ 5 |
+
+**Items, in dependency order.** Each item's owner holds its exit, and the order says what starts
+first. Items with no dependency start now. The two in-progress branches are referenced here, not
+restated.
+
+| order | item | owner | exit criterion | depends on |
+|---|---|---|---|---|
+| 1 | Measurement: per-branch stage timestamps (started, Codex-clean, CI started, landed) and median time to land shown on this roadmap | R-0547 | every branch landed after the recorder exists has all four timestamps, and the generated median covers them | — |
+| 2 | Review discipline: review per slice; after the first full pass, review only the delta since the previous round; neutral prompts and piecewise diffs for ownership work | R-0544 | median ≤ 5 review rounds per slice over a month of recorded slices, and every slice past 5 rounds was split | — |
+| 3 | Branch discipline: one bug or one rule per branch; rule-changing branches land first and small | R-0545 | over a month of landings, no branch carries more than one bug or rule without a recorded reason, and no rule change breaks another branch's fixture after that branch was ready | — |
+| 4 | Load control: at most 2 heavy local runs per machine (a machine-wide semaphore); agents run only fast and impact-selected gates; full sets run on servers or in CI | R-0543 | a third concurrent heavy run waits for a slot (control), and a recorded week has no timeout failure caused by load | — |
+| 5 | Generated ledgers: bug records are the single source, CHANGELOG entries are `changelog.d` fragments, drift gates (branch `ledgers`) | R-0542 | a scripted control rebases two branches that each add a bug, a changelog entry and an example, with zero textual conflicts; a hand edit to a generated ledger fails its drift gate | — |
+| 6 | CI tiers: a landing tier required for merge; the mutation campaign on schedule or dispatch, gating campaign qualification and not merges; the language-surface job split; candidate CI on lambdaclass/concrete (branch `ci-tiering`) | R-0540 | median landing-tier wall clock ≤ 40 min over 10 consecutive runs; stage (c) still requires the campaign, and `check_qualification_record.sh` refuses a landing-only run | — |
+| 7 | Landing trains: merge every ready branch into one candidate, run one CI, bisect only on red; a landing script builds the train, regenerates generated files, runs the fast gates, pushes `ci/`, dispatches, watches and lands on both remotes | R-0539 | three consecutive trains of at least two branches land through the script, and median Codex-clean → main is under 2 h over them | 5, 6 |
+| 8 | Self-hosted or larger runners on the maintainers' servers, never for `pull_request` (the repository is public); heavy local gate runs execute remotely on the servers | R-0541 | a workflow check fails when a self-hosted job can run for `pull_request` (with its negative control); a full local gate set runs on a server and records its result against the SHA | 4, 6 |
+| 9 | Impact-based gate selection for pre-push: map source files and fixtures to the gates that exercise them, so a change runs every gate it can break | R-0513 | pre-push median ≤ 10 min, and over 20 consecutive landings no gate failure is first seen in CI | 1 |
+| 10 | Build and compile caches: profile the 20 slowest gates first; then a shared compiled-artifact cache keyed by compiler identity and source hash, and a shared Lean build cache across worktrees | R-0546 | the profile is recorded at a SHA; with the compiler unchanged, a second run of those gates takes at most half the first run's time; changing the compiler identity or a source invalidates the cache (control) | 1 |
 
 ## Phases and releases
 
@@ -367,6 +441,9 @@ V1 and the shared compiler structure, and that the feature track is capped with 
   class in [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) and its track when it is added. When repairs keep A below its minimum for
   two consecutive cycles, the structural owner of the class causing most of them moves to the front of
   A's migration slot.
+- **Development throughput.** The [development throughput](#development-throughput) track (R-0539 –
+  R-0547, with R-0513) is charged to C. After RocksDB slice 1, the next D checkpoint waits until
+  R-0547's measurements are recorded and landing trains (R-0539) run on the landing tier (R-0540).
 - **Scope bounds until V1b's composed native exit holds.** RocksDB slice 1 and its four companions are
   the one executable workload; the four-adapter checkpoint follows its acceptance. R-0490 runs only
   bounded component workloads (row 7). Workloads expand beyond RocksDB slice 1 only after R-0515's
@@ -422,6 +499,21 @@ why the difference cannot affect it.
 R-0513 owns making stage (a) a dependency-closure-selected fast tier within its budget and keeping
 stage (c) bound to exact commits, toolchains and artifacts (Phase 1 exit 2f); R-0516 automates (c)'s
 record for releases (today `qualification_record.py` is run by hand against the run IDs).
+
+**Trains and tiers (2026-10-22, [development throughput](#development-throughput)).** Ready branches
+are meant to land as one **train**: one integrated candidate, one CI run, and bisection by member only
+when that run is red (R-0539). Stage (b) splits into two tiers:
+
+- a **landing tier**, which is required for merge and has a target of ≤ 40 min (R-0540, branch
+  `ci-tiering`);
+- a **campaign tier**, which holds the mutation campaign, runs on schedule or dispatch, and gates stage
+  (c) qualification but not merges.
+
+A train's result is recorded against the train's own SHA, and each member's against the SHA it landed
+at. A member removed by bisection keeps its failed result. The landing tier never stands in for stage
+(c), and a stage (c) verdict still needs every job of one dispatch run. Passed, failed, skipped,
+cancelled and incomplete stay distinct throughout: a cancelled or incomplete train run is not a pass
+for any member.
 
 ### Release map
 
@@ -2637,6 +2729,189 @@ coverage matrix.
 
 The corresponding local/CI gate work is scheduled as a stable-ID task
 below; this index carries no executable work.
+
+## Area: Development Throughput
+
+These tasks carry the [development throughput](#development-throughput) track, which was decided on
+2026-10-22. The measurements behind them, the targets and the dependency order are in that section.
+Pre-push gate selection belongs to R-0513 (exit 2f), so it is not restated here. None of these tasks
+changes what a validation result means. Every result stays bound to its exact SHA under the
+[promotion pipeline](#promotion-pipeline).
+
+### Task R-0539
+
+**Phase:** 1
+
+**Objective:** Landing trains. Merge every ready branch into one candidate, run one CI, and bisect only
+on red.
+
+**Work:** a landing script (new) that takes the ready branches and does the following:
+
+- builds the train;
+- regenerates the generated files (R-0542's ledgers, `Concrete/BuildIdentity.lean`, the candidate
+  table) once on the train rather than on each branch;
+- runs the fast gates and pushes the train to `ci/`;
+- dispatches CI and watches it to its conclusion;
+- on green, lands the train on both remotes.
+
+On red, it bisects the train by member. It rebuilds the train without the offending branch and
+records that branch's failure against its SHA. A rerun never stands in for the failed result. The
+train's record lists each member's SHA, which is what lets a member's later result be traced to the
+train it landed in.
+
+**Exit:** three consecutive trains of at least two branches land through the script with no manual
+step except approval. Median Codex-clean → main is under 2 h over those trains (R-0547's record). A
+seeded red member is identified by bisection, and the remaining members land without it.
+
+**Depends on:** R-0542 (a train whose ledgers conflict cannot be built mechanically) and R-0540 (the
+landing tier).
+
+### Task R-0540
+
+**Phase:** 1
+
+**Objective:** CI tiers. A landing tier is required for merge, with a target of ≤ 40 min. The mutation
+campaign runs on schedule or dispatch and gates campaign qualification ([stage (c)](#promotion-pipeline)),
+not merges.
+
+**Work:** in progress on branch `ci-tiering`, which edits the workflow and the promotion-pipeline tier
+text. It moves the mutation campaign out of the landing tier, splits the language-surface job and
+routes jobs to runners. Candidate CI runs on lambdaclass/concrete, whose GitHub Enterprise plan allows
+about 500 concurrent jobs against the free plan's roughly 20.
+
+**Exit:** median landing-tier wall clock, from dispatch to conclusion including queueing, is ≤ 40 min
+over 10 consecutive runs. No landing-tier job takes more than 40 min. Stage (c) still requires every
+job, the campaign included, and `check_qualification_record.sh` refuses a landing-only run.
+
+### Task R-0541
+
+**Phase:** 1
+
+**Objective:** Self-hosted or larger runners on the maintainers' servers, and remote execution of
+heavy local gate runs on the same servers.
+
+**Work:** register the runners with labels and route only `push`, `schedule` and `workflow_dispatch`
+jobs to them. They are never used for `pull_request`, because the repository is public and a fork's
+pull request would run untrusted code on them. The runbook is `docs/project/SELF_HOSTED_RUNNERS.md` on
+branch `ci-tiering`. Heavy local gate runs (`make pre-push-full`, closure-mode runs and local mutation
+campaigns) run remotely on a server against an exact SHA, so they keep the laptop's load low.
+
+**Exit:** a workflow check fails when a job with a self-hosted label can run for `pull_request`, and
+its negative control proves the check bites. A full local gate set runs on a server and records its
+result against the candidate SHA in the same form as a local closure-mode summary.
+
+**Depends on:** R-0540 (routing), R-0543 (where heavy runs go).
+
+### Task R-0542
+
+**Phase:** 1
+
+**Objective:** Generated ledgers. Every shared fact has one owner that is edited by hand, and every
+other copy is generated and drift-gated. This is the "one owner per fact" rule of the approved
+repository reorganization ([R-0480](#task-r-0480)).
+
+**Work:** in progress on branch `ledgers`, which edits the bug README, the audit corpus and the
+CHANGELOG mechanics:
+
+- bug records are the single source for the bug README's lists, STRUCTURAL_CLASSES' instances and the
+  audit corpus;
+- CHANGELOG entries are `changelog.d` fragments;
+- the example manifest's and gate inventory's counts are derived;
+- each generated copy has a drift gate.
+
+**Exit:** a scripted control rebases two branches that each add a bug record, a changelog entry and an
+example onto the same base with zero textual conflicts. A hand edit to a generated ledger fails its
+drift gate.
+
+### Task R-0543
+
+**Phase:** 1
+
+**Objective:** Load control. At most 2 heavy local runs per machine.
+
+**Work:**
+
+- a machine-wide semaphore in a directory shared by every worktree and clone, which every heavy runner
+  acquires and releases even when it is interrupted;
+- agents run only the fast gates and the impact-selected gates (R-0513);
+- full sets run on the servers (R-0541) or in CI.
+
+**Exit:** a third concurrent heavy run waits for a slot (control), and a stale slot from a killed run is
+reclaimed. A recorded week of runs has no timeout failure attributed to load.
+
+### Task R-0544
+
+**Phase:** 1
+
+**Objective:** Review discipline. The target is ≤ 5 review rounds per slice.
+
+**Work:**
+
+- review per slice;
+- after the first full pass, each round reviews only the delta since the previous round;
+- a slice still not clean after 5 rounds is split;
+- ownership and memory-safety work is reviewed with neutral prompts and piecewise diffs, so a filter
+  does not block the round.
+
+**Exit:** R-0547's record shows a median of ≤ 5 rounds per slice over a month, and every slice past 5
+rounds has a recorded split.
+
+### Task R-0545
+
+**Phase:** 1
+
+**Objective:** Branch discipline. One bug or one rule per branch, and rule-changing branches land first
+and small.
+
+**Work:**
+
+- a branch that changes a language or checker rule lands before branches that add fixtures under the
+  old rule;
+- the rule change carries the migrations of main's fixtures, and nothing else;
+- a branch that needs two rules is two branches.
+
+**Exit:** over a month of landings, no branch carries more than one bug or rule without a recorded
+reason. No rule change breaks a fixture of a branch that was already ready.
+
+### Task R-0546
+
+**Phase:** 1
+
+**Objective:** Build and compile caches.
+
+**Work:**
+
+- first, profile the 20 slowest gates;
+- then a shared compiled-artifact cache keyed by compiler identity and source hash;
+- a shared Lean build cache across worktrees.
+
+**Exit:**
+
+- the profile is recorded at a named SHA;
+- with the compiler unchanged, a second run of those gates takes at most half the first run's time;
+- a new worktree's first build reuses the shared Lean cache;
+- changing the compiler identity or a source file invalidates the affected entries (negative control).
+
+**Depends on:** R-0547 (the profile is recorded with the measurement).
+
+### Task R-0547
+
+**Phase:** 1
+
+**Objective:** Measurement. Record per-branch stage timestamps (started, Codex-clean, CI started,
+landed) and show median time to land on this roadmap.
+
+**Work:**
+
+- one record per branch, so recording never conflicts on rebase;
+- review rounds per slice and the place each gate failure was first seen (pre-push or CI) are recorded
+  with the timestamps;
+- a generated median time to land next to the candidate table under
+  [Implemented, not yet accepted](#implemented-not-yet-accepted), regenerated like that table.
+
+**Exit:** every branch landed after the recorder exists has all four timestamps. The generated median
+covers them, and `check_docs_drift.sh` fails when the median is stale.
+
 ## Area: Verified-Compiler Pipeline, Stabilization And Usability
 
 These tasks carry the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md)
@@ -3503,6 +3778,14 @@ proof infrastructure; the full tier on the exact candidate commit before qualifi
 nightly; semantic, checker, evidence and trusted-base changes run their complete affected proof and
 regression closure; remote runners for the full tier with local reproduction kept; the Linux-only
 claim-inventory step in the local full tier.
+
+**Impact-based selection (2026-10-22, [development throughput](#development-throughput) item 9).** Today the
+pre-push hook selects about 92 of 255 gates by area name, and stack-budget, trust-gate, float
+round-trip and linear-discard failures were first seen in CI. The fast tier selects by an impact map
+from source files and fixtures to the gates that exercise them, so a change runs every gate it can
+break. A path the map does not cover selects the full set, so the map fails closed. Interim target
+before the five-minute budget: pre-push median ≤ 10 min, and over 20 consecutive landings no gate
+failure is first seen in CI (R-0547 records where each failure was first seen).
 
 **Exit:** adding a legitimate proved example requires no incidental count edit; deliberate coverage loss
 fails; the fast tier meets its recorded budget; full results bind exact commits, toolchains and
