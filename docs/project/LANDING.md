@@ -68,7 +68,8 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent. The
   push carries an empty lease, and ownership is taken only from `--porcelain`'s `*` (new ref)
   line, because git reports an existing ref at the same SHA as up to date before it checks the
-  lease. On a collision the run tries a fresh name. The ref is and deleted on exit with a lease on that SHA, so
+  lease. On a collision the run tries a fresh name. The ref is deleted afterwards, and on any exit,
+  with a lease on that SHA, so
   concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.

@@ -84,6 +84,9 @@ if [ -f "$FAKE_GH_DIR/pause-countdown" ]; then
   n=$(( $(cat "$FAKE_GH_DIR/pause-countdown") - 1 )); echo "$n" > "$FAKE_GH_DIR/pause-countdown"
   [ "$n" -le 0 ] && touch "$BOT_PAUSE_FILE"
 fi
+if [ -f "$FAKE_GH_DIR/pause-in-culprit-probe" ]; then
+  case "$(git symbolic-ref -q --short HEAD)" in *-bc) touch "$BOT_PAUSE_FILE" ;; esac
+fi
 [ ! -e BAD ]
 EOF
 cat > "$TMP/notify.sh" <<'EOF'
@@ -205,7 +208,7 @@ merges="$(git --git-dir="$TMP/origin.git" log --first-parent --reverse --format=
 rl="$(cat "$TMP/gh/runner.log" 2>/dev/null)"
 has "$rl" "wip/land-bot-" && [ "$(printf '%s\n' "$rl" | sort | uniq -d)" = "" ] \
   && [ -z "$(land_refs)" ] \
-  && ok "the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards" || no "remote leg refs: '$rl'"
+  && ok "the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards" || { no "remote leg refs: '$rl', left: '$(land_refs)'"; cat "$LAND_STATE_DIR"/bot-*/check-*/remote.log 2>/dev/null | grep 'remote:' | sed 's/^/      /'; }
 has "$(cat "$TMP/gh/notify.log" 2>/dev/null)" "landed|train bot-" && ok "notify.sh was called with the landing" || no "no landing notification"
 has "$(cat "$LAND_STATE_DIR/bot/bot.env")" "phase=idle" && ok "state is idle after landing" || no "state not idle"
 
@@ -290,11 +293,12 @@ in_main "$(sha_of wip/ph)" && ! in_main "$(sha_of wip/pc)" && has "$out" "[eject
 
 mk wip/qb qb BAD qb; mark wip/qb
 mk wip/qg qg src/qg.txt qg; mark wip/qg
-echo 3 > "$TMP/gh/pause-countdown"   # 1: the train's check; 2: the halving probe; 3: the culprit probe (red)
+rm -f "$LAND_STATE_DIR"/bot/bisect-*.log
+touch "$TMP/gh/pause-in-culprit-probe"   # the hook pulls the switch while checking the culprit alone (red)
 out="$(bot tick)"; rc=$?
-rm -f "$TMP/gh/pause-countdown"
+rm -f "$TMP/gh/pause-in-culprit-probe"
 blog="$(cat "$LAND_STATE_DIR"/bot/bisect-*.log 2>/dev/null)"
-has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$blog" "train: culprit:" \
+has "$out" "stopped by the kill switch" && ! has "$out" "[ejected]" && ! has "$blog" "train: culprit:" && has "$blog" "before attribution" \
   && ok "a pause raised DURING the red culprit probe attributes nothing" || { no "pause in culprit probe"; echo "$out" | sed 's/^/      /'; echo "$blog" | sed 's/^/      /'; }
 rm -f "$BOT_PAUSE_FILE" "$LAND_STATE_DIR"/bot/bisect-*.log
 out="$(bot tick)"
@@ -307,9 +311,10 @@ mk wip/cx cx src/cx.txt cx; mark wip/cx
 CXH="$(cd "$W" && git rev-parse HEAD)"
 : > "$TMP/gh/runner.log"
 out="$(cd "$W" && LAND_REMOTE_REF_FIRST=wip/land-collide bash "$ROOT_DIR/scripts/land/train.sh" check cx-t --no-review 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "wip/land-collide was not created by this run" && ! has "$(cat "$TMP/gh/runner.log")" "wip/land-collide" \
+rlog="$(cat "$LAND_STATE_DIR"/cx-t/check-*/remote.log 2>/dev/null)"
+[ "$rc" = 0 ] && has "$rlog" "wip/land-collide was not created by this run" && ! has "$(cat "$TMP/gh/runner.log")" "wip/land-collide" \
   && [ "$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/wip/land-collide)" = "$CXH" ] && [ "$(land_refs)" = "refs/heads/wip/land-collide" ] \
-  && ok "an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted" || { no "collision: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && ok "an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted" || { no "collision: exit $rc, refs '$(land_refs)'"; echo "$rlog" | sed 's/^/      /'; }
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-collide
 ( cd "$W" && git checkout -q --detach origin/main )
 

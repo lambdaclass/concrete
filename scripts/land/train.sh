@@ -348,6 +348,12 @@ remote_leg() { # name head
   local rc=0 out
   out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}" 2>&1)" || rc=$?
   printf '%s\n' "$out"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
+    # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
+    local dout
+    dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)" \
+      && echo "remote: deleted refs/heads/$ref" || echo "remote: could NOT delete refs/heads/$ref: ${dout//$'\n'/ | }"
+  fi
   case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
   return "$rc"
 }
