@@ -33,6 +33,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -106,12 +107,21 @@ def locked(data):
 def atomic_write(path, data_bytes):
     """Readers see the old file or the new one, never a truncated one; a crash leaves at most a
     stray temp file."""
-    tmp = "%s.tmp.%d" % (path, os.getpid())
-    with open(tmp, "wb") as f:
-        f.write(data_bytes)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # mkstemp creates the temp file exclusively (O_EXCL), so a planted symlink is never followed.
+    fd, tmp = tempfile.mkstemp(prefix=".%s." % os.path.basename(path), dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def write_and_commit(data, path, new_bytes, msg, no_commit):
@@ -194,12 +204,12 @@ def cmd_processed(a):
 
 def cmd_pending(a):
     """Print the sha of the newest full record that is not processed yet (nothing when none), so a
-    cycle interrupted after measuring finishes that commit even if main has moved on."""
+    cycle interrupted after measuring finishes that commit even if main has moved on; older
+    unprocessed commits follow at later ticks."""
     done = processed_set(contained(a.data, a.machine, "processed"))
     for r in reversed(load(a.data, a.machine)):
-        if r.get("bench") is None:
-            if r["sha"] not in done:
-                print(r["sha"])
+        if r.get("bench") is None and r["sha"] not in done:
+            print(r["sha"])
             break
     return 0
 
