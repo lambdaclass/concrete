@@ -98,7 +98,7 @@ declare -A BUG_TEST_MAP=(
   [134]="error_134_enum_eq.con error_134_struct_eq.con"
   [140]="error_140_heap_eq.con error_140_linear_eq.con error_140_ref_eq.con error_140_string_eq.con error_140_generic_unbounded_eq.con error_140_generic_copy_at_struct.con error_140_rawptr_eq_safe.con error_140_generic_self_compare.con regress_140_scalar_comparisons.con"
   # Bug 142: rule (d), no exit inside a call argument, literal element or operand (E0278).
-  [142]="error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con regress_142_exits_allowed.con"
+  [142]="error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con error_142_deref_operand_return.con error_142_for_cond_break.con regress_142_exits_allowed.con"
   # Bug 143: defer rule (a), reserve by place (E0279 / E0206).
   [143]="error_143_defer_borrow_then_free.con error_143_defer_borrow_then_consume.con error_143_defer_observer_before_consumer.con error_143_defer_field_arg.con error_143_defer_call_arg.con error_143_defer_then_use_after_block.con error_143_defer_borrow_only.con error_143_defer_last_in_match_arm.con regress_143_defer_reserve_by_place.con"
   # Bug 144: heap interiors linearity-tracked (E0290 / E0287).

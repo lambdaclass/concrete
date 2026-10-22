@@ -1775,6 +1775,8 @@ run_err "$TESTDIR/error_142_enum_field_return.con"     "(E0278)"
 run_err "$TESTDIR/error_142_operand_return.con"        "(E0278)"
 run_err "$TESTDIR/error_142_method_arg_return.con"     "(E0278)"
 run_err "$TESTDIR/error_142_break_in_arg.con"          "(E0278)"
+run_err "$TESTDIR/error_142_deref_operand_return.con"  "(E0278)"
+run_err "$TESTDIR/error_142_for_cond_break.con"        "(E0278)"
 run_ok  "$TESTDIR/regress_142_exits_allowed.con" "1 4 5 2 0" 0
 r142_i=$($COMPILER "$TESTDIR/regress_142_exits_allowed.con" --interp 2>&1 | awk "NR<=1" || true)
 if [ "$r142_i" = "1 4 5 2 00" ]; then

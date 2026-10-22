@@ -636,7 +636,9 @@ partial def stmtEscape? (depth : Nat) (labels : List String) : Stmt → Option (
       stmtsEscape? (depth + 1) (lbl.toList ++ labels) body
   | .forLoop _ init c step body lbl =>
     let labels' := lbl.toList ++ labels
-    ((init.bind (stmtEscape? depth labels)).orElse fun _ => operandEscape? (depth + 1) labels' c).orElse fun _ =>
+    -- The condition is evaluated outside the loop's scope (Check and Elab agree), so a
+    -- `break`/`continue` there does not target this loop (Codex review).
+    ((init.bind (stmtEscape? depth labels)).orElse fun _ => operandEscape? depth labels c).orElse fun _ =>
       ((step.bind (stmtEscape? (depth + 1) labels')).orElse fun _ => stmtsEscape? (depth + 1) labels' body)
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
   | .letStructDestructure _ _ _ v => operandEscape? depth labels v
@@ -663,6 +665,9 @@ def protectedOperands : Expr → Option (String × List Expr)
   | .arrayLit _ elems => some ("an array literal element", elems)
   | .binOp _ _ l r => some ("an operand of a binary operator", [l, r])
   | .unaryOp _ _ x => some ("the operand of a unary operator", [x])
+  | .deref _ x => some ("the operand of a dereference", [x])
+  | .borrow _ x | .borrowMut _ x => some ("the operand of a borrow", [x])
+  | .fieldAccess _ x f => some (s!"the base of the field access '.{f}'", [x])
   | .cast _ x _ => some ("the operand of a cast", [x])
   | .arrayIndex _ a i => some ("an index expression", [a, i])
   | .allocCall _ _ a => some ("an allocator argument", [a])

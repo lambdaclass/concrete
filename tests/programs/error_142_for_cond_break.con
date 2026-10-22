@@ -1,0 +1,13 @@
+// Bug 142 (Codex): a `for` condition is evaluated outside its loop, so a `break` there leaves the
+// enclosing operand even when the label repeats an outer one (E0278).
+fn id(x: Int) -> Int { return x; }
+fn main() -> Int {
+    'outer: while true {
+        let x: Int = id(if true {
+            'outer: for (if true { break 'outer; true } else { true }) {}
+            1
+        } else { 0 });
+        return x;
+    }
+    return 0;
+}

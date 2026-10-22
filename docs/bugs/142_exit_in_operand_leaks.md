@@ -59,7 +59,9 @@ let-else idiom). Enforced at `checkExpr`, the single expression entry (`protecte
 Fixtures (`run_tests.sh`): `error_142_struct_field_return.con`, `error_142_call_arg_return.con`,
 `error_142_array_elem_return.con`, `error_142_enum_field_return.con`,
 `error_142_operand_return.con`, `error_142_method_arg_return.con`, `error_142_break_in_arg.con`
-(D15), and the positive control `regress_142_exits_allowed.con` (let-initializer return, tail
+(D15), `error_142_deref_operand_return.con` (dereference, borrow and field-access bases are operands
+too) and `error_142_for_cond_break.con` (a `for` condition is outside its loop; both from Codex
+review), and the positive control `regress_142_exits_allowed.con` (let-initializer return, tail
 `return if`, statement match, a `break` bound inside the operand; native and `--interp` agree).
 
 Migration: 1 site, `tests/regressions/bug086_discarded_tail/repro.con`'s `argret` (which existed
