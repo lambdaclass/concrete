@@ -1,0 +1,37 @@
+# Bug-discovery record: one row per probe batch, the input of the reliability exit's discovery-rate
+# signal (ROADMAP Phase 1 exit 2m) and of the bug dashboard (scripts/gen/bug_dashboard.py, which
+# check_docs_drift.sh runs with --check). Every bug record from 079 on (docs/bugs/NNN_*.md) is
+# attributed to exactly one row; whoever files a bug adds it to the batch that found it, or adds that
+# batch, in the same commit, and regenerates the dashboard.
+# A row is a batch: a bounded piece of probing with a recorded effort, whether or not it found bugs.
+# A batch that finds nothing is recorded too: zero rows are the signal.
+# Columns (tab-separated, every cell non-empty, "-" for none):
+#   date     YYYY-MM-DD, the day the batch ran (the first day for a multi-day batch)
+#   kind     one of: hunt, examples, workload, design-proofs, semantics, spec, fuzz, interp-coverage
+#            (independent probes: they count toward the discovery-rate signal), or
+#            ci, review, follow-on, controls, development (attribution only: they find bugs as a side
+#            effect of other work and do not count as probe rounds)
+#   probe    what was probed, in a few words
+#   effort   the size of the batch (hours, probe programs, examples, fuzz hours), or "unrecorded"
+#            for history seeded from the bug records; a counting batch from 2026-10-22 on records it
+#   bugs     comma-separated three-digit bug numbers the batch found, or "-"
+#   silent   the subset of bugs that are silent (memory-safety violation in accepted code, silent
+#            wrong code or wrong value, false proof or claim, authority violation, a gate passing
+#            vacuously), or "-"; the rest are loud (rejected valid programs, invalid IR, link
+#            failures, interpreter refusals, leaks the checker should reject)
+date	kind	probe	effort	bugs	silent
+2026-10-17	controls	R-0482 P1 negative controls	unrecorded	079	079
+2026-10-18	hunt	name-resolution, collision, model-vs-runtime, scope, literal, checker-ownership and red-team hunts; type-identity and generic-destroy review probes	unrecorded	080,081,082,083,084,085,086,087,088,089,090,091,092,093,094,096,097,098,099,100	080,081,082,083,084,085,086,087,088,089,090,091,092,096,097,098
+2026-10-18	review	Codex review of the bug 085 change	unrecorded	101	101
+2026-10-20	workload	RocksDB slice 1 groundwork	unrecorded	102,103	102,103
+2026-10-20	design-proofs	V1 design examples (design question B6)	unrecorded	104	104
+2026-10-20	follow-on	testing the bug 091 round 3 fix; fixing bug 109	unrecorded	105,106,135	105,106,135
+2026-10-20	review	Codex review of batch 4	unrecorded	107	107
+2026-10-20	examples	examples-health pass: port and output-test every example	unrecorded	108,109,110,111,112,113,114,115,116,117,118,119,120	109,111,113,115
+2026-10-20	ci	CI run 39494484959 (ubuntu x86_64)	unrecorded	121	121
+2026-10-20	follow-on	bug 121's layout probe	unrecorded	122	122
+2026-10-21	spec	exit 2i specification (MEMORY_SEMANTICS section 15)	unrecorded	123,124,126	123,126
+2026-10-21	semantics	semantics probes N1-N4 and reference rules	unrecorded	127,128,129,130,131	127,128,129,131
+2026-10-21	review	Codex reviews of the bug 123 and bug 116 fixes	unrecorded	132,133	132,133
+2026-10-21	development	std ownership-on-failure work	unrecorded	134	-
+2026-10-21	follow-on	fixing bug 127	unrecorded	136,137	136,137
