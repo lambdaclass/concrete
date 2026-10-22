@@ -34,7 +34,8 @@
 # Output (DIR, default a temp dir, printed): base.tsv, candidate.tsv, diff.tsv, summary.txt, and
 # logs/{base,candidate}/<unit with / as %>.err (the full diagnostics of every refusal).
 #   columns: kind  unit  outcome  codes  loc  first-error-line
-# Exit: 0 no difference, 1 differences found, 2 usage or setup error.
+# Exit: 0 no difference, 1 differences found, 2 usage or setup error (a compile that could not
+# run, status 125 - 127, is a setup error, never an outcome).
 set -uo pipefail
 export LC_ALL=C
 
@@ -54,6 +55,7 @@ if [ "${1:-}" = "__unit" ]; then
   loc=$(printf '%s' "$first" | grep -oE '^[^ :]+\.con' | sed "s|^$corpus/||")
   if [ $rc -eq 0 ]; then outcome=accept
   elif [ $rc -eq 124 ]; then outcome=timeout
+  elif [ $rc -ge 125 ] && [ $rc -le 127 ]; then outcome=error   # timeout or the compiler could not run
   elif [ $rc -ge 128 ] || grep -qiE 'PANIC|INTERNAL PANIC|uncaught exception|stack overflow' "$out"; then outcome=crash
   else outcome=refuse; fi
   [ "$outcome" = accept ] && { codes=""; first=""; loc=""; }
@@ -71,7 +73,10 @@ die() { echo "rule_impact: $*" >&2; exit 2; }
 CAND=""; BASE="$ROOT_DIR"; CORPUS=""; OUT=""; ONLY="file,project,std,inline"; TMO=120
 NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 JOBS=$(( NPROC / 2 )); [ "$JOBS" -lt 1 ] && JOBS=1; [ "$JOBS" -gt 32 ] && JOBS=32
+need() { [ "$2" -ge 2 ] || die "$1 needs a value (see --help)"; }
+posint() { case "$2" in ''|*[!0-9]*|0*) die "$1 takes a positive integer, got '$2'" ;; esac; }
 while [ $# -gt 0 ]; do
+  case "$1" in --candidate|--base|--corpus|--out|--jobs|--timeout|--only) need "$1" $# ;; esac
   case "$1" in
     --candidate) CAND="${2:-}"; shift 2 ;;
     --base) BASE="${2:-}"; shift 2 ;;
@@ -85,7 +90,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$CAND" ] || die "--candidate is required"
-case "$JOBS$TMO" in *[!0-9]*) die "--jobs and --timeout take positive integers" ;; esac
+posint --jobs "$JOBS"; posint --timeout "$TMO"
+case ",$ONLY," in *,file,*|*,project,*|*,std,*|*,inline,*) ;; *) die "--only takes a comma list of file,project,std,inline" ;; esac
+command -v timeout >/dev/null || die "timeout(1) is required"
 [ -n "$CORPUS" ] || CORPUS="$BASE"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/rule_impact.XXXXXX")
 [ -n "$OUT" ] || OUT="$WORK/report"
@@ -104,6 +111,7 @@ resolve() {
   if [ -d "$spec" ]; then
     dir="$(cd "$spec" && pwd)"
     [ -x "$dir/.lake/build/bin/concrete" ] || die "$label tree $dir has no built .lake/build/bin/concrete"
+    "$dir/.lake/build/bin/concrete" --help >/dev/null 2>&1; [ $? -lt 126 ] || die "$label compiler $dir/.lake/build/bin/concrete cannot run"
     RESOLVED="$dir"; return
   fi
   git -C "$ROOT_DIR" rev-parse --verify --quiet "$spec^{commit}" >/dev/null || die "$label '$spec' is neither a directory nor a commit"
@@ -155,11 +163,11 @@ if want inline; then
   mkdir -p "$CDIR/_inline"
   for s in "$CDIR"/scripts/tests/*.sh "$CDIR"/scripts/ci/*.sh; do
     [ -f "$s" ] || continue
-    # A heredoc body is a Concrete program when it declares a function and expands no shell
-    # variable. The delimiter is the word after <<, quoted or not; `<<-` strips leading tabs.
+    # A heredoc body is a Concrete program when it declares a function (`fn name(` or `fn name<`,
+    # anywhere: `mod m { fn main() .. }` counts) and expands no shell variable. The delimiter is the word after <<, quoted or not; `<<-` strips leading tabs.
     awk -v out="$CDIR/_inline" -v base="$(basename "$s" .sh)" '
       function flush() {
-        if (body ~ /(^|\n)[ \t]*(pub[ \t]+)?(trusted[ \t]+)?fn[ \t]+[A-Za-z_]/ && !(quoted == 0 && body ~ /\$/)) {
+        if (body ~ /(^|[^A-Za-z0-9_])fn[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*[(<]/ && !(quoted == 0 && body ~ /\$/)) {
           f = out "/" base "__L" start ".con"; printf "%s", body > f; close(f); print "inline\t_inline/" base "__L" start ".con"
         }
       }
@@ -196,6 +204,10 @@ run_side "$BASE_DIR/.lake/build/bin/concrete" "$OUT/base.tsv" "$OUT/logs/base"
 run_side "$CAND_DIR/.lake/build/bin/concrete" "$OUT/candidate.tsv" "$OUT/logs/candidate"
 nb=$(wc -l < "$OUT/base.tsv" | tr -d ' '); nc=$(wc -l < "$OUT/candidate.tsv" | tr -d ' ')
 [ "$nb" = "$N" ] && [ "$nc" = "$N" ] || die "incomplete scan: $N units, base $nb rows, candidate $nc rows"
+# A unit whose compiler could not run is not an outcome: the scan is a setup failure, never a
+# "no difference" report.
+nerr=$(cat "$OUT/base.tsv" "$OUT/candidate.tsv" | awk -F'\t' '$3 == "error"' | wc -l | tr -d ' ')
+[ "$nerr" = 0 ] || die "$nerr compiles could not run (status 125-127); see the error rows in $OUT/base.tsv and $OUT/candidate.tsv"
 
 # --- diff: a unit differs when its outcome or its code set differs --------------------------
 join -t$'\t' -1 2 -2 2 -o '1.1,1.2,1.3,1.4,2.3,2.4,2.5,2.6' "$OUT/base.tsv" "$OUT/candidate.tsv" \

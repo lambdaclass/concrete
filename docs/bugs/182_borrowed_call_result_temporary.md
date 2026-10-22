@@ -49,7 +49,7 @@ spill), the shape of bugs 102 and 126.
 ## Structural owner
 
 Exit 2i (R-0500) enforcing REF-5 over every non-place operand, or REF-5@2 specifying a temporary as
-an anonymous local of the enclosing call that is destroyed after it, as decided in
+an anonymous local of the enclosing statement, as decided in
 [TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md) (T-REF5); R-0501 (S10 Place MIR) gives
 temporaries places for good. Containment under exit 0b: refuse a borrow of a call result or
 aggregate literal whose type is not Copy (it is the only form that leaks or is miscompiled).

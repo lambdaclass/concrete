@@ -69,7 +69,7 @@ changes. It measures what a rule breaks before the rule lands.
 | T-G2 | post-mono reference predicate weaker than the front end's (G2 remainder) | SEMANTICS | front end refuses `T := *const &Int` in a return (E0236 on train3, no code on main); a transitive generic reaches `id::<*const &Int>` and passes | one predicate (`tyContainsRef`) at both sites, E0236 `post-mono`; completeness gate scans `Verify.lean` | now (exit 2i) |
 | T-G9 | `&mut` argument modes (G9, B1, B2) | SEMANTICS | a parameter `&mut` is reborrowed at each call; a borrow-block `&mut` is consumed by its first call (E0205 on the second); both may lapse unused | B1: every `&mut` argument is an implicit reborrow; B2: an unused exclusive reference may lapse | decide now (Q1), implement later (R-0496 reborrow form) |
 | T-G10 | owner reads under a shared borrow block (G10, B7) | STYLE | refused (E0203) | none: keep the freeze | deferred: a workload that needs owner reads under a named shared borrow (R-0499) |
-| T-REF5 | borrow of a temporary: literal, call result, aggregate literal (G12) | HOLE | accepted. `&alloc(..)` segfaults and `&int_to_string(..)` leaks (bug 182). `&42`, `&mk()` and `&P{..}` of Copy type give 42 in both consumers. 79 corpus sites borrow a string literal | refuse a borrow of a non-place whose type is not Copy (E0238 REF-5); Copy temporaries and string literals are anonymous call-scoped locals (REF-5@2) | now (Q2 picks the variant) |
+| T-REF5 | borrow of a temporary: literal, call result, aggregate literal (G12) | HOLE | accepted. `&alloc(..)` segfaults and `&int_to_string(..)` leaks (bug 182). `&42`, `&mk()` and `&P{..}` of Copy type give 42 in both consumers. 79 corpus sites borrow a string literal | refuse a borrow of a non-place whose type is not Copy (E0238 REF-5); Copy temporaries and string literals are anonymous locals of the enclosing statement (REF-5@2) | now (Q2 picks the variant) |
 | T-G13 | trait method declaration returning a reference (G13) | SEMANTICS | accepted; every implementation is refused | E0236 at trait method declarations | now (exit 2i) |
 | T-G15 | `extern fn` with `*const &T` in its signature (G15) | SEMANTICS | result and parameter forms accepted; reading the inner reference is E0238 | E0575 looks through raw-pointer pointees, in parameters and results; 0 corpus sites | now (exit 2i, with R-0285) |
 | T-G16 | reference-returning function type via an alias or a field (G16) | SEMANTICS | accepted (no value can inhabit it) | E0236 after alias expansion and in struct/enum field declarations; 0 corpus sites | now (exit 2i) |
@@ -181,15 +181,19 @@ are not candidates here. Two other items are settled and are not repeated in the
 - **Rule options.**
   - (A) REF-5@1 as written. Every non-place borrow is E0238, and the 80 literal sites migrate to
     named locals.
-  - (B) REF-5@2. A borrow of a value expression is an anonymous local of the enclosing call,
-    destroyed after it. Linear temporaries would then be destroyed implicitly, which the 2026-10-21
+  - (B) REF-5@2. A borrow of a value expression is an anonymous local of the enclosing
+    statement, destroyed at its end. Linear temporaries would then be destroyed implicitly, which the 2026-10-21
     stance excludes.
   - (C) A borrow of a non-place whose type is not Copy is E0238. Copy temporaries and string
-    literals, which are static storage, are anonymous call-scoped locals that need no destruction.
+    literals, which are static storage, are anonymous locals of the enclosing statement that need no
+    destruction.
     No corpus site breaks.
 - **Interactions.** REF-5 is exit 2i's rule, and C is a REF-5@2 version of it. It is compatible
-  with REF-6 (exit 2i): a temporary can only be a call argument, because no `let` may hold a
-  reference. Place MIR (R-0501) gives the anonymous local a place.
+  with REF-6 (exit 2i): no `let` may hold a reference and none is assigned, so a borrowed temporary
+  is used only where REF-5 lets a reference be used, all inside one statement: a call argument or
+  receiver, the operand of `*` (`*(&42)`), a field or index base, or a `match` / `if let` /
+  `while let` scrutinee (`match &mk() { .. }`). For a scrutinee the statement is the whole `match`,
+  so arm binders through it stay inside the temporary's lifetime. Place MIR (R-0501) gives the anonymous local a place.
 - **Recommendation.** Now, with C (Q2). It is also bug 182's exit 0b containment.
 
 #### T-G13. Trait method declaration returning a reference
@@ -395,7 +399,7 @@ Each question names the recommended option first.
    refuses `twice` above and breaks every parameter used twice.
 2. **Q2 (T-REF5):** which version of REF-5?
    - *Recommended: (C).* Refuse borrowing a non-place of non-Copy type (E0238). Copy temporaries
-     and string literals are call-scoped anonymous locals. 0 corpus sites break.
+     and string literals are anonymous locals of the enclosing statement. 0 corpus sites break.
    - (A) Refuse every non-place borrow. 80 sites migrate.
    - (B) Destroy linear temporaries after the call. This is implicit destruction, which the stance
      rejects.
