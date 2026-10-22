@@ -439,7 +439,7 @@ The CI workflow's jobs fall in two tiers. Every job runs somewhere; none was dro
   `gh workflow run CI --ref <ref> -f campaign=true`. Its jobs: `Gate mutation plan`, the 24 `Gate
   mutation shard N` jobs, `Gate mutation coverage (aggregate verdict)` and `Nightly differential
   fuzz` (nightly cron), `Weekly clean-checkout proof replay` (weekly cron), and the `Multi-kernel
-  mutation coverage` step of the multi-kernel job (any cron, or a dispatch with `campaign=true`).
+  mutation coverage` step of the multi-kernel job (either cron, on `main` of `lambdaclass/concrete`, or a dispatch with `campaign=true`).
 
 Runners: every Ubuntu job runs on GitHub-hosted `ubuntu-latest` unless the repository variable
 `CONCRETE_SELF_HOSTED` (landing tier) or `CONCRETE_SELF_HOSTED_CAMPAIGN` (campaign tier) is `true`;
