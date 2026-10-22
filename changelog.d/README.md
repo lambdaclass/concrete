@@ -12,7 +12,8 @@ file, so two branches never edit the same lines and a rebase cannot conflict her
 - Body: ordinary Markdown, with no `#` or `##` headings. One fragment may hold several entries.
 
 `python3 scripts/gen/changelog.py --fold` moves the pending fragments into CHANGELOG.md, newest
-first, and deletes them. It runs on main after a landing. Landings are serialized, so a fold never
+first within that fold, and deletes them. Ordering is per fold: a fragment dated earlier than an
+entry folded before it still lands above that entry (follow-up: merge by date across folds). It runs on main after a landing. Landings are serialized, so a fold never
 conflicts. Until then, `--print` shows the changelog with the pending fragments folded in, and the
 roadmap gates read Completed Task headings from that view.
 

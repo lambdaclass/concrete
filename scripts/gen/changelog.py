@@ -136,6 +136,10 @@ def main():
     stamp, body = split(text, path)
     frs = fragments(a.root)
     if a.print:
+        # The roadmap gates read Completed Task headings from this view, so on a migrated tree it is
+        # served only from a CHANGELOG.md that matches its stamp: a hand-added heading cannot retire a task.
+        if ledgers_migrated(a.root) and (stamp is None or stamp != digest(body)):
+            die(f"{path} does not match its stamp (hand-edited, or the stamp was lost); refusing to print it")
         sys.stdout.write(folded(body, frs))
         return 0
     if a.stamp_initial:

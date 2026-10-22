@@ -250,6 +250,9 @@ expect changelog_stamp_deleted 1 python3 -I "$CL" --check --root "$C"
 make_copy
 edit CHANGELOG.md "import re; s,n=re.subn(r'(<!-- changelog stamp: )[0-9a-f]{32}', r'\g<1>not-a-digest', s, flags=re.M); assert n==1"
 expect changelog_stamp_damaged 2 python3 -I "$CL" --check --root "$C"
+make_copy
+edit CHANGELOG.md "old='## Major Milestones\n'; i=s.index(old); j=s.index('\n', i+len(old))+1; s=s[:j]+'\n### Completed Task R-9998\n\nx\n'+s[j:]"
+expect changelog_print_refuses_hand_edit 2 python3 -I "$CL" --print --root "$C"
 if python3 -I "$CL" --restamp --root "$C" >/dev/null 2>&1 && python3 -I "$CL" --check --root "$C" >/dev/null 2>&1; then
   ok "positive control: --restamp repairs a damaged stamp"
 else no "positive control: --restamp could not repair a damaged stamp"; fi

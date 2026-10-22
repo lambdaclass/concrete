@@ -278,7 +278,11 @@ for section, start, end in (("fixed", fx.end(), op.start()), ("open", op.end(), 
             continue
         r = records[n]
         want = "open" if L.status_open(r["text"], r["path"]) else "fixed"
-        # a bug listed twice keeps the line from the section its status puts it in
+        # a bug listed twice keeps the line from the section its status puts it in; the other line is
+        # reported, since it may carry provenance the kept one lacks
+        if "summary" in r and r["summary"] != oneline(strip_summary_status(summ)):
+            note(f"bug {n} is listed twice in the README with different text; kept the {want} section's line. "
+                 f"Review the other: {summ[:100]!r}")
         if "summary" not in r or section == want:
             r["summary"] = oneline(strip_summary_status(summ))
 for n, r in records.items():

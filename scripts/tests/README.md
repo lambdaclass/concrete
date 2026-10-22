@@ -44,3 +44,17 @@ hand-edited or stale.
 
 `scripts/gen/migrate_ledgers.sh` performs the one-time move from the hand-maintained views to the
 records. Until it has run, the generators report "not migrated" and the legacy maps stay in use.
+
+Follow-ups, not yet done:
+
+- `Concrete/BuildIdentity.lean` stays committed. It is embedded at build time and receipts bind
+  it, so a branch binary must carry its own sources' identity; regenerating it only at landing
+  would leave every branch build stale. Deriving it inside the build would need a Lake pre-build
+  step (a `lakefile.lean`). Until then a conflict in it is resolved by `refresh_generated.sh`.
+- `docs/bugs/discovery.tsv` (when present) still lists bugs per probe batch, so two branches
+  filing bugs from one batch edit one row. The record's `silent:` line is the owner of silent/loud
+  and the ledger checks the two agree; moving batch membership into the record is the next step.
+- `changelog.py --fold` orders newest first within one fold only; merging by date across folds
+  is not implemented.
+- The migration keeps one README line per bug when a bug was listed twice and NOTEs the other;
+  the lander reconciles those by hand.
