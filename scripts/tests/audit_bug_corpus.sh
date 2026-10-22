@@ -96,6 +96,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
+  # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
+  # Also check_pipeline_artifacts.sh legs B, U and D.
+  [180]="regress_180_report_scope/src/main.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

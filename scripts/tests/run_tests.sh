@@ -2790,6 +2790,14 @@ check_report "$TESTDIR/report_mono_check.con" mono \
     "report_mono_check.con --report mono shows Specializations" \
     "report_mono_check.con --report mono missing Specializations"
 
+# --- bug 180: a project's --report mono describes the program the build compiles ---
+# Mono runs on the whole validated program, not the invoked file's modules re-run without std,
+# so the std generic's u16 instance is listed (before the fix: "Specializations: 0").
+check_report "$TESTDIR/regress_180_report_scope/src/main.con" mono \
+    "max<u16> -> " \
+    "regress_180_report_scope --report mono lists the std generic's u16 instance" \
+    "regress_180_report_scope --report mono lost the dependency's specialization (bug 180)"
+
 # -- Integration test: all report modes on one file --
 # Gate: if the file doesn't compile at all, skip all 14 assertions
 if compile_gate "$TESTDIR/report_integration.con" "--report caps" "report_integration.con compilation" 14; then

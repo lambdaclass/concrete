@@ -1479,6 +1479,9 @@ jobs:
       - name: "Type identity (R-0004 V2 input — aliases, transport, nesting, builtins, and Elab use sites)"
         run: bash scripts/tests/check_type_identity.sh
 
+      - name: "Pipeline artifacts (R-0497 slice 1 / bug 180 — sealed, certified ValidatedCore/Mono/SSA; forgery, mutation reuse and diagnostic bypass do not elaborate)"
+        run: bash scripts/tests/check_pipeline_artifacts.sh
+
       - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
         run: bash scripts/tests/check_fnptr_values.sh
 

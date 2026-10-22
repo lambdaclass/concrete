@@ -49,6 +49,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124, 130, 134, 136 (evaluation-order rule 6: Core cannot bind the base once) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115 | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
+| 16. Pipeline artifacts not bound to their payload | 180 (a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified) | R-0497 (S5 sealed, payload-bound artifacts; slice 1 landed with 180's fix) |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -343,3 +344,24 @@ threaded along every reachable path, including guard failure.
 
 **Owner.** R-0499 (S8: use-once and conservation at reachable exits; its exit names 090), queue
 row 4.
+
+## 16. Pipeline artifacts not bound to their payload
+
+**Bugs.** 180 (in a project, `--report mono`, `verify` and `traceability` built a `ValidatedCore`
+by `{ validCore with coreModules := … }` from the invoked file's modules, wrapped in synthetic empty
+parents and stripped of `std` and every other dependency, then ran Mono and lowering on it; the
+reports described a program nothing compiles, with no dependency specialization at all).
+
+**Design cause.** A pipeline artifact was a plain record. Its type said which pass had accepted it,
+but nothing tied that acceptance to the payload it carried, so any code could replace the payload
+and keep the type, and every consumer downstream read the new payload as certified.
+
+**Structural fix.** Sealed, certified artifacts (R-0497): each artifact from `ValidatedCore` on has
+a private constructor and carries, as an erased `Prop` field, the equation its producer established
+about its exact payload, and names the artifact it was produced from. A selection of a validated
+program is a separate type (`CoreSubset`) that no compiling pass accepts, and the debugging SSA view
+is `UnverifiedSSA`, which `emit` does not accept.
+
+**Owner.** R-0497 (S5, artifact half). `check_pipeline_artifacts.sh` refuses forgery, payload
+replacement and diagnostic bypass by elaboration.
+

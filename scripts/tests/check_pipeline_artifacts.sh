@@ -137,7 +137,10 @@ if [ -z "$SPEC" ] || [ -z "$LL" ]; then
 else
   # Every specialization the report lists is a function the build emits, and the build emits none
   # the report omits: the report and the compile describe one program.
-  grep -E '^  [^ ].* -> ' <<<"$MONO" | sed -E 's/.* -> //' | sort -u > "$TMP/rep.names"
+  # The listing after the second `Specializations:` header: `  base<T…> -> name`, or `  name` alone
+  # when the base itself contains `_for_` (`OrderedMap_for_each`).
+  awk '/^Specializations:$/ {on=1; next} on && /^  / {sub(/^  /, ""); sub(/.* -> /, ""); print}' <<<"$MONO" \
+    | sort -u > "$TMP/rep.names"
   # An emitted symbol is `_C.<module path>.<mono name>`; the report lists the mono name.
   grep -oE '^define [^@]*@[A-Za-z0-9_.$]+' <<<"$LL" | sed -E 's/.*@//; s/.*\.//' | grep '_for_' | sort -u > "$TMP/ll.names"
   NREP="$(grep -c . "$TMP/rep.names" || true)"; NLL="$(grep -c . "$TMP/ll.names" || true)"
@@ -149,7 +152,8 @@ else
   fi
 fi
 VER="$("$BIN" "$WF/src/main.con" --report verify 2>&1)"
-grep -q 'VERIFY-GATES: ok' <<<"$VER" && ok "B: wordfreq's project --report verify is clean on the compiled program" \
+# Liveness only: the scoped run was clean too, so this leg does not discriminate bug 180.
+grep -q 'VERIFY-GATES: ok' <<<"$VER" && ok "B: wordfreq's project --report verify runs and is clean" \
   || no "B: wordfreq's project --report verify: $(head -3 <<<"$VER" | tr '\n' ' ')"
 
 echo ""
