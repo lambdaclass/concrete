@@ -41,11 +41,24 @@ accepts "caller declares the required cap" have
 emit havemore 'mod m { fn needs() with(File) -> Int { return 0; } fn main() with(File) -> Int { let x: Int = needs(); return x; } }'
 accepts "caller declares required cap (used)" havemore
 
+# THE REJECTION MUST BE THE DECISION'S OWN DIAGNOSTIC, not any rejection. Since bug 091 (2026-10-18)
+# the post-mono verifier `verifyCapsPostMono` re-asks this question for concrete caps as defense in
+# depth, so with CoreCheck's E0520 disabled these programs are STILL refused — by an internal error
+# (E0601, "please report it"). A bare `rejects` therefore stayed green, and the `capability-requirement`
+# mutation family SURVIVED in every dispatched campaign. A user-facing capability error and an ICE
+# from a backstop are different outcomes; this gate pins the first.
 emit missing 'mod m { fn needs() with(File) -> Int { return 0; } fn main() -> Int { return needs(); } }'
-rejects "caller lacks the required cap" missing
+rejects_code "caller lacks the required cap (E0520)" missing "E0520"
 
 emit missingone 'mod m { fn needs() with(File) -> Int { return 0; } fn main() with(Network) -> Int { return needs(); } }'
-rejects "caller has a different cap (missing the required one)" missingone
+rejects_code "caller has a different cap, missing the required one (E0520)" missingone "E0520"
+
+# A CALLEE THAT REQUIRES `Unsafe` HAS EXACTLY ONE ENFORCER. Check filters `Unsafe` out of its
+# per-cap E0240 (CoreCheck owns the trusted-body discharge), and `verifyCapsPostMono` excludes it for
+# the same reason, so CoreCheck's direct-call decision is the only thing between a plain caller and a
+# `with(Unsafe)` callee. With that decision disabled this program COMPILED (measured 2026-10-22).
+emit unsafecallee 'mod m { fn d() with(Unsafe) -> Int { let x: i32 = 5; let p: *const i32 = &x as *const i32; let v: i32 = *p; return v as Int; } fn main() -> Int { return d(); } }'
+rejects_code "plain caller of a with(Unsafe) callee (only CoreCheck decides it)" unsafecallee "E0520"
 
 emit pure 'mod m { fn pure_fn() -> Int { return 1; } fn main() -> Int { return pure_fn(); } }'
 accepts "pure callee needs no cap" pure
