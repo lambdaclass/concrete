@@ -121,7 +121,8 @@ kernel. Replay: `bash scripts/tests/check_external_checker.sh` (CI job `External
   model in ZF set theory with an ω-chain of Grothendieck universes in which every constant is a
   member of its type (`model_exists`); in particular no proof of `False` is accepted
   (`no_False_declaration`, both in `ConLeche/MainTheorem.lean`). Run with `--verified`, the mode the
-  theorem is about.
+  theorem is about, and with one worker (`--jobs=1`): see
+  [EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md) for why (lean4#15288) and what it costs.
 - **[nanoda](https://github.com/ammkrn/nanoda_lib)** — an independent checker in Rust, with no code
   shared with the Lean kernel or con-leche. No consistency proof: it adds implementation diversity.
 
@@ -165,7 +166,10 @@ lean4export tag for the new release (it is built with this repository's `lean-to
 must match the release that wrote the `.olean` files), and check the Lean Kernel Arena for the
 con-leche and nanoda revisions it evaluated against that release — prefer those over newer commits,
 since the Arena's soundness suite is the external evidence that a revision rejects what it should.
-Then run the gate; the export metadata leg fails if the exporter and toolchain disagree. A new
+Then run the gate; the export metadata leg fails if the exporter and toolchain disagree.
+`check_checker_pin_freshness.sh` reports when the con-leche or nanoda pin differs from the revision
+behind the Arena's published results — a warning when landing, a finding in the nightly campaign
+([EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md#pins-and-their-freshness); KNOWN_HOLES H29). A new
 `bv_decide` that mints a native axiom fails the owner leg until it is added to
 `axiom_native_owners.txt` and named here.
 
