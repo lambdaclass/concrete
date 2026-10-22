@@ -62,10 +62,12 @@
 # inconsistent ret= must each FAIL, as must a rule with no oracle, oracle=interp without
 # interp=yes, an unverified oracle on a case the interpreter runs or without a reason, and a spec
 # pointer to a missing file or heading; the real rule must pass, and a real unverified rule must
-# pass and be counted. Five controls pin lib/bounded.sh: a command that prints and then hangs twice
+# pass and be counted. Eight controls pin lib/bounded.sh: a command that prints and then hangs twice
 # is incomplete with no output; a command that itself exits 124 is not incomplete; a run that
 # times out once and then completes is recorded as recovered; the watchdog form reports INCOMPLETE
-# and fails bounded_gate_status; a child that ignores TERM is killed before bounded_run returns.
+# and fails bounded_gate_status; a TERM-ignoring child, and a TERM-ignoring orphan whose parent
+# died, are killed before bounded_run returns; a command's stderr can neither fake nor hide a
+# timeout.
 #
 # Environment (used by the controls): EXAMPLE_MANIFEST, EXAMPLE_OUTPUTS_ONLY
 # (restrict coverage and runs to one unit), EXAMPLE_OUTPUTS_IS_CONTROL=1.
@@ -97,7 +99,7 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-BOUNDED_DIR="$TMP"
+BOUNDED_PARENT="$TMP"
 # shellcheck source=lib/bounded.sh
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
@@ -540,7 +542,7 @@ run_controls() {
   # controls do not count toward this run's own recovered/incomplete tally.
   local bres
   bres=$(
-    mkdir -p "$dir/bounded"; BOUNDED_DIR="$dir/bounded"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
+    BOUNDED_PARENT="$dir"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
     cd "$dir" || exit 1
     out=$(bounded_run -r 1 1 -- sh -c 'echo EXPECTED; sleep 5'); rc=$?
     { bounded_is_incomplete "$rc" && [ -z "$out" ]; } && echo hang_twice_incomplete_no_output
@@ -549,13 +551,25 @@ run_controls() {
     rm -f marker
     out=$(bounded_run -r 5 1 -- sh -c 'if [ -e marker ]; then echo second; else : > marker; sleep 3; fi'); rc=$?
     { [ "$rc" = 0 ] && [ "$out" = second ] && grep -q '^recovered' "$BOUNDED_LOG"; } && echo recovered_recorded
+    BOUNDED_KILL_AFTER=1 bounded_run -r 1 1 -- sh -c 'trap "" TERM; sleep 47.25' > /dev/null 2>&1; rc=$?
+    sleep 0.5
+    { bounded_is_incomplete "$rc" && ! pgrep -f "sleep 47.25" > /dev/null 2>&1; } && echo term_ignoring_child_killed
+    # The leader dies on SIGTERM; its child ignores it and would outlive a leader-only watchdog.
+    BOUNDED_KILL_AFTER=1 bounded_run -r 1 1 -- sh -c '(trap "" TERM; exec sleep 48.25) & wait' > /dev/null 2>&1; rc=$?
+    sleep 0.5
+    { bounded_is_incomplete "$rc" && ! pgrep -f "sleep 48.25" > /dev/null 2>&1; } && echo term_ignoring_orphan_killed
+    # A command's own output cannot fake a timeout, nor a prefix hide one.
+    out=$(bounded_run 5 -- sh -c 'echo "timeout: sending signal TERM to command x" >&2; echo fine' 2>/dev/null); rc=$?
+    { [ "$rc" = 0 ] && [ "$out" = fine ] && ! bounded_is_incomplete "$rc"; } && echo stderr_cannot_fake_timeout
+    out=$(bounded_run -r 1 1 -- sh -c 'printf prefix >&2; sleep 5' 2>&1); rc=$?
+    { bounded_is_incomplete "$rc" && [ -z "$out" ]; } && echo stderr_cannot_hide_timeout
+    # Last: bounded_gate_status removes this sourcing's state.
     bounded_watchdog 1
     out=$("${TO[@]}" sh -c 'echo EXPECTED; sleep 5' 2> "$dir/wd.err"); rc=$?
     { [ "$rc" = 124 ] && [ -z "$out" ] && grep -q '^INCOMPLETE' "$dir/wd.err" && ! bounded_gate_status > /dev/null; } && echo watchdog_incomplete
-    BOUNDED_KILL_AFTER=1 bounded_run -r 1 1 -- sh -c 'trap "" TERM; sleep 47.25' > /dev/null 2>&1; rc=$?
-    { bounded_is_incomplete "$rc" && ! pgrep -f "sleep 47.25" > /dev/null 2>&1; } && echo term_ignoring_child_killed
   )
-  for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete term_ignoring_child_killed; do
+  for c in hang_twice_incomplete_no_output own_exit_124_not_incomplete recovered_recorded watchdog_incomplete \
+           term_ignoring_child_killed term_ignoring_orphan_killed stderr_cannot_fake_timeout stderr_cannot_hide_timeout; do
     if grep -qx "$c" <<< "$bres"; then echo "  ok   bounded control $c"; PASS=$((PASS + 1))
     else no "bounded control $c: lib/bounded.sh does not behave as specified"; fi
   done

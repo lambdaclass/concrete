@@ -20,6 +20,12 @@ FIX="$ROOT_DIR/tests/regressions/view_lifetime"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
 
 TMP="$(mktemp -d)"
+# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+BOUNDED_PARENT="$TMP"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 trap 'rm -rf "$TMP"' EXIT
 
 PASS=0; FAIL=0
@@ -33,11 +39,6 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # invoked FROM run_tests.sh, so it runs on macOS too and needs the same treatment.
 # A missing watchdog is worth saying out loud: a hang here would otherwise look
 # like an unexplained CI stall.
-# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
-# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
-bounded_watchdog 300
 
 
 # check_rejects <dir> <regex the diagnostic must match> <label>

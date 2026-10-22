@@ -30,11 +30,6 @@ cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
 FIX="$ROOT_DIR/tests/regressions/cap_sibling_module"
 
-# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
-# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
-# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
-bounded_watchdog 300
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -42,6 +37,12 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
+# budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
+# bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+BOUNDED_PARENT="$TMP"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
+bounded_watchdog 300
 
 echo "=== a capability-free caller cannot reach a with(Console) SIBLING ==="
 lout="$(cd "$FIX/launder" && "${TO[@]}" "$CC" check . 2>&1)"

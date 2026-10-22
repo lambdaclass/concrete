@@ -28,12 +28,13 @@ source "scripts/tests/lib/fresh.sh"
 require_fresh_binary || exit 1
 C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first ($C missing)" >&2; exit 2; }
+TMP="$(mktemp -d)"
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
 # budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
 # bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+BOUNDED_PARENT="$TMP"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
 bounded_watchdog 120
-TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }

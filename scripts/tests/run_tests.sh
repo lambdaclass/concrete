@@ -11834,7 +11834,7 @@ fi
 # `timeout` is coreutils; present in the devshell and on CI. Degrade to running
 # without a watchdog rather than skipping the fixtures entirely, but say so, so
 # a hang on such a machine is at least explicable.
-BOUNDED_DIR="$SUITE_TMPDIR"
+BOUNDED_PARENT="$SUITE_TMPDIR"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 if ! command -v timeout >/dev/null 2>&1; then
     echo "  warn  'timeout' not found — project fixtures run WITHOUT a hang watchdog"

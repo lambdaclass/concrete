@@ -30,12 +30,13 @@ PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # Hang watchdog (scripts/tests/lib/bounded.sh): a timeout is re-run once alone with twice the
 # budget; a second timeout gives no output, prints INCOMPLETE and returns 124, and
 # bounded_gate_status (the last line) then fails the gate whatever its checks concluded.
+BOUNDED_PARENT="$TMP"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/bounded.sh"
 bounded_watchdog 300
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "=== the fixture builds and runs ==="
 if (cd "$FIX/app" && "${TO[@]}" "$CC" build . -o "$TMP/app" >"$TMP/b.log" 2>&1) && "$TMP/app" >/dev/null 2>&1; then
