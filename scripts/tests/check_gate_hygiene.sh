@@ -422,15 +422,26 @@ echo "=== git grep: no engine-dependent pattern, no status read through a short-
 # Known limits: patterns passed through a variable, and a trailing backslash inside single quotes.
 logical_lines() { # files... -> FILE:LINE:joined logical line
   awk 'BEGIN { q = sprintf("%c", 39); hdre = "(^|[^<])<<-?[[:space:]]*[\"" q "]?[A-Za-z_][A-Za-z0-9_]*[\"" q "]?" }
-       # quotes_balanced(s): an even number of each quote character before a heredoc operator, so
-       # `echo "<<EOF"` is not one. `<<<` (a here-string) is excluded by the operator pattern.
-       function quotes_balanced(s,   a, b) { a = gsub(/"/, "", s); b = gsub(q, "", s); return a % 2 == 0 && b % 2 == 0 }
+       # unquoted(s): s (the text before a heredoc operator) ends outside any quotes, tracking
+       # backslash escapes, so `echo "<<EOF"` and `echo \" "<<EOF"` are not heredocs. `<<<` (a
+       # here-string) is excluded by the operator pattern.
+       function unquoted(s,   i, c, sq, dq) {
+         sq = 0; dq = 0
+         for (i = 1; i <= length(s); i++) {
+           c = substr(s, i, 1)
+           if (sq) { if (c == q) sq = 0; continue }
+           if (c == "\\") { i++; continue }
+           if (c == "\"") dq = !dq
+           else if (c == q && !dq) sq = 1
+         }
+         return !sq && !dq
+       }
        FNR == 1 { buf = ""; hd = ""; hdp = "" }
        hd != "" { t = $0; sub(/^\t+/, "", t); if (t == hd) hd = ""; next }
        /^[[:space:]]*#/ { next }
        { if (buf == "") start = FNR
          line = $0
-         if (match(line, hdre) && quotes_balanced(substr(line, 1, RSTART))) {
+         if (match(line, hdre) && unquoted(substr(line, 1, RSTART))) {
            tag = substr(line, RSTART, RLENGTH); sub(/^[^<]?<<-?[[:space:]]*/, "", tag); gsub("[\"" q "]", "", tag); hdp = tag }
          if (sub(/\\$/, "", line)) { buf = buf line " "; next }
          if (line ~ /(\||&&)[[:space:]]*$/) { buf = buf line " "; next }
@@ -471,8 +482,9 @@ if [ -z "$(gitgrep_gnuisms "$_gg_dir/portable.sh")$(gitgrep_into_quiet_grep "$_g
 else no "control: a captured, portable search was flagged"; fi
 printf '%s\n' "echo \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_quoted_heredoc_text.sh"
 printf '%s\n' "cat <<<EOF" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_here_string.sh"
+printf '%s\n' "echo \\\" \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_escaped_quote_heredoc_text.sh"
 printf '%s\n' "if $_GG -n Foo -- x |" "  # why the next stage is here" "  grep -q .; then :; fi" > "$_gg_dir/comment_in_pipeline.sh"
-for c in quiet quiet_cont quiet_split_opts quiet_pipe_cont after_quoted_heredoc_text after_here_string comment_in_pipeline; do
+for c in quiet quiet_cont quiet_split_opts quiet_pipe_cont after_quoted_heredoc_text after_here_string after_escaped_quote_heredoc_text comment_in_pipeline; do
   if [ -n "$(gitgrep_into_quiet_grep "$_gg_dir/$c.sh")" ]; then ok "control: git grep piped into grep -q ($c) is flagged"
   else no "control: git grep piped into grep -q ($c) was NOT flagged (the check above is inert)"; fi
 done

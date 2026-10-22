@@ -300,9 +300,12 @@ def i2 := s! "{Proof.PackageIdentity}"
 def PackageIdentity := 1
 def l1 : Nat → Nat := λPackageIdentity => 0
 def u2 := PackageIdentity℀
+def i3 := s!
+  "{Proof.PackageIdentity}"
+def u3 := caféPackageIdentity + PackageIdentityé + PackageIdentityⱼ
 LEAN
 _c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$TMP/c6_fixture.lean" | cut -d: -f2 | tr '\n' ' ')"
-_c6_want="1 2 13 15 18 19 21 22 "
+_c6_want="1 2 13 15 18 19 21 22 25 "
 [ "$_c6_ctl" = "$_c6_want" ] && ok "C6 control: code uses of a deleted name are found (after a \"--\" string or a raw string, in interpolations, as «PackageIdentity», after λ and after #eval!\"{\"); comments, docstrings, strings, raw strings, Lean's other identifiers and noPackageIdentity are not" \
   || no "C6 control: the deleted-name scan reported lines '$_c6_ctl', expected '$_c6_want'"
 printf '%s\n' 'def a := 1' 'def b := "never closed' > "$TMP/c6_open.lean"

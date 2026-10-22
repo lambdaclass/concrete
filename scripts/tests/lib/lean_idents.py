@@ -13,7 +13,8 @@ digits, `_`, `'`, `!`, `?`, Lean's letter-like ranges and subscripts), so `noPac
 `αPackageIdentity` and `PackageIdentity₁` are different identifiers, and `λx` is `λ` then `x`. A
 `«...»` component is one token compared whole: `«PackageIdentity»` is that name,
 `«some PackageIdentity name»` is not. Interpolation is recognized after `s!`, `m!` or `f!` (with
-optional whitespace before the quote), not after other `!` tokens such as `#eval!`.
+optional whitespace, newlines included, before the quote), not after other `!` tokens such as
+`#eval!`.
 
 Exit status: 0 when the files were read and tokenized to the end (the output is the verdict); 2 on
 a usage or read error or an unterminated comment, string or `«` name, so a caller can tell "found
@@ -22,14 +23,17 @@ nothing" from "could not look".
 import sys
 
 
+# Copied from the pinned toolchain (lean-toolchain: v4.34.1), src/lean/Init/Meta/Defs.lean:
+# isLetterLike, isSubScriptAlnum, isIdFirst, isIdRest. Re-check them when the toolchain moves.
 def _letter_like(v):
     return ((0x3B1 <= v <= 0x3C9 and v != 0x3BB) or (0x391 <= v <= 0x3A9 and v not in (0x3A0, 0x3A3))
             or 0x3CA <= v <= 0x3FB or 0x1F00 <= v <= 0x1FFE or 0x2100 <= v <= 0x214F
-            or 0x1D49C <= v <= 0x1D59F)
+            or 0x1D49C <= v <= 0x1D59F
+            or (0x00C0 <= v <= 0x00FF and v not in (0x00D7, 0x00F7)) or 0x0100 <= v <= 0x017F)
 
 
 def _subscript_alnum(v):
-    return 0x2080 <= v <= 0x2089 or 0x2090 <= v <= 0x209C or 0x1D62 <= v <= 0x1D6A
+    return 0x2080 <= v <= 0x2089 or 0x2090 <= v <= 0x209C or 0x1D62 <= v <= 0x1D6A or v == 0x2C7C
 
 
 def _ascii_alpha(c):
@@ -121,7 +125,7 @@ class Scanner:
     def interpolates(self):
         # the quote at self.i opens an interpolated string iff it follows s!, m! or f!
         j = self.i - 1
-        while j >= 0 and self.t[j] in " \t":
+        while j >= 0 and self.t[j] in " \t\r\n":
             j -= 1
         if j < 0 or self.t[j] != "!":
             return False
