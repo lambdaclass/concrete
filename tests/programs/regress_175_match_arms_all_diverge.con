@@ -1,0 +1,91 @@
+// Bug 175: a `match` whose arms all diverge (break / continue / return) left its
+// merge block open when the match was unit-typed. The statements after it were
+// lowered into that unreachable block; inside a loop it branched back to the
+// header and fed the header phi a value defined in the loop body, which does not
+// dominate it: `error[ssa-verify]: (E0708) main: block 'while.hdr0': phi operand
+// %t2 from 'merge3' not dominated by def block 'while.body1'`. The interpreter
+// ran every shape below. Each helper is one shape; main sums them to 42.
+
+enum E { A {}, B { v: i32 } }
+
+fn pick(i: i32) -> E {
+    if i < 3 { return E::A {}; }
+    return E::B { v: i };
+}
+
+// The reported shape: every arm breaks. 1
+fn all_break() -> i32 {
+    let mut n: i32 = 0;
+    while n < 10 {
+        n = n + 1;
+        match n {
+            1 => { break; },
+            _ => { break; },
+        }
+    }
+    return n;
+}
+
+// Labelled break out of an inner loop. 2
+fn labelled_break() -> i32 {
+    let mut n: i32 = 0;
+    'outer: while true {
+        n = n + 1;
+        while true {
+            n = n + 1;
+            match n {
+                2 => { break 'outer; },
+                _ => { break 'outer; },
+            }
+        }
+    }
+    return n;
+}
+
+// Enum scrutinee, continue in one arm and break in the other. 3
+fn enum_continue_break() -> i32 {
+    let mut n: i32 = 0;
+    let mut acc: i32 = 0;
+    while n < 10 {
+        n = n + 1;
+        let e: E = pick(n);
+        match e {
+            E::A {} => { continue; },
+            E::B { v } => { acc = v; break; },
+        }
+    }
+    return acc;
+}
+
+// continue, break and return arms, with an aggregate live across the loop. 7 + 2 = 9
+fn mixed_arms() -> i32 {
+    let a: [i32; 2] = [7, 8];
+    let mut m: i32 = 0;
+    while true {
+        m = m + 1;
+        match m {
+            1 => { continue; },
+            2 => { break; },
+            _ => { return 99; },
+        }
+    }
+    return a[0] + m;
+}
+
+// The bug 078 shape with a match: all arms return inside a branch, then an
+// aggregate is read after the branch. 27
+fn all_return_in_branch(c: i32) -> i32 {
+    let a: [i32; 2] = [27, 8];
+    if c > 5 {
+        match c {
+            6 => { return 1; },
+            _ => { return 2; },
+        }
+    }
+    return a[0];
+}
+
+fn main() -> i32 {
+    return all_break() + labelled_break() + enum_continue_break() + mixed_arms()
+        + all_return_in_branch(0);
+}
