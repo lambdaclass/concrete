@@ -363,8 +363,8 @@ def _classify(oracle, src, params, compiler, wd):
     if irc != 0 and any(u in ierr for u in ("not yet supported", "unsupported", "not supported")):
         return Result(None, "", d, "pending")
     if rto or ito:
-        if rto and ito:  # both hang: agreement (e.g. a genuine infinite loop)
-            return Result(None, "", d, "agree")
+        if rto and ito:  # both hang: agreement (e.g. a genuine infinite loop), but proves nothing
+            return Result(None, "", d, "both-timeout")
         return Result("timeout", "native" if rto else "interp", d, "timeout")
     # A language trap is abort(): SIGABRT, or exit 134 through a shell. Any other signal
     # (SIGSEGV, SIGBUS, SIGILL, SIGFPE) is a native crash, never "agreement" with an
@@ -665,7 +665,13 @@ def minimize(case, res, compiler, wd, seconds=900, max_tests=600, use_lean=True,
     budget = Budget(seconds, max_tests, hard_deadline, pause_flag)
     cwd = os.path.join(wd, "min")
 
+    worst = (T_COMPILE + T_RUN + T_INTERP) * (1 + TIMEOUT_RETRY_FACTOR)
+
     def oracle_run(o, src, prm):
+        if res.cls == "timeout" and budget.deadline - time.time() < worst:
+            # a timeout candidate needs the full confirmed criterion (with retries); when the
+            # budget cannot hold it, decline the candidate rather than overrun the deadline
+            return Result(None, "", {}, "declined")
         NO_RETRY["on"] = res.cls != "timeout"
         NO_RETRY["deadline"] = budget.deadline
         try:
@@ -1009,7 +1015,11 @@ def recheck(args):
             if r.cls is not None and r.presig(meta["oracle"]) == meta["presig"]:
                 repro = True
                 break
-            if r.outcome in ("resource", "pending", "timeout") or r.cls == "timeout":
+            backend = "clang compilation failed" in r.detail.get("compile", {}).get("stderr", "")
+            if (r.outcome in ("resource", "pending", "timeout", "both-timeout")
+                    or r.cls == "timeout" or (backend and r.cls is None)):
+                # nothing was proved: no resource-free run, a hang on both sides, or an opaque
+                # backend failure (a killed clang looks exactly like this)
                 inconclusive = True
             elif r.cls == "refusal" and meta["class"] != "refusal":
                 # Main now REJECTS the program (a new rule, or a backend failure such as a
