@@ -3,8 +3,15 @@
 # Checks that every numbered bug in docs/bugs/ has regression test coverage.
 #
 # Each bug must either:
-#   1. Have an entry in BUG_TEST_MAP below (bug number -> test file name)
+#   1. Have an entry in BUG_TEST_MAP (bug number -> test file name)
 #   2. Be listed in SKIP_BUGS with a justification
+#
+# THE RECORDS OWN THESE MAPS. Since the ledger migration (scripts/gen/migrate_ledgers.sh) each bug's
+# coverage is the `fixtures:` or `coverage:` line of the ledger block in its record,
+# docs/bugs/NNN_*.md, and the maps below are built from them at run time by
+# `scripts/gen/bug_ledger.py corpus` (never committed, so two branches filing bugs cannot conflict
+# here). The inline arrays are the pre-migration form; once any record carries a ledger block they
+# must be empty, and an entry left in them fails this audit.
 #
 # Run as a CI gate or manually:
 #   bash scripts/tests/audit_bug_corpus.sh
@@ -195,6 +202,31 @@ declare -A SKIP_BUGS=(
   [046]="FIXED -- error_046_map_values_linear/src/main.con (negative project fixture, must FAIL) + std-compiled-coverage bug-046 legs (E0241 + Copy positive); keys/values/elements Copy-bounded"
 )
 
+# The records' coverage lines (see the header). A record-borne entry and a legacy inline entry never
+# coexist: the migration moves every inline entry into its record in one step.
+LEGACY_ENTRIES=$(( ${#BUG_TEST_MAP[@]} + ${#SKIP_BUGS[@]} ))
+if ! LEDGER_ROWS="$(python3 -I "$ROOT_DIR/scripts/gen/bug_ledger.py" corpus --root "$ROOT_DIR")"; then
+  echo "FATAL: scripts/gen/bug_ledger.py corpus failed; the bug records' ledger blocks cannot be read" >&2
+  exit 2
+fi
+LEDGER_FAIL=0
+if [ -n "$LEDGER_ROWS" ]; then
+  if [ "$LEGACY_ENTRIES" -gt 0 ]; then
+    echo "  FAIL the bug records carry ledger blocks but this script still holds $LEGACY_ENTRIES inline entries:" \
+      "$(printf '%s\n' "${!BUG_TEST_MAP[@]}" "${!SKIP_BUGS[@]}" | sort | tr '\n' ' ')— move each into its record's" \
+      "ledger block (fixtures: or coverage:) and delete it here"
+    LEDGER_FAIL=1
+  fi
+  while IFS=$'\t' read -r lnum lkind lval; do
+    [ -n "$lnum" ] || continue
+    case "$lkind" in
+      fixtures) BUG_TEST_MAP[$lnum]="$lval" ;;
+      coverage) SKIP_BUGS[$lnum]="$lval" ;;
+      *) echo "FATAL: bug_ledger.py corpus printed an unknown kind '$lkind' for $lnum" >&2; exit 2 ;;
+    esac
+  done <<< "$LEDGER_ROWS"
+fi
+
 echo "=== Bug-to-Regression Corpus Audit ==="
 echo
 
@@ -348,6 +380,8 @@ else
   FAIL=$((FAIL+STATUS_BAD))
 fi
 
+FAIL=$((FAIL+LEDGER_FAIL))
+
 echo
 echo "=== Results ==="
 echo "  pass:    $PASS"
@@ -357,7 +391,8 @@ echo "  skip:    $SKIP"
 if [[ "$FAIL" -gt 0 ]]; then
   echo
   echo "FAILED: $FAIL bug(s) missing regression coverage."
-  echo "Fix: add entry to BUG_TEST_MAP or SKIP_BUGS in this script."
+  echo "Fix: give the bug's record (docs/bugs/NNN_*.md) a ledger block with a fixtures: or coverage: line"
+  echo "     (before the ledger migration: an entry in BUG_TEST_MAP or SKIP_BUGS in this script)."
   exit 1
 fi
 

@@ -80,7 +80,10 @@ TARGET="${1:-ROADMAP.md}"
 LEDGER="${2:-docs/project/ROADMAP_RECONCILIATION.md}"
 ARCHIVE="${3:-docs/archive/ROADMAP_RETIRED_TASKS.md}"
 BACKLOG="${4:-docs/project/ROADMAP_BACKLOG.md}"
-CHANGELOG="CHANGELOG.md"
+# The changelog as it reads with the pending changelog.d/ fragments folded in: a branch retires a task
+# with a `### Completed Task R-NNNN` heading in its fragment, and that counts before the fold.
+CHANGELOG="$(mktemp)"
+python3 -I scripts/gen/changelog.py --print > "$CHANGELOG" || { echo "FATAL: scripts/gen/changelog.py --print failed" >&2; rm -f "$CHANGELOG"; exit 2; }
 [ -f "$TARGET" ] || { echo "FATAL: $TARGET missing" >&2; exit 2; }
 [ -f "$LEDGER" ] || { echo "FATAL: $LEDGER missing" >&2; exit 2; }
 [ -f "$ARCHIVE" ] || { echo "FATAL: $ARCHIVE missing" >&2; exit 2; }
@@ -678,7 +681,7 @@ done <<< "$RESULT"
 
 if [ $# -eq 0 ]; then
   echo "=== 2. negative controls ==="
-  TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD"' EXIT
+  TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD" "$CHANGELOG"' EXIT
   neg() { # name, python-edit, expected-substring[, "ledger"/"archive"/"backlog"/"both" to mutate that file instead]
     # "both" runs the edit with s = ROADMAP and b = backlog, and writes both back.
     local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" a="$TMPD/$1.archive.md" k="$TMPD/$1.backlog.md" src="$TARGET" dst

@@ -3,8 +3,11 @@
 # than a remembered procedure:
 #
 #   1. docs/bugs/NNN_*.md          — the document
-#   2. an entry in audit_bug_corpus.sh — BUG_TEST_MAP (a fixture) or SKIP_BUGS (a
-#                                        rationale naming the coverage)
+#   2. its coverage entry               — since the ledger migration, the `fixtures:` or
+#                                        `coverage:` line of the ledger block in the record
+#                                        (scripts/gen/bug_ledger.py corpus); before it, an
+#                                        entry in audit_bug_corpus.sh's BUG_TEST_MAP (a
+#                                        fixture) or SKIP_BUGS (a rationale naming the coverage)
 #   3. coverage that actually exists  — the fixture file, or a named gate script
 #
 # Bug 066 shipped with 1 and 3 but not 2, and main went red on the CI-only trust gate.
@@ -21,6 +24,16 @@ no() { echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 AUDIT="scripts/tests/audit_bug_corpus.sh"
 [ -f "$AUDIT" ] || { echo "error: $AUDIT missing" >&2; exit 2; }
+# The records' coverage rows (empty before the ledger migration): NNN<TAB>fixtures|coverage<TAB>value.
+if ! LEDGER_ROWS="$(python3 -I scripts/gen/bug_ledger.py corpus)"; then
+  echo "error: scripts/gen/bug_ledger.py corpus failed; the bug records' ledger blocks cannot be read" >&2
+  exit 2
+fi
+# Both sources as legacy-shaped lines, so every leg below reads one form: `[NNN]="value"`.
+ledger_lines() { # fixtures|coverage
+  [ -n "$LEDGER_ROWS" ] || return 0
+  awk -F'\t' -v k="$1" '$2 == k { printf "  [%s]=\"%s\"\n", $1, $3 }' <<<"$LEDGER_ROWS"
+}
 
 docs=0; missing=""
 for f in docs/bugs/[0-9][0-9][0-9]_*.md; do
@@ -28,7 +41,7 @@ for f in docs/bugs/[0-9][0-9][0-9]_*.md; do
   docs=$((docs+1))
   n="$(basename "$f" | cut -c1-3)"
   # Entry in either map. Both are `[NNN]=` keyed, so one grep covers them.
-  if ! grep -qE "^\s*\[$n\]=" "$AUDIT"; then
+  if ! grep -qE "^\s*\[$n\]=" "$AUDIT" && ! grep -qE "^$n	" <<<"$LEDGER_ROWS"; then
     missing="$missing $n"
   fi
 done
@@ -42,7 +55,7 @@ fi
 if [ -z "$missing" ]; then
   ok "every bug document has a corpus entry"
 else
-  no "bug documents with NO entry in $AUDIT:$missing (add to BUG_TEST_MAP with a fixture, or SKIP_BUGS with a rationale naming the coverage)"
+  no "bug documents with NO coverage entry:$missing (give the record's ledger block a fixtures: line, or a coverage: line naming the gate that covers it; docs/bugs/README.md, Filing a bug)"
 fi
 
 # The reverse direction: an entry naming a fixture whose file does not exist is a map
@@ -56,7 +69,7 @@ while IFS= read -r line; do
     case "$cand" in *.con) ;; *) continue ;; esac
     [ -e "tests/programs/$cand" ] || [ -e "$cand" ] || absent="$absent $n:$cand"
   done
-done <<< "$(awk '/declare -A BUG_TEST_MAP/,/^\)/' "$AUDIT" | grep -E '^\s*\[[0-9]+\]=')"
+done <<< "$({ awk '/declare -A BUG_TEST_MAP/,/^\)/' "$AUDIT"; ledger_lines fixtures; } | grep -E '^\s*\[[0-9]+\]=')"
 if [ -z "$absent" ]; then
   ok "every fixture named in BUG_TEST_MAP exists on disk"
 else
@@ -70,7 +83,7 @@ while IFS= read -r line; do
   if ! grep -qE "\.con|\.sh|OPEN|HALF CLOSED" <<<"$line"; then
     vague="$vague $n"
   fi
-done <<< "$(awk '/declare -A SKIP_BUGS/,/^\)/' "$AUDIT" | grep -E '^\s*\[[0-9]+\]=')"
+done <<< "$({ awk '/declare -A SKIP_BUGS/,/^\)/' "$AUDIT"; ledger_lines coverage; } | grep -E '^\s*\[[0-9]+\]=')"
 # RATCHET, not a bar. Six historical entries name a commit or a prose rationale rather
 # than a fixture or gate; retrofitting them is separate work and blocking every push on
 # it would be the wrong trade. What must not happen is a NEW one, so the count may fall

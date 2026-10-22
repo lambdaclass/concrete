@@ -25,6 +25,11 @@
 #      prerequisites, and no bug listed as implemented-but-not-accepted is already
 #      recorded fixed in docs/bugs (check_roadmap_coverage.sh, with its own
 #      negative controls).
+#   4b. One owner per fact: the bug lists in docs/bugs/README.md, the bugs column of
+#      STRUCTURAL_CLASSES.md's table and ROADMAP's exit bug spans equal the ones generated from the
+#      bug records (scripts/gen/bug_ledger.py --check), CHANGELOG.md matches its stamp and every
+#      changelog.d/ fragment is well-formed (scripts/gen/changelog.py --check), with negative and
+#      positive controls on a migrated copy (scripts/tests/check_ledgers.sh).
 #   5. ROADMAP's "Implemented, not yet accepted" table equals the one generated from
 #      docs/project/candidates.tsv (scripts/gen/candidate_table.py --check), with
 #      negative controls for a hand edit, a stale table and a malformed record.
@@ -123,6 +128,13 @@ if bash scripts/tests/check_roadmap_coverage.sh; then
   ok "ROADMAP tasks are phased or dispositioned; ledger and queue rows name real tasks"
 else
   no "ROADMAP task coverage (check_roadmap_coverage.sh)"
+fi
+
+echo "=== 4b. the bug ledger and the changelog are generated from records each owner edits alone ==="
+if bash scripts/tests/check_ledgers.sh; then
+  ok "bug ledger views, CHANGELOG.md and the changelog.d/ fragments match their records"
+else
+  no "bug ledger / changelog generation (check_ledgers.sh)"
 fi
 
 echo "=== 5. the roadmap's candidate table is generated from the candidate record ==="

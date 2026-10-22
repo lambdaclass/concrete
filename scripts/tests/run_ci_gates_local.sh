@@ -148,6 +148,15 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 254 -> 255: check_native_libs.sh (Concrete.toml [native] native-library declarations, gap G1),
 #   pinned in the same commit.
 EXPECTED_GATE_COMMANDS=255
+# THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
+# scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
+# adds a gate adds its line, two branches adding different gates touch different lines instead of
+# both rewriting one number, and the check compares CONTENT, so a lost gate cannot hide behind an
+# added one with the same total (ROADMAP_HISTORY "Gate inventory checked in CI, by content").
+GATE_INVENTORY="scripts/tests/ci_gate_inventory.txt"
+if [ -f "$GATE_INVENTORY" ]; then
+  EXPECTED_GATE_COMMANDS="$(grep -c . "$GATE_INVENTORY" || true)"
+fi
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
@@ -156,6 +165,26 @@ EXPECTED_GATE_COMMANDS=255
 resolve_selection() {
   RESOLVE_ERR=""; RESOLVE_MSG=""; SELECTED=(); FIRST_N=0; OUTSIDE=0
   mapfile -t CMDS < <(_extract_cmds "$WORKFLOW" 2>/dev/null)
+  # THE INVENTORY, WHEN PRESENT, IS CHECKED FIRST AND BY CONTENT: it names what was lost or added,
+  # where the count below can only say that the total moved. A near-empty inventory is refused as
+  # vacuous, exactly like a near-empty extraction.
+  if [ -f "$GATE_INVENTORY" ]; then
+    if [ "$EXPECTED_GATE_COMMANDS" -lt 100 ]; then
+      RESOLVE_ERR="gate_inventory_vacuous(inventory:$EXPECTED_GATE_COMMANDS)"
+      RESOLVE_MSG="$GATE_INVENTORY lists only $EXPECTED_GATE_COMMANDS gate commands; refusing a vacuous inventory."
+      return 1
+    fi
+    local inv_diff
+    inv_diff="$(diff <(LC_ALL=C sort -u "$GATE_INVENTORY") <(printf '%s\n' "${CMDS[@]}" | LC_ALL=C sort -u) || true)"
+    if [ -n "$inv_diff" ]; then
+      RESOLVE_ERR="gate_inventory_mismatch"
+      RESOLVE_MSG="the workflow's gate commands differ from $GATE_INVENTORY (< inventory only, > workflow only):
+$inv_diff
+       If the workflow legitimately changed, update $GATE_INVENTORY in the SAME commit
+       (one command per line, LC_ALL=C sorted). Refusing to report a verdict."
+      return 1
+    fi
+  fi
   # VACUITY FLOOR ON THE INVENTORY ITSELF. `mapfile` does not fail when its process substitution
   # produces nothing, so a missing workflow file or extractor drift yields CMDS=() — after which every
   # loop below does nothing, DISCOVERED == EXECUTED == 0 holds, and closure mode writes `completed=1`
