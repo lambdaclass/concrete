@@ -371,7 +371,8 @@ class Q:
             t["stop_charge"] = bool(charge or t.get("stop_charge"))
             self.event("stop_pending", tid, reason=why)
             return
-        t.pop("stop_charge", None)
+        for k in ("stop_charge", "stop_outcome", "ready_sha"):  # per-attempt facts end here
+            t.pop(k, None)
         if t.get("status") in ("running", "stopping", "launching"):
             self.finish_run(t, now() if t_now is None else t_now)
         if charge:
@@ -459,9 +460,14 @@ class Q:
             t["status"] = "exited"
             t["exit"] = rc
             self.event("exited", tid, rc=rc, usd=cost, tokens=tokens)
-            if rc != 0 and t.get("ready_sha") and t.get("ready_sha") == t.get("last_sha"):
-                self.mark_done(tid, t)  # its candidate was already ready; the exit is not a failure
-                return
+            if rc != 0 and t.get("ready_sha"):
+                # Its candidate was ready when last seen; the exit is not a failure only if the
+                # CURRENT head is still that ready candidate (it may have pushed since).
+                head = self.remote_sha(t["wip_ref"])
+                if head and head == t["ready_sha"] and self.ready(head):
+                    t["last_sha"] = head
+                    self.mark_done(tid, t)
+                    return
             if rc != 0:
                 self.notify(f"queue: {tid} failed", f"agent exited {rc}; log {t['run_dir']}/agent.log")
                 self.release(tid, t, f"agent exited {rc}", charge=True)
@@ -595,7 +601,8 @@ class Q:
         t.update(status="running", pid=p.pid, slot=slot, worktree=wt, branch=branch, wip_ref=wip_ref,
                  run_dir=run_dir, session=session, agent=f"claude:{session}", started=utc(),
                  started_at=t_now, areas=task["areas"], tier=task["tier"], title=task.get("title", ""))
-        t.pop("last_push", None)
+        for k in ("last_push", "stop_outcome", "stop_charge", "ready_sha", "exit"):
+            t.pop(k, None)
         t.setdefault("attempts", 0)
         self.state["slots"].setdefault(slot, {})["last_start"] = t_now
         self.event("claimed", tid, slot=slot, worktree=wt, branch=branch, agent=t["agent"], pid=p.pid,
