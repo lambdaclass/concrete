@@ -351,10 +351,13 @@ partial def scopedWalkSizedB {α}
   | [] => []
   | s :: rest =>
       let restScope := match s with
-        -- An empty scope has nothing to invalidate: skip the subtree walk.
+        -- An empty scope has nothing to invalidate: skip the subtree walk (a nested `if`
+        -- would otherwise be walked once per enclosing level; bug 178). The catch-all arm
+        -- stays as it was: `dropStaleHyps` itself answers `[]` for an empty scope, and the
+        -- arm is the fact-invalidation mutation's anchor.
         | .ifElse _ c t none => if blockTerminates t then scope ++ (negateGuard c).toList
                                 else if scope.isEmpty then [] else dropStaleHyps scope (assignedScalarsS s)
-        | _ => if scope.isEmpty then [] else dropStaleHyps scope (assignedScalarsS s)
+        | _ => dropStaleHyps scope (assignedScalarsS s)
       -- A declaration is visible to what FOLLOWS it, and shadows an outer binding of the
       -- same name because it is prepended and lookups take the first match. Bindings made
       -- inside `s` (a block) do not reach `rest`: only `s`'s own declaration does.
