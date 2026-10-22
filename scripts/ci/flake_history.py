@@ -148,8 +148,11 @@ def record_run(run_id, repo, ledger):
                     continue
                 outcome, cls = OUTCOME.get(concl, concl), "-"
                 if concl == "failure":
-                    k = failed.index(s_)
-                    r = secs[k] if len(failed) <= len(secs) else res
+                    # A failed step takes the classification of the log section that RAN ITS GATE
+                    # (the last one, if it ran twice). Sections and steps are never paired by index:
+                    # a tolerated continue-on-error failure is a section with no failed step.
+                    own = [r for r in secs if gate is not None and r["gate"] == gate]
+                    r = own[-1] if own else res
                     gate = gate or r["gate"]
                     outcome, cls = r["outcome"], r["class"]
                 row(att, jname, s_.get("name", ""), gate, outcome, cls)

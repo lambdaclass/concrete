@@ -109,6 +109,8 @@ expect 9000000077 real "Run examples" 1 0 "no job log (404) but a step concluded
 expect 9000000019 real aggregate_mutation_shards.py 1 0 "aggregate refusal no failed shard explains"
 expect 9000000020 real check_linear_discard.sh 1 0 "tolerated install blip, then a real gate failure"
 expect 9000000021 real check_model_diff.sh 1 0 "INCOMPLETE beside a nonzero FAIL= tally"
+expect 9000000022 real aggregate_mutation_shards.py 1 0 "families in no shard while the failed shard's summary was usable"
+expect 9000000023 real check_workload_differential.sh 1 0 "same command twice: network exit, then assertion + timeout"
 expect 9000000017 real check_linear_discard.sh 1 0 "a real failure beside an infra one (no rerun)"
 expect 9000000006 infra "Install clang" 0 1 "apt mirror unreachable"
 expect 9000000007 infra "Run examples" 0 1 "runner lost (no job log, no step concluded)"
@@ -242,6 +244,15 @@ def api(name, d): json.dump(d, open(os.path.join(fx, "api", name + ".json"), "w"
 def step(n, c): return {"name": n, "conclusion": c}
 SB = "Stack budget fails closed (an unbounded stack is never a number; bug 065)"
 EX = "External-checker gate (proof evidence re-checked by con-leche)"
+LDN = "Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)"
+# Run 7004: a tolerated (continue-on-error) network failure in the Lean install, then the linear
+# discard gate fails an assertion. The gate's row must be real, not the install's infra.
+api("runs_7004", {"head_sha": "7004".zfill(40), "head_branch": "main", "event": "push",
+                  "created_at": "2026-10-20T01:00:00Z", "run_attempt": 1})
+api("runs_7004_attempts_1_jobs_per_page_100",
+    {"jobs": [{"id": 70041, "name": "Language-surface gates (Phase 5-6)", "conclusion": "failure",
+               "steps": [step("Install Lean (via lean-action)", "success"), step(LDN, "failure")]}]})
+shutil.copy(os.path.join(fix, "logs", "9100000020.txt"), os.path.join(fx, "logs", "70041.txt"))
 cases = [(7001, "Language-surface gates (Phase 5-6)", SB, 119725877209),
          (7002, "External proof re-check (con-leche)", EX, 9100000005),
          (7003, "SSA test suite", "Install clang", 9100000006)]
@@ -275,6 +286,10 @@ H="$TMP/hist.tsv"
 grep -qE $'^7001\t1\t0+7001\tmain\tpush\t2026-10-20\tLanguage-surface gates \\(Phase 5-6\\)\t.*\tcheck_stack_budget.sh\tfailed\treal$' "$H" \
   && grep -qE $'^7001\t2\t.*\tcheck_stack_budget.sh\tpassed\t-$' "$H" \
   && ok "outcome rows: failed (real) on attempt 1, passed on attempt 2" || no "outcome rows for 7001"
+"${FH[@]}" record --repo o/r --out "$TMP/h4.tsv" --run 7004 >/dev/null 2>&1
+grep -qE $'^7004\t1\t.*\tcheck_linear_discard.sh\tfailed\treal$' "$TMP/h4.tsv" \
+  && ok "a gate failing after a tolerated install failure is recorded real (sections matched by gate)" \
+  || { no "tolerated-failure pairing"; sed 's/^/        /' "$TMP/h4.tsv"; }
 grep -qE $'\tcheck_external_checker.sh\tfailed\tinfra-defect$' "$H" && ok "the lean4export failure is recorded as an infra defect" \
   || no "lean4export outcome class"
 CAND="$("${FH[@]}" candidates --history "$H")"

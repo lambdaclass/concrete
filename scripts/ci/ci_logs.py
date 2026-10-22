@@ -165,26 +165,28 @@ def _block(lines, start, end):
 
 
 def failing_sections(lines):
-    """-> [(command, section lines)] of EVERY step that exited nonzero, in log order: each is the
-    last `##[group]Run` block before a `Process completed with exit code` error. A step with
-    continue-on-error (the first Lean install) can fail and be tolerated, so the step that failed
-    the job is not necessarily the first one."""
+    """-> [(command, section lines, start line)] of EVERY step that exited nonzero, in log order:
+    each is the last `##[group]Run` block before a `Process completed with exit code` error. A step
+    with continue-on-error (the first Lean install) can fail and be tolerated, so the step that
+    failed the job is not necessarily the first one. A section is identified by its start line,
+    never by its command text (two steps can run the same command)."""
     out = []
     for err, l in enumerate(lines):
         if not EXIT_ERR_RE.match(l):
             continue
         start = next((i for i in range(err, -1, -1) if lines[i].startswith("##[group]Run ")), None)
-        out.append(_block(lines, start, err) if start is not None else (None, lines[:err + 1]))
+        out.append(_block(lines, start, err) + (start,) if start is not None else (None, lines[:err + 1], -1))
     return out
 
 
 def running_section(lines):
-    """(command, section) of the last `##[group]Run` block to the end of the log: the step that was
-    running when a job was cancelled, lost its runner or timed out. (None, []) when there is none."""
+    """(command, section, start line) of the last `##[group]Run` block to the end of the log: the
+    step that was running when a job was cancelled, lost its runner or timed out.
+    (None, [], -1) when there is none."""
     start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith("##[group]Run ")), None)
     if start is None:
-        return None, []
-    return _block(lines, start, len(lines) - 1)
+        return None, [], -1
+    return _block(lines, start, len(lines) - 1) + (start,)
 
 
 def gate_of(command, fallback):
@@ -377,7 +379,7 @@ def classify_job(job, log_text, ledger_rows):
     for rx, why in INFRA_DEFECT:
         if any(rx.search(l) for l in lines):
             cands = failing_sections(lines) + [running_section(lines)]
-            c, sec = next(((c, sec) for c, sec in cands if any(rx.search(l) for l in sec)), cands[-1])
+            c, sec, _ = next((t for t in cands if any(rx.search(l) for l in t[1])), cands[-1])
             r = _result(job, step0, c, sec, "infra-defect", why)
             r["sections"] = [r]
             return r
@@ -388,11 +390,12 @@ def classify_job(job, log_text, ledger_rows):
         context = "cancelled"
     sections = failing_sections(lines)
     names = failed_steps if len(failed_steps) == len(sections) else [step0] * len(sections)
-    results = [classify_section(job, n, c, sec, ledger_rows) for n, (c, sec) in zip(names, sections)]
+    results = [classify_section(job, n, c, sec, ledger_rows) for n, (c, sec, _) in zip(names, sections)]
     if context:
-        c, sec = running_section(lines)
-        last_failed = sections[-1][0] if sections else object()
-        if c is not None and c != last_failed:
+        c, sec, start = running_section(lines)
+        # The interrupted step is a different step from the last one that exited unless it starts
+        # at the same line (it is that step, still running when the job ended).
+        if c is not None and start not in {st for _, _, st in sections}:
             results.append(classify_section(job, failed_steps[-1] if failed_steps else step0, c, sec,
                                             ledger_rows, context))
         elif not results:
@@ -412,6 +415,11 @@ AGGREGATE_CONSEQUENTIAL = (
     "shard_supervisor_refused", "shard_unexplained_exit", "shard_selected", "shard_executed",
     "shard_reported", "families_in_no_shard",
 )
+
+
+# Refusals meaning a shard published no usable summary (so none of its families is accounted for).
+SUMMARY_UNUSABLE = ("shard_job_", "shard_summary_keys", "shard_summary_missing",
+                    "shard_status_missing_or_mislabelled", "shard_missing(")
 
 
 def refusal_tokens(text):
@@ -439,12 +447,24 @@ def aggregate_explained(log_text, failed_shards):
     ref = [l.split("refusals:", 1)[1].strip() for l in lines if l.strip().startswith("refusals:")]
     if not ref or not failed_shards:
         return False
+    unusable = False
     for tok in refusal_tokens(ref[0]):
         if not tok.startswith(AGGREGATE_CONSEQUENTIAL):
             return False
         m = re.match(r"^\w+\((\d+)\b", tok)
-        if m and int(m.group(1)) not in failed_shards:
+        if m:
+            if int(m.group(1)) not in failed_shards:
+                return False
+            unusable |= tok.startswith(SUMMARY_UNUSABLE)
+        elif not tok.startswith("families_in_no_shard"):
             return False
+    # `families_in_no_shard` names families, not shards. Families are left in no shard when a shard
+    # published no usable summary; a shard that did publish one but dropped families is refused by
+    # number (shard_missing_families, shard_selected, ...), and every numbered token was checked
+    # above. So the unnumbered token is explained only when some FAILED shard has an unusable
+    # summary; otherwise it is the aggregate's own finding.
+    if any(t.startswith("families_in_no_shard") for t in refusal_tokens(ref[0])) and not unusable:
+        return False
     return True
 
 

@@ -1,0 +1,16 @@
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_workload_differential.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_workload_differential.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z curl: (6) Could not resolve host: example.org
+2026-10-22T10:00:00.0000000Z ##[error]Process completed with exit code 1.
+2026-10-22T10:00:00.0000000Z ##[group]Run actions/checkout@v4
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z ##[group]Run bash scripts/tests/check_workload_differential.sh
+2026-10-22T10:00:00.0000000Z [36;1mbash scripts/tests/check_workload_differential.sh[0m
+2026-10-22T10:00:00.0000000Z shell: /usr/bin/bash -e {0}
+2026-10-22T10:00:00.0000000Z ##[endgroup]
+2026-10-22T10:00:00.0000000Z   FAIL kvstore: wrong output after compaction
+2026-10-22T10:00:00.0000000Z ##[error]The job running on runner GitHub Actions 3 has exceeded the maximum execution time of 60 minutes.
