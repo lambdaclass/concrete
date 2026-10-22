@@ -24,9 +24,11 @@
 # push-both", "we don't really need the CI to say things are fine, we can check later and
 # keep going"). Two things changed under it:
 #
-#   * THERE IS NO MIRROR. `MIRROR` has defaulted to empty since 2026-07-31, and the mirror
-#     push was the only thing the wait gated. It has been holding the exclusive lock for up
-#     to 70 minutes to protect a publication target that does not exist.
+#   * THERE WAS NO MIRROR. `MIRROR` defaulted to empty from 2026-07-31 to 2026-10-22, and the
+#     mirror push was the only thing the wait gated. It held the exclusive lock for up to 70
+#     minutes to protect a publication target that did not exist then. (The mirror is required
+#     again since 2026-10-22, below; the wait stays opt-in, and the mirror still receives only
+#     the exact commit the primary's hook accepted.)
 #   * MOST RUNS NEVER REACH A VERDICT ANYWAY. The workflow sets `cancel-in-progress` for
 #     pushes on a ref, so when two people push to main the earlier run is cancelled. Three
 #     of the last four waits ended in `cancelled` — 70 minutes of held lock for no answer.
@@ -65,13 +67,19 @@ printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || 
 trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
 
 PRIMARY="${PRIMARY:-origin}"
-# NO MIRROR BY DEFAULT (changed 2026-07-31 on the owner's instruction: "stop
-# pushing to lambdaclass"). `origin` is unbalancedparentheses/concrete2 and is the
-# only publication target; `lambdaclass` points at lambdaclass/concrete, a
-# DIFFERENT repository. Set MIRROR=<remote> to re-enable mirroring; everything
-# below — the CI wait, the ancestry check, the parity check — still applies when
-# it is set, so turning it back on does not turn the safeguards off.
-MIRROR="${MIRROR:-}"
+# BOTH REMOTES ARE REQUIRED (2026-10-22, the owner's decision: every landing goes to BOTH
+# origin = unbalancedparentheses/concrete2 and lambdaclass = lambdaclass/concrete). This
+# supersedes the 2026-07-31 instruction "stop pushing to lambdaclass", under which MIRROR
+# defaulted to empty. `lambdaclass` is a DIFFERENT repository, so it is still pushed SECOND,
+# fast-forward only, and only with the exact commit the primary accepted; the ancestry and
+# parity checks below are unchanged. scripts/land/train.sh land mirrors the same way.
+# `MIRROR=` (explicitly empty) skips the mirror for a one-off and says so; the remote named
+# `fork` is a divergent repository and is never a mirror.
+MIRROR="${MIRROR-lambdaclass}"
+if [ "$PRIMARY" = "fork" ] || [ "$MIRROR" = "fork" ]; then
+  echo "push-both: refusing the remote named fork (a divergent repository) as PRIMARY or MIRROR" >&2
+  exit 2
+fi
 BRANCH="${BRANCH:-main}"
 LOCAL="$(git rev-parse HEAD)"
 CI_WAIT=0
@@ -96,7 +104,28 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-echo "push-both: $PRIMARY (gated) then $MIRROR (fast-forward)"
+echo "push-both: $PRIMARY (gated) then ${MIRROR:-<no mirror>} (fast-forward)"
+# PRE-FLIGHT THE MIRROR, before the primary moves. With both remotes required, a mirror that is
+# missing, unreachable or divergent must stop the publish while nothing has been pushed; checked
+# only after the primary push, it left a half-landing (primary advanced, mirror not). The check is
+# repeated before the mirror push below, because the primary push and CI wait take time.
+if [ -n "$MIRROR" ]; then
+  if ! git remote get-url "$MIRROR" >/dev/null 2>&1; then
+    echo "push-both: mirror remote '$MIRROR' is not configured; both remotes are required" >&2
+    echo "push-both: (add it, or set MIRROR= deliberately). Nothing was pushed." >&2
+    exit 1
+  fi
+  if ! mpre="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+    echo "push-both: cannot read $MIRROR/$BRANCH (unreachable?). Nothing was pushed." >&2
+    exit 1
+  fi
+  mpre="$(printf '%s' "$mpre" | cut -f1)"
+  if [ -n "$mpre" ] && ! git merge-base --is-ancestor "$mpre" "$LOCAL" 2>/dev/null; then
+    echo "push-both: $MIRROR/$BRANCH (${mpre:0:8}) is not an ancestor of ${LOCAL:0:8}; the mirror would" >&2
+    echo "push-both: not fast-forward. Reconcile it first (never force it). Nothing was pushed." >&2
+    exit 1
+  fi
+fi
 # Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —
 # the primary verification, the CI wait, the parity check — is about $LOCAL, so
 # pushing HEAD means publishing something other than what was checked.
@@ -201,7 +230,8 @@ fi
 # already ran for this exact commit on the primary; running them twice proves
 # nothing and doubles the wait.
 if [ -z "$MIRROR" ]; then
-  echo "push-both: no mirror configured — $PRIMARY is the only publication target."
+  echo "push-both: MIRROR is empty — the mirror was SKIPPED on request. Both remotes are" >&2
+  echo "push-both: required since 2026-10-22: publish ${LOCAL:0:8} to lambdaclass before calling this landed." >&2
   echo "push-both: published ${LOCAL:0:8}"
   exit 0
 fi
@@ -210,7 +240,11 @@ fi
 # commit we do not contain, that is the exact anomaly this script was written
 # after — a mirror carrying work the primary never accepted. Report it as such
 # instead of letting a bare push failure stand in for the diagnosis.
-mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH" | cut -f1)"
+if ! mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+  echo "push-both: cannot read $MIRROR/$BRANCH now; $PRIMARY is published, the mirror is NOT. Re-run the mirror push." >&2
+  exit 1
+fi
+mnow="$(printf '%s' "$mnow" | cut -f1)"
 if [ -n "$mnow" ] && ! git merge-base --is-ancestor "$mnow" "$LOCAL" 2>/dev/null; then
   echo "push-both: $MIRROR/$BRANCH is at ${mnow:0:8}, which is NOT an ancestor of ${LOCAL:0:8}." >&2
   echo "push-both: the mirror holds commits the primary does not. Reconcile before publishing;" >&2
