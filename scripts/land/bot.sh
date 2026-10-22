@@ -95,45 +95,36 @@ paused() { [ -e "$PAUSE" ]; }
 
 # --- single instance -----------------------------------------------------------------------------
 # With flock(1) (the Linux server): an OS lock on $LOCK.flock held for the whole run; the kernel
-# releases it when the process dies, so there is nothing stale to recover. Without it (macOS): a
-# lock directory holding the owner's pid. A dead owner's lock, or a pid-less lock older than 60 s
-# (a crash between mkdir and the pid write), is taken over under a guard directory that is held
-# until the new owner's pid is written; a guard older than 60 s is itself a crashed takeover.
-# BOT_LOCK_MODE=mkdir forces the fallback (the gate tests both).
+# releases it when the process dies, so there is nothing stale to recover. Without it (macOS): the
+# lock is a SYMLINK whose target is the owner's pid, created atomically by `ln -s`, so a lock never
+# exists without its owner. A dead owner's lock is taken over under a guard that is itself a pid
+# symlink; a guard is removed only when ITS owner is dead (never by age: a suspended taker is live),
+# and the taker re-reads the lock under the guard. BOT_LOCK_MODE=symlink forces the fallback.
 LOCK="$STATE_DIR/lock"
 LOCK_HELD=0
-release_lock() { if [ "$LOCK_HELD" = 1 ]; then rm -rf "$LOCK"; fi; }
-age_of() { # seconds since the path's mtime
-  local m; m="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0)"
-  echo $(( $(date +%s) - m ))
-}
+release_lock() { if [ "$LOCK_HELD" = 1 ] && [ "$(readlink "$LOCK" 2>/dev/null)" = "$$" ]; then rm -f "$LOCK"; fi; }
+alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
 acquire_lock() {
   mkdir -p "$STATE_DIR"
-  if [ "${BOT_LOCK_MODE:-}" != mkdir ] && command -v flock >/dev/null 2>&1; then
+  if [ "${BOT_LOCK_MODE:-}" != symlink ] && command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK.flock"
     flock -n 9 || { say "another instance holds $LOCK.flock; nothing to do"; exit 0; }
     return 0
   fi
-  if [ -d "$LOCK.takeover" ] && [ "$(age_of "$LOCK.takeover")" -gt 60 ]; then rmdir "$LOCK.takeover" 2>/dev/null || true; fi
-  if ! mkdir "$LOCK" 2>/dev/null; then
-    local pid; pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then say "another instance (pid $pid) holds $LOCK; nothing to do"; exit 0; fi
-    if [ -z "$pid" ] && [ "$(age_of "$LOCK")" -le 60 ]; then say "another instance is starting ($LOCK has no pid yet)"; exit 0; fi
-    mkdir "$LOCK.takeover" 2>/dev/null || { say "another instance is taking over $LOCK"; exit 0; }
-    # Re-read under the guard: the lock may have changed hands since the first look.
-    pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
-    if { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } || { [ -z "$pid" ] && [ -d "$LOCK" ] && [ "$(age_of "$LOCK")" -le 60 ]; }; then
-      rmdir "$LOCK.takeover"; say "lock is live; nothing to do"; exit 0
-    fi
-    rm -rf "$LOCK"; mkdir "$LOCK"
-    echo "$$" > "$LOCK/pid"
-    LOCK_HELD=1; trap release_lock EXIT
-    rmdir "$LOCK.takeover"
-    event stale-lock "took over the lock of dead pid ${pid:-?}"
-    return 0
-  fi
-  echo "$$" > "$LOCK/pid"
+  if ln -s "$$" "$LOCK" 2>/dev/null; then LOCK_HELD=1; trap release_lock EXIT; return 0; fi
+  local pid g; pid="$(readlink "$LOCK" 2>/dev/null || true)"
+  if alive "$pid"; then say "another instance (pid $pid) holds $LOCK; nothing to do"; exit 0; fi
+  g="$(readlink "$LOCK.takeover" 2>/dev/null || true)"
+  if [ -n "$g" ] && ! alive "$g"; then rm -f "$LOCK.takeover"; fi
+  ln -s "$$" "$LOCK.takeover" 2>/dev/null || { say "another instance (pid ${g:-?}) is taking over $LOCK"; exit 0; }
+  # Under the guard: re-read, the lock may have changed hands since the first look.
+  pid="$(readlink "$LOCK" 2>/dev/null || true)"
+  if alive "$pid"; then rm -f "$LOCK.takeover"; say "lock is live (pid $pid); nothing to do"; exit 0; fi
+  rm -f "$LOCK"
+  ln -s "$$" "$LOCK" || { rm -f "$LOCK.takeover"; say "lost $LOCK during the takeover"; exit 0; }
   LOCK_HELD=1; trap release_lock EXIT
+  rm -f "$LOCK.takeover"
+  event stale-lock "took over the lock of dead pid ${pid:-?}"
 }
 
 # --- remote view ---------------------------------------------------------------------------------
@@ -350,20 +341,23 @@ watch_and_land() { # train
 }
 
 # After a crash or a failure between dispatch and recording the run id, find the run for this exact
-# train head instead of dispatching a second one. Prints the run id, or nothing.
+# train head instead of dispatching a second one. Prints the run id (or nothing: GitHub answered and
+# has no such run). Exit 2 when the lookup itself failed (network, auth, bad JSON): that is no answer.
 reconcile_run() { # train
-  local name="$1" id head
+  local name="$1" id head out
   id="$(train_get "$name" run_id)"
   if [ -n "$id" ]; then echo "$id"; return 0; fi
   head="$(train_get "$name" head)"
   [ -n "$head" ] || return 0
-  "${LAND_GH:-gh}" run list -R "${LAND_REPO:-unbalancedparentheses/concrete2}" --workflow CI --branch "ci/$name" \
-      --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null | python3 -I -c '
+  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-unbalancedparentheses/concrete2}" --workflow CI --branch "ci/$name" \
+      --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null)" || return 2
+  printf '%s' "$out" | python3 -I -c '
 import json, sys
 try: runs = json.load(sys.stdin)
-except Exception: runs = []
+except Exception: sys.exit(2)
+if not isinstance(runs, list): sys.exit(2)
 m = [r for r in runs if r.get("headSha") == sys.argv[1]]
-print(m[0]["databaseId"] if m else "")' "$head" || true
+print(m[0]["databaseId"] if m else "")' "$head" || return 2
 }
 
 run_train() { # "branch sha"... (landing order)
@@ -402,7 +396,7 @@ run_train() { # "branch sha"... (landing order)
   if paused; then st_set phase idle; event paused "train $name checked; CI not dispatched (kill switch)"; return 20; fi
   # `dispatching` is persisted BEFORE the dispatch: a restart (or a failure to find the run) then
   # reconciles with GitHub instead of dispatching the same candidate twice.
-  st_set phase dispatching
+  st_set dispatch_epoch "$(now)"; st_set phase dispatching
   rc=0; bash "$TRAIN" ci "$name" > "$STATE_DIR/ci-$name.log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then event ci-failed "train $name: push, dispatch or run lookup failed; next tick reconciles (log $STATE_DIR/ci-$name.log)"; return 20; fi
   st_set phase ci
@@ -428,16 +422,21 @@ cmd_tick() {
         case "$rc" in 0|10) ;; *) return 0 ;; esac
       fi ;;
     dispatching)
-      local id=""
-      [ "$DRY" = 1 ] || id="$(reconcile_run "$train")"
+      local id="" lrc=0 since
+      [ "$DRY" = 1 ] || id="$(reconcile_run "$train")" || lrc=$?
+      since="$(st_get dispatch_epoch)"; since=$(( $(now) - ${since:-0} ))
       if [ "$DRY" = 1 ]; then say "(dry-run) would reconcile the dispatch of train $train"
+      elif [ "$lrc" != 0 ]; then
+        event dispatch-unknown "train $train: the CI run lookup failed; keeping it as dispatching and asking again next tick"; return 0
+      elif [ -z "$id" ] && [ "$since" -lt "${BOT_DISPATCH_GRACE:-900}" ]; then
+        event dispatch-unknown "train $train: no run visible yet ${since}s after its dispatch; asking again next tick"; return 0
       elif [ -n "$id" ]; then
         train_set "$train" run_id "$id"; st_set phase ci
         event resume "train $train was dispatched as run $id before the restart; watching it"
         rc=0; watch_and_land "$train" || rc=$?
         case "$rc" in 0|10) ;; *) return 0 ;; esac
       else
-        event resume "train $train has no CI run at its head; discarding it and starting over"; st_set phase idle
+        event resume "train $train has no CI run at its head ${since}s after its dispatch; discarding it and starting over"; st_set phase idle
       fi ;;
     build|check) event resume "train $train was interrupted at $phase; discarding it and starting over"; st_set phase idle ;;
   esac

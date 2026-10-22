@@ -330,8 +330,13 @@ remote_leg() { # name head
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     refuse_fork "$REMOTE"
     # One ref per run, created only if absent (no --force), so concurrent checks never share one.
-    ref="wip/land-$name-${head:0:12}-$$-$RANDOM"
-    git push -q "$REMOTE" "$head:refs/heads/$ref" || return 1
+    # Created only if ABSENT (an empty lease): a same-SHA ref of another run is never adopted.
+    local try ok=0
+    for try in 1 2 3; do
+      ref="wip/land-$name-${head:0:12}-$$-$RANDOM$RANDOM"
+      if git push -q --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref"; then ok=1; break; fi
+    done
+    [ "$ok" = 1 ] || return 1
     # Removed even when the leg is interrupted. A deletion publishes nothing, so it skips the gates
     # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
     trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
@@ -661,6 +666,10 @@ cmd_land() {
 # result is recorded against that train's SHA. Attribution assumes one culprit; an interaction
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
+# The landing bot's kill switch (LAND_PAUSE_FILE) is read before every stage of every probe: each
+# --ci probe checks and dispatches a run. A paused probe answers `paused`, never green or red.
+bisect_paused() { [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; }
+
 subset_red() { # sub-name test-cmd|"" members...
   local sub="$1" test="$2"; shift 2
   local refs=() m
@@ -672,13 +681,18 @@ subset_red() { # sub-name test-cmd|"" members...
     git update-ref "refs/landing-bisect/$sub/$i" "${m##*@}"
     pinned+=("refs/landing-bisect/$sub/$i"); i=$((i+1))
   done
+  if bisect_paused; then echo paused; return 0; fi
   "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || { echo build-failed; return 0; }
+  if bisect_paused; then echo paused; return 0; fi
   local rc=0
   if [ -n "$test" ]; then
     bash -c "$test" >/dev/null 2>&1 || rc=$?
   else
-    "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 && "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 \
-      && "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+    "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 || rc=$?
+    if [ "$rc" = 0 ] && bisect_paused; then echo paused; return 0; fi
+    if [ "$rc" = 0 ]; then
+      "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 && "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
+    fi
   fi
   STAGE_T0="$(date +%s)"
   log_row "$sub" bisect-step "$([ "$rc" = 0 ] && echo passed || echo failed)" "members: $(printf '%s ' "${refs[@]}")"
@@ -704,21 +718,22 @@ cmd_bisect() {
   [ "${#list[@]}" -ge 2 ] || die "bisect: train $name has fewer than two members"
   local step=0 half verdict
   while [ "${#list[@]}" -gt 1 ]; do
-    # The landing bot's kill switch reaches between the steps (each --ci step dispatches a run).
-    if [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; then
-      log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE)"; die "bisect: paused by $LAND_PAUSE_FILE before step $((step+1))"
-    fi
     step=$((step+1)); half=$(( ${#list[@]} / 2 ))
     local first=("${list[@]:0:$half}") second=("${list[@]:$half}")
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
     note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
     case "$verdict" in
+      paused) log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) at step $step"; die "bisect: paused by $LAND_PAUSE_FILE at step $step; no culprit attributed" ;;
       red|build-failed) list=("${first[@]}") ;;
       green) list=("${second[@]}") ;;
     esac
   done
   local culprit="${list[0]}"
   verdict="$(subset_red "$name-bc" "$test" "$culprit")"
+  if [ "$verdict" = paused ]; then
+    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before the culprit probe"
+    die "bisect: paused by $LAND_PAUSE_FILE before probing ${culprit%@*} alone; no culprit attributed"
+  fi
   local rest=() ; for m in $(printf '%s\n' "${members//,/ }"); do [ "$m" = "$culprit" ] || rest+=("${m%@*}"); done
   STAGE_T0="$(date +%s)"
   state_set "$name" bisect_culprit "$culprit"
