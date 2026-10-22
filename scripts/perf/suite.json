@@ -22,7 +22,7 @@
   ],
   "synthetic": [
     {"family": "functions", "n": 2000},
-    {"family": "match", "n": 1000},
+    {"family": "match", "n": 600},
     {"family": "statements", "n": 4000},
     {"family": "array", "n": 2000},
     {"family": "nesting", "n": 160},
