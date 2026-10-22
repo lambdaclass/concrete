@@ -3474,11 +3474,16 @@ def checkModule (m : Module) (summary : FileSummary)
         -- That is safety by ACCIDENT: it rests on the renderer's narrowness, and the first person
         -- to add `.ifExpr` to `renderTerm` -- an obvious extension -- makes the corruption live.
         -- Rejecting binders here makes the property checked rather than incidental.
-        let binders := (specBinders b).eraseDups
+        -- binder-free, checked by the exhaustive contract walk too (review round 11: the
+        -- older `specBinders` walk skipped method calls and other constructors)
+        let binders := (specBinders b ++ contractExprBad [] b).eraseDups
         if !binders.isEmpty then
           .error [{ severity := .error
                   , message := s!"spec fn '{sd.name}' body binds name(s): {", ".intercalate binders}; spec bodies must be binder-free"
                   , pass := "check", span := some sd.span
+                  -- exit 2i: the same binder-free rule as contracts (E0305, SCOPE-1@1)
+                  , code := "E0305", evidence := ruleEvidence (some "SCOPE-1@1")
+                  , nextAction := some "write the spec body as a binder- and statement-free expression over its parameters"
                   , hint := some "TEMPORARY: parameter substitution is by name and would capture a shadowing binding. The restriction lifts once substitution is capture-avoiding — until then keep the body free of `let`, match patterns, and loops." }]
         else if !free.isEmpty then
           .error [{ severity := .error
@@ -3554,13 +3559,11 @@ def checkModule (m : Module) (summary : FileSummary)
           if g.typeParams.isEmpty && ib.typeParams.isEmpty then none else some g.name)
         ++ (m.traitImpls.flatMap fun tb => tb.methods.filterMap fun g =>
           if g.typeParams.isEmpty && tb.typeParams.isEmpty then none else some g.name)
-      -- reference-typed parameters, aliases expanded (review round 10)
-      let refPs := f.params.filterMap fun p =>
-        match expandAliasDeep typeAliasMap (typeAliasMap.length + 64) p.ty with
-        | .ref _ | .refMut _ => some p.name
-        | _ => none
       clauses.flatMap fun e =>
-        match (contractExprBad refPs e ++ contractGenericCalls genericFns genericMethods e).eraseDups with
+        -- (review round 11) passing a reference to a NON-generic callee is harmless: that body is
+        -- checked like any other; only an erased call's never-built specialization escapes, so
+        -- the rule is about generic callees (no reference-parameter list is passed).
+        match (contractExprBad [] e ++ contractGenericCalls genericFns genericMethods e).eraseDups with
         | [] => []
         | bad =>
           let ce := CheckError.contractBinds f.name (", ".intercalate bad)

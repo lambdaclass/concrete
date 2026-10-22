@@ -1,4 +1,5 @@
-// Exit 2i (review round 10): a contract uses a reference parameter as a method receiver. E0305.
+// Exit 2i (review round 11): a contract may call a non-generic method on a reference parameter.
+// Run 42.
 struct S { n: i32 }
 impl S { fn probe(&self) -> bool { return true; } }
 #[requires(x.probe())]

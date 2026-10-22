@@ -1148,11 +1148,14 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   `ensures`, loop invariants and variants, in functions, inherent and trait-impl methods) are
   binder- and statement-free propositions, like spec bodies: a binder of any kind (a pattern
   binder included) or any statement other than a block's trailing value in one is E0305
-  (`contractBinds`, tagged SCOPE-1@1; an exhaustive walk, `contractExprBad`), and so is a borrow, a
-  reference-typed parameter (aliases expanded) passed to a call or used as a method receiver, or any call to a generic function of the module: an
-  erased contract never reaches monomorphization, so a generic it called would have its
-  specialization go unchecked (a call by name, mangled `Type_method`, `Type::method` or method
-  syntax). For the same reason a generic instantiated inside an `assert`, `assume` or ghost
+  (`contractBinds`, tagged SCOPE-1@1; an exhaustive walk, `contractExprBad`, which also refuses a
+  borrow), and so is any call to a generic function or method of the module: an erased contract
+  never reaches monomorphization, so a generic it called would have its specialization go
+  unchecked. A plain or `Type::method` call is matched exactly (mangled `Type_method` names); a
+  method-syntax call `x.m(..)` cannot be resolved without types here, so it is refused whenever
+  the module has a generic method named `m` (a deliberate over-approximation: call it as
+  `Type::m(..)` to name a non-generic one). Passing a reference to a non-generic callee is allowed:
+  that body is checked like any other. Spec fn bodies get the same exhaustive binder walk. For the same reason a generic instantiated inside an `assert`, `assume` or ghost
   initializer must be instantiated at a type that cannot hold a reference under substitution (no
   reference, and no forwarded type parameter except behind a function or raw-pointer type, which
   substitution cannot turn into a reference binding): otherwise E0302 (`erasedRefInstantiation`).
@@ -1334,7 +1337,7 @@ when the manifest is written.
 Rows naming `error_091_*`, `error_104_*`, `error_105_*`, `error_107_*`, `regress_087_*` or
 `trait_generic_fn_value_param.con` need batch 2 on `main`.
 
-**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 169 rows and
+**As implemented (exit 2i, 2026-10-21).** `tests/rules/exit_2i.tsv` holds 171 rows and
 `scripts/tests/check_rules_2i.sh` (in the full gate set, CI job `language-gates`) checks them as stated
 above, plus negative controls that feed corrupted manifests and wrong expectations through the same
 checks. Deviations from the table below, each deliberate: several reject rows share one run row (a

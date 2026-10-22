@@ -1,0 +1,10 @@
+// Exit 2i (review round 11): method syntax in a contract is refused when the module has a generic
+// method of that name (it cannot be resolved without types there); naming the non-generic method
+// as `Type::method` is accepted. Run 42, binary = --interp.
+struct Copy S { n: i32 }
+struct Copy U { n: i32 }
+impl S { fn probe<T: Copy>(x: T) -> bool { return true; } }
+impl U { fn probe(self) -> bool { return true; } }
+#[requires(U::probe(x))]
+fn f(x: U) -> i32 { return 42; }
+fn main() -> i32 { return f(U { n: 1 }); }
