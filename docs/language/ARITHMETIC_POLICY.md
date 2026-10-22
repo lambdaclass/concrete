@@ -504,7 +504,7 @@ is `Copy`-bounded, and every instantiation is held to the same scalar rule after
 - **Float laws.** Comparison follows IEEE 754: `==` is not reflexive (`x == x` is false when `x` is
   NaN, and `x != x` is true), and every ordered comparison with a NaN operand is false. The binary
   emits `fcmp oeq`/`une`/`olt`/... ; no pass may fold a float self-comparison
-  (the SSA folder folded `x == x` to `true` for floats, EVALUATION2 D12; repaired as bug 139 on the interpreter-coverage branch).
+  (the SSA folder folded `x == x` to `true` for floats, EVALUATION2 D12; filed and repaired as bug 150 on the interpreter-coverage branch).
 - **Raw pointers** compare by address, in trusted or `Unsafe` code only.
 
 **Status on main.** Enforced: `Check.lean` `.binOp` (E0229 at the source span), and

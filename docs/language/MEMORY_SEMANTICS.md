@@ -432,7 +432,14 @@ which this section does not restate. Then:
   destructuring and rebuilding the aggregate. A general place `replace` is a pull-gated
   language/`std` item with no owner yet; it waits for a workload that needs it.
 
-Status: the refusals are enforced on `main` (E0219, E0291). The order is stated, not yet gated
+Status: the refusals are enforced on `main` (E0219, E0291), through every place form: an element
+write through `&mut [T; N]` (EVALUATION2 D1) is the place `(*r)[i]` and is E0291 since bug 091's
+normalized place rule (`error_091_norm_ref_array_overwrite.con`, and the generic form
+`error_091_norm_generic_ref_array_overwrite.con`), and a heap cell's interior is tracked like any
+other owner since bug 144 (no by-value non-Copy field read, no `free` of a live non-Copy pointee).
+So there is no safe store into, or drop of, an initialized non-Copy place without consuming it
+(decided 2026-10-21); the trusted raw store into an uninitialized slot (`*p = v`, `p: *mut T`) stays
+a distinct operation. The order is stated, not yet gated
 (exit 2j). This prevents silent leaks of an overwritten resource; the order rule removes a
 consumer-agreement obligation (interpreter, Core and native must agree on it). Owner: ROADMAP exit
 2j (R-0500); OWNERSHIP_MODEL cites this section.
