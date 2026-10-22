@@ -10,10 +10,13 @@ runs the same procedure by name instead of receiving a long prompt:
 | `/fix-bug <N or description>` | reproduce, classify, repair or contain one bug on its own branch |
 | `/roadmap-item <R-NNNN>` | carry one roadmap task to a landable candidate |
 | `/file-bug <title>` | file a new bug with `scripts/gen/new_bug.sh` |
-| `/review` | Codex review of the branch through `scripts/review/review.sh` |
+| `/creview` | Codex review of the branch through `scripts/review/review.sh` |
 | `/rebase` | the safe rebase onto `origin/main` |
 | `/land` | hand a validated branch to the landing train (`scripts/land/train.sh`) |
-| `/status` | where this worktree, its branch, its CI and this machine stand |
+| `/cstatus` | where this worktree, its branch, its CI and this machine stand |
+
+`/creview` and `/cstatus` carry a `c` prefix so they do not shadow Claude Code's built-in `/review`
+and `/status`; a new playbook takes a name no built-in uses.
 
 This file owns the rules the commands share. A command links here rather than restating them, so a
 rule changes in one place.

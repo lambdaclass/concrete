@@ -25,7 +25,7 @@ Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md).
    otherwise a slice heading), and the roadmap prose updated without status tags.
 8. **Validate** in `nix develop`: the new legs, `run_fast_surface_gates.sh`, the area gates. Full
    set on the server (`concrete-remote`) or in CI. Commit, push `wip/<branch>` every 5 minutes.
-9. `/review`, then `/land`.
+9. `/creview`, then `/land`.
 
 Report: the slice delivered, what remains of the task, the head SHA, the gates and their results,
 the Codex verdict.

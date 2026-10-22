@@ -30,7 +30,7 @@ Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md). Read it first if 
 8. **Validate** inside `nix develop`: the targeted fixture, then `bash scripts/tests/run_fast_surface_gates.sh`
    and the area gates. Run `bash scripts/tests/check_examples.sh` after Lower/EmitSSA changes. Full
    sets go to `concrete-remote wip/<branch> '...'` or CI, never the laptop.
-9. Commit, push `wip/<branch>`, run `/review`. When review and gates are clean, run `/land`.
+9. Commit, push `wip/<branch>`, run `/creview`. When review and gates are clean, run `/land`.
 
 Report: the branch and head SHA, the structural cause and owner, the regression leg (and proof it
 failed before), the gates run with their results, the Codex verdict.

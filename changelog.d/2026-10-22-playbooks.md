@@ -1,7 +1,7 @@
 ### Shared Agent Playbooks And A Race-Safe Bug Scaffold (2026-10-22)
 
 Every agent session now runs the same procedures by name: `.claude/commands/` holds `/fix-bug`,
-`/roadmap-item`, `/file-bug`, `/review`, `/rebase`, `/land` and `/status`, and
+`/roadmap-item`, `/file-bug`, `/creview`, `/rebase`, `/land` and `/cstatus`, and
 [docs/project/AGENTS.md](docs/project/AGENTS.md) owns the rules they share (structural cause and
 owner per bug, one bug or rule per branch, `wip/*` pushes, landings only through the train, at most
 two heavy runs per machine, no piped rebases).

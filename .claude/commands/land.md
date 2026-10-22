@@ -17,7 +17,7 @@ below to the orchestrator. Never fall back to pushing `main` by hand.
 
 **Preconditions** (stop and report the missing one):
 - the branch is pushed as `wip/<branch>` and that SHA is the one you validated;
-- `/review` finished (clean, or 5 rounds with follow-ups recorded);
+- `/creview` finished (clean, or 5 rounds with follow-ups recorded);
 - the fast and area gates passed at that SHA; a full set ran on the server or in CI if the change
   is broad;
 - bug records, `changelog.d/` fragment and regenerated views are in the branch;
