@@ -58,8 +58,9 @@ undefined behaviour that its notes say may affect con-leche. On 2026-10-22 our c
 **Not closed:** the check compares against the Arena's *published* revision, by policy (AXIOMS.md
 prefers Arena-evaluated revisions). So the gap between an upstream fix and our bump is the Arena's
 publication delay, which nothing here bounds, plus the nightly cadence and the time to evaluate and
-land a bump. An upstream fix not yet in a published round is invisible to the finding; the upstream
-head is printed, never compared. The Arena's suite is also curated rather than adversarial.
+land a bump. While the Arena's published revision is readable, an upstream fix not yet in a published
+round is invisible to the finding: the upstream head is printed, not compared (it is compared only
+as the fallback when the Arena page cannot be read). The Arena's suite is also curated rather than adversarial.
 The Lean toolchain itself (4.34.1) is outside this check; its bump to 4.35 is planned as a
 separate slice. **Owner:** R-0532 (R-0208's checker-advisory residuals). Operation and the bump
 record: [EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md).

@@ -86,7 +86,8 @@ workflow job) is withheld until the pin is bumped or the finding is answered. Th
 treats an unreadable source as a finding too, because a check that silently skipped every night
 would never report anything.
 
-What this does **not** catch: an upstream soundness fix that the Arena has not yet published. The
+What this does **not** catch, while the Arena's published revision is readable: an upstream
+soundness fix that the Arena has not yet published (only the fallback compares with the upstream head). The
 comparison is with the published round by design, so the exposure window includes the Arena's
 publication delay, which nothing here bounds. The upstream head and the Arena's next-round revision
 are printed every run so that a reviewer can see such a fix coming; acting on one before the Arena
