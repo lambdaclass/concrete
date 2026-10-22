@@ -65,6 +65,9 @@ jobs:
       - name: "Impact gate selection (R-0513: pre-push selection replays the 2026-10-22 CI-only failures)"
         run: bash scripts/tests/check_gate_selection.sh
 
+      - name: Build-cache gate (seeding refuses a key mismatch and never replaces lake build)
+        run: bash scripts/tests/check_build_cache.sh
+
       - name: VC-bridge register gate (every obligation family is registered)
         run: bash scripts/tests/check_vc_bridge_register.sh
 
@@ -102,13 +105,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -117,6 +129,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -127,6 +140,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Check for build warnings
@@ -152,13 +166,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -167,6 +190,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -177,6 +201,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -205,13 +230,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -220,6 +254,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -230,6 +265,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Run main test suite
@@ -303,7 +339,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache pinned external tools (lean4export, con-leche, nanoda)
         uses: actions/cache@v4
@@ -317,6 +353,15 @@ jobs:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
 
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
       - name: Install Lean (via lean-action)
         id: lean_install
         # A toolchain download can fail on a dropped connection; one paused retry
@@ -324,6 +369,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -334,6 +380,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: External-checker gate (proof evidence re-checked by con-leche)
@@ -351,13 +398,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -366,6 +422,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -376,6 +433,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -455,13 +513,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -470,6 +537,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -480,6 +548,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -566,13 +635,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -581,6 +659,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -591,6 +670,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -614,13 +694,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -629,6 +718,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -639,6 +729,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -670,13 +761,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -685,6 +785,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -695,6 +796,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -837,13 +939,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -852,6 +963,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -862,6 +974,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1209,13 +1322,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1224,6 +1346,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1234,6 +1357,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1296,13 +1420,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1311,6 +1444,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1321,6 +1455,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1357,13 +1492,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1372,6 +1516,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1382,6 +1527,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1514,13 +1660,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1529,6 +1684,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1539,6 +1695,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1622,13 +1779,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1637,6 +1803,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1647,6 +1814,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1666,13 +1834,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1681,6 +1858,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1691,6 +1869,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1723,13 +1902,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1738,6 +1926,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1748,6 +1937,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang
@@ -1785,13 +1975,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1800,6 +1999,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1810,6 +2010,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang and valgrind
@@ -1849,13 +2050,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache the Lean toolchain (~/.elan)
         uses: actions/cache@v4
         with:
           path: ~/.elan
           key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Install Lean (via lean-action)
         id: lean_install
@@ -1864,6 +2074,7 @@ jobs:
         continue-on-error: true
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Wait before retrying the Lean install
@@ -1874,6 +2085,7 @@ jobs:
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
         with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
       - name: Install clang

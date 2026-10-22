@@ -214,3 +214,139 @@ already handles, and what the host has to handle.
    `self-hosted runner, using preinstalled clang`.
 4. To turn it off, delete the variable. Queued jobs that are still waiting for a self-hosted
    runner have to be cancelled and re-run.
+
+## Build cache (R-0546)
+
+Every job, worktree and agent used to build the compiler from nothing. Two caches now start that
+build warm. **Neither one skips it.** `lake build` still runs and re-checks every module's trace,
+and the BuildIdentity freshness gate still runs.
+
+### Lean: `.lake/build` seeds
+
+`scripts/dev/seed-lake.sh` copies an existing `.lake/build` into a checkout that has none. It
+**refuses** (exit 3, nothing copied) unless the source matches on the **seed key**:
+
+- the platform (`uname -s`/`-m`);
+- `lean-toolchain`;
+- the sha256 of `lake-manifest.json`;
+- the sha256 of the **lean executable itself**.
+
+The executable is in the key because lake's traces record only the Lean version and commit. Elan's
+official archive and the devshell's autoPatchelf'd Linux copy would otherwise accept each other's
+`.olean` files, and a module kernel-checked by one binary would be credited to the other (R-0208).
+For a checkout, the script reads the binary from the checkout's own lake traces. Traces from other
+Lean versions are ignored, because lake rebuilds those modules anyway.
+
+Sources and `lakefile.toml` are not in the key. A seed from other sources is the useful case, and
+lake mixes each module's sources and options into its trace. A source hash only chooses between
+cache entries.
+
+| Where | Seed source | How |
+|---|---|---|
+| Self-hosted CI runner | `/var/cache/concrete-lake/<key>/{<srchash>,latest}` | workflow step `Seed .lake from the server build cache (self-hosted only)` |
+| GitHub-hosted runner | `actions/cache` (`.lake/build`, exact source key) and lean-action's `.lake` cache (previous commit) | unchanged |
+| New worktree (laptop or server) | the main checkout's `.lake/build` | `bash scripts/dev/seed-lake.sh` (inside `nix develop`), then `lake build` |
+
+- **Every same-version module must name its executable.** A trace from this Lean version that
+  does not name the binary that compiled it refuses the whole seed, because it may be a fetched
+  artifact or an unknown log format. The check assumes that the binary at a recorded path has not
+  been replaced in place. That holds for Nix store paths, which are immutable, and for elan
+  toolchains, which use one directory per release.
+- **A consistent snapshot.** Lake takes no lock that the seeder could share. A checkout source must
+  therefore be quiet: nothing in it may be written from 10 s before the copy
+  (`CONCRETE_SEED_QUIET`) until the copy ends. A `lake build` that is running, or has just
+  finished, in the main checkout refuses the seed. Provenance is checked again on the copy itself.
+  So is the order of writes: an `.olean` or `.ilean` newer than its trace means the build was
+  killed or suspended mid-module, and that refuses the seed too. One risk remains and is accepted:
+  checkout files edited by hand with matching timestamps are not detected. CI seeds only from
+  published entries.
+  Published cache entries need neither check. Each one is moved into place whole, after a completed
+  build, and never written again. One seeder runs per checkout at a time (`.lake/seed.lock`).
+- **CI checks against `~/.elan`'s lean** (`--elan`). That is the binary lean-action builds with,
+  whatever else is on `PATH`.
+- **Copies, never hardlinks.** Lake rewrites trace files in place, so a hardlink would write through
+  into the seed. macOS uses APFS clones (`cp -c`, instant, no extra space). The server uses a plain
+  copy, about 1 s for 600 MB.
+- In CI, a seeded job sets `use-github-cache: false` on lean-action. Otherwise lean-action would
+  restore an older commit's `.lake` over the seed. An exact-hit of the `.lake/build`
+  `actions/cache` step comes first. The seed then refuses to overwrite it, which is the right
+  outcome, because the exact hit is the better start.
+- `--build [args]` seeds and then always `exec`s `lake build args`. The exit status is the build's.
+- `scripts/tests/check_build_cache.sh` gates the key, the refusals, the copy-not-link rule,
+  publish/consume, and the workflow wiring.
+
+**The cache producer on concrete-ci-1.** The system user `lakecache` (no login, no sudo, home
+`/var/lib/concrete-lake`, its own elan) owns `/var/cache/concrete-lake`. That directory is
+world-readable and writable only by `lakecache`. `concrete-lake-refresh.timer` runs every 10
+minutes and starts `concrete-lake-refresh.service`, which runs at `Nice=15`, `CPUWeight=20` and
+`IOWeight=20`, with `ProtectSystem=strict` and `ProtectHome=true`. The service:
+
+1. fetches `origin/main` into `/var/lib/concrete-lake/main`, a persistent clone, so the build is
+   incremental;
+2. runs `/usr/local/lib/concrete-lake/seed-lake.sh --publish /var/cache/concrete-lake`, which runs
+   `lake build` and publishes only if it succeeds.
+
+The service keeps three entries per key and updates `latest` atomically. The installed copy of
+`seed-lake.sh` must be updated by hand when the key format changes. The key starts with
+`format=concrete-lake-seed-v1`, so a format change makes the old entries miss instead of match
+wrongly.
+
+**Why only `lakecache` writes.** Lake trusts a module's stored trace and `.hash` files. A job that
+could write the seed could plant an `.olean` file whose trace still matches its sources, and later
+jobs would use it without rebuilding. Runner users (`gha1..6`) and `dev` can only read the cache.
+The producer builds only `origin/main`, which takes write access to change.
+
+### Nix: binary cache
+
+All local users share one `/nix/store` through nix-daemon. On this host the store already acts as
+the cache, so the useful steps are to realize the devshell closures and to protect them from garbage
+collection:
+
+- `/nix/var/nix/gcroots/concrete/devshell-default` (116 paths) and `devshell-provers`
+  (11.4 GB, Rocq, Isabelle, cvc5), built from `origin/main`'s `flake.lock`;
+- `/nix/var/nix/gcroots/concrete/nix-serve-ng` (the server binary).
+
+`concrete-nix-serve.service` serves that store as a **signed** binary cache. It uses nix-serve-ng
+from the repository's pinned nixpkgs.
+
+- **Choice of nix-serve-ng.** It serves the live store directly, with no push step, database or
+  second copy, and signs narinfos on the fly. Attic adds a server, a database and an upload step,
+  and earns that only with several machines that push.
+- **Exposure.** It listens on `127.0.0.1:5050` only. The ufw rules are unchanged (OpenSSH only).
+  It runs as `DynamicUser`, and the signing key reaches it through systemd `LoadCredential`.
+- **Keys.** The secret key is `/etc/nix/concrete-ci-1-cache.sec` (root, 0600). The public key is
+  `concrete-ci-1-cache-1:vbcfJrrGDnfqalZ9Tmf0ZsvWY5+UCM77+uHM5aVoyMA=`.
+- **Not a substituter on concrete-ci-1 itself.** A local substituter that serves the same store
+  can never supply a missing path. It would only add a failed lookup per miss and a new way to fail.
+  `/etc/nix/nix.conf` is therefore unchanged, and cache.nixos.org remains the only substituter. A
+  second server on the same LAN would add `http://<lan-ip>:5050` (after a ufw rule for that
+  interface only) as `extra-substituters`, plus the public key in `extra-trusted-public-keys`.
+- **GitHub-hosted runners** never reach it. They keep cache.nixos.org and `actions/cache`. No port
+  is opened.
+- **The laptop.** The laptop is aarch64-darwin and the server is x86_64-linux, so the server's store
+  has nothing a macOS devshell can use. It helps only a Linux builder or VM on the laptop. If one is
+  needed, use a tunnel, never a public port:
+
+  ```sh
+  ssh -i ~/.ssh/concrete_ci -N -L 5050:127.0.0.1:5050 ubuntu@62.210.216.169 &
+  nix build ... --extra-substituters http://127.0.0.1:5050 \
+    --extra-trusted-public-keys 'concrete-ci-1-cache-1:vbcfJrrGDnfqalZ9Tmf0ZsvWY5+UCM77+uHM5aVoyMA='
+  ```
+
+  `--extra-substituters` is honored only for a trusted user, or when it is listed in the laptop's
+  `trusted-substituters`.
+
+### Measured (2026-10-22)
+
+| Build | Time | Modules rebuilt |
+|---|---|---|
+| Server, cold `lake build` (elan Lean, origin/main) | 105 s | 239/242 |
+| Server, seeded, same sources | 1 s copy + 0.2 s | 0 |
+| Server, seeded from main, building the previous main commit or wip/ci-tiering | 1 s + 28 s | 9 |
+| Laptop, seeded (APFS clone, 0 s) from a stale main checkout, building wip/ci-tiering | 85 s (load ~25) | 178 |
+| GitHub-hosted `Build` job, lean-action prior-commit cache (run 39775852735) | 240 s | 148 |
+| GitHub-hosted downstream jobs, exact `.lake/build` hit | 20–35 s setup | 0 |
+
+A seed is only as warm as its source is recent. The server seed tracks `origin/main` within 10
+minutes, so a self-hosted job pays only for its own diff. A laptop worktree seeded from a stale main
+checkout pays for everything that differs.

@@ -103,7 +103,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|scripts/dev/seed-lake\.sh' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -173,7 +173,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   command on top of whatever they pin.
 # 255 -> 256: check_review_tool.sh (R-0544 review tool, fake reviewer), pinned in the same commit.
 #   Other branches in flight also bump this pin; on rebase, re-count rather than take either side.
-EXPECTED_GATE_COMMANDS=258
+EXPECTED_GATE_COMMANDS=259
 # 255 -> 256: check_new_bug.sh (the bug scaffold scripts/gen/new_bug.sh and the pre-push hook's
 #   bug-number reservation tier), pinned in the same commit.
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
@@ -192,6 +192,11 @@ fi
 #   check_kernel_recheck.sh, check_checker_policy.sh, check_axiom_inventory.sh and
 #   check_claim_inventory.sh are removed, because checker_acceptance_evidence.sh re-ran all five in the
 #   same workflow run; that step is now their only run, and this runner includes it (-5 +1).
+# 255 -> 256: check_build_cache.sh (R-0546 build cache: key computation, refusal on toolchain or
+#   manifest mismatch, seeding never replaces lake build), pinned in the same commit.
+#   scripts/dev/seed-lake.sh is excluded from the inventory: the workflow runs it on self-hosted
+#   runners to seed .lake from the server's cache. It is a build accelerator, not a gate, and run
+#   locally it would only copy a build.
 
 # RESOLVE THE SELECTION — sets CMDS (raw inventory), SELECTED (normalized, unique, execution order),
 # FIRST_N (how many leading SELECTED entries are the sequential first stage) and OUTSIDE (selected
