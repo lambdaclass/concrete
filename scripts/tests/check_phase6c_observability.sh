@@ -15,6 +15,8 @@
 # which need no rebuild, as a fast liveness sample; the full sweep is the nightly.
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,8 +25,8 @@ cd "$ROOT_DIR"
 PASS=0; FAIL=0
 run(){ # <label> <cmd...>
   local label="$1"; shift
-  if "$@" >/tmp/6c_sub.log 2>&1; then echo "  ok   $label"; PASS=$((PASS+1));
-  else echo "  FAIL $label"; sed 's/^/        /' /tmp/6c_sub.log | tail -4; FAIL=$((FAIL+1)); fi
+  if "$@" >$GATE_TMP/6c_sub.log 2>&1; then echo "  ok   $label"; PASS=$((PASS+1));
+  else echo "  FAIL $label"; sed 's/^/        /' $GATE_TMP/6c_sub.log | tail -4; FAIL=$((FAIL+1)); fi
 }
 
 echo "=== Phase 6C observability capstone ==="

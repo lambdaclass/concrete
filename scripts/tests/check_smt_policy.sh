@@ -16,6 +16,8 @@
 # build is honest: no solver evidence is produced, so nothing is rejected.
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,8 +32,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # build_expect <dir> <expected-exit 0|1> <needle-if-fail> <label>
 build_expect(){ local dir="$1" want="$2" needle="$3" label="$4"
   local out rc
-  out="$( cd "$dir" && "$ABS" build -o /tmp/smtpol_out 2>&1 )" && rc=0 || rc=$?
-  rm -f /tmp/smtpol_out
+  out="$( cd "$dir" && "$ABS" build -o $GATE_TMP/smtpol_out 2>&1 )" && rc=0 || rc=$?
+  rm -f $GATE_TMP/smtpol_out
   if [ "$want" = "0" ]; then
     [ "$rc" -eq 0 ] && ok "$label" || { no "$label (exit=$rc)"; printf '%s\n' "$out" | grep -iE "error|E061" | head -2 | sed 's/^/      /'; }
   else

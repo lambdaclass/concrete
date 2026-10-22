@@ -471,5 +471,67 @@ else
 fi
 
 echo ""
+echo "=== no gate uses a fixed shared /tmp path (R-0547) ==="
+# Gates run in parallel within one pass (run_ci_gates_local.sh JOBS>1) and several passes run at once
+# on a shared host (concrete-ci-1 runs other agents' gate sets beside this one). A fixed name such as
+# `/tmp/6c_sub.log` or `EXAMPLES_OUT_DIR=/tmp/concrete_examples_out` is shared by every concurrent
+# writer, so one run's output can be read, truncated or deleted by another and the verdict becomes a
+# function of the schedule. Scratch belongs in a per-run directory (`mktemp -d`, the suite's
+# $TMPDIR) or at least a per-process name (`.$$`). A literal that is never written (a repro hint, a
+# fixture string, recorded command text) is listed below with its reason.
+declare -A TMP_OK=(
+  ["run_tests.sh:/tmp/test_rerun"]="text of a '# Rerun:' hint printed for a human, never written by the suite"
+  ["run_tests.sh:/tmp/test"]="text of a recorded repro command (save_failure), never written by the suite"
+  ["check_native_libs.sh:/tmp/evil.so"]="fixture string inside a Concrete.toml under test; the compiler must refuse it"
+  ["check_replay_producer.sh:/tmp/x"]="argument to a Lean #eval of a refusal message; nothing touches the path"
+  ["capture_wrong_code_bundle.sh:/tmp/bug_bin"]="text written into a bundle's command.txt, not executed"
+)
+# Prints "file:line:/tmp/name" for each fixed /tmp path on a non-comment line. A token followed by
+# `.$$`/`$$`, or on a line that calls mktemp, is per-run and not reported.
+fixed_tmp_scan() {
+  perl -ne '
+    next if /^\s*#/ || /mktemp/;
+    while (m{(?<![\w\$/{}-])(/tmp/[A-Za-z0-9_.-]*[A-Za-z0-9_])(\.?\$\$)?}g) {
+      next if defined $2;
+      my $t = $1; my $f = $ARGV; $f =~ s{.*/}{};
+      print "$f:$.:$t\n";
+    }
+    close ARGV if eof;' "$@"
+}
+mapfile -t TMPSCAN < <(find "$ROOT_DIR/scripts/tests" "$ROOT_DIR/scripts/tests/lib" "$ROOT_DIR/scripts/ci" \
+  -maxdepth 1 -type f -name '*.sh' ! -name 'check_gate_hygiene.sh' 2>/dev/null | LC_ALL=C sort -u)
+TMPHITS=""
+while IFS= read -r h; do
+  [ -n "$h" ] || continue
+  f="${h%%:*}"; t="${h##*:}"
+  [ -n "${TMP_OK[$f:$t]:-}" ] && continue
+  TMPHITS="$TMPHITS $h"
+done < <(fixed_tmp_scan "${TMPSCAN[@]}")
+# The workflow's gate commands are extracted and run by run_ci_gates_local.sh, so an env prefix that
+# names a fixed /tmp path there (EXAMPLES_OUT_DIR=/tmp/... was one) is shared the same way.
+while IFS= read -r h; do
+  [ -n "$h" ] && TMPHITS="$TMPHITS lean_action_ci.yml:${h#*:}"
+done < <(grep -nE '^[[:space:]]*(- )?run:.*scripts/.*\.(sh|py)' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" \
+           | perl -ne 'while (m{(?<![\w\$/{}-])(/tmp/[A-Za-z0-9_.-]*[A-Za-z0-9_])(\.?\$\$)?}g) { print "$1\n" unless defined $2 }')
+if [ "${#TMPSCAN[@]}" -lt 100 ]; then
+  no "only ${#TMPSCAN[@]} scripts enumerated for the fixed-/tmp scan — the check would be vacuous"
+elif [ -z "$TMPHITS" ]; then
+  ok "no fixed shared /tmp path in ${#TMPSCAN[@]} gate scripts or the workflow's gate commands"
+else
+  no "fixed shared /tmp path(s) — use mktemp -d or a .\$\$ suffix:$TMPHITS"
+fi
+TTMP="$(mktemp -d)"
+printf '%s\n' 'echo x > /tmp/shared_name.log' > "$TTMP/fixed.sh"
+printf '%s\n' 'D="$(mktemp -d /tmp/ok.XXXXXX)"' 'echo x > /tmp/ok_name.$$' '# echo > /tmp/comment_only' \
+  'echo x > ${TMPDIR:-/tmp}/ok2.$$' > "$TTMP/perrun.sh"
+[ -n "$(fixed_tmp_scan "$TTMP/fixed.sh")" ] \
+  && ok "CONTROL: the fixed-/tmp scan flags a shared name" \
+  || no "CONTROL: the fixed-/tmp scan is inert"
+[ -z "$(fixed_tmp_scan "$TTMP/perrun.sh")" ] \
+  && ok "CONTROL: the fixed-/tmp scan accepts mktemp, .\$\$ names and comments" \
+  || no "CONTROL: the fixed-/tmp scan flags per-run paths: $(fixed_tmp_scan "$TTMP/perrun.sh" | tr '\n' ' ')"
+rm -rf "$TTMP"
+
+echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

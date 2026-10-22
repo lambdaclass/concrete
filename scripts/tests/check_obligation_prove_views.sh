@@ -13,6 +13,8 @@
 #   - the prove CLI and snapshot gates stay green (output parity).
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -52,8 +54,8 @@ ok={'proved_by_lean','proved_by_kernel_decision','proved_by_lean_replay','arithm
 sys.exit(0 if json.load(sys.stdin)['status'] in ok else 1)" && ok "show-obligation status ∈ canonical vocabulary" || no "status outside vocabulary"
 
 echo "=== prove CLI + snapshots stay green (output parity) ==="
-if bash scripts/tests/test_prove_cli.sh >/tmp/pv_cli.log 2>&1; then ok "prove CLI gate green"; else no "prove CLI gate failed"; tail -5 /tmp/pv_cli.log|sed 's/^/      /'; fi
-if bash scripts/tests/check_snapshots.sh >/tmp/pv_snap.log 2>&1; then ok "snapshot gate green"; else no "snapshot gate failed"; fi
+if bash scripts/tests/test_prove_cli.sh >$GATE_TMP/pv_cli.log 2>&1; then ok "prove CLI gate green"; else no "prove CLI gate failed"; tail -5 $GATE_TMP/pv_cli.log|sed 's/^/      /'; fi
+if bash scripts/tests/check_snapshots.sh >$GATE_TMP/pv_snap.log 2>&1; then ok "snapshot gate green"; else no "snapshot gate failed"; fi
 
 echo ""
 echo "OBLIGATION-PROVE-VIEWS: PASS=$PASS  FAIL=$FAIL"

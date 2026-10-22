@@ -2104,12 +2104,12 @@ done
 # and the run tests nothing — the same shape as a CI job that is green because it never
 # ran. (This once scored as "KILLED (build)" and read as perfect coverage.)
 printf "preflight: pristine tree builds ... "
-if $LAKE build > /tmp/mutation_preflight.log 2>&1; then
+if $LAKE build > ${TMPDIR:-/tmp}/mutation_preflight.log.$$ 2>&1; then
   echo "ok"
 else
   echo "FAILED"
   echo "error: the unmutated tree does not build, so kill/survive verdicts would be meaningless." >&2
-  echo "       see /tmp/mutation_preflight.log" >&2
+  echo "       see ${TMPDIR:-/tmp}/mutation_preflight.log.$$" >&2
   exit 2
 fi
 # Measured HERE: pristine source, nothing mutated yet, nothing built from a mutation.

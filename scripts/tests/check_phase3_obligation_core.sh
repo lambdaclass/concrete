@@ -8,6 +8,8 @@
 # Then it composes the Phase-3 consolidation gates as the final umbrella.
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -70,7 +72,7 @@ echo "=== umbrella: the Phase-3 consolidation gates are all green ==="
 for g in check_obligation_core check_obligation_report_views check_obligation_policy_views \
          check_obligation_prove_views check_obligation_single_truth_source \
          check_no_duplicate_obligation_walkers check_discharge_adapters check_obligation_lowering; do
-  if bash "scripts/tests/$g.sh" >/tmp/p3_$g.log 2>&1; then ok "$g"; else no "$g"; tail -3 /tmp/p3_$g.log|sed 's/^/      /'; fi
+  if bash "scripts/tests/$g.sh" >$GATE_TMP/p3_$g.log 2>&1; then ok "$g"; else no "$g"; tail -3 $GATE_TMP/p3_$g.log|sed 's/^/      /'; fi
 done
 
 echo ""

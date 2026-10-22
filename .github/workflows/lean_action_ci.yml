@@ -1674,7 +1674,7 @@ jobs:
         # skip). A skip must name an owning gate CI runs that references the
         # file, and a reason; the gate's negative controls prove an unowned skip
         # and an unlisted .con both fail.
-        run: EXAMPLES_OUT_DIR=/tmp/concrete_examples_out bash ./scripts/tests/check_examples.sh
+        run: bash ./scripts/tests/check_examples.sh
 
       - name: Check example outputs (native and interpreter)
         # Replaces the old smoke step, which ran binaries with no input, failed

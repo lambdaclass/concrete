@@ -13,6 +13,8 @@
 # GitHub uses closely enough to catch indicator/indentation errors).
 
 set -uo pipefail
+# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -21,12 +23,12 @@ WF_DIR=".github/workflows"
 
 parse_one() {
   local f="$1"
-  if python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$f" 2>/tmp/wfyaml.err; then
+  if python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$f" 2>$GATE_TMP/wfyaml.err; then
     return 0
   fi
   # python3 missing PyYAML (ModuleNotFoundError) → fall back to ruby
-  if grep -q "No module named 'yaml'" /tmp/wfyaml.err 2>/dev/null; then
-    ruby -ryaml -e "YAML.load_file(ARGV[0])" "$f" 2>/tmp/wfyaml.err
+  if grep -q "No module named 'yaml'" $GATE_TMP/wfyaml.err 2>/dev/null; then
+    ruby -ryaml -e "YAML.load_file(ARGV[0])" "$f" 2>$GATE_TMP/wfyaml.err
     return $?
   fi
   return 1
@@ -38,7 +40,7 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
   if parse_one "$f"; then
     echo "  ok   $f"; PASS=$((PASS+1))
   else
-    echo "  FAIL $f"; sed 's/^/         /' /tmp/wfyaml.err | head -4; FAIL=$((FAIL+1))
+    echo "  FAIL $f"; sed 's/^/         /' $GATE_TMP/wfyaml.err | head -4; FAIL=$((FAIL+1))
   fi
 done
 

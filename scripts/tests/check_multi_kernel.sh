@@ -445,10 +445,10 @@ if command -v isabelle >/dev/null 2>&1; then
   echo "=== [policy] require-two-kernels is first-class, not just a CLI flag ==="
   # The release requirement lives in the package's Concrete.toml, so it holds for
   # `concrete build` regardless of which flags a CI job happens to pass.
-  ( cd examples/multi_kernel_policy/allow && "$ROOT_DIR/$COMPILER" build -o /tmp/mkp_allow_gate >/dev/null 2>&1 )
+  ( cd examples/multi_kernel_policy/allow && "$ROOT_DIR/$COMPILER" build -o ${TMPDIR:-/tmp}/mkp_allow_gate.$$ >/dev/null 2>&1 )
   [ $? -eq 0 ] && ok "policy project whose obligations all reach 2 kernels BUILDS" \
                 || no "allow project should build under require-two-kernels"
-  BLK="$( cd examples/multi_kernel_policy/blocked && "$ROOT_DIR/$COMPILER" build -o /tmp/mkp_blocked_gate 2>&1 )"
+  BLK="$( cd examples/multi_kernel_policy/blocked && "$ROOT_DIR/$COMPILER" build -o ${TMPDIR:-/tmp}/mkp_blocked_gate.$$ 2>&1 )"
   rc=$?
   [ $rc -ne 0 ] && ok "policy project with an unprovable obligation is REJECTED" \
                 || no "blocked project should be rejected under require-two-kernels"
@@ -609,7 +609,7 @@ fi
 # would pass for the wrong reason.
 if ! command -v coqc >/dev/null 2>&1 && ! command -v isabelle >/dev/null 2>&1; then
   echo "=== fail-closed: require-two-kernels rejects when NO external kernel exists ==="
-  FC="$( cd examples/multi_kernel_policy/allow && "$ROOT_DIR/$COMPILER" build -o /tmp/mkp_failclosed 2>&1 )"
+  FC="$( cd examples/multi_kernel_policy/allow && "$ROOT_DIR/$COMPILER" build -o ${TMPDIR:-/tmp}/mkp_failclosed.$$ 2>&1 )"
   if [ $? -eq 0 ]; then
     no "allow project BUILT with no external kernel — require-two-kernels failed OPEN"
   else
