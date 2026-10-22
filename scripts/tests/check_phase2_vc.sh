@@ -32,10 +32,20 @@ SUBGATES=(
   check_vc_examples.sh            # end-of-Phase-2 examples (one VC/SMT surface each)
 )
 
+# CONCURRENT, REPORTED IN ORDER (R-0547). The sub-gates are independent processes with their own
+# sandboxes, and a full pass already runs them side by side; in series they made this umbrella one of
+# the longest gates of a parallel pass (361 s at JOBS=64). Each sub-gate's output is printed whole, in
+# the listed order, and its verdict is its own recorded exit status — a missing status is a failure.
+P2_TMP="$(mktemp -d)"; trap 'rm -rf "$P2_TMP"' EXIT
+for g in "${SUBGATES[@]}"; do
+  ( rc=0; bash "scripts/tests/$g" >"$P2_TMP/$g.log" 2>&1 || rc=$?; echo "$rc" > "$P2_TMP/$g.rc" ) &
+done
+wait
 PASS=0; FAIL=0
 for g in "${SUBGATES[@]}"; do
   echo "=== $g ==="
-  if bash "scripts/tests/$g"; then PASS=$((PASS+1)); else echo "  >>> $g FAILED"; FAIL=$((FAIL+1)); fi
+  cat "$P2_TMP/$g.log" 2>/dev/null
+  if [ "$(cat "$P2_TMP/$g.rc" 2>/dev/null)" = "0" ]; then PASS=$((PASS+1)); else echo "  >>> $g FAILED"; FAIL=$((FAIL+1)); fi
   echo ""
 done
 

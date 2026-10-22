@@ -69,10 +69,19 @@ lp="$(ccache_run "$COMPILER" "$P" --report obligation-ledger --json 2>/dev/null 
 [ -n "$sp" ] && [ "$sp" = "$lp" ] && ok "prove --show-obligation O1 == ledger ($sp)" || no "prove ≠ ledger: prove=$sp ledger=$lp"
 
 echo "=== umbrella: the Phase-3 consolidation gates are all green ==="
-for g in check_obligation_core check_obligation_report_views check_obligation_policy_views \
-         check_obligation_prove_views check_obligation_single_truth_source \
-         check_no_duplicate_obligation_walkers check_discharge_adapters check_obligation_lowering; do
-  if bash "scripts/tests/$g.sh" >$GATE_TMP/p3_$g.log 2>&1; then ok "$g"; else no "$g"; tail -3 $GATE_TMP/p3_$g.log|sed 's/^/      /'; fi
+# The sub-gates are independent processes, each in its own sandbox, and a full pass already runs them
+# side by side; here they ran in series and made this umbrella the critical path of a parallel pass
+# (441 s at JOBS=64). They now run concurrently and are judged in the listed order (R-0547). Each
+# records its own exit status; a missing status is a failure, never a pass.
+P3_SUBGATES=(check_obligation_core check_obligation_report_views check_obligation_policy_views
+             check_obligation_prove_views check_obligation_single_truth_source
+             check_no_duplicate_obligation_walkers check_discharge_adapters check_obligation_lowering)
+for g in "${P3_SUBGATES[@]}"; do
+  ( rc=0; bash "scripts/tests/$g.sh" >"$GATE_TMP/p3_$g.log" 2>&1 || rc=$?; echo "$rc" > "$GATE_TMP/p3_$g.rc" ) &
+done
+wait
+for g in "${P3_SUBGATES[@]}"; do
+  if [ "$(cat "$GATE_TMP/p3_$g.rc" 2>/dev/null)" = "0" ]; then ok "$g"; else no "$g"; tail -3 "$GATE_TMP/p3_$g.log"|sed 's/^/      /'; fi
 done
 
 echo ""
