@@ -118,41 +118,27 @@ def evalSourceLetStep (env : Env) (name : String) (vv : PVal)
 def evalSourceBinOpStep (pop : PBinOp) (vl vr : PVal) : Option PVal :=
   evalBinOp pop vl vr
 
-/-! ## Phase 12 wrapper architecture (lift landed 2026-05-30)
+/-! ## The extractor the theorems are about (bug 219, 2026-10-24)
 
-`cExprToPExprImpl` (the partial-def, in the mutual block)
-still has the structural-recursion barrier through
-`List.mapM` over field / element / arm lists.  Lean's
-kernel treats `partial def` as opaque — no equation
-lemmas, `rfl` cannot reduce.
+The theorems below are stated against `cExprToPExpr` and `cStmtsToPExprK`, which are now exactly
+`cExprToPExprImpl` and `cStmtsToPExprKImpl` (the mutual block the compiler runs), with no arm of
+their own. Each proof unfolds the public name (`simp only [cExprToPExpr, ...] at *`) and then one
+equation of the implementation (`simp [cExprToPExprImpl, ...]`).
 
-**The lift.**  `cExprToPExpr` (the public entry point in
-`Concrete.ProofCore`) is now a non-partial wrapper that
-handles `.intLit` and `.boolLit` definitionally and
-delegates all other cases to `cExprToPExprImpl`.  Because
-the wrapper sits OUTSIDE the mutual block and is a plain
-`def`, Lean reduces `cExprToPExpr (.intLit n ty)` to
-`some (.lit (.int n))` by `rfl`.
-
-This is the minimum refactor that makes the literal cases
-of the REAL extractor theorem-friendly.  All other cases
-of `cExprToPExpr` still go through the partial-def
-implementation; theorems about them remain blocked until a
-future commit replaces the `mapM`s with paired structural
-recursion.
-
-R-01 and R-02 below are now stated against `cExprToPExpr`
-(the wrapper), not the parallel `cExprLitToPExpr` helper.
-The helper remains in `ProofCore` as a literal-only spec
-useful for documentation and as a redundant cross-check;
-the theorems below no longer depend on it. -/
+History: while the mutual block was a `partial def` (opaque to the kernel), the public names were
+WRAPPERS outside it that repeated the arms the theorems needed (literals 2026-05-30, then
+`binOp`, `let`, `if`, `while` ...), so those arms reduced. Once the block became an ordinary `def`
+the copies were unnecessary, and they were a hazard: a theorem about a copy is a theorem about code
+nothing executes, and mutation 31 (bug 061 restored) survived because it hit the copy. The
+`cExprLitToPExpr` helper remains in `ProofCore` as a literal-only cross-check; no theorem depends
+on it. -/
 
 /-! ## R-01: `lit_int_preservation` (against real extractor)
 
 For any int literal source `e := .intLit n ty`:
   * `cExprToPExpr e = some (.lit (.int n))` —
     proved against the REAL public extractor
-    (closed by `rfl` via the non-partial wrapper);
+    (one equation of `cExprToPExprImpl`);
   * evaluating that PExpr at any non-zero fuel produces
     `some (.int n)`;
   * the source-level semantics produces `some (.int n)`.
@@ -184,8 +170,8 @@ theorem lit_bool_preservation (b : Bool) (fuel : Nat)
 
 For any identifier source `e := .ident name ty`:
   * `cExprToPExpr e = some (.var name)` — proved against
-    the REAL public extractor (closed by `rfl` via the
-    non-partial wrapper, same pattern as R-01/R-02);
+    the REAL public extractor (one equation of
+    `cExprToPExprImpl`, same pattern as R-01/R-02);
   * evaluating that PExpr at any non-zero fuel produces
     `env name` (the scope's value for `name`);
   * the source-level semantics produces the same lookup.
@@ -221,7 +207,7 @@ For `e := .binOp op lhs rhs ty`, given:
 
 the conclusion holds in three views:
   * `cExprToPExpr e = some (.binOp pop pl pr)` — proved
-    against the REAL extractor via the new wrapper arm
+    against the REAL extractor via `cExprToPExprImpl`'s arm
     (closed by `simp` over the hypotheses);
   * eval on `.binOp pop pl pr` reduces via `evalBinOp`
     once `pl`/`pr` evaluate (the eval side is a
@@ -233,7 +219,7 @@ rules (R-06 letIn, R-07 if, R-08 call, ...) follow this
 shape — hypotheses on sub-expressions; conclusion about
 the composite.
 
-The wrapper's `.binOp` arm:
+The extractor's `.binOp` arm (shown with the public name):
 
     | .binOp op lhs rhs _ => do
         let pop ← binOpToPBinOp op (CExpr.ty lhs)
@@ -293,12 +279,11 @@ theorem source_binop_step
 
 /-! ## R-06: `let_preservation` (compositional, three views)
 
-`letIn` extraction lives in `cStmtsToPExprK`, not
-`cExprToPExpr`.  Same wrapper-arm pattern as R-04 but
-applied to the CStmt-list extractor — the new
-`cStmtsToPExprK` wrapper handles `.letDecl :: rest`
-directly, recursing through itself for both `val` (via
-the expression wrapper) and `rest`.
+`letIn` extraction lives in `cStmtsToPExprK` (=
+`cStmtsToPExprKImpl`), not `cExprToPExpr`.  Same pattern as
+R-04 applied to the CStmt-list extractor: its
+`.letDecl :: rest` arm recurses into the expression extractor
+for `val` and into itself for `rest`.
 
 For `(.letDecl name _ ty val) :: rest`, given:
   * `cExprToPExpr val = some pv`,
@@ -307,7 +292,7 @@ the conclusion is
   `cStmtsToPExprK ((.letDecl name _ ty val) :: rest) k
     = some (.letIn name pv pb)`.
 
-Closed by `show`/`rw`/`rfl` over the two hypotheses. -/
+Closed by `simp` over the hypotheses. -/
 theorem let_preservation
     (name : String) (isMut : Bool) (ty : Ty) (val : CExpr)
     (rest : List CStmt) (k : Option PExpr)
@@ -421,7 +406,7 @@ theorem array_index_preservation
 
 Source-level `arr[i] = v;` extracts to a shadowing letIn
 that rebinds `arr` via `arraySet`.  Only supported when
-`arr` is a simple identifier — the wrapper arm:
+`arr` is a simple identifier — the extractor's arm:
 
     | (.arrayIndexAssign (.ident name _) idx val) :: rest, k =>
         let pi ← cExprToPExpr idx
@@ -491,9 +476,9 @@ recursion via paired mutual helpers; Lean's structural
 recursion checker accepts the whole block.
 
 Consequence: every rule whose extraction lives inside the
-mutual block is now wrapper-free reducible — theorems can
-prove against `cExprToPExprImpl` (or the public
-`cExprToPExpr` which dispatches into it) by `simp`. -/
+mutual block reduces by its equations — theorems prove
+against the public `cExprToPExpr`, which IS
+`cExprToPExprImpl`, by `simp`. -/
 
 /-! ## R-08: `call_preservation` (extraction)
 

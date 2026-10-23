@@ -689,8 +689,7 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | _, _    => none
 
 /-- Non-partial extractor restricted to the LITERAL fragment of
-    `CExpr`.  Mirrors the literal cases of `cExprToPExpr` (lines
-    708–709) so the Phase 12 soundness proofs in
+    `CExpr`.  Mirrors the literal cases of `cExprToPExprImpl` so the Phase 12 soundness proofs in
     `Concrete.ProofSoundness` can reason about it WITHOUT the
     `partial def` opacity barrier.
 
