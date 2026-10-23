@@ -7783,6 +7783,8 @@ run_err "$TESTDIR/error_166_foreign_fn_value_repr_c_let.con" "(E0588)"
 run_err "tests/regressions/bug166_foreign_fn_value_abi/repro.con" "(E0588)"
 run_err "$TESTDIR/error_166_foreign_fn_value_scalar.con"     "(E0588)"
 run_err "$TESTDIR/error_166_imported_extern_value.con"      "(E0588)"
+run_err "$TESTDIR/error_166_extern_value_in_const.con"      "(E0588)"
+run_err "$TESTDIR/error_166_extern_value_after_scope.con"   "(E0588)"
 run_ok  "$TESTDIR/regress_166_wrapper_value.con" 42
 # #[export_name]: a C caller reaches the Concrete function by its exported name (rc 42).
 xp_ll="$TMPDIR/ffi_export_name.ll"

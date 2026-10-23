@@ -114,6 +114,8 @@ inductive ElabError where
   | assignToUndeclaredVariable (name : String)
   | borrowUndeclaredVariable (name : String)
   | ghostInRuntime (name : String)
+  /-- Bug 166 (D4): an `extern fn` taken as a value. -/
+  | foreignFnValue (name : String)
   -- Struct/field
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
@@ -145,6 +147,7 @@ def ElabError.message : ElabError → String
   | .assignToUndeclaredVariable name => s!"assignment to undeclared variable '{name}'"
   | .borrowUndeclaredVariable name => s!"borrow: undeclared variable '{name}'"
   | .ghostInRuntime name => s!"ghost value '{name}' cannot be used in runtime code"
+  | .foreignFnValue name => s!"extern fn '{name}' cannot be taken as a value: a call through a function value would use the Concrete calling convention and the function type's capabilities, not the C function's"
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .fieldAccessNonStruct => "field access on non-struct type"
@@ -168,6 +171,7 @@ def ElabError.hint : ElabError → Option String
   | .arrayLiteralEmpty => some "provide at least one element"
   | .methodCallOnNonNamedType => some "method calls require a named type"
   | .importSpellingCollision _ spelling _ other => some s!"two definitions would be one callee '{spelling}' after elaboration, and the backends would pick '{other}' for the import; rename '{other}'. Tracking: docs/bugs/082_import_alias_loses_to_same_named_definition.md"
+  | .foreignFnValue name => some s!"call '{name}' directly, or pass a Concrete function whose body calls '{name}' (FFI.md \"Foreign Function Values\")"
   | .ghostInRuntime _ => some "ghost bindings are proof-only and erased before codegen; reference them only in contracts (#[ensures]/#[invariant]) or other ghost code"
   | _ => none
 
@@ -179,6 +183,7 @@ def ElabError.code : ElabError → String
   | .assignToUndeclaredVariable _ => "E0404"
   | .borrowUndeclaredVariable _ => "E0405"
   | .ghostInRuntime _ => "E0420"
+  | .foreignFnValue _ => "E0588"
   | .unknownStructType _ => "E0406"
   | .structHasNoField _ _ => "E0408"
   | .fieldAccessNonStruct => "E0409"
@@ -200,6 +205,20 @@ def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
+
+/-- Bug 166 (D4, FFI.md "Foreign Function Values"): an `extern fn` is never a value. Decided here,
+    at the one place a global function becomes a value, on the RESOLVER's identity of the name
+    (`resolveCallee`, `ns = .extern`, own or imported), so scoping, constants and import aliases
+    are the resolver's and not a re-derivation (Codex review: a name-keyed check in CoreCheck
+    missed constant initializers and was fooled by an expired local). A compiler-intrinsic
+    spelling (`resolveIntrinsic`) is not a foreign function even when declared `extern`.
+    CoreCheck re-checks `.fnRef` as defense in depth. -/
+private def refuseForeignFnValue (env : ElabEnv) (name : String) (span : Option Span) : ElabM Unit := do
+  match env.resolveCallee name with
+  | some id =>
+    if id.ns == .extern && (resolveIntrinsic name).isNone then
+      throwElab (.foreignFnValue name) span
+  | none => pure ()
 
 /-! ### Coverage, not collection
 
@@ -602,6 +621,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | none =>
       match ← lookupFnSig name with
       | some sig =>
+        refuseForeignFnValue env name (some e.getSpan)
         let paramTys := sig.params.map Prod.snd
         return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
@@ -1155,6 +1175,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let env ← getEnv
     match env.allFnSigPairs.lookup fnName with
     | some sig =>
+      refuseForeignFnValue env fnName (some e.getSpan)
       let paramTys := sig.params.map Prod.snd
       return ElaboratedExprV2.mk (CExpr.fnRef (← coreFnSpelling fnName) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee fnName with
                  | some id => Proof.evFnRef id

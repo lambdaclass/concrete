@@ -397,7 +397,7 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
 private def checkForeignFnValue (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   let foreign := match env.currentForeign.lookup name with
-    | some d => !d.startsWith "_C$rt."
+    | some d => !d.startsWith "_C$rt." && (resolveIntrinsic name).isNone
     | none => false
   if !foreign then return
   match ty with
