@@ -109,8 +109,7 @@ partial def hasRawPtrOpsExpr (e : CExpr) : Bool :=
     | .ptrMut _ | .ptrConst _ => true
     | _ => hasRawPtrOpsExpr inner
   -- `read_owned(p)` (bug 198) is a raw-memory move, like `*p` (Codex review).
-  | .call (.direct n) _ args _ =>
-    resolveIntrinsic n == some .readOwned || args.any hasRawPtrOpsExpr
+  | .call (.runtime "read_owned") _ _ _ => true
   | .call _ _ args _ => args.any hasRawPtrOpsExpr
   | .binOp _ l r _ => hasRawPtrOpsExpr l || hasRawPtrOpsExpr r
   | .unaryOp _ e _ => hasRawPtrOpsExpr e

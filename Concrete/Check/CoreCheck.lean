@@ -517,6 +517,12 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   -- spelling: the call cannot reach one.
   | .call (.runtime helper) _typeArgs args _ty =>
     let env ← getEnv
+    -- T-RAWDUP (bug 198): `read_owned` is a raw-memory move like `*p`: a trust edge, and trusted
+    -- or `Unsafe` code only.
+    if helper == "read_owned" then
+      addTrustEdge .containsRawOp "read_owned"
+      if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
+        addCCError (.missingCapability "read_owned" "Unsafe" "")
     match lookupBuiltinCap helper with
     | some calleeCaps =>
       let helperD := Capabilities.decideCall env.currentCapSet calleeCaps
@@ -533,10 +539,6 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let envE ← getEnv
     -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
     -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
-    if resolveIntrinsic fn == some .readOwned && (envE.fnSigs.find? (·.1 == fn)).isNone then
-      addTrustEdge .containsRawOp "read_owned"
-      if !Capabilities.capsAllowUnsafeOp envE.inTrusted envE.currentCapSet then
-        addCCError (.missingCapability "read_owned" "Unsafe" "")
     if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
     if envE.externNames.contains fn then addTrustEdge .callsFFI fn
     -- Check capability discipline

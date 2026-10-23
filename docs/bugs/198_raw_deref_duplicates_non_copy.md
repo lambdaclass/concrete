@@ -70,3 +70,8 @@ the intrinsic has one spelling (an alias `_read_owned` would have been checked a
 elaborated to a program function named `read_owned`); the interpreter reads a pointer that keeps a
 reference path (`&mut x as *mut T`); and `read_owned` counts as a raw operation in the trust and
 unsafe reports (`hasRawPtrOpsExpr`).
+
+Round 2: Elab emits the intrinsic as `Callee.runtime "read_owned"`, so its identity travels with the
+call and no program function named `read_owned` is taken for it (CoreCheck's raw-operation gate and
+the reports' raw-operation detection read the callee form, not the spelling); and bug 199's cast
+resolution expands aliases only, so no other cast's Core moves.

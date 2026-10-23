@@ -1258,7 +1258,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     -- are different programs, and before this the two were one gap.
     -- Bug 199: the target is resolved through type aliases like every other written type; a cast
     -- to an alias (`p as IP`) reached the backend as the unknown named type `IP` and panicked.
-    let targetTyR ← resolveTypeE targetTy
+    -- Aliases only (the declaration's own type parameters shadow them): the rest of the written
+    -- target keeps its Core form, so no other program's Core or identity moves (Codex review).
+    let env0 ← getEnv
+    let aliases := env0.typeAliases.filter fun (n, _) => !env0.currentTypeParams.contains n
+    let targetTyR := expandAliasDeep aliases (aliases.length + 64) targetTy
     let targetRef ← typeRefOf targetTyR
     return ElaboratedExprV2.mk (CExpr.cast cInner targetTyR) (Proof.evCast targetRef cInnerEv.evidence)
 
@@ -1494,7 +1498,9 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     -- its pointee (Codex review).
     let argTyR ← resolveTypeE cArg.ty
     let pointee := match argTyR with | .ptrMut t | .ptrConst t => t | _ => .placeholder
-    return ElaboratedExprV2.mk (CExpr.call "read_owned" [] [cArg] pointee)
+    -- The intrinsic's identity travels with the call (`Callee.runtime`), so no program function
+    -- named `read_owned` can be taken for it downstream (Codex review).
+    return ElaboratedExprV2.mk (CExpr.call (.runtime "read_owned") [] [cArg] pointee)
       (Proof.evCall (CallableId.ofIntrinsic "read_owned") [])
   -- Intercept free(ptr)
   if intrinsic == some .free then

@@ -45,7 +45,8 @@ inductive Callee where
   /-- A call through a fn-typed local/parameter, named by that binding. -/
   | indirect (binding : String)
   /-- A call the COMPILER generated to one of its runtime helpers (`print_int` for `println`,
-      `Symbols.runtimeHelperNames`), by the helper's name. Never resolved against the
+      `Symbols.runtimeHelperNames`) or to an intrinsic it implements inline (`read_owned`, bug 198),
+      by name. Never resolved against the
       program's definitions: a module that defines its own `fn print_int` keeps it, and
       `println` still reaches the helper (bug 165). The Core counterpart of
       `SCallee.foreign`; Lower emits it as the helper's reserved `_C$rt.` symbol. -/
