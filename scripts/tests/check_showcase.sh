@@ -54,7 +54,7 @@ for c in chunks:
         print(f"{name}\t{path}\t{conf}")
 PYEOF
 
-# EACH FLAGSHIP IS CHECKED IN ITS OWN PROCESS, CONCURRENTLY (R-0547). A flagship's checks (release
+# EACH FLAGSHIP IS CHECKED IN ITS OWN PROCESS, CONCURRENTLY (R-0546). A flagship's checks (release
 # bundle capture, the audit report) are independent of every other flagship's, and in series they made
 # this a 5-minute gate. check_flagship writes its report to its own file and its verdict (0 pass,
 # 1 fail) to another; the reports are printed and the verdicts counted in manifest order, and a

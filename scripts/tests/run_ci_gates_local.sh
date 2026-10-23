@@ -140,7 +140,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 237 -> 238: check_bug077_contained.sh (bug 077 kept separately owned under R-0484 closure), pinned in the same commit.
 # 238 -> 239: check_divergence_detection.sh (bug 078; the divergence-detection family's gate), pinned in the same commit.
 # 239 -> 240: check_mutation_shard_aggregate.sh (sharded mutation campaign), pinned in the same commit.
-#   scripts/tools/checker_acceptance_evidence.sh (R-0208) was excluded too, until R-0547 made it the only
+#   scripts/tools/checker_acceptance_evidence.sh (R-0208) was excluded too, until R-0546 made it the only
 #   run of five gates (see 257 -> 253 below); it now runs here with RUNNER_TEMP pointed at a per-run dir.
 #   The aggregator itself (aggregate_mutation_shards.py) is excluded above with the campaign driver:
 #   it reads artifacts of a sharded dispatch and has nothing to judge in a local pass.
@@ -171,7 +171,7 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   check_heavy_slots.sh (R-0543 semaphore), check_compile_cache.sh and check_build_cache.sh (R-0546;
 #   scripts/dev/seed-lake.sh is excluded below, a build accelerator rather than a gate),
 #   check_ci_triage.sh, check_status_page.sh, check_work_queue.sh, check_fuzz_farm.sh and
-#   check_perf_tracking.sh. fast-gates (R-0547, one run per assertion) removed the standalone steps
+#   check_perf_tracking.sh. fast-gates (R-0546, one run per assertion) removed the standalone steps
 #   for check_checker_identity.sh, check_kernel_recheck.sh, check_checker_policy.sh,
 #   check_axiom_inventory.sh and check_claim_inventory.sh, which checker_acceptance_evidence.sh
 #   re-ran in the same workflow run; that step is now their only run and this runner includes it
@@ -483,7 +483,7 @@ fi
 # commands reference "$SEED", which would trip `set -u` here. Mirror CI.
 SEED="${SEED:-$(date -u +%Y%m%d)}"
 # The acceptance step writes its evidence under $RUNNER_TEMP on CI. Here it gets a per-run directory,
-# removed at the end, so two passes on one host never share it (R-0547).
+# removed at the end, so two passes on one host never share it (R-0546).
 if [ -z "${RUNNER_TEMP:-}" ]; then RUNNER_TEMP="$(mktemp -d)"; _CI_RUNNER_TEMP_OWNED=1; fi
 export RUNNER_TEMP
 
@@ -519,7 +519,7 @@ JOBS_DEFAULT=$(( CORES - 2 ))
 if command -v heavy_jobs_default >/dev/null 2>&1 && [ "$(heavy_slots_n)" -gt 1 ]; then
   JOBS_DEFAULT="$(heavy_jobs_default)"
 fi
-# A HOST DEFAULT (R-0547). concrete-remote sets CONCRETE_GATE_JOBS_DEFAULT on the CI server, where the
+# A HOST DEFAULT (R-0546). concrete-remote sets CONCRETE_GATE_JOBS_DEFAULT on the CI server, where the
 # measured best width (docs/project/GATE_PROFILE.md) is far above the laptop rule. It is a DEFAULT,
 # not an explicit JOBS: an explicit JOBS still wins, and closure mode still forces JOBS=1 without
 # refusing, because the operator did not ask for this width.
@@ -658,7 +658,7 @@ FAILLOG_DIR="$ROOT_DIR/.ci-gate-failures"
 rm -rf "$FAILLOG_DIR"; mkdir -p "$FAILLOG_DIR"
 faillog_name(){ printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_' | cut -c1-80; }
 
-# PER-GATE TIMINGS (R-0547). One TSV row per gate execution: start and end (epoch seconds, sub-second
+# PER-GATE TIMINGS (R-0546). One TSV row per gate execution: start and end (epoch seconds, sub-second
 # where bash has EPOCHREALTIME), duration, stage and verdict. Stage is `first`, `seq`, `pool` or
 # `recheck`; a pool FAIL followed by a recheck PASS is the contention flake the summary names, and is
 # visible here rather than only as a count. Written for every run, green or red.
@@ -671,12 +671,18 @@ _timing_row() { # start end stage verdict cmd
 printf 'start\tend\tsecs\tstage\tverdict\tcmd\n' > "$GATE_TIMINGS"
 
 # ONE SEQUENTIAL VERDICT, used by the first stage, JOBS=1 and the parallel re-run alike.
+# GATE OUTPUT IS WRITTEN OUTSIDE THE CHECKOUT and moved into $FAILLOG_DIR only on failure (R-0546).
+# Creating and deleting a log per gate inside the checkout churned the tree that other gates copy
+# (`cp -a` of the checkout in the mutation driver refused when a file vanished under it).
+GATE_OUT_TMP="$(mktemp -d)"
 run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
-  local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}"
+  local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}" _tmp
+  _tmp="$GATE_OUT_TMP/seq.$RANDOM$RANDOM.log"
   _t0="$(_now)"
-  if eval "$1" >"$_out" 2>&1; then
-    PASS=$((PASS+1)); rm -f "$_out"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
+  if eval "$1" >"$_tmp" 2>&1; then
+    PASS=$((PASS+1)); rm -f "$_tmp"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
   fi
+  mv -f "$_tmp" "$_out" 2>/dev/null || cp -f "$_tmp" "$_out" 2>/dev/null
   _timing_row "$_t0" "$(_now)" "$_st" FAIL "$1"
   FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})"
   return 1
@@ -692,7 +698,7 @@ done
 REST=("${RUN_LIST[@]:$RUN_FIRST_N}")
 [ "$STOPPED_EARLY" = "1" ] && REST=()
 
-# LONGEST FIRST (R-0547). The pool's wall time is bounded below by its longest gate, and a 6-minute
+# LONGEST FIRST (R-0546). The pool's wall time is bounded below by its longest gate, and a 6-minute
 # gate launched last finishes 6 minutes after everything else. scripts/tests/gate_weights.tsv holds
 # measured seconds per command (from .ci-gate-timings.tsv, see docs/project/GATE_PROFILE.md); the
 # pool starts the heaviest first and keeps the workflow order among the rest. Ordering only: a stale
@@ -729,9 +735,10 @@ else
     idx=$((idx+1))
     # The pool's own output is kept on failure too (<name>.pool.log): a gate that fails only under
     # load is a defect in the gate, and the sequential recheck's output cannot show why it failed.
-    ( _t0="$(_now)"; _pl="$FAILLOG_DIR/$(faillog_name "$cmd").pool.log"
+    ( _t0="$(_now)"; _pl="$GATE_OUT_TMP/pool.$idx.log"
       if eval "$cmd" >"$_pl" 2>&1; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
-      else _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
+      else mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
+        _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
   done
   LAUNCHED=$idx
   wait
@@ -969,6 +976,7 @@ else
 fi
 [ "$HEAVY_RUN" = "1" ] && heavy_slot_release
 [ "${_CI_RUNNER_TEMP_OWNED:-0}" = "1" ] && rm -rf "$RUNNER_TEMP"
+rm -rf "${GATE_OUT_TMP:-}"
 
 # The artifact write is part of the verdict: a pass with no durable record is not closure evidence.
 [ "$RUN_OK" = "1" ]

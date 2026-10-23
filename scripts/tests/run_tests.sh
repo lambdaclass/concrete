@@ -2151,14 +2151,14 @@ trait_destroy_newtype_payload_paren:ok
 r091_bad=""
 for row in $r091_table; do
     f="${row%%:*}"; want="${row#*:}"
-    out=$($COMPILER "$TESTDIR/$f.con" -o "$TESTDIR/.r091_table_bin" 2>&1) && rc=0 || rc=$?
+    out=$($COMPILER "$TESTDIR/$f.con" -o "$TMPDIR/r091_table_bin" 2>&1) && rc=0 || rc=$?
     if [ "$want" = "ok" ]; then
         [ "$rc" -eq 0 ] || r091_bad="$r091_bad $f(want ok)"
     else
         grep -qF "($want)" <<<"$out" || r091_bad="$r091_bad $f(want $want)"
     fi
 done
-rm -f "$TESTDIR/.r091_table_bin"
+rm -f "$TMPDIR/r091_table_bin"
 if [ -z "$r091_bad" ]; then
     echo "  ok  bug 091: normalized-place table — every recorded spelling behaves as recorded"
     PASS=$((PASS + 1))

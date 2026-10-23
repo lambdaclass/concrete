@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FROZEN CLAIM INVENTORY (R-0208): replay every Lean-backed claim and compare the rows with the
-# committed reference. Since R-0547 this gate runs only inside the checker-acceptance step
+# committed reference. Since R-0546 this gate runs only inside the checker-acceptance step
 # (scripts/tools/checker_acceptance_evidence.sh), which is its CI step and its command in the local
 # full set; run it alone with `bash scripts/tests/check_claim_inventory.sh`.
 #

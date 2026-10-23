@@ -567,7 +567,7 @@ else
 fi
 
 echo ""
-echo "=== no gate uses a fixed shared /tmp path (R-0547) ==="
+echo "=== no gate uses a fixed shared /tmp path (R-0546) ==="
 # Gates run in parallel within one pass (run_ci_gates_local.sh JOBS>1) and several passes run at once
 # on a shared host (concrete-ci-1 runs other agents' gate sets beside this one). A fixed name such as
 # `/tmp/6c_sub.log` or `EXAMPLES_OUT_DIR=/tmp/concrete_examples_out` is shared by every concurrent

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DELEGATED SUB-GATES: an umbrella states, instead of re-running, that each gate it covers runs as its
-# own unconditional CI step (R-0547).
+# own unconditional CI step (R-0546).
 #
 # Four umbrella gates (check_phase1_contracts, check_phase2_vc, check_phase3_obligation_core and the
 # nested check_snapshots/test_prove_cli runs in the obligation view gates) re-ran gates that CI already

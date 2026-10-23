@@ -66,7 +66,7 @@ REACHABLE_FILE="$(mktemp)"; trap 'rm -f "$REACHABLE_FILE"; rm -rf "${STRIP_DIR:-
 # killed at five minutes. The adjacency is built once — each file scanned for every gate name in a
 # single pass — and the fixpoint then walks it with no further subprocesses.
 # scripts/tools/*.sh are containers too: checker_acceptance_evidence.sh is the only run of five gates
-# (R-0547), so the edge from the workflow to those gates passes through it.
+# (R-0546), so the edge from the workflow to those gates passes through it.
 NAMES_FILE="$(mktemp)"; EDGES_FILE="$(mktemp)"
 trap 'rm -f "$REACHABLE_FILE" "$NAMES_FILE" "$EDGES_FILE"' EXIT
 for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh scripts/tools/*.sh; do
