@@ -80,7 +80,7 @@ def evalSourceLit : CExpr → Option PVal
     and PExpr-side environments are the same shape; the
     preservation theorem is that lookup agrees on both sides. -/
 def evalSourceIdent (env : Env) : CExpr → Option PVal
-  | .ident name _ => env name
+  | .ident name _ => env name.name
   | _             => none
 
 /-- Source semantics for a letIn step.
