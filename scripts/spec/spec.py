@@ -605,7 +605,7 @@ def outcome_native(cc, src, workdir, project=None):
         return ("fail", f"compiler {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0:
         if LEAK_RE.search(out):
-            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0))
+            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0) + " :: " + out)
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
     if rc is None:
@@ -619,7 +619,7 @@ def outcome_interp(cc, src):
     if rc is None or rc < 0:
         return ("fail", f"interpreter {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0 and LEAK_RE.search(out):
-        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0))
+        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0) + " :: " + out)
     if rc == 0:
         last = [l for l in stdout.split("\n") if l.strip()]
         v = last[-1].strip() if last else ""

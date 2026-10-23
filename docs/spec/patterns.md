@@ -141,8 +141,9 @@ fn main() -> Int {
 **Rationale.** A pattern describes the shape the scrutinee has. Every field is listed, so a field
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
 arm that can never be reached is a mistake. Two gaps fail closed at a later stage instead of at
-the checker: a variant of another enum reaches elaboration (bug 196, an `unknown variant`
-diagnostic), and a range arm over an enum reaches the SSA verifier (bug 195).
+the checker: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
+reports `unknown variant` (bug 196), and a range arm over an enum reaches the SSA verifier
+natively while `--interp` runs it (bug 195).
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -169,7 +170,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=other-enum-variant code=new stage=check pair=arms-fit pending=R-0499 now=reject:E0411:elab
+```con reject name=other-enum-variant code=new stage=check pair=arms-fit pending=R-0499 now=fail:Option.get!
 enum Copy E { A, B }
 enum Copy F { X, Y }
 
@@ -294,7 +295,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=else-falls-through code=new stage=check pair=destructure-all pending=R-0499 now=fail:llvm-as now-interp=accept:42
+```con reject name=else-falls-through code=new stage=check pair=destructure-all pending=R-0499 now=fail:doesn't_match_function_result_type now-interp=accept:42
 fn main() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     let Option::Some { value } = o else {
