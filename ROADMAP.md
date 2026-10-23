@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 10** (1 silent, 3 loud, 6 filed before the discovery record) of 188 bug records.
+**Open bugs: 10** (1 silent, 3 loud, 6 filed before the discovery record) of 189 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -123,7 +123,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 | spec: language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews) | 2026-10-23 | 29 programs | 4 | 4 | 0 | found bugs |
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
-| fuzz: fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus hand probes after R-0492 steps 1-3 | 2026-10-23 | 13 programs | 5 | 2 | 3 | found bugs |
+| fuzz: fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus hand probes after R-0492 steps 1-3 | 2026-10-23 | 13 programs | 6 | 3 | 3 | found bugs |
 
 Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 13 counting batches recorded. 35 attribution-only batches (reviews, follow-ons, CI, controls, development) found 47 further bugs.
 
