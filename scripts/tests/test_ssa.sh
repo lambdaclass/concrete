@@ -58,6 +58,11 @@ for spec in "$RESDIR"/test_*.spec; do
     fi
     (
         out="$OUTDIR/$spec_id"
+        # Private scratch directory per program (bug 191): a program that touches the filesystem
+        # builds its paths from CONCRETE_TEST_TMPDIR, never a fixed /tmp name another user or run
+        # owns. The timeout re-run below reuses the same directory.
+        export CONCRETE_TEST_TMPDIR="$out.scratch"
+        mkdir -p "$CONCRETE_TEST_TMPDIR"
         if ! $COMPILER "$file" -o "$out" > /dev/null 2>&1; then
             msg=$($COMPILER "$file" -o "$out" 2>&1 | head -1)
             echo "FAIL $name: $msg"
@@ -118,7 +123,7 @@ for f in "$RESDIR"/*.out; do
     set -- $result; tname=$2; tspec="$RESDIR/$3.spec"
     expected_rc_raw=$(sed -n '2p' "$tspec"); expected=$(tail -n +3 "$tspec")
     out="$OUTDIR/$3"
-    actual=$(perl -e 'alarm 30; exec @ARGV' "$out" 2>&1) && actual_rc=0 || actual_rc=$?
+    actual=$(CONCRETE_TEST_TMPDIR="$out.scratch" perl -e 'alarm 30; exec @ARGV' "$out" 2>&1) && actual_rc=0 || actual_rc=$?
     pass=0
     if [ "$actual_rc" = "142" ]; then
         echo "INCOMPLETE $tname: timed out twice (5 s in parallel, 30 s alone)" > "$f"; continue

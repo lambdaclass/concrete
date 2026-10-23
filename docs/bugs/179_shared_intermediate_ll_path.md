@@ -86,8 +86,9 @@ The location of an intermediate artifact was derived from a shared input (the so
 machine-wide clock) instead of being private to the compile that owns it. The driver treated a
 compile as the only process touching the source's directory. Nothing named which compile owns
 the `.ll`, so a compile could remove a file another compile was reading. No other recorded bug
-has this cause; it is the first entry of class 16 in
-[STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md).
+had this cause when it was filed; it is the first entry of class 16 in
+[STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md). Bug 191 (test scratch files at fixed `/tmp`
+names) later joined the class.
 
 ## Structural owner
 

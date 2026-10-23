@@ -346,6 +346,13 @@ BOUNDED_PARENT="$SUITE_TMPDIR"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 JOBDIR="$TMPDIR/jobs"
 mkdir -p "$JOBDIR"
+# TEST SCRATCH IS PRIVATE TO THE RUN (bug 191). A program that touches the filesystem builds its
+# paths from CONCRETE_TEST_TMPDIR, never a fixed /tmp name: a fixed name is owned by whichever user
+# ran first on a shared host (fopen then fails for everyone else) and is shared by concurrent runs.
+# This default covers every program the suite runs; run_ok / run_ok_O2 workers narrow it to a
+# directory per job, so the same program run twice in one pass cannot collide either.
+export CONCRETE_TEST_TMPDIR="$SUITE_TMPDIR/scratch"
+mkdir -p "$CONCRETE_TEST_TMPDIR"
 
 # --- Compiler output cache ---
 # Avoids recompiling the same file with the same flags.
@@ -680,6 +687,9 @@ run_ok_worker() {
     local name
     name=$(path_key "${file%.con}")
     local out="$TMPDIR/$name"
+    # Per-job scratch directory (bug 191); see CONCRETE_TEST_TMPDIR above.
+    local -x CONCRETE_TEST_TMPDIR="$out.scratch"
+    mkdir -p "$CONCRETE_TEST_TMPDIR"
 
     # MAIN_EXIT_MODEL stage 2.1: a numeric expectation in 0-255 is compared as
     # the PROCESS EXIT CODE (compiled without the legacy echo knob; stdout must
@@ -795,6 +805,9 @@ run_ok_O2_worker() {
     name=$(path_key "${file%.con}")
     local llpath="$TMPDIR/${name}.ll"
     local out="$TMPDIR/${name}_O2"
+    # Per-job scratch directory (bug 191); see CONCRETE_TEST_TMPDIR above.
+    local -x CONCRETE_TEST_TMPDIR="$out.scratch"
+    mkdir -p "$CONCRETE_TEST_TMPDIR"
 
     local rc_mode=0
     case "$expected" in
@@ -1287,6 +1300,38 @@ run_ok "$TESTDIR/option_mixed_payloads.con" 44
 # Phase 11: File I/O builtins
 run_ok "$TESTDIR/file_write_read.con" 5
 run_ok "$TESTDIR/file_read_basic.con" 12
+# Bug 191 (FIXED): test programs and std tests wrote fixed /tmp paths; on a shared host the first
+# user to run the suite owned them, fopen returned NULL for everyone else and file_write_read
+# segfaulted (rc 139). Scratch now comes from CONCRETE_TEST_TMPDIR, set by the runner. An
+# environment error is an exit code, never a crash: unset -> 100, a directory that does not exist
+# (the open for writing fails) -> 101.
+r191_bin="$TMPDIR/r191_fwr"
+if $COMPILER "$TESTDIR/file_write_read.con" -o "$r191_bin" >/dev/null 2>&1; then
+    r191_unset=0; env -u CONCRETE_TEST_TMPDIR "$r191_bin" >/dev/null 2>&1 || r191_unset=$?
+    r191_absent=0; CONCRETE_TEST_TMPDIR="$TMPDIR/r191_absent" "$r191_bin" >/dev/null 2>&1 || r191_absent=$?
+    if [ "$r191_unset" = "100" ] && [ "$r191_absent" = "101" ]; then
+        echo "  ok  regress_191 file_write_read: unset scratch -> 100, missing directory -> 101 (no crash)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  regress_191 file_write_read: unset gave $r191_unset (want 100), missing directory gave $r191_absent (want 101)"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "FAIL  regress_191: file_write_read.con did not compile"
+    FAIL=$((FAIL + 1))
+fi
+# The runner provides the directory: with the caller's variable set to a sentinel, the test binary
+# must see a different, writable directory (regress_191_test_scratch: 1 unset, 2 inherited the
+# sentinel, 3 not writable). Before the fix it inherited the sentinel.
+r191_out=$(CONCRETE_TEST_TMPDIR=/nonexistent/r191_sentinel $COMPILER "$TESTDIR/regress_191_test_scratch.con" --test 2>&1) \
+    && r191_rc=0 || r191_rc=$?
+if [ "$r191_rc" = "0" ] && grep -q "^PASS: .*test_runner_scratch" <<<"$r191_out"; then
+    echo "  ok  regress_191_test_scratch: --test overrides the caller's CONCRETE_TEST_TMPDIR with a writable private directory"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_191_test_scratch --test with the caller's CONCRETE_TEST_TMPDIR at a sentinel: rc $r191_rc $(awk 'NR<=3' <<<"$r191_out" | tr '\n' ' ')"
+    FAIL=$((FAIL + 1))
+fi
 
 # Phase 10: Monomorphized trait dispatch
 run_ok "$TESTDIR/trait_dispatch_basic.con" 30
