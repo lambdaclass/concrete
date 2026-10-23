@@ -1431,7 +1431,7 @@ private partial def monoTypesInProgram (modules : List CModule)
 -- Entry point
 -- ============================================================
 
--- spec: PASS-1 (docs/spec/pipeline.md; this declaration enforces the rule)
+-- spec: PASS-1, spec: TYPE-2 (docs/spec/pipeline.md, docs/spec/types.md; specialization resolves every trait-bound call statically)
 def monoProgram (modules : List CModule)
     -- Run on the function-specialized program BEFORE type specialization
     -- renames generic instances: a type argument the instance's fields do not

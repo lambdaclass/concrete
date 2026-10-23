@@ -151,7 +151,7 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "n
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \
   && control "N1d: Uses names a missing definition" S1 "Uses names 'REF-D9'" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's.rstrip("\n").removesuffix(F)' \
+fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's[:s.rindex("\n" + F + "\n")] + "\n" + s[s.rindex("\n" + F + "\n") + 5:]' \
   && control "N1e: an example fence that is never closed" S1 "is never closed" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", F + "con pseudocode\nfn f() {}\n" + F + "\n<!-- CONFORMANCE", 1) if "<!-- CONFORMANCE" in s else s.replace("**Conformance fixtures.**", F + "con pseudocode\nfn f() {}\n" + F + "\n\n**Conformance fixtures.**", 1)' \
   && control "N1f: a pseudocode block inside an entry" S1 "inside entry" -- lint "${SP[@]}"
@@ -187,8 +187,8 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\n
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
   && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
-fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0217\t[^\t\n]*", "E0217\trule", s, flags=re.M)' \
-  && control "N6b: a rule-class code that no entry names" S6 "E0217: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0220\t[^\t\n]*", "E0220\trule", s, flags=re.M)' \
+  && control "N6b: a rule-class code that no entry names" S6 "E0220: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 
 # S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"

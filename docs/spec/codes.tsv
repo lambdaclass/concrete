@@ -14,26 +14,26 @@ E0108	unmigrated:modules	unknown type
 E0109	unmigrated:modules	Self outside impl block
 E0110	unmigrated:modules	unknown module
 E0111	unmigrated:modules	symbol not public in module
-E0200	unmigrated:ownership	Self outside impl block
-E0201	unmigrated:ownership	undeclared variable
-E0202	unmigrated:ownership	assignment to undeclared variable
+E0200	unmigrated:modules	Self outside impl block
+E0201	unmigrated:modules	undeclared variable
+E0202	unmigrated:modules	assignment to undeclared variable
 E0203	rule	variable frozen by borrow
 E0204	rule	cannot move linear variable: borrowed
-E0205	unmigrated:ownership	linear variable used after move
-E0206	unmigrated:ownership	variable reserved or borrowed by a pending defer
-E0207	unmigrated:ownership	cannot consume linear variable in loop
-E0208	unmigrated:ownership	linear variable never consumed
-E0209	unmigrated:ownership	match arms disagree on consumption
-E0210	unmigrated:ownership	break skips unconsumed linear variable
-E0211	unmigrated:ownership	continue skips unconsumed linear variable
-E0212	unmigrated:ownership	linear consumed in one branch not other
-E0213	unmigrated:ownership	linear consumed in then-branch (no else)
+E0205	rule	linear variable used after move
+E0206	rule	variable reserved or borrowed by a pending defer
+E0207	rule	cannot consume linear variable in loop
+E0208	rule	linear variable never consumed
+E0209	rule	match arms disagree on consumption
+E0210	rule	break skips unconsumed linear variable
+E0211	rule	continue skips unconsumed linear variable
+E0212	rule	linear consumed in one branch not other
+E0213	rule	linear consumed in then-branch (no else)
 E0214	rule	borrow ref shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
 E0215	rule	borrow region shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
-E0216	unmigrated:ownership	unknown loop label
-E0217	unmigrated:ownership	assignment to immutable variable
-E0218	unmigrated:ownership	assignment to frozen variable
-E0219	unmigrated:ownership	reassignment of linear variable
+E0216	unmigrated:statements	unknown loop label
+E0217	rule	assignment to immutable variable
+E0218	rule	assignment to frozen variable
+E0219	rule	reassignment of linear variable
 E0220	unmigrated:types	type mismatch
 E0221	unmigrated:types	dereference of non-reference type
 E0222	unmigrated:types	while break/else type mismatch
@@ -44,20 +44,20 @@ E0226	unmigrated:types	break value type mismatch
 E0227	unmigrated:arithmetic	integer literal out of range
 E0228	unmigrated:types	binary operand type mismatch
 E0229	unmigrated:types	comparison not defined on this type (integers, floats, bool, char; raw pointers in Unsafe code; bugs 134/140)
-E0230	unmigrated:ownership	cannot borrow: already moved
+E0230	rule	cannot borrow: already moved
 E0231	rule	cannot borrow: already mutably borrowed
 E0232	rule	cannot mutably borrow: already borrowed
-E0233	unmigrated:ownership	cannot mutably borrow immutable variable
+E0233	rule	cannot mutably borrow immutable variable
 E0234	rule	reference escapes borrow block
-E0235	unmigrated:ownership	cannot mutably borrow: already immutably borrowed
+E0235	rule	cannot mutably borrow: already immutably borrowed
 E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
 E0237	unmigrated:references	mutable borrow (explicit or `&mut self` receiver) through a shared reference
 E0238	rule	place or reference source that does not normalize to a traceable place
 E0240	unmigrated:trusted	missing capability
 E0241	unmigrated:trusted	trait bound not satisfied
 E0242	unmigrated:trusted	cannot infer capability variable
-E0243	unmigrated:ownership	proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)
-E0244	unmigrated:ownership	right operand of && or || moves a value it may never run to move (bug 148)
+E0243	rule	proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)
+E0244	rule	right operand of && or || moves a value it may never run to move (bug 148)
 E0250	unmigrated:types	unknown struct type
 E0251	unmigrated:types	struct has no field
 E0252	unmigrated:types	missing field in literal
@@ -87,23 +87,23 @@ E0275	retired	former ? operator required Result type
 E0276	retired	former ? operator required Ok/Err variants
 E0277	retired	former ? operator required an Ok value field
 E0278	unmigrated:statements	return/break/continue inside a call argument, literal element or operator operand (bug 142)
-E0279	unmigrated:statements	deferred call argument is not a local, a borrow of a local, or a constant (bug 143)
+E0279	rule	deferred call argument is not a local, a borrow of a local, or a constant (bug 143)
 E0280	unmigrated:statements	break outside loop
 E0281	unmigrated:statements	continue outside loop
-E0282	unmigrated:statements	defer body must be a function call
+E0282	rule	defer body must be a function call
 E0283	unmigrated:statements	reserved identifier
 E0284	unmigrated:modules	unknown module
 E0285	unmigrated:modules	symbol not public in module
-E0286	unmigrated:ownership	fallible result discarded (must use)
-E0287	unmigrated:ownership	non-Copy value discarded without consumption
-E0288	unmigrated:ownership	wildcard would discard a non-Copy value
-E0289	unmigrated:ownership	let _ removed (wildcard is not a discard)
-E0290	unmigrated:ownership	non-Copy sub-place read by value (would duplicate)
-E0291	unmigrated:ownership	non-Copy overwrite would leak the old value
+E0286	rule	fallible result discarded (must use)
+E0287	rule	non-Copy value discarded without consumption
+E0288	rule	wildcard would discard a non-Copy value
+E0289	rule	let _ removed (wildcard is not a discard)
+E0290	rule	non-Copy sub-place read by value (would duplicate)
+E0291	rule	non-Copy overwrite would leak the old value
 E0292	rule	shadowing a still-live non-Copy binding
 E0293	rule	overlapping borrows of one place in a single call
-E0294	unmigrated:ownership	pure value computed then discarded (dead computation)
-E0295	unmigrated:ownership	discard() of a non-Copy value (use destroy or consume it)
+E0294	rule	pure value computed then discarded (dead computation)
+E0295	rule	discard() of a non-Copy value (use destroy or consume it)
 E0296	unmigrated:types	newtype constructed outside its defining module (construction rights, 0b)
 E0297	unmigrated:types	struct literal touches a field private to its defining module (0b)
 E0298	unmigrated:types	read/write of a struct field private to its defining module (0b)
@@ -166,8 +166,8 @@ E0553	unmigrated:arithmetic	cannot cast between types
 E0554	unmigrated:types	dereference of non-reference type
 E0555	unmigrated:types	assign through a target that is not `&mut T` or `*mut T`
 E0560	unmigrated:types	return type mismatch
-E0570	unmigrated:ownership	Copy/Destroy conflict
-E0571	unmigrated:ownership	Copy struct has non-Copy field
+E0570	rule	Copy/Destroy conflict
+E0571	rule	Copy struct has non-Copy field
 E0572	unmigrated:ffi	repr(C) struct has generics
 E0573	unmigrated:ffi	repr(C) field not FFI-safe
 E0574	unmigrated:ffi	extern fn parameter not FFI-safe
@@ -180,7 +180,7 @@ E0580	unmigrated:traits	unknown trait
 E0581	unmigrated:traits	missing trait method
 E0582	unmigrated:traits	trait method return type mismatch
 E0583	unmigrated:traits	recursive type has infinite size
-E0584	unmigrated:ownership	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)
+E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)
 E0585	unmigrated:ffi	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
 E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
 E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method

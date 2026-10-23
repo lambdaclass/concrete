@@ -165,7 +165,6 @@ bash scripts/tests/check_phase3_obligation_core.sh	797
 bash scripts/tests/check_phase6_redteam.sh	2
 bash scripts/tests/check_phase6c_observability.sh	296
 bash scripts/tests/check_phase6d_surface_simplification.sh	9
-bash scripts/tests/check_pipeline_contracts.sh	0
 bash scripts/tests/check_pipeline_refactor_contract.sh	3
 bash scripts/tests/check_pipeline_telemetry.sh	1
 bash scripts/tests/check_policy.sh	82

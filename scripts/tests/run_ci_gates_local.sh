@@ -194,7 +194,10 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   were already counted in train 2's 264); lang-tightening-doc +0 (its G17 fixtures run inside
 #   run_tests.sh; rule_impact.sh is a tool, not a CI step); spec-single-source +1 (check_spec.sh).
 #   266 + 1 + 0 + 0 + 0 + 0 + 0 + 1 = 268.
-EXPECTED_GATE_COMMANDS=268
+# 268 -> 267: check_pipeline_contracts.sh retired (wip/spec-single-source, after train 4's merge); its six
+#   boundary fixtures are reject and accept examples of docs/spec/pipeline.md (PASS-5 .. PASS-10), run by
+#   check_spec.sh with the same leak check.
+EXPECTED_GATE_COMMANDS=267
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

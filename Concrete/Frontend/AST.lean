@@ -83,6 +83,7 @@ def CapSet.expandAliases (aliases : List (String × List String)) : CapSet → C
   | .var n => .var n
   | .union a b => .union (a.expandAliases aliases) (b.expandAliases aliases)
 
+-- spec: TYPE-1, spec: TYPE-2 (docs/spec/types.md; the type grammar has function-pointer types and no closure or trait-object type)
 inductive Ty where
   | int          -- Int or i64
   | uint         -- Uint or u64

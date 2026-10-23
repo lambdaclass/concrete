@@ -610,6 +610,7 @@ private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) 
 private def verifyModule (m : SModule) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   m.functions.foldl (fun acc f => acc ++ verifyFn f fnSigs) []
 
+-- spec: PASS-9 (docs/spec/pipeline.md; this stage boundary)
 def ssaVerifyProgram (modules : List SModule) : Except Diagnostics Unit :=
   -- First signature of a name wins, as the old list `find?` did.
   let fnSigs : Std.HashMap String (List Ty × Ty) := (buildFnSigs modules).foldl

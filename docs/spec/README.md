@@ -48,8 +48,15 @@ areas exist (§8).
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | stub: PAT-1, the renamed pattern binder that SCOPE-1 depends on (it was gap G4) |
-| `ffi.md` | `FFI-` | stub: FFI-1, foreign function values |
-| `pipeline.md` | `PASS-` | stub: PASS-1 and PASS-2, the preservation statements for generic substitution and binder modes |
+| `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
+| `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
+| `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
+| `types.md` | `TYPE-` | stub: TYPE-1 to TYPE-3 (callable values, no dynamic dispatch, owned `Text`) |
+| `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
+| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
+| `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
+| `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
+| `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -122,7 +129,9 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      examples, and the pending ones are tracked) or `pending <tracking>` (decided, not
      implemented). A tracking ID is a roadmap item (`R-0496`) or a bug (`bug-181`).
    - `Enforced by:` the Lean declarations of today's compiler that implement the entry, as
-     fully qualified names. It is required unless the status is `pending`. A definition names
+     fully qualified names, or, for a library contract, a std declaration written
+     `std/src/<file>.con#<Name>` (whose `//` comment block carries the `spec:` comment). It is
+     required unless the status is `pending`. A definition names
      the Lean predicate it denotes, such as `Concrete.tyContainsRef`.
    - `Semantics:` the declarations in Core's semantics or checker judgments that define the
      entry, or `none` while they do not exist. This is the normative link (see "Authority"
@@ -168,6 +177,8 @@ attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the
           | "now=" OUTCOME               required if and only if pending
           | "now-interp=" OUTCOME        optional, only when pending
           | "interp-exempt=" NAME        accept only; a reason slug, such as no-heap-in-interp
+          | "project=" NAME              compile as a package of that name against this checkout's std
+                                          (`concrete build`, CONCRETE_STD pinned); needs interp-exempt
 OUTCOME  := "accept:" N | "reject:" CODE ":" STAGE | "fail:" TEXT   (TEXT: no spaces; `_` reads as a space)
 ```
 
@@ -185,7 +196,12 @@ example states, never only with the other legs.
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
   every exemption.
 - **reject**: the first error reported by the native compile, and the first error reported
-  by `--interp`, are each `error[<stage>]: (<code>)`. The code must be one of the entry's
+  by `--interp`, are each `error[<stage>]: (<code>)`, and no lower layer leaked (`llvm-as`,
+  the system linker, a panic). In a preservation entry (a stage boundary), the code may belong
+  to another chapter's rule, so it need not be among the entry's `Codes` and no rule tag is
+  required, and `code=none` is allowed for a `link` diagnostic that has no code yet.
+  `interp-exempt=` on a reject example drops the interpreter leg, for a stage the interpreter
+  does not have. The code must be one of the entry's
   `Codes`, the stage one of that code's stages, and the diagnostic must carry
   `rule: <ID>@<version>` for this entry.
 - **pending**: the entry is decided and not implemented. The example is still run, and
@@ -218,7 +234,7 @@ and it is counted in SKIPPED.
 | S2 registry | `ids.tsv` has one row per allocated key: an entry version (`REF-3@1`) or an example (`REF-3/stored-field`). Columns: `key`, `state` (`live`, `pending`, `superseded` or `retired:<reason>`) and, for an entry version, the SHA-256 of its normalized sentence (`-` for an example). The `live` and `pending` rows equal what the chapters contain, state for state. A sentence whose hash differs from its version's row needs a new version row. |
 | S3 history | Against a base revision: no `ids.tsv` row is removed, a hash never changes, and a row's state changes only along `pending → live`, `live → superseded` (only when a newer version of the same entry exists) and `pending` or `live → retired:<reason>`. A `superseded` or `retired` row is final, so an ID is never reused. `codes.tsv` gains no `unmigrated` row. When a definition gains a version, every entry that uses it gains one in the same change. The base is `$SPEC_BASE`, or else the merge base with `origin/main`, or `HEAD~1` when that merge base is `HEAD`. |
 | S4 examples | Every example behaves as §2.2 says, on both consumers. |
-| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. |
+| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. One exception: a library contract whose `Enforced by:` names only std declarations may be covered by a native project example, since the interpreter runs single files; the check names every entry covered this way. |
 | S6 codes | Every code in `--report diagnostic-codes` has exactly one row in `codes.tsv`. The class is `rule` (named by an entry), `unmigrated:<chapter>`, `internal` (a compiler invariant failure, such as `ssa-verify` or `lower`), `tooling` (proof, policy and evidence tooling, not language) or `retired`. Class `rule` holds exactly for the codes some entry names. For each code, the ledger's `rules` field equals the set of `<ID>@<version>` of the entries that name it. The spec owns that mapping, and the compiler's copy is checked against it. |
 | S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |
@@ -314,8 +330,8 @@ them.
 |---|---|
 | `check_rules_2i.sh` and `tests/rules/exit_2i.tsv` | The manifest is generated (§5), and the gate's code-to-rule table comes from the spec. |
 | `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean` and `CoreCheck.lean` has a ledger row. It does not see codes built elsewhere. S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. Widening the first gate's scan to every emitter is tracked separately. |
-| `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | They own the boundary contracts between stages. Spec examples use the same pass-tag vocabulary and pin the first responsible stage the same way. |
-| `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | These hold per-constructor value-flow coverage. They migrate into `ownership.md` as that chapter's constructor table, and the coverage check becomes part of `check_spec.sh` (§8, step 1). |
+| `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | Migrated (step 0): the boundary contracts are `pipeline.md`'s PASS-5 to PASS-11, their fixtures are its examples, the leak check is part of S4, and the gate is retired. PIPELINE_CONTRACTS.md is the design record. |
+| `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | Migrated (step 1): the per-constructor tables are OWN-15 in `ownership.md`. `check_value_flow_spec.sh` stays the owner of constructor coverage and now reads `ownership.md`; it is a fast source gate, so it stays out of `check_spec.sh`, which needs a compiler. VALUE_FLOW_SPEC.md is the design record. |
 | `check_constructor_coverage.sh` | It checks that every compiler walker handles every constructor. That is a fact about the compiler, not the language, so it stays separate. |
 | `check_doc_snippets.sh` (13r: `con`, `con reject:E…`, `con pseudocode`) | It owns snippets in other documents, at the bar of `--emit-core`. Spec examples are stricter: they run, compare both consumers and pin the stage. `docs/spec/` is outside its glob. |
 | `check_docs_drift.sh` | It runs S11 (§6). |
@@ -332,12 +348,12 @@ Every area of the language has a planned chapter. A migration step does the foll
 
 Each step lands with the gate green. The steps run in this order:
 
-0. **pipeline.md** (`PASS-`, grown from the stub): the boundary contracts of
+0. **pipeline.md** (`PASS-`, migrated 2026-10-23): the boundary contracts of
    PIPELINE_CONTRACTS.md, one preservation entry per stage (Elab, Mono, CoreCheck, Lower, SSA),
    each with its relation and its evidence (D12: every pass states what it preserves). Generic
    substitution and binder modes are first (PASS-1 and PASS-2, in the pilot). `check_pipeline_contracts.sh`'s fixtures become the
    entries' reject examples, and PIPELINE_CONTRACTS.md becomes their design record.
-1. **ownership.md** (`OWN-`): linearity, consumption, Copy and Destroy, discards, defer.
+1. **ownership.md** (`OWN-`, migrated 2026-10-23): linearity, consumption, Copy and Destroy, discards, defer.
    It replaces the normative parts of OWNERSHIP_MODEL, VALUE_FLOW_SPEC (the constructor table
    and its gate), LANGUAGE_INVARIANTS §2, IGNORED_RESULT and DEFER. The decided defer and
    exit-order rules (TIGHTENING_DECISIONS §4.5) enter as pending.
@@ -355,6 +371,9 @@ Each step lands with the gate green. The steps run in this order:
    control, evaluation order, `main` and the exit status. It replaces
    STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL, EXECUTION_MODEL and the language half of
    MAIN_EXIT_MODEL. T-ORDER enters as pending.
+5a. **memory.md** (`MEM-`, grown from the stub): allocations, `Heap<T>`, what safe code may
+   observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
+   MEMORY_SEMANTICS.
 6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,

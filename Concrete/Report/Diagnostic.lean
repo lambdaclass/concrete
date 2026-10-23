@@ -228,7 +228,45 @@ def ruleSpecRef (rule : String) : String :=
     | "PAT" => "patterns"
     | "FFI" => "ffi"
     | "PASS" => "pipeline"
+    | "OWN" => "ownership"
+    | "TYPE" => "types"
+    | "MEM" => "memory"
+    | "TRUST" => "trusted"
+    | "STMT" => "statements"
+    | "ARITH" => "arithmetic"
+    | "CON" => "contracts"
     | _ => "README"
   s!"docs/spec/{chapter}.md#{id}"
+
+/-- The versioned rule a diagnostic code enforces, for the codes whose rule is a whole-code
+    property (one rule per code). The language specification owns this mapping: every entry's
+    `Codes:` field in docs/spec, checked equal to this table and to the `--report
+    diagnostic-codes` ledger by `scripts/tests/check_spec.sh` (S6). A code that several rules
+    share (E0236, E0238, E0239) is tagged at its sites instead (`CheckError.rule`). -/
+def codeRuleTag : String → Option String
+  -- docs/spec/ownership.md
+  | "E0205" | "E0230" => some "OWN-1@1"
+  | "E0208" | "E0210" | "E0211" => some "OWN-2@1"
+  | "E0209" | "E0212" | "E0213" => some "OWN-3@1"
+  | "E0207" => some "OWN-4@1"
+  | "E0287" | "E0288" | "E0289" | "E0295" => some "OWN-5@1"
+  | "E0286" => some "OWN-6@1"
+  | "E0294" => some "OWN-7@1"
+  | "E0290" => some "OWN-8@1"
+  | "E0219" | "E0291" => some "OWN-9@1"
+  | "E0217" | "E0233" => some "OWN-10@1"
+  | "E0243" | "E0244" => some "OWN-11@1"
+  | "E0206" | "E0279" | "E0282" => some "OWN-12@1"
+  | "E0570" | "E0584" => some "OWN-13@1"
+  | "E0571" => some "OWN-14@1"
+  -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
+  | "E0218" | "E0235" => some "REF-8@1"
+  | _ => none
+
+/-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/
+def codeRuleEvidence (code : String) : List (String × String) :=
+  match codeRuleTag code with
+  | some r => [("rule", r), ("spec", ruleSpecRef r)]
+  | none => []
 
 end Concrete

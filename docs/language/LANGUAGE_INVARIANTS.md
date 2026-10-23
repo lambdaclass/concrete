@@ -14,6 +14,9 @@ separate judgments.
 
 ## 2. True Linear Types
 
+The normative statement of this section is [docs/spec/ownership.md](../spec/ownership.md)
+(OWN-D1 to OWN-15); the text below is kept as a summary.
+
 Every linear value must be consumed exactly once. Not zero (leak = compile error). Not twice (double-use = compile error). Forgetting a resource is rejected.
 
 ### What counts as consuming a value

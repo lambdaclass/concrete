@@ -22,7 +22,7 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
-STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check"}
+STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation"}
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
@@ -72,8 +72,8 @@ class Example:
             if k in self.attrs:
                 self.errors.append(f"repeated attribute '{k}'")
             self.attrs[k] = v
-        allowed = {"name", "pending", "now", "now-interp"} | (
-            {"exit", "interp-exempt"} if self.verdict == "accept" else {"code", "stage", "pair"})
+        allowed = {"name", "pending", "now", "now-interp", "project", "interp-exempt"} | (
+            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
         for k in self.attrs:
             if k not in allowed:
                 self.errors.append(f"unknown attribute '{k}' for {self.verdict}")
@@ -88,8 +88,9 @@ class Example:
         if "stage" in self.attrs and self.attrs["stage"] not in STAGES:
             self.errors.append(f"unknown stage '{self.attrs['stage']}'")
         c = self.attrs.get("code")
-        if c is not None and not (re.fullmatch(r"E[0-9]{4}", c) or (c == "new" and "pending" in self.attrs)):
-            self.errors.append(f"code '{c}' is not E<4 digits> (or `new` on a pending example)")
+        if c is not None and not (re.fullmatch(r"E[0-9]{4}", c) or (c == "new" and "pending" in self.attrs)
+                                  or (c == "none" and self.attrs.get("stage") == "link")):
+            self.errors.append(f"code '{c}' is not E<4 digits> (or `new` on a pending example, or `none` at stage link)")
         if ("pending" in self.attrs) != ("now" in self.attrs):
             self.errors.append("`now=` is required exactly when `pending=` is present")
         if "now-interp" in self.attrs and "pending" not in self.attrs:
@@ -97,6 +98,10 @@ class Example:
         for k in ("now", "now-interp"):
             if k in self.attrs and parse_outcome(self.attrs[k]) is None:
                 self.errors.append(f"malformed outcome {k}={self.attrs[k]}")
+        if "project" in self.attrs and not re.fullmatch(r"[a-z][a-z0-9_]*", self.attrs["project"]):
+            self.errors.append(f"project '{self.attrs['project']}' is not a package name [a-z][a-z0-9_]*")
+        if "project" in self.attrs and self.verdict == "accept" and "interp-exempt" not in self.attrs:
+            self.errors.append("a project example needs interp-exempt= (the interpreter runs single files)")
         if "pending" in self.attrs and not TRACK_RE.match(self.attrs["pending"]):
             self.errors.append(f"pending '{self.attrs['pending']}' is not R-NNNN or bug-NNN")
 
@@ -367,7 +372,7 @@ def check_format(spec, root):
             names.add(x.name)
             if st == "enforced" and x.pending:
                 fail("S1", f"{x.key}: a pending example under an enforced rule (Status must be partial)"); s1 += 1
-            if x.verdict == "reject" and x.attrs.get("code") not in ("new", None):
+            if x.verdict == "reject" and x.attrs.get("code") not in ("new", "none", None) and e.kind != "preservation":
                 stg = dict((c, s) for c, s in codes if c)
                 if x.attrs["code"] not in stg:
                     fail("S1", f"{x.key}: code {x.attrs['code']} is not in the rule's Codes"); s1 += 1
@@ -391,7 +396,7 @@ def check_format(spec, root):
         ok(f"S1 format: {len(spec.entries)} entries, {sum(len(e.examples) for e in spec.entries)} examples in {len(spec.text)} chapters")
 
 def check_coverage(spec):
-    bad = 0
+    bad, native_only = 0, []
     for e in spec.entries:
         st, _ = e.status()
         acc = {x.name: x for x in e.examples if x.verdict == "accept"}
@@ -401,6 +406,9 @@ def check_coverage(spec):
                 fail("S5", f"{e.id}: an enforced refusal needs a non-pending reject example"); bad += 1
             if st == "pending" and not rej:
                 fail("S5", f"{e.id}: a pending refusal needs a reject example"); bad += 1
+        if rej and e.kind not in ("refusal", "preservation"):
+            fail("S5", f"{e.id}: a {e.kind} has no reject examples (only refusals and stage boundaries do)"); bad += 1
+        if True:
             for x in rej:
                 p = acc.get(x.attrs.get("pair", ""))
                 if p is None:
@@ -408,10 +416,15 @@ def check_coverage(spec):
                 elif not x.pending and p.pending:
                     fail("S5", f"{x.key}: its pair {p.key} is pending"); bad += 1
         if e.kind in ("guarantee", "preservation") and st != "pending":
-            if not any(not x.pending and "interp-exempt" not in x.attrs for x in acc.values()):
+            std_only = bool(e.names("Enforced by")) and all(is_std_site(n) for n in e.names("Enforced by"))
+            both = any(not x.pending and "interp-exempt" not in x.attrs for x in acc.values())
+            lib = std_only and any(not x.pending and "project" in x.attrs for x in acc.values())
+            if lib and not both: native_only.append(e.id)
+            if not (both or lib):
                 fail("S5", f"{e.id}: a guarantee needs a non-pending accept example run on both consumers"); bad += 1
     if bad == 0:
-        ok("S5 coverage: every refusal has reject examples paired with accepted rewrites; every guarantee runs on both consumers")
+        ok("S5 coverage: every refusal has reject examples paired with accepted rewrites; every guarantee runs on both consumers"
+           + (f", except std library contracts covered natively by a project example ({', '.join(native_only)})" if native_only else ""))
 
 def check_tracking(spec, root):
     bad, seen = 0, set()
@@ -554,7 +567,9 @@ def check_history(spec, base, old_ids_path, old_codes_path, old_spec_dir):
 # ---------------------------------------------------------------------------------------------
 # S4 examples
 # ---------------------------------------------------------------------------------------------
-ERR_RE = re.compile(r"error\[([a-z-]+)\]: \((E[0-9]{4})\)")
+ERR_RE = re.compile(r"error\[([a-z-]+)\]: (?:\((E[0-9]{4})\))?")
+# a diagnostic must come from a compiler stage; any of these means a lower layer leaked (PIPELINE_CONTRACTS)
+LEAK_RE = re.compile(r"llvm-as|LLVM IR validation|Undefined symbols|^ld:|clang: error|llc:|PANIC|panic|Segmentation", re.M)
 
 def first_error(out):
     lines = out.split("\n")
@@ -566,22 +581,31 @@ def first_error(out):
                 if ERR_RE.search(l2) or l2.startswith("error"): break
                 t = re.match(r"^\s+rule: (\S+)$", l2)
                 if t: tag = t.group(1); break
-            return ("reject", m.group(2), m.group(1), tag)
+            return ("reject", m.group(2) or "none", m.group(1), tag)
     return None
 
-def run(cmd, timeout=120, cwd=None):
+def run(cmd, timeout=120, cwd=None, env=None):
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, cwd=cwd)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, cwd=cwd, env=env)
         return r.returncode, r.stdout + r.stderr, r.stdout
     except subprocess.TimeoutExpired:
         return None, "timeout", ""
 
-def outcome_native(cc, src, workdir):
+def outcome_native(cc, src, workdir, project=None):
     binp = src[:-4] + ".bin"
-    rc, out, _ = run([cc, src, "-o", binp])
+    if project:
+        d = src[:-4] + ".proj"
+        os.makedirs(os.path.join(d, "src"), exist_ok=True)
+        open(os.path.join(d, "Concrete.toml"), "w").write(f'[package]\nname = "{project}"\nversion = "0.1.0"\n')
+        os.replace(src, os.path.join(d, "src", "main.con"))
+        rc, out, _ = run([cc, "build", "-o", binp], cwd=d, env=dict(os.environ, CONCRETE_STD=os.path.join(ROOT, "std")))
+    else:
+        rc, out, _ = run([cc, src, "-o", binp])
     if rc is None or rc < 0:
         return ("fail", f"compiler {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0:
+        if LEAK_RE.search(out):
+            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0))
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
     if rc is None:
@@ -594,6 +618,8 @@ def outcome_interp(cc, src):
     rc, out, stdout = run([cc, src, "--interp"])
     if rc is None or rc < 0:
         return ("fail", f"interpreter {'timeout' if rc is None else 'signal ' + str(-rc)}")
+    if rc != 0 and LEAK_RE.search(out):
+        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0))
     if rc == 0:
         last = [l for l in stdout.split("\n") if l.strip()]
         v = last[-1].strip() if last else ""
@@ -614,6 +640,8 @@ def matches_target(x, o):
     if x.attrs["code"] == "new":
         now = parse_outcome(x.attrs["now"])
         return not (now[0] == "reject" and now[1] == o[1])
+    if e.kind == "preservation":   # a stage boundary: the code belongs to another chapter's rule
+        return o[1] == x.attrs["code"]
     return o[1] == x.attrs["code"] and o[3] == e.tag
 
 def matches_now(spec_o, o):
@@ -652,7 +680,7 @@ def run_examples(spec, cc, jobs, workdir, only=None):
         i, x = ix
         src = os.path.join(workdir, f"ex{i:04d}.con")
         open(src, "w").write(x.body)
-        nat = outcome_native(cc, src, workdir)
+        nat = outcome_native(cc, src, workdir, x.attrs.get("project"))
         itp = None if "interp-exempt" in x.attrs else outcome_interp(cc, src)
         return x, judge(x, nat, itp)
     counts = {"PASS": 0, "FAIL": 0, "PENDING": 0}
@@ -717,6 +745,25 @@ def check_codes(spec, ledger_path):
 
 # ---------------------------------------------------------------------------------------------
 # S7 sites
+STD_SITE_RE = re.compile(r"^(std/src/[a-z0-9_/]+\.con)#([A-Za-z_][A-Za-z0-9_]*)$")
+def is_std_site(n): return STD_SITE_RE.match(n) is not None
+
+def std_site_has_comment(name, rid):
+    """A std declaration `std/src/x.con#Name`: the file declares Name, and the `//` comment block
+    directly above that declaration contains `spec: <rid>`."""
+    m = STD_SITE_RE.match(name)
+    p = os.path.join(ROOT, m.group(1))
+    if not os.path.exists(p): return None
+    lines = open(p, encoding="utf-8").read().split("\n")
+    found = None
+    for i, ln in enumerate(lines):
+        if re.match(r"^\s*(pub\s+)?(trusted\s+)?(struct|enum|newtype|fn)\s+(Copy\s+)?" + re.escape(m.group(2)) + r"\b", ln):
+            found = False
+            k = i - 1
+            while k >= 0 and lines[k].strip().startswith("//"):
+                if re.search(r"spec: " + re.escape(rid) + r"\b", lines[k]): return True
+                k -= 1
+    return found
 # ---------------------------------------------------------------------------------------------
 DECL_RE = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|partial|noncomputable|unsafe|nonrec)\s+)*"
                      r"(def|theorem|lemma|abbrev|inductive|structure|instance|opaque|axiom)\s+([^\s(:\[{]+)")
@@ -724,7 +771,10 @@ DECL_RE = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|partial|nonco
 def lean_decls(src_dir):
     """last-name -> [(file, start, end, text)] for every top-level declaration."""
     out = {}
-    for p in sorted(glob.glob(os.path.join(src_dir, "**", "*.lean"), recursive=True)):
+    files = sorted(glob.glob(os.path.join(src_dir, "**", "*.lean"), recursive=True))
+    main_lean = os.path.join(os.path.dirname(os.path.abspath(src_dir)), "Main.lean")
+    if os.path.exists(main_lean): files.append(main_lean)   # the driver's root `main`
+    for p in files:
         lines = open(p, encoding="utf-8").read().split("\n")
         starts = []
         for i, ln in enumerate(lines):
@@ -769,8 +819,16 @@ def check_sites(spec, src_dir, lean_out):
         if not en:
             fail("S7", f"{e.id}: no Enforced by: names"); bad += 1
         for n in en:
-            names.append((n, "any", e.id))
+            if is_std_site(n):
+                r = std_site_has_comment(n, e.id)
+                if r is not True:
+                    fail("S7", f"{e.id}: std declaration {n} has no `spec: {e.id}` comment" + ("" if r is False else " (declaration not found)")); bad += 1
+                continue
             cands = decls.get(n.split(".")[-1], [])
+            # the driver's root module (Main.lean) is not importable, so its declarations are checked
+            # textually only; every other name must also resolve in Lean
+            if not (("." not in n) and cands and all(p.endswith("Main.lean") for p, _, _, _ in cands)):
+                names.append((n, "any", e.id))
             if not any(re.search(r"spec: " + re.escape(e.id) + r"\b", t) for _, _, _, t in cands):
                 fail("S7", f"{e.id}: declaration {n} has no `spec: {e.id}` comment" + ("" if cands else " (declaration not found)")); bad += 1
         ev = e.fields.get("Evidence", "")
@@ -779,6 +837,11 @@ def check_sites(spec, src_dir, lean_out):
             tcb = open(os.path.join(ROOT, "docs/verification/TRUSTED_COMPUTING_BASE.md"), encoding="utf-8").read()
             if ev[9:] not in tcb: fail("S7", f"{e.id}: trusted assumption {ev[9:]} is not in TRUSTED_COMPUTING_BASE.md"); bad += 1
     for p in sorted(glob.glob(os.path.join(src_dir, "**", "*.lean"), recursive=True)):
+        for i, ln in enumerate(open(p, encoding="utf-8").read().split("\n")):
+            for m in re.finditer(r"spec: (" + ID_RE + r")\b", ln):
+                if m.group(1) not in live:
+                    fail("S7", f"{os.path.relpath(p, ROOT)}:{i+1}: `spec: {m.group(1)}` names no live entry"); bad += 1
+    for p in sorted(glob.glob(os.path.join(ROOT, "std", "src", "**", "*.con"), recursive=True)):
         for i, ln in enumerate(open(p, encoding="utf-8").read().split("\n")):
             for m in re.finditer(r"spec: (" + ID_RE + r")\b", ln):
                 if m.group(1) not in live:
@@ -918,6 +981,14 @@ def main():
     if c == "lint":
         check_format(spec, a.root); check_registry(spec); check_coverage(spec); check_tracking(spec, a.root)
         check_restatements(spec, a.root, a.scan_root)
+    elif c == "register":
+        # append-only: add a row for every chapter key ids.tsv lacks; never edits an existing row
+        path = os.path.join(spec.dir, "ids.tsv")
+        have = {r[0] for r in (read_tsv(path) or [])}
+        new = [(k, st, h) for k, (st, h) in registry_expect(spec).items() if k not in have]
+        with open(path, "a") as f:
+            for k, st, h in new: f.write(f"{k}\t{st}\t{h}\n")
+        print(f"registered {len(new)} new keys")
     elif c == "restatements":
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":
