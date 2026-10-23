@@ -549,8 +549,16 @@ branch `vp-r0492`, unlanded).**
     searching the frames for the spelling (`BodyScope.resolve?`).
   - The walk mints the destructure temporary (`destructureTempName`) and its synthesized uses.
 - *Invariant made structural:* no front-end pass decides by spelling which binding a local name
-  denotes. Check and Elab both read the one walk. The Core names and evidence positions are the
-  same as before, which the snapshot, golden, binder-refs, body-scope and proof gates show.
+  denotes. Check and Elab both read the one walk.
+  - The Core names and evidence positions are the same as before. `--emit-core` is identical on
+    all 1474 corpus files (`tests/programs`, example sources) against the pre-step-2 compiler, and
+    `--report fingerprints` / `subject-facts` are identical on 111 example entry points.
+    `check_local_identity.sh` leg E pins the exact name profile of the edge cases.
+  - The walk's `shadows` fact counts exactly what Elab's old scope held as runtime variables.
+    Region names and `ghost let`s do not count; `_` binders and the destructure temporary do.
+  - One intended difference: a source use can no longer resolve to Elab's destructure temporary.
+    A parameter spelled `__destr_P` used to be captured by the temporary in Elab while Check read
+    the parameter; both now read the parameter. No corpus program is affected.
 - *Not in this slice:*
   - `BodyScope`'s frames keep their spellings and are still tombstoned at block exit; they are
     now positional bookkeeping only.
