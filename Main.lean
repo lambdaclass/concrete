@@ -3427,7 +3427,8 @@ def compileAndReport (inputPath : String) (reportType : String)
         IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
         return 1
       | .ok mono =>
-        IO.println (Report.monoReport fullValidCore.source.coreModules mono.coreModules)
+        -- Mono ran on the certified whole program; the listing is the invoked file's (bug 180).
+        IO.println (Report.monoReport scopedCore (Report.restrictMonoToScope scopedCore mono.coreModules))
         return 0
     IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, vcs, obligation-ledger, backend-contracts, verify, audit, bool-kernel, vcgen-diff"
     return 1

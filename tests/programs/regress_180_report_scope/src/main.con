@@ -2,7 +2,7 @@
 // ran Mono and lowering on the invoked file's modules alone, without the dependencies CoreCheck had
 // checked them against, under a `ValidatedCore` whose modules had been replaced. The report then
 // described a program nothing compiles: `std.math.max` is generic, so its `u16` instance exists only
-// in the whole program, and the old report listed no specialization at all.
+// in the whole program, and the old report listed no specialization at all. Exits 0.
 mod regress_180_report_scope {
     import std.math.{max};
 
@@ -10,6 +10,9 @@ mod regress_180_report_scope {
         let a: u16 = 40;
         let b: u16 = 42;
         let m: u16 = max(a, b);
-        return m as i32;
+        if m == 42 {
+            return 0;
+        }
+        return 1;
     }
 }

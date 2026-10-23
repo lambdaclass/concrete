@@ -173,8 +173,10 @@ LL="$(cd "$WF" && "$BIN" build --emit-llvm 2>/dev/null)"; LL_RC=$?
 if [ "$MONO_RC" -ne 0 ] || [ "$LL_RC" -ne 0 ] || [ -z "$SPEC" ] || [ -z "$LL" ]; then
   no "B: could not read wordfreq's mono report or IR (rc $MONO_RC/$LL_RC, spec='$SPEC', ir bytes=${#LL})"
 else
-  # INCLUSION, not equality: every specialization the build emits is listed by the report (the
-  # report also lists instances emission does not keep). Before bug 180's fix it listed none.
+  # The listing is the invoked file's: the specializations Mono placed in wordfreq's own module
+  # when run on the whole validated program. Each is a function the build emits (the report names
+  # nothing the compile does not produce), and there is at least one. Before bug 180's fix Mono ran
+  # on the file's modules without std, so it listed none.
   # The listing after the second `Specializations:` header: `  base<T…> -> name`, or `  name` alone
   # when the base itself contains `_for_` (`OrderedMap_for_each`).
   awk '/^Specializations:$/ {on=1; next} on && /^  / {sub(/^  /, ""); sub(/.* -> /, ""); print}' <<<"$MONO" \
@@ -182,11 +184,11 @@ else
   # An emitted symbol is `_C.<module path>.<mono name>`; the report lists the mono name.
   grep -oE '^define [^@]*@[A-Za-z0-9_.$]+' <<<"$LL" | sed -E 's/.*@//; s/.*\.//' | grep '_for_' | sort -u > "$TMP/ll.names"
   NREP="$(grep -c . "$TMP/rep.names" || true)"; NLL="$(grep -c . "$TMP/ll.names" || true)"
-  MISSING="$(comm -13 "$TMP/rep.names" "$TMP/ll.names" | tr '\n' ' ')"
-  if [ "$NLL" -gt 0 ] && [ "$SPEC" -gt 0 ] && [ -z "$MISSING" ]; then
-    ok "B: wordfreq's project --report mono lists $SPEC specializations, including all $NLL the build emits"
+  EXTRA="$(comm -23 "$TMP/rep.names" "$TMP/ll.names" | tr '\n' ' ')"
+  if [ "$SPEC" -gt 0 ] && [ "$NREP" -eq "$SPEC" ] && [ -z "$EXTRA" ]; then
+    ok "B: wordfreq's project --report mono lists $SPEC specializations of its own, each emitted by the build ($NLL emitted)"
   else
-    no "B: wordfreq's --report mono lists $SPEC ($NREP names) but the build emits $NLL; unlisted: ${MISSING:-none}"
+    no "B: wordfreq's --report mono lists $SPEC ($NREP names); not emitted by the build: ${EXTRA:-none}"
   fi
 fi
 VER="$("$BIN" "$WF/src/main.con" --report verify 2>&1)"; VER_RC=$?
