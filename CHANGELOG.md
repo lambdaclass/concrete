@@ -33,6 +33,25 @@ closed their scope by hand. Every block now closes through one helper (`closeBlo
 therefore checked at the end of the body, which also catches a per-iteration leak in a
 non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
 
+### CoreCheck Compares Every Binder With Its Value: Bug 177 (2026-10-22)
+
+CoreCheck is the independent re-check of elaborated Core, but it never compared a `let`'s declared
+type with its value's type. It compared call arguments by count only, and assignments, fields and
+stores not at all. Returns were compared with a helper that treats every numeric type as equal.
+So when bug 176's checker leak let `let y: u8 = <i32>` through, CoreCheck passed it too, and the
+binary printed 300 from a `u8`. One binder-agreement relation, `bindTyAgrees`, now checks every
+binder: `let`, assignment, direct and indirect call arguments, struct and variant fields, field
+stores, stores through `&mut`/`*mut`, array element stores, array literal elements and the
+branch values of a value `if` or `match` (E0510), and returns (E0560). A fn binder must also declare
+every capability of the fn value it holds. It is exact
+on scalars and on the shape of references, pointers, arrays and fn types, and defers only on
+named, generic and type-variable types, which stay Check's to decide. A `for` loop's
+step is now checked, and CoreCheck's own blocks close their scope. A pass-level test plants
+mismatched values in Core directly, so it stays meaningful after bug 176's fix. The new check also found
+that Elab gave a struct or enum literal's field value an unexpanded alias as its expected type, so
+`S { a: 1 }` with `a: Id` (`type Id = i32`) stored an `Int` literal; field hints now expand aliases. Record:
+[bug 177](docs/bugs/177_corecheck_never_compared_binder_types.md).
+
 ### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
 
 The landing page now exposes the existing Concrete compiler as WebAssembly in a

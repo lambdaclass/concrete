@@ -155,6 +155,11 @@ declare -A BUG_TEST_MAP=(
   # Bug 176: a loop body's / for header's shadowing let outlived the loop in Check (run_tests.sh
   # also requires --interp == binary == 42 for the valid fixture).
   [176]="regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type.con error_176_while_shadow_ssa.con error_176_while_shadow_mut.con error_176_for_header_type.con error_176_loop_body_linear_leak.con error_176_loop_body_leak_while_let.con error_176_loop_body_leak_labelled_break.con error_176_loop_body_leak_labelled_break_mid.con"
+  # Bug 177: CoreCheck never compared a binder's type with its value's. The defence-in-depth
+  # check itself is covered by pipeline-test corecheck/binder-agreement (eight cases planted in
+  # Core, all accepted by the previous compiler) and check_corecheck_boundary.sh class 7 (bug
+  # 176's program never compiles); this fixture covers the Elab alias-hint sites the check found.
+  [177]="regress_177_alias_value_hints.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).

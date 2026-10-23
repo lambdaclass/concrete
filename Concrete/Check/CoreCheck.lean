@@ -16,6 +16,9 @@ top-level modules and all nested submodules.
 Function-body validation:
 - Capability discipline: caller's capSet ⊇ callee's capSet
 - Type consistency: operand types match operators, arguments match parameters
+- Binder agreement (bug 177): a `let`, assignment, call argument, struct/variant field,
+  store through a reference, array element store and `return` must give the binder a
+  value of its declared Core type (`bindTyAgrees`)
 - Structural invariants: break/continue inside loops, match coverage
 
 Declaration-level validation (on Core IR, not surface AST):
@@ -96,6 +99,9 @@ inductive CoreCheckError where
   | cannotCast (fromTy : String) (toTy : String)
   | cannotDerefNonRef (ty : String)
   | cannotAssignThroughNonMutRef (ty : String)
+  -- Binder agreement (bug 177): a value bound to a name, slot or parameter must
+  -- have the binder's type. `site` names the binder ("let 'y'", "argument 1 of 'f'").
+  | bindingTypeMismatch (site : String) (declared : String) (got : String)
   -- Return type
   | returnTypeMismatch (expected : String) (got : String)
   -- Module-level validation (moved from Check)
@@ -129,6 +135,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .negationOnNonNumeric ty => s!"negation on non-numeric type: {ty}"
   | .logicalNotOnNonBool ty => s!"logical not on non-Bool type: {ty}"
   | .bitwiseNotOnNonInteger ty => s!"type mismatch in bitwise not: expected integer type, got {ty}"
+  | .bindingTypeMismatch site declared got => s!"type mismatch at {site}: declared {declared}, value has type {got}"
   | .insufficientCapabilities fn required available => s!"function '{fn}' requires {required} but caller has {available}"
   | .missingCapability callee cap _caller => s!"function '{callee}' requires capability '{cap}' but caller does not declare it"
   | .argCountMismatch fn expected got => s!"function '{fn}' expects {expected} args, got {got}"
@@ -213,6 +220,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .negationOnNonNumeric _ => "E0507"
   | .logicalNotOnNonBool _ => "E0508"
   | .bitwiseNotOnNonInteger _ => "E0509"
+  | .bindingTypeMismatch _ _ _ => "E0510"
   -- Capability discipline (E0520–E0529)
   | .insufficientCapabilities _ _ _ => "E0520"
   | .missingCapability _ _ _ => "E0521"
@@ -371,6 +379,100 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
   let env ← getEnv
   return env.enumDefs.find? fun ed => ed.name == name
 
+/-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
+    built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
+    `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
+    and the set is decided per instance after Mono, not here. -/
+private def capsDecidable (cs : CapSet) : Bool :=
+  let (names, vars) := cs.normalize
+  vars.isEmpty && names.all validCaps.contains
+
+/-- Does a value of type `got` fit a binder declared `declared`? The binder-agreement
+    relation of bug 177, used at every place Core binds a value to a typed slot: a `let`,
+    an assignment, a call argument, a struct or variant field, a store through a
+    reference, an array element store and a `return`.
+
+    It is EXACT on everything Core has fully decided: scalars (width and signedness
+    included), `String`, `char`, `bool`, `()`, and the shape of references, pointers,
+    arrays, heap shells and fn types. It is deliberately NOT `typesCompatible`, which
+    treats every numeric type as compatible with every other one and so cannot see the
+    width confusion bug 176 produced (`let y: u8 = <i32>`).
+
+    It defers (answers true) only where CoreCheck cannot decide equality before Mono:
+    - `.named`/`.generic` (aliases, newtypes and nominal types are compared by Check with
+      the nominal tables CoreCheck does not re-derive; a `.generic` pair with the same head
+      and arity is still compared argument-wise),
+    - `.typeVar` (a generic body, decided per instance after Mono),
+    - `.placeholder` (not yet inferred),
+    - a `never` value (a diverging expression fits any binder).
+    A `&mut T` value fits a `&T` binder, and `*mut T`/`*const T` pair as in
+    `typesCompatible`. A fn value fits a fn binder only when the binder's capability set
+    covers the value's: a call through the binding is checked against the binder's type, so
+    a narrower binder would erase the requirement. That comparison is made only between sets
+    of built-in capability names; a set with a capability parameter or variable is deferred. -/
+partial def bindTyAgrees (declared got : Ty) : Bool :=
+  if declared == got then true else
+  match declared, got with
+  | _, .never => true
+  | .named _, _ | _, .named _ => true
+  | .typeVar _, _ | _, .typeVar _ => true
+  | .placeholder, _ | _, .placeholder => true
+  | .generic n as _, .generic m bs _ =>
+    if n == m && as.length == bs.length then (as.zip bs).all fun (a, b) => bindTyAgrees a b
+    else true
+  | .generic _ _ _, _ | _, .generic _ _ _ => true
+  | .ref a, .ref b | .ref a, .refMut b | .refMut a, .refMut b => bindTyAgrees a b
+  | .ptrMut a, .ptrMut b | .ptrConst a, .ptrConst b
+  | .ptrMut a, .ptrConst b | .ptrConst a, .ptrMut b => bindTyAgrees a b
+  | .heap a, .heap b | .heapArray a, .heapArray b => bindTyAgrees a b
+  | .array a n, .array b m => n == m && bindTyAgrees a b
+  | .fn_ ps dc r, .fn_ qs vc s =>
+    -- The binder's capability set must cover the value's: an indirect call is checked
+    -- against the binder's recorded type, so a narrower binder would erase a requirement.
+    -- Compared only when both sets are decidable here (`capsDecidable`).
+    ps.length == qs.length && (ps.zip qs).all (fun (p, q) => bindTyAgrees p q) && bindTyAgrees r s
+      && (!(capsDecidable dc && capsDecidable vc) || capsContain dc vc)
+  | _, _ => false
+
+/-- The declared field list of a struct, nominal types where the producer recorded them. -/
+private def structFieldTys (sd : CStructDef) : List (String × Ty) :=
+  if sd.nominalFields.isEmpty then sd.fields else sd.nominalFields
+
+/-- The declared payload of an enum variant, nominal types where recorded. -/
+private def variantFieldTys (ed : CEnumDef) (variant : String) : Option (List (String × Ty)) :=
+  let vs := if ed.nominalVariants.isEmpty then ed.variants else ed.nominalVariants
+  (vs.find? fun (vn, _) => vn == variant).map (·.2)
+
+/-- The value a value-bearing block yields: its trailing `expr` without `;`. A block that ends
+    otherwise (a `return`, `break`, a statement) yields no value to compare. -/
+private def blockValue (ss : List CStmt) : Option CExpr :=
+  match ss.getLast? with
+  | some (.expr e true) => some e
+  | _ => none
+
+/-- Refuse `value` at `site` unless its Core type fits `declared` (bug 177). -/
+private def checkBinding (site : String) (declared : Ty) (value : CExpr) : StateM CoreCheckEnv Unit :=
+  if bindTyAgrees declared value.ty then pure ()
+  else addCCError (.bindingTypeMismatch site (tyToStr declared) (tyToStr value.ty))
+
+/-- Run `k` as a lexical block: bindings it adds are dropped when it closes, so a later
+    lookup of the name answers with the binding visible there (the bug 176 discipline,
+    applied to CoreCheck's own environment). -/
+private def inCoreBlock (k : StateM CoreCheckEnv Unit) : StateM CoreCheckEnv Unit := do
+  let saved := (← getEnv).vars
+  k
+  let env ← getEnv
+  setEnv { env with vars := saved }
+
+/-- The struct a field access or field store reaches, looking through one reference or
+    heap shell (Core's auto-deref for `.field`). -/
+private def structOfTy (ty : Ty) : StateM CoreCheckEnv (Option CStructDef) := do
+  let base := match ty with
+    | .ref t | .refMut t | .heap t | .ptrMut t | .ptrConst t => t
+    | t => t
+  match base with
+  | .named n | .generic n _ _ => lookupStruct n
+  | _ => pure none
 
 -- ============================================================
 -- Expression validation
@@ -478,6 +580,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         addCCError (.insufficientCapabilities binding (capSetToString ptrCaps) (capSetToString env.currentCapSet))
       if args.length != paramTys.length then
         addCCError (.argCountMismatch binding paramTys.length args.length)
+      else
+        for (i, (pTy, arg)) in (List.range paramTys.length).zip (paramTys.zip args) do
+          checkBinding s!"argument {i + 1} of '{binding}'" pTy arg
     | _ => pure ()
     for arg in args do
       ccCheckExpr arg
@@ -521,22 +626,43 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     | some (params, _retTy) =>
       if args.length != params.length then
         addCCError (.argCountMismatch fn params.length args.length)
+      else
+        for (i, ((pName, pTy), arg)) in (List.range params.length).zip (params.zip args) do
+          checkBinding s!"argument {i + 1} ('{pName}') of '{fn}'" pTy arg
     | none => pure ()
     for arg in args do
       ccCheckExpr arg
 
-  | .structLit _name _typeArgs fields _ty =>
+  | .structLit name _typeArgs fields _ty =>
     for (_, fieldExpr) in fields do
       ccCheckExpr fieldExpr
+    match ← lookupStruct name with
+    | some sd =>
+      let declared := structFieldTys sd
+      for (fname, fieldExpr) in fields do
+        match declared.lookup fname with
+        | some fTy => checkBinding s!"field '{fname}' of '{name}'" fTy fieldExpr
+        | none => pure ()
+    | none => pure ()
 
   | .fieldAccess obj _field _ty =>
     ccCheckExpr obj
 
-  | .enumLit _enumName _variant _typeArgs fields _ty =>
+  | .enumLit enumName variant _typeArgs fields _ty =>
     for (_, fieldExpr) in fields do
       ccCheckExpr fieldExpr
+    match ← lookupEnum enumName with
+    | some ed =>
+      match variantFieldTys ed variant with
+      | some declared =>
+        for (fname, fieldExpr) in fields do
+          match declared.lookup fname with
+          | some fTy => checkBinding s!"field '{fname}' of '{enumName}::{variant}'" fTy fieldExpr
+          | none => pure ()
+      | none => pure ()
+    | none => pure ()
 
-  | .match_ scrutinee arms _ty =>
+  | .match_ scrutinee arms ty =>
     ccCheckExpr scrutinee
     -- Check match arm coverage for enums
     -- Auto-deref through references (match on &T should check T)
@@ -589,6 +715,13 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
           addCCError .matchNonEnumNoDefault
     for arm in arms do
       ccCheckMatchArm arm
+    -- A value `match` binds each arm's value to its own type, like a `let` (not when typed
+    -- `never` or `()`, as for `if`).
+    if ty != .unit && ty != .never then
+      for arm in arms do
+        let body := match arm with
+          | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => b
+        if let some v := blockValue body then checkBinding "the value of a match arm" ty v
 
   | .borrow inner _ => ccCheckExpr inner
   | .borrowMut inner _ => ccCheckExpr inner
@@ -612,10 +745,15 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !throughRef && !capsContain env.currentCapSet (.concrete ["Alloc"]) then
         addCCError (.missingCapability "*heap_ptr" "Alloc" "")
     | _ => addCCError (.cannotDerefNonRef (toString (repr inner.ty)))
-  | .arrayLit elems _ =>
+  | .arrayLit elems ty =>
     if elems.isEmpty then
       addCCError .arrayLiteralEmpty
     for elem in elems do ccCheckExpr elem
+    match ty with
+    | .array elemTy _ =>
+      for (i, elem) in (List.range elems.length).zip elems do
+        checkBinding s!"array element {i}" elemTy elem
+    | _ => pure ()
   | .arrayIndex arr index _ =>
     ccCheckExpr arr
     ccCheckExpr index
@@ -724,12 +862,18 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addCCError (.missingCapability "alloc" "Alloc" "")
     ccCheckExpr inner
     ccCheckExpr allocExpr
-  | .ifExpr cond then_ else_ _ =>
+  | .ifExpr cond then_ else_ ty =>
     ccCheckExpr cond
     if cond.ty != .bool && !isInteger cond.ty then
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
-    for s in then_ do ccCheckStmt s
-    for s in else_ do ccCheckStmt s
+    inCoreBlock (for s in then_ do ccCheckStmt s)
+    inCoreBlock (for s in else_ do ccCheckStmt s)
+    -- A value `if` binds each branch's value to its own type, like a `let`. An `if` typed
+    -- `never` (Elab takes an unhinted `if`'s type from its first branch, which may diverge)
+    -- or `()` is not compared.
+    if ty != .unit && ty != .never then
+      if let some v := blockValue then_ then checkBinding "the value of an if branch" ty v
+      if let some v := blockValue else_ then checkBinding "the value of an else branch" ty v
 
 partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   -- Arm binders are arm-scoped: restore the var table afterwards so a
@@ -747,7 +891,7 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   | .litArm value guard body =>
     ccCheckExpr value
     match guard with | some g => ccCheckExpr g | none => pure ()
-    for s in body do ccCheckStmt s
+    inCoreBlock (for s in body do ccCheckStmt s)
   | .varArm binding bindTy guard body =>
     let saved := (← getEnv).vars
     addVar binding bindTy
@@ -759,29 +903,32 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     ccCheckExpr lo
     ccCheckExpr hi
     match guard with | some g => ccCheckExpr g | none => pure ()
-    for s in body do ccCheckStmt s
+    inCoreBlock (for s in body do ccCheckStmt s)
 
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   match stmt with
   | .letDecl name _mutable ty value =>
     ccCheckExpr value
+    -- Bug 177: the declared type was recorded and never compared with the value's,
+    -- so a front-end slip (bug 176: `let y: u8 = <i32>`) passed through to a binary.
+    checkBinding s!"let '{name}'" ty value
     addVar name ty
 
-  | .assign _name value =>
+  | .assign name value =>
     ccCheckExpr value
+    match ← lookupVar name with
+    | some varTy => checkBinding s!"assignment to '{name}'" varTy value
+    | none => pure ()
 
   | .return_ (some value) _retTy =>
     ccCheckExpr value
     let env ← getEnv
     let valueTy := value.ty
-    -- Skip check for types containing named/generic/typeVar (could be newtypes, aliases, or polymorphic)
-    let rec containsResolvable : Ty → Bool
-      | .named _ | .generic _ _ _ | .typeVar _ | .unit | .placeholder => true
-      | .ptrMut inner | .ptrConst inner | .ref inner | .refMut inner => containsResolvable inner
-      | .array inner _ => containsResolvable inner
-      | _ => false
-    if !typesCompatible valueTy env.currentRetTy && !containsResolvable valueTy && !containsResolvable env.currentRetTy then
-      addCCError (.returnTypeMismatch (toString (repr env.currentRetTy)) (toString (repr valueTy)))
+    -- The binder-agreement relation (bug 177). It used to be `typesCompatible` with every
+    -- type containing a named/generic/unit part skipped, so any numeric value passed for
+    -- any numeric return type (`return <i32>` from a `-> u8` function).
+    if !bindTyAgrees env.currentRetTy valueTy then
+      addCCError (.returnTypeMismatch (tyToStr env.currentRetTy) (tyToStr valueTy))
 
   | .return_ none _ => pure ()
 
@@ -791,30 +938,42 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     ccCheckExpr cond
     if cond.ty != .bool && !isInteger cond.ty then
       addCCError (.ifCondNotBool (toString (repr cond.ty)))
-    for s in then_ do ccCheckStmt s
+    inCoreBlock (for s in then_ do ccCheckStmt s)
     match else_ with
-    | some stmts => for s in stmts do ccCheckStmt s
+    | some stmts => inCoreBlock (for s in stmts do ccCheckStmt s)
     | none => pure ()
 
-  | .while_ cond body _label _ =>
+  | .while_ cond body _label step =>
     ccCheckExpr cond
     if cond.ty != .bool && !isInteger cond.ty then
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
     let env ← getEnv
     setEnv { env with inLoop := true }
-    for s in body do ccCheckStmt s
+    -- The body is a block; the step (a `for` loop's update) runs after it and sees only
+    -- the loop's own scope, never the body's bindings. The step was not checked at all.
+    inCoreBlock (for s in body do ccCheckStmt s)
+    inCoreBlock (for s in step do ccCheckStmt s)
     let env' ← getEnv
     setEnv { env' with inLoop := env.inLoop }
 
-  | .fieldAssign obj _field value =>
+  | .fieldAssign obj field value =>
     ccCheckExpr obj
     ccCheckExpr value
+    match ← structOfTy obj.ty with
+    | some sd =>
+      match (structFieldTys sd).lookup field with
+      | some fTy => checkBinding s!"field '{field}' of '{sd.name}'" fTy value
+      | none => pure ()
+    | none => pure ()
 
   | .derefAssign target value =>
     ccCheckExpr target
     ccCheckExpr value
     -- Check target is a mutable ref/pointer
     let env ← getEnv
+    match target.ty with
+    | .refMut t | .ptrMut t => checkBinding "store through a reference" t value
+    | _ => pure ()
     match target.ty with
     | .refMut _ => pure ()
     | .ptrMut _ =>
@@ -831,6 +990,11 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     ccCheckExpr value
     if !isInteger index.ty then
       addCCError (.arrayIndexNotInteger (toString (repr index.ty)))
+    match arr.ty with
+    | .array e _ | .ref (.array e _) | .refMut (.array e _)
+    | .ptrConst (.array e _) | .ptrMut (.array e _) | .heap (.array e _) =>
+      checkBinding "array element store" e value
+    | _ => pure ()
     -- Indexing auto-derefs a reference/pointer to an array (`&[T;N]` etc.), so
     -- those are valid index bases too (C10).
     match arr.ty with
@@ -852,8 +1016,11 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .defer body => ccCheckExpr body
 
-  | .borrowIn _var _ref _region _isMut _refTy body =>
-    for s in body do ccCheckStmt s
+  | .borrowIn _var ref _region _isMut refTy body =>
+    -- The reference is a binder of the block, so a store to it is checked like any other.
+    inCoreBlock do
+      addVar ref refTy
+      for s in body do ccCheckStmt s
 
 end
 
