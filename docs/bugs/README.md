@@ -190,6 +190,9 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 
 ## Open Numbered Bugs
 
+- [183_deref_assign_destination_first.md](183_deref_assign_destination_first.md) — OPEN: a dereference assignment `*(&mut a[i()]) = j()` evaluates its destination first in the binary and its right-hand side first in `--interp` (evaluation-order rule 7 requires the latter; silent wrong code). Found writing the 2026-10-21 rule, filed 2026-10-23. Joins exit 0b.
+- [182_borrowed_call_result_temporary.md](182_borrowed_call_result_temporary.md) — OPEN: a borrow of a call result (REF-5, gap G12) is accepted; `&alloc(..)` passes the heap pointer where `&Heap<B>` is a slot address (SIGSEGV in safe code), and `&int_to_string(..)` never destroys the temporary (a leak). Found by the language-tightening probes, 2026-10-23. Joins exit 0b.
+- [181_generic_borrowed_scrutinee_binder_mode.md](181_generic_borrowed_scrutinee_binder_mode.md) — OPEN: a payload binder through a borrowed scrutinee whose payload type is a type parameter is `&T` to Check and `T` to Elab, so `get::<Int>` passes the payload's value where `fn(&T)` expects a pointer (SIGSEGV in safe code; `--interp` refuses). Found by the language-tightening probes, 2026-10-23. Joins exit 0b.
 - [027_emitssa_quadratic_rendering.md](027_emitssa_quadratic_rendering.md) — EmitSSA renders SSA→LLVM text in O(n²) (perf; large functions slow to codegen)
 - [049_reduce_crash_predicate_vacuous.md](049_reduce_crash_predicate_vacuous.md) — `concrete reduce --predicate crash` reduces anything to an empty program (reducer audit 2026-07-18)
 - [054_struct_mono_name_collision.md](054_struct_mono_name_collision.md) — user types shadow generated specializations (middle-end audit 2026-07-18)

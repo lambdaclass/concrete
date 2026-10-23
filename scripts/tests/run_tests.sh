@@ -1599,6 +1599,11 @@ run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro_read.co
 run_err "$TESTDIR/error_115_vec_get_non_copy.con"           "(E0290)"
 run_err "$TESTDIR/error_115_vec_get_generic_unbounded.con"  "(E0290)"
 run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
+# G17 (MEMORY_SEMANTICS §15.7, closed 2026-10-23): the root of a borrowed scrutinee cannot move
+# while an arm binder borrows it (TIGHTENING_DECISIONS T-G17).
+run_err "$TESTDIR/error_g17_match_borrow_root_moved_in_arm.con"     "(E0204)"
+run_err "$TESTDIR/error_g17_if_let_borrow_root_moved.con"           "(E0204)"
+run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # Bugs 102 and 105: the interpreter agrees with the binary (102 needed pointer equality on
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708

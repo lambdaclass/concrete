@@ -1,0 +1,14 @@
+// Bug 183: `*(&mut a[tick(&mut c, 1)]) = tick(&mut c, 2)` must evaluate the right-hand side first
+// (STATEMENT_EXPRESSION_MODEL, evaluation order rule 7), so `c` records 2 then 1: exit 21.
+// Observed: the binary evaluates the destination first and exits 12; --interp exits with 21.
+fn tick(c: &mut Int, n: Int) -> Int {
+    *c = *c * 10 + n;
+    return n;
+}
+
+fn main() -> Int {
+    let mut c: Int = 0;
+    let mut a: [Int; 3] = [0, 0, 0];
+    *(&mut a[tick(&mut c, 1)]) = tick(&mut c, 2);
+    return c;
+}

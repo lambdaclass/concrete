@@ -111,6 +111,44 @@ call adds no call-graph edge to a same-named definition and still explains which
 supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
 `regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
 
+### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+
+[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
+gap that could be tightened. The gaps covered are:
+
+- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
+- checked arithmetic and lossy casts;
+- the trusted raw-pointer duplication;
+- bugs 165 and 166;
+- evaluation order;
+- `main`'s exit status;
+- contract typing.
+
+Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
+program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
+records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
+deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
+borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
+Holes and semantic cases are tightened; style-only rules wait for a workload.
+
+`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
+with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
+shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
+E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
+standalone files and 7 inline gate probes.
+
+The witness programs found three silent defects, filed as open under exit 0b:
+
+- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
+  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
+  safe code at `T := Int`.
+- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
+  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
+- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
+  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
+
+Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
