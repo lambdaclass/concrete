@@ -1,0 +1,8 @@
+// Bug 193: a struct literal gives a field twice. The checker read the first occurrence, the binary
+// stored the last, and --interp used the first. Expected: E0306 (TYPE-7).
+struct Copy P { n: Int }
+
+fn main() -> Int {
+    let p: P = P { n: 1, n: 41 };
+    return p.n;
+}

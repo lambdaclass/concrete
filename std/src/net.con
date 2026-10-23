@@ -92,7 +92,7 @@ mod net {
         fd: i32,
     }
 
-    trusted impl TcpListener {
+    impl TcpListener {
         pub trusted fn bind(addr: &String, port: u16) with(Alloc, Network, Env) -> Result<TcpListener, NetError> {
             let fd: i32 = socket(2, 1, 0);
             if fd < 0 {
@@ -160,7 +160,7 @@ mod net {
         /// handle (see `NetError::CloseFailed`: a failed `close(2)` must not be
         /// retried). (Ownership-on-failure convention:
         /// docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
-        pub fn close(self) with(Network) -> Result<u64, NetError> {
+        pub trusted fn close(self) with(Network) -> Result<u64, NetError> {
             let TcpListener { fd } = self;
             if close(fd) != 0 {
                 return Result::<u64, NetError>::Err { error: NetError::CloseFailed };
@@ -173,7 +173,7 @@ mod net {
         fd: i32,
     }
 
-    trusted impl TcpStream {
+    impl TcpStream {
         pub trusted fn connect(addr: &String, port: u16) with(Alloc, Network, Env) -> Result<TcpStream, NetError> {
             let fd: i32 = socket(2, 1, 0);
             if fd < 0 {
@@ -256,7 +256,7 @@ mod net {
         /// handle (see `NetError::CloseFailed`: a failed `close(2)` must not be
         /// retried). (Ownership-on-failure convention:
         /// docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
-        pub fn close(self) with(Network) -> Result<u64, NetError> {
+        pub trusted fn close(self) with(Network) -> Result<u64, NetError> {
             let TcpStream { fd } = self;
             if close(fd) != 0 {
                 return Result::<u64, NetError>::Err { error: NetError::CloseFailed };

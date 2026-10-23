@@ -3190,8 +3190,9 @@ private def assessEligibility
     (if !f.capSet.isEmpty then
       [s!"has capabilities: {", ".intercalate concreteCaps}"] else []) ++
     (if f.isTrusted then ["marked trusted"] else []) ++
-    (if f.isEntryPoint then ["is entry point (main)"] else []) ++
-    (if f.trustedImplOrigin.isSome then ["from trusted impl"] else [])
+    -- No separate "from trusted impl" reason: since bug 189 a method is trusted only by
+    -- its own `trusted`, which "marked trusted" already reports.
+    (if f.isEntryPoint then ["is entry point (main)"] else [])
   let allocs := callees.filter isAllocCall
   let rec_ := match recMap.find? (fun (n, _, _) => n == qualName) with
     | some (_, .direct, _) => "direct"
@@ -3839,8 +3840,10 @@ def standaloneAssumptions (modules : List CModule)
     | .error _ => ("unidentified:program", "program")
 
 /-- Extract the proof-oriented fragment from validated Core.
-    This is the primary entry point for the proof pipeline. -/
-def extractProofCore (vc : ValidatedCore) (identity : Proof.ResolvedIdentity)
+    This is the primary entry point for the proof pipeline. It reads a `CoreSubset`: the whole
+    validated program (a `ValidatedCore` coerces to it) or modules drawn from one, such as a
+    project's user package. Never modules CoreCheck did not see. -/
+def extractProofCore (vc : CoreSubset) (identity : Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
@@ -3923,7 +3926,7 @@ def ProofIdentityRefusal.explain : ProofIdentityRefusal → String
     `extractProofCore` rather than folded into it with a default: a caller that has an identity
     should not be able to accidentally proceed without one, and a caller that lacks one should have
     to say so. -/
-def extractProofCore? (vc : ValidatedCore)
+def extractProofCore? (vc : CoreSubset)
     (identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])

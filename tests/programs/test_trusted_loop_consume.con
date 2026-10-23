@@ -1,4 +1,4 @@
-// Test: trusted impl with pointer ops inside a loop
+// Test: a method with pointer ops inside a loop (it declares with(Unsafe), so it needs no trust)
 // (pointer arithmetic on Copy fields is always fine, not a linearity issue)
 
 extern fn malloc(size: u64) with(Alloc) -> *mut u8;
@@ -9,7 +9,7 @@ struct Buf {
     len: u64,
 }
 
-trusted impl Buf {
+impl Buf {
     fn free_entries(self) with(Alloc, Unsafe) {
         let Buf { ptr, len } = self;
         let mut i: u64 = 0;

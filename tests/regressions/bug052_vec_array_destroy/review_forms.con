@@ -10,8 +10,8 @@
 // touches nothing), 6, then main's exit 0.
 mod review {
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        pub fn destroy(&self) {
+    impl Destroy for Tracked {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

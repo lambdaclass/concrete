@@ -3,8 +3,8 @@
 // read from (*self) at offset 0 instead of dereferencing self.data.
 struct Copy Wrapper { data: *mut i32 }
 
-trusted impl Wrapper {
-    fn read(&self) -> i32 {
+impl Wrapper {
+    trusted fn read(&self) -> i32 {
         // This requires field access (.data) before deref (*).
         // Without the fix, this was parsed as (*self).data which crashes.
         let p: *mut i32 = self.data;

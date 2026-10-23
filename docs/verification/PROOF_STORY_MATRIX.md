@@ -68,7 +68,7 @@ models; it must replace rather than duplicate these rows.
 | Heap-owning values | open/assumed by profile | ownership checker enforces linear use; ProofCore excludes heap state | resource semantics and allocation obligations |
 | Raw pointers / `Unsafe` | trusted | visible `Unsafe` capability and trust reports | wrapper-specific assumptions; no general proof story |
 | FFI bodies | trusted/assumed | extern/trusted boundary reports, assumption files | ABI/layout and wrapper contracts |
-| `trusted fn` / trusted impl | trusted/assumed | `--report unsafe`, assumptions, policy gates | smaller wrappers and stronger audit evidence |
+| `trusted fn` (functions and methods) | trusted/assumed | `--report unsafe`, assumptions, policy gates | smaller wrappers and stronger audit evidence |
 | Backend lowering and LLVM/toolchain | trusted | verify gates, wrong-code corpus, bundles | old Phase 14/15 compiler/backend soundness work |
 | Machine-level constant time | assumed | constant_time_tag assumption files and manifest limits | source-level constant-time profile, backend timing assumptions |
 | Modules *(manual stopgap)* | enforced at resolve/check boundaries | module-visibility, project-model, and submodule-check gates | stable cross-phase identity remains part of R-0008/R-0438 |

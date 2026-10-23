@@ -24,6 +24,56 @@ two programs check `fopen` and report an environment error by exit code (100/101
 literal in any `.con` source, as it already did for gate scripts, and also scans the examples'
 scripts. Record: [bug 191](docs/bugs/191_test_scratch_at_fixed_tmp_paths.md).
 
+### A Block Never Confers Trust (bug 189, 2026-10-23)
+
+`trusted impl` is refused. It made every method of the block trusted whether or not the method
+declared it, so a method added to the block later was audited by nobody. Each function now
+declares `trusted fn` itself. Std and the corpus were migrated by compiling: every `trusted impl`
+became `impl`, and a method was marked `trusted fn` exactly when the compiler then refused it.
+That gave 175 of 326 methods, plus thirteen fixtures marked by hand where an intended earlier
+error hid the need. The other 151 methods were trusted only through their block. The stdlib
+surface manifest was regenerated, and 89 rows lose an inherited `trusted-boundary` class. Pinned
+by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh`.
+
+### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
+
+A function generic over a capability variable could perform any effect. `capsContain` treated a
+caller holding any capability variable as covering every requirement, `Unsafe` included, because
+the variable "is resolved at instantiation", but a generic body is checked once and nothing checks
+it again when it is instantiated. So `fn f<cap C>(..) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and a `main` declaring nothing ran it by
+instantiating `C := {}`. Now one entailment rule (`Capabilities.missingCaps`) serves direct calls,
+calls through function pointers, method calls, trait-bound calls and the raw-operation gate. A
+requirement is met by a concrete capability the caller declares, or by a capability variable of
+the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
+capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
+discharge. A capability parameter may not be spelled like a capability (E0121).
+`std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
+declare `trusted`. A bodiless declaration may not take capability parameters, and two
+legitimate shapes that Check refused with a false E0220 (forwarding a variable to a
+same-named parameter, a variable beside a concrete capability) now compile. The fix is pinned
+by nine witnesses, a positive control that agrees with `--interp`,
+`check_capability_judgment.sh` and five mutation families.
+
+### A Literal Gives Each Field Once (bug 193, 2026-10-23)
+
+A struct or enum literal that names a field twice is now refused with E0306. Before this fix the
+checker type-checked the first occurrence, the binary stored the last and `--interp` used the
+first, so `P { n: 1, n: 41 }` gave 41 natively and 1 in the interpreter. The specification's types
+chapter (TYPE-7, each field exactly once) led to it. It is pinned by
+`error_193_duplicate_{struct,variant}_field.con`.
+
+### An Integer Is Not A Condition (bug 192, 2026-10-23)
+
+An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as
+the expression form already was. Before this fix the checker computed the statement condition's
+type and discarded it, and CoreCheck admitted any integer as a condition, so the binary ran the
+program with C truthiness while `--interp` stopped with a run-time error. The language
+specification's TYPE-5 example found it, because the specification's examples run on both
+consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
+rather than the `while` code. A match guard had the same hole and is refused the same way. It is pinned by
+`error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`.
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never
@@ -243,6 +293,26 @@ may affect con-leche.
   explicit SKIP offline.
 - Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
   [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
+
+### Sealed, Certified Pipeline Artifacts (R-0497 slice 1, bug 180, 2026-10-23)
+
+Pipeline artifacts now carry proof of their own validity. `ValidatedCore`, `MonomorphizedProgram`
+and `SSAProgram` have private constructors. Each carries an erased `Prop` stating what its producer
+established about its exact payload: CoreCheck accepted these modules, Mono produced these modules
+from that source and the post-Mono verifier is clean on them, and the SSA verifier accepts these
+modules after cleanup. Forging one, or replacing its payload with `{ a with … }`, no longer
+compiles. The `ssa-unverified` debugging view is a separate `UnverifiedSSA` that `emit` refuses.
+Modules drawn from a validated program are a `CoreSubset`, which proof extraction reads and Mono
+does not. The emitted output is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
+payload-replacement and diagnostic-bypass cases by elaboration.
+
+Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and `traceability`
+replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
+dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
+specializations where the build emits 61, and the verify gates called that program clean. These
+reports now run their passes on the whole validated program and list the invoked file's part of
+the result (9 wordfreq specializations). The bug is pinned by
+`regress_180_report_scope`.
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 

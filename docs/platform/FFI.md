@@ -198,7 +198,7 @@ Concrete now has the three-way split described in the research notes:
 That means:
 
 - `trusted` does **not** suppress ordinary capabilities
-- `trusted fn`/`trusted impl` absorbs the `Unsafe` of an `extern fn` call (since R-0484, 2026-10-01) — never the binding's declared effects, which every `extern` must state
+- `trusted fn` (a function or a method) absorbs the `Unsafe` of an `extern fn` call (since R-0484, 2026-10-01) — never the binding's declared effects, which every `extern` must state
 - `trusted extern fn` is a separate, narrower mechanism: it marks a specific foreign binding as safe to call, rather than granting blanket trust to a block of code
 - builtin and stdlib internals are aligned to this same model instead of relying on silent exemptions
 
@@ -221,9 +221,10 @@ pub trusted fn read_header(fd: i32) with(File, Unsafe) -> Int {
 
 The stdlib demonstrates this pattern throughout:
 
-- `trusted impl Vec<T>` wraps pointer arithmetic behind safe push/pop/get
-- `trusted impl HashMap<K, V>` wraps raw allocation behind safe insert/get/remove
-- `trusted impl TextFile` wraps POSIX file I/O behind open/read/write/close
+- `Vec<T>`'s trusted methods wrap pointer arithmetic behind safe push/pop/get
+- `HashMap<K, V>`'s trusted methods wrap raw allocation behind safe insert/get/remove
+- `TextFile`'s trusted methods wrap POSIX file I/O behind open/read/write/close
+- each method declares `trusted fn` itself; an impl block confers no trust (bug 189)
 - `trusted fn print/println` wraps extern console I/O behind `with(Console)`
 - `trusted extern fn sqrt` marks a pure foreign function as safe to call without `with(Unsafe)`
 

@@ -1,0 +1,15 @@
+// Bug 188: a capability variable does not entail `Process`. `sneaky` calls a
+// `with(Process)` binding it was never granted; `main` declares nothing.
+trusted extern fn getpid() with(Process) -> i32;
+
+fn sneaky<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    let pid: i32 = getpid();
+    if pid < 0 { return 0; }
+    return f(x);
+}
+
+fn pure_id(x: i32) -> i32 { return x; }
+
+fn main() -> i32 {
+    return sneaky(pure_id, 42);
+}
