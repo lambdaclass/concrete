@@ -8363,6 +8363,19 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 211: a generic operator instantiated at a struct or enum reached the backend; the post-Mono
+# operator check refuses it (E0501) and admits numeric instances (binary and --interp agree on 42).
+run_err "$TESTDIR/error_211_generic_add_struct.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_mul_enum.con" "(E0501)"
+run_ok "$TESTDIR/regress_211_generic_add_numeric.con" 42
+r211_interp=$($COMPILER "$TESTDIR/regress_211_generic_add_numeric.con" --interp 2>&1 || true)
+if [ "$r211_interp" = "42" ]; then
+    echo "  ok  bug 211: numeric generic instances are admitted — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 211: interp gave '$r211_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
 run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
 run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
