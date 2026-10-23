@@ -1,0 +1,11 @@
+// Bug 200 control: a method's `self` names the impl's type without arguments (the parser
+// writes the impl's bare name); it is not a bare generic type. Runs 42.
+trait Tr { fn m(&self) -> Int; }
+struct Copy Box2<T> { v: Int }
+impl Tr for Box2<Int> { fn m(&self) -> Int { return self.v; } }
+impl<T> Box2<T> { fn get(&self) -> Int { return self.v; } }
+
+fn main() -> Int {
+    let b: Box2<Int> = Box2::<Int> { v: 21 };
+    return b.m() + b.get();
+}

@@ -155,7 +155,7 @@ declare -A BUG_TEST_MAP=(
   # Also check_pipeline_artifacts.sh legs B, U and D.
   [180]="regress_180_report_scope/src/main.con"
   # Bug 200: a generic type named without its argument list (E0113, TYPE-15).
-  [200]="error_200_bare_generic_type.con error_200_bare_generic_signature.con regress_200_generic_type_with_arguments.con regress_200_type_param_shadows_generic.con"
+  [200]="error_200_bare_generic_type.con error_200_bare_generic_signature.con regress_200_generic_type_with_arguments.con regress_200_type_param_shadows_generic.con regress_200_self_receiver_of_generic_impl.con"
   # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
   [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
   # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).
