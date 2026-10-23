@@ -990,6 +990,18 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
     some (.letIn name pv pb)
+  -- A scalar or value assignment `x = e` outside a loop: the functional state model
+  -- (docs/verification/PROVABLE_V1.md, "Statements And State") rebinds the name, as a loop body's
+  -- assignment already does in `cStmtsToStepExprK`. The continuation `rest` reads the new binding.
+  -- Inside a branch the continuation is the branch's own `k`, built from the code after the `if`,
+  -- so each path carries its own value of `x` into it. SCOPE-1 guarantees `x` names one binding
+  -- (no shadowing), and `cBranchComposes` (bug 101) still refuses a branch whose `let` the
+  -- continuation names.
+  | (.assign name val) :: rest, k => do
+    if !cExprNoEscape val then none
+    let pv ← cExprToPExprImpl val
+    let pb ← cStmtsToPExprKImpl rest k
+    some (.letIn name pv pb)
   -- Array index assignment `arr[i] = v`.  Only supported when
   -- `arr` is a simple identifier — we model the mutation as a
   -- shadowing letIn that rebinds the name to (arraySet arr idx
@@ -1505,7 +1517,6 @@ def identifyUnsupported (body : List CStmt) : List String :=
     | .continue_ .. => some "continue"
     | .defer .. => some "defer"
     | .borrowIn .. => some "borrow region"
-    | .assign .. => some "mutable assignment"
     | _ => none
   let exprKinds := body.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
   (structural ++ stmtKinds ++ exprKinds).eraseDups
