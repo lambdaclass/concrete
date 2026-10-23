@@ -21,6 +21,12 @@ statement and the missing link is tracked debt, which closes as the Core semanti
 link is optional today and becomes required area by area (§2.1, S7). Once an entry has a link,
 it never loses it (S3).
 
+Authority moves one chapter at a time (TIGHTENING_DECISIONS D11). When an area's chapter is in
+this directory and checked, the chapter replaces the area's old prose home, and the old document
+becomes a design record (§6). The rules' Lean definitions then govern, and a disagreement
+between them and the chapter fails the gate, because every example runs against the
+implementation. Until an area's chapter migrates, its old prose home stays normative.
+
 This README defines the format, the gate and the migration plan. It states no language rules.
 
 ## 1. Layout
@@ -328,8 +334,8 @@ Each step lands with the gate green. The steps run in this order:
 
 0. **pipeline.md** (`PASS-`, grown from the stub): the boundary contracts of
    PIPELINE_CONTRACTS.md, one preservation entry per stage (Elab, Mono, CoreCheck, Lower, SSA),
-   each with its relation and its evidence. Generic substitution and binder modes are first
-   (PASS-1 and PASS-2, in the pilot). `check_pipeline_contracts.sh`'s fixtures become the
+   each with its relation and its evidence (D12: every pass states what it preserves). Generic
+   substitution and binder modes are first (PASS-1 and PASS-2, in the pilot). `check_pipeline_contracts.sh`'s fixtures become the
    entries' reject examples, and PIPELINE_CONTRACTS.md becomes their design record.
 1. **ownership.md** (`OWN-`): linearity, consumption, Copy and Destroy, discards, defer.
    It replaces the normative parts of OWNERSHIP_MODEL, VALUE_FLOW_SPEC (the constructor table
@@ -337,7 +343,8 @@ Each step lands with the gate green. The steps run in this order:
    exit-order rules (TIGHTENING_DECISIONS §4.5) enter as pending.
 2. **types.md** (`TYPE-`): type formation, aliases, generics and const generics, newtypes,
    construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,
-   VALIDATED_WRAPPERS and the type sections of VALUE_MODEL.
+   VALIDATED_WRAPPERS and the type sections of VALUE_MODEL. D5 (a bare `T` is Any) enters as
+   enforced. D6 (Copy is explicit) enters as pending.
 3. **patterns.md** (`PAT-`, grown from the stub): exhaustiveness, nested and destructuring
    patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING,
    PATTERN_ERGONOMICS, NESTED_PATTERNS and TUPLES.
@@ -351,13 +358,15 @@ Each step lands with the gate green. The steps run in this order:
 6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,
-   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP enters as pending.
+   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP, D8 (global state) and D10
+   (the `trusted mod` marker) enter as pending.
 7. **contracts.md** (`CON-`): `requires`, `ensures`, invariants, ghost code, the specification
    judgment. It replaces the language half of CONTRACTS_GUIDE. T-H27 enters as pending.
 8. **modules.md** (`MOD-`): modules, imports, visibility, name resolution and namespaces
-   (SCOPE-4's open question). It replaces VISIBILITY_AND_MODULE_HYGIENE.
-9. **traits.md** (`TRAIT-`): traits, impls, bounds and coherence. The trait-coherence branch
-   may start this chapter at any point. It does not wait for its place in this order.
+   (SCOPE-4's open question). It replaces VISIBILITY_AND_MODULE_HYGIENE. D9 (one file per module,
+   with generated interfaces) enters as pending.
+9. **traits.md** (`TRAIT-`): traits, impls, bounds and coherence (D7). The trait-coherence
+   branch may start this chapter at any point. It does not wait for its place in this order.
 10. **syntax.md** (`SYN-`): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
     owners of the productions, and the chapter cites productions by name rather than copying
     them. Its entries cover what the grammar cannot say, such as the precedence and
