@@ -22,7 +22,7 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
-STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "link"}
+STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "ssa-verify", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation"}
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>

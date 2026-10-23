@@ -109,11 +109,11 @@ E0296	rule	newtype constructed outside its defining module (construction rights,
 E0297	rule	struct literal touches a field private to its defining module (0b)
 E0298	rule	read/write of a struct field private to its defining module (0b)
 E0299	unmigrated:modules	a module binds one name twice (import vs local definition, or two imports)
-E0300	unmigrated:patterns	a match guard moves a non-Copy value (guards are read-only; bug 090)
+E0300	rule	a match guard moves a non-Copy value (guards are read-only; bug 090)
 E0301	rule	a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)
 E0302	rule	a `let` binding holds a reference (references are scoped; exit 2i)
 E0303	rule	a reference binding is assigned (references are never re-pointed; exit 2i)
-E0304	unmigrated:patterns	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
+E0304	rule	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
 E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
 E0306	rule	a struct or enum literal gives a field more than once (bug 193)
 E0310	unmigrated:statements	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
@@ -151,11 +151,11 @@ E0510	internal	binding type mismatch (let, assignment, argument, field or store)
 E0520	unmigrated:trusted	insufficient capabilities
 E0521	unmigrated:trusted	missing capability
 E0522	unmigrated:trusted	argument count mismatch
-E0530	unmigrated:patterns	non-exhaustive match: missing variant
-E0531	unmigrated:patterns	match arm wrong enum
-E0532	unmigrated:patterns	duplicate match arm
-E0533	unmigrated:patterns	variant field count mismatch
-E0534	unmigrated:patterns	non-enum match without default arm
+E0530	rule	non-exhaustive match: missing variant
+E0531	rule	match arm wrong enum
+E0532	rule	duplicate match arm
+E0533	rule	variant field count mismatch
+E0534	rule	non-enum match without default arm
 E0540	rule	while condition not Bool
 E0541	rule	if condition not Bool
 E0542	unmigrated:statements	break outside loop

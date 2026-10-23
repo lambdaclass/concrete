@@ -47,7 +47,7 @@ areas exist (§8).
 |---|---|---|
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
-| `patterns.md` | `PAT-` | stub: PAT-1, the renamed pattern binder that SCOPE-1 depends on (it was gap G4) |
+| `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-7 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives) |
 | `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
@@ -361,9 +361,9 @@ Each step lands with the gate green. The steps run in this order:
    construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,
    VALIDATED_WRAPPERS and the type sections of VALUE_MODEL. D5 (a bare `T` is Any) enters as
    enforced. D6 (Copy is explicit) enters as pending.
-3. **patterns.md** (`PAT-`, grown from the stub): exhaustiveness, nested and destructuring
-   patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING,
-   PATTERN_ERGONOMICS, NESTED_PATTERNS and TUPLES.
+3. **patterns.md** (`PAT-`, migrated 2026-10-23): exhaustiveness, nested and destructuring
+   patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING and
+   PATTERN_ERGONOMICS; NESTED_PATTERNS and TUPLES stay the records of their deferred decisions.
 4. **arithmetic.md** (`ARITH-`): integer and float semantics, overflow, checked, wrapping and
    saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL. T-ARITH and
    T-CAST enter as pending.

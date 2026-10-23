@@ -480,7 +480,7 @@ private def structOfTy (ty : Ty) : StateM CoreCheckEnv (Option CStructDef) := do
 
 mutual
 
--- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   match e with
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()

@@ -6219,10 +6219,14 @@ open Json in
 def diagnosticCodesReport : String :=
   -- A code with a whole-code rule (`codeRuleTag`, docs/spec) names it, like `entryR` below.
   let entry (code pass severity description : String) : Val :=
-    match codeRuleTag code with
-    | some r => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
-                      ("description", .str description), ("rules", .str r)]
-    | none => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    let rules := match codeRuleTag code with
+      | some r => r
+      | none => ", ".intercalate (codeSharedRules code)
+    if rules.isEmpty then
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    else
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
+            ("description", .str description), ("rules", .str rules)]
   -- A code that enforces exit 2i rules names them with their versions (MEMORY_SEMANTICS §15.5
   -- item 1); `scripts/tests/check_rules_2i.sh` checks every manifest row's tag against this.
   let entryR (code pass severity description rules : String) : Val :=
