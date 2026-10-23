@@ -10,7 +10,7 @@ mod owned {
     pub struct Token { pub id: Int }
     // Destroy is the compiler's trait: its impl lives with its type (TC-3).
     impl Destroy for Token {
-        fn destroy(self) { let Token { id } = self; }
+        pub fn destroy(self) { let Token { id } = self; }
     }
     pub fn make(id: Int) -> Token { return Token { id: id }; }
     pub fn id_of(t: &Token) -> Int { return t.id; }

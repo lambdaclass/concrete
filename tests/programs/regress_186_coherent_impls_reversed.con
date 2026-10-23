@@ -26,7 +26,7 @@ mod owned {
     pub fn id_of(t: &Token) -> Int { return t.id; }
     pub fn make(id: Int) -> Token { return Token { id: id }; }
     impl Destroy for Token {
-        fn destroy(self) { let Token { id } = self; }
+        pub fn destroy(self) { let Token { id } = self; }
     }
     pub struct Token { pub id: Int }
 }
