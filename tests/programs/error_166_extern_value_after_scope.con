@@ -1,0 +1,20 @@
+// Bug 166 (D4), Codex review: after a block-local binding named like an extern goes out of scope,
+// the name is the extern again, and taking it as a value is refused (E0588).
+trusted extern fn labs(x: Int) with() -> Int;
+
+fn id(x: Int) -> Int {
+    return x;
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    let c: bool = true;
+    if c {
+        let labs: fn(Int) -> Int = id;
+        let n: Int = labs(1);
+    }
+    return apply(labs, -42);
+}

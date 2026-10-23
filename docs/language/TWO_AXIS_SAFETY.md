@@ -1,5 +1,7 @@
 # The two safety axes, and what the migration experiment measured
 
+The rules are in [docs/spec/trusted.md](../spec/trusted.md); this document is a design record.
+
 Status: design note + experiment record.
 Date: 2026-09-25. Gated by `scripts/tests/check_trusted_method.sh`.
 

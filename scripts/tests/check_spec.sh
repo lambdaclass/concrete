@@ -165,7 +165,7 @@ fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/
   && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-value exit=42", F + "con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\ntrait Get", "pending=R-9999 now=accept:42\ntrait Get", 1)' \
+fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-9999 now=accept:42\nmod num", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"
 mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@1\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@1\.\*\* //')" > "$TMP/n11/planted.md"
 control "N11: a normative sentence copied into another doc" S11 "planted.md restates the normative sentence of REF-6" -- restatements --scan-root "$TMP/n11"
@@ -181,15 +181,16 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("**REF-1@1.**", "**REF-1@2.**",
   && control "N4d: a reject example whose diagnostic carries another rule version" S4 "REF-1/return-param" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-param
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=borrow-each-use exit=42", "name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N4e: a pending example that already holds" S4 "pending example already holds" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/borrow-each-use
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\ntrait Get", "pending=R-0500 now=accept:41\ntrait Get", 1)' \
-  && control "N4f: a pending example whose now= is wrong" S4 "pending example changed behaviour" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/trait-declaration
+fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-0500 now=accept:41\nmod num", 1)' \
+  && control "N4f: a pending example whose now= is wrong" S4 "pending example changed behaviour" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only TYPE-11/foreign-newtype-unwrap
 
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
   && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
-# an unmigrated code (whichever is first today), reclassified as a rule code no entry names
-UNM="$(awk -F'\t' '$2 ~ /^unmigrated:/ {print $1; exit}' docs/spec/codes.tsv)"
-[ -n "$UNM" ] || no "N6b: codes.tsv has no unmigrated code left to plant; update this control"
+# an internal code (whichever is first today; no entry names one), reclassified as a rule code.
+# Every user-facing code is migrated, so an internal one is the code no entry names.
+UNM="$(awk -F'\t' '$2 == "internal" {print $1; exit}' docs/spec/codes.tsv)"
+[ -n "$UNM" ] || no "N6b: codes.tsv has no internal code left to plant; update this control"
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^$UNM\t[^\t\n]*', '$UNM\trule', s, flags=re.M)" \
   && control "N6b: a rule-class code that no entry names" S6 "$UNM: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 

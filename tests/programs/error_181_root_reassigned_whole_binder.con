@@ -1,0 +1,10 @@
+// D3 (bug 181): a binder through a borrowed scrutinee is a reference, so the scrutinee's root stays
+// frozen while the binder lives, Copy payloads included (REF-8). Root reassigned: whole_binder shape. E0232.
+fn use_it(r: &Int) -> Int { return *r; }
+fn f() -> Int {
+    let mut x: Int = 5;
+    match &x {
+        n => { x = 9; return use_it(n); }
+    }
+}
+fn main() -> Int { return f(); }

@@ -1,0 +1,10 @@
+// Bug 194: only one branch returns, so the end is reachable. Expected: E0307.
+fn f(c: bool) -> Int {
+    if c {
+        return 1;
+    }
+}
+
+fn main() -> Int {
+    return f(true) + 41;
+}

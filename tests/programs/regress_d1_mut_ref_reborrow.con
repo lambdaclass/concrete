@@ -1,0 +1,45 @@
+// D1 (decision Q1, R-0496): every `&mut` argument is an implicit reborrow, whatever binding it
+// comes from (a parameter, a borrow-block binder, an arm binder) and whatever the call form (free
+// function, method argument, `&mut self` receiver, static method, function pointer). The reference
+// stays usable after the call; an exclusive reference may also lapse unused. Exit 42.
+struct Copy C { n: Int }
+
+impl C {
+    fn bump(&mut self) {
+        self.n = self.n + 1;
+    }
+    fn add_to(&self, r: &mut Int) {
+        *r = *r + self.n;
+    }
+}
+
+fn inc(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn twice(r: &mut Int) {
+    inc(r);
+    inc(r);
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    twice(&mut x);
+    // a borrow-block binder: reborrowed by each call (it used to be consumed by the first)
+    borrow mut x as r in R {
+        inc(r);
+        inc(r);
+        let f: fn(&mut Int) = inc;
+        f(r);
+        let c: C = C { n: 30 };
+        c.add_to(r);
+    }
+    let mut c2: C = C { n: 0 };
+    borrow mut c2 as rc in R2 {
+        rc.bump();
+        rc.bump();
+    }
+    // an exclusive reference that is never used lapses (B2)
+    borrow mut x as unused in R3 { }
+    return x + c2.n + 5;
+}

@@ -4,6 +4,8 @@ import Concrete.IR.SSA
 import Concrete.Check.Layout
 import Concrete.Resolve.Intrinsic
 import Concrete.Report.Diagnostic
+import Concrete.Backend.Symbols
+import Concrete.Semantics.BindingMode
 
 namespace Concrete
 
@@ -335,6 +337,24 @@ private def getLayoutCtx : LowerM Layout.Ctx := do
 private def computeTySize (ty : Ty) : LowerM Nat := do
   let ctx ← getLayoutCtx
   return Layout.tySize ctx ty
+
+/-- Bug 190: an array VALUE is the address of its storage in Lower (an `arrayLit` is its alloca,
+    a variable read is the variable's slot), so binding one from a place, or passing one by value,
+    shared the source's storage: `let t = xs; xs[0] = 9;` changed `t`. Wherever an array is bound
+    or passed BY VALUE from an expression that is not a fresh value (an array literal or a call
+    result), the value is copied into its own storage first. Arrays are Copy, so a copy is what the
+    program means; the interpreter already copies. -/
+private def snapshotArrayValue (value : CExpr) (val : SVal) : LowerM SVal := do
+  match value.ty with
+  | .array _ _ =>
+    match value with
+    | .arrayLit .. | .call .. => return val
+    | _ =>
+      let dst ← freshReg "arrcopy."
+      emitEntryAlloca (.alloca dst value.ty)
+      emit (.store val (.reg dst value.ty))
+      return .reg dst value.ty
+  | _ => return val
 
 /-- Is this type an aggregate that should use stable alloca storage
     instead of phi-transporting through loop headers?
@@ -931,6 +951,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let intrinsic := match callee with
       | .indirect _ => none
       | .direct fn => if st.definedFns.contains fn then none else resolveIntrinsic fn
+      -- A compiler-generated runtime call is its helper whatever the program defines (bug 165).
+      | .runtime helper => resolveIntrinsic helper
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants
     if intrinsic == some .sizeof then
       let argTy := match _typeArgs with | t :: _ => t | [] => Ty.int
@@ -940,6 +962,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       let argTy := match _typeArgs with | t :: _ => t | [] => Ty.int
       let ctx ← getLayoutCtx
       return .intConst (Int.ofNat (Layout.tyAlign ctx argTy)) .uint
+    -- T-RAWDUP: `read_owned(p)` moves the value out of the slot: the load `*p` is, stated as a
+    -- transfer (the checker refuses the bare `*p` for a non-Copy pointee).
+    if intrinsic == some .readOwned then
+      match args.head? with
+      | some arg =>
+        let pv ← lowerExpr arg
+        let dst ← freshReg
+        emit (.load dst pv ty)
+        return .reg dst ty
+      | none => return .unit
     -- Handle alloc(val) → malloc + store
     if intrinsic == some .alloc then
       match args.head? with
@@ -1004,7 +1036,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- STABLE base address (promoted local or pointer) — never a loaded copy.
         -- The old `&mut field` special case GEP'd into `lowerExpr obj`, a loaded
         -- struct VALUE, so the field write was silently lost.
-        let v ← lowerExpr arg
+        -- A by-value array argument is the callee's own copy (bug 190).
+        let v ← snapshotArrayValue arg (← lowerExpr arg)
         aVals := aVals ++ [v]
     -- Resolve fn-pointer variables: if the call target is a local variable
     -- holding a fn pointer, resolve it to the actual function / register name.
@@ -1014,6 +1047,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let callTarget : SCallee ← do
       match callee with
       | .direct name => pure (.direct name)
+      -- The helper's reserved `_C$rt.` symbol, which no Concrete definition can take (bug 165).
+      | .runtime helper => pure (.foreign (Symbols.runtimeFn helper))
       | .indirect binding =>
         match ← lookupVar binding with
         -- Devirtualization: the binding holds a statically-known function, so
@@ -1120,7 +1155,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
   | .match_ scrutinee arms ty =>
     -- Bug #3 fix: actual pattern comparison dispatch
     -- Bug #4 fix: capture real result values for phi nodes
-    let scrVal ← lowerExpr scrutinee
+    -- A binder arm binds the scrutinee BY VALUE (bug 190: an array scrutinee is copied).
+    let scrVal ← snapshotArrayValue scrutinee (← lowerExpr scrutinee)
     let mergeLabel ← freshLabel "merge"
     let mergeDst ← freshReg
     let mut phiIncoming : List (SVal × String) := []
@@ -1183,10 +1219,20 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             if bname != "_" then
               let gepDst ← freshReg
               let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
-              emit (.gep gepDst (.reg payloadGep .i8) [.intConst (Int.ofNat foff) .int] .i8)
-              let loadDst ← freshReg
-              emit (.load loadDst (.reg gepDst bty) bty)
-              setVar bname (.reg loadDst bty)
+              -- The base operand carries the binder's type for a borrowed binder: SSA cleanup
+              -- folds a zero-offset GEP into its base operand, which must then still be typed
+              -- as the reference the binder is.
+              let baseTy := if binderIsBorrow bty then bty else .i8
+              emit (.gep gepDst (.reg payloadGep baseTy) [.intConst (Int.ofNat foff) .int] .i8)
+              -- D3 (bug 181): a borrowed binder (reference-typed in Core, Concrete/Semantics/
+              -- BindingMode.lean) is the payload field's ADDRESS in the scrutinee's storage; a
+              -- by-value binder is its value.
+              if binderIsBorrow bty then
+                setVar bname (.reg gepDst bty)
+              else
+                let loadDst ← freshReg
+                emit (.load loadDst (.reg gepDst bty) bty)
+                setVar bname (.reg loadDst bty)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1252,6 +1298,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- reference (`match &x { 0 => … }`), deref it once so scalar comparisons
       -- and variable bindings see the value, mirroring Check's auto-deref of the
       -- scrutinee type. (The enum branch above already loads through the pointer.)
+      -- A variable arm over a reference binds the reference itself (D3), so keep it.
+      let scrRef := scrVal
       let scrVal ← match scrutinee.ty with
         | .ref t | .refMut t => do
           let d ← freshReg "mderef."
@@ -1303,7 +1351,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding != "_" then setVar binding scrVal
+          if binding != "_" then setVar binding (if binderIsBorrow _bindTy then scrRef else scrVal)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1884,14 +1932,16 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       emit (.store val (.reg allocaReg ty))
       addPromotedAlloca name allocaReg ty
     else
-      setVar name val
+      setVar name (← snapshotArrayValue value val)
 
   | .assign name value =>
     let val ← lowerExpr value
     setVar name val
 
   | .return_ (some value) _retTy =>
-    let val ← lowerExpr value
+    -- The result is read BEFORE the deferred calls run, so an array result is copied first
+    -- (bug 190, Codex review: a defer writing the array changed the returned value).
+    let val ← snapshotArrayValue value (← lowerExpr value)
     emitAllDeferredCalls
     terminateBlock (.ret (some val))
 
@@ -1903,7 +1953,8 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let v ← lowerExpr e
     -- Only a trailing value expression (no `;`) is the block's value; a discarded
     -- statement still lowers (side effects) but does not set the block value (#42).
-    if iv then setVar "__last_expr" v else pure ()
+    -- A block's value is taken before the block's deferred calls run (bug 190).
+    if iv then setVar "__last_expr" (← snapshotArrayValue e v) else pure ()
 
   | .ifElse cond then_ else_ =>
     let condVal ← lowerExpr cond
@@ -2196,8 +2247,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     storeToPlace (.fieldAccess obj field value.ty) fVal
 
   | .derefAssign target value =>
-    let tVal ← lowerExpr target
+    -- Evaluation-order rule 7 (STATEMENT_EXPRESSION_MODEL): the right-hand side first, then
+    -- the destination's subexpressions, as every other assignment form here and the
+    -- interpreter do. Lowering `target` first ran its effects first (bug 183).
     let vVal ← lowerExpr value
+    let tVal ← lowerExpr target
     emit (.store vVal tVal)
 
   | .arrayIndexAssign arr index value =>

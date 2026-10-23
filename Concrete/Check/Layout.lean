@@ -137,12 +137,12 @@ def substEnumTypeArgs (ed : CEnumDef) (typeArgs : List Ty) : CEnumDef :=
 
     * `lookupAgg name` → `(isCopy, typeParams, fieldTys)` for a struct or enum:
       the declared-Copy flag plus every field/payload type (a generic aggregate
-      is Copy iff declared Copy AND every field is Copy after substituting the
-      instantiation's args).
+      is Copy iff declared Copy AND every type argument is Copy, decision D6).
     * `lookupNewtype name` → the wrapped inner type (front-end only; Core has no
       newtypes, so it passes `fun _ => none`).
     * `typeVarIsCopy name` → is an unresolved type variable Copy — bounds-based in
       Check (`T: Copy`), a fixed per-stage policy in the Core stages. -/
+-- spec: OWN-D1, spec: TYPE-14 (docs/spec/ownership.md, types.md; this declaration enforces the rule)
 partial def isCopyTyGeneric
     (lookupAgg : String → Option (Bool × List String × List Ty))
     (lookupNewtype : String → Option Ty)
@@ -161,11 +161,15 @@ partial def isCopyTyGeneric
     | none => match lookupNewtype name with
       | some inner => isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy inner
       | none => false
+  -- Decision D6 (explicit Copy): a generic struct or enum DECLARED `Copy` is Copy exactly when
+  -- every type argument is Copy, decided from the declaration alone (as a derived `Copy` is), never
+  -- from the instantiated fields. The declaration is checked once, with its parameters taken as Copy
+  -- (CoreCheck, E0571), so "declared Copy and every argument Copy" implies "every field Copy". A
+  -- generic not declared `Copy` is never Copy. Invariant under substitution: no fixpoint over the
+  -- type graph is needed (Mono's former demotion fixpoint is gone).
   | .generic name args _ =>
     match lookupAgg name with
-    | some (isC, typeParams, fieldTys) =>
-      isC && fieldTys.all fun fty =>
-        isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy (substTyVars (typeParams.zip args) fty)
+    | some (isC, _, _) => isC && args.all (isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy)
     | none => false
   | .array elem _ => isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy elem
   | _ => false

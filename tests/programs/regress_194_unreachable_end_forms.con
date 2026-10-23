@@ -1,0 +1,16 @@
+// Bug 194: a return before the last statement makes the end unreachable (no E0307).
+fn f() -> Int {
+    return 42;
+    let x: Int = 0;
+}
+
+fn g(c: bool) -> Int {
+    let mut out: Int = 0;
+    borrow out as r in R {
+        return 0;
+    }
+}
+
+fn main() -> Int {
+    return f() + g(true);
+}

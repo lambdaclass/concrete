@@ -1,0 +1,11 @@
+// D3 (bug 181): a binder through a borrowed scrutinee is a reference, so the scrutinee's root stays
+// frozen while the binder lives, Copy payloads included (REF-8). Root reassigned: defer shape. E0232.
+fn show(r: &Int) { let _x: Int = *r; }
+fn f() -> Int {
+    let mut o: Option<Int> = Option::Some { value: 1 };
+    match &o {
+        Option::Some { value } => { defer show(value); o = Option::None; return 1; },
+        Option::None => { return 0; }
+    }
+}
+fn main() -> Int { return f(); }

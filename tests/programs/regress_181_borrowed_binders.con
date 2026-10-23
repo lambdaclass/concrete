@@ -1,0 +1,91 @@
+// D3 (bug 181): every binder through a borrowed scrutinee is a reference (`&T`), Copy payloads
+// included, and is read with `*value`. The generic shape of bug 181 (a payload binder passed to a
+// `fn(&T)` parameter, specialized at `Int`) now passes the payload's address natively and in the
+// interpreter. Shapes: generic at Int and at a struct, a guard, `while let`, a nested pattern, an
+// early exit, a deferred read, a whole-value binder over `&Int`, and an owned scrutinee (still by
+// value). The parts sum to 39; main adds 3 and exits 42.
+struct Copy P { n: Int }
+
+fn get<T>(o: &Option<T>, k: fn(&T) -> Int) -> Int {
+    match o {
+        Option::Some { value } => { return k(value); },
+        Option::None => { return 0; }
+    }
+}
+
+fn read(p: &Int) -> Int {
+    return *p;
+}
+
+fn read_p(p: &P) -> Int {
+    return p.n;
+}
+
+fn guarded(o: &Option<Int>) -> Int {
+    match o {
+        Option::Some { value } if *value > 2 => { return *value; },
+        _ => { return 0; }
+    }
+}
+
+fn drain(o: &Option<Int>) -> Int {
+    let mut total: Int = 0;
+    let mut steps: Int = 0;
+    while let Option::Some { value } = o {
+        total = total + *value;
+        steps = steps + 1;
+        if steps == 2 { break; }
+    }
+    return total;
+}
+
+enum Copy W { A { inner: Option<Int> }, B }
+
+fn nested(w: &W) -> Int {
+    match w {
+        W::A { inner } => {
+            match inner {
+                Option::Some { value } => { return *value; },
+                Option::None => { return 0; }
+            }
+        },
+        W::B => { return 0; }
+    }
+}
+
+fn show(r: &Int) {
+    let _x: Int = *r;
+}
+
+fn deferred(o: &Option<Int>) -> Int {
+    match o {
+        Option::Some { value } => { defer show(value); return *value; },
+        Option::None => { return 0; }
+    }
+}
+
+fn whole(x: &Int) -> Int {
+    match x {
+        0 => { return 100; }
+        n => { return *n; }
+    }
+}
+
+fn owned(o: Option<Int>) -> Int {
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    let a: Option<Int> = Option::Some { value: 7 };
+    let b: Option<P> = Option::Some { value: P { n: 5 } };
+    let w: W = W::A { inner: Option::Some { value: 4 } };
+    let one: Int = 1;
+    let three: Option<Int> = Option::Some { value: 3 };
+    let s1: Int = get::<Int>(&a, read) + get::<P>(&b, read_p);
+    let s2: Int = guarded(&a) + drain(&three) + nested(&w);
+    let s3: Int = deferred(&a) + whole(&one) + owned(Option::Some { value: 2 });
+    return s1 + s2 + s3 + 3;
+}

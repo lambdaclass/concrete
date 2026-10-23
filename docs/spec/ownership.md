@@ -19,7 +19,7 @@ Every claim of "exactly once" here holds on every path that does not abort (STMT
 <a id="OWN-D1"></a>
 ### OWN-D1. Copy
 
-**OWN-D1@1.** A type is Copy when it is a primitive, a shared reference, a raw pointer, a function pointer, an array of a Copy type, a newtype over a Copy type, a type parameter bounded by `Copy`, or an instantiation of a struct or enum declared `Copy` whose fields are all Copy after substitution, and every other type is linear.
+**OWN-D1@2.** A type is Copy when it is a primitive, a shared reference, a raw pointer, a function pointer, an array of a Copy type, a newtype over a Copy type, a type parameter bounded by `Copy`, or an instantiation of a struct or enum declared `Copy` whose type arguments are all Copy, and every other type is linear.
 
 - Kind: definition
 - Uses: none
@@ -31,17 +31,20 @@ Every claim of "exactly once" here holds on every path that does not abort (STMT
 - Evidence: by-users
 
 **Rationale.** Copy answers "may this be duplicated", not "may this be dropped". A generic
-declared `Copy` is Copy only at the instantiations whose payloads are Copy: `Option<i32>` is,
-`Option<String>` is not. An instantiation that does not qualify is linear, not an error.
-TIGHTENING_DECISIONS D6 replaces this conditional rule with Copy as an explicit, checked
-declaration; that change belongs to the types chapter.
+declared `Copy` is Copy exactly at the instantiations whose type arguments are Copy:
+`Option<i32>` is, `Option<String>` is not. An instantiation that does not qualify is linear, not
+an error. Version 2 (TIGHTENING_DECISIONS D6, option (a), 2026-10-23) decides this from the
+declaration alone, as a derived `Copy` is: version 1 looked at the fields after substitution, so
+a parameter no field mentions (`struct Copy P<T> { n: Int }`) made every instantiation Copy, and
+Mono needed a fixpoint over the type graph. The declaration itself is checked once (OWN-14), and
+TYPE-14 states the consequence.
 
 ## Rules
 
 <a id="OWN-1"></a>
 ### OWN-1. A moved value is not used again
 
-**OWN-1@1.** After a linear value is moved or consumed, the binding that held it is not used or borrowed again.
+**OWN-1@2.** After a linear value is moved or consumed, the binding that held it is not used or borrowed again.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -113,7 +116,7 @@ fn main() -> Int {
 <a id="OWN-2"></a>
 ### OWN-2. Every owned linear binding is consumed before every exit
 
-**OWN-2@1.** Every owned linear binding, parameters and by-value `self` included, is consumed before every exit of its scope (falling off the end, `return`, `break` and `continue`), except where the end of the scope is unreachable.
+**OWN-2@2.** Every owned linear binding, parameters and by-value `self` included, is consumed before every exit of its scope (falling off the end, `return`, `break` and `continue`), except where the end of the scope is unreachable.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -184,7 +187,7 @@ fn main() -> Int {
 <a id="OWN-3"></a>
 ### OWN-3. Branches agree on what they consume
 
-**OWN-3@1.** Every path of an `if` or `match` that reaches the point after it has consumed the same linear values, while a path that diverges or leaves the function is exempt from that agreement.
+**OWN-3@2.** Every path of an `if` or `match` that reaches the point after it has consumed the same linear values, while a path that diverges or leaves the function is exempt from that agreement.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -243,7 +246,7 @@ fn main() -> Int {
 <a id="OWN-4"></a>
 ### OWN-4. A loop body does not consume an outer value
 
-**OWN-4@1.** A loop body does not consume a linear value declared outside the loop, except on a path that leaves the function or the loop before another iteration can run, or in an assignment that consumes a `mut` binding and gives it a new value in the same statement (`acc = f(acc)`).
+**OWN-4@2.** A loop body does not consume a linear value declared outside the loop, except on a path that leaves the function or the loop before another iteration can run, or in an assignment that consumes a `mut` binding and gives it a new value in the same statement (`acc = f(acc)`).
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -303,7 +306,7 @@ fn main() -> Int {
 <a id="OWN-5"></a>
 ### OWN-5. A linear value is never discarded
 
-**OWN-5@1.** A linear value is never discarded: `_` ignores only Copy values, `let _` does not exist, a statement expression does not drop a linear value, and `discard(e)` accepts only a Copy value.
+**OWN-5@2.** A linear value is never discarded: `_` ignores only Copy values, `let _` does not exist, a statement expression does not drop a linear value, and `discard(e)` accepts only a Copy value.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -319,7 +322,9 @@ owns a resource. A linear value is accounted for: it is consumed, passed on, ret
 with `destroy(x)`, or destructured exhaustively with its parts handed off. `destroy(x)` runs a
 linear value's destructor, and `discard(x)` acknowledges that a trivial Copy value is dropped.
 Over a non-Copy enum, a `let ... else`, `if let` or `while let` that has no arm for the other
-variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead.
+variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead. A
+variant pattern written without a field list ignores every field, so over an owned scrutinee it
+is refused when a field is not Copy (bug 197).
 
 ```con reject name=wildcard-drops-linear code=E0288 stage=check pair=account-for-it
 struct R { v: Int }
@@ -343,6 +348,19 @@ fn mk() -> R {
 fn main() -> Int {
     mk();
     return 0;
+}
+```
+
+```con reject name=bare-variant-drops-payload code=E0288 stage=check pair=account-for-it
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn main() -> Int {
+    let e: E = E::A { r: R { v: 42 } };
+    match e {
+        E::A => { return 1; },
+        E::B => { return 0; }
+    }
 }
 ```
 
@@ -430,7 +448,7 @@ fn main() -> Int {
 <a id="OWN-7"></a>
 ### OWN-7. A pure value is not computed and thrown away
 
-**OWN-7@1.** A statement expression does not discard a pure, trap-free, non-Unit Copy value, that is, one built only from literals, variable and field reads, and arithmetic, comparison, logical, bitwise and shift operators over them.
+**OWN-7@2.** A statement expression does not discard a pure, trap-free, non-Unit Copy value, that is, one built only from literals, variable and field reads, and arithmetic, comparison, logical, bitwise and shift operators over them.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -465,7 +483,7 @@ fn main() -> Int {
 <a id="OWN-8"></a>
 ### OWN-8. A non-Copy part is not read out of a place
 
-**OWN-8@1.** A non-Copy field, array element or heap interior is never read out of its place by value, so it is borrowed in place or its whole owner is destructured.
+**OWN-8@2.** A non-Copy field, array element or heap interior is never read out of its place by value, so it is borrowed in place or its whole owner is destructured.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -509,7 +527,7 @@ fn main() -> Int {
 <a id="OWN-9"></a>
 ### OWN-9. An assignment never overwrites a live linear value
 
-**OWN-9@1.** An assignment never overwrites a live linear value, whether it is in a binding, a field, an array element or a place behind `&mut`, and a `mut` binding of linear type may be assigned again once its old value has been consumed.
+**OWN-9@2.** An assignment never overwrites a live linear value, whether it is in a binding, a field, an array element or a place behind `&mut`, and a `mut` binding of linear type may be assigned again once its old value has been consumed.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -758,7 +776,7 @@ fn main() -> Int {
 <a id="OWN-13"></a>
 ### OWN-13. Nothing is destroyed implicitly
 
-**OWN-13@1.** No value is destroyed implicitly: a linear value is destroyed only by an explicit consuming call (`destroy(x)`, a consuming method or a deferred one), no type is both Copy and `Destroy`, and a `Destroy` implementation requires no capability beyond `Alloc`.
+**OWN-13@2.** No value is destroyed implicitly: a linear value is destroyed only by an explicit consuming call (`destroy(x)`, a consuming method or a deferred one), no type is both Copy and `Destroy`, and a `Destroy` implementation requires no capability beyond `Alloc`.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -807,7 +825,7 @@ fn main() -> Int {
 <a id="OWN-14"></a>
 ### OWN-14. A `Copy` declaration has only Copy fields
 
-**OWN-14@1.** A struct or enum declared `Copy` has only Copy fields and payloads, so no Copy value ever contains a linear one.
+**OWN-14@2.** A struct or enum declared `Copy` has only fields and payloads that are Copy when its type parameters are taken as Copy, so no Copy value ever contains a linear one.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -819,8 +837,9 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** A Copy value is duplicated freely, so a linear field inside it would be duplicated
-with it. For a generic declaration the field check is made per instantiation today, and a
-non-qualifying instantiation is linear (OWN-D1).
+with it. A generic declaration is checked once, with its type parameters taken as Copy, so a
+field that is linear whatever the arguments (`String`) is refused at the declaration (version 2;
+version 1 checked each instantiation and made a non-qualifying one linear).
 
 ```con reject name=copy-with-linear-field code=E0571 stage=core-check pair=copy-with-copy-fields
 struct S { x: Int }
@@ -842,10 +861,18 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=generic-with-linear-field code=E0571 stage=core-check pair=copy-with-copy-fields
+struct Copy S<T> { a: T, s: String }
+
+fn main() -> Int {
+    return 0;
+}
+```
+
 <a id="OWN-15"></a>
 ### OWN-15. Every surface form has one value-flow behaviour
 
-**OWN-15@1.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states.
+**OWN-15@2.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states.
 
 - Kind: guarantee
 - Uses: OWN-D1
@@ -924,7 +951,7 @@ fn main() -> Int {
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1; E0292 for a still-live linear binding remains as a backstop); `let _` is removed (**E0289**) | conservation + discard |
+| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `let _` is removed (**E0289**) | conservation + discard |
 | `assign` | the old value must already be consumed (otherwise **E0219**, OWN-9); an ident right-hand side **moves** (H13) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linear value (OWN-2) | conservation + scope |
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free(...)` is itself the consumption when its pointee is Copy (a non-Copy pointee would be dropped: **E0287**, bug 144) | discard |

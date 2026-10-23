@@ -1,4 +1,7 @@
-// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): one call's borrows are disjoint: two locals, two fields of one struct. Run 42, binary = --interp.
+// Exit 2i REF-8 (MEMORY_SEMANTICS §15.3): one call's borrows are disjoint: two locals. Since D2
+// (loans keyed by root, 2026-10-23) two fields of ONE struct are not disjoint loans
+// (`error_d2_call_disjoint_fields.con`); the rewrite borrows each field in its own call. Run 42,
+// binary = --interp.
 struct Copy W { a: Int, b: Int }
 
 fn mix(a: &Int, b: &mut Int) -> Int {
@@ -16,6 +19,8 @@ fn main() -> Int {
     let mut y: Int = 0;
     let mut w: W = W { a: 0, b: 0 };
     let out: Int = mix(&x, &mut y);
-    two(&mut w.a, &mut w.b);
+    let mut b: Int = 0;
+    two(&mut w.a, &mut b);
+    w.b = b;
     return out + y + w.a + w.b;
 }

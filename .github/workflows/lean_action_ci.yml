@@ -1150,6 +1150,9 @@ jobs:
       - name: "Exit 2i rules (MEMORY_SEMANTICS §15 — second-class references and one binding per visible name, with versioned migration diagnostics)"
         run: bash scripts/tests/check_rules_2i.sh
 
+      - name: "Tightening batch (landing train 6 — bugs 136/137/165/166/183/185/190/198/199, D1/D2/D3/D6, G13/G15/G16)"
+        run: bash scripts/tests/check_tightening_rules.sh
+
       - name: Install Zola for the spec gate's site build (pinned, the version book.yml publishes with)
         run: |
           if command -v zola >/dev/null; then zola --version; else

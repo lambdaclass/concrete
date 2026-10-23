@@ -1,0 +1,14 @@
+// D2 (the Austral model, 2026-10-23): loans are keyed by root variable, so two `&mut` borrows of
+// different fields of one struct in one call overlap (both are loans on `w`). E0293 (REF-8).
+struct Copy W { a: Int, b: Int }
+
+fn two(a: &mut Int, b: &mut Int) {
+    *a = 1;
+    *b = 1;
+}
+
+fn main() -> Int {
+    let mut w: W = W { a: 0, b: 0 };
+    two(&mut w.a, &mut w.b);
+    return w.a + w.b;
+}

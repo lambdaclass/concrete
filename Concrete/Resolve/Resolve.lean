@@ -135,6 +135,9 @@ structure ResolveCtx where
   traitImpls : List (String × String) := []
   /-- True when resolving inside a trait definition (Self is allowed). -/
   inTraitDef : Bool := false
+  /-- The type parameters in scope (the function's and its impl's). A type parameter shadows a
+      declaration or builtin of the same name, so no arity is looked up for it (bug 200). -/
+  typeParams : List String := []
 
 /-- Result of the shallow (declaration-level) resolution phase.
     Carries everything the body phase needs plus any errors found during the shallow phase. -/
@@ -223,18 +226,26 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
 private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  if ctx.typeParams.contains name then none else
   match lookupSymKind ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
+  -- A type declared under the name (an alias, a trait) is not the builtin. A value binding is
+  -- in another namespace and does not hide it.
+  | some (.typeAlias _) | some (.trait _) => none
   | _ => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" | "Result" => some 0
     | _ => none
 
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  if ctx.typeParams.contains name then none else
   match lookupSymKind ctx name with
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
+  -- A type declared under the name (an alias, a trait) is not the builtin: `type Vec = ..` takes
+  -- no arguments (bug 200 review). A value binding is in another namespace and does not hide it.
+  | some (.typeAlias _) | some (.trait _) => none
   | _ => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" => some 1
     | "Result" => some 2
@@ -280,6 +291,12 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       | some _ => ctx
       | none => addError ctx .selfOutsideImpl span
     else if isKnownType ctx name then
+      -- Bug 200: a generic type named bare (`B` for `B<T>`) is E0113 (0 type arguments
+      -- given), as an explicit list of the wrong length is. Before this the missing
+      -- argument was accepted and left an unresolved parameter for later passes.
+      let ctx := match declaredTypeArity ctx name with
+        | some tp => if tp > 0 then addError ctx (.wrongTypeArgCount name tp 0) span else ctx
+        | none => ctx
       -- A struct with capability parameters cannot be named bare: `Writer` alone says
       -- nothing about what the handle may do, so it is an E0115 (0 capability
       -- arguments given), not something to infer later.
@@ -535,14 +552,15 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
 
 /-- Resolve a single function body. -/
 private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : FnDef)
-    (implType : Option String := none)
+    (implType : Option String := none) (implTypeParams : List String := [])
     (traitMethods : List (String × List String) := [])
     (traitImpls : List (String × String) := []) : Diagnostics :=
   let ctx : ResolveCtx := {
     globalScope := globalScope
     localScopes := [[]]
     errors := []
-    knownTypes := knownTypes ++ f.typeParams
+    knownTypes := knownTypes ++ implTypeParams ++ f.typeParams
+    typeParams := implTypeParams ++ f.typeParams
     currentImplType := implType
     traitMethods := traitMethods
     traitImpls := traitImpls
@@ -550,7 +568,17 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : 
   -- Validate parameter types and add params to scope
   let ctx := f.params.foldl (fun ctx p =>
     let ctx := addLocal ctx p.name (.var (some p.ty) false)
-    checkTyDeep ctx p.ty none) ctx
+    -- The parser writes a method's `self` as the impl's bare type name (`&Box2` in
+    -- `impl Tr for Box2<i32>`); its arguments are the impl target's, so it is not a bare
+    -- generic type and no arity is looked up for it (bug 200).
+    match implType with
+    | some tn =>
+      if p.name == "self" then
+        let saved := ctx.typeParams
+        let ctx := checkTyDeep { ctx with typeParams := tn :: saved } p.ty none
+        { ctx with typeParams := saved }
+      else checkTyDeep ctx p.ty none
+    | none => checkTyDeep ctx p.ty none) ctx
   -- Validate return type
   let ctx := checkTyDeep ctx f.retTy none
   -- Walk body
@@ -667,15 +695,15 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let aliasErrors := resolveTypeAliases m globalScope knownTypes
   -- Check top-level functions
   let fnErrors := m.functions.foldl (fun acc f =>
-    acc ++ resolveFnBody globalScope knownTypes f none traitMethods traitImpls_) []
+    acc ++ resolveFnBody globalScope knownTypes f none [] traitMethods traitImpls_) []
   -- Check impl block methods (with Self)
   let implErrors := m.implBlocks.foldl (fun acc ib =>
     acc ++ ib.methods.foldl (fun acc method =>
-      acc ++ resolveFnBody globalScope (knownTypes ++ ib.typeParams) method (some ib.typeName) traitMethods traitImpls_) []) []
+      acc ++ resolveFnBody globalScope knownTypes method (some ib.typeName) ib.typeParams traitMethods traitImpls_) []) []
   -- Check trait impl methods (with Self)
   let traitImplErrors := m.traitImpls.foldl (fun acc ti =>
     acc ++ ti.methods.foldl (fun acc method =>
-      acc ++ resolveFnBody globalScope (knownTypes ++ ti.typeParams) method (some ti.typeName) traitMethods traitImpls_) []) []
+      acc ++ resolveFnBody globalScope knownTypes method (some ti.typeName) ti.typeParams traitMethods traitImpls_) []) []
   -- R-0484 R3: every foreign binding declares its effects, and a known-effectful
   -- symbol may not be declared effect-free. The rule covers EVERY module: the walk
   -- descends into nested submodules (bug 113: it read only `m.externFns`, so an
@@ -897,6 +925,7 @@ def resolveBodies (modules : List Module) (shallow : ShallowResult) : Except Dia
 -- ============================================================
 
 /-- Resolve all modules. Returns resolved modules or diagnostics on failure. -/
+-- spec: TYPE-15 (docs/spec/types.md; this declaration enforces the rule)
 def resolveProgram (modules : List Module) (summaryTable : List (String × FileSummary) := []) : Except Diagnostics (List ResolvedModule) :=
   let moduleSummaries := modules.map fun m =>
     match summaryTable.find? fun (n, _) => n == m.name with

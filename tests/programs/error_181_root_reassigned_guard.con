@@ -1,0 +1,11 @@
+// D3 (bug 181): a binder through a borrowed scrutinee is a reference, so the scrutinee's root stays
+// frozen while the binder lives, Copy payloads included (REF-8). Root reassigned: guard shape. E0232.
+fn reset(o: &mut Option<Int>) -> bool { *o = Option::None; return true; }
+fn f() -> Int {
+    let mut o: Option<Int> = Option::Some { value: 1 };
+    match &o {
+        Option::Some { value } if reset(&mut o) => { return *value; },
+        _ => { return 0; }
+    }
+}
+fn main() -> Int { return f(); }

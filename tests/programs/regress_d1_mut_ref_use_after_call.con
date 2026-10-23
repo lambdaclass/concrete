@@ -1,0 +1,16 @@
+// D1 (decision Q1, 2026-10-23): every `&mut` argument is an implicit reborrow, borrow-block binders
+// included. This program was `error_mut_ref_use_after_call.con`, refused when a borrow-block binder was
+// consumed by the call it was passed to; it now runs. Exit 11.
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let mut result: Int = 0;
+    borrow mut n as r in R {
+        increment(r);
+        result = *r;
+    }
+    return result;
+}

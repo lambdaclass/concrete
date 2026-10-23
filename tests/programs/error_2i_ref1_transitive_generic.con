@@ -1,0 +1,23 @@
+// Exit 2i REF-1@1, gap G2: a generic instantiated at `*const &Int` only transitively (through a
+// generic caller's own type parameter) returns a raw pointer to a reference after
+// specialization. The post-mono verifier applies the front end's REF-1 judgment (`tyContainsRef`,
+// shared) and refuses it. E0236, pass post-mono.
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+fn relay<U>(x: U, k: fn(U) -> Int) -> Int {
+    return k(id::<U>(x));
+}
+
+trusted fn first(p: *const &Int) -> Int {
+    return 0;
+}
+
+trusted fn go(p: *const &Int) -> Int {
+    return relay::<*const &Int>(p, first);
+}
+
+fn main() -> Int {
+    return 0;
+}

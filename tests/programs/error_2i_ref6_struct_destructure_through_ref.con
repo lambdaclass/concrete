@@ -1,0 +1,15 @@
+// Exit 2i REF-6 with D3 (2026-10-23): destructuring a struct THROUGH a reference would bind each field
+// as a reference, and a `let` may not hold one, so it is refused (E0302), like the enum form. It was
+// accepted, binding the fields by value. The rewrite reads the fields:
+// `regress_2i_ref6_struct_fields_through_ref.con`.
+struct Copy S { x: Int, y: Int }
+
+fn read(s: &S) -> Int {
+    let S { x, y } = s;
+    return x + y;
+}
+
+fn main() -> Int {
+    let s: S = S { x: 40, y: 2 };
+    return read(&s);
+}

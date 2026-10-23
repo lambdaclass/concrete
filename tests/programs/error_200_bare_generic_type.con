@@ -1,0 +1,9 @@
+// Bug 200: a generic type named without its argument list was accepted. This program failed
+// in llvm-as natively (`alloca` of an unsized `%struct.Box1`) while --interp returned 42.
+// It must be rejected with E0113, as `Box1<Int, bool>` is.
+struct Copy Box1<T> { v: Int }
+
+fn main() -> Int {
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
+}

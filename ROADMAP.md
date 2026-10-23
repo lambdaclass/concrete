@@ -100,34 +100,31 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 166 bug records.
+**Open bugs: 8** (1 silent, 1 loud, 6 filed before the discovery record) of 178 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 2 | 054, 077, 114, 122, 165 |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 3 | 3 | 136, 137, 183 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 1 | 1 | 182 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 4 | 1 | 054, 077, 114, 122 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
-| 12. One fact kept in two places | 2 | 1 | 064, 181 |
-| 14. Trusted `std` and FFI code with no checked contract | 1 | 1 | 166 |
+| 12. One fact kept in two places | 1 | 0 | 064 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
-| exit 0b | 8 | 8 | 122, 136, 137, 165, 166, 181, 182, 183 |
+| exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
 | no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 | semantics: second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes) | 2026-10-21 | unrecorded | 4 | 3 | 1 | found bugs |
 | interp-coverage: interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary | 2026-10-21 | unrecorded | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
+| spec: language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews) | 2026-10-23 | 29 programs | 4 | 4 | 0 | found bugs |
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 23 attribution-only batches (reviews, follow-ons, CI, controls, development) found 34 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 12 counting batches recorded. 30 attribution-only batches (reviews, follow-ons, CI, controls, development) found 42 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

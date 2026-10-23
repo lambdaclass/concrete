@@ -75,7 +75,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 - `error_branch_disagree.con` — basic branch disagree
 - `error_deep_branch_disagree.con` — deep nesting disagree
 - `error_enum_match_disagree.con` — match arm disagree
-- `error_mut_ref_branch_disagree.con` — `&mut T` branch disagree
+- `regress_d1_mut_ref_branch_disagree.con` — `&mut T` branch disagree
 - `bug_int_match_disagree.con` — integer match disagree (regression)
 - **pressure_branch_create_consume.con** — linear created/consumed within branches
 - **pressure_match_linear_arms.con** — all match arms consuming pre-existing linear
@@ -204,7 +204,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 **Test coverage:**
 - `error_memory_edge_loop_consume_outer.con` — outer linear consumed in loop
 - `error_loop_consume.con` — basic loop consumption
-- `error_mut_ref_loop_consume.con` — `&mut T` in loop
+- `regress_d1_mut_ref_loop_consume.con` — `&mut T` in loop
 - `error_break_linear_skip.con` — break skips linear
 - `adversarial_mut_ref_loop_deref.con` — deref in loop (allowed)
 - `adversarial_for_loop_linear.con` — linear in for loop

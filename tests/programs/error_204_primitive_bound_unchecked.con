@@ -1,0 +1,6 @@
+// Bug 204: a trait bound on a primitive type argument was never checked. This program failed in
+// llvm-as natively (`@Int_m` undefined) and under --interp (undefined function); it must be
+// refused with E0241 (TRAIT-10).
+trait Tr { fn m(&self) -> Int; }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+fn main() -> Int { let n: Int = 42; return call::<Int>(&n); }

@@ -1,0 +1,6 @@
+// Bug 205: a struct holding itself by value through a generic instantiation passed the
+// finite-size check. Natively llvm-as refused the recursive struct type; --interp returned 42.
+// It must be refused with E0583 (TYPE-16).
+struct Copy W<T> { v: T }
+struct Copy Node { a: Int, w: W<Node> }
+fn main() -> Int { return 42; }

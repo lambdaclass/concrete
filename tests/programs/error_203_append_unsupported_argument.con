@@ -1,0 +1,9 @@
+// Bug 203: an append() argument of an unsupported type (here a float) was refused by Check with
+// no diagnostic code, and Elab's copy of the refusal spelled E0420, the code of a ghost value
+// read at run time. Both now report E0421 (TYPE-10).
+fn main() with(Alloc) -> Int {
+    let mut out: String = "";
+    append(&mut out, 1.5);
+    drop_string(out);
+    return 0;
+}

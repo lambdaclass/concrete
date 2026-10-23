@@ -1,0 +1,11 @@
+// Bug 200: a bare generic type in a signature nobody calls compiled and ran (42) on both
+// consumers. It must be rejected with E0113.
+struct Copy Box1<T> { v: Int }
+
+fn get(b: Box1) -> Int {
+    return b.v;
+}
+
+fn main() -> Int {
+    return 42;
+}

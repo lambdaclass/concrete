@@ -7,6 +7,7 @@ import Concrete.Proof.EvidenceBuild
 import Concrete.Proof.IdentityUseBytes
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Elab.Core
+import Concrete.Semantics.BindingMode
 import Concrete.Elab.TypeSpelling
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
@@ -122,6 +123,8 @@ inductive ElabError where
   | assignToUndeclaredVariable (name : String)
   | borrowUndeclaredVariable (name : String)
   | ghostInRuntime (name : String)
+  /-- Bug 166 (D4): an `extern fn` taken as a value. -/
+  | foreignFnValue (name : String)
   -- Struct/field
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
@@ -153,6 +156,7 @@ def ElabError.message : ElabError → String
   | .assignToUndeclaredVariable name => s!"assignment to undeclared variable '{name}'"
   | .borrowUndeclaredVariable name => s!"borrow: undeclared variable '{name}'"
   | .ghostInRuntime name => s!"ghost value '{name}' cannot be used in runtime code"
+  | .foreignFnValue name => s!"extern fn '{name}' cannot be taken as a value: a call through a function value would use the Concrete calling convention and the function type's capabilities, not the C function's"
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .fieldAccessNonStruct => "field access on non-struct type"
@@ -176,6 +180,7 @@ def ElabError.hint : ElabError → Option String
   | .arrayLiteralEmpty => some "provide at least one element"
   | .methodCallOnNonNamedType => some "method calls require a named type"
   | .importSpellingCollision _ spelling _ other => some s!"two definitions would be one callee '{spelling}' after elaboration, and the backends would pick '{other}' for the import; rename '{other}'. Tracking: docs/bugs/082_import_alias_loses_to_same_named_definition.md"
+  | .foreignFnValue name => some s!"call '{name}' directly, or pass a Concrete function whose body calls '{name}' (FFI.md \"Foreign Function Values\")"
   | .ghostInRuntime _ => some "ghost bindings are proof-only and erased before codegen; reference them only in contracts (#[ensures]/#[invariant]) or other ghost code"
   | _ => none
 
@@ -187,6 +192,7 @@ def ElabError.code : ElabError → String
   | .assignToUndeclaredVariable _ => "E0404"
   | .borrowUndeclaredVariable _ => "E0405"
   | .ghostInRuntime _ => "E0420"
+  | .foreignFnValue _ => "E0588"
   | .unknownStructType _ => "E0406"
   | .structHasNoField _ _ => "E0408"
   | .fieldAccessNonStruct => "E0409"
@@ -203,15 +209,34 @@ def ElabError.code : ElabError → String
   | .importSpellingCollision _ _ _ _ => "E0299"
   | .mutReceiverThroughSharedRef _ => "E0237"
 
+-- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
+  -- Every Elab code names one rule (bug 203 gave the `append()` refusal its own code, so E0420
+  -- is CON-4's alone and carries a whole-code tag).
+  let ev := codeRuleEvidence e.code
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
-           evidence := codeRuleEvidence e.code }]
+           evidence := ev }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
 
 def throwElabMsg (msg : String) (span : Option Span := none) : ElabM α :=
   throw [{ severity := .error, message := msg, pass := "elab", span := span, hint := none }]
+
+/-- Bug 166 (D4, FFI.md "Foreign Function Values"): an `extern fn` is never a value. Decided here,
+    at the one place a global function becomes a value, on the RESOLVER's identity of the name
+    (`resolveCallee`, `ns = .extern`, own or imported), so scoping, constants and import aliases
+    are the resolver's and not a re-derivation (Codex review: a name-keyed check in CoreCheck
+    missed constant initializers and was fooled by an expired local). A compiler-intrinsic
+    spelling (`resolveIntrinsic`) is not a foreign function even when declared `extern`.
+    CoreCheck re-checks `.fnRef` as defense in depth. -/
+-- spec: FFI-1 (docs/spec/ffi.md; this declaration enforces the rule)
+def refuseForeignFnValue (env : ElabEnv) (name : String) (span : Option Span) : ElabM Unit := do
+  match env.resolveCallee name with
+  | some id =>
+    if id.ns == .extern && (resolveIntrinsic name).isNone then
+      throwElab (.foreignFnValue name) span
+  | none => pure ()
 
 /-! ### Coverage, not collection
 
@@ -463,6 +488,43 @@ private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Op
   registerBound id binding fresh ty
   return fresh
 
+/-- Evaluation-order temporaries (bugs 136, 137). Core has no expression-level `let` yet (R-0496
+    owns one); `match value { t => body }` with a single unguarded binder arm is exactly
+    `let t = value in body` in every consumer (Lower, the interpreter, the proof model bind a
+    variable arm's scrutinee once), so it is the one encoding used, built only here. A temporary's
+    name `ev.t<n>` contains `.`, which no source identifier does, and it is never entered into
+    `vars`, so source code cannot name it. -/
+private def freshEvalTemp : ElabM String := do
+  let env ← getEnv
+  setEnv { env with freshBinder := env.freshBinder + 1 }
+  return s!"ev.t{env.freshBinder}"
+
+private def letInExpr (name : String) (value : CExpr) (body : CExpr) : CExpr :=
+  .match_ value [.varArm name value.ty none [.expr body true]] body.ty
+
+/-- An initializer whose evaluation has no observable order: a literal. (A variable read is
+    order-sensitive: another initializer may write it through `&mut`.) -/
+private def orderFreeInit : CExpr → Bool
+  | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => true
+  | _ => false
+
+/-- Evaluate `inits` in the given (source) order into temporaries, then build `mk` over the
+    resulting operands. Order-free initializers stay inline. Returns `mk inits` unchanged when
+    fewer than two initializers are order-sensitive, since then no reordering is observable. -/
+private def withSourceOrder (inits : List (String × CExpr))
+    (mk : List (String × CExpr) → CExpr) : ElabM CExpr := do
+  if (inits.filter (fun (_, e) => !orderFreeInit e)).length < 2 then return mk inits
+  -- accumulated newest first, reversed once
+  let mut bindsRev : List (String × CExpr) := []
+  let mut operandsRev : List (String × CExpr) := []
+  for (f, e) in inits do
+    if orderFreeInit e then operandsRev := (f, e) :: operandsRev
+    else
+      let t ← freshEvalTemp
+      bindsRev := (t, e) :: bindsRev
+      operandsRev := (f, .ident t e.ty) :: operandsRev
+  return bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) (mk operandsRev.reverse)
+
 /-- Bug 087: bind a block-scoped local (`let`, borrow ref, parameter, destructure binder or
     temporary) and return its Core name. A binder that SHADOWS a binding of the same spelling
     visible where it is introduced is alpha-renamed like a match binder (bug 045); the local walk
@@ -639,6 +701,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | none =>
       match ← lookupFnSig name with
       | some sig =>
+        refuseForeignFnValue env name (some e.getSpan)
         let paramTys := sig.params.map Prod.snd
         return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
@@ -750,9 +813,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         (((hintCapMap.getD []).lookup c).getD .empty).canonArg
       let resultTy := if typeArgs.isEmpty && sd.capParams.isEmpty then Ty.named name
                       else Ty.generic name typeArgs provisionalCaps
-      -- Functional update `..base`: elaborate the base once; any field not given
-      -- explicitly is filled with `base.field`. (Use a variable as the base — a
-      -- complex base expression is re-read per copied field.)
+      -- Functional update `..base`: the base is elaborated once here and EVALUATED once, after
+      -- the explicit initializers (bug 136; see below).
       let cBase ← base.mapM (fun b => do pure (← elabExprEv b (some resultTy)).core)
       let mut cFields : List (String × CExpr) := []
       -- SOURCE ORDER (language decision, 2026-08-08). Initializers evaluate left-to-right as
@@ -795,15 +857,38 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let capArgs := sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg
       let resultTy := if typeArgs.isEmpty && sd.capParams.isEmpty then Ty.named name
                       else Ty.generic name typeArgs capArgs
-      for sf in sd.fields do
-        if !(fields.any fun (fn, _) => fn == sf.name) then
-          let fieldTy := substCapNamesTy capMap (substTy mapping sf.ty)
-          match cBase with
-          | some cb =>
-            recordFieldUse sd sf.name
-            cFields := cFields ++ [(sf.name, .fieldAccess cb sf.name fieldTy)]
-          | none => pure ()  -- union partial init
-      return ElaboratedExprV2.mk (CExpr.structLit name typeArgs cFields resultTy) (match sd.typeId? with
+      -- Bug 136 (evaluation-order rule 6): the explicit initializers in source order, then the
+      -- base EXACTLY ONCE. Reading every omitted field from a copy of the base expression ran it
+      -- once per omitted field. A base that is a variable is read, not evaluated, and every
+      -- omitted field is read after the explicit initializers, so it stays inline. Otherwise the
+      -- explicit initializers that are order-sensitive and then the base are evaluated into
+      -- temporaries (`letInExpr`), and the omitted fields read the base's temporary.
+      let omitted := sd.fields.filter fun sf => !(fields.any fun (fn, _) => fn == sf.name)
+      let fillFrom (cb : CExpr) (acc : List (String × CExpr)) : List (String × CExpr) :=
+        acc ++ omitted.map fun sf =>
+          (sf.name, .fieldAccess cb sf.name (substCapNamesTy capMap (substTy mapping sf.ty)))
+      for sf in omitted do
+        if cBase.isSome then recordFieldUse sd sf.name
+      let core ← match cBase with
+        | none => pure (CExpr.structLit name typeArgs cFields resultTy)  -- union partial init
+        | some cb =>
+          let baseIsRead := match cb with | .ident _ _ => true | _ => false
+          if baseIsRead || omitted.isEmpty then
+            pure (CExpr.structLit name typeArgs (fillFrom cb cFields) resultTy)
+          else do
+            let tb ← freshEvalTemp
+            let mut bindsRev : List (String × CExpr) := []
+            let mut explicitRev : List (String × CExpr) := []
+            for (f, ex) in cFields do
+              if orderFreeInit ex then explicitRev := (f, ex) :: explicitRev
+              else
+                let t ← freshEvalTemp
+                bindsRev := (t, ex) :: bindsRev
+                explicitRev := (f, .ident t ex.ty) :: explicitRev
+            bindsRev := (tb, cb) :: bindsRev
+            let lit := CExpr.structLit name typeArgs (fillFrom (.ident tb cb.ty) explicitRev.reverse) resultTy
+            pure (bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) lit)
+      return ElaboratedExprV2.mk core (match sd.typeId? with
            | some owner =>
              .structLit owner (structFieldEvsRev.reverse.map fun fe =>
                ({ owner := owner, field := fe.1 }, fe.2))
@@ -893,21 +978,42 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       match ed.variants.find? fun v => v.name == variant with
       | some ev =>
         recordVariantUse ed variant
-        let mut cFields : List (String × CExpr) := []
-        let mut fieldEvsRev : List (String × Proof.EvidenceExprV2) := []
+        -- Every declared field must be given (checked in declaration order, as before).
         for sf in ev.fields do
-          -- aliases expanded, as for struct literal fields (bug 177)
-          let fieldTy := substTy mapping (← expandFieldAliases ed.typeParams sf.ty)
-          match fields.find? fun (fn, _) => fn == sf.name with
-          | some (_, expr) =>
+          if !(fields.any fun (fn, _) => fn == sf.name) then
+            throwElab (.missingFieldInVariant sf.name enumName variant) (some e.getSpan)
+        -- SOURCE ORDER (bug 137, evaluation-order rule): initializers are elaborated, and run, in
+        -- the order written. The Core literal keeps DECLARATION order, which is the payload's
+        -- positional identity for Lower's layout, the interpreter and the proof model; when the
+        -- two orders differ, the initializers are evaluated into temporaries first
+        -- (`withSourceOrder`).
+        let mut srcInitsRev : List (String × CExpr) := []
+        let mut srcEvsRev : List (String × Proof.EvidenceExprV2) := []
+        for (fname, expr) in fields do
+          match ev.fields.find? fun sf => sf.name == fname with
+          | some sf =>
+            -- aliases expanded, as for struct literal fields (bug 177)
+            let fieldTy := substTy mapping (← expandFieldAliases ed.typeParams sf.ty)
             let cExprEv ← elabExprEv expr (some fieldTy)
-            let cExpr := cExprEv.core
-            cFields := cFields ++ [(sf.name, cExpr)]
-            fieldEvsRev := (sf.name, cExprEv.evidence) :: fieldEvsRev
-          | none => throwElab (.missingFieldInVariant sf.name enumName variant) (some e.getSpan)
+            srcInitsRev := (sf.name, cExprEv.core) :: srcInitsRev
+            srcEvsRev := (sf.name, cExprEv.evidence) :: srcEvsRev
+          | none => pure ()  -- unknown field: reported by the checker
+        let srcInits := srcInitsRev.reverse
+        -- Evidence in SOURCE order: the written order is now observable (it is the evaluation
+        -- order), so two literals differing only in it are different implementations and must
+        -- not share an identity (Codex review). A literal written in declaration order keeps its
+        -- previous evidence.
+        let fieldEvsRev : List (String × Proof.EvidenceExprV2) := srcEvsRev
         let resultTy := if effectiveTypeArgs.isEmpty then Ty.named enumName
                          else Ty.generic enumName effectiveTypeArgs [] -- enums take no capability parameters
-        return ElaboratedExprV2.mk (CExpr.enumLit enumName variant effectiveTypeArgs cFields resultTy)
+        let declOrder (ops : List (String × CExpr)) : List (String × CExpr) :=
+          ev.fields.filterMap fun sf => (ops.lookup sf.name).map (sf.name, ·)
+        let inDeclOrder := srcInits.map (·.1) == ev.fields.map (·.name)
+        let core ← if inDeclOrder then
+            pure (CExpr.enumLit enumName variant effectiveTypeArgs srcInits resultTy)
+          else withSourceOrder srcInits fun ops =>
+            CExpr.enumLit enumName variant effectiveTypeArgs (declOrder ops) resultTy
+        return ElaboratedExprV2.mk core
           (match ed.typeId? with
            | some owner =>
              .variantLit { owner := owner, variant := variant }
@@ -956,8 +1062,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               -- aliases expanded (the enum's own type parameters shadow them), as the
               -- enum's Core payload types are (bug 096's agreement checker compares the two)
               let payloadAliases := (← getEnv).typeAliases.filter fun (n, _) => !ed.typeParams.contains n
-              let bty := substTy typeMapping
-                (expandAliasDeep payloadAliases (payloadAliases.length + 64) sf.ty)
+              -- D3 (bug 181): the binder's type is `payloadBinderTy`, the SAME function Check
+              -- uses: `&T` through a reference scrutinee, the payload type otherwise. It is the
+              -- binding mode stored in Core (see Concrete/Semantics/BindingMode.lean).
+              let bty := payloadBinderTy scrTy (substTy typeMapping
+                (expandAliasDeep payloadAliases (payloadAliases.length + 64) sf.ty))
               -- Keep `_` in the binding list (positional field mapping) but do not
               -- bind it in scope — it is a wildcard, not a readable variable.
               -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
@@ -987,12 +1096,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             armEvsRev := (.arm (Proof.evLitPattern cValEv.evidence)
                             (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
           | .varArm varSp binding guard body =>
-            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding innerTyR (some varSp)
+            -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
+            let wholeTy := wholeBinderTy scrTy innerTyR
+            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
             armEvsRev := (.arm (if binding == "_" then .wildcard else .binder)
                             (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
           | .rangeArm _ lo hi incl guard body =>
@@ -1023,12 +1134,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let cBody := cBodyEv.flatMap (·.core)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm varSp binding guard body =>
-            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding innerTyR (some varSp)
+            -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
+            let wholeTy := wholeBinderTy scrTy innerTyR
+            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
           | .mk _ en v _ guard body =>
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
@@ -1061,12 +1174,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let cBody := cBodyEv.flatMap (·.core)
           cArms := cArms ++ [.litArm cVal cGuard cBody]
         | .varArm varSp binding guard body =>
-          let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding innerTyR (some varSp)
+          -- D3: a variable arm over `&T` binds the reference (`wholeBinderTy`).
+          let wholeTy := wholeBinderTy scrTy innerTyR
+          let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+          cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
         | .mk _ en v _ guard body =>
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
@@ -1180,13 +1295,21 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let cInner := cInnerEv.core
     -- The cast TARGET is the whole point of the expression: `x as i32` and `x as i64`
     -- are different programs, and before this the two were one gap.
-    let targetRef ← typeRefOf targetTy
-    return ElaboratedExprV2.mk (CExpr.cast cInner targetTy) (Proof.evCast targetRef cInnerEv.evidence)
+    -- Bug 199: the target is resolved through type aliases like every other written type; a cast
+    -- to an alias (`p as IP`) reached the backend as the unknown named type `IP` and panicked.
+    -- Aliases only (the declaration's own type parameters shadow them): the rest of the written
+    -- target keeps its Core form, so no other program's Core or identity moves (Codex review).
+    let env0 ← getEnv
+    let aliases := env0.typeAliases.filter fun (n, _) => !env0.currentTypeParams.contains n
+    let targetTyR := expandAliasDeep aliases (aliases.length + 64) targetTy
+    let targetRef ← typeRefOf targetTyR
+    return ElaboratedExprV2.mk (CExpr.cast cInner targetTyR) (Proof.evCast targetRef cInnerEv.evidence)
 
   | .fnRef _ fnName =>
     let env ← getEnv
     match env.allFnSigPairs.lookup fnName with
     | some sig =>
+      refuseForeignFnValue env fnName (some e.getSpan)
       let paramTys := sig.params.map Prod.snd
       return ElaboratedExprV2.mk (CExpr.fnRef (← coreFnSpelling fnName) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee fnName with
                  | some id => Proof.evFnRef id
@@ -1399,6 +1522,19 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     -- relaxed, carry `cArgEv.evidence` here before it becomes a live collision.
     return ElaboratedExprV2.mk (CExpr.call "alloc" [] [cArg] (.heap cArg.ty))
       (Proof.evCall (CallableId.ofIntrinsic "alloc") [])
+  -- T-RAWDUP: `read_owned(p)` moves the value out of the raw slot (a load, stated as a transfer).
+  if intrinsic == some .readOwned then
+    let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
+    let cArgEv ← elabExprEv arg
+    let cArg := cArgEv.core
+    -- The pointer type is resolved first, so a pointer spelled through an alias still yields
+    -- its pointee (Codex review).
+    let argTyR ← resolveTypeE cArg.ty
+    let pointee := match argTyR with | .ptrMut t | .ptrConst t => t | _ => .placeholder
+    -- The intrinsic's identity travels with the call (`Callee.runtime`), so no program function
+    -- named `read_owned` can be taken for it downstream (Codex review).
+    return ElaboratedExprV2.mk (CExpr.call (.runtime "read_owned") [] [cArg] pointee)
+      (Proof.evCall (CallableId.ofIntrinsic "read_owned") [])
   -- Intercept free(ptr)
   if intrinsic == some .free then
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
@@ -1761,22 +1897,22 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
         let cArg := cArgEv.core
         let printCall := match cArg.ty with
           | .string =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.borrow cArg (.ref .string)] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.borrow cArg (.ref .string)] .unit) false
           | .ref .string | .refMut .string =>
-            CStmt.expr (CExpr.call "print_string" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [cArg] .unit) false
           | .int =>
-            CStmt.expr (CExpr.call "print_int" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_int") [] [cArg] .unit) false
           | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-            CStmt.expr (CExpr.call "print_int" [] [CExpr.cast cArg .int] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_int") [] [CExpr.cast cArg .int] .unit) false
           | .bool =>
-            CStmt.expr (CExpr.call "print_bool" [] [cArg] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_bool") [] [cArg] .unit) false
           | .char =>
-            CStmt.expr (CExpr.call "print_char" [] [CExpr.cast cArg .int] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.cast cArg .int] .unit) false
           | _ =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.strLit "<unprintable>"] .unit) false
+            CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.strLit "<unprintable>"] .unit) false
         stmts := stmts ++ [printCall]
       if fnName == "println" then
-        stmts := stmts ++ [CStmt.expr (CExpr.call "print_char" [] [CExpr.intLit 10 .int] .unit) false]
+        stmts := stmts ++ [CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.intLit 10 .int] .unit) false]
       return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
     -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
     -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
@@ -1795,24 +1931,26 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
           let cArg := cArgEv.core
           let call ← match cArg.ty with
             | .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append") [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit) false)
             | .ref .string | .refMut .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append") [] [cBuf, cArg] .unit) false)
             | .int =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_int") [] [cBuf, cArg] .unit) false)
             | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, CExpr.cast cArg .int] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_int") [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | .bool =>
-              pure (CStmt.expr (CExpr.call "string_append_bool" [] [cBuf, cArg] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_append_bool") [] [cBuf, cArg] .unit) false)
             | .char =>
-              pure (CStmt.expr (CExpr.call "string_push_char" [] [cBuf, CExpr.cast cArg .int] .unit) false)
+              pure (CStmt.expr (CExpr.call (.runtime "string_push_char") [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | _ =>
               throw [{ severity := .error
                      , message := s!"append() argument has unsupported type; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
                      , pass := "elab"
                      , span := some sp
                      , hint := some "pass primitive values or string references; complex values must be formatted first"
-                     , code := "E0420" }]
+                     -- Bug 203: its own code. It shared E0420 with a ghost read at run time, so
+                     -- the code did not identify the rule (TYPE-10 here, CON-4 there).
+                     , code := "E0421" }]
           stmts := stmts ++ [call]
         return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
       | _ =>
@@ -2304,6 +2442,7 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     let callee' := match callee with
       | .direct name => Callee.direct (rmap.lookup name |>.getD name)
       | .indirect binding => Callee.indirect binding
+      | .runtime helper => Callee.runtime helper
     .call callee' targs (args.map (renameFnExpr rmap)) ty
   | .fnRef name ty =>
     let name' := rmap.lookup name |>.getD name
@@ -2958,8 +3097,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
   -- Build extern fns
+  -- Extern signatures are expanded through the module's type aliases like every other declared
+  -- type (G15 review: `type R = &Int; extern fn f() -> *const R;` reached CoreCheck's FFI rule
+  -- unexpanded, so neither FFI safety nor the reference judgment saw `&Int`).
   let cExterns := m.externFns.map fun ef =>
-    (ef.name, ef.params.map fun p => (p.name, p.ty), ef.retTy, ef.isTrusted)
+    (ef.name, ef.params.map fun p => (p.name, nominalTy [] p.ty), nominalTy [] ef.retTy, ef.isTrusted)
   let cExternCaps := m.externFns.map fun ef => (ef.name, ef.capSet.getD .empty)
   -- Build constants
   let constResults := m.constants.map fun c =>
@@ -3636,7 +3778,7 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
           (f.params.zip args).map (fun ((_, pt), a) => (pt, a.ty, s!"an argument of '{n}'", f.typeParams))
           ++ inner
       | none => inner
-    | .indirect _ => inner
+    | .indirect _ | .runtime _ => inner
   | .fnRef n t =>
     match c.fns n with
     | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]

@@ -28,7 +28,12 @@ fn run() -> Int {
     let r: Result<Int, MyError> = use_result();
     match r {
         Result::Ok { value } => { return value; },
-        Result::Err => { return 0; },
+        // bug 197: a bare `Result::Err` dropped the non-Copy `MyError`; consume it instead
+        Result::Err { error } => {
+            match error {
+                MyError::Bad => { return 0; }
+            }
+        },
     }
 
 }

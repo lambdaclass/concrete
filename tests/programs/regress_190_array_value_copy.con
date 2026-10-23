@@ -1,0 +1,76 @@
+// Bug 190: an array is a Copy value, but Lower represents an array value by the address of its
+// storage, so binding one from a place or passing one by value shared the source's storage. Each
+// shape below copies an array, then writes the source, then reads the copy: it must still hold 5.
+// The binary read 9 in the first three (exit 1-3); --interp read 5. Exit 42. (A by-value argument
+// aliased by a `&mut` argument of the same call was a fourth shape; D2 now refuses that call, E0293,
+// and parameters are immutable, so the argument copy is no longer observable; Lower still makes it.)
+enum E { V { a: Int, b: [Int; 1] } }
+
+fn set(r: &mut Int) -> Int {
+    *r = 9;
+    return 1;
+}
+
+fn let_copy() -> Int {
+    let mut xs: [Int; 1] = [5];
+    let t: [Int; 1] = xs;
+    xs[0] = 9;
+    return t[0];
+}
+
+fn match_binder_copy() -> Int {
+    let mut xs: [Int; 1] = [5];
+    let r: Int = match xs {
+        t => { xs[0] = 9; t[0] }
+    };
+    return r;
+}
+
+fn literal_snapshot() -> Int {
+    let mut xs: [Int; 1] = [5];
+    let e: E = E::V { b: xs, a: set(&mut xs[0]) };
+    match e {
+        E::V { a, b } => { return b[0] + a * 0; }
+    }
+}
+
+fn assign_copy() -> Int {
+    let mut xs: [Int; 1] = [5];
+    let mut t: [Int; 1] = [1];
+    t = xs;
+    xs[0] = 9;
+    return t[0];
+}
+
+fn overwrite(xs: &mut [Int; 1]) {
+    xs[0] = 9;
+}
+
+fn returned_before_defer() -> [Int; 1] {
+    let mut xs: [Int; 1] = [5];
+    defer overwrite(&mut xs);
+    return xs;
+}
+
+fn block_value_before_defer() -> Int {
+    let c: bool = true;
+    let ys: [Int; 1] = if c {
+        let mut xs: [Int; 1] = [5];
+        defer overwrite(&mut xs);
+        xs
+    } else {
+        [0]
+    };
+    return ys[0];
+}
+
+fn main() -> Int {
+    if let_copy() != 5 { return 1; }
+    if match_binder_copy() != 5 { return 2; }
+    if literal_snapshot() != 5 { return 3; }
+    if assign_copy() != 5 { return 5; }
+    let r: [Int; 1] = returned_before_defer();
+    if r[0] != 5 { return 6; }
+    if block_value_before_defer() != 5 { return 7; }
+    return 42;
+}

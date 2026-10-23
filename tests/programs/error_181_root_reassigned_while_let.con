@@ -1,0 +1,11 @@
+// D3 (bug 181): a binder through a borrowed scrutinee is a reference, so the scrutinee's root stays
+// frozen while the binder lives, Copy payloads included (REF-8). Root reassigned: while_let shape. E0232.
+fn f() -> Int {
+    let mut o: Option<Int> = Option::Some { value: 1 };
+    while let Option::Some { value } = &o {
+        o = Option::None;
+        return *value;
+    }
+    return 0;
+}
+fn main() -> Int { return f(); }

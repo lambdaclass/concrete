@@ -1,4 +1,5 @@
 import Concrete.Elab.Core
+import Concrete.Semantics.BindingMode
 import Concrete.Semantics.IntArith
 import Concrete.Resolve.Shared
 import Concrete.Check.Layout
@@ -33,6 +34,10 @@ open Concrete
 inductive RefStep where
   | field (name : String)
   | index (i : Nat)
+  /-- A payload field of an enum value in variant `variant` (a borrowed match binder, D3). The
+      variant is part of the step: payload layout is per variant, and two variants may name a
+      field alike. -/
+  | payload (variant : String) (name : String)
   deriving Repr, Inhabited
 
 /-- A reference path roots at a variable name in the env at borrow
@@ -1170,6 +1175,7 @@ private def arithOut : IntArith.ArithResult → Except String IVal
 def refStepEq : RefStep → RefStep → Bool
   | .field a, .field b => a == b
   | .index a, .index b => a == b
+  | .payload v a, .payload w b => v == w && a == b
   | _, _ => false
 
 /-- Do two references name the same place? -/
@@ -1365,6 +1371,15 @@ private partial def lookupAt (val : IVal) (steps : List RefStep) : Except String
       | some (_, fv) => lookupAt fv rest
       | none => .error s!"interp: ref path field '{fname}' not found"
     | _ => .error "interp: ref step .field on non-struct"
+  -- A payload field of an enum value: a borrowed match binder (D3) points here.
+  | .payload variant fname :: rest =>
+    match val with
+    | .enum_ _ v fields =>
+      if v != variant then .error s!"interp: ref path payload of variant '{variant}' on '{v}'" else
+      match fields.find? (fun (n, _) => n == fname) with
+      | some (_, fv) => lookupAt fv rest
+      | none => .error s!"interp: ref path payload field '{fname}' not found"
+    | _ => .error "interp: ref step .payload on non-enum"
   | .index i :: rest =>
     match val with
     | .array elems _ _ =>
@@ -1404,6 +1419,16 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
           if n == fname then (n, newFv) else (n, v)
         return .struct_ sname newFields
     | _ => .error "interp: ref step .field on non-struct (update)"
+  | .payload variant fname :: rest =>
+    match val with
+    | .enum_ en vn fields =>
+      if vn != variant then .error s!"interp: ref update payload of variant '{variant}' on '{vn}'" else
+      match fields.find? (fun (n, _) => n == fname) with
+      | none => .error s!"interp: ref update payload field '{fname}' not found"
+      | some (_, fv) => do
+        let newFv ← updateAt fv rest newVal
+        return .enum_ en vn (fields.map fun (n, v) => if n == fname then (n, newFv) else (n, v))
+    | _ => .error "interp: ref step .payload on non-enum (update)"
   | .index i :: rest =>
     match val with
     | .array elems elemTy size =>
@@ -1465,6 +1490,18 @@ def heapRefAddr (cx : Ctx) (p : RefPath) : Option (Nat × Nat) := do
       let es ← (sizeOfTy cx et).toOption
       o := o + i * es
       ty := normTy cx et
+    -- An enum payload field (D3 borrowed binder): the payload offset after the tag, then the
+    -- field's offset within its variant, as Lower's GEPs compute them (Codex review).
+    | .payload v f, t@(.named n) | .payload v f, t@(.generic n _ _) =>
+      let typeArgs := match t with | .generic _ a _ => a | _ => []
+      let ed ← Layout.lookupEnum cx.layout n
+      if !layoutKnown cx t then none
+      let ed' := Layout.substEnumTypeArgs ed typeArgs
+      let (_, vfields) ← ed'.variants.find? (·.1 == v)
+      let idx ← vfields.findIdx? (·.1 == f)
+      let (_, fty) ← vfields[idx]?
+      o := o + Layout.enumPayloadOffset cx.layout ed typeArgs + Layout.variantFieldOffset cx.layout vfields idx
+      ty := normTy cx fty
     | _, _ => none
   return (blk, o)
 
@@ -1947,7 +1984,8 @@ private def bindParams (env : Env) (params : List (String × Ty)) (args : List I
   | _, [] => env
   | (name, _) :: ps, v :: vs => bindParams (envBind env name v) ps vs
 
-private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal)) : Env :=
+private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal))
+    (scrRef : Option RefPath := none) (variant : String := "") : Env :=
   -- POSITIONAL, matching Core/Lower semantics: Elab zips arm bindings with
   -- the variant's fields in declaration order, and (bug 045) binders are
   -- alpha-renamed (`v` → `v.b0`) so a by-name field lookup can no longer
@@ -1956,8 +1994,13 @@ private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields 
   match bindings, fields with
   | [], _ => env
   | _, [] => env
-  | (name, _) :: rest, (_, v) :: fRest =>
-    bindEnumFields (envBind env name v) rest fRest
+  | (name, bty) :: rest, (fname, v) :: fRest =>
+    -- D3 (bug 181): a borrowed binder (reference-typed in Core) names the payload field in the
+    -- scrutinee's storage, as Lower's address does; a by-value binder copies the value.
+    let bound := match scrRef with
+      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps.concat (.payload variant fname) } else v
+      | none => v
+    bindEnumFields (envBind env name bound) rest fRest scrRef variant
 
 private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
   match scrutinee, lit with
@@ -2262,7 +2305,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     let result ← liftE <| evalUnaryOp op v
     return (env, .val result)
 
-  | .call callee typeArgs args _ => do
+  | .call callee typeArgs args callRetTy => do
     let (env, argVals) ← evalCallArgs cx env args
     -- The call form says which kind this is (bug 050), so the interpreter no
     -- longer guesses by probing the environment for every callee name. An
@@ -2283,6 +2326,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | .indirect binding => match envGetLocal env binding with
         | some (.fnPtr real _) => if real.startsWith externPtrPrefix then some (real.drop externPtrPrefix.length).toString else none
         | _ => none
+      -- A compiler-generated runtime call is its builtin, never a program definition (bug 165).
+      | .runtime helper => some (runtimeHelperPrefix ++ helper)
     let externSym : Option String := match foreign with
       | some decl => if decl.startsWith runtimeHelperPrefix then none else some ((cx.externLinks.lookup decl).getD decl)
       | none => none
@@ -2307,6 +2352,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
           pure (real, t)
         | some _ => fail s!"interp: '{binding}' is not a function pointer"
         | none => fail s!"interp: unbound fn-pointer local '{binding}'"
+      -- Unreachable: `foreign` is always `some` for a runtime callee (above).
+      | .runtime helper => pure (helper, none)
     match target with
     | some (fdef, calleeScope) =>
       if fdef.params.length != argVals.length then
@@ -2546,6 +2593,13 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match typeArgs with
         | [t] => return (env, .val (.int (← liftE (sizeOfTy cx t)) .uint))
         | _ => fail "interp: sizeof without one type argument"
+      -- T-RAWDUP: move the value out of the raw slot (the call's result type is its type).
+      | "read_owned", [.ptr blk off] => do
+        return (env, .val (← readMem cx blk off (normTy cx callRetTy)))
+      -- A pointer cast from a reference keeps its reference path (`evalCast`): read the place.
+      | "read_owned", [.ref p] => do
+        return (env, .val (← lookupPath cx env p))
+      | "read_owned", [_] => fail "interp: read_owned of a non-pointer value"
       | "alignof", [] => do
         match typeArgs with
         | [t] => return (env, .val (.int (← liftE (alignOfTy cx t)) .uint))
@@ -2691,8 +2745,12 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- reference scrutinee once before matching (the E0715 fix); the interpreter
     -- must agree, or a var/guard arm binds the ref instead of the value (e.g.
     -- `match p { n if n > 5 => .. }` on `p : &Int` would compare a ref to an int).
+    -- A borrowed binder (D3) binds through the reference itself, so keep its path.
+    let scrRef : Option IVal := match sv with
+      | .ref p => some (.ref p)
+      | _ => none
     let sv ← autoDeref cx env sv
-    evalMatch cx env sv arms
+    evalMatch cx env sv arms scrRef
 
   | .arrayLit elems ty => do
     let (env, vals) ← evalCallArgs cx env elems
@@ -2907,8 +2965,8 @@ partial def evalFields (cx : Ctx) (env : Env) (fields : List (String × CExpr)) 
     let (env, vs) ← evalFields cx env rest
     return (env, (name, v) :: vs)
 
-partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
-    IM (Env × Flow) :=
+partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMatchArm)
+    (scrRef : Option IVal := none) : IM (Env × Flow) :=
   match arms with
   | [] => fail "interp: no matching arm in match expression"
   | arm :: rest =>
@@ -2938,17 +2996,18 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
       | .enum_ sEnum sVariant sFields =>
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
-          let armEnv := bindEnumFields env bindings sFields
+          let refPath := match scrRef with | some (.ref p) => some p | _ => none
+          let armEnv := bindEnumFields env bindings sFields refPath variant
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
             let (bodyEnv, flow) ← evalStmts cx gEnv body
             let restored := bodyEnv.drop (bodyEnv.length - outerLen)
             return (restored, flow)
           else
-            evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+            evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
         else
-          evalMatch cx env scrutinee rest
-      | _ => evalMatch cx env scrutinee rest
+          evalMatch cx env scrutinee rest scrRef
+      | _ => evalMatch cx env scrutinee rest scrRef
     | .litArm value guard body => do
       let (env, litVal) ← evalExprVal cx env value
       if matchLit scrutinee litVal then do
@@ -2959,19 +3018,23 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
       else
-        evalMatch cx env scrutinee rest
-    | .varArm binding _ guard body => do
+        evalMatch cx env scrutinee rest scrRef
+    | .varArm binding bindTy guard body => do
       let outerLen := env.length
-      let armEnv := if binding == "_" then env else envBind env binding scrutinee
+      -- D3: a variable arm over a reference binds the reference itself.
+      let bound := match scrRef with
+        | some r => if binderIsBorrow bindTy then r else scrutinee
+        | none => scrutinee
+      let armEnv := if binding == "_" then env else envBind env binding bound
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
         let (bodyEnv, flow) ← evalStmts cx gEnv body
         let restored := bodyEnv.drop (bodyEnv.length - outerLen)
         return (restored, flow)
       else
-        evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+        evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
     | .rangeArm lo hi inclusive guard body => do
       let (env, loVal) ← evalExprVal cx env lo
       let (env, hiVal) ← evalExprVal cx env hi
@@ -2986,9 +3049,9 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
       else
-        evalMatch cx env scrutinee rest
+        evalMatch cx env scrutinee rest scrRef
 
 /-- Resolve a place expression to its root variable and the `RefStep` path
     reaching it, evaluating any array-index subexpressions. Mirrors the
@@ -3424,6 +3487,7 @@ partial def IVal.toString : IVal → String
     let stepStr (s : RefStep) : String := match s with
       | .field n => "." ++ n
       | .index i => s!"[{i}]"
+      | .payload v n => s!"::{v}.{n}"
     let pfx := if p.isMut then "&mut " else "&"
     pfx ++ p.base ++ String.join (p.steps.map stepStr)
   | .fnPtr name _ => "fn " ++ name

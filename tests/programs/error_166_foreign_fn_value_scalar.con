@@ -1,0 +1,12 @@
+// Bug 166 (D4): an extern fn is never a value, whatever its signature (E0588). Even with scalar
+// parameters a call through the value would carry the function type's capabilities rather than the
+// extern's, and the C convention is decided only at a direct call.
+trusted extern fn labs(x: Int) with() -> Int;
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    return apply(labs, -42);
+}

@@ -1,0 +1,17 @@
+// D2 (Codex review, round 2): an explicit `&mut s.a` receiver is a loan on `s`, like the implicit
+// one, so another argument may not read `s.b` in the same call. E0293 (REF-8).
+struct Copy N { v: Int }
+
+impl N {
+    fn update(&mut self, by: Int) {
+        self.v = self.v + by;
+    }
+}
+
+struct Copy S { a: N, b: Int }
+
+fn main() -> Int {
+    let mut s: S = S { a: N { v: 40 }, b: 2 };
+    (&mut s.a).update(s.b);
+    return s.a.v;
+}

@@ -1420,6 +1420,9 @@ run_ok "$TESTDIR/integration_state_machine.con" 42
 run_ok "$TESTDIR/integration_compiler_stress.con" 42
 run_ok "$TESTDIR/integration_multi_module.con" 42
 run_ok "$TESTDIR/integration_recursive_structures.con" 42
+# Bug 205 (silent on --interp): a struct holding itself through a generic instantiation.
+run_err "$TESTDIR/error_205_recursive_through_instantiation.con" "(E0583)"
+run_ok "$TESTDIR/regress_205_instantiations_without_cycle.con" 42
 run_ok "$TESTDIR/integration_multi_file_calculator.con" 42
 run_ok "$TESTDIR/integration_type_registry.con" 42
 run_ok "$TESTDIR/integration_pipeline_processor.con" 42
@@ -1432,6 +1435,10 @@ run_ok "$TESTDIR/bug_if_expression.con" 0
 run_ok "$TESTDIR/bug_print_builtins.con" "hello 42" 0
 run_ok "$TESTDIR/bug_string_building.con" 0
 run_ok "$TESTDIR/variadic_append.con" 0
+# Bug 203: E0420 named two unrelated errors; the append() refusal is now E0421.
+run_err "$TESTDIR/error_203_append_unsupported_argument.con" "(E0421)"
+run_err "$TESTDIR/error_203_ghost_read_at_runtime.con" "(E0420)"
+run_err "$TESTDIR/error_203_print_unsupported_argument.con" "(E0421)"
 run_ok "$TESTDIR/bug_clock_builtin.con" 0
 run_ok "$TESTDIR/bug_enum_in_struct.con" 0
 run_ok "$TESTDIR/bug_stack_array_borrow_copy.con" 42
@@ -1705,7 +1712,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
 # Bug 188: legitimate capability polymorphism (positive control), binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_188_capvar_polymorphism; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow regress_198_read_owned regress_199_cast_to_alias regress_d6_copy_generics regress_188_capvar_polymorphism; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -1763,6 +1770,23 @@ r179_leg regress_179_concurrent_compile 5 8 42 \
     "$ROOT_DIR/$COMPILER" "$ROOT_DIR/$TESTDIR/regress_179_concurrent_compile.con" -o
 r179_build() { cd "$ROOT_DIR/$TESTDIR/regress_179_concurrent_build" && "$ROOT_DIR/$COMPILER" build -o "$1"; }
 r179_leg regress_179_concurrent_build 3 4 0 r179_build
+# Bug 165: println/print/append desugared into helper calls that bound by spelling, so a
+# module's own `fn print_int` was called by `println`. The interpreter prints the program's
+# stdout then its result; the binary must print the same stdout and exit with that result.
+r165_src="$TESTDIR/regress_165_generated_helper_call.con"
+r165_i=$($COMPILER "$r165_src" --interp 2>&1 || true)
+r165_n=""; r165_o=""
+if $COMPILER "$r165_src" -o "$TESTDIR/.r165_bin" >/dev/null 2>&1; then
+    r165_o=$("$TESTDIR/.r165_bin" 2>&1) && r165_n=0 || r165_n=$?
+fi
+rm -f "$TESTDIR/.r165_bin"
+if [ "$r165_n" = "42" ] && [ "$r165_i" = "$(printf '%s\n42' "$r165_o")" ]; then
+    echo "  ok  regress_165_generated_helper_call: --interp == binary (stdout and 42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_165_generated_helper_call: --interp gave '$r165_i', binary '$r165_o' exit '$r165_n'"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 184 (FIXED): `--interp` read ALL of standard input before `main` ran, so a program that
 # never reads stdin, fed by a pipe that stays open, waited for the writer to close it (the binary
 # returns at once). Standard input is now pulled when the program reads it. Each run's stdin is a
@@ -1977,6 +2001,9 @@ run_err "$TESTDIR/error_140_string_eq.con"                 "(E0229)"
 run_err "$TESTDIR/error_140_generic_unbounded_eq.con"      "(E0229)"
 run_err "$TESTDIR/error_140_generic_copy_at_struct.con"    "(E0229)"
 run_err "$TESTDIR/error_140_rawptr_eq_safe.con"            "(E0229)"
+# Bug 185: the same comparison through a safe Copy-bounded generic is refused post-mono; the
+# instance carries its definition's authority (trusted and Unsafe generics still compare).
+run_err "$TESTDIR/error_185_generic_rawptr_eq_safe.con"     "(E0229)"
 run_err "$TESTDIR/error_140_generic_self_compare.con"      "(E0229)"
 # Bug 145: vec_free of a Vec with non-Copy elements is E0287 (its vec_set half is bug 115's
 # fix, E0291).
@@ -1996,6 +2023,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 run_ok  "$TESTDIR/regress_140_scalar_comparisons.con" "175" 0
+run_ok  "$TESTDIR/regress_185_generic_rawptr_eq_authority.con" 42
 # Bug 142, rule (d): no return/break/continue inside a call argument, a literal element or an
 # operator operand (E0278); exits in statement position, tails and let initializers stay legal.
 run_err "$TESTDIR/error_142_struct_field_return.con"   "(E0278)"
@@ -2220,7 +2248,7 @@ error_091_norm_double_deref_read:E0238
 error_091_norm_intrinsic_arg_under_reborrow:E0302
 error_091_norm_ref_array_overwrite:E0291
 error_091_norm_generic_ref_array_overwrite:E0291
-error_091_norm_catchall_binder_through_ref:E0290
+error_091_norm_catchall_binder_through_ref:E0302
 error_091_norm_enum_payload_ref:E0239
 error_091_norm_generic_field_ref_write:E0239
 error_091_norm_heap_ref_field_write:E0239
@@ -2345,6 +2373,12 @@ run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discrimin
 run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
 run_err "$TESTDIR/error_type_arg_count_extra.con"   "E0113"   # bug 073: extra type argument
 run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing type argument
+# Bug 200 (silent): a generic type named without its argument list compiled.
+run_err "$TESTDIR/error_200_bare_generic_type.con" "(E0113)"
+run_err "$TESTDIR/error_200_bare_generic_signature.con" "(E0113)"
+run_ok "$TESTDIR/regress_200_generic_type_with_arguments.con" 42
+run_ok "$TESTDIR/regress_200_type_param_shadows_generic.con" 42
+run_ok "$TESTDIR/regress_200_self_receiver_of_generic_impl.con" 42
 run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
 # R-0484: structs with capability parameters (`struct Sink<cap C>`). Positives build and use
 # them; negatives are the authority escapes they must refuse, and the kind/count checks.
@@ -2419,14 +2453,14 @@ run_err "$TESTDIR/error_borrow_consumed_var.con" "already moved"
 run_err "$TESTDIR/error_assign_frozen_by_borrow.con" "frozen by borrow block"
 run_err "$TESTDIR/error_linear_array_leak.con" "was never consumed"
 # &mut T borrow-block ref consumption errors
-run_err "$TESTDIR/error_mut_ref_double_use.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_double_call.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_call_then_deref.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_use_after_call.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_branch_disagree.con" "consumed in one branch"
-run_err "$TESTDIR/error_mut_ref_loop_consume.con" "inside a loop"
+run_ok "$TESTDIR/regress_d1_mut_ref_double_use.con" 12
+run_ok "$TESTDIR/regress_d1_mut_ref_double_call.con" 12
+run_ok "$TESTDIR/regress_d1_mut_ref_call_then_deref.con" 99
+run_ok "$TESTDIR/regress_d1_mut_ref_use_after_call.con" 11
+run_ok "$TESTDIR/regress_d1_mut_ref_branch_disagree.con" 11
+run_ok "$TESTDIR/regress_d1_mut_ref_loop_consume.con" 13
 run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "(E0302)"
-run_err "$TESTDIR/error_mut_ref_method_on_borrow_ref.con" "used after move"
+run_ok "$TESTDIR/regress_d1_mut_ref_method_on_borrow_ref.con" 12
 # Memory regression checklist gap-closing tests
 run_err "$TESTDIR/error_continue_skip_linear.con" "continue would skip unconsumed linear"
 run_err "$TESTDIR/error_mut_borrow_immutable.con" "cannot take mutable borrow of immutable"
@@ -2451,6 +2485,10 @@ run_err "$TESTDIR/error_unknown_label.con" "unknown loop label"
 run_err "$TESTDIR/error_label_not_loop.con" "label can only precede while or for"
 # Trait bound errors
 run_err "$TESTDIR/error_trait_bound_missing.con" "does not implement trait"
+# Bug 204 (silent): a trait bound on a primitive type argument was never checked.
+run_err "$TESTDIR/error_204_primitive_bound_unchecked.con" "(E0241)"
+run_err "$TESTDIR/error_204_primitive_bound_unused.con" "(E0241)"
+run_ok "$TESTDIR/regress_204_primitive_bound_satisfied.con" 42
 # Trait dispatch errors
 run_err "$TESTDIR/error_trait_dispatch_missing.con" "no method"
 # File I/O errors
@@ -7920,22 +7958,16 @@ if filter_match "$TESTDIR/regress_129_user_fn_named_malloc.con"; then
         FAIL=$((FAIL + 1))
     fi
 fi
-# Bug 166 pin (OPEN): a foreign function taken as a value is called with the Concrete ABI.
-# The reproducer's call through `f` passes the struct's address although C takes it in a
-# register. When this leg fails, the call changed: update docs/bugs/166, the corpus entry and
-# this leg together.
-b166_ll="$TMPDIR/bug166_foreign_fn_value_abi.ll"
-if filter_match "tests/regressions/bug166_foreign_fn_value_abi/repro.con"; then
-    if $COMPILER "tests/regressions/bug166_foreign_fn_value_abi/repro.con" --emit-llvm > "$b166_ll" 2>/dev/null \
-       && grep -qE '^declare i64 @take_pair\(i64\)' "$b166_ll" \
-       && grep -qE 'call i64 %f\(ptr %p\)' "$b166_ll"; then
-        echo "  ok  bug 166 pin: the call through a foreign fn value still uses the Concrete ABI (OPEN)"
-        PASS=$((PASS + 1))
-    else
-        echo "FAIL  bug 166 pin: the reproducer's IR changed -- fixed? update docs/bugs/166, the corpus entry and this leg"
-        FAIL=$((FAIL + 1))
-    fi
-fi
+# Bug 166 (contained, D4): a foreign fn value was called with the Concrete ABI and the fn type's
+# capabilities; an extern fn is never a value (E0588). The reproducer is refused too.
+run_err "$TESTDIR/error_166_foreign_fn_value_repr_c.con"     "(E0588)"
+run_err "$TESTDIR/error_166_foreign_fn_value_repr_c_let.con" "(E0588)"
+run_err "tests/regressions/bug166_foreign_fn_value_abi/repro.con" "(E0588)"
+run_err "$TESTDIR/error_166_foreign_fn_value_scalar.con"     "(E0588)"
+run_err "$TESTDIR/error_166_imported_extern_value.con"      "(E0588)"
+run_err "$TESTDIR/error_166_extern_value_in_const.con"      "(E0588)"
+run_err "$TESTDIR/error_166_extern_value_after_scope.con"   "(E0588)"
+run_ok  "$TESTDIR/regress_166_wrapper_value.con" 42
 # #[export_name]: a C caller reaches the Concrete function by its exported name (rc 42).
 xp_ll="$TMPDIR/ffi_export_name.ll"
 xp_bin="$TMPDIR/ffi_export_name"
@@ -8280,6 +8312,24 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 194: a function with a result type and a reachable end reached llvm-as (`ret void`).
+run_err "$TESTDIR/error_194_missing_return_plain.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_if.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_method.con" "(E0307)"
+run_ok "$TESTDIR/regress_194_unreachable_end_forms.con" 42
+# Bug 195: the else block of a let ... else fell through (the rest of the function was skipped).
+run_err "$TESTDIR/error_195_let_else_falls_through_unit.con" "(E0308)"
+run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
+# Bug 197: a variant pattern without a field list dropped a non-Copy payload.
+run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
+run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
+# Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
+run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
+run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
+run_err "$TESTDIR/error_196_variant_over_int.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_type.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_over_type_param.con" "(E0309)"
+run_err "$TESTDIR/error_196_same_name_other_enum.con" "(E0309)"
 # Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
 # the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
 run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"
@@ -8305,12 +8355,70 @@ run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
 # Bug 175 (fails closed): a match whose arms all diverge left its merge block open, so a
 # loop around it failed SSA verification (E0708). --interp agreement: the r102 loop.
 run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
+# Bug 183 (silent): a dereference assignment lowered its destination first (rule 7: the
+# right-hand side first). --interp agreement: the r102 loop.
+run_ok "$TESTDIR/regress_183_deref_assign_rhs_first.con" 129
+run_ok "tests/regressions/bug183_deref_assign_destination_first/repro.con" 21
+# Bugs 136 and 137 (silent): functional update evaluated its base once per omitted field;
+# enum-variant literal fields ran in declaration order. --interp agreement: the r102 loop.
+run_ok "$TESTDIR/regress_136_137_literal_eval_order.con" 42
+# Bug 190 (silent): an array bound or passed by value aliased its source. --interp: the r102 loop.
+run_ok "$TESTDIR/regress_190_array_value_copy.con" 42
+# Bug 181 (D3): every binder through a borrowed scrutinee is a reference; the root stays frozen.
+run_ok "$TESTDIR/regress_181_borrowed_binders.con" 42
+run_ok "tests/regressions/bug181_generic_borrowed_scrutinee_binder_mode/repro.con" 42
+# Bug 182 / D2 (the Austral model): only a variable or a string literal is a reference's root
+# (E0238), and loans are keyed by root (E0293).
+run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
+# D1: every &mut argument is an implicit reborrow; a deferred call holds its loan; two exclusive
+# reborrows of one reference in one call overlap.
+run_ok "$TESTDIR/regress_d1_mut_ref_reborrow.con" 42
+run_ok "$TESTDIR/regress_d1_defer_branches_and_loop_exit.con" 2
+run_ok "$TESTDIR/regress_d1_append_ref_twice.con" 4
+run_err "$TESTDIR/error_d1_defer_holds_loan.con" "(E0206)"
+run_err "$TESTDIR/error_d1_defer_holds_loan_param.con" "(E0206)"
+run_err "$TESTDIR/error_d1_overlapping_mut_args.con" "(E0293)"
+# Bug 198 (T-RAWDUP): `*p` by value of a non-Copy pointee is refused; `read_owned(p)` moves.
+run_err "$TESTDIR/error_rawdup_trusted_deref.con" "(E0311)"
+run_ok "$TESTDIR/regress_198_read_owned.con" 42
+# Bug 199: a cast to a type alias crashed the backend.
+run_ok "$TESTDIR/regress_199_cast_to_alias.con" 42
+# Decision D6 (explicit Copy): a declared-Copy generic is Copy exactly when every type argument is;
+# the declaration is checked once with its parameters taken as Copy.
+run_err "$TESTDIR/error_d6_copy_generic_field_not_copy.con" "(E0571)"
+run_err "$TESTDIR/error_d6_copy_enum_payload_not_copy.con" "(E0571)"
+run_err "$TESTDIR/error_d6_phantom_arg_not_copy.con" "(E0208)"
+run_ok "$TESTDIR/regress_d6_copy_generics.con" 42
+run_err "$TESTDIR/error_d2_borrow_literal.con" "(E0238)"
+run_err "$TESTDIR/error_d2_borrow_field_of_temporary.con" "(E0238)"
+run_err "$TESTDIR/error_d2_temporary_receiver.con" "(E0238)"
+run_err "$TESTDIR/error_d2_mut_borrow_string_literal.con" "(E0238)"
+run_err "$TESTDIR/error_d2_branch_receiver.con" "(E0238)"
+run_err "$TESTDIR/error_d2_call_disjoint_fields.con" "(E0293)"
+run_err "$TESTDIR/error_d2_call_field_read.con" "(E0293)"
+run_err "$TESTDIR/error_d2_receiver_projection_read.con" "(E0293)"
+run_err "$TESTDIR/error_d2_call_field_read_in_branch.con" "(E0293)"
+run_err "$TESTDIR/error_d2_explicit_mut_receiver_read.con" "(E0293)"
+run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro.con" "(E0238)"
+run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con" "(E0238)"
+run_err "$TESTDIR/error_181_root_reassigned_match.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_while_let.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_guard.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_nested.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_whole_binder.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_defer.con" "(E0232)"
+run_ok "tests/regressions/bug136_functional_update_base_reevaluated/repro.con" 59
+run_ok "tests/regressions/bug137_enum_literal_field_order/repro.con" 56
 # Bug 150: a float self-comparison is not folded (x != x is true for NaN).
 run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
 # Bug 152: string_trim("") is the empty string (it was one byte, read past the source).
 run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
 # Bug 151 (contained): two nested modules' functions with one flattened name are refused (E0299).
 run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
+# Bug 165 (silent): a module defining `fn print_int` got it called by every `println`; the
+# reproducer aborted. --interp agreement: the r165 block.
+run_ok "$TESTDIR/regress_165_generated_helper_call.con" "7 hi true x n=hi ok" 42
+run_ok "tests/regressions/bug165_generated_helper_call_binds_by_spelling/repro.con" 7
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's
 # wrap (the folder compared an unnormalized constant: `u64max as i64 < 0`).
@@ -8438,7 +8546,8 @@ run_ok "$TESTDIR/regress_2i_ref6_method_let_else.con" 42
 run_err "$TESTDIR/error_2i_ref6_nested_let_else_through_ref.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_nested_let_destructure.con" 42
 run_err "$TESTDIR/error_2i_ref6_ghost_let_at_type_param.con" "(E0302)"
-run_ok "$TESTDIR/regress_2i_ref6_struct_destructure_through_ref.con" 42
+run_err "$TESTDIR/error_2i_ref6_struct_destructure_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_struct_fields_through_ref.con" 42
 run_ok "$TESTDIR/regress_2i_scope2_borrow_after_loop.con" 42
 run_err "$TESTDIR/error_2i_ref6_erased_assert_let.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_erased_assert_assign.con" "(E0303)"

@@ -48,16 +48,18 @@ areas exist (§8).
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-7 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives) |
-| `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
+| `ffi.md` | `FFI-` | migrated: FFI-1 to FFI-5 (foreign function values, Layout authority, extern declarations, layout attributes, symbol names) |
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
-| `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-14 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds) |
-| `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
-| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
-| `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
-| `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
-| `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
-| `traits.md` | `TRAIT-` | pilot: TRAIT-D1, TRAIT-1 to TRAIT-7 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence) |
+| `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-16 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds, generic arguments, finite size) |
+| `memory.md` | `MEM-` | migrated: MEM-1 to MEM-6 (two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
+| `trusted.md` | `TRUST-` | migrated: TRUST-1 to TRUST-7 (pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules, moving out of raw memory); handle capabilities and callable-value capabilities still in their documents |
+| `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
+| `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
+| `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
+| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
+| `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
+| `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -167,7 +169,7 @@ An example is a fenced block. Its info string is `con`, followed by space-separa
 
 ```
 info     := "con" SP verdict (SP attr)*
-verdict  := "accept" | "reject"
+verdict  := "accept" | "reject" | "abort"
 attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the entry
           | "exit=" N                    accept only, required; 0 <= N <= 125
           | "code=" CODE                 reject only, required; E<4 digits>, or "new" if pending
@@ -177,6 +179,7 @@ attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the
           | "pending=" TRACKING
           | "now=" OUTCOME               required if and only if pending
           | "now-interp=" OUTCOME        optional, only when pending
+          | "trap=" TEXT                  abort only, required: the interpreter's run-time error names it
           | "interp-exempt=" NAME        accept only; a reason slug, such as no-heap-in-interp
           | "project=" NAME              compile as a package of that name against this checkout's std
                                           (`concrete build`, CONCRETE_STD pinned); needs interp-exempt
@@ -196,6 +199,9 @@ example states, never only with the other legs.
 - **accept**: the program builds natively and the binary exits `N`. `--interp` exits 0 and
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
   every exemption.
+- **abort**: the program compiles and traps at run time: the binary is killed by `SIGABRT` (the
+  abort helpers of checked operations) and `--interp` stops with a run-time error, not a
+  diagnostic that names the trap given by `trap=`. It takes no `exit`, `code` or `stage`.
 - **reject**: the first error reported by the native compile, and the first error reported
   by `--interp`, are each `error[<stage>]: (<code>)`, and no lower layer leaked (`llvm-as`,
   the system linker, a panic). In a preservation entry (a stage boundary), the code may belong
@@ -235,7 +241,7 @@ and it is counted in SKIPPED.
 | S2 registry | `ids.tsv` has one row per allocated key: an entry version (`REF-3@1`) or an example (`REF-3/stored-field`). Columns: `key`, `state` (`live`, `pending`, `superseded` or `retired:<reason>`) and, for an entry version, the SHA-256 of its normalized sentence (`-` for an example). The `live` and `pending` rows equal what the chapters contain, state for state. A sentence whose hash differs from its version's row needs a new version row. |
 | S3 history | Against a base revision: no `ids.tsv` row is removed, a hash never changes, and a row's state changes only along `pending → live`, `live → superseded` (only when a newer version of the same entry exists) and `pending` or `live → retired:<reason>`. A `superseded` or `retired` row is final, so an ID is never reused. `codes.tsv` gains no `unmigrated` row. When a definition gains a version, every entry that uses it gains one in the same change. The base is `$SPEC_BASE`, or else the merge base with `origin/main`, or `HEAD~1` when that merge base is `HEAD`. |
 | S4 examples | Every example behaves as §2.2 says, on both consumers. |
-| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. One exception: a library contract whose `Enforced by:` names only std declarations may be covered by a native project example, since the interpreter runs single files; the check names every entry covered this way. |
+| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. One exception, named by the check: a library contract whose `Enforced by:` names only std declarations may be covered by a native project example, since the interpreter runs single files. |
 | S6 codes | Every code in `--report diagnostic-codes` has exactly one row in `codes.tsv`. The class is `rule` (named by an entry), `unmigrated:<chapter>`, `internal` (a compiler invariant failure, such as `ssa-verify` or `lower`), `tooling` (proof, policy and evidence tooling, not language) or `retired`. Class `rule` holds exactly for the codes some entry names. For each code, the ledger's `rules` field equals the set of `<ID>@<version>` of the entries that name it. The spec owns that mapping, and the compiler's copy is checked against it. |
 | S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |
@@ -330,7 +336,7 @@ them.
 | existing | relation |
 |---|---|
 | `check_rules_2i.sh` and `tests/rules/exit_2i.tsv` | The manifest is generated (§5), and the gate's code-to-rule table comes from the spec. |
-| `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean` and `CoreCheck.lean` has a ledger row. It does not see codes built elsewhere. S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. Widening the first gate's scan to every emitter is tracked separately. |
+| `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean`, `CoreCheck.lean`, `Resolve.lean` and `Elab.lean` has a ledger row (widened 2026-10-23, which added E0112 – E0120 and E0420 to the ledger). S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. |
 | `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | Migrated (step 0): the boundary contracts are `pipeline.md`'s PASS-5 to PASS-11, their fixtures are its examples, the leak check is part of S4, and the gate is retired. PIPELINE_CONTRACTS.md is the design record. |
 | `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | Migrated (step 1): the per-constructor tables are OWN-15 in `ownership.md`. `check_value_flow_spec.sh` stays the owner of constructor coverage and now reads `ownership.md`; it is a fast source gate, so it stays out of `check_spec.sh`, which needs a compiler. VALUE_FLOW_SPEC.md is the design record. |
 | `check_constructor_coverage.sh` | It checks that every compiler walker handles every constructor. That is a fact about the compiler, not the language, so it stays separate. |
@@ -361,33 +367,34 @@ Each step lands with the gate green. The steps run in this order:
 2. **types.md** (`TYPE-`, migrated 2026-10-23): type formation, aliases, generics and const generics, newtypes,
    construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,
    VALIDATED_WRAPPERS and the type sections of VALUE_MODEL. D5 (a bare `T` is Any) enters as
-   enforced. D6 (Copy is explicit) enters as pending.
+   enforced. D6 (Copy is explicit) entered as pending and was enforced on 2026-10-23 (option (a), TYPE-14@2).
 3. **patterns.md** (`PAT-`, migrated 2026-10-23): exhaustiveness, nested and destructuring
    patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING and
    PATTERN_ERGONOMICS; NESTED_PATTERNS and TUPLES stay the records of their deferred decisions.
-4. **arithmetic.md** (`ARITH-`): integer and float semantics, overflow, checked, wrapping and
+4. **arithmetic.md** (`ARITH-`, migrated 2026-10-23): integer and float semantics, overflow, checked, wrapping and
    saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL. T-ARITH and
    T-CAST enter as pending.
-5. **statements.md** (`STMT-`): statements and expressions, value blocks, loops and loop
+5. **statements.md** (`STMT-`, migrated 2026-10-23): statements and expressions, value blocks, loops and loop
    control, evaluation order, `main` and the exit status. It replaces
-   STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL, EXECUTION_MODEL and the language half of
-   MAIN_EXIT_MODEL. T-ORDER enters as pending.
-5a. **memory.md** (`MEM-`, grown from the stub): allocations, `Heap<T>`, what safe code may
+   STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL and the language half of MAIN_EXIT_MODEL;
+   EXECUTION_MODEL stays the runtime and platform description. T-ORDER's violations (bugs 136,
+   137 and 183) were fixed in landing train 6, so STMT-4 is enforced.
+5a. **memory.md** (`MEM-`, migrated 2026-10-23): allocations, `Heap<T>`, what safe code may
    observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
    MEMORY_SEMANTICS.
-6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
+6. **ffi.md** (`FFI-`) and **trusted.md** (`TRUST-`), migrated 2026-10-23 except handle and callable-value capabilities: the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,
-   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP, D8 (global state) and D10
+   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP enters enforced (TRUST-7); D8 (global state) and D10
    (the `trusted mod` marker) enter as pending.
-7. **contracts.md** (`CON-`): `requires`, `ensures`, invariants, ghost code, the specification
+7. **contracts.md** (`CON-`, migrated 2026-10-23): `requires`, `ensures`, invariants, ghost code, the specification
    judgment. It replaces the language half of CONTRACTS_GUIDE. T-H27 enters as pending.
-8. **modules.md** (`MOD-`): modules, imports, visibility, name resolution and namespaces
+8. **modules.md** (`MOD-`, migrated 2026-10-23): modules, imports, visibility, name resolution and namespaces
    (SCOPE-4's open question). It replaces VISIBILITY_AND_MODULE_HYGIENE. D9 (one file per module,
    with generated interfaces) enters as pending.
-9. **traits.md** (`TRAIT-`): traits, impls, bounds and coherence (D7). The trait-coherence
+9. **traits.md** (`TRAIT-`, migrated 2026-10-23): traits, impls, bounds and coherence (D7). The trait-coherence
    branch may start this chapter at any point. It does not wait for its place in this order.
-10. **syntax.md** (`SYN-`): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
+10. **syntax.md** (`SYN-`, migrated 2026-10-23): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
     owners of the productions, and the chapter cites productions by name rather than copying
     them. Its entries cover what the grammar cannot say, such as the precedence and
     trailing-value rules.

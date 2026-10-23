@@ -1,0 +1,18 @@
+// T-RAWDUP (the raw-pointer generic leak, bug 046's shape): `*p` read BY VALUE of a non-Copy pointee
+// duplicated the value the slot still holds; this program freed one heap cell twice (the binary
+// exited 0; --interp reported a use after free). Refused: E0311. `trusted` does not relax
+// linearity (MEMORY_SEMANTICS §11).
+struct Copy B { v: Int }
+
+trusted fn dup<K>(x: &mut K) -> K {
+    let p: *mut K = x as *mut K;
+    return *p;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42 });
+    let h2: Heap<B> = dup::<Heap<B>>(&mut h);
+    free(h2);
+    free(h);
+    return 0;
+}

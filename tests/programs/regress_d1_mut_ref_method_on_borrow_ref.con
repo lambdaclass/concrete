@@ -1,0 +1,19 @@
+// D1 (decision Q1, 2026-10-23): every `&mut` argument is an implicit reborrow, borrow-block binders
+// included. This program was `error_mut_ref_method_on_borrow_ref.con`, refused when a borrow-block binder was
+// consumed by the call it was passed to; it now runs. Exit 12.
+struct Copy Counter { val: Int }
+
+impl Counter {
+    fn inc(&mut self) {
+        self.val = self.val + 1;
+    }
+}
+
+fn main() -> Int {
+    let mut c: Counter = Counter { val: 10 };
+    borrow mut c as r in R {
+        r.inc();
+        r.inc();
+    }
+    return c.val;
+}

@@ -51,8 +51,9 @@ names of a borrow block. The visible binding's state and type do not matter. So
 `let s = transform(s)` is refused even though the right-hand side consumed `s`, and a Copy
 binding is protected like a linear one. Contract expressions are binder-free propositions, so a
 binder in one is refused as well (E0305). The rule prevents the shadowing bugs 087, 093, 094,
-107 and 124 at their source. E0292 and E0238's shadowed-source guard stay in place behind it
-as defense in depth. E0214 and E0215 are no longer emitted, and E0301 covers them.
+107 and 124 at their source. E0214, E0215 and E0292 are no longer emitted, and E0301 covers
+them; E0238's shadowed-source guard is gone too. Binding identity is minted by the same walk
+(R-0492), so a spelling that is not visible names a different binding.
 
 ```con reject name=block-let code=E0301 stage=check pair=block-let-renamed
 fn main() -> Int {

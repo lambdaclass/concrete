@@ -3,7 +3,9 @@
 **Status:** decision record, 2026-10-23. The four questions this record raised were decided by the
 user on 2026-10-23 ([§4](#4-decisions-of-2026-10-23)), with a second set of decisions (D5 – D12,
 [§4.6](#46-decisions-of-2026-10-23-second-set); D5, D8 and D10 revised the same day) and the
-ordered plan of §5. The other
+ordered plan of §5. D1 – D4, D6 and T-RAWDUP were implemented on 2026-10-23 (landing train 6); their
+rules are REF-10, REF-5 and REF-11, REF-9, FFI-1, OWN-D1 and TYPE-14, and TRUST-7 in
+[docs/spec](../spec/README.md). The other
 recommendations stand as recommendations until their owners implement them.
 This document does not restate rules. Each rule is normative in its canonical owner: references and
 binding in [MEMORY_SEMANTICS §15](MEMORY_SEMANTICS.md), evaluation order in
@@ -576,7 +578,14 @@ enforcement in exit 2i; bug 182 closes with it.
 **Rule.** Every pattern binder that binds through a scrutinee of reference type (`match r`,
 `match &o`, `if let`, `while let`) has reference type: a payload field of type `T` binds as `&T`,
 and a whole-value binder over `&T` binds as `&T`, whether or not `T` is Copy. A Copy value is read
-with `*value`. Literal and range patterns still compare the referenced value.
+with `*value`. Literal and range patterns still compare the referenced value. **Scope (decided
+2026-10-23):** D3's `&T` binder rule applies to match-style binders: `match`, `if let` and
+`while let` arms. A destructuring `let` of a struct through a reference (`let P { a, b } = r;` with
+`r: &P`) is refused by REF-6 (E0302), like any `let` that would hold a reference. There is no
+exception: reference-holding binders live only in `match` arms and borrow blocks, so the one rule
+"a `let` never holds a reference" stays without a new case. A field is read through a reference as
+`r.a`, or bound by a `match`. An earlier wording of this scope proposed binding the fields as `&T`;
+it is superseded.
 
 **Rationale.** Today the mode depends on whether the payload is Copy, a property monomorphization
 changes, and Check and Elab already disagree about it (bug 181: SIGSEGV in safe code at
@@ -750,9 +759,22 @@ add syntax without removing a semantic case. Bug 181 is fixed by storing the bin
 **D6. Copy is explicit.** A struct or enum, generic or not, is Copy only when declared `Copy`, and
 the declaration is checked (every field Copy, under the declared kinds of its parameters). Copy is
 never derived from the fields of an instantiation. *Rationale:* it removes the conditional-Copy
-fixpoint Mono computes today (`Concrete/IR/Mono.lean`, "iterate to a fixpoint … either kind's
+fixpoint Mono computed (`Concrete/IR/Mono.lean`, "iterate to a fixpoint … either kind's
 Copy-ness can depend on the other's"), so Copy-ness is a fact of the declaration, not of a type
-graph.
+graph. *Refined 2026-10-23 (option (a)) and implemented the same day:* bare parameters keep kind
+Any, so the declaration is checked once with its type parameters taken as Copy, and an
+instantiation of a generic declared `Copy` is Copy exactly when every type argument is Copy, as a
+derived `Copy` is ([OWN-D1](../spec/ownership.md#OWN-D1), [TYPE-14](../spec/types.md#TYPE-14)).
+
+**D6 refined (a), 2026-10-23.** A `Copy` declaration on a generic struct or enum means **"Copy when
+every type parameter is Copy"**: `struct Copy Pair<A, B> { .. }` makes `Pair<X, Y>` Copy exactly when
+`X` and `Y` are Copy. This is decided from the declaration alone, with no type-graph fixpoint. The
+declaration is checked once: every field must be Copy under the assumption that every parameter is
+Copy. The builtin `Option` and `Result` are declared this way, so `Option<Int>` is Copy and
+`Option<String>` is not. A generic that is not declared `Copy` is never Copy, whatever its
+arguments. *Rationale:* it matches Rust's derived `Copy`, it is invariant under substitution (the
+answer for an instantiation follows from the declaration and the arguments' own Copy-ness, both
+known before specialization), and it keeps `Option<Int>` Copy without a fixpoint.
 
 **D7. Trait coherence.** One impl per (trait, type), and it lives in the module of the trait or of
 the type. A method reachable through two bounds must be called qualified (`Trait::method(x)`),

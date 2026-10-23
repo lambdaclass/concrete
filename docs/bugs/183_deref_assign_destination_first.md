@@ -1,6 +1,6 @@
 # Bug 183 — a dereference assignment evaluates its destination before its right-hand side in the binary
 
-**Status:** OPEN
+**Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-21, while writing the evaluation-order rule (the semantics decisions of
 2026-10-21; recorded in [STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)
 and in ROADMAP exit 0b as "not yet filed"); reproduced and filed 2026-10-23 by the
@@ -44,7 +44,20 @@ R-0496 (S7 Core semantics) with the evaluation-order rule's gate in exit 2j (R-0
 permanent differential leg in exit 2c (R-0491). Narrow repair under exit 0b: lower `value` before
 `target` in `Lower`'s `.derefAssign` case.
 
-## Containment while open
+## Fix
+
+`Lower`'s `.derefAssign` case lowers the right-hand side before the destination, as the
+indexed and field assignment cases and the interpreter already did, so rule 7 holds in both
+consumers. The structural owner (one Core semantics fixing the order for every consumer, R-0496)
+is unchanged; this is the exit 0b repair the record names.
+
+Regression fixture: `tests/programs/regress_183_deref_assign_rhs_first.con`: the reproducer's
+indexed shape, a borrowed field of an array element, and a raw-pointer destination in trusted code,
+each recording its order; exit 129 (21 + 43 + 65) natively and under `--interp` (`run_tests.sh`,
+`run_ok` and the `--interp == binary` loop). The reproducer now exits 21 (`run_ok`); on the
+previous compiler it exits 12.
+
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `runs-exit`) requires the
 binary to exit 12; when it exits 21 that leg fails until this document, the

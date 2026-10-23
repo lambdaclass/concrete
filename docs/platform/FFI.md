@@ -1,5 +1,9 @@
 # FFI and Unsafe Boundary
 
+The rules are FFI-1 to FFI-5 of [docs/spec/ffi.md](../spec/ffi.md) and TRUST-4 / TRUST-5 of
+[docs/spec/trusted.md](../spec/trusted.md); this document is the design record and keeps the
+wrapper patterns and the calling-convention design.
+
 Status: stable reference
 
 This document describes the current foreign-function interface boundary and the role of `Unsafe` in Concrete.
@@ -140,6 +144,21 @@ function by its bare name must export it with `#[export_name]`.
 **Owners.** Bugs 103 and 129: ROADMAP exit 0b (R-0482), as wrong code and a
 memory-safety defect in safe code. Mangling and the namespace: R-0285 / R-0283 (the foreign
 boundary), with R-0510 for generated symbols; the export attribute: R-0286.
+
+## Foreign Function Values (normative, decided 2026-10-23)
+
+An `extern fn` is never a value. The C calling convention (a `#[repr(C)]` aggregate flattened into
+registers) and the extern's own authority (`with(Unsafe)` unless `trusted extern`, its declared
+effects) are decided at a direct call. A function type (`fn(A) -> R`) carries neither, so a call
+through a value used the Concrete convention and the function type's capabilities (bug 166).
+Taking an `extern fn` as a value, own or imported, is refused (E0588). To pass a foreign function,
+pass a Concrete function whose body calls it directly.
+
+Long-term design, decided and not implemented (TIGHTENING_DECISIONS D4): the calling convention is
+part of the function type. `extern "C" fn(A) -> R` is a C function type distinct from `fn(A) -> R`,
+an `extern fn` taken as a value has that type, a call through it lowers with the C ABI and needs
+what a direct call of the extern needs, and a Concrete function C must call is exported explicitly.
+It lands with the first workload that passes a C callback or stores a foreign function.
 
 ## FFI-Safe Types
 

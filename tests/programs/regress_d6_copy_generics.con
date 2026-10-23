@@ -1,0 +1,23 @@
+// D6 (explicit Copy), run control: a declared-Copy generic at Copy arguments is Copy, also nested and
+// for the builtin `Option`; each value is used twice. Exit 42, binary = --interp.
+struct Copy W<T> { v: T }
+
+struct Copy Pair<A, B> { a: A, b: B }
+
+fn use_w(w: W<Int>) -> Int {
+    return w.v;
+}
+
+fn use_p(p: Pair<W<Int>, Option<Int>>) -> Int {
+    match p.b {
+        Option::Some { value } => { return p.a.v + value; },
+        Option::None => { return p.a.v; }
+    }
+}
+
+fn main() -> Int {
+    let w: W<Int> = W::<Int> { v: 5 };
+    let o: Option<Int> = Option::Some { value: 6 };
+    let p: Pair<W<Int>, Option<Int>> = Pair::<W<Int>, Option<Int>> { a: w, b: o };
+    return use_w(w) + use_w(w) + use_p(p) + use_p(p) + 10;
+}

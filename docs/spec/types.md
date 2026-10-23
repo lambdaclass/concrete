@@ -3,7 +3,7 @@
 Every expression has one type, and there are no implicit conversions. This chapter covers
 callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of expressions and
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
-kinds of type parameters (TYPE-13, TYPE-14). Copy itself is defined in the ownership chapter
+kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
 The design records are [TYPE_ALIASES.md](../language/TYPE_ALIASES.md),
@@ -367,7 +367,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check)
+- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -405,7 +405,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check)
+- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check), E0421 (check, elab)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -416,6 +416,15 @@ fn main() -> Int {
 their own signatures rather than by a declaration, so each misuse has its own diagnostic.
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
 
+```con reject name=append-unsupported-argument code=E0421 stage=check pair=free-heap
+fn main() with(Alloc) -> Int {
+    let mut out: String = "";
+    append(&mut out, 1.5);
+    drop_string(out);
+    return 0;
+}
+```
+
 ```con reject name=free-non-heap code=E0274 stage=check pair=free-heap
 fn main() with(Std) -> Int {
     let x: Int = 42;
@@ -424,7 +433,7 @@ fn main() with(Std) -> Int {
 }
 ```
 
-```con accept name=free-heap exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=free-heap exit=42
 struct Copy B { v: Int }
 
 fn main() with(Std) -> Int {
@@ -579,7 +588,7 @@ mod m {
 <a id="TYPE-13"></a>
 ### TYPE-13. A bare type parameter is linear-capable
 
-**TYPE-13@1.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
+**TYPE-13@2.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
 
 - Kind: guarantee
 - Uses: OWN-D1
@@ -620,29 +629,32 @@ fn main() -> Int {
 <a id="TYPE-14"></a>
 ### TYPE-14. Copy is declared, never derived
 
-**TYPE-14@1.** A struct or enum is Copy only when it is declared `Copy` and every field is Copy under the declared bounds of its type parameters, so whether an instantiation is Copy never depends on its type arguments.
+**TYPE-14@2.** Whether an instantiation of a struct or enum is Copy is decided from its declaration alone, so it is Copy exactly when the struct or enum is declared `Copy` and every type argument is Copy.
 
-- Kind: refusal
+- Kind: guarantee
 - Uses: OWN-D1
-- Codes: E0571 (core-check)
-- Status: pending R-0510
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.isCopyTyGeneric
 - Semantics: none
-- Obligation: Copy is a fact of the declaration (R-0510 removes Mono's conditional-Copy fixpoint)
+- Obligation: Copy is decided from the declaration and the type arguments alone, with no fixpoint over the type graph (R-0510)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D6). Today a generic declared `Copy` is
-Copy only at instantiations whose arguments are Copy (OWN-D1), which Mono computes as a fixpoint
-over the type graph. Under this rule a declaration like `struct Copy Box<T> { v: T }` with a bare
-`T` is refused, and `struct Copy Box<T: Copy> { v: T }` is the way to write it. When it lands,
-OWN-D1 gets a new version, and E0571's rule tag moves from OWN-14 to this entry (OWN-14 is then
-subsumed and retired).
+**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D6, option (a)) and enforced the same
+day. Copy used to be derived from an instantiation's fields, which Mono computed as a fixpoint
+over the type graph; the fixpoint is gone. A generic declared `Copy` behaves like a derived
+`Copy`: `struct Copy Bx<T> { v: T }` is accepted, its declaration checked once with `T` taken
+as Copy (OWN-14), and `Bx<Int>` is Copy while `Bx<String>` is linear. A parameter no field
+mentions still counts. A generic not declared `Copy` is never Copy. Version 1 (pending, never
+enforced) required a `T: Copy` bound instead and was retired by the option (a) decision.
 
-```con reject name=copy-over-bare-parameter code=E0571 stage=core-check pair=copy-over-copy-parameter pending=R-0510 now=accept:42
+```con accept name=copy-over-bare-parameter-at-copy exit=42
 struct Copy Bx<T> { v: T }
 
 fn main() -> Int {
-    let b: Bx<Int> = Bx::<Int> { v: 42 };
-    return b.v;
+    let b: Bx<Int> = Bx::<Int> { v: 21 };
+    let c: Bx<Int> = b;
+    return b.v + c.v;
 }
 ```
 
@@ -656,3 +668,123 @@ fn main() -> Int {
 }
 ```
 
+<a id="TYPE-15"></a>
+### TYPE-15. A generic type takes the arguments it declares
+
+**TYPE-15@1.** A named type takes exactly as many type arguments and capability arguments as its declaration has type parameters and capability parameters, each of the matching kind, so a type with capability parameters is never named bare.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0113 (resolve), E0114 (resolve), E0115 (resolve)
+- Status: enforced
+- Enforced by: Concrete.resolveProgram
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** An extra type argument was once dropped silently, so `Box1<i32, bool>` compiled
+and ran (bug 073), and a missing one surfaced later as an unrelated error on the unresolved
+parameter. A capability argument says what a handle may do (R-0484), so a bare `Writer` for a
+`Writer<cap C>` would leave the authority to inference; it is refused instead. The parser
+classifies each argument as a type or a capability by position, and resolution checks the kind
+and the count in both directions. A generic type named bare, with no argument list, is refused
+too (bug 200).
+
+```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
+struct Copy Box1<T> { v: T }
+
+fn main() -> Int {
+    let b: Box1<Int, bool> = Box1::<Int, bool> { v: 42 };
+    return b.v;
+}
+```
+
+```con accept name=declared-type-arguments exit=42
+struct Copy Box1<T> { v: T }
+
+fn main() -> Int {
+    let b: Box1<Int> = Box1::<Int> { v: 42 };
+    return b.v;
+}
+```
+
+```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments
+struct Copy Box1<T> { v: Int }
+
+fn main() -> Int {
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
+}
+```
+
+```con reject name=type-where-capability code=E0114 stage=resolve pair=capability-argument
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<Int>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con reject name=capability-arity code=E0115 stage=resolve pair=capability-argument
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<{}, {}>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=capability-argument exit=42
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<{}>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+<a id="TYPE-16"></a>
+### TYPE-16. A struct has a finite size
+
+**TYPE-16@1.** A struct does not contain itself by value, directly or through the fields of other structs and enums or of their instantiations, so a recursive type goes through a `Heap` or a raw pointer.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0583 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: every type has a layout (R-0502)
+- Evidence: tested
+
+**Rationale.** A value is laid out inline, so a struct that holds itself by value has no finite
+size. CoreCheck refuses it before code generation, where it used to surface as an LLVM
+"recursive structure type" error. A reference cannot be a field (REF-3), so it does not break a
+cycle. A generic instantiation is followed with its type arguments substituted, so `W<Node>`
+inside `Node` is refused too (bug 205; it used to reach `llvm-as` while `--interp` ran it).
+
+```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
+struct Copy Node { v: Int, next: Node }
+fn main() -> Int { return 0; }
+```
+
+```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct
+struct Copy W<T> { v: T }
+struct Copy Node { a: Int, w: W<Node> }
+fn main() -> Int { return 42; }
+```
+
+```con accept name=finite-struct exit=42
+struct Copy Node { v: Int, w: Int }
+fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
+```

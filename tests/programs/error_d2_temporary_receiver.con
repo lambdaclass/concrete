@@ -1,0 +1,17 @@
+// D2: a method's implicit `&self` borrow of a temporary receiver (`mk().get()`) borrows a non-root,
+// exactly as `&mk()` would. E0238 (REF-5).
+struct Copy P { f: Int }
+
+impl P {
+    fn get(&self) -> Int {
+        return self.f;
+    }
+}
+
+fn mk() -> P {
+    return P { f: 42 };
+}
+
+fn main() -> Int {
+    return mk().get();
+}

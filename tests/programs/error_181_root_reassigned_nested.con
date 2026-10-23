@@ -1,0 +1,16 @@
+// D3 (bug 181): a binder through a borrowed scrutinee is a reference, so the scrutinee's root stays
+// frozen while the binder lives, Copy payloads included (REF-8). Root reassigned: nested shape. E0232.
+enum W { A { inner: Option<Int> }, B }
+fn f() -> Int {
+    let mut w: W = W::A { inner: Option::Some { value: 3 } };
+    match &w {
+        W::A { inner } => {
+            match inner {
+                Option::Some { value } => { w = W::B; return *value; },
+                Option::None => { return 0; }
+            }
+        },
+        W::B => { return 0; }
+    }
+}
+fn main() -> Int { return f(); }
