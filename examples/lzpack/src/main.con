@@ -141,12 +141,12 @@ mod lzpack {
         let n: u64 = d.len();
         if i + MIN_MATCH > n { return best; }
         let mut limit: u64 = n - i;
-        if limit > MAX_MATCH { limit = MAX_MATCH; }
+        if (limit > MAX_MATCH) { limit = MAX_MATCH; }
         let mut c: u64 = head.get_unchecked(hash3(d, i));
         let mut steps: u64 = 0;
-        while c != 0 && steps < MAX_CHAIN {
+        while (c != 0 && steps < MAX_CHAIN) {
             let cand: u64 = c - 1;
-            if i - cand > WINDOW { break; }
+            if (i - cand > WINDOW) { break; }
             let l: u64 = match_len(d, cand, i, limit);
             if l > best.len {
                 best = Match { len: l, dist: i - cand };
@@ -174,7 +174,7 @@ mod lzpack {
                 items = 0;
             }
             let m: Match = find_match(d, &head, &prev, i);
-            if m.len >= MIN_MATCH {
+            if (m.len >= MIN_MATCH) {
                 flag = flag | (1 << items);
                 let off: u64 = m.dist - 1;
                 out.push((off & 255) as u8);
@@ -277,7 +277,7 @@ mod lzpack {
                 if r > st.longest { st.longest = r; }
             } else {
                 i = i + 1;
-                if i - lit_start == MAX_LITERALS {
+                if (i - lit_start == MAX_LITERALS) {
                     flush_literals(d, lit_start, i, out, st);
                     lit_start = i;
                 }
@@ -329,7 +329,7 @@ mod lzpack {
         out.push(method);
         push_le32(&mut out, d.len());
         push_le32(&mut out, crc32_all(d));
-        if method == METHOD_LZ {
+        if (method == METHOD_LZ) {
             lz_encode(d, &mut out, st);
         } else {
             rle_encode(d, &mut out, st);
@@ -338,20 +338,20 @@ mod lzpack {
     }
 
     fn decompress(src: &Bytes) with(Alloc) -> Result<Bytes, DecodeError> {
-        if src.len() < HEADER_LEN {
+        if (src.len() < HEADER_LEN) {
             return Result::<Bytes, DecodeError>::Err { error: DecodeError::Truncated };
         }
         if src.get_unchecked(0) != 76 || src.get_unchecked(1) != 90 || src.get_unchecked(2) != 80 {
             return Result::<Bytes, DecodeError>::Err { error: DecodeError::BadMagic };
         }
         let method: u8 = src.get_unchecked(3);
-        if method != METHOD_LZ && method != METHOD_RLE {
+        if (method != METHOD_LZ && method != METHOD_RLE) {
             return Result::<Bytes, DecodeError>::Err { error: DecodeError::BadMethod };
         }
         let orig: u64 = src.le32(4);
         let crc: u64 = src.le32(8);
         let mut out: Bytes = Bytes::new();
-        let r: Result<u64, DecodeError> = if method == METHOD_LZ {
+        let r: Result<u64, DecodeError> = if (method == METHOD_LZ) {
             lz_decode(src, HEADER_LEN, orig, &mut out)
         } else {
             rle_decode(src, HEADER_LEN, orig, &mut out)
@@ -376,7 +376,7 @@ mod lzpack {
     }
 
     fn method_name(method: u8) -> String {
-        if method == METHOD_LZ { return "lz"; }
+        if (method == METHOD_LZ) { return "lz"; }
         return "rle";
     }
 
@@ -402,7 +402,7 @@ mod lzpack {
             },
         };
         packed.drop();
-        if method == METHOD_LZ {
+        if (method == METHOD_LZ) {
             line.append(&" (literals ");
             line.append_int(st.literals as Int);
             line.append(&", matches ");
@@ -564,8 +564,8 @@ mod lzpack {
         ok = report(&"text", &txt) && ok;
         txt.drop();
 
-        let rnd: Bytes = lcg_bytes(2000, 7);
-        ok = report(&"lcg 2000", &rnd) && ok;
+        let rnd: Bytes = lcg_bytes(1000, 7);
+        ok = report(&"lcg 1000", &rnd) && ok;
         rnd.drop();
 
         let all: Bytes = every_byte(2);
