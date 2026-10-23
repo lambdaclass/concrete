@@ -54,6 +54,14 @@ neg F3 "$PRIV" 'def forged : LocalTable := ⟨true, #[], [], [], [], []⟩'
 neg F4 "$PRIV" 'def forged (t : LocalTable) : LocalTable := { t with uses := [] }'
 neg F5 "$MISMATCH" 'def byName (env : TypeEnv) : Option VarInfo := env.vars.lookup "x"'
 neg F6 'failed to synthesize|Inhabited' 'def forged : LocalId := default'
+# A string-literal pattern on a Core binder field (`| .letDecl "y" ..`) used to elaborate through a
+# String -> CLocal coercion and match only a binder WITHOUT an identity, so it compiled and silently
+# stopped matching Elab's Core (PipelineTest's binder-agreement test). The coercion is gone; such a
+# pattern is now a type error, in every form (nested, let-pattern, arm binding).
+neg F7 "$MISMATCH" 'def byLit : CStmt → Bool
+  | .letDecl "y" _ _ _ => true
+  | _ => false'
+neg F8 "$MISMATCH" 'def byLit (e : CExpr) : Bool := if let .ident "x" _ := e then true else false'
 
 echo ""
 echo "=== S: one minting site, no name-keyed lookup ==="
@@ -72,17 +80,6 @@ elif ! grep -q '^Concrete/Resolve/Locals.lean:' <<<"$MINT_RAW"; then
   no "S: the minting audit found no call in the walk itself, so its pattern is stale"
 else
   ok "S: LocalTable minting is called only from Resolve/Locals.lean (qualified, dot and open forms)"
-fi
-# A string-literal pattern on a Core binder field (`| .letDecl "y" ..`, `.ident "r" _`) elaborates
-# through the String -> CLocal coercion and matches only a binder WITHOUT an identity: it compiles
-# and silently never matches Elab's Core (found in PipelineTest's binder-agreement test). AST
-# constructors take a span first, so a literal in first position is a Core pattern (the lexer's
-# TokenKind.ident patterns in Concrete/Frontend are excluded).
-LIT="$(grep -rnE '(^|[|(@])[[:space:]]*\.(ident|letDecl|assign|varArm|borrowIn) "' --include='*.lean' Concrete Main.lean | grep -v '^Concrete/Frontend/')"; LRC=$?
-if [ "$LRC" -le 1 ] && [ -z "$LIT" ]; then
-  ok "S: no string-literal pattern on a Core binder field"
-else
-  no "S: string-literal patterns on Core binder fields: $(head -n3 <<<"$LIT" | tr '\n' ' ')"
 fi
 HELP="$(grep -nE 'def lookupVarInfo|def lookupVarTy|def checkNoLiveShadow|def guardShadowedSource|nextVarUid' Concrete/Check/*.lean)"; HRC=$?
 [ "$HRC" -le 1 ] && [ -z "$HELP" ] && ok "S: the checker has no name-keyed binding lookup and no private uid counter" || no "S: $HELP"
