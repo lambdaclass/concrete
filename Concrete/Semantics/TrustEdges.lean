@@ -77,14 +77,13 @@ structure TrustFnAttr where
   isTrusted : Bool
   isPublic : Bool
   /-- Does this function's capability set AUTHORIZE a raw operation? This is the
-      `capsContain` question, which a capability VARIABLE satisfies — deliberately
-      different from the `assumesUnsafe` edge, which records LITERAL membership.
-
-      Using literal membership to decide justification produced false provenance:
-      `OrderedSet::for_each<cap C>(..) with(C)` authorizes its raw ops through the
-      variable, yet reported four "unjustified" raw operations that the checker had
-      authorized all along. A provenance report inventing an unjustified operation is
-      the same defect class as inventing a capability. -/
+      `capsContain` question — the same entailment the checker's raw-operation gate
+      asks — deliberately distinct from the `assumesUnsafe` edge, which records
+      LITERAL membership. The two agree today: since bug 188 a capability VARIABLE
+      entails only itself, never `Unsafe`, so `for_each<cap C>(..) with(C)` authorizes
+      a raw operation only by being `trusted`. Reading the checker's own question
+      keeps the report from inventing (or hiding) an unjustified operation if the
+      entailment rule changes again. -/
   capsAuthorizeUnsafe : Bool := false
   deriving Repr, BEq
 

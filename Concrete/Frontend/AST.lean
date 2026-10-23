@@ -121,6 +121,7 @@ inductive Ty where
     aliases are rejected earlier (Resolve, E0112), so realistic inputs are
     acyclic; if fuel is exhausted on pathologically deep nesting, expansion stops
     safely (leaving the type as-is) rather than looping. -/
+-- spec: TYPE-12 (docs/spec/types.md; this declaration enforces the rule)
 def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
   | 0, ty => ty
   | fuel + 1, ty =>
@@ -144,6 +145,7 @@ def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
     fully-expanded, alias-free target: `type B = A; type A = i32` makes `B`
     resolve straight to `i32`, and `type Arr = [E; 3]; type E = i32` makes `Arr`
     resolve to `[i32; 3]`. -/
+-- spec: TYPE-12 (docs/spec/types.md; this declaration enforces the rule)
 def closeAliasMap (m : List (String × Ty)) : List (String × Ty) :=
   m.map (fun (n, t) => (n, expandAliasDeep m (m.length + 64) t))
 
@@ -538,8 +540,11 @@ structure ImplBlock where
   capParams : List String := []
   typeBounds : List (String × List String) := []  -- impl-level param bounds: V -> [Copy], enforced at method-call sites
   methods : List FnDef
-  isTrusted : Bool := false        -- trusted impl: all methods inherit trusted boundary
   span : Span := default
+  /-- The type arguments written on the impl's target (`impl<T> Name<T>`), `none` when the
+      target is written bare. Recorded so trait coherence (E0593) can judge them: they were
+      parsed and DROPPED, so `impl Name<i32>` silently meant every `Name<_>` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure TraitDef where
   name : String
@@ -557,8 +562,10 @@ structure ImplTraitBlock where
   typeBounds : List (String × List String) := []  -- impl-level param bounds (conditional trait impls, H18)
   methods : List FnDef
   capSet : CapSet := .empty        -- capabilities on the impl (used by Destroy in Phase 3)
-  isTrusted : Bool := false        -- trusted impl Trait for Type: methods inherit trusted boundary
   span : Span := default
+  /-- The type arguments written on the impl's target (`for Vec<T>`), `none` when bare. See
+      `ImplBlock.targetArgs` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure Module where
   name : String

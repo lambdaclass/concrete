@@ -33,7 +33,7 @@ mod time {
         nanos: i64,
     }
 
-    trusted impl Instant {
+    impl Instant {
         pub trusted fn now() with(Time, Alloc) -> Instant {
             // Allocate 16 bytes for struct timespec (macOS arm64: i64 + i64)
             let buf: *mut u8 = grow::<u8>(0 as *mut u8, 16);

@@ -80,7 +80,7 @@ For proof-backed code, the following additional properties hold:
 All of these must hold simultaneously:
 
 1. **Pure** — empty capability set (no effects)
-2. **Not trusted** — no `trusted` marker, no `trusted impl` origin
+2. **Not trusted** — no `trusted` marker on the function or method
 3. **Not entry point** — not `main`
 4. **Body extractable** — every construct is in the current `ProvableV1`
    surface, including its selected bounded-loop and functional-state forms

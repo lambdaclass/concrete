@@ -17,16 +17,40 @@ facts are defined:
 
 | Fact | Meaning | Was scattered in |
 | --- | --- | --- |
-| `capsContain caller callee` | superset: does the caller's authority cover the callee's? (a cap variable satisfies anything) | `Resolve/Shared` (now re-exported from there) |
+| `capsContain caller callee` / `missingCaps` | entailment: does the caller's authority cover the callee's? A concrete capability entails itself; a capability variable entails only itself (bug 188) | `Resolve/Shared` (now re-exported from there) |
 | `capsAllowUnsafeOp inTrusted cs` | authority to perform an `Unsafe` op — `trusted` OR the cap set covers `Unsafe` | open-coded 4× in `CoreCheck` |
 | `capSetHasUnsafe cs` | does the set LITERALLY list `Unsafe`? (for report counting — a cap variable is not literal Unsafe) | `Report/ReportInterface.hasUnsafeCap` |
 | `externFnRequiredCaps isTrusted` | an untrusted `extern fn` requires `Unsafe`; a trusted one requires nothing | recomputed in `CoreCheck` + twice in `ReportBase` |
 
 The two Unsafe questions are deliberately distinct and must not be conflated:
-**authority** (`capsAllowUnsafeOp`, handles `trusted` and cap variables) drives
+**authority** (`capsAllowUnsafeOp`, handles `trusted`) drives
 the CoreCheck raw-pointer/unsafe-cast gates; **literal membership**
 (`capSetHasUnsafe`) drives report counts. A cap-polymorphic function has
-authority (its variable satisfies) but does not *literally* list Unsafe.
+neither: its variable entails only itself, never `Unsafe` (bug 188).
+
+## Capability variables entail only themselves (bug 188, 2026-10-23)
+
+Until bug 188 a caller holding ANY capability variable was treated as covering every
+requirement, `Unsafe` included, on the theory that the variable is "resolved at
+instantiation". Nothing at the instantiation re-checked the generic body, so
+`fn f<cap C>(g: fn(i32) with(C) -> i32) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and `main` instantiated
+`C := {}` and ran it with no authority.
+
+The rule now: a requirement is satisfied by a concrete capability the caller declares,
+or by a capability variable only when the variable's declared bound entails it. A
+capability parameter declares no bound, so it entails exactly itself. Unknown variables
+fail closed. The one rule is `Capabilities.missingCaps` (with `capsContain` its boolean
+view), read by direct calls, calls through a function pointer, method calls, calls through
+a trait bound and the raw-operation gate. It is decided on the generic definition, before
+monomorphization: CoreCheck checks a call against the callee's declared concrete set
+(`instantiatedRequirement`), and Check checks a call to a capability-polymorphic callee
+against the INSTANTIATED set, `Unsafe` included, with the trusted-body discharge
+(`trustedDischarges`). `verifyCapsPostMono` stays as defense in depth.
+
+A capability parameter may not be spelled like a capability, `Std` or a capability alias
+(E0121): inside a fn-pointer type a variable is a plain name, so `<cap Unsafe>` would
+otherwise hold the real `Unsafe`.
 
 ## The next layer: `CapabilityJudgment` (planned)
 

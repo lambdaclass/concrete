@@ -23,7 +23,7 @@ mod map {
         eq_fn:   fn(&K, &K) -> bool,
     }
 
-    trusted impl<K, V> HashMap<K, V> {
+    impl<K, V> HashMap<K, V> {
         pub trusted fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc) -> HashMap<K, V> {
             let cap: u64 = 16;
             let keys: *mut K = grow::<K>(0 as *mut K, cap);
@@ -69,7 +69,7 @@ mod map {
         // applies `f`, and moves the result back, so no `&mut V` escapes and
         // the container cannot be reallocated while a borrow is held.
         // Returns true if the key was present. ROADMAP Phase 6 #8a.
-        pub fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
+        pub trusted fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
             match self.find_live(key) {
                 Option::Some { value } => {
                     let idx: u64 = value;
@@ -92,7 +92,7 @@ mod map {
         // makes the same accessor usable by a pure compare or an effectful
         // (e.g. printing) callback without a combinatorial API split.
         // docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md §5; ROADMAP Phase 5 #24.
-        pub fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
+        pub trusted fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
             match self.find_live(key) {
                 Option::Some { value } => {
                     let idx: u64 = value;
@@ -111,7 +111,7 @@ mod map {
         /// call and E0293 rejects any context that overlaps the receiver
         /// (container-not-in-context), so the table cannot be reallocated
         /// while the element borrow is live.
-        pub fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
+        pub trusted fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
             match self.find_live(key) {
                 Option::Some { value } => {
                     let idx: u64 = value;
@@ -125,7 +125,7 @@ mod map {
 
         /// Convenience over `with_value_mut` for the no-result case: mutate the
         /// value for `key` in place. Returns whether the key was present.
-        pub fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
+        pub trusted fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
             match self.find_live(key) {
                 Option::Some { value } => {
                     let idx: u64 = value;
@@ -156,7 +156,7 @@ mod map {
         /// Returning `Option` rather than an index-plus-flag convention is what
         /// makes "absent" representable at all; the previous signature had to
         /// hand back a slot even when there was no answer.
-        fn find_live(&self, key: &K) -> Option<u64> {
+        trusted fn find_live(&self, key: &K) -> Option<u64> {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(key);
             let mask: u64 = self.cap - 1;
@@ -232,7 +232,7 @@ mod map {
         }
 
         /// Fold over all key-value pairs, threading an accumulator.
-        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
+        pub trusted fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let mut i: u64 = 0;
             while i < self.cap {
@@ -250,7 +250,7 @@ mod map {
 
         /// Shared-context iteration (docs/CALLABLE_VALUES §3.1): `ctx` is
         /// borrowed immutably; called once per occupied slot.
-        pub fn for_each_with<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &K, &V) with(C)) with(C) {
+        pub trusted fn for_each_with<Ctx, cap C>(&self, ctx: &Ctx, f: fn(&Ctx, &K, &V) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -266,7 +266,7 @@ mod map {
 
         /// Mutable-context iteration (docs/CALLABLE_VALUES §3.1): `ctx` is
         /// reborrowed per call — the fold-into-a-caller-owned-sink shape.
-        pub fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &K, &V) with(C)) with(C) {
+        pub trusted fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &K, &V) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -281,7 +281,7 @@ mod map {
         }
 
         /// Call a function for each key-value pair in the map.
-        pub fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
+        pub trusted fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -296,7 +296,7 @@ mod map {
         }
 
         /// Fold over keys only, threading an accumulator.
-        pub fn keys_fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
+        pub trusted fn keys_fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let mut i: u64 = 0;
             while i < self.cap {
@@ -312,7 +312,7 @@ mod map {
         }
 
         /// Fold over values only, threading an accumulator.
-        pub fn values_fold<A, cap C>(&self, init: A, f: fn(A, &V) with(C) -> A) with(C) -> A {
+        pub trusted fn values_fold<A, cap C>(&self, init: A, f: fn(A, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let mut i: u64 = 0;
             while i < self.cap {
@@ -328,7 +328,7 @@ mod map {
         }
 
         /// Call a function for each key in the map.
-        pub fn keys_for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
+        pub trusted fn keys_for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -342,7 +342,7 @@ mod map {
         }
 
         /// Call a function for each value in the map.
-        pub fn values_for_each<cap C>(&self, f: fn(&V) with(C)) with(C) {
+        pub trusted fn values_for_each<cap C>(&self, f: fn(&V) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -355,7 +355,7 @@ mod map {
             }
         }
 
-        fn insert_for_grow(&mut self, key: K, value: V) {
+        trusted fn insert_for_grow(&mut self, key: K, value: V) {
             let hash_f: fn(&K) -> u64 = self.hash_fn;
             let h: u64 = hash_f(&key);
             let mask: u64 = self.cap - 1;
@@ -389,9 +389,9 @@ mod map {
     // the scoped/borrowing APIs (keys_for_each, folds, with_value). An
     // owning extraction would be a CONSUMING into_keys(self) that also
     // destroys the unreturned side — pull-gated, not built speculatively.
-    trusted impl<K: Copy, V> HashMap<K, V> {
+    impl<K: Copy, V> HashMap<K, V> {
         /// Collect all keys into a Vec (Copy keys only — see bug 046).
-        pub fn keys(&self) with(Alloc) -> Vec<K> {
+        pub trusted fn keys(&self) with(Alloc) -> Vec<K> {
             let mut result: Vec<K> = vec_new::<K>();
             let mut i: u64 = 0;
             while i < self.cap {
@@ -407,9 +407,9 @@ mod map {
         }
     }
 
-    trusted impl<K, V: Copy> HashMap<K, V> {
+    impl<K, V: Copy> HashMap<K, V> {
         /// Collect all values into a Vec (Copy values only — see bug 046).
-        pub fn values(&self) with(Alloc) -> Vec<V> {
+        pub trusted fn values(&self) with(Alloc) -> Vec<V> {
             let mut result: Vec<V> = vec_new::<V>();
             let mut i: u64 = 0;
             while i < self.cap {
@@ -424,7 +424,7 @@ mod map {
             return result;
         }
 
-        pub fn get(&self, key: &K) -> Option<V> {
+        pub trusted fn get(&self, key: &K) -> Option<V> {
             match self.find_live(key) {
                 Option::Some { value } => {
                     let idx: u64 = value;
@@ -443,8 +443,8 @@ mod map {
     // H18: insert/remove need K destroyable — a same-key overwrite destroys the
     // DISPLACED old key (Copy keys elide). V is unconstrained: values move
     // in/out, insert never destroys one (the old value is RETURNED).
-    trusted impl<K: Destroy, V> HashMap<K, V> {
-        pub fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
+    impl<K: Destroy, V> HashMap<K, V> {
+        pub trusted fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
             match self.find_live(key) {
                 Option::None => { return Option::<V>::None; },
                 Option::Some { value } => {
@@ -578,7 +578,7 @@ mod map {
     // OCCUPIED slot's key and value (flags==1; empties and tombstones hold
     // no live values), then frees the three buffers. Non-destroyable K or V
     // makes clear/drop uncallable — drain with remove() and close explicitly.
-    trusted impl<K: Destroy, V: Destroy> HashMap<K, V> {
+    impl<K: Destroy, V: Destroy> HashMap<K, V> {
         pub trusted fn clear(&mut self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.cap {
@@ -613,7 +613,7 @@ mod map {
     }
 
     // Composition: HashMap is destroyable iff K and V are.
-    trusted impl<K: Destroy, V: Destroy> Destroy for HashMap<K, V> {
+    impl<K: Destroy, V: Destroy> Destroy for HashMap<K, V> {
         pub trusted fn destroy(&self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.cap {
@@ -632,8 +632,8 @@ mod map {
 
     // --- H18 drop-glue test helpers ---
     struct MTracked { cell: *mut u64 }
-    trusted impl Destroy for MTracked {
-        pub fn destroy(&self) {
+    impl Destroy for MTracked {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }
@@ -647,8 +647,8 @@ mod map {
     fn e_i64(a: &i64, b: &i64) -> bool { return *a == *b; }
 
     struct MapDropKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for MapDropKey {
-        pub fn destroy(&self) {
+    impl Destroy for MapDropKey {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

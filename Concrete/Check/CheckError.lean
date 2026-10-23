@@ -188,6 +188,9 @@ inductive CheckError where
   -- Bug 194: the end of a function with a result type is reachable (a path with no `return`).
   | missingReturn (fnName : String) (retTy : String)
   | ifCondNotBool (ty : String)
+  -- Bug 192: the condition of an `if` / `while` / `for` STATEMENT (TYPE-5; the expression form
+  -- uses `ifCondNotBool`). Its type was computed and discarded, so an integer condition compiled.
+  | condNotBool (what : String) (ty : String)
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
@@ -228,6 +231,9 @@ inductive CheckError where
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
   | missingFieldInLiteral (fieldName : String) (containerDesc : String)
+  -- Bug 193 (TYPE-7): a struct or enum literal names a field twice. The checker read the first
+  -- occurrence and the backend stored the last, so the consumers disagreed.
+  | duplicateFieldInLiteral (fieldName : String) (containerDesc : String)
   | unknownFieldInLiteral (fieldName : String) (containerDesc : String)
   | fieldAccessNonStruct
   | unknownVariant (variant : String) (enumName : String)
@@ -236,6 +242,7 @@ inductive CheckError where
   | undeclaredFunction (name : String)
   | noMethodOnType (method : String) (typeName : String)
   | noMethodOnTypeVar (method : String) (typeVar : String)
+  | ambiguousBoundMethod (method : String) (typeVar : String) (traits : List String)
   | methodCallOnNonNamedType
   | unknownFunctionRef (name : String)
   | builtinWrongArgCount (fnName : String) (expected : Nat)
@@ -406,6 +413,7 @@ def CheckError.message : CheckError → String
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
   | .missingReturn fnName retTy => s!"function '{fnName}' returns '{retTy}', but the end of its body is reachable without a `return`"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
+  | .condNotBool what ty => s!"{what} condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
@@ -429,6 +437,7 @@ def CheckError.message : CheckError → String
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .missingFieldInLiteral fieldName containerDesc => s!"missing field '{fieldName}' in {containerDesc}"
+  | .duplicateFieldInLiteral fieldName containerDesc => s!"field '{fieldName}' is given more than once in {containerDesc}"
   | .unknownFieldInLiteral fieldName containerDesc => s!"unknown field '{fieldName}' in {containerDesc}"
   | .fieldAccessNonStruct => "field access on non-struct type"
   | .unknownVariant variant enumName => s!"unknown variant '{variant}' in enum '{enumName}'"
@@ -437,6 +446,8 @@ def CheckError.message : CheckError → String
   | .undeclaredFunction name => s!"call to undeclared function '{name}'"
   | .noMethodOnType method typeName => s!"no method '{method}' on type '{typeName}'"
   | .noMethodOnTypeVar method typeVar => s!"no method '{method}' for type variable '{typeVar}'"
+  | .ambiguousBoundMethod method typeVar traits =>
+    s!"method '{method}' on type variable '{typeVar}' is ambiguous: it is declared by more than one of its bounds ({", ".intercalate traits}); bound order does not choose one"
   | .methodCallOnNonNamedType => "method call on non-named type"
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
   | .builtinWrongArgCount fnName expected =>
@@ -498,6 +509,7 @@ def CheckError.message : CheckError → String
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
+  | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/spec/traits.md TRAIT-6)"
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
@@ -589,6 +601,7 @@ def CheckError.code : CheckError → String
   | .whileBreakTypeMismatch _ _ => "E0222"
   | .missingReturn _ _ => "E0307"
   | .ifCondNotBool _ => "E0223"
+  | .condNotBool _ _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"
   | .breakTypeMismatch _ _ => "E0226"
@@ -612,6 +625,7 @@ def CheckError.code : CheckError → String
   | .unknownStructType _ => "E0250"
   | .structHasNoField _ _ => "E0251"
   | .missingFieldInLiteral _ _ => "E0252"
+  | .duplicateFieldInLiteral _ _ => "E0306"
   | .unknownFieldInLiteral _ _ => "E0253"
   | .fieldAccessNonStruct => "E0254"
   | .unknownVariant _ _ => "E0260"
@@ -620,6 +634,7 @@ def CheckError.code : CheckError → String
   | .undeclaredFunction _ => "E0263"
   | .noMethodOnType _ _ => "E0264"
   | .noMethodOnTypeVar _ _ => "E0265"
+  | .ambiguousBoundMethod _ _ _ => "E0595"
   | .methodCallOnNonNamedType => "E0266"
   | .unknownFunctionRef _ => "E0267"
   | .builtinWrongArgCount _ _ => "E0268"
@@ -685,6 +700,8 @@ def CheckError.rule : CheckError → Option String
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
+  -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
+  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
   | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
@@ -700,6 +717,7 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
   | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
+  | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
   | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
   | _ => none
 

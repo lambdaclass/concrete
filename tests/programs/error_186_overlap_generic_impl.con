@@ -1,0 +1,7 @@
+// Bug 186 / TRAIT-2 (E0591): a generic impl and a specialized one whose targets unify. Before,
+// the binary ran whichever body was emitted first (1) for a Box2<i32>; --interp refused.
+trait Tr { fn m(&self) -> Int; }
+struct Copy Box2<T> { v: T }
+impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 1; } }
+impl Tr for Box2<i32> { fn m(&self) -> Int { return 2; } }
+pub fn main() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }

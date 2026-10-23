@@ -1,4 +1,10 @@
-# Pattern Ergonomics
+# Pattern Ergonomics (design record)
+
+**Superseded as the normative text (2026-10-23).** The rules are in
+[docs/spec/patterns.md](../spec/patterns.md): exhaustiveness (PAT-2), arm shapes (PAT-3), guards
+(PAT-4), `if let` / `while let` (PAT-6), ranges and OR patterns (PAT-7). How a binder through a
+reference scrutinee binds is REF-9 (pending: today a Copy payload binds by value, as described
+below). This note keeps the history and the implementation notes.
 
 Status: CLOSED — ROADMAP old Phase 6 #5. The compound usability block is complete
 for V1: built features are gated by `scripts/tests/check_pattern_ergonomics.sh`,

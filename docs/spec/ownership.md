@@ -762,9 +762,9 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: OWN-D1
-- Codes: E0570 (core-check), E0584 (core-check)
+- Codes: E0570 (core-check), E0584 (core-check), E0272 (check), E0273 (check)
 - Status: enforced
-- Enforced by: Concrete.ccCheckModuleDecls
+- Enforced by: Concrete.ccCheckModuleDecls, Concrete.checkExprCore
 - Semantics: none
 - Obligation: ownership instrumentation with a proved erasure theorem (R-0496, R-0507)
 - Evidence: tested

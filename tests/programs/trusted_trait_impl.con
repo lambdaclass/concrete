@@ -8,8 +8,8 @@ trait Readable {
     fn as_const(&self) -> *const u8;
 }
 
-trusted impl Readable for Buf {
-    fn as_const(&self) -> *const u8 {
+impl Readable for Buf {
+    trusted fn as_const(&self) -> *const u8 {
         let p: *const u8 = self.ptr as *const u8;
         return p;
     }

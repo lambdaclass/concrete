@@ -143,7 +143,7 @@ else
 fi
 # (2) the with_value backdoor: a callback that returns its borrowed &V (R=&V).
 printf '%s' 'mod m { pub struct Copy H { pub v: i64 }
-  trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
+  impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
 import m.{H};
 fn ret_ref(x: &i64) -> &i64 { return x; }
 fn main() -> i64 { let h: H = H { v: 42 }; return *h.with_value(ret_ref); }' > "$TMP/wvbackdoor.con"
@@ -163,7 +163,7 @@ else
 fi
 # (4) a value-returning callback (R = a value) still works — the sound case.
 run wv_value_ok 'mod m { pub struct Copy H { pub v: i64 }
-  trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
+  impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
 import m.{H};
 fn rd(x: &i64) -> i64 { return *x; }
 fn main() -> i64 { let h: H = H { v: 42 }; return h.with_value(rd); }' 42
@@ -183,7 +183,7 @@ reject_e0293 neg_shared_plus_mut_borrow 'struct X { v: i32 }
 fn mix(a: &X, b: &mut X) -> i32 { b.v = 2; return a.v; }
 fn main() -> Int { let mut x: X = X { v: 0 }; let r: i32 = mix(&x, &mut x); let X { v } = x; return (r + v) as Int; }'
 reject_e0293 neg_receiver_ctx_alias 'mod m { pub struct C { pub n: i64 }
-  trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
+  impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
 fn main() -> Int { let mut c: C = C { n: 1 }; c.scoped(&mut c, cb); let C { n } = c; return n as Int; }'
@@ -197,7 +197,7 @@ reject_e0302() {
   else no "$name: expected E0302, got '$(grep <<<"$out" -oE '\(E[0-9]+\)' | awk 'NR<=1')'"; fi
 }
 reject_e0302 neg_alias_through_binding 'mod m { pub struct C { pub n: i64 }
-  trusted impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
+  impl C { pub fn scoped<Ctx, cap Cp>(&mut self, ctx: &mut Ctx, f: fn(&mut Ctx, &mut i64) with(Cp)) with(Cp) { f(ctx, &mut self.n); } } }
 import m.{C};
 fn cb(ctx: &mut C, v: &mut i64) { *v = *v + 1; }
 fn main() -> Int { let mut c: C = C { n: 1 }; let r: &mut C = &mut c; c.scoped(r, cb); let C { n } = c; return n as Int; }'
