@@ -8161,10 +8161,10 @@ run_ok "tests/regressions/bug181_generic_borrowed_scrutinee_binder_mode/repro.co
 # Bug 182 / D2 (the Austral model): only a variable or a string literal is a reference's root
 # (E0238), and loans are keyed by root (E0293).
 run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
-for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal; do
+for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal branch_receiver; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
 done
-for d2 in call_disjoint_fields call_field_read receiver_projection_read; do
+for d2 in call_disjoint_fields call_field_read receiver_projection_read call_field_read_in_branch; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0293)"
 done
 run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro.con" "(E0238)"

@@ -1351,7 +1351,12 @@ partial def normProjBase (base : Expr) : CheckM Norm := do
 partial def normRef (e : Expr) : CheckM Norm := do
   match e with
   | .paren _ inner => normRef inner
-  | .borrow _ inner => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
+  -- D2: a string literal is a static, immutable root, so `&"text"` points at storage, and a
+  -- reborrow or projection through it (`&*(&"ab")`) keeps that root (Codex review).
+  | .borrow _ inner =>
+    match unparenExpr inner with
+    | .strLit .. => return .place { root := none, reach := .shared "a string literal is static, immutable storage" }
+    | _ => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
   | .borrowMut _ inner => return (← normPlace inner).reachedThrough .exclusive
   | .ident _ n =>
     match ← lookupVarInfo n with
@@ -1439,10 +1444,9 @@ def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (s
         throwCheck (.conflictingCallBorrows path.1) span
     seen := (path, isMut) :: seen
 
-/-- The variable names an expression mentions outside nested blocks (`if` / `match` bodies are
-    not visited: a branch that reads a root is still a read, so they are included by their
-    condition/scrutinee only, which is the conservative direction for D2's call rule only when
-    combined with the explicit borrow parts). -/
+mutual
+/-- Every variable name an expression mentions, nested blocks included (`if` / `match` branches,
+    guards and arm bodies): a read inside a branch is still a read of the root (Codex review). -/
 partial def exprMentionedNames : Expr → List String
   | .ident _ n => [n]
   | .paren _ e | .unaryOp _ _ e | .fieldAccess _ e _ | .borrow _ e | .borrowMut _ e | .deref _ e
@@ -1452,9 +1456,60 @@ partial def exprMentionedNames : Expr → List String
   | .methodCall _ o _ _ args => exprMentionedNames o ++ args.flatMap exprMentionedNames
   | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => exprMentionedNames e) ++ (b.map exprMentionedNames).getD []
   | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => exprMentionedNames e)
-  | .match_ _ scr _ => exprMentionedNames scr
-  | .ifExpr _ c _ _ => exprMentionedNames c
+  | .match_ _ scr arms => exprMentionedNames scr ++ arms.flatMap armMentionedNames
+  | .ifExpr _ c t e => exprMentionedNames c ++ stmtsMentionedNames t ++ stmtsMentionedNames e
   | _ => []
+
+partial def armMentionedNames : MatchArm → List String
+  | .mk _ _ _ _ g body | .varArm _ _ g body =>
+    ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+  | .litArm _ v g body => exprMentionedNames v ++ ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+  | .rangeArm _ lo hi _ g body =>
+    exprMentionedNames lo ++ exprMentionedNames hi ++ ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+
+partial def stmtsMentionedNames (ss : List Stmt) : List String :=
+  ss.flatMap fun s => match s with
+    | .letDecl _ _ _ _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+    | .letStructDestructure _ _ _ v => exprMentionedNames v
+    | .assign _ n v => n :: exprMentionedNames v
+    | .return_ _ v | .break_ _ v _ => (v.map exprMentionedNames).getD []
+    | .expr _ e _ => exprMentionedNames e
+    | .ifElse _ c t e => exprMentionedNames c ++ stmtsMentionedNames t ++ ((e.map stmtsMentionedNames).getD [])
+    | .while_ _ c body _ => exprMentionedNames c ++ stmtsMentionedNames body
+    | .forLoop _ i c st body _ =>
+      ((i.map fun x => stmtsMentionedNames [x]).getD []) ++ exprMentionedNames c
+        ++ ((st.map fun x => stmtsMentionedNames [x]).getD []) ++ stmtsMentionedNames body
+    | .fieldAssign _ o _ v | .derefAssign _ o v => exprMentionedNames o ++ exprMentionedNames v
+    | .arrayIndexAssign _ a i v => exprMentionedNames a ++ exprMentionedNames i ++ exprMentionedNames v
+    | .borrowIn _ v _ _ _ body => v :: stmtsMentionedNames body
+    | .letDestructure _ _ _ _ v e => exprMentionedNames v ++ ((e.map stmtsMentionedNames).getD [])
+    | _ => []
+end
+
+/-- D2 / D1: the root of the NEW mutable loan an operand makes, if it makes one. A plain reborrow of
+    a reference binding (`r`, `&mut *r`, a receiver `r` whatever kind of binding `r` is: a parameter,
+    a borrow-block binder, an arm binder) re-lends a reference the caller already holds and makes no
+    new loan (D1); anything else that is borrowed mutably (`&mut s.a`, a `self.offs` receiver, an
+    owned `s`) is a loan on its root (Codex review: decided from the operand, not from its root). -/
+def mutLoanRoot? (operand : Expr) (explicitBorrow : Bool) : CheckM (Option String) := do
+  let inner := match unparenExpr operand with
+    | .borrowMut _ x => if explicitBorrow then x else operand
+    | x => x
+  let rec stripDerefs : Expr → Expr
+    | .paren _ x | .deref _ x => stripDerefs x
+    | x => x
+  match stripDerefs inner with
+  | .ident _ n =>
+    match ← lookupVarInfo n with
+    | some info =>
+      match info.ty with
+      | .ref _ | .refMut _ => return none
+      | _ => pure ()
+    | none => pure ()
+  | _ => pure ()
+  match ← normPlace inner with
+  | .place p => return p.key.map (·.1)
+  | _ => return none
 
 /-- D2: loans are keyed by root, so while one call borrows a root mutably, no OTHER argument (or
     the receiver) of that call may mention that root at all: `add(&mut s.a, s.b)` and
@@ -1466,14 +1521,7 @@ partial def exprMentionedNames : Expr → List String
     reference binding (`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the
     root: it re-lends the reference the caller already holds, so reading through that reference in
     another argument is not a second loan (D1: every `&mut` argument is an implicit reborrow). -/
-def checkCallRootReads (parts : List ((String × List String) × Bool)) (operands : List Expr) (span : Option Span) : CheckM Unit := do
-  let mut mutRoots : List String := []
-  for ((root, steps), isMut) in parts do
-    if !isMut then continue
-    let isRefBinding ← match ← lookupVarInfo root with
-      | some info => pure (match info.ty with | .ref _ | .refMut _ => true | _ => false)
-      | none => pure false
-    if !steps.isEmpty || !isRefBinding then mutRoots := root :: mutRoots
+def checkCallRootReads (mutRoots : List String) (operands : List Expr) (span : Option Span) : CheckM Unit := do
   if mutRoots.isEmpty then return
   let mut counts : List (String × Nat) := []
   for o in operands do

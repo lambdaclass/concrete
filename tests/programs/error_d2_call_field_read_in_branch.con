@@ -1,0 +1,14 @@
+// D2 (Codex review): a read of the borrowed root inside a branch of another argument is still a
+// read of that root in the same call. E0293 (REF-8).
+struct Copy S { a: Int, b: Int }
+
+fn add(a: &mut Int, b: Int) {
+    *a = *a + b;
+}
+
+fn main() -> Int {
+    let flag: bool = true;
+    let mut s: S = S { a: 40, b: 2 };
+    add(&mut s.a, if flag { s.b } else { 0 });
+    return s.a;
+}

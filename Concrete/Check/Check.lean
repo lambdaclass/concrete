@@ -375,6 +375,21 @@ def refuseTemporaryBorrow (isMut : Bool) (subject : String) (e : Expr) (span : O
   if let .temp := (← normPlace e) then
     throwCheck (.temporaryNotBorrowable subject) span
 
+/-- The roots of the new mutable loans a call's explicit `&mut` arguments make (`mutLoanRoot?`). -/
+def argMutLoanRoots (args : List Expr) : CheckM (List String) := do
+  let mut out : List String := []
+  for a in args do
+    match unparenExpr a with
+    | .borrowMut .. => if let some r ← mutLoanRoot? a true then out := r :: out
+    | _ => pure ()
+  return out
+
+/-- The root of the new mutable loan a `&mut self` receiver makes, if any. -/
+def receiverMutLoanRoot (selfKind : Option SelfKind) (obj : Expr) : CheckM (List String) := do
+  match selfKind with
+  | some .refMut => return (← mutLoanRoot? obj false).toList
+  | _ => return []
+
 /-- Bug 091 round 3: a method call's IMPLICIT receiver borrow is the explicit `&place` /
     `&mut place` it stands for, checked by the same `checkSharedAccess` / `checkMutAccess` on
     the receiver's NORMALIZED place (one rule for concrete and trait-bound receivers):
@@ -407,9 +422,14 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
   | some .ref =>
     -- D2: an implicit `&self` borrow of an owned TEMPORARY receiver (`mk().get()`) borrows a
     -- non-root, exactly as `&mk()` would (bug 182); a string literal receiver is a static root.
+    -- The verdict is `receiverNorm`'s (an `if` / `match` receiver is `.temp` there), so every
+    -- temporary receiver is refused, not only the ones `normPlace` would call temporary (Codex).
     match objTy with
     | .ref _ | .refMut _ => pure ()
-    | _ => refuseTemporaryBorrow false s!"the receiver of '{methodName}'" obj span
+    | _ =>
+      let isStrLit := match stripParens obj with | .strLit .. => true | _ => false
+      if let .temp := n then
+        if !isStrLit then throwCheck (.temporaryNotBorrowable s!"the receiver of '{methodName}'") span
     checkSharedAccess n s!"the receiver of '{methodName}'" span
   | _ => pure ()
 
@@ -882,7 +902,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     let parts ← argBorrowParts args
     checkCallBorrowConflicts parts (some e.getSpan)
-    checkCallRootReads parts args (some e.getSpan)
+    checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
@@ -2101,7 +2121,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
           let parts := (← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)
           checkCallBorrowConflicts parts (some e.getSpan)
-          checkCallRootReads parts (obj :: args) (some e.getSpan)
+          checkCallRootReads ((← receiverMutLoanRoot sig.selfKind obj) ++ (← argMutLoanRoots args)) (obj :: args) (some e.getSpan)
           -- `Destroy::destroy` consumes its receiver (`consumeDestroyReceiver` below); there
           -- is no implicit borrow to check, and the owner may already be moved by `w.0`.
           if !(foundBuiltin == some .destroy && methodName == destroyMethodName) then
@@ -2129,7 +2149,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- (container-not-in-context, #18 §5.1).
       let parts := (← receiverBorrowParts (selfKindOfParams sig.params) obj objTy) ++ (← argBorrowParts args)
       checkCallBorrowConflicts parts (some e.getSpan)
-      checkCallRootReads parts (obj :: args) (some e.getSpan)
+      checkCallRootReads ((← receiverMutLoanRoot (selfKindOfParams sig.params) obj) ++ (← argMutLoanRoots args)) (obj :: args) (some e.getSpan)
       let isDestroyImplCall := methodName == destroyMethodName &&
         (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
       if !isDestroyImplCall then
@@ -2168,7 +2188,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     let parts ← argBorrowParts args
     checkCallBorrowConflicts parts (some e.getSpan)
-    checkCallRootReads parts args (some e.getSpan)
+    checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     checkDirectDestroyImplUse mangledName (some e.getSpan)
     match ← lookupFn mangledName with

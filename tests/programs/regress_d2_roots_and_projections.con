@@ -27,8 +27,13 @@ impl Counter {
 
 fn main() -> Int {
     let s: S = S { f: 10, inner: Inner { x: 20 } };
-    let lit: Int = string_length(&"ab");
+    // a string literal is a static root, also through a reborrow (Codex review)
+    let lit: Int = string_length(&"ab") + string_length(&*(&"x")) - 1;
     let mut c: Counter = Counter { n: 0, step: 5 };
     c.tick();
-    return read(&s.f) + via(&s) + lit + c.n + 5;
+    // a borrow-block binder reborrowed as a receiver beside a read through it: no second loan (D1)
+    borrow mut c as r in R {
+        r.add(r.step);
+    }
+    return read(&s.f) + via(&s) + lit + c.n;
 }

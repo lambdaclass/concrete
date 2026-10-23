@@ -73,6 +73,14 @@ mention that root in another argument (`checkCallRootReads`, E0293 REF-8@2). A p
 `&mut` parameter as a receiver beside a read through it (`self.sift_up(self.len - 1)`) makes no new
 loan and stays legal (D1).
 
+Codex review, round 1, four holes closed: an `if` / `match` result as a `&self` receiver is a
+temporary too (the receiver's own verdict is used); a read of the borrowed root inside a branch,
+guard or arm body of another argument counts (the mention walk enters nested blocks); the D1
+exemption is decided from the operand (a plain reborrow of ANY reference binding: a parameter, a
+borrow-block binder, an arm binder), not from the root it reaches; and a string literal stays a
+static root through a reborrow or projection (`&*(&"ab")`). Fixtures `error_d2_branch_receiver.con`,
+`error_d2_call_field_read_in_branch.con`, and two run cases added to `regress_d2_roots_and_projections.con`.
+
 Migration (`rule_impact.sh`, 2198 units against `wip/train3` 1df4cf48): `std/src/map.con`
 (`m.remove(&2)` becomes `m.remove(&key2)`), `std/src/cli.con` (`self.offs.push(self.names.len())`
 reads `self.names.len()` into a local first), `tests/programs/regress_047_048_hashmap_probe`
