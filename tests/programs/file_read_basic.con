@@ -9,7 +9,7 @@
 //   101  fopen for writing failed
 //   102  fopen for reading failed
 trusted extern fn getenv(name: *mut u8) with(Env) -> *const u8;
-trusted extern fn strlen(s: *const u8) -> u64;
+trusted extern fn strlen(s: *const u8) with() -> u64;
 trusted extern fn fopen(name: *mut u8, mode: *mut u8) with(File) -> *const u8;
 trusted extern fn fclose(file: *const u8) with(File) -> i32;
 trusted extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) with(File) -> u64;
