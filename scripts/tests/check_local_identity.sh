@@ -244,18 +244,28 @@ ELAB=Concrete/Elab/Elab.lean
 EHITS="$(grep -nE '^  (vars|renames|ghostVars) :|bodyScope\.resolve\?|Proof\.evBinderRef [a-z(]' "$ELAB")"; ERC=$?
 [ "$ERC" -le 1 ] && [ -z "$EHITS" ] && ok "E: Elab keeps no name-keyed scope (vars / renames / ghostVars) and resolves no binder by spelling" \
   || no "E: $EHITS"
-# Core names are the walk's decisions: a let keeps its spelling, an arm binder is fresh, and the
-# second struct-destructure temporary in one block shadows the first and is renamed.
+# Core names are the walk's decisions, and they are the names the old name-keyed Elab chose
+# (Codex review of step 2: exact, not a pattern). The profile below was produced by the pre-step-2
+# compiler (wip/vp-r0492 1c4ffc65) and by this one, identically: a let keeps its spelling; the
+# second struct-destructure temporary shadows the first (.b0); the third, inside a borrow block
+# whose REGION is spelled like the temporary, shadows the visible temporaries but not the region
+# (.b1); the arm binder takes the next fresh number (.b2); a ghost let of a constant's spelling
+# does not capture the runtime read of the constant.
 cat > "$TMP/core.con" <<'CON'
 mod m {
     struct P { u: i32, t: i32 }
     enum E { A { p: i32 }, B {} }
+    const K: i32 = 7;
     fn f(e: E) -> i32 {
         let keep: i32 = 1;
         let P { u, t } = P { u: keep, t: 2 };
         let P { u: u2, t: t2 } = P { u: u, t: t };
+        let mut z: i32 = 0;
+        borrow mut z as rz in __destr_P { let P { u: u3, t: _ } = P { u: *rz, t: 1 }; *rz = u3; }
+        ghost let K: i32 = 3;
+        assert(K == 3);
         match e {
-            E::A { p } => { return p + u2 + t2; },
+            E::A { p } => { return p + u2 + t2 + z + K; },
             E::B {} => { return 0; },
         }
     }
@@ -263,11 +273,12 @@ mod m {
 }
 CON
 CORE="$("$BIN" "$TMP/core.con" --emit-core 2>&1)" && CRC=0 || CRC=$?
-if [ "$CRC" -eq 0 ] && grep -q 'keep' <<<"$CORE" && grep -qE 'p\.b[0-9]+' <<<"$CORE" \
-   && grep -qE '__destr_P\.b[0-9]+' <<<"$CORE"; then
-  ok "E: Core names: a let keeps its spelling, an arm binder is fresh, a shadowing destructure temporary is renamed"
+PROFILE="$(grep -oE '(keep|__destr_P|p|u3|K|rz|z)(\.b[0-9]+)?\b' <<<"$CORE" | sort | uniq -c | awk '{printf "%s %s ", $1, $2}')"
+WANT="4 __destr_P 3 __destr_P.b0 3 __destr_P.b1 1 K 2 keep 1 p 2 p.b2 3 rz 2 u3 3 z "
+if [ "$CRC" -eq 0 ] && [ "$PROFILE" = "$WANT" ]; then
+  ok "E: Core names match the pre-step-2 compiler exactly (let spelling, three destructure temporaries, region not counted, fresh arm binder, ghost does not capture a constant)"
 else
-  no "E: Core names (rc=$CRC): $(grep -oE '__destr_P[^ ]*|p\.b[0-9]+' <<<"$CORE" | sort -u | tr '\n' ' ')"
+  no "E: Core name profile (rc=$CRC): got '$PROFILE' want '$WANT'"
 fi
 
 echo ""
