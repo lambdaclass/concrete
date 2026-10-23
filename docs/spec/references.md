@@ -318,12 +318,18 @@ fn main() -> Int {
 - Obligation: INV-REF (R-0500): every reference has a binding root
 - Evidence: tested
 
-**Rationale.** This is the Austral model, decided 2026-10-23 (TIGHTENING_DECISIONS D2). The
-core language has two operations that form a reference: borrowing a variable, and projecting
-through a reference. `&s.f`, `&a[i]` and `&s.inner.x` are surface sugar, rewritten to "borrow
-the root, then project" before checking, and they add no semantic case. A string literal is a
-static, immutable root: `&"text"` is allowed, while `&mut "text"` and every move out of a
-literal are not. Borrowing a temporary is gap G12 (bug 182: a borrowed call result
+**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D2). The core follows Austral, whose
+borrows take only a variable and whose references to parts are paths that start in a reference.
+The core language has two operations that form a reference: borrowing a variable, and
+projecting a field, index or newtype through a reference. Concrete has no `->` (removed
+2026-07-14). Projection through a reference `r` is written `&r.f` or `&r[i]`, and a field read
+through it is written `r.f`, which auto-dereferences one layer. `&s.f`, `&a[i]` and `&s.inner.x`
+are Concrete's own surface sugar, which Austral does not have. Before checking, they are
+rewritten to "borrow the root variable, then project", and they add no semantic case and no
+typing or loan rule of their own. A string literal is a static, immutable root, its `String`
+descriptor included: `&"text"` is allowed, and `&mut "text"`, moving out of a literal and
+destroying one are not. A raw-pointer dereference is neither of the two operations: in trusted
+or `Unsafe` code, `&*p` forms a reference only under that code's validity premise. Borrowing a temporary is gap G12 (bug 182: a borrowed call result
 miscompiled or leaked). Its examples are pending until R-0500 enforces it. Loans are keyed by
 the root (REF-11).
 
@@ -773,8 +779,11 @@ fn main() -> Int {
 - Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
 - Evidence: tested
 
-**Rationale.** This is part of the Austral model (TIGHTENING_DECISIONS D2). A loan on `&s.f` is
-a loan on `s`, as the whole-owner freeze of a borrow block already is. Field-precise loans are
+**Rationale.** Decided 2026-10-23 with the Austral-based core (TIGHTENING_DECISIONS D2). A loan on
+`&s.f` is a loan on `s`, as the whole-owner freeze of a borrow block already is, and the loan
+checker needs no path-overlap analysis. The measured migration: one std site
+(`std/src/cli.con:77`, where a `&mut self` receiver overlaps a read of `self.names`; bind the read
+with `let` first) and this conformance fixture. Field-precise loans are
 deferred until a workload needs two simultaneous borrows of different fields of one owner and
 cannot be restructured with a `let` or a borrow block. Until this lands, the conformance row
 `regress_2i_ref8_call_disjoint.con` (run, 42) records today's field-disjoint acceptance under
