@@ -589,7 +589,13 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
     -- (a `defer` registered before the block still runs on this return; Codex review).
     let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
     if st == .consumed || st == .reserved then continue
+    -- Bug 214: name the exit. Every `return` that leaves the binding live reports it at the
+    -- same declaration span, so without this note two such refusals are identical and neither
+    -- says which path leaves the value unconsumed.
     throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse fun _ => span)
+      (related := if info.declSpan.isSome then
+          span.toList.map (fun sp => (sp, s!"'{name}' is still unconsumed when this `return` leaves the function"))
+        else [])
 
 /-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state. The only
     consumptions of an outer binding inside the body are on paths that leave the function (the

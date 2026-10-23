@@ -1281,6 +1281,9 @@ jobs:
       - name: "Workload 8: tcpserve single-connection server (accept path, failure classification)"
         run: bash scripts/tests/check_tcpserve.sh
 
+      - name: "Workload 9: lzpack streams byte-identical to an independent encoder + cross-decode + corrupt streams + exit codes"
+        run: bash scripts/tests/check_lzpack_differential.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

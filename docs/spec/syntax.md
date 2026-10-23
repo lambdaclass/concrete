@@ -43,6 +43,38 @@ fn main() -> Int {
 }
 ```
 
+One disambiguation is lexical, so the productions cannot show it: after an `IDENT`, a `{` begins
+a struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter,
+the type-name convention; after a lowercase name it ends the expression. In the head of an `if`,
+`while` or `match` (and of `if let` / `while let`) the head's block follows the expression, so an
+uppercase name just before that block, typically a module constant, is read as the start of a
+struct literal and the head does not parse. Parenthesizing the head (`if (n > LIMIT) { … }`)
+removes the reading, and the E0001 diagnostic names that form ([bug
+212](../bugs/212_const_before_block_parses_as_struct_literal.md)). `scripts/check_ll1.py` checks
+FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW conflict between `ident_tail` and the block
+after a head, which the case rule resolves. Whether a head should admit a struct literal at all
+is an open syntax question, not decided here.
+
+```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
+const LIMIT: Int = 16;
+
+fn main() -> Int {
+    let mut n: Int = 20;
+    if n > LIMIT { n = LIMIT; }
+    return n + 26;
+}
+```
+
+```con accept name=head-constant-parenthesized exit=42
+const LIMIT: Int = 16;
+
+fn main() -> Int {
+    let mut n: Int = 20;
+    if (n > LIMIT) { n = LIMIT; }
+    return n + 26;
+}
+```
+
 <a id="SYN-2"></a>
 ### SYN-2. Operators group by a fixed precedence
 

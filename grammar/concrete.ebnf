@@ -367,6 +367,13 @@ primary_expr = INT
              ;
 
 (* After IDENT: dispatch on '::' '#' '(' '{' or nothing.           *)
+(* The '{' alternative is taken only when IDENT starts with an       *)
+(* uppercase letter (the type-name convention), a lexical rule the   *)
+(* productions cannot state. It resolves a FIRST/FOLLOW conflict     *)
+(* with the block after an if/while/match head, which the FIRST/     *)
+(* FIRST checker does not report: in a head, `NAME {` begins a       *)
+(* struct literal, so an uppercase constant before the head's block  *)
+(* must be parenthesized (bug 212; docs/spec/syntax.md SYN-1).       *)
 ident_tail = '::' type_args [ '::' IDENT call_args ]
            | '#' IDENT [ '{' field_values '}' ]
            | call_args

@@ -1,0 +1,23 @@
+empty: 0 -> lz=12 (literals 0, matches 0, longest 0) ok
+empty: 0 -> rle=12 (literals 0, runs 0, longest 0) ok
+one byte: 1 -> lz=14 (literals 1, matches 0, longest 0) ok
+one byte: 1 -> rle=14 (literals 1, runs 0, longest 0) ok
+abc x40: 120 -> lz=31 (literals 3, matches 7, longest 18) ok
+abc x40: 120 -> rle=133 (literals 120, runs 0, longest 0) ok
+z x1000: 1000 -> lz=133 (literals 1, matches 56, longest 18) ok
+z x1000: 1000 -> rle=28 (literals 0, runs 8, longest 130) ok
+text: 792 -> lz=160 (literals 50, matches 43, longest 18) ok
+text: 792 -> rle=811 (literals 792, runs 0, longest 0) ok
+lcg 1000: 1000 -> lz=1137 (literals 1000, matches 0, longest 0) ok
+lcg 1000: 1000 -> rle=1020 (literals 1000, runs 0, longest 0) ok
+bytes 0-255 x2: 512 -> lz=332 (literals 256, matches 15, longest 18) ok
+bytes 0-255 x2: 512 -> rle=528 (literals 512, runs 0, longest 0) ok
+corrupt cut last byte: truncated stream
+corrupt magic: bad magic
+corrupt method: unknown method
+corrupt distance: match distance before start of output
+corrupt short length: trailing data after stream
+corrupt extra byte: trailing data after stream
+corrupt flipped literal: checksum mismatch
+corrupt rle overrun: output longer than header length
+selftest: all ok

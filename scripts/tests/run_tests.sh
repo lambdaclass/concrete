@@ -1448,6 +1448,23 @@ run_ok "$TESTDIR/bug_string_building.con" 0
 run_ok "$TESTDIR/variadic_append.con" 0
 # Bug 203: E0420 named two unrelated errors; the append() refusal is now E0421.
 run_err "$TESTDIR/error_203_append_unsupported_argument.con" "(E0421)"
+# Bug 212: an uppercase constant before the block of an if / while / match head is read as a
+# struct literal; the E0001 must name that reading (the accepted language is unchanged).
+run_err "$TESTDIR/error_212_const_in_if_head.con" "\`LIMIT {\` is read as the start of a struct literal"
+run_err "$TESTDIR/error_212_const_in_while_head.con" "\`LIMIT {\` is read as the start of a struct literal"
+run_err "$TESTDIR/error_212_const_in_match_head.con" "\`MODE {\` is read as the start of a struct literal"
+# Bug 214: a binding left unconsumed by two returns is refused once per return, and each E0208
+# names its own return (line 9 and line 10), so the two refusals differ.
+run_err "$TESTDIR/error_214_two_returns_leak.con" "is still unconsumed when this \`return\` leaves the function"
+r214_out=$($COMPILER "$TESTDIR/error_214_two_returns_leak.con" --emit-llvm 2>&1 >/dev/null || true)
+if grep -q 'related (9:[0-9]*): .b. is still unconsumed when this `return`' <<<"$r214_out" \
+   && grep -q 'related (10:[0-9]*): .b. is still unconsumed when this `return`' <<<"$r214_out"; then
+    echo "  ok  bug 214: each leaking return is named (lines 9 and 10)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 214: the two E0208 refusals do not name returns 9 and 10: $(grep -c 'related' <<<"$r214_out") related lines"
+    FAIL=$((FAIL + 1))
+fi
 run_err "$TESTDIR/error_203_ghost_read_at_runtime.con" "(E0420)"
 run_err "$TESTDIR/error_203_print_unsupported_argument.con" "(E0421)"
 run_ok "$TESTDIR/bug_clock_builtin.con" 0
@@ -8301,6 +8318,17 @@ fi
 # SCOPE-1); the H9 legs below are the leak the rule does not reach.
 # Bug 208: a fn-typed local spelled like an imported function is not renamed to it (both
 # backends returned 141); binary and --interp must agree on 42.
+# Bug 212: the parenthesized heads the diagnostic suggests parse and run; binary and --interp
+# agree on 42.
+run_ok "$TESTDIR/regress_212_parenthesized_const_head.con" 42
+r212_interp=$($COMPILER "$TESTDIR/regress_212_parenthesized_const_head.con" --interp 2>&1 || true)
+if [ "$r212_interp" = "42" ]; then
+    echo "  ok  bug 212: parenthesized constant heads parse and run — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 212: interp gave '$r212_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 run_ok "$TESTDIR/regress_208_fn_local_named_like_import.con" 42
 r208_interp=$($COMPILER "$TESTDIR/regress_208_fn_local_named_like_import.con" --interp 2>&1 || true)
 if [ "$r208_interp" = "42" ]; then

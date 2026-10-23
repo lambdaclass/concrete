@@ -400,3 +400,5 @@ CON-3/spec-fn-calls-runtime-code	live	-
 MOD-4@1	live	149db4f722ab52fe92ca50f3d7209727
 MOD-4/missing-module-file	live	-
 MOD-4/inline-module	live	-
+SYN-1/head-constant-struct-literal	live	-
+SYN-1/head-constant-parenthesized	live	-
