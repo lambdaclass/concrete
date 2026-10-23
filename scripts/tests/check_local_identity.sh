@@ -74,8 +74,14 @@ neg F13 'failed to synthesize' 'def same (a b : Callee) : Bool := a == b'
 # Control: the same questions, asked explicitly, elaborate (so F9 - F13 fail for the stated reason only).
 printf '%s\n%s\n' "$HDR" 'def spell (c : CLocal) : String := c.name
 def same (a b : CLocal) : Bool := a.key == b.key
-def keys (f : CFnDef) : List LocalKey := f.paramKeys' > "$TMP/P9.lean"
-if POUT="$(lake env lean "$TMP/P9.lean" 2>&1)"; then ok "P9: .name, .key and paramKeys elaborate"
+def keys (f : CFnDef) : List LocalKey := f.paramKeys
+def h (a : CLocal) : UInt64 := hash a.name
+def lt (a b : CLocal) : Bool := compare a.name b.name == .lt
+def sameC : Callee → Callee → Bool
+  | .direct a, .direct b => a == b
+  | .indirect a, .indirect b => a.key == b.key
+  | _, _ => false' > "$TMP/P9.lean"
+if POUT="$(lake env lean "$TMP/P9.lean" 2>&1)"; then ok "P9: the explicit forms of F9 - F13 (.name, .key, hash/compare of the spelling, a Callee match) elaborate"
 else no "P9: the explicit forms did not elaborate: $(grep -m2 error <<<"$POUT" | cut -c1-300)"; fi
 
 echo ""
