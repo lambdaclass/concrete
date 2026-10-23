@@ -576,9 +576,15 @@ branch `vp-r0492`, unlanded).**
   - Elab fills every identity from the walk's table. The struct-destructure temporary has one,
     because the walk mints it. An evaluation-order temporary (`ev.t<n>`), a constant or a function
     value has none.
-  - Migration follows the R-0002 technique. Coercions run both ways, and equality, hashing,
-    ordering, `Repr` and `ToString` are the name's, so no consumer changes behaviour and no
-    printed or hashed form of Core moves.
+  - Migration follows the R-0002 technique, with one deliberate exception.
+    - A `CLocal` coerces to its name, and equality, hashing, ordering, `Repr` and `ToString` are
+      the name's, so no consumer changes behaviour and no printed or hashed form of Core moves.
+    - A name does NOT coerce to a `CLocal` (`CLocal.ofName` is explicit). With that coercion, a
+      string-literal pattern on a binder field (`| .letDecl "y" ..`) elaborated, matched only
+      identity-less binders, and silently stopped matching Elab's Core. PipelineTest's
+      binder-agreement test was caught this way. Such a pattern is now a type error (gate legs
+      F7 and F8).
+  - Mono's specializations carry the generic's `paramIds`.
 - *Invariant made structural:* `ElabVerify` (`Concrete/Check/ElabVerify.lean`), which runs inside
   `Pipeline.elaborate`, refuses Core whose identities and names disagree. Its three rules:
   - B1: a binder identity is not already visible where it is introduced.

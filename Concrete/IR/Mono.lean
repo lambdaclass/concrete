@@ -661,6 +661,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               isTrusted := fnDef.isTrusted
               trustedImplOrigin := fnDef.trustedImplOrigin
               declSpan := fnDef.declSpan
+              paramIds := fnDef.paramIds
               -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
               foreignCalls := fnDef.foreignCalls
             }
@@ -700,6 +701,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         isTrusted := fnDef.isTrusted
         trustedImplOrigin := fnDef.trustedImplOrigin
         declSpan := fnDef.declSpan
+        paramIds := fnDef.paramIds
         -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
         foreignCalls := fnDef.foreignCalls
       }
