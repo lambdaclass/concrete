@@ -489,9 +489,10 @@ cd "$ROOT_DIR"
 # build is invisible to the role that audits it.
 # 132 -> 134 with bug 088's literal-default-range and post-mono-literal-range families (both
 # killed by check_cast_matrix.sh's both-paths-reject rows).
-# 134 -> 137 with bug 188's capvar-entails-only-itself, capvar-instantiated-unsafe and
-# capparam-name-reserved families (killed by check_capability_judgment.sh's bug 188 rows).
-EXPECTED_FAMILIES=137
+# 134 -> 139 with bug 188's capvar-entails-only-itself, capvar-instantiated-unsafe,
+# capvar-method-instantiated-unsafe, bodyless-capparams-refused and capparam-name-reserved
+# families (killed by check_capability_judgment.sh's bug 188 rows).
+EXPECTED_FAMILIES=139
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -715,6 +716,8 @@ add "capability-requirement" "Concrete/Check/CoreCheck.lean" "check_capability_j
 #   * restore the blanket ("any caller variable covers everything") in the one rule;
 #   * restore Check's `Unsafe` filter on the INSTANTIATED set of a cap-polymorphic call,
 #     which CoreCheck cannot see (the Unsafe-callback row);
+#   * the same filter on the METHOD path (CheckHelpers; Codex review);
+#   * accept capability parameters on a bodiless declaration (Codex review);
 #   * stop reserving capability spellings for capability parameters (the E0121 row).
 add "capvar-entails-only-itself" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
   $'  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)' \
@@ -722,6 +725,12 @@ add "capvar-entails-only-itself" "Concrete/Semantics/Capabilities.lean" "check_c
 add "capvar-instantiated-unsafe" "Concrete/Check/Check.lean" "check_capability_judgment.sh" yes \
   $'          if !Capabilities.trustedDischarges env.currentFnTrusted cap then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)' \
   $'          if cap != unsafeCapName then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)'
+add "capvar-method-instantiated-unsafe" "Concrete/Check/CheckHelpers.lean" "check_capability_judgment.sh" yes \
+  $'      if !Capabilities.trustedDischarges env.currentFnTrusted cap then\n        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)' \
+  $'      if cap != unsafeCapName then\n        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)'
+add "bodyless-capparams-refused" "Concrete/Frontend/Parser.lean" "check_capability_judgment.sh" yes \
+  $'    if !capParams.isEmpty then\n      throwParse s!"a bodiless declaration cannot take capability parameters' \
+  $'    if false then\n      throwParse s!"a bodiless declaration cannot take capability parameters'
 add "capparam-name-reserved" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
   $'  validCaps.contains name || name == stdCapMacroName || aliases.contains name' \
   $'  false && (validCaps.contains name || name == stdCapMacroName || aliases.contains name)'

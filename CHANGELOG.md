@@ -24,8 +24,11 @@ the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
 capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
 discharge. A capability parameter may not be spelled like a capability (E0121).
 `std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
-declare `trusted`. The fix is pinned by six witnesses, a positive control that agrees with
-`--interp`, `check_capability_judgment.sh` and three mutation families.
+declare `trusted`. A bodiless declaration may not take capability parameters, and two
+legitimate shapes that Check refused with a false E0220 (forwarding a variable to a
+same-named parameter, a variable beside a concrete capability) now compile. The fix is pinned
+by nine witnesses, a positive control that agrees with `--interp`,
+`check_capability_judgment.sh` and five mutation families.
 
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 

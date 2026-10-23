@@ -88,7 +88,16 @@ One entailment rule, `Capabilities.missingCaps`, with `capsContain` as its boole
   INSTANTIATED set, `Unsafe` included, with the same trusted-body discharge as CoreCheck
   (`trustedDischarges`). Uninferable variables were already refused (`cannotInferCapVariable`);
 - Resolve refuses a capability parameter spelled like a built-in capability, `Std` or a module
-  capability alias (E0121), so name matching cannot launder a real capability.
+  capability alias (E0121), so name matching cannot launder a real capability;
+- the parser refuses capability parameters on a bodiless declaration (a foreign binding or an
+  intrinsic). It has no call-site instantiation, so `trusted fn f<cap C>() with(C);` dropped
+  its parameters and its `with(C)` was read as the callee's own, instantiated parameter:
+  callable with no authority (found by the Codex review of this fix);
+- Check compares a capability-polymorphic call's parameter types under the INFERRED bindings,
+  as the method path already did. It rebuilt them from the whole resolved set minus names
+  equal to a callee parameter, which refused two legitimate shapes with a false E0220:
+  forwarding a variable to a callee whose parameter has the same name, and a callee declaring
+  `with(C, Unsafe)` with a pure callback (Codex review).
 
 The decision is made before specialization, on the generic definition. `verifyCapsPostMono` stays
 as defense in depth.
@@ -101,26 +110,25 @@ operation is explicit), which is the only change the rule required outside the w
 ## Containment
 
 - `tests/programs/error_188_capvar_{console,process,unsafe_call}.con` (E0520),
-  `error_188_capvar_unsafe_op.con` (E0521), `error_188_capvar_unsafe_callback.con` (E0240) and
-  `error_188_capparam_named_unsafe.con` (E0121), in `run_tests.sh`.
+  `error_188_capvar_unsafe_op.con` (E0521), `error_188_capvar_unsafe_callback.con` (E0240),
+  `error_188_capparam_named_unsafe.con` (E0121), and from the Codex review
+  `error_188_capvar_method_unsafe_callback.con` (E0240, the method path),
+  `error_188_capvar_impl_receiver.con` (E0520, an `impl<cap C>` method) and
+  `error_188_bodyless_capparam.con` (E0001), in `run_tests.sh`.
 - `tests/programs/regress_188_capvar_polymorphism.con`: the positive control (a variable entails
   itself, forwarding, a concrete capability beside a variable, a trusted capability-polymorphic
   body, a callback instantiated with authority the caller holds). Binary exit 42, and the
   `--interp == binary` loop in `run_tests.sh` agrees.
 - `check_capability_judgment.sh`, section "a capability VARIABLE entails only itself": every
   witness with its code, the positive control with its `--interp` leg, and a fn-pointer row.
-- Mutation families `capvar-entails-only-itself`, `capvar-instantiated-unsafe` and
-  `capparam-name-reserved` (`check_gate_mutation_coverage.sh`) restore each leg of the hole and
-  must be killed by that gate.
+- Mutation families `capvar-entails-only-itself`, `capvar-instantiated-unsafe`,
+  `capvar-method-instantiated-unsafe`, `bodyless-capparams-refused` and `capparam-name-reserved`
+  (`check_gate_mutation_coverage.sh`) restore each leg of the hole and must be killed by that
+  gate.
 
 ## Left over
 
 - Capability variables have no bound syntax. The rule is written so a declared bound would entail
   through it; none exists today, and none is needed by any workload.
-- Forwarding a capability variable to a callee whose own parameter has the SAME name
-  (`twice<cap C>` calling `apply<cap C>(f, ..)`) is refused with a false E0220, and a callee
-  declaring `with(C, Unsafe)` maps `C` to the whole resolved set when comparing parameter types.
-  Both are in Check's parameter-type resolution (`capBindings'`), fail closed, and are untouched
-  by this fix.
 - `Unsafe` stays a capability. Separating effects from safety obligations is the later trust-split
   slice.

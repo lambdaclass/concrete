@@ -1994,6 +1994,13 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     pure .unit
   let tk2 ← peek
   if tk2 == .semicolon then
+    -- A bodiless declaration (a foreign binding or an intrinsic) has no call-site
+    -- instantiation: its capability parameters would be dropped here and its `with(C)`
+    -- would require a variable nobody binds, which a direct call's check then treats as
+    -- the callee's own (instantiated) parameter — `trusted fn f<cap C>() with(C);` was
+    -- callable with no authority (Codex review of bug 188). Refused.
+    if !capParams.isEmpty then
+      throwParse s!"a bodiless declaration cannot take capability parameters ('{name}' declares {", ".intercalate capParams}): a foreign binding declares the concrete effects it exercises" (span := some sp)
     advance  -- consume ';'
     let declCaps : Option CapSet :=
       if wroteWith then some (match capSet with | .concrete [] => CapSet.empty | other => other)

@@ -157,7 +157,8 @@ echo "=== a capability VARIABLE entails only itself (bug 188) ==="
 # instantiated `C := {}` and ran it with no authority. Every witness below COMPILED and
 # RAN (exit 42) at ee1fff8e. Each row pins the specific refusal, not any rejection: a
 # reverted rule must turn its row red (mutation families capvar-entails-only-itself,
-# capvar-instantiated-unsafe, capparam-name-reserved).
+# capvar-instantiated-unsafe, capvar-method-instantiated-unsafe, capparam-name-reserved,
+# bodyless-capparams-refused).
 fixture(){ cp "$ROOT_DIR/tests/programs/$2.con" "$TMPDIR/$1.con"; }
 fixture cv_console  error_188_capvar_console
 rejects_code "with(C) body calls a Console builtin (C does not entail Console)" cv_console "E0520"
@@ -171,6 +172,12 @@ fixture cv_cbunsafe error_188_capvar_unsafe_callback
 rejects_code "an Unsafe callback instantiates C := Unsafe; a pure caller is refused" cv_cbunsafe "E0240"
 fixture cv_named    error_188_capparam_named_unsafe
 rejects_code "a capability parameter spelled like a capability (<cap Unsafe>)" cv_named "E0121"
+fixture cv_mcb      error_188_capvar_method_unsafe_callback
+rejects_code "METHOD path: an Unsafe callback instantiates C := Unsafe; a pure caller is refused" cv_mcb "E0240"
+fixture cv_implcap  error_188_capvar_impl_receiver
+rejects_code "impl<cap C> method: C does not entail Console" cv_implcap "E0520"
+fixture cv_bodyless error_188_bodyless_capparam
+rejects_code "a bodiless declaration may not take capability parameters" cv_bodyless "bodiless declaration cannot take capability parameters"
 # Legitimate capability polymorphism still compiles, and the binary agrees with --interp.
 fixture cv_ok       regress_188_capvar_polymorphism
 accepts "capability polymorphism: C entails C, forwarding, C beside a concrete cap, trusted body" cv_ok

@@ -2,14 +2,18 @@
 // capability variable stopped entailing every requirement. Each shape is one the
 // entailment rule must accept:
 //   * a callback whose `with(C)` is the caller's own variable (C entails C);
-//   * a variable forwarded to another capability-polymorphic function (D := C);
-//   * a concrete capability declared BESIDE the variable and exercised by the body;
+//   * a variable forwarded to another capability-polymorphic function whose own
+//     parameter has the SAME name (`twice<cap C>` -> `apply<cap C>`, C := C);
+//   * a concrete capability declared BESIDE the variable and exercised by the body, with a
+//     pure callback (`with(C, Unsafe)` compares the callback at `with(C)`, not `with(Unsafe)`);
 //   * a `trusted` capability-polymorphic body discharging a raw operation's `Unsafe`;
 //   * a callback instantiated with real authority by a caller that declares it.
-// Binary exit 42, and `--interp` agrees (run_tests.sh, the r102 loop).
+// The two forwarding/beside shapes were false E0220s before the Codex review of bug 188
+// (Check rebuilt parameter types from the whole resolved set). Binary exit 42, and
+// `--interp` agrees (run_tests.sh, the r102 loop).
 extern fn abs(x: i32) with() -> i32;
 
-fn apply<cap D>(f: fn(i32) with(D) -> i32, x: i32) with(D) -> i32 {
+fn apply<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
     return f(x);
 }
 
@@ -31,9 +35,9 @@ fn add_two_unsafe(x: i32) with(Unsafe) -> i32 { return abs(x) + 2; }
 
 fn main() with(Unsafe) -> i32 {
     let a: i32 = twice(add_one, 10);             // 12
-    let b: i32 = magnitude_then(add_two_unsafe, 0 - 9); // 11
-    let v: i32 = 6;
-    let c: i32 = read_then(add_one, &v as *const i32); // 7
-    let d: i32 = apply(add_two_unsafe, 0 - 10);  // 12, D := Unsafe, held by main
+    let b: i32 = magnitude_then(add_one, 0 - 9); // 10
+    let v: i32 = 7;
+    let c: i32 = read_then(add_one, &v as *const i32); // 8
+    let d: i32 = apply(add_two_unsafe, 0 - 10);  // 12, C := Unsafe, held by main
     return a + b + c + d;
 }

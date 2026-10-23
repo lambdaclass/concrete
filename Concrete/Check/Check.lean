@@ -1313,12 +1313,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
           | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps, capBindings)
           | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
-      -- Resolve cap variables in parameter types for type comparison
-      let capBindings' := if sig.capParams.isEmpty then [] else
-        sig.capParams.map fun cp =>
-          match resolvedCapSet with
-          | .concrete caps => (cp, caps.filter fun c => !sig.capParams.contains c)
-          | _ => (cp, ([] : List String))
+      -- Resolve cap variables in parameter types for type comparison, from the INFERRED
+      -- bindings — the same ones the method path uses (CheckHelpers). These were rebuilt
+      -- from the whole resolved set minus names equal to a callee parameter, which gave
+      -- every parameter the callee's fixed caps too (`with(C, Unsafe)` compared its
+      -- callback at `with(Unsafe)`) and erased a caller variable that shares the
+      -- parameter's name (`twice<cap C>` forwarding to `apply<cap C>`): two false E0220s
+      -- (Codex review of bug 188).
+      let capBindings' : List (String × List String) := if sig.capParams.isEmpty then [] else
+        sig.capParams.map fun cp => (cp, ((inferredCapBindings.find? (·.1 == cp)).map (·.2)).getD [])
       let resolveCapInTy : Ty → Ty := fun ty =>
         match ty with
         | .fn_ params (.concrete caps) ret =>
