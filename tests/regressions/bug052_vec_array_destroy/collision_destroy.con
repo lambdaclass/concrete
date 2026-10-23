@@ -8,8 +8,8 @@
 mod m {
     mod inner {
         pub struct Tracked { cell: *mut u64 }
-        trusted impl Destroy for Tracked {
-            pub fn destroy(&self) {
+        impl Destroy for Tracked {
+            pub trusted fn destroy(&self) {
                 *self.cell = *self.cell + 1;
             }
         }
@@ -23,8 +23,8 @@ mod m {
         }
     }
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        pub fn destroy(&self) {
+    impl Destroy for Tracked {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 100;
         }
     }

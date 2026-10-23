@@ -287,7 +287,7 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- (`T: Copy`). Core stages (Mono/Verify/CoreCheck) call `Layout.isCopyTyCore`,
 -- the same judgment with Core defs. There is now ONE Copy recursion, so the two
 -- cannot drift (they previously disagreed on typeVar/newtype).
--- spec: OWN-D1 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-D1, spec: TYPE-13 (docs/spec/ownership.md; this declaration enforces the rule)
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
   -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
@@ -416,6 +416,7 @@ def normalizeTyForCmp : Ty → Ty
   | .array t n => .array (normalizeTyForCmp t) n
   | t => t
 
+-- spec: TYPE-4 (docs/spec/types.md; this declaration enforces the rule)
 def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) : CheckM Unit := do
   if expected == actual then return ()
   -- Never type is compatible with anything (bottom type)
@@ -992,9 +993,7 @@ def checkPeekCtx : PeekCtx CheckM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveType ty catch _ => pure .placeholder
   subst := substTy
@@ -1242,12 +1241,13 @@ partial def inferMethodParamAndRetTys
       | .ok caps => pure caps
       | .error cv => throwCheck (.cannotInferCapVariable cv callName) (some sp)
     let env ← getEnv
-    -- Shared direct-call decision (Capabilities.missingCaps) — see Check.lean.
-    -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge (an audited
-    -- body vouches for a callee's `Unsafe` obligation) and checks every call. Checking it
-    -- here too would refuse a trusted body for what CoreCheck correctly accepts.
-    for cap in (Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps)).filter (· != unsafeCapName) do
-      throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
+    -- One entailment rule on the INSTANTIATED set (Capabilities.missingCaps) — see
+    -- Check.lean. `Unsafe` included (bug 188): CoreCheck cannot see the instantiation,
+    -- so a callback's `Unsafe` reaching the method through `C` is decided here. A
+    -- trusted body discharges it exactly as CoreCheck's call-site discharge does.
+    for cap in Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps) do
+      if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
   -- 4. Resolve cap variables inside fn-typed param types so a pure/empty-cap
   --    callback argument matches the declared `with(C)` parameter.
   let resolveCapInTy : Ty → Ty := fun ty =>

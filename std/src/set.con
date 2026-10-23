@@ -44,7 +44,7 @@ mod set {
 
     // Bug 046: `elements` inherits keys' two-owners defect for linear
     // element types; Copy-bounded like the map methods it delegates to.
-    trusted impl<K: Copy> HashSet<K> {
+    impl<K: Copy> HashSet<K> {
         /// Collect all elements into a Vec (Copy elements only — bug 046).
         pub fn elements(&self) with(Alloc) -> Vec<K> {
             return self.inner.keys();
@@ -92,15 +92,15 @@ mod set {
     }
 
     // Composition: HashSet is destroyable iff K is (inner map: V=u8 is Copy).
-    trusted impl<K: Destroy> Destroy for HashSet<K> {
-        pub fn destroy(&self) with(Alloc) {
+    impl<K: Destroy> Destroy for HashSet<K> {
+        pub trusted fn destroy(&self) with(Alloc) {
             (&self.inner).destroy();
         }
     }
 
     struct SetDropKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for SetDropKey {
-        pub fn destroy(&self) {
+    impl Destroy for SetDropKey {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

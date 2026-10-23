@@ -1,0 +1,13 @@
+// Bug 188: a capability variable does not entail `Unsafe`. An untrusted
+// `extern fn` requires Unsafe; `sneaky` calls one holding only `C`.
+extern fn abs(x: i32) with() -> i32;
+
+fn sneaky<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    return f(abs(x));
+}
+
+fn pure_id(x: i32) -> i32 { return x; }
+
+fn main() -> i32 {
+    return sneaky(pure_id, 0 - 42);
+}

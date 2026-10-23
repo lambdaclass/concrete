@@ -7,7 +7,7 @@ For each `pub fn` in std/src/*.con, derive from the SIGNATURE (+ attributes):
   fails       infallible | option | result            (return type head)
   capability  none | comma-set                        (the with(...) clause)
   proof-class pure-core | deterministic | hosted-effect | trusted-boundary
-              (trusted fn OR fn inside a trusted impl => trusted-boundary;
+              (trusted fn => trusted-boundary; an impl block confers no trust, bug 189;
                caps!=none => hosted-effect; pure-core modules => pure-core;
                else deterministic)
   evidence    proved | gated            (item 22a: `proved` iff the fn carries a
@@ -110,7 +110,7 @@ def scan_generics(s, i):
 
 
 FN_HEAD = re.compile(r"\bpub\s+(trusted\s+)?(extern\s+)?fn\s+(\w+)")
-IMPL_HEAD = re.compile(r"\b(trusted\s+)?impl\b[^{]*\{")
+IMPL_HEAD = re.compile(r"\bimpl\b[^{]*\{")
 
 
 def preceding_attr_lines(src, start):
@@ -147,9 +147,10 @@ def canon_sig(gen, params, caps, ret):
 
 def parse_fns(src):
     """Yield dicts for every `pub [trusted] [extern] fn` with balanced
-    signature parts and the enclosing impl's trusted-ness."""
+    signature parts. Trust is the function's own `trusted` (bug 189: an impl block never
+    confers it, and the parser refuses `trusted impl`)."""
     clean = strip_comments_strings(src)
-    # impl regions: (start_brace_index, end_index, trusted?)
+    # impl regions: (start_brace_index, end_index, receiver)
     impl_regions = []
     for im in IMPL_HEAD.finditer(clean):
         brace = clean.index("{", im.start())
@@ -163,7 +164,7 @@ def parse_fns(src):
         if re.search(r"\bfor\b", head):
             head = re.split(r"\bfor\b", head, maxsplit=1)[1].strip()
         recv = re.sub(r"\s+", " ", head)
-        impl_regions.append((brace, end, bool(im.group(1)), recv))
+        impl_regions.append((brace, end, recv))
 
     for m in FN_HEAD.finditer(clean):
         fn_trusted, fn_extern, name = bool(m.group(1)), bool(m.group(2)), m.group(3)
@@ -206,14 +207,13 @@ def parse_fns(src):
                     break
                 k += 1
             ret = rest[rm.end():k]
-        in_trusted_impl = any(b <= m.start() < e and t for (b, e, t, _) in impl_regions)
         # Innermost enclosing impl (the latest-starting region that contains the fn).
-        enclosing = [(b, r) for (b, e, _, r) in impl_regions if b <= m.start() < e]
+        enclosing = [(b, r) for (b, e, r) in impl_regions if b <= m.start() < e]
         receiver = max(enclosing)[1] if enclosing else "-"
         yield {
             "start": m.start(),
             "name": name,
-            "trusted": fn_trusted or in_trusted_impl,
+            "trusted": fn_trusted,
             "extern": fn_extern,
             "gen": gen,
             "params": params,

@@ -1,0 +1,43 @@
+// Bug 188 positive control: legitimate capability polymorphism still compiles after a
+// capability variable stopped entailing every requirement. Each shape is one the
+// entailment rule must accept:
+//   * a callback whose `with(C)` is the caller's own variable (C entails C);
+//   * a variable forwarded to another capability-polymorphic function whose own
+//     parameter has the SAME name (`twice<cap C>` -> `apply<cap C>`, C := C);
+//   * a concrete capability declared BESIDE the variable and exercised by the body, with a
+//     pure callback (`with(C, Unsafe)` compares the callback at `with(C)`, not `with(Unsafe)`);
+//   * a `trusted` capability-polymorphic body discharging a raw operation's `Unsafe`;
+//   * a callback instantiated with real authority by a caller that declares it.
+// The two forwarding/beside shapes were false E0220s before the Codex review of bug 188
+// (Check rebuilt parameter types from the whole resolved set). Binary exit 42, and
+// `--interp` agrees (run_tests.sh, the r102 loop).
+extern fn abs(x: i32) with() -> i32;
+
+fn apply<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    return f(x);
+}
+
+fn twice<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    return apply(f, apply(f, x));
+}
+
+fn magnitude_then<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C, Unsafe) -> i32 {
+    return f(abs(x));
+}
+
+trusted fn read_then<cap C>(f: fn(i32) with(C) -> i32, p: *const i32) with(C) -> i32 {
+    return f(*p);
+}
+
+fn add_one(x: i32) -> i32 { return x + 1; }
+
+fn add_two_unsafe(x: i32) with(Unsafe) -> i32 { return abs(x) + 2; }
+
+fn main() with(Unsafe) -> i32 {
+    let a: i32 = twice(add_one, 10);             // 12
+    let b: i32 = magnitude_then(add_one, 0 - 9); // 10
+    let v: i32 = 7;
+    let c: i32 = read_then(add_one, &v as *const i32); // 8
+    let d: i32 = apply(add_two_unsafe, 0 - 10);  // 12, C := Unsafe, held by main
+    return a + b + c + d;
+}

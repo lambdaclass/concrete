@@ -4,7 +4,7 @@ mod slice {
         len: u64,
     }
 
-    trusted impl<T> Slice<T> {
+    impl<T> Slice<T> {
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
         // Unchecked value reader lives in the Copy-bounded impl below.
 
@@ -22,7 +22,7 @@ mod slice {
         len: u64,
     }
 
-    trusted impl<T> MutSlice<T> {
+    impl<T> MutSlice<T> {
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
         // Unchecked value reader lives in the Copy-bounded impl below.
 
@@ -39,12 +39,12 @@ mod slice {
     }
 
     // Value readers for Copy elements (the Copy cell of the value model).
-    trusted impl<T: Copy> Slice<T> {
-        pub fn get_unchecked(&self, at: u64) -> T {
+    impl<T: Copy> Slice<T> {
+        pub trusted fn get_unchecked(&self, at: u64) -> T {
             return *(self.ptr + at);
         }
 
-        pub fn get(&self, at: u64) -> Option<T> {
+        pub trusted fn get(&self, at: u64) -> Option<T> {
             if at >= self.len {
                 return Option::<T>::None;
             }
@@ -53,18 +53,18 @@ mod slice {
         }
     }
 
-    trusted impl<T: Copy> MutSlice<T> {
+    impl<T: Copy> MutSlice<T> {
         /// Unchecked set. Caller must ensure index is within bounds. Copy-bounded
         /// (ownership on failure, 2026-10-21): the overwritten element is neither
         /// returned nor destroyed, which is sound only when it owns nothing. For a
         /// linear element, write through the owning `Vec::replace`, which returns
         /// the displaced value.
-        pub fn set_unchecked(&mut self, at: u64, value: T) {
+        pub trusted fn set_unchecked(&mut self, at: u64, value: T) {
             let target_ptr: *mut T = self.ptr + at;
             *target_ptr = value;
         }
 
-        pub fn set(&mut self, at: u64, value: T) -> bool {
+        pub trusted fn set(&mut self, at: u64, value: T) -> bool {
             if at >= self.len {
                 return false;
             }
@@ -73,11 +73,11 @@ mod slice {
             return true;
         }
 
-        pub fn get_unchecked(&self, at: u64) -> T {
+        pub trusted fn get_unchecked(&self, at: u64) -> T {
             return *(self.ptr + at);
         }
 
-        pub fn get(&self, at: u64) -> Option<T> {
+        pub trusted fn get(&self, at: u64) -> Option<T> {
             if at >= self.len {
                 return Option::<T>::None;
             }

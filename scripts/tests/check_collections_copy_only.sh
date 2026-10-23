@@ -97,7 +97,9 @@ for spec in "map.con:impl<K: Destroy, V: Destroy> HashMap" "map.con:Destroy for 
             "ordered_map.con:Destroy for OrderedMap" "ordered_set.con:Destroy for OrderedSet" \
             "vec.con:pub fn replace"; do
   f="${spec%%:*}"; pat="${spec#*:}"
-  grep -qF "$pat" "std/src/$f" && ok "$f: $pat" || no "$f missing: $pat"
+  # A method may declare `trusted` itself (bug 189: no block-level trust), so `pub fn X`
+  # also matches `pub trusted fn X`.
+  grep -qF "$pat" <(sed 's/pub trusted fn /pub fn /' "std/src/$f") && ok "$f: $pat" || no "$f missing: $pat"
 done
 grep -q "test_map_destroys_entries" std/src/map.con \
   && ok "map destruction-count std test present" \
@@ -110,7 +112,7 @@ for spec in "map.con:test_map_remove_destroys_key" "set.con:test_set_remove_dest
   f="${spec%%:*}"; t="${spec#*:}"
   grep -q "$t" "std/src/$f" && ok "$f: $t (keyed-remove sentinel)" || no "$f missing keyed-remove sentinel $t"
 done
-grep -q "destroy();" <(sed -n '/pub fn remove/,/^        }/p' std/src/map.con) \
+grep -q "destroy();" <(sed -n '/pub \(trusted \)\{0,1\}fn remove/,/^        }/p' std/src/map.con) \
   && ok "map.remove destroys the stored key before tombstoning" \
   || no "map.remove does not destroy the stored key"
 

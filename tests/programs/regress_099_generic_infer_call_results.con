@@ -4,8 +4,8 @@
 // Expected (compiled AND --interp): 4.
 mod single {
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        fn destroy(self) {
+    impl Destroy for Tracked {
+        trusted fn destroy(self) {
             let Tracked { cell } = self;
             *cell = *cell + 1;
         }
