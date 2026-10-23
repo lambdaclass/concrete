@@ -27,6 +27,9 @@
 #   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
 #      agree, each pinned to its runtime value; a branch- or body-local `let` named by what follows its
 #      scope (bug 101) is not extracted, while a local nothing after it names still is.
+#   M  the state model outside loops (2026-10-23): assignments rebind, a match statement's arms
+#      continue to the code after it, an if-expression branch that assigns is refused, and a
+#      statement arm's value is discarded (the two counterexamples of its review);
 #   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
 #      extracted; a tail match/if whose arms return agrees.
 #
@@ -193,6 +196,26 @@ CONCRETE_MODEL_DIFF_PERTURB=main.main "$BIN" "$EF" --report model-diff > "$TMP/n
 grep -qP '^MISMATCH\tmain\.main\tunclaimed\t\(\)\tmodel=43\truntime=42$' "$TMP/nep" \
   && ok "N: a perturbed entry point reads MISMATCH (main(): model=43 runtime=42)" \
   || no "N: the perturbed entry point row: $(grep -P '\tmain\.main\t' "$TMP/nep" | tr '\t' ' ' | tr '\n' '|')"
+
+echo ""
+echo "=== M: the functional state model outside loops — assignments and match statements ==="
+MF="tests/regressions/model_diff_state/repro.con"
+"$BIN" "$MF" --report model-diff > "$TMP/m" 2>&1
+"$BIN" "$MF" --report extraction > "$TMP/mx" 2>&1
+grep -qE '^MISMATCH' "$TMP/m" && no "M: a mismatch: $(grep -m2 '^MISMATCH' "$TMP/m" | tr '\t' ' ' | tr '\n' '|')" \
+  || ok "M: no mismatch on the state fixture"
+# an assignment inside an if EXPRESSION would be lost: the extractor refuses the function
+grep -A1 -E '^\s*main\.escapes' "$TMP/mx" | grep -q 'status: extracted' \
+  && no "M: escapes is extracted (its branch assignment would be lost)" || ok "M: escapes is not extracted"
+for fn in armvalue state; do
+  r="$(grep -P "\tmain\.$fn\t" "$TMP/m")"
+  if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "M: every input of $fn agrees ($(grep -c . <<<"$r"))"
+  else no "M: $fn: $(grep -v '^agree' <<<"$r" | head -2 | tr '\t' ' ' | tr '\n' '|')"; fi
+done
+grep -qP '^agree\tmain\.armvalue\tunclaimed\t\(0\)\tmodel=42\truntime=42$' "$TMP/m" \
+  && ok "M: armvalue(0) is 42: the arm's value is discarded" || no "M: armvalue(0): $(grep -P 'armvalue\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
+grep -qP '^agree\tmain\.state\tunclaimed\t\(0\)\tmodel=100\truntime=100$' "$TMP/m" \
+  && ok "M: state(0) is 100: the match statement's assignment reaches the return" || no "M: state(0): $(grep -P 'state\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
 
 echo ""
 echo "=== B: scalar coverage — nullary, bool and mixed signatures ==="

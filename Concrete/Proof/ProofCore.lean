@@ -849,6 +849,27 @@ def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
 /-- May `branch` be composed with the continuation `k` (already extracted)? Only when none of the
     branch's own `let`s that reach its end is mentioned by `k` — then nesting `k` inside them changes
     nothing. A fresh local nothing after the branch names stays extractable. -/
+/-- Does a statement list assign a local anywhere, nested bodies included? A VALUE-position body (an
+    `if` expression's branch, a `match` expression's arm) is extracted with no continuation, so an
+    assignment in it would rebind the name only inside the extracted body and its effect on the code
+    after the expression would be lost: such a body is refused (Codex review of the 2026-10-23
+    state-model extension, which admitted assignments outside loops). Conservative: any assignment
+    counts, even to a local declared inside the body. -/
+partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any fun
+  | .assign .. | .arrayIndexAssign .. | .fieldAssign .. | .derefAssign .. => true
+  | .ifElse c t e => cExprAssigns c || cStmtsAssign t || (e.map cStmtsAssign).getD false
+  | .while_ c b _ => cExprAssigns c || cStmtsAssign b
+  | .borrowIn _ _ _ _ _ b => cStmtsAssign b
+  | .letDecl _ _ _ v | .expr v _ | .defer v => cExprAssigns v
+  | .return_ (some v) _ | .break_ (some v) _ => cExprAssigns v
+  | _ => false
+where
+  cExprAssigns : CExpr → Bool
+    | .ifExpr c t e _ => cExprAssigns c || cStmtsAssign t || cStmtsAssign e
+    | .match_ s arms _ => cExprAssigns s || arms.any fun
+      | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => cStmtsAssign b
+    | _ => false
+
 def cBranchComposes (branch : List CStmt) (k : Proof.PExpr) : Bool :=
   (cStmtsLetsAtEnd [] branch).all fun n => !pexprMentions n k
 
@@ -900,6 +921,7 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pargs ← cExprListToPExpr args
     some (.applyVar binding pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
+    if cStmtsAssign thenBranch || cStmtsAssign elseBranch then none
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
     let pe ← cStmtsToPExpr elseBranch
@@ -937,6 +959,7 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
   -- A guarded arm is not modelled in the proof path (V1); like range patterns,
   -- it makes the function non-proof-extractable (disclosed in identifyUnsupported).
   | .enumArm enumName variant bindings none body => do
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.enumPat enumName variant (bindings.map (·.1.name)), pbody)
   | .litArm value none body => do
@@ -947,9 +970,11 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     let v ← match pval with
       | .lit v => some v
       | _ => none
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.litPat v, pbody)
   | .varArm binding _bindTy none body => do
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.varPat binding, pbody)
   | .enumArm _ _ _ (some _) _ | .litArm _ (some _) _ | .varArm _ _ (some _) _ => none
@@ -980,7 +1005,12 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- it as the value (`if c { id(x); } return 7;` modeled as `if c then id(x) else 7`) was wrong.
   -- A pure discard is rejected by the checker (E0294), so what remains is a call or a control-flow
   -- expression with effects the model cannot see; it falls through to the refusal below.
-  | [.expr e true], _ => if cExprTailOk e then cExprToPExprImpl e else none
+  | [.expr e true], none => if cExprTailOk e then cExprToPExprImpl e else none
+  -- A trailing value of a branch that has a continuation is a statement's discarded value: an `if`
+  -- or `match` STATEMENT's arm ends in a value, and control goes on to the code after it (Codex
+  -- review of the 2026-10-23 extension: `match n { 0 => 1, _ => 2, } return 42;` modelled 1 or 2).
+  -- The value is not evaluated: a trap in it makes the model's answer partial, as any trap does.
+  | [.expr e true], some kk => if cExprNoEscape e then some kk else none
   -- A discarded `match`/`if` whose every arm returns is the function's exit, so its arms' values
   -- are the result and the continuation is unreachable.
   | [.expr e false], _ =>
