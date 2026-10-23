@@ -2962,7 +2962,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- The fresh re-check's checker can fail to identify even when the probe above succeeded;
         -- its policy is then `unknown`, and the line says why rather than leaving a bare status.
         let freshUnidentified : String := match fresh.map (·.environment.checker) with
-          | some (.unidentified w) => s!" (this run's re-check: checker UNIDENTIFIED ({w}))"
+          | some (Proof.CheckerResolution.unidentified w) => s!" (this run's re-check: checker UNIDENTIFIED ({w}))"
           | _ => ""
         let mut lines : List String := []
         let mut policyCounts : Array Proof.AdvisoryStatus := #[]
