@@ -1,0 +1,10 @@
+// Bug 193: an enum variant literal gives a payload field twice. Expected: E0306 (TYPE-7).
+fn main() -> Int {
+    let o: Option<Int> = Option::Some { value: 1, value: 41 };
+    let mut out: Int = 0;
+    match o {
+        Option::Some { value } => { out = value; },
+        Option::None => {}
+    }
+    return out;
+}

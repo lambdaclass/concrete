@@ -879,8 +879,12 @@ def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
 def destroyImplKey (typeName : String) : String := "$impl$Destroy$" ++ typeName
 
 /-- Reserved key of a type's (non-Destroy) trait impl method `method`. A type has at most one
-    method of a given name, so (type, method) identifies the impl method. -/
-def traitImplKey (typeName method : String) : String := "$impl$" ++ typeName ++ "$" ++ method
+    method of a given name (TRAIT-5, enforced by coherence since bug 186), so (type, method)
+    identifies the impl method. The type is keyed by its canonical spelling, so an impl written
+    `for bool` (or `i64`) and a runtime `Bool` (`Int`) receiver meet on one key; a user type's
+    name is unchanged. -/
+def traitImplKey (typeName method : String) : String :=
+  "$impl$" ++ tyCanonical (tyFromName typeName) ++ "$" ++ method
 
 partial def collectTraitImpls : List CModule → List CTraitImpl
   | [] => []
@@ -2854,8 +2858,12 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
   match splitTraitParamCallee fnName, argVals with
   | some (_, m), recv :: _ =>
     let target ← autoDeref cx env recv
+    -- A primitive receiver dispatches on its type too (`impl Tr for Int`, bug 186): it used
+    -- to be "" here, so the interpreter refused a call native code made.
     let tn := match target with
       | .struct_ n _ | .enum_ n _ _ => n
+      | .int _ ty | .float _ ty => tyCanonical ty
+      | .bool _ => tyCanonical .bool
       | _ => ""
     if !tn.isEmpty && ((findFn cx.fns (ambiguousKey tn)).isSome
         || (findFn cx.fns (ambiguousKey (traitImplKey tn m))).isSome) then

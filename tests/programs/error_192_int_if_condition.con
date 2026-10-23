@@ -1,0 +1,9 @@
+// Bug 192: an integer is not a condition (TYPE-5). The if statement's condition type was
+// discarded by the checker and admitted by CoreCheck as truthiness. Expected: E0223.
+fn main() -> Int {
+    let n: Int = 1;
+    if n {
+        return 42;
+    }
+    return 0;
+}

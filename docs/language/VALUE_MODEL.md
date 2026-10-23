@@ -1,6 +1,10 @@
-# Value & Reference Model
+# Value & Reference Model (design record)
 
-Status: stable reference
+**Superseded as the normative text (2026-10-23).** Copy and linearity are
+[docs/spec/ownership.md](../spec/ownership.md) (OWN-D1 to OWN-15), references are
+[docs/spec/references.md](../spec/references.md) (REF-1 to REF-11), newtypes and typing are
+[docs/spec/types.md](../spec/types.md) (TYPE-1 to TYPE-14), and layout attributes belong to the
+FFI chapter. This document keeps the overview and the four-cell value model's reasoning.
 
 Concrete uses a strict value/reference model with linear types by default.
 

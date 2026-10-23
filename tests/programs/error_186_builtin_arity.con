@@ -1,0 +1,5 @@
+// Bug 186 / TRAIT-4 (E0593): `Option` takes one argument; an impl for bare `Option` does not
+// say which instantiations it covers.
+trait Tr { fn m(&self) -> Int; }
+impl Tr for Option { fn m(&self) -> Int { return 42; } }
+pub fn main() -> Int { return 0; }

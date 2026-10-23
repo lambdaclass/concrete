@@ -46,7 +46,7 @@ mod process {
         pid: i32,
     }
 
-    trusted impl Child {
+    impl Child {
         pub fn pid(&self) -> i32 {
             return self.pid;
         }

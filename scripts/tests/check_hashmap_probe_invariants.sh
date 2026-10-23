@@ -225,7 +225,7 @@ echo "=== linear (Destroy) keys and values are destroyed exactly once ==="
 runs linear_payload_exactly_once 0 'mod main {
     import std.map.{HashMap};
     struct DKey { id: i32, cell: *mut u64 }
-    trusted impl Destroy for DKey { pub fn destroy(&self) { *self.cell = *self.cell + 1; } }
+    impl Destroy for DKey { pub trusted fn destroy(&self) { *self.cell = *self.cell + 1; } }
     fn h_dkey(k: &DKey) -> u64 { return 0; }
     fn e_dkey(a: &DKey, b: &DKey) -> bool { return a.id == b.id; }
 

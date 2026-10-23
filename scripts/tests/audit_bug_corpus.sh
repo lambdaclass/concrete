@@ -111,9 +111,18 @@ declare -A BUG_TEST_MAP=(
   # Bug 179: concurrent compiles of one source shared the intermediate <input>.ll / <main>.ll;
   # both fixtures are compiled concurrently by run_tests.sh (file mode and project mode).
   [179]="regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con"
+  # Bug 186: trait impl selection was a search (duplicate, overlapping, specialized, orphan impls;
+  # a method name from two impls; bound calls by order). E0590 - E0595, plus the two-order positive control.
+  [186]="error_186_duplicate_impl.con error_186_duplicate_generic_impl.con error_186_overlap_generic_impl.con error_186_overlap_blanket_impl.con error_186_orphan_impl.con error_186_specialized_impl.con error_186_method_clash.con error_186_inherent_clash.con error_186_ambiguous_bound_method.con error_186_duplicate_primitive_spelling.con error_186_orphan_sibling.con error_186_imported_alias_target.con error_186_builtin_arity.con regress_186_coherent_impls.con regress_186_primitive_impl_spellings.con regress_186_coherent_impls_reversed.con regress_186_visible_targets.con"
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
+  # Bug 188: a capability variable entailed every requirement (Unsafe included). Also
+  # check_capability_judgment.sh and three mutation families.
+  # Bug 189: `trusted impl` conferred trust on every method of the block. Also
+  # check_trusted_method.sh's bug 189 section.
+  [189]="error_189_trusted_impl_refused.con"
+  [188]="error_188_capvar_console.con error_188_capvar_process.con error_188_capvar_unsafe_call.con error_188_capvar_unsafe_op.con error_188_capvar_unsafe_callback.con error_188_capparam_named_unsafe.con error_188_capvar_method_unsafe_callback.con error_188_capvar_impl_receiver.con error_188_bodyless_capparam.con regress_188_capvar_polymorphism.con"
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
   [134]="error_134_enum_eq.con error_134_struct_eq.con"
@@ -136,6 +145,13 @@ declare -A BUG_TEST_MAP=(
   [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con"
   # Bug 196: a match arm whose pattern does not fit the scrutinee (E0309).
   [196]="error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con"
+  # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
+  # Also check_pipeline_artifacts.sh legs B, U and D.
+  [180]="regress_180_report_scope/src/main.con"
+  # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
+  [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
+  # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).
+  [192]="error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

@@ -1,0 +1,11 @@
+// Bug 189: a block never confers trust. `trusted impl` made every method of the block
+// trusted whether or not it declared it, so a method added to the block later was audited
+// by nobody. The marker is refused (E0001); each method that needs it declares
+// `trusted fn` itself.
+struct Buf { p: *mut u8 }
+
+trusted impl Buf {
+    fn first(&self) -> u8 { return *self.p; }
+}
+
+fn main() -> i32 { return 0; }

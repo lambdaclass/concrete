@@ -1,0 +1,18 @@
+// Bug 188 (Codex review): an IMPL-level capability parameter. `impl<cap C> Sink<C>` gives
+// every method `C`, and `C` entails only itself: a `with(C)` method may not print.
+struct Copy Sink<cap C> { f: fn(i32) with(C) -> i32 }
+
+impl<cap C> Sink<C> {
+    fn run(&self, x: i32) with(C) -> i32 {
+        print_int(x as i64);
+        let g: fn(i32) with(C) -> i32 = self.f;
+        return g(x);
+    }
+}
+
+fn pure_id(x: i32) -> i32 { return x; }
+
+fn main() -> i32 {
+    let s: Sink<{}> = Sink { f: pure_id };
+    return s.run(42);
+}

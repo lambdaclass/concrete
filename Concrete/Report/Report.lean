@@ -30,6 +30,32 @@ private def collectFnNames (modules : List CModule) : List String :=
   modules.foldl (fun acc m =>
     acc ++ m.functions.map (·.name) ++ collectSubFnNames m) []
 
+/-- The first module named `n`, and the list without it. -/
+def takeNamesake (n : String) : List CModule → Option (CModule × List CModule)
+  | [] => none
+  | m :: ms => if m.name == n then some (m, ms)
+    else (takeNamesake n ms).map fun (t, rest) => (t, m :: rest)
+
+/-- The part of a monomorphized program that corresponds to a listing scope: for each scope module,
+    its namesake in `mono` at the same level, keeping that module's functions (originals and the
+    specializations Mono placed there) only when the scope module itself lists functions, and
+    descending into the scope's submodules alone. A scope wrapper (`scopeUserModulesToFile`'s empty
+    parent) therefore contributes only its matched children. With the whole program as scope this
+    is `mono` itself, up to module order (bug 180: the mono report runs Mono on the validated whole
+    program and restricts the listing, instead of running Mono on the scope). -/
+partial def restrictMonoToScope (scope mono : List CModule) : List CModule :=
+  -- Match by OCCURRENCE, in order: a scope module takes the first not-yet-taken namesake, so two
+  -- sibling modules of one name map to their own counterparts (Mono keeps module order).
+  let step (acc : List CModule × List CModule) (sm : CModule) : List CModule × List CModule :=
+    let (out, rest) := acc
+    match takeNamesake sm.name rest with
+    | none => (out, rest)
+    | some (tm, rest') =>
+      let kept := { tm with functions := if sm.functions.isEmpty then [] else tm.functions,
+                            submodules := restrictMonoToScope sm.submodules tm.submodules }
+      (out ++ [kept], rest')
+  (scope.foldl step ([], mono)).1
+
 /-- Count generic functions across all modules including submodules. -/
 private partial def countGenericFns (m : CModule) : Nat :=
   let local_ := (m.functions.filter fun f => !f.typeParams.isEmpty).length
@@ -1402,7 +1428,7 @@ def provableV1ConformanceReport (modules : List CModule) (locMap : FnLocMap := [
             ++ excludedLines)
   let footer :=
     if blockedEntries.isEmpty then
-      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted impls, capability use), not counted against conformance."
+      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted functions and methods, capability use), not counted against conformance."
     else
       s!"{blockedEntries.length} function(s) are proof-eligible but use constructs\noutside the current ProvableV1 supported surface (see docs/verification/PROVABLE_V1.md)."
   s!"{header}\n\n{"\n".intercalate chunks}\n\nStatus: {conformance}\n{footer}\n"
@@ -6219,10 +6245,14 @@ open Json in
 def diagnosticCodesReport : String :=
   -- A code with a whole-code rule (`codeRuleTag`, docs/spec) names it, like `entryR` below.
   let entry (code pass severity description : String) : Val :=
-    match codeRuleTag code with
-    | some r => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
-                      ("description", .str description), ("rules", .str r)]
-    | none => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    let rules := match codeRuleTag code with
+      | some r => r
+      | none => ", ".intercalate (codeSharedRules code)
+    if rules.isEmpty then
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    else
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
+            ("description", .str description), ("rules", .str rules)]
   -- A code that enforces exit 2i rules names them with their versions (MEMORY_SEMANTICS §15.5
   -- item 1); `scripts/tests/check_rules_2i.sh` checks every manifest row's tag against this.
   let entryR (code pass severity description rules : String) : Val :=
@@ -6269,7 +6299,7 @@ def diagnosticCodesReport : String :=
     entry "E0220" "check" "error" "type mismatch",
     entry "E0221" "check" "error" "dereference of non-reference type",
     entry "E0222" "check" "error" "while break/else type mismatch",
-    entry "E0223" "check" "error" "if condition not Bool",
+    entry "E0223" "check" "error" "condition of if / while / for not Bool",
     entry "E0224" "check" "error" "if branch type mismatch",
     entry "E0225" "check" "error" "match arm type mismatch",
     entry "E0226" "check" "error" "break value type mismatch",
@@ -6355,6 +6385,7 @@ def diagnosticCodesReport : String :=
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
     entry "E0309" "check" "error" "a match arm's pattern does not fit the scrutinee's type (bug 196)",
+    entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
@@ -6432,6 +6463,13 @@ def diagnosticCodesReport : String :=
     entry "E0585" "core-check" "error" "repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)",
     entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
     entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
+    -- Check: trait coherence (bug 186; docs/spec/traits.md TRAIT-1 … TRAIT-6)
+    entry "E0590" "check" "error" "duplicate impl: a trait implemented twice for one type (TRAIT-1)",
+    entry "E0591" "check" "error" "overlapping impls: two impls of one trait whose targets unify (TRAIT-2)",
+    entry "E0592" "check" "error" "orphan impl: the module defines neither the trait nor the type (TRAIT-3)",
+    entry "E0593" "check" "error" "impl target is not its type applied to exactly the impl's own parameters (specialized, blanket, alias or arity; TRAIT-4)",
+    entry "E0594" "check" "error" "one method name provided by two impls of the same type (TRAIT-5)",
+    entry "E0595" "check" "error" "method call through type-parameter bounds is ambiguous: several bound traits declare it (TRAIT-6)",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

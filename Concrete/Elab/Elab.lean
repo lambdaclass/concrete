@@ -196,7 +196,8 @@ def ElabError.code : ElabError → String
   | .mutReceiverThroughSharedRef _ => "E0237"
 
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
-  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
+  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
+           evidence := codeRuleEvidence e.code }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
@@ -542,9 +543,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveTypeE ty catch _ => pure .placeholder
   subst := substTy
@@ -1197,16 +1196,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        let mut foundSig : Option FnSigDef := none
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- Unique by Check (E0595): an ambiguous call never reaches Elab.
+        let found := boundMethodUnique env.traits bounds methodName
+        let foundBuiltin : Option BuiltinTraitId := found.bind (·.1.builtinId)
+        match found.map Prod.snd with
         | none => throwElab (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Replace Self with the type variable
@@ -2661,8 +2654,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                          (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
-                typeBounds := ib.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+                typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -2670,8 +2662,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,
-                typeBounds := tb.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+                typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let localCallIds : List (String × CallableId) := allFnPairs.map fun (f, implTy) =>

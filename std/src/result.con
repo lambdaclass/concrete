@@ -185,7 +185,7 @@ mod result {
     // rejects any leak/dup, so this compiling is the guarantee; the empty
     // destroy keeps it Alloc-free.
     struct ResultTestLin { v: i32 }
-    trusted impl Destroy for ResultTestLin {
+    impl Destroy for ResultTestLin {
         pub fn destroy(&self) { }
     }
     fn rlin_to_code(e: ResultTestLin) -> i32 { let c: i32 = e.v; destroy(e); return c; }

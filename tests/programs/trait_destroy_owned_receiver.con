@@ -8,15 +8,15 @@
 // Expected (compiled AND --interp): 11111, exit 0.
 mod m {
     struct ByVal { cell: *mut u64, step: u64 }
-    trusted impl Destroy for ByVal {
-        fn destroy(self) {
+    impl Destroy for ByVal {
+        trusted fn destroy(self) {
             let ByVal { cell, step } = self;
             *cell = *cell + step;
         }
     }
     struct ByRef { cell: *mut u64, step: u64 }
-    trusted impl Destroy for ByRef {
-        fn destroy(&self) {
+    impl Destroy for ByRef {
+        trusted fn destroy(&self) {
             *self.cell = *self.cell + self.step;
         }
     }

@@ -1,0 +1,13 @@
+// Bug 188: a capability VARIABLE in the caller's `with(C)` satisfied every
+// requirement. `sneaky` is never granted Console, yet it prints: `main` binds
+// C := {} (a pure callback), so the whole program declares no authority.
+fn sneaky<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    print_int(x as i64);
+    return f(x);
+}
+
+fn pure_id(x: i32) -> i32 { return x; }
+
+fn main() -> i32 {
+    return sneaky(pure_id, 42);
+}

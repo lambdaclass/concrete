@@ -20,7 +20,7 @@ The current stdlib is best understood as a low-level systems layer, not as a con
 The main design rules are:
 
 - keep effects visible in signatures
-- keep pointer-level unsafety contained under `trusted fn` / `trusted impl`
+- keep pointer-level unsafety contained under `trusted fn`, declared per function and method
 - keep foreign boundaries explicit
 - keep systems modules consistent in error and handle style
 - prefer a few deeply-tested collections over a broad inconsistent zoo

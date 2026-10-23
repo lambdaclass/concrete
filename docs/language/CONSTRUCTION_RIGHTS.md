@@ -1,4 +1,8 @@
-# Construction Rights & Representation Privacy
+# Construction Rights & Representation Privacy (design record)
+
+**Superseded as the normative text (2026-10-23).** The enforced rule is TYPE-11 of
+[docs/spec/types.md](../spec/types.md#TYPE-11), with its pending follow-on slices. This note keeps
+the visibility matrix, the motivation and the implementation order.
 
 **Status:** authoritative design (defect-queue 0b). Slice 1 (newtype
 construction rights) AND slice 2 (struct field privacy: cross-module

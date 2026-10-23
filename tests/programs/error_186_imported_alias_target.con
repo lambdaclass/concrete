@@ -1,0 +1,9 @@
+// Bug 186 / TRAIT-4 (E0593): an impl target written through an imported alias is refused, as a
+// local alias is.
+mod defs { pub type Alias = Int; }
+mod main {
+    import defs.{Alias};
+    trait Tr { fn m(&self) -> Int; }
+    impl Tr for Alias { fn m(&self) -> Int { return 42; } }
+    pub fn main() -> Int { return 0; }
+}
