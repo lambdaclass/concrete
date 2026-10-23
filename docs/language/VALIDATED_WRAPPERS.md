@@ -1,5 +1,9 @@
 # Opaque Validated Wrappers and Fallible Conversions
 
+The language rules this library pattern relies on are in the specification: newtypes and
+construction rights (TYPE-11), type aliases (TYPE-12) and owned `Text` (TYPE-3) of
+[docs/spec/types.md](../spec/types.md). This document describes the pattern, not the rules.
+
 Status: stable reference (Phase 3 item 72 closed)
 
 This document is the stable-direction counterpart to [../research/language/opaque-validated-types.md](../../research/language/opaque-validated-types.md). It settles the question posed by ROADMAP item 72:

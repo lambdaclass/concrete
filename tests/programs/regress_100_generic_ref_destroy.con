@@ -4,8 +4,8 @@
 // Expected (compiled AND --interp): 2.
 mod single {
     struct Holder<T> { cell: *mut u64, v: T }
-    trusted impl<T: Copy> Destroy for Holder<T> {
-        fn destroy(&self) {
+    impl<T: Copy> Destroy for Holder<T> {
+        trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

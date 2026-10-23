@@ -131,18 +131,18 @@ mod rocksdb {
         handle: *mut u8,
     }
 
-    trusted impl Options {
-        pub fn create() with(Alloc) -> Options {
+    impl Options {
+        pub trusted fn create() with(Alloc) -> Options {
             return Options { handle: rocksdb_options_create() };
         }
 
-        pub fn set_create_if_missing(&mut self, v: bool) {
+        pub trusted fn set_create_if_missing(&mut self, v: bool) {
             let mut flag: u8 = 0;
             if v { flag = 1; }
             rocksdb_options_set_create_if_missing(self.handle, flag);
         }
 
-        pub fn destroy(self) with(Alloc) {
+        pub trusted fn destroy(self) with(Alloc) {
             let Options { handle } = self;
             rocksdb_options_destroy(handle);
         }
@@ -153,12 +153,12 @@ mod rocksdb {
         handle: *mut u8,
     }
 
-    trusted impl WriteOptions {
-        pub fn create() with(Alloc) -> WriteOptions {
+    impl WriteOptions {
+        pub trusted fn create() with(Alloc) -> WriteOptions {
             return WriteOptions { handle: rocksdb_writeoptions_create() };
         }
 
-        pub fn destroy(self) with(Alloc) {
+        pub trusted fn destroy(self) with(Alloc) {
             let WriteOptions { handle } = self;
             rocksdb_writeoptions_destroy(handle);
         }
@@ -169,12 +169,12 @@ mod rocksdb {
         handle: *mut u8,
     }
 
-    trusted impl ReadOptions {
-        pub fn create() with(Alloc) -> ReadOptions {
+    impl ReadOptions {
+        pub trusted fn create() with(Alloc) -> ReadOptions {
             return ReadOptions { handle: rocksdb_readoptions_create() };
         }
 
-        pub fn destroy(self) with(Alloc) {
+        pub trusted fn destroy(self) with(Alloc) {
             let ReadOptions { handle } = self;
             rocksdb_readoptions_destroy(handle);
         }
@@ -188,12 +188,12 @@ mod rocksdb {
         len: u64,
     }
 
-    trusted impl Value {
+    impl Value {
         pub fn len(&self) -> u64 {
             return self.len;
         }
 
-        pub fn to_bytes(&self) with(Alloc) -> Bytes {
+        pub trusted fn to_bytes(&self) with(Alloc) -> Bytes {
             let mut b: Bytes = Bytes::with_capacity(self.len);
             let mut i: u64 = 0;
             while i < self.len {
@@ -204,7 +204,7 @@ mod rocksdb {
             return b;
         }
 
-        pub fn free(self) with(Alloc) {
+        pub trusted fn free(self) with(Alloc) {
             let Value { ptr, len } = self;
             rocksdb_free(ptr);
         }
@@ -218,11 +218,11 @@ mod rocksdb {
         handle: *mut u8,
     }
 
-    trusted impl Db {
+    impl Db {
         // Open (or, with create_if_missing, create) the database at `path`.
         // A failure is a typed DbError { kind: Open }, never an abort; on
         // failure no rocksdb_t exists, so there is nothing to close.
-        pub fn open(opts: &Options, path: &String) with(File, Alloc) -> Result<Db, DbError> {
+        pub trusted fn open(opts: &Options, path: &String) with(File, Alloc) -> Result<Db, DbError> {
             let cpath: *mut u8 = path.to_cstr();
             let slot: *mut *mut u8 = new_err_slot();
             let h: *mut u8 = rocksdb_open(opts.handle, cpath as *const u8, slot);
@@ -241,7 +241,7 @@ mod rocksdb {
         }
 
         // Write key -> value. Returns the number of value bytes written.
-        pub fn put(&self, wopts: &WriteOptions, key: &Bytes, val: &Bytes) with(File, Alloc) -> Result<u64, DbError> {
+        pub trusted fn put(&self, wopts: &WriteOptions, key: &Bytes, val: &Bytes) with(File, Alloc) -> Result<u64, DbError> {
             let slot: *mut *mut u8 = new_err_slot();
             rocksdb_put(self.handle, wopts.handle,
                         key.raw_ptr() as *const u8, key.len(),
@@ -256,7 +256,7 @@ mod rocksdb {
 
         // Read key. Ok(None) = key absent; Ok(Some(v)) = a library-owned
         // Value the caller must `free`.
-        pub fn get(&self, ropts: &ReadOptions, key: &Bytes) with(File, Alloc) -> Result<Option<Value>, DbError> {
+        pub trusted fn get(&self, ropts: &ReadOptions, key: &Bytes) with(File, Alloc) -> Result<Option<Value>, DbError> {
             let slot: *mut *mut u8 = new_err_slot();
             let mut vlen: u64 = 0;
             let p: *mut u8 = rocksdb_get(self.handle, ropts.handle,
@@ -274,7 +274,7 @@ mod rocksdb {
             return Result::<Option<Value>, DbError>::Ok { value: Option::<Value>::Some { value: v } };
         }
 
-        pub fn close(self) with(File, Alloc) {
+        pub trusted fn close(self) with(File, Alloc) {
             let Db { handle } = self;
             rocksdb_close(handle);
         }

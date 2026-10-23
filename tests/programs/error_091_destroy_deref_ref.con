@@ -2,8 +2,8 @@
 // the reference exactly as `t.destroy()` does. Expected: E0290.
 mod m {
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        fn destroy(&self) {
+    impl Destroy for Tracked {
+        trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

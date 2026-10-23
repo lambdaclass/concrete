@@ -1,0 +1,15 @@
+// Bug 188: an `Unsafe` callback instantiates `C := Unsafe`, so a caller that does not
+// declare `Unsafe` (and is not trusted) may not make the call. Check decides it on the
+// instantiated set; CoreCheck cannot see the instantiation, and Check used to leave
+// `Unsafe` to it, so the call was accepted.
+extern fn abs(x: i32) with() -> i32;
+
+fn apply<cap C>(f: fn(i32) with(C) -> i32, x: i32) with(C) -> i32 {
+    return f(x);
+}
+
+fn magnitude(x: i32) with(Unsafe) -> i32 { return abs(x); }
+
+fn main() -> i32 {
+    return apply(magnitude, 0 - 42);
+}

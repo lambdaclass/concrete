@@ -445,8 +445,8 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts become immutable and payload-bound (`ValidatedCore` is
-publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+explicitly versioned. Pipeline artifacts become immutable and payload-bound (slice 1 sealed `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram`, 2026-10-23), with diagnostic artifacts typed separately.
 Language: no block `let` shadowing a visible name; colliding import aliases rejected; match binders
 equal or name their field.
 **Exit:** `check_ir_no_string_identity.sh` rejects string identity joins in resolved tables, the
@@ -454,6 +454,38 @@ source checker's environments, Core, SSA and `PExpr`; 081, 082, 087, 093 and 094
 correctly; targeted mutations show checker consumption/block-local accounting, `ElabVerify` and the
 theorem-table identity checks load-bearing; compile-fail controls cover artifact forgery and
 diagnostic-path bypass.
+
+**S5 slice contract 1 — sealed, certified artifacts (R-0497 slice 1, 2026-10-23).**
+- *Representation:* `ValidatedCore`, `MonomorphizedProgram`, `SSAProgram` and `ElaboratedProgram`
+  get private constructors. The first three carry erased `Prop` certificates about their exact
+  payload: `coreCheckProgram coreModules = .ok ()`; Mono's output equation over `source` plus
+  `verifyPostMono coreModules = []`; and the lowering chain from `source` plus
+  `ssaVerifyProgram ssaModules = .ok ()`. Mono and SSA artifacts name the artifact they were produced from. Two
+  uncertified types are split off: `UnverifiedSSA`, the `ssa-unverified` debugging view, and
+  `CoreSubset`, modules drawn from a `ValidatedCore` with a `Sublist` proof. Proof extraction reads
+  a `CoreSubset`, and a whole program coerces to one.
+- *Invariant made structural:* a value of a certified type is exactly what its producer accepted.
+  Forging one, replacing its payload (`{ a with … }`), or passing an uncertified artifact where a
+  certificate is required is a compile error. Changing the payload needs a proof about the new
+  payload. The certificates are erased `Prop`s. The `source` fields are runtime data, and the
+  compiler's emitted output is unchanged. Private constructors are API discipline. The
+  certificates are the statement, and forging one past the seal needs a proof or an axiom.
+- *Gates:* `check_pipeline_artifacts.sh`:
+  - P: the certificates read as their equations, the producer chain type-checks, and no `sorryAx`;
+  - F1–F7: forgery by `{…}`, `⟨…⟩` and `.mk`;
+  - U1–U4: payload replacement;
+  - D1–D4: `UnverifiedSSA` reaching `emit`, and a `CoreSubset` or `ElaboratedProgram` reaching Mono
+    or the verify gates;
+  - S: no `open private` of these constructors, and every declaration of `Pipeline.lean` in the
+    built environment rests only on `propext`, `Classical.choice` and `Quot.sound`. A sorry with
+    its warning silenced and an indented `axiom` are both refused (mutant-checked);
+  - B: bug 180, the class instance this slice found.
+
+  A public-constructor mutant turns F1–F3 and U1 red. The golden and snapshot gates show the
+  compiler's output unchanged. The exception is bug 180's intended report change.
+- *Not in this slice:* binding `ElaboratedProgram` to its resolved input; the identity half (R-0492);
+  stage types beyond SSA as their IRs land; a mutation family in `test_mutation.sh` (it moves the
+  pinned inventory count, so it waits for a landing train).
 
 **S5 slice contract 2 — local binder identity in the checker (R-0492 slice 1, 2026-10-23).**
 - *Representation:* `LocalId` (`Concrete/Frontend/LocalId.lean`, private constructor) names one
@@ -465,7 +497,8 @@ diagnostic-path bypass.
   position and spelling), and each SCOPE-1 collision. Desugaring moves inside `Pipeline.resolve`,
   so no path reaches Check with a body that skipped it (bug 197).
 - *Invariant made structural:*
-  - The checker's environment is keyed by `LocalId` (`TypeEnv.vars : List (LocalId × VarInfo)`).
+  - The checker's environment is keyed by binding identity (`TypeEnv.vars : List (LocalRef × VarInfo)`;
+    a `LocalRef` is a `LocalId` with its spelling for messages, and compares by identity).
   - A use of a local name finds its binding through the table, never by searching the
     environment for the spelling.
   - The references a binding keeps to other bindings are `LocalId`s: `borrowedFrom`,
@@ -480,10 +513,12 @@ diagnostic-path bypass.
     their module, and `TypeEnv.vars` cannot be searched by a spelling.
   - S: the minting functions are called only from `Resolve/Locals.lean`, and the checker keeps no
     name-keyed lookup helper and no private uid counter.
-  - T: twelve walk answers on a probe program with loops, branches, an arm, a borrow block,
+  - T: fifteen walk answers on a probe program with loops, a `for` header, branches, an arm,
+    `let … else`, a struct destructure, a borrow block, a call through a fn-typed parameter,
     sibling reuse and one collision.
   - R: `Pipeline.resolve` attaches a resolved table to every function; bug 176's loop program
-    still runs; bug 197's project `let … else` builds.
+    still runs; bug 197's project `let … else` builds; a destructure's two `_` binders keep two
+    identities (Codex round 2).
   - Mutation family 98 (a use denotes the outermost visible binding of its spelling) is killed by
     leg T.
   - *Why no program-level discriminator:* with SCOPE-1 enforced and loop scopes closed (bug 176),

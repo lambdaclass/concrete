@@ -1,0 +1,11 @@
+// Bug 186 / TRAIT-3 (E0592): a submodule sees its siblings' types without an import, so the
+// target names `defs`'s Foo; `bad` defines neither Foo nor Destroy.
+mod outer {
+    mod defs { pub struct Foo { pub a: Int } }
+    mod bad {
+        impl Destroy for Foo {
+            fn destroy(self) { let Foo { a } = self; }
+        }
+    }
+}
+pub fn main() -> Int { return 0; }

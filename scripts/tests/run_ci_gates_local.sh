@@ -197,9 +197,17 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 268 -> 267: check_pipeline_contracts.sh retired (wip/spec-single-source, after train 4's merge); its six
 #   boundary fixtures are reject and accept examples of docs/spec/pipeline.md (PASS-5 .. PASS-10), run by
 #   check_spec.sh with the same leak check.
-# 267 -> 268: check_local_identity.sh (R-0492 slice 1, branch vp-r0492: local binder identity in the
+# 267 -> 268: check_pipeline_artifacts.sh (R-0497 slice 1 / bug 180: sealed, certified artifacts), from
+#   train 5 (wip/verified-pipeline, which pinned it as 255 -> 256 on its pre-train-2 base).
+#   Train 5 as a whole, recounted with `--plan` on the merged workflow (268 commands): cap-soundness +0
+#   (bugs 188/189 extend the existing check_capability_judgment.sh and check_trusted_method.sh steps);
+#   trait-coherence +0 (bug 186's fixtures run inside run_tests.sh, its spec examples inside
+#   check_spec.sh); verified-pipeline +1 (check_pipeline_artifacts.sh, the only workflow step the
+#   train adds); spec-single-source after train 4 +0 (types.md and patterns.md run inside check_spec.sh).
+#   267 + 0 + 0 + 1 + 0 = 268.
+# 268 -> 269: check_local_identity.sh (R-0492 slice 1, branch vp-r0492: local binder identity in the
 #   checker; bug 197).
-EXPECTED_GATE_COMMANDS=268
+EXPECTED_GATE_COMMANDS=269
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

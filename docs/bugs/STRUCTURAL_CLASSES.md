@@ -34,23 +34,24 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 | class | bugs | structural owner |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C), 132 (two modules' constants of one name), 165 (a compiler-generated `print_int` call binds to a same-named user function), 151 (two nested modules' functions flattened to one name) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C), 132 (two modules' constants of one name), 165 (a compiler-generated `print_int` call binds to a same-named user function), 151 (two nested modules' functions flattened to one name), 186 (an impl keyed by its type's spelling with its arguments dropped, and a method by `Type_method`: impl selection was a first-match search) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124, 176 (a loop body's shadowing `let` outlived the loop in the checker) (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments. Since exit 2i the source rule SCOPE-1@1 (E0301) keeps every shadowing shape of this class out of the compiler (124 closed by it); the identity repair stays R-0492's |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131, 143 (a deferred call's borrow reserved nothing) | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
-| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities), 105 (a source-level reference rule satisfied later by Mono's substitution) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity), 140, 150 (the folder's float self-comparison), 152 (a runtime string builtin's empty-input edge), 183 (a dereference assignment's operand order), 184 (the interpreter read all of stdin before `main`; the binary reads when the program does) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
+| 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities), 105 (a source-level reference rule satisfied later by Mono's substitution), 188 (a capability variable entailed every requirement, deferred to an instantiation nothing checks) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity), 140, 150 (the folder's float self-comparison), 152 (a runtime string builtin's empty-input edge), 183 (a dereference assignment's operand order), 184 (the interpreter read all of stdin before `main`; the binary reads when the program does), 193 (which occurrence of a repeated literal field counts) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 107, 108, 110, 116, 126, 127, 130, 133, 134, 146 (`*h` lowered as a load only), 175 (a `match` whose arms all diverge left its merge open: 078's shape, missed in `match`), 182 (a borrowed temporary has no slot) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
 | 11. Absence read as a fact (fail-open defaults) | 049, 052, 058, 063, 065, 067, 075, 076, 103, 106, 112, 123, 128 | the absence rule (`check_absence_not_fact.sh`); R-0494 (S2) for verdicts and R-0494/R-0495 for proof admission (076); R-0513 (exits 2d, 2e) for gates; R-0510 for synthesized definitions |
 | 12. One fact kept in two places | 042, 057, 064, 070, 105 (`isPassByPtr` read both as "passed as a pointer" and "a register holding an aggregate by pointer"), 108, 109 (float rendering kept in several places), 135 (the formatter's copy of that rendering), 110 (the element-type hint: Check passes it, Elab did not), 112, 121, 122, 129, 177 (secondary: CoreCheck kept a width-blind copy of type equality), 181 (an arm binder through a borrowed scrutinee: `&T` in Check, `T` in Elab), 197 (the front-end stage sequence restated by each driver; four skipped desugaring) | R-0492/R-0514 (one resolver and builtin table); R-0502 (S11 one `Layout`); R-0494 (S2 report split) |
-| 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124 (closed by SCOPE-1@1, exit 2i), 130, 134 (no type had a defined comparison), 136 (evaluation-order rule 6: Core cannot bind the base once), 140 (nor was a comparison non-consuming), 144 (heap interiors exempted from use-once by a disclosed exclusion), 145 (raw collection intrinsics outside rule (c)), 177 (CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's), 182 (REF-5: a borrowed call result is accepted) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
-| 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
+| 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124 (closed by SCOPE-1@1, exit 2i), 130, 134 (no type had a defined comparison), 136 (evaluation-order rule 6: Core cannot bind the base once), 140 (nor was a comparison non-consuming), 144 (heap interiors exempted from use-once by a disclosed exclusion), 145 (raw collection intrinsics outside rule (c)), 177 (CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's), 182 (REF-5: a borrowed call result is accepted), 192 (an `if` / `while` / `for` statement condition: Check discarded its type, CoreCheck admitted integers) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
+| 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI), 189 (`trusted impl` made every method trusted without declaring it) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 | 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
+| 18. Pipeline artifacts not bound to their payload | 180 (a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified) | R-0497 (S5 sealed, payload-bound artifacts; slice 1 landed with 180's fix) |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -66,7 +67,9 @@ packages' modules with one name became one LLVM module), 077 (a relative call in
 submodule lowered to an unprefixed symbol), 081 (a call's key in the proof model was the call-site
 spelling, so an import alias could borrow another function's proof), 082 (an import alias lost to
 any same-named definition), 096 – 098 (same-named types, private functions and generic functions in
-two modules resolved to one definition).
+two modules resolved to one definition), 186 (an impl was keyed by its type's spelling with the
+target's arguments dropped, and a method by `Type_method`, so "which impl?" was answered by the
+first match and nothing established that there was only one).
 
 **Design cause.** Names stay `String` after resolution: Core binders and callees (with a
 `Coe String Callee`), SSA registers, the alias pools and `PExpr` are joined by spelling, and module
@@ -79,7 +82,9 @@ namespaces, specialization arguments and the extern/intrinsic/generated distinct
 
 **Owner.** R-0492 (verified-pipeline S5, whose exit names 081 and 082), applied to the shared front
 end for every user by R-0514 (queue row 4); R-0510 (S8a) owns specialization identity (051, 054,
-098). R-0002, R-0436 and R-0442 already retired the string encodings behind 050, 056 and 061.
+098). R-0002, R-0436 and R-0442 already retired the string encodings behind 050, 056 and 061. Bug
+186's coherence judgment is typed (`TraitId`, `TypeId`, `MethodKey`); R-0548 moves the method
+tables themselves off the `Type_method` spelling.
 
 ## 2. Binder identity by name, not a `LocalId`
 
@@ -410,3 +415,23 @@ append ratchet (`check_no_quadratic_append.sh`) keeps the commonest spelling fro
 **Owner.** R-0422 (one owned queue for measured compiler performance defects, with explicit
 complexity envelopes gated per class). ROADMAP #5's structured Lower/SSA builder should own block
 and merge accumulation; R-0504's SSA validator should keep the O(1) dominance query.
+
+## 18. Pipeline artifacts not bound to their payload
+
+**Bugs.** 180 (in a project, `--report mono`, `verify` and `traceability` built a `ValidatedCore`
+by `{ validCore with coreModules := … }` from the invoked file's modules, wrapped in synthetic empty
+parents and stripped of `std` and every other dependency, then ran Mono and lowering on it; the
+reports described a program nothing compiles, with no dependency specialization at all).
+
+**Design cause.** A pipeline artifact was a plain record. Its type said which pass had accepted it,
+but nothing tied that acceptance to the payload it carried, so any code could replace the payload
+and keep the type, and every consumer downstream read the new payload as certified.
+
+**Structural fix.** Sealed, certified artifacts (R-0497): each artifact from `ValidatedCore` on has
+a private constructor and carries, as an erased `Prop` field, the equation its producer established
+about its exact payload, and names the artifact it was produced from. A selection of a validated
+program is a separate type (`CoreSubset`) that no compiling pass accepts, and the debugging SSA view
+is `UnverifiedSSA`, which `emit` does not accept.
+
+**Owner.** R-0497 (S5, artifact half). `check_pipeline_artifacts.sh` refuses forgery, payload
+replacement and diagnostic bypass by elaboration.

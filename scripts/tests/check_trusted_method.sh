@@ -131,13 +131,15 @@ if grep -q "^alloc	alloc_dealloc	calls-ffi" <<<"$xp"; then
 else
   no "the dependency's FFI leaves are not visible to a consumer"
 fi
-# JUSTIFICATION USES AUTHORITY, NOT LITERAL MEMBERSHIP. A `cap C` function satisfies the
-# raw-operation gate through its variable; asking `capSetHasUnsafe` instead invented four
-# unjustified raw operations in `ordered_set` that the checker had authorized all along.
-# A provenance report inventing an unjustified operation is the defect class this whole
-# area exists to prevent, so the count is pinned at zero.
+# JUSTIFICATION USES AUTHORITY, NOT LITERAL MEMBERSHIP. The report asks the checker's own
+# question (`capsContain`), so it agrees with the raw-operation gate by construction. Before
+# bug 188 a `cap C` function passed that gate through its variable, and asking
+# `capSetHasUnsafe` instead invented four unjustified raw operations in `ordered_set`; since
+# bug 188 those methods declare `trusted`. A provenance report inventing an unjustified
+# operation is the defect class this whole area exists to prevent, so the count is pinned at
+# zero.
 if grep -q "unjustified-raw-op=0" <<<"$xp"; then
-  ok "no unjustified raw operations across the dependency (cap variables counted as authority)"
+  ok "no unjustified raw operations across the dependency (the report reads the checker's authority)"
 else
   no "unjustified raw operations reported: $(printf '%s' "$xp" | grep -oE 'unjustified-raw-op=[0-9]+')"
 fi
@@ -150,6 +152,35 @@ if grep -q "trusted methods in impl" "$ROOT_DIR/Concrete/Report/ReportInterface.
   ok "the unsafe report says 'trusted methods in impl X', not 'trusted impl X'"
 else
   no "the report labels a per-method trust as a trusted IMPL — an overclaim"
+fi
+
+echo "=== a block never confers trust (bug 189) ==="
+# `trusted impl` made every method of the block trusted whether or not it declared it, so a
+# method added to the block later was audited by nobody. The marker is refused, for inherent
+# and trait impls alike, and a method in a plain impl is trusted only by its own `trusted`.
+b189_parse() { # name src label
+  printf '%s\n' "$2" > "$TMP/$1.con"
+  local out; out="$("${TO[@]}" "$CC" "$TMP/$1.con" -o "$TMP/$1.bin" 2>&1)"
+  if grep -q "(E0001) 'trusted impl' is not allowed" <<<"$out"; then ok "$3"
+  else no "$3 — expected the E0001 trusted-impl refusal, got: $(grep -m1 error <<<"$out")"; fi
+}
+b189_parse b189_inherent 'struct B { p: *mut u8 }
+trusted impl B { fn get(&self) -> u8 { return *self.p; } }
+fn main() -> i32 { return 0; }' "trusted impl is refused"
+b189_parse b189_trait 'struct D { p: *mut u64 }
+trusted impl Destroy for D { fn destroy(&self) { *self.p = 1; } }
+fn main() -> i32 { return 0; }' "trusted impl Trait for Type is refused"
+printf '%s\n' 'struct B { p: *mut u8 }
+impl B {
+    trusted fn audited(&self) -> u8 { return *self.p; }
+    fn unaudited(&self) -> u8 { return *self.p; }
+}
+fn main() -> i32 { return 0; }' > "$TMP/b189_sibling.con"
+out189="$("${TO[@]}" "$CC" "$TMP/b189_sibling.con" -o "$TMP/b189_sibling.bin" 2>&1)"
+if grep -q "b189_sibling.con:4:[0-9]*: error.*(E0521)" <<<"$out189" && ! grep -q "b189_sibling.con:3:" <<<"$out189"; then
+  ok "a trusted method's sibling is not trusted (its raw deref is E0521)"
+else
+  no "the untrusted sibling of a trusted method was not refused: $(grep -m1 error <<<"$out189")"
 fi
 
 echo

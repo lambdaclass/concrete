@@ -187,8 +187,11 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\n
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
   && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
-fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0220\t[^\t\n]*", "E0220\trule", s, flags=re.M)' \
-  && control "N6b: a rule-class code that no entry names" S6 "E0220: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+# an unmigrated code (whichever is first today), reclassified as a rule code no entry names
+UNM="$(awk -F'\t' '$2 ~ /^unmigrated:/ {print $1; exit}' docs/spec/codes.tsv)"
+[ -n "$UNM" ] || no "N6b: codes.tsv has no unmigrated code left to plant; update this control"
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^$UNM\t[^\t\n]*', '$UNM\trule', s, flags=re.M)" \
+  && control "N6b: a rule-class code that no entry names" S6 "$UNM: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 
 # S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"

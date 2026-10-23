@@ -51,7 +51,7 @@ pub fn is_empty(&self) -> bool
 ```
 
 `cursor` returns a `ByteCursor` over `[off, off+len)` (built via the existing
-`ByteCursor::from_raw(buf.ptr + off, len)` inside the trusted impl), so all reads
+`ByteCursor::from_raw(buf.ptr + off, len)` inside a trusted method), so all reads
 through it are already the bounds-checked cursor reads. The returned `ByteCursor`
 is `Copy` and owns no Concrete reference — value-model compliant.
 

@@ -17,8 +17,8 @@ mod bytes {
         pub cap: u64,
     }
 
-    trusted impl Bytes {
-        pub fn new() -> Bytes {
+    impl Bytes {
+        pub trusted fn new() -> Bytes {
             let b: Bytes = Bytes {
                 ptr: 0 as *mut u8,
                 len: 0,
@@ -42,7 +42,7 @@ mod bytes {
         /// Pulled by workload 1 (base64_cli): text→bytes programs were
         /// hand-writing this loop. The reverse crossing stays checked
         /// (`to_string` -> Option) per UNICODE_POLICY.
-        pub fn from_string(s: &String) with(Alloc) -> Bytes {
+        pub trusted fn from_string(s: &String) with(Alloc) -> Bytes {
             let mut b: Bytes = Bytes::with_capacity(s.len());
             let mut i: u64 = 0;
             while i < s.len() {
@@ -63,7 +63,7 @@ mod bytes {
             self.len = self.len + 1;
         }
 
-        pub fn get(&self, at: u64) -> Option<u8> {
+        pub trusted fn get(&self, at: u64) -> Option<u8> {
             if at >= self.len {
                 return Option::<u8>::None;
             }
@@ -71,12 +71,12 @@ mod bytes {
             return Option::<u8>::Some { value: *target_ptr };
         }
 
-        pub fn get_unchecked(&self, at: u64) -> u8 {
+        pub trusted fn get_unchecked(&self, at: u64) -> u8 {
             let target_ptr: *mut u8 = self.ptr + at;
             return *target_ptr;
         }
 
-        pub fn set(&mut self, at: u64, byte: u8) -> bool {
+        pub trusted fn set(&mut self, at: u64, byte: u8) -> bool {
             if at >= self.len {
                 return false;
             }
@@ -85,7 +85,7 @@ mod bytes {
             return true;
         }
 
-        pub fn set_unchecked(&mut self, at: u64, byte: u8) {
+        pub trusted fn set_unchecked(&mut self, at: u64, byte: u8) {
             let target_ptr: *mut u8 = self.ptr + at;
             *target_ptr = byte;
         }
@@ -139,7 +139,7 @@ mod bytes {
             self.len = 0;
         }
 
-        fn grow(&mut self) with(Alloc) {
+        trusted fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
             self.ptr = grow::<u8>(self.ptr, new_cap);
             self.cap = new_cap;
@@ -230,7 +230,7 @@ mod bytes {
         /// Unchecked reinterpretation: the caller PROVES the bytes are valid
         /// UTF-8 (2a: an _unchecked variant names an obligation, not UB —
         /// downstream text ops assume validity).
-        pub fn to_string_unchecked(self) -> String {
+        pub trusted fn to_string_unchecked(self) -> String {
             let Bytes { ptr, len, cap } = self;
             let s: String = String::from_raw_unchecked(ptr, len, cap);
             return s;
@@ -253,7 +253,7 @@ mod bytes {
         // bodies are outside checked semantics), so this stays a documented
         // model refinement until a distinct trusted-refinement link class
         // (#[model_refined_by]-style) exists — recorded in the arc doc.
-        pub fn view(&self, start: u64, vlen: u64) -> Option<BytesRaw> {
+        pub trusted fn view(&self, start: u64, vlen: u64) -> Option<BytesRaw> {
             // H2: overflow-safe bounds (start+vlen could wrap u64)
             if start > self.len || vlen > self.len - start {
                 return Option::<BytesRaw>::None;
@@ -321,7 +321,7 @@ mod bytes {
             return BytesRaw { ptr: ptr, len: len, cap: cap };
         }
 
-        pub fn drop(self) with(Alloc) {
+        pub trusted fn drop(self) with(Alloc) {
             let Bytes { ptr, len, cap } = self;
             dealloc::<u8>(ptr);
         }
@@ -331,8 +331,8 @@ mod bytes {
 
     // H18 drop-glue: trait-form destructor for collection elements (see
     // string.con note).
-    trusted impl Destroy for Bytes {
-        pub fn destroy(&self) with(Alloc) {
+    impl Destroy for Bytes {
+        pub trusted fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
     }

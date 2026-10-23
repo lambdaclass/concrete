@@ -9,6 +9,7 @@ import Concrete.Resolve.Locals
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
+import Concrete.Check.Coherence
 
 namespace Concrete
 
@@ -605,7 +606,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
--- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -1207,9 +1209,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       do
         let env ← getEnv
         -- Anti-smuggling: an indirect call must hold the pointer type's caps AND
-        -- its cap variables (Capabilities.missingCapsThroughPtr) — the stricter
-        -- through-pointer variant of the one shared missing-caps decision.
-        for cap in Capabilities.missingCapsThroughPtr env.currentCapSet fnPtrCapSet do
+        -- its cap variables — the one entailment rule (Capabilities.missingCaps),
+        -- the same one every direct call reads (bug 188).
+        for cap in Capabilities.missingCaps env.currentCapSet fnPtrCapSet do
           throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
@@ -1327,12 +1329,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
           | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps, capBindings)
           | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
-      -- Resolve cap variables in parameter types for type comparison
-      let capBindings' := if sig.capParams.isEmpty then [] else
-        sig.capParams.map fun cp =>
-          match resolvedCapSet with
-          | .concrete caps => (cp, caps.filter fun c => !sig.capParams.contains c)
-          | _ => (cp, ([] : List String))
+      -- Resolve cap variables in parameter types for type comparison, from the INFERRED
+      -- bindings — the same ones the method path uses (CheckHelpers). These were rebuilt
+      -- from the whole resolved set minus names equal to a callee parameter, which gave
+      -- every parameter the callee's fixed caps too (`with(C, Unsafe)` compared its
+      -- callback at `with(Unsafe)`) and erased a caller variable that shares the
+      -- parameter's name (`twice<cap C>` forwarding to `apply<cap C>`): two false E0220s
+      -- (Codex review of bug 188).
+      let capBindings' : List (String × List String) := if sig.capParams.isEmpty then [] else
+        sig.capParams.map fun cp => (cp, ((inferredCapBindings.find? (·.1 == cp)).map (·.2)).getD [])
       let resolveCapInTy : Ty → Ty := fun ty =>
         match ty with
         | .fn_ params (.concrete caps) ret =>
@@ -1353,13 +1358,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
-        -- One shared direct-call decision (Capabilities.missingCaps): the caps the
-        -- caller lacks for this call. Same computation CoreCheck's satisfaction
-        -- check and the reports read, so they cannot disagree.
-        -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge and checks
-        -- every call (see the method path in CheckHelpers).
-        for cap in (Capabilities.missingCaps env.currentCapSet resolvedCapSet).filter (· != unsafeCapName) do
-          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- One entailment rule (Capabilities.missingCaps) on the INSTANTIATED set: the
+        -- caps the caller lacks for this call. `Unsafe` included (bug 188): CoreCheck
+        -- sees this call without the inferred binding, so a callback's `Unsafe`
+        -- reaching the callee through `C` is decided here or nowhere. A trusted body
+        -- discharges it exactly as CoreCheck's call-site discharge does.
+        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+          if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
@@ -1467,6 +1473,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         match sd.fields.find? fun sf => sf.name == fn with
         | some _ => pure ()
         | none => throwCheck (.unknownFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
+        -- Bug 193 (TYPE-7): each field once (the checker reads the first, the backend the last).
+        if (fields.filter fun (f, _) => f == fn).length > 1 then
+          throwCheck (.duplicateFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
@@ -1584,6 +1593,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+          if (fields.filter fun (f, _) => f == fn).length > 1 then
+            throwCheck (.duplicateFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
@@ -2063,18 +2074,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        -- Find the method in one of the bound traits
-        let mut foundSig : Option FnSigDef := none
-        let mut foundTrait : String := ""
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundTrait := traitName; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
+        -- that had the method used to win, so `T: A + B` resolved by declaration order.
+        let cands := boundMethodCandidates env.traits bounds methodName
+        if cands.length > 1 then
+          throwCheck (.ambiguousBoundMethod methodName n (cands.map (·.1.name))) (some e.getSpan)
+        let foundTrait : String := (cands.head?.map (·.1.name)).getD ""
+        let foundBuiltin : Option BuiltinTraitId := cands.head?.bind (·.1.builtinId)
+        match cands.head?.map Prod.snd with
         | none => throwCheck (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Bug 091: a call through a trait bound exercises the authority the TRAIT
@@ -2086,7 +2093,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.
           let envC ← getEnv
           for cap in Capabilities.missingCaps envC.currentCapSet sig.capSet do
-            if !(cap == unsafeCapName && envC.currentFnTrusted) then
+            if !Capabilities.trustedDischarges envC.currentFnTrusted cap then
               throwCheck (.missingCapability s!"{foundTrait}::{methodName}" cap envC.currentFnName) (some e.getSpan)
           -- Replace Self with the type variable in the trait signature
           let selfTy := Ty.typeVar n
@@ -2200,6 +2207,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     and moving a non-Copy value in it is E0300. A false guard falls through to
     the next arm, which is checked from the same pre-arm env and may move the
     same value — the guard's move would then be a second one at run time. -/
+-- spec: PAT-4 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def checkGuard (guard : Option Expr) : CheckM Unit := do
   match guard with
   | none => pure ()
@@ -2210,7 +2218,10 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     let live := before.vars.filterMap fun (_, vi) =>
       if !vi.isCopy && vi.state != .consumed then some vi.uid else none
     setEnv { before with guardUids := live ++ before.guardUids }
-    discard (checkExpr g (some .bool))
+    -- Bug 192 (TYPE-5): a guard is a condition; the `.bool` hint does not assert the type.
+    let gTy ← checkExpr g (some .bool)
+    if gTy != .bool then
+      throwCheck (.condNotBool "match guard" (tyToString gTy)) (some g.getSpan)
     let after0 ← getEnv
     setEnv { after0 with guardUids := before.guardUids }
     let after ← getEnv
@@ -2218,7 +2229,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -2425,7 +2436,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             throwCheck (.discardedPureValue (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    -- Bug 192 (TYPE-5): the condition is a `bool`; an integer is not a condition.
+    if condTy != .bool then
+      throwCheck (.condNotBool "if" (tyToString condTy)) (some cond.getSpan)
     -- Snapshot variable states before branches
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
@@ -2488,7 +2502,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
     setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    if condTy != .bool then
+      throwCheck (.condNotBool "while" (tyToString condTy)) (some cond.getSpan)
     let envC ← getEnv
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
@@ -2521,7 +2537,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
       let env0 ← getEnv
       setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-      let _condTy ← checkExpr cond
+      let condTy ← checkExpr cond
+      if condTy != .bool then
+        throwCheck (.condNotBool "for" (tyToString condTy)) (some cond.getSpan)
       let envC ← getEnv
       setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
       -- Body + step in loop scope, push label if present
@@ -3978,12 +3996,11 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
-    -- A method of a `trusted impl` is trusted (as Elab records it): the trusted-only
-    -- rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
+    -- A method is trusted only when it declares `trusted` itself (bug 189); the
+    -- trusted-only rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
-              , typeBounds := ib.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -3991,8 +4008,7 @@ def checkModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
-              , typeBounds := tb.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>
@@ -4065,6 +4081,10 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     happened) and uses summary table for import resolution. -/
 def checkProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics Unit :=
+  -- Trait coherence FIRST (bug 186): every impl is unique, local and fully generic, and every
+  -- (type, method) names one method, before any method table below is built from them.
+  let coherence := Coherence.checkProgram (resolved.map (·.module)) summaryTable
+  if !coherence.isEmpty then .error coherence else
   -- Build sibling module summaries for inline modules (mod A {} mod B {}).
   -- Each module's summary is indexed by name for qualified :: access.
   let moduleSummaryList : List (String × FileSummary) := resolved.map fun rm =>
