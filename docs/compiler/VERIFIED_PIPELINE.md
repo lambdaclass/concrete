@@ -455,6 +455,41 @@ correctly; targeted mutations show checker consumption/block-local accounting, `
 theorem-table identity checks load-bearing; compile-fail controls cover artifact forgery and
 diagnostic-path bypass.
 
+**S5 slice contract 2 — local binder identity in the checker (R-0492 slice 1, 2026-10-23).**
+- *Representation:* `LocalId` (`Concrete/Frontend/LocalId.lean`, private constructor) names one
+  local value binding of one function. Bindings are parameters, `let`s, pattern binders, `for`
+  header binders, and borrow-block references and region names. Each function carries a
+  `LocalTable` (`FnDef.locals`) produced by `Pipeline.resolve` after desugaring. One lexical walk,
+  `Resolve/Locals.lean` (the former SCOPE-1 walk of `Check.lean`), records three things: the
+  binder for each binding, the binding each use of a local name denotes (keyed by the use's
+  position and spelling), and each SCOPE-1 collision. Desugaring moves inside `Pipeline.resolve`,
+  so no path reaches Check with a body that skipped it (bug 197).
+- *Invariant made structural:*
+  - The checker's environment is keyed by `LocalId` (`TypeEnv.vars : List (LocalId × VarInfo)`).
+  - A use of a local name finds its binding through the table, never by searching the
+    environment for the spelling.
+  - The references a binding keeps to other bindings are `LocalId`s: `borrowedFrom`,
+    `refParent`, borrow-block refs, and the roots of normalized places.
+  - A binding that stays in the environment after its scope closed can no longer answer for a
+    later use of its spelling (class 2: bugs 040, 041, 045, 087, 093, 094, 107, 124, 176).
+  - E0301 is rendered from the same walk, so the shadowing rule and binding identity cannot
+    disagree.
+  - A function without a table, or with an ambiguous one, is refused rather than checked by name.
+- *Gates:* `check_local_identity.sh`:
+  - compile-fail controls: `LocalId` and `LocalTable` cannot be constructed outside their
+    module, and the environment cannot be searched by spelling;
+  - a source leg: the minting functions are called only from `Resolve/Locals.lean`;
+  - the bug 176 reproducers;
+  - a mutant control: with `closeBlockScope` disabled, so loop and branch bindings leak into the
+    environment as they did before bug 176's fix, the type-confusion and mutability reproducers
+    still type and assign through the outer binding. The leak no longer reaches a use.
+- *Not in this slice:*
+  - Elab still alpha-renames by its own scopes; it consumes `LocalId`s in a later slice, retiring
+    that second walk.
+  - Contract expressions (`requires`, `ensures`, invariants) still name parameters by spelling.
+  - Resolve's pre-desugar E0100 walk is a separate visibility computation.
+  - Core, SSA and `PExpr` keep their string binders (R-0492 steps 2–4).
+
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
 evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
 specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width
