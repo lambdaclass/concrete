@@ -1513,7 +1513,16 @@ jobs:
       # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
       # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0547): they used to
       # be steps of their own as well, so each assertion ran twice per workflow run.
+      # check_kernel_recheck (run inside this step) also compiles the replay probe's native-trust
+      # classifier under Lean 4.35, which removes Lean.ofReduceBool/ofReduceNat/trustCompiler; here
+      # that leg is required, not skipped. Only the toolchain is installed; this repository still
+      # builds with its own pin.
+      - name: Install the Lean 4.35 toolchain (classifier compatibility leg only)
+        run: elan toolchain install leanprover/lean4:v4.35.0
+
       - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
+        env:
+          CONCRETE_REQUIRE_LEAN435: "1"
         run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
 
       - name: "Upload checker acceptance evidence"
