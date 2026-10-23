@@ -1,0 +1,19 @@
+// Bug 181: matching through a reference binds a payload of type parameter T as `&T` in Check (T is
+// not known to be Copy), but Elab gives the binder the payload type T, so at T := Int the
+// specialization loads the Int and passes it where `fn(&T)` expects a pointer. Expected: exit 42.
+// Observed: the binary is killed by SIGSEGV; --interp fails with "deref of non-ref value".
+fn get<T>(o: &Option<T>, k: fn(&T) -> Int) -> Int {
+    match o {
+        Option::Some { value } => { return k(value); },
+        Option::None => { return 0; }
+    }
+}
+
+fn read(p: &Int) -> Int {
+    return *p;
+}
+
+fn main() -> Int {
+    let o: Option<Int> = Option::Some { value: 42 };
+    return get::<Int>(&o, read);
+}

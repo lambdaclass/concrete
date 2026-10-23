@@ -99,8 +99,9 @@ intermediate should use `privateIntermediate` inside `IO.FS.withTempDir`. No roa
 the driver; this record proposes the rule above as its owner until the driver is restructured.
 
 **Integration note (train 3, 2026-10-23).** Landing train 2 carried a partial fix for the same race
-from fast-gates (R-0547, `b5b9dbea`), which put the intermediates at per-process paths beside the
+from fast-gates (R-0546, `b5b9dbea`), which put the intermediates at per-process paths beside the
 source (`<source>.<pid>.ll`). It kept concurrent builds apart, but it left files in the source
 tree and did not clean them up on every failure path. Train 3 keeps this record's private
 directory and removes that `scratchPath` helper, so the repository has one mechanism: the
-structural owner named above.
+structural owner named above. Train 4 merged fast-gates' later version of that helper (under
+`$TMPDIR` with the process id and a clock stamp) and dropped it the same way.

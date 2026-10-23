@@ -340,6 +340,10 @@ COMPILER=".lake/build/bin/concrete"
 TESTDIR="tests/programs"
 TMPDIR=$(mktemp -d)
 SUITE_TMPDIR="$TMPDIR"   # removed by on_exit; do not add another EXIT trap (it would replace on_exit)
+# The bounded runner (lib/bounded.sh) is sourced here, before any section uses it: bug 184's legs
+# run early, and a call before the old late `source` would have been "command not found".
+BOUNDED_PARENT="$SUITE_TMPDIR"
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 JOBDIR="$TMPDIR/jobs"
 mkdir -p "$JOBDIR"
 
@@ -1599,6 +1603,11 @@ run_ok  "tests/regressions/bug126_field_write_through_mut_heap_ref/repro_read.co
 run_err "$TESTDIR/error_115_vec_get_non_copy.con"           "(E0290)"
 run_err "$TESTDIR/error_115_vec_get_generic_unbounded.con"  "(E0290)"
 run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
+# G17 (MEMORY_SEMANTICS §15.7, closed 2026-10-23): the root of a borrowed scrutinee cannot move
+# while an arm binder borrows it (TIGHTENING_DECISIONS T-G17).
+run_err "$TESTDIR/error_g17_match_borrow_root_moved_in_arm.con"     "(E0204)"
+run_err "$TESTDIR/error_g17_if_let_borrow_root_moved.con"           "(E0204)"
+run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # Bugs 102 and 105: the interpreter agrees with the binary (102 needed pointer equality on
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
@@ -1664,7 +1673,7 @@ r179_leg regress_179_concurrent_build 3 4 0 r179_build
 # Bug 184 (FIXED): `--interp` read ALL of standard input before `main` ran, so a program that
 # never reads stdin, fed by a pipe that stays open, waited for the writer to close it (the binary
 # returns at once). Standard input is now pulled when the program reads it. Each run's stdin is a
-# fifo whose writer prints the feed and then holds it open for 30 s, under `timeout 10`: a run
+# fifo whose writer prints the feed and then holds it open for 30 s, under a 10 s bound: a run
 # that waits for end of input times out (124) and fails. The writer is killed and reaped after
 # every run. regress_184_interp_stdin_unread never reads stdin (21); regress_184_interp_stdin_read
 # is the control that does: one read(0, buf, 2) of "AB" returns both bytes at once (131).
@@ -1674,7 +1683,10 @@ r184_run() {  # <feed> <command...>: run the command with stdin held open after 
     mkfifo "$fifo"
     { printf '%s' "$feed"; exec sleep 30; } > "$fifo" 2>/dev/null &
     w=$!
-    timeout 10 "$@" < "$fifo" || rc=$?
+    # bounded_run, not GNU `timeout` (absent on macOS runners). The retry budget is pinned to 10 s so
+    # first try + retry (20 s) ends before the writer releases the pipe (30 s): a run that waits for
+    # end of input still times out (124) instead of being rescued by a longer retry.
+    bounded_run -i "$fifo" -r 10 10 -- "$@" || rc=$?
     kill "$w" 2>/dev/null || true
     wait "$w" 2>/dev/null || true
     rm -f "$fifo"
@@ -2144,14 +2156,14 @@ trait_destroy_newtype_payload_paren:ok
 r091_bad=""
 for row in $r091_table; do
     f="${row%%:*}"; want="${row#*:}"
-    out=$($COMPILER "$TESTDIR/$f.con" -o "$TESTDIR/.r091_table_bin" 2>&1) && rc=0 || rc=$?
+    out=$($COMPILER "$TESTDIR/$f.con" -o "$TMPDIR/r091_table_bin" 2>&1) && rc=0 || rc=$?
     if [ "$want" = "ok" ]; then
         [ "$rc" -eq 0 ] || r091_bad="$r091_bad $f(want ok)"
     else
         grep -qF "($want)" <<<"$out" || r091_bad="$r091_bad $f(want $want)"
     fi
 done
-rm -f "$TESTDIR/.r091_table_bin"
+rm -f "$TMPDIR/r091_table_bin"
 if [ -z "$r091_bad" ]; then
     echo "  ok  bug 091: normalized-place table — every recorded spelling behaves as recorded"
     PASS=$((PASS + 1))
@@ -2539,6 +2551,9 @@ run_err "$TESTDIR/error_export_narrow_int.con" "E0119"
 # Bug 112 (fixed with 113): an #[intrinsic] declaration is not a foreign binding, so R3 does not
 # refuse it; std.mem's sizeof form compiles outside std (exit 5).
 run_ok "$TESTDIR/regress_112_user_intrinsic.con" "5"
+# Bug 177: literals for alias-typed fields, payloads, field stores, returns and constants are
+# typed at the expanded type, so the stricter CoreCheck accepts them (exit 42).
+run_ok "$TESTDIR/regress_177_alias_value_hints.con" "42"
 
 # === Cross-module and parser tests ===
 run_ok "$TESTDIR/test_module_nested.con" 42
@@ -12318,8 +12333,7 @@ fi
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
 # python3 it degrades to running without a watchdog rather than skipping the fixtures,
 # and says so once, so a hang on such a machine is at least explicable.
-BOUNDED_PARENT="$SUITE_TMPDIR"
-source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
+# (lib/bounded.sh is sourced once, right after SUITE_TMPDIR is set, so every section can use it.)
 
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do

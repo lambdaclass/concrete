@@ -6387,6 +6387,8 @@ def diagnosticCodesReport : String :=
     entry "E0507" "core-check" "error" "negation on non-numeric type",
     entry "E0508" "core-check" "error" "logical not on non-Bool",
     entry "E0509" "core-check" "error" "bitwise not on non-integer",
+    -- Core-check: binder agreement (bug 177)
+    entry "E0510" "core-check" "error" "binding type mismatch (let, assignment, argument, field or store)",
     -- Core-check: capability (E0520–E0522)
     entry "E0520" "core-check" "error" "insufficient capabilities",
     entry "E0521" "core-check" "error" "missing capability",

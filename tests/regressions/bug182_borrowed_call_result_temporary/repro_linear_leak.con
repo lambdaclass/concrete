@@ -1,0 +1,10 @@
+// Bug 182, second form: a borrowed linear call result (`&int_to_string(..)`) is never destroyed.
+// Expected: refused (REF-5) or the temporary destroyed after the call. Observed: exit 5 in both
+// consumers, and valgrind reports 32 bytes definitely lost (the String's buffer).
+fn n(s: &String) -> Int {
+    return string_length(s);
+}
+
+fn main() with(Alloc) -> Int {
+    return n(&int_to_string(12345));
+}

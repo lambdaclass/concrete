@@ -146,6 +146,7 @@ E0506	unmigrated:types	bitwise operator on non-integer
 E0507	unmigrated:types	negation on non-numeric type
 E0508	unmigrated:types	logical not on non-Bool
 E0509	unmigrated:types	bitwise not on non-integer
+E0510	internal	binding type mismatch (let, assignment, argument, field or store)
 E0520	unmigrated:trusted	insufficient capabilities
 E0521	unmigrated:trusted	missing capability
 E0522	unmigrated:trusted	argument count mismatch

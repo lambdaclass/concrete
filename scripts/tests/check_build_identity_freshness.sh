@@ -23,6 +23,20 @@ require_fresh_binary || exit 1
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 BIN="$ROOT_DIR/.lake/build/bin/concrete"
 
+# THE GENERATOR RUNS IN A PRIVATE COPY OF ITS INPUTS, never in this checkout (R-0546). It rewrites
+# Concrete/BuildIdentity.lean in place (`cat >`, not atomic), and the probes below append to
+# Concrete/Proof/Replay.lean and add Concrete/__InventoryProbe.lean. In a parallel pass every other
+# gate's require_fresh_binary then rebuilt the shared compiler from those transient sources
+# ("object file .../Concrete/Proof/Replay.olean does not exist"). The copy holds exactly the
+# generator's inventory roots (Concrete/, Main.lean, lakefile.toml, lean-toolchain) and the generator.
+SRC_COPY="$TMP/src"
+mkdir -p "$SRC_COPY/scripts/gen"
+cp -R Concrete "$SRC_COPY/Concrete" && cp Main.lean lakefile.toml lean-toolchain "$SRC_COPY/" \
+  && cp scripts/gen/build_identity.sh "$SRC_COPY/scripts/gen/" \
+  || { echo "FATAL: could not make a private copy of the identity inputs" >&2; exit 2; }
+gen_identity() { bash "$SRC_COPY/scripts/gen/build_identity.sh" >/dev/null 2>&1; }
+CBI="$SRC_COPY/Concrete/BuildIdentity.lean"
+
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
@@ -34,12 +48,12 @@ REPORTED="$("$BIN" examples/elf_header/src/main.con --report receipts 2>/dev/nul
             | grep -oE 'build:[0-9a-f]+' | head -1 | cut -d: -f2)"
 # What the SOURCES say, re-derived now.
 cp "Concrete/BuildIdentity.lean" "$TMP/committed.lean"
-bash scripts/gen/build_identity.sh >/dev/null 2>&1
-FRESH="$(grep -oE 'buildIdentity : String := "[0-9a-f]+"' Concrete/BuildIdentity.lean \
+gen_identity
+FRESH="$(grep -oE 'buildIdentity : String := "[0-9a-f]+"' "$CBI" \
          | grep -oE '[0-9a-f]{32}' | head -1)"
 COMMITTED="$(grep -oE 'buildIdentity : String := "[0-9a-f]+"' "$TMP/committed.lean" \
              | grep -oE '[0-9a-f]{32}' | head -1)"
-cp "$TMP/committed.lean" "Concrete/BuildIdentity.lean"
+cp "$TMP/committed.lean" "$CBI"
 
 if [ -n "$REPORTED" ] && [ -n "$FRESH" ] && [ -n "$COMMITTED" ]; then
   ok "all three values were readable (reported, committed, freshly derived)"
@@ -105,12 +119,12 @@ fi
 # NON-VACUITY for the inventory digest: it must move when the FILE LIST moves, and it must NOT move
 # for an ordinary edit. Without both halves, a constant would satisfy either one alone.
 INV_PROBE="$TMP/inv_probe.lean"
-cp "Concrete/BuildIdentity.lean" "$TMP/inv.committed"
-printf -- '-- transient inventory probe\n' > "Concrete/__InventoryProbe.lean"
-bash scripts/gen/build_identity.sh >/dev/null 2>&1
-INV_DIG_MOVED="$(grep -oE 'buildIdentityInventoryDigest : String := "[0-9a-f]+"' Concrete/BuildIdentity.lean | grep -oE '[0-9a-f]{32}' || true)"
-rm -f "Concrete/__InventoryProbe.lean"
-cp "$TMP/inv.committed" "Concrete/BuildIdentity.lean"
+cp "$CBI" "$TMP/inv.committed"
+printf -- '-- transient inventory probe\n' > "$SRC_COPY/Concrete/__InventoryProbe.lean"
+gen_identity
+INV_DIG_MOVED="$(grep -oE 'buildIdentityInventoryDigest : String := "[0-9a-f]+"' "$CBI" | grep -oE '[0-9a-f]{32}' || true)"
+rm -f "$SRC_COPY/Concrete/__InventoryProbe.lean"
+cp "$TMP/inv.committed" "$CBI"
 if [ -n "$INV_DIG_MOVED" ] && [ "$INV_DIG_MOVED" != "$INV_DIG_SRC" ]; then
   ok "adding a compiler source moves the inventory digest ($INV_DIG_SRC -> $INV_DIG_MOVED)"
 else
@@ -121,13 +135,13 @@ echo "=== the identity moves when the compiler's sources move ==="
 
 # NON-VACUITY. Without this, a generator that emitted a fixed string would satisfy every assertion
 # above. A file the digest covers is perturbed, the value re-derived, and the file restored.
-PROBE="Concrete/Proof/Replay.lean"
+PROBE="$SRC_COPY/Concrete/Proof/Replay.lean"
 cp "$PROBE" "$TMP/probe.orig"
 printf -- '-- transient probe for check_build_identity_freshness.sh\n' >> "$PROBE"
-bash scripts/gen/build_identity.sh >/dev/null 2>&1
-MOVED="$(grep -oE '[0-9a-f]{32}' Concrete/BuildIdentity.lean | head -1)"
+gen_identity
+MOVED="$(grep -oE '[0-9a-f]{32}' "$CBI" | head -1)"
 cp "$TMP/probe.orig" "$PROBE"
-cp "$TMP/committed.lean" "Concrete/BuildIdentity.lean"
+cp "$TMP/committed.lean" "$CBI"
 if [ "$MOVED" != "$COMMITTED" ]; then
   ok "changing a compiler source changes the build identity ($MOVED)"
 else
@@ -135,9 +149,9 @@ else
 fi
 # ...and restoring the source restores the value, so the digest is a function of content and not of
 # how many times the generator has run.
-bash scripts/gen/build_identity.sh >/dev/null 2>&1
-RESTORED="$(grep -oE '[0-9a-f]{32}' Concrete/BuildIdentity.lean | head -1)"
-cp "$TMP/committed.lean" "Concrete/BuildIdentity.lean"
+gen_identity
+RESTORED="$(grep -oE '[0-9a-f]{32}' "$CBI" | head -1)"
+cp "$TMP/committed.lean" "$CBI"
 if [ "$RESTORED" = "$COMMITTED" ]; then
   ok "restoring the source restores the identity — it is a function of content alone"
 else

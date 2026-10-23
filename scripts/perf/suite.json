@@ -1,5 +1,5 @@
 {
-  "suite_version": 1,
+  "suite_version": 2,
   "comment": "Bump suite_version whenever a benchmark below changes meaning (program, size, command). Records with different suite_version are never compared.",
   "repeats": 5,
   "projects": [

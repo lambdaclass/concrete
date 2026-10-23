@@ -571,7 +571,7 @@ echo "=== the tracked generated file is what its generator produces ==="
 # allowance without it would be the hole, not the gate.
 REFS_FILE="Concrete/Proof/GeneratedAttestations.lean"
 cp "$REFS_FILE" "$TMP/refs.committed"
-# NOTHING HERE WRITES THE SHARED TREE (R-0547). This gate used to regenerate $REFS_FILE in place and
+# NOTHING HERE WRITES THE SHARED TREE (R-0546). This gate used to regenerate $REFS_FILE in place and
 # to append a probe function to examples/hmac_sha256/src/main.con, restoring both afterwards. In a
 # parallel pass that is a race, not a restore: while the probe was in place, concurrent gates read a
 # mutated example ("'__attestation_probe' is a reserved identifier"), and while the regenerated .lean

@@ -21,6 +21,85 @@ had modelled stdin as a byte snapshot the driver took up front. It is now a sour
 binary: a program that never reads (21) and a control whose single two-byte read returns at once
 (131). Record: [bug 184](docs/bugs/184_interp_reads_stdin_up_front.md).
 
+### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+
+[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
+gap that could be tightened. The gaps covered are:
+
+- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
+- checked arithmetic and lossy casts;
+- the trusted raw-pointer duplication;
+- bugs 165 and 166;
+- evaluation order;
+- `main`'s exit status;
+- contract typing.
+
+Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
+program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
+records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
+deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
+borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
+Holes and semantic cases are tightened; style-only rules wait for a workload.
+
+`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
+with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
+shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
+E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
+standalone files and 7 inline gate probes.
+
+The witness programs found three silent defects, filed as open under exit 0b:
+
+- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
+  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
+  safe code at `T := Int`.
+- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
+  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
+- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
+  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
+
+Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+
+The user decided the four questions the same day ("do the best long term solution for this problem
+and every problem"):
+
+- **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
+- **D2:** first "only places are borrowable", then replaced by the Austral model ("ok do the austral
+  model with `&s.f` sugar"). Only a variable or a string literal is borrowed, and a reference to a
+  part is a projection through a reference. `&s.f` is front-end sugar, and loans are keyed by root.
+  This closes bug 182; 2 std sites and 1 train3 fixture migrate.
+- **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
+  fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
+- **D4:** every foreign function value is refused now (bug 166), revised after review from an
+  aggregate-only refusal. Function types will carry calling convention, capabilities and safety
+  obligations later.
+
+A second set of decisions the same day ("the best long term solution for everything we discussed")
+adds:
+
+- a bare `T` is Any (linear-capable) and `T: Copy` stays the only kind annotation (revised from
+  "two declared kinds"), with Copy for structs declared and checked, never derived;
+- trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
+  identity;
+- global state: immutable globals everywhere, and mutable state only as declared global cells.
+  Cells live in an unsafe-marked module and are reached through capability-requiring functions;
+  there is no `static mut`, and the compiler's own globals are inventoried as trusted base (revised
+  from "no mutable globals");
+- one file per module, with generated interface artifacts;
+- a `trusted mod` marker in source: only marked modules may hold trusted, foreign and raw code.
+  The marker never confers trust, and a gate lists every marked module (it replaces the allowlist
+  idea);
+- the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
+- disciplines for every pass and every gate.
+
+The doc's §5 orders the work: traits; then the binder, kinds, references, loans and foreign-value
+refusal; then the spec pilot; the trusted base; `read_owned`, contracts and casts; and generated
+interfaces.
+
+G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
+case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
+recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
+implemented yet.
+
 ### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
 
 The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
@@ -32,6 +111,25 @@ closed their scope by hand. Every block now closes through one helper (`closeBlo
 `inBlockScope` applying the block-local consumption rule). A loop body's linear locals are
 therefore checked at the end of the body, which also catches a per-iteration leak in a
 non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
+
+### CoreCheck Compares Every Binder With Its Value: Bug 177 (2026-10-22)
+
+CoreCheck is the independent re-check of elaborated Core, but it never compared a `let`'s declared
+type with its value's type. It compared call arguments by count only, and assignments, fields and
+stores not at all. Returns were compared with a helper that treats every numeric type as equal.
+So when bug 176's checker leak let `let y: u8 = <i32>` through, CoreCheck passed it too, and the
+binary printed 300 from a `u8`. One binder-agreement relation, `bindTyAgrees`, now checks every
+binder: `let`, assignment, direct and indirect call arguments, struct and variant fields, field
+stores, stores through `&mut`/`*mut`, array element stores, array literal elements and the
+branch values of a value `if` or `match` (E0510), and returns (E0560). A fn binder must also declare
+every capability of the fn value it holds. It is exact
+on scalars and on the shape of references, pointers, arrays and fn types, and defers only on
+named, generic and type-variable types, which stay Check's to decide. A `for` loop's
+step is now checked, and CoreCheck's own blocks close their scope. A pass-level test plants
+mismatched values in Core directly, so it stays meaningful after bug 176's fix. The new check also found
+that Elab gave a struct or enum literal's field value an unexpanded alias as its expected type, so
+`S { a: 1 }` with `a: Id` (`type Id = i32`) stored an `Int` literal; field hints now expand aliases. Record:
+[bug 177](docs/bugs/177_corecheck_never_compared_binder_types.md).
 
 ### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
 
@@ -86,6 +184,51 @@ instead of 1555 G (703x). Emitted LLVM and SSA are byte-identical across all 168
 and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_heartbeats`), and
 `check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
 (heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
+
+### Proof Replay Ready For Lean 4.35's Removed Native Axioms (2026-10-22)
+
+Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and `Lean.trustCompiler` (lean4#14953;
+release notes and `Init/Core.lean` checked at both tags). The re-check probe in
+`Concrete/Proof/Replay.lean` named two of them as double-backtick literals, which must resolve, so on
+4.35 the probe would not compile and every theorem would read `notRun`. The pin stays at 4.34.1.
+
+- The native-trust classifier is one piece of Lean source (`nativeAxiomClassifierSrc`) spliced into
+  the probe: the legacy names as unresolved single-backtick literals, plus the `._native.` axioms
+  `Lean.Meta.nativeEqTrue` mints on both toolchains (unchanged between them). `Lean.ofReduceNat`,
+  previously unrecognised (a theorem on it was refused as a generic failure), is now classified native.
+- `check_kernel_recheck.sh` gains two legs: a scan refusing any resolved reference to a removed name
+  in Lean sources, probes held in strings included; and the classifier compiled on its own under
+  4.34.1 and under 4.35, where `native_decide`, `decide +native` and `bv_decide` proofs must read
+  native, a classical proof must not, and every axiom the toolchain declares must be classified
+  (4.35 declares exactly 4.34.1's set minus the three). CI's checker-gates job installs 4.35 and
+  requires the leg; elsewhere it SKIPs when that toolchain is absent.
+- `check_axiom_inventory.sh` lists `Lean.ofReduceNat` as native trust too; on 4.35 its legacy list
+  matches nothing. Two mutation families (134 -> 136) show the new legs kill a reintroduced resolved
+  literal and a dropped legacy name.
+
+### External Checker Pins Kept Current; con-leche Single-Threaded (2026-10-22)
+
+con-leche and nanoda, which re-check every theorem outside the Lean kernel, are trust anchors, and
+an independent checker protects us only while it is current: kernel bug lean4#14576 also got past a
+week-old nanoda. Lean 4.35.0's #15288 fixed thread-sharing undefined behaviour that its notes say
+may affect con-leche.
+
+- con-leche runs with `--jobs=1` at every call in `check_external_checker.sh`; its default was one
+  worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
+  about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
+  fix is already in con-leche's own toolchain (v4.35.0; v4.35.0-rc3 via backport #15306 at the
+  earlier pins), so this is defence in depth.
+- con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
+  results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
+  the gate 22/0. The next day the Arena published a new round, the freshness check reported both
+  pins stale, and they moved again: con-leche `ae1f319` (Lean 4.35.0) and nanoda `998e0a8`, gate
+  22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external checkers, so
+  no identity row changes.
+- `check_checker_pin_freshness.sh` compares the pins with the Arena's published revisions (falling
+  back to upstream heads): a warning when landing, a finding in the nightly campaign tier, and an
+  explicit SKIP offline.
+- Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
+  [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 

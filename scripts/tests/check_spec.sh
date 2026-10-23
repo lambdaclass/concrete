@@ -129,7 +129,9 @@ mutate() {
 import sys
 p, expr = sys.argv[1], sys.argv[2]
 s = open(p).read()
-t = eval(expr, {"s": s, "re": __import__("re")})
+# F is a Markdown code fence, so the expressions below never spell three backticks inside a
+# double-quoted shell-visible string (check_gate_vacuity counts those as command substitutions).
+t = eval(expr, {"s": s, "re": __import__("re"), "F": "\x60" * 3})
 if t == s: sys.exit(1)
 open(p, "w").write(t)
 PY
@@ -149,11 +151,11 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "n
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \
   && control "N1d: Uses names a missing definition" S1 "Uses names 'REF-D9'" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's[:s.rindex("\n```\n")] + "\n" + s[s.rindex("\n```\n") + 5:]' \
+fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's[:s.rindex("\n" + F + "\n")] + "\n" + s[s.rindex("\n" + F + "\n") + 5:]' \
   && control "N1e: an example fence that is never closed" S1 "is never closed" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", "```con pseudocode\nfn f() {}\n```\n<!-- CONFORMANCE", 1) if "<!-- CONFORMANCE" in s else s.replace("**Conformance fixtures.**", "```con pseudocode\nfn f() {}\n```\n\n**Conformance fixtures.**", 1)' \
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", F + "con pseudocode\nfn f() {}\n" + F + "\n<!-- CONFORMANCE", 1) if "<!-- CONFORMANCE" in s else s.replace("**Conformance fixtures.**", F + "con pseudocode\nfn f() {}\n" + F + "\n\n**Conformance fixtures.**", 1)' \
   && control "N1f: a pseudocode block inside an entry" S1 "inside entry" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"```con accept name=fn-pointer-field.*?```\n", "", s, count=1, flags=re.S)' \
+fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(F + r"con accept name=fn-pointer-field.*?" + F + r"\n", "", s, count=1, flags=re.S)' \
   && control "N2a: an example deleted while still registered" S2 "REF-3/fn-pointer-field is registered live" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("No assignment through a reference stores", "No assignment through a reference ever stores", 1)' \
   && control "N2b: a sentence edited without a version bump" S2 "REF-7@1: the sentence changed without a new version" -- lint "${SP[@]}"
@@ -161,7 +163,7 @@ fresh_copy; cp docs/spec/ids.tsv "$TMP/n/base_ids.tsv"; mutate "$TMP/n/spec/ids.
   && control "N3a: a registry row deleted relative to the base" S3 "ids.tsv row REF-7/write-value was removed" -- history "${SP[@]}" --base ctl --base-ids "$TMP/n/base_ids.tsv"
 fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/codes.tsv" 's.replace("E0700\tinternal", "E0700\tunmigrated:statements")' \
   && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("```con accept name=write-value exit=42", "```con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-value exit=42", F + "con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\ntrait Get", "pending=R-9999 now=accept:42\ntrait Get", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"

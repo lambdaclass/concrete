@@ -5,8 +5,9 @@
 # only on the allowlisted Lean kernel axioms. Anything else is a silent trust
 # upgrade and fails the gate:
 #   - `sorryAx`                       → incomplete proof presented as evidence
-#   - `Lean.ofReduceBool`/`trustCompiler` → native-code trust (native_decide,
-#     and bv_decide's compiled LRAT checker) — permitted ONLY for theorems
+#   - native-code trust (native_decide, and bv_decide's compiled LRAT checker): the generated
+#     `._native.` axioms, and up to Lean 4.34 `Lean.ofReduceBool`/`ofReduceNat`/`trustCompiler`
+#     (removed in Lean 4.35, lean4#14953) — permitted ONLY for theorems
 #     named in scripts/tests/axiom_native_trust.txt AND docs/verification/AXIOMS.md
 #   - any user-declared axiom         → must never back proof evidence
 # The full trust story lives in docs/verification/AXIOMS.md; this gate keeps it honest.
@@ -24,7 +25,9 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # Kernel axioms every classical Lean development may use. Nothing else.
 ALLOWLIST="propext Classical.choice Quot.sound"
-NATIVE_AXIOMS="Lean.ofReduceBool Lean.trustCompiler"
+# Up to Lean 4.34 only; Lean 4.35 declares none of them (lean4#14953), so on 4.35 this list matches
+# nothing and native trust is only the `._native.` spelling below. Kept for 4.34 environments.
+NATIVE_AXIOMS="Lean.ofReduceBool Lean.ofReduceNat Lean.trustCompiler"
 NATIVE_FILE="scripts/tests/axiom_native_trust.txt"
 # NATIVE-CODE TRUST HAS TWO SPELLINGS. Lean 4.28's bv_decide/native_decide rested on the axioms above;
 # Lean 4.34's emit a fresh axiom per proof, named `<decl>._native.bv_decide.ax_<n>` (or

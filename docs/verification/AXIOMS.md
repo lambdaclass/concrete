@@ -30,7 +30,12 @@ and LRAT certificate check run as compiled Lean. A theorem proved "by
 kernel-checked bitblasting" is therefore *not* kernel-only: the kernel checks
 the reflection, but the bit-blasting and certificate validation are native
 code. (Lean 4.34 spells this trust as a fresh axiom per call rather than
-`Lean.ofReduceBool`; see below.)
+`Lean.ofReduceBool`; see below. Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and
+`Lean.trustCompiler` altogether (lean4#14953), leaving only the per-call `._native.` axioms. The
+replay's classifier and the axiom-inventory gate recognise both spellings, refer to the removed names
+only as unresolved literals, and `check_kernel_recheck.sh` compiles the classifier under 4.34.1 and
+4.35 against real `native_decide`, `decide +native` and `bv_decide` proofs and each toolchain's full
+axiom set, so a bump cannot silently reclassify native trust.)
 
 Wherever a report or doc says `proved_by_kernel_decision (bv_decide)`,
 read it as "kernel-checked reflection over natively executed bit-blasting
@@ -121,7 +126,8 @@ kernel. Replay: `bash scripts/tests/check_external_checker.sh` (CI job `External
   model in ZF set theory with an ω-chain of Grothendieck universes in which every constant is a
   member of its type (`model_exists`); in particular no proof of `False` is accepted
   (`no_False_declaration`, both in `ConLeche/MainTheorem.lean`). Run with `--verified`, the mode the
-  theorem is about.
+  theorem is about, and with one worker (`--jobs=1`): see
+  [EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md) for why (lean4#15288) and what it costs.
 - **[nanoda](https://github.com/ammkrn/nanoda_lib)** — an independent checker in Rust, with no code
   shared with the Lean kernel or con-leche. No consistency proof: it adds implementation diversity.
 
@@ -134,7 +140,7 @@ evidence; 3834 on the three standard axioms, 35 on native trust; no `sorryAx`.
 
 - **The 3834 standard-axiom theorems** are exported with lean4export (format 3.1.0, built with this
   repository's Lean 4.34.1 so it reads the same `.olean` files) and **accepted by con-leche --verified**
-  (14385 declarations including Lean core dependencies, about six seconds) **and by nanoda** (16377).
+  (14385 declarations including Lean core dependencies; at `8621d95a`, 16175 in about 11 s with one worker) **and by nanoda** (16377).
 - **The 35 native-trust theorems**, HMAC/SHA-256 among them, are declined by con-leche, which accepts
   only the three standard axioms. nanoda **accepts them with exactly the six native axioms above
   permitted**: every step of those proofs is re-checked except the six natively evaluated
@@ -165,7 +171,10 @@ lean4export tag for the new release (it is built with this repository's `lean-to
 must match the release that wrote the `.olean` files), and check the Lean Kernel Arena for the
 con-leche and nanoda revisions it evaluated against that release — prefer those over newer commits,
 since the Arena's soundness suite is the external evidence that a revision rejects what it should.
-Then run the gate; the export metadata leg fails if the exporter and toolchain disagree. A new
+Then run the gate; the export metadata leg fails if the exporter and toolchain disagree.
+`check_checker_pin_freshness.sh` reports when the con-leche or nanoda pin differs from the revision
+behind the Arena's published results — a warning when landing, a finding in the nightly campaign
+([EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md#pins-and-their-freshness); KNOWN_HOLES H29). A new
 `bv_decide` that mints a native axiom fails the owner leg until it is added to
 `axiom_native_owners.txt` and named here.
 

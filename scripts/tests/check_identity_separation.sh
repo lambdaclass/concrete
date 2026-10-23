@@ -322,6 +322,31 @@ elif [ -n "$C6_REFS" ]; then
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi
+# SECOND CONTROL (fast-gates' fixture, run through the same lib/lean_idents.py scan): a line comment
+# that opens `/-`, a block comment glued between tokens, a string holding `--`, and a character literal
+# holding a double quote must not hide the code references on lines 1, 6, 8, 9 and 12.
+_c6_fx="$(mktemp)"
+cat > "$_c6_fx" <<'LEAN'
+def a := Proof.PackageIdentity.of x
+  | .noPackageIdentity w => w
+-- PackageIdentity was deleted
+/- syntheticForModules, in a block comment /- nested packageIdentityOf -/ still comment PackageIdentity -/
+-- /-
+def legacy := syntheticForModules x
+-- -/
+def/- c -/packageIdentityOf := 1
+def s := "--" ++ toString PackageIdentity
+def quote : Char := '"'
+-- " /-
+def legacy2 := packageIdentityOf x
+def h' := 1
+LEAN
+_c6_rc=0; _c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$_c6_fx")" || _c6_rc=$?
+_c6_ctl="$(cut -d: -f2 <<<"$_c6_ctl" | tr '\n' ' ')"
+rm -f "$_c6_fx"
+[ "$_c6_rc" = 0 ] && [ "$_c6_ctl" = "1 6 8 9 12 " ] \
+  && ok "CONTROL: the C6 scan flags code references (also after '-- /-', a glued block comment, a string holding --, and a quote character literal) and ignores noPackageIdentity and comments" \
+  || no "CONTROL: the C6 scan reported lines '$_c6_ctl' (exit $_c6_rc) on its fixture (want: 1 6 8 9 12)"
 
 echo ""
 echo "=== M: the old-to-new map ==="

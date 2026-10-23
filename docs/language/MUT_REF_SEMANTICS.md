@@ -24,6 +24,8 @@ The checker distinguishes two kinds of `&mut T` variable:
 
 This distinction exists because borrow-block refs are tied to a specific scope and alloca, while function parameter refs are incoming pointers with no scope to manage.
 
+**Decided 2026-10-23, not yet implemented** ([TIGHTENING_DECISIONS D1](TIGHTENING_DECISIONS.md#d1-mut-arguments-one-mode-q1-g9-design-examples-b1-and-b2)): the distinction goes. A `&mut` is an exclusive scoped loan: every `&mut` argument is an implicit reborrow (a child loan), borrow-block refs included, and an unused `&mut` may lapse. While a child loan lives its parent is suspended, so overlapping exclusive arguments in one call (`f(r, r)`) stay refused (E0293) while sequential calls are fine, for methods, indirect calls and generic calls alike; reborrows are recorded in Core before specialization. Section 3's "consumes" rows for passing a borrow-block ref to a call and for a `&mut self` receiver become reborrows when R-0496's Core reborrow form lands (MEMORY_SEMANTICS §15.7 G9). This document describes the enforced behavior until then.
+
 To be precise about "reborrowable": the reborrowing of parameter refs is **implicit** — the checker simply does not consume a `&mut T` argument unless it is a borrow-block ref (it checks `env.borrowRefs` before consuming). There is **no explicit reborrow syntax** (`&mut *r` does not parse); see section 10. Borrow-block refs get no reborrowing of either kind — passing one to a function consumes it, per section 3.
 
 ## 3. What Consumes a Borrow-Block `&mut T` Ref

@@ -41,7 +41,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # case <label> <env-assignment> <expected-marker> [shape-predicate]
 # The gate is run with ONE self-test flag set. Its verdict must be red AND must name the reason.
 #
-# THE CASES RUN CONCURRENTLY, THE VERDICTS ARE JUDGED IN ORDER (R-0547). Each case is a full,
+# THE CASES RUN CONCURRENTLY, THE VERDICTS ARE JUDGED IN ORDER (R-0546). Each case is a full,
 # independent run of check_dependency_edges.sh (45-85 s, its own mktemp sandbox), and nine of them in
 # series made this the longest gate of a parallel pass (396 s at JOBS=64). case_run only REGISTERS a
 # case; run_cases launches every registered case (at most MBA_JOBS at once, default all) and then

@@ -175,7 +175,7 @@ def main():
     if not os.path.exists(CC):
         print(f"error: build first ({CC} missing)", file=sys.stderr)
         return 2
-    # GENERATED IN ORDER, CHECKED CONCURRENTLY (R-0547). The checks draw nothing from the seeded
+    # GENERATED IN ORDER, CHECKED CONCURRENTLY (R-0546). The checks draw nothing from the seeded
     # stream, so generating every case first yields exactly the serial sequence; each case compiles
     # in its own file. The reported failure is the LOWEST failing case, the one a serial run stops
     # at, so a seed gives the same report at any FUZZ_JOBS (default: half the cores, at most 8).

@@ -249,7 +249,8 @@ structure ReplayEnvironment where
 inductive RecheckVerdict where
   /-- Every workspace module in the closure replayed through the kernel without error. -/
   | rechecked
-  /-- The theorem rests on native evaluation (`Lean.ofReduceBool`/`trustCompiler`). The kernel
+  /-- The theorem rests on native evaluation (a `._native.` axiom; up to Lean 4.34 also
+      `Lean.ofReduceBool`/`ofReduceNat`/`trustCompiler`; see `nativeAxiomClassifierSrc`). The kernel
       cannot re-run compiled code, so no replay can re-establish it; never treated as rechecked. -/
   | native
   /-- Some module in the closure failed to replay; the message names it. -/
@@ -624,6 +625,29 @@ def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) 
     let some buildDigest ← checkerBuildDigest hashed named | return none
     return some { version, githash, platform, buildDigest }
 
+/-- WHICH AXIOMS ARE NATIVE EVALUATION, as Lean SOURCE: spliced at the head of `recheckProbe`, and
+    compiled on its own, under every supported toolchain, by `check_kernel_recheck.sh`. One text, so
+    the rule the replay applies is the rule the gate tests.
+
+    Two spellings of native trust exist. Lean up to 4.34 declares `Lean.ofReduceBool`,
+    `Lean.ofReduceNat` and `Lean.trustCompiler`; Lean 4.35 removes them (lean4#14953), and native
+    evaluation is then only the axiom `Lean.Meta.nativeEqTrue` mints per use,
+    `<decl>._native.<tactic>.ax_<n>` (`bv_decide`, `native_decide`, `decide +native`), which 4.34
+    already uses. The legacy names are SINGLE-backtick literals: a double-backtick literal must
+    resolve, so it would stop the probe compiling on 4.35 and every theorem would read `notRun`.
+    They stay in the list because a 4.34 environment can still rest on them; on 4.35 they match
+    nothing, which the gate checks against the toolchain's own axiom set. -/
+def nativeAxiomClassifierSrc : String := r#"
+/-- The native-evaluation axioms Lean declared up to 4.34 (removed in 4.35, lean4#14953). -/
+def _concreteLegacyNativeAxioms : List Lean.Name :=
+  [`Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]
+
+/-- An axiom that stands for natively evaluated code: a legacy one, or one minted by
+    `Lean.Meta.nativeEqTrue` (a `_native` name component). -/
+def _concreteIsNativeAxiom (a : Lean.Name) : Bool :=
+  _concreteLegacyNativeAxioms.contains a || (a.toString.splitOn "._native.").length > 1
+"#
+
 /-- The Lean commands that RE-CHECK each theorem through the kernel, in the replay process itself.
 
     For each theorem: if it rests on native evaluation it is reported `native`; otherwise every
@@ -643,7 +667,7 @@ def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) 
     unidentified executable in that role. -/
 def recheckProbe (nonce : String) (theorems : List String) : String :=
   let names := ", ".intercalate (theorems.map fun t => "\"" ++ t ++ "\"")
-  ((r#"
+  ((nativeAxiomClassifierSrc ++ r#"
 -- Fresh kernel re-check of each theorem's workspace dependency closure (R-0208).
 open Lean in
 def _concreteToolchainModule (env : Environment) (sysLib : String)
@@ -722,8 +746,7 @@ open Lean Elab Command in
     -- "succeeded". Only the kernel's standard three may remain; anything else is named.
     let axs ← liftCoreM <| Lean.collectAxioms thm
     let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))
-    if extra.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler
-                           || (a.toString.splitOn "._native.").length > 1) then
+    if extra.any _concreteIsNativeAxiom then
       IO.println s!"CONCRETE-RECHECK NONCE {s} native"
       continue
     if !extra.isEmpty then

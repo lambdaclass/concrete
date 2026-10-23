@@ -180,7 +180,7 @@ if [ -f "$README" ]; then
 fi
 
 echo "=== sub-gates (each runs once, as its own CI step) ==="
-# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh): check_contract_negatives.sh and check_contract_stability.sh are each its own CI
+# DELEGATED, NOT RE-RUN (R-0546, scripts/tests/lib/delegated_gates.sh): check_contract_negatives.sh and check_contract_stability.sh are each its own CI
 # step and its own command in the local full set, so re-running it here repeated every one of its
 # assertions in the same run. This gate now asserts only that the step exists and is unconditional.
 p1_ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }

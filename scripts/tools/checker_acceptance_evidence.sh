@@ -10,7 +10,7 @@
 #     escaping the allow-list);
 #   - a fresh replay of the frozen claim inventory, compared ROW BY ROW with the accepted reference
 #     (check_claim_inventory.sh).
-# These five gates run ONLY here (R-0547): this step is their CI step, and the local full set runs it.
+# These five gates run ONLY here (R-0546): this step is their CI step, and the local full set runs it.
 # It never registers anything. The register is edited by hand, citing this evidence; an unregistered
 # build keeps reading `unknown`.
 #
@@ -43,7 +43,7 @@ else
   echo "UNREGISTERED candidate" > "$OUT/register-status.txt"
 fi
 
-# THE ONLY RUN OF THESE GATES (R-0547). They used to run as their own CI steps AND again here, so every
+# THE ONLY RUN OF THESE GATES (R-0546). They used to run as their own CI steps AND again here, so every
 # assertion they make ran twice per CI run (about 10 of this step's 11 minutes). They now run only
 # here — this step is their CI step and their command in the local full set (run_ci_gates_local.sh no
 # longer excludes it) — which keeps the artifact self-contained: the logs below are the run. They are
