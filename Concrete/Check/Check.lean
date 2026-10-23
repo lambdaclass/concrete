@@ -2201,7 +2201,10 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     let live := before.vars.filterMap fun (_, vi) =>
       if !vi.isCopy && vi.state != .consumed then some vi.uid else none
     setEnv { before with guardUids := live ++ before.guardUids }
-    discard (checkExpr g (some .bool))
+    -- Bug 192 (TYPE-5): a guard is a condition; the `.bool` hint does not assert the type.
+    let gTy ← checkExpr g (some .bool)
+    if gTy != .bool then
+      throwCheck (.condNotBool "match guard" (tyToString gTy)) (some g.getSpan)
     let after0 ← getEnv
     setEnv { after0 with guardUids := before.guardUids }
     let after ← getEnv

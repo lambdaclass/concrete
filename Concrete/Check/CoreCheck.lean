@@ -885,25 +885,33 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     let saved := (← getEnv).vars
     for (bname, bty) in bindings do
       addVar bname bty
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     for s in body do ccCheckStmt s
     let env ← getEnv
     setEnv { env with vars := saved }
   | .litArm value guard body =>
     ccCheckExpr value
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
   | .varArm binding bindTy guard body =>
     let saved := (← getEnv).vars
     addVar binding bindTy
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     for s in body do ccCheckStmt s
     let env ← getEnv
     setEnv { env with vars := saved }
   | .rangeArm lo hi _ guard body =>
     ccCheckExpr lo
     ccCheckExpr hi
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
 
 -- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8 (docs/spec/types.md; this declaration enforces the rule)

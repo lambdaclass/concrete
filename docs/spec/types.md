@@ -144,7 +144,7 @@ mod text_owned {
 <a id="TYPE-4"></a>
 ### TYPE-4. One type per expression, no implicit conversion
 
-**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a loop result) expects that type exactly, with no implicit conversion.
+**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a `break` value) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position.
 
 - Kind: refusal
 - Uses: none
@@ -186,7 +186,7 @@ fn main() -> Int {
 <a id="TYPE-5"></a>
 ### TYPE-5. Conditions are `bool`
 
-**TYPE-5@1.** The condition of an `if` or `while` and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
+**TYPE-5@1.** The condition of an `if`, `while` or `for`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
 
 - Kind: refusal
 - Uses: none
@@ -224,7 +224,7 @@ fn main() -> Int {
 <a id="TYPE-6"></a>
 ### TYPE-6. Operators take operands of one numeric type
 
-**TYPE-6@1.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool`, `char` and, in `Unsafe` code, raw pointers.
+**TYPE-6@1.** Arithmetic operators take two operands of one numeric type, except that trusted or `Unsafe` code may add an integer offset to a raw pointer, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool`, `char` and, in `Unsafe` code, raw pointers.
 
 - Kind: refusal
 - Uses: none
@@ -238,7 +238,8 @@ fn main() -> Int {
 **Rationale.** Mixed widths and signedness are a classic source of silent conversion bugs, so they
 are refused rather than promoted. Comparing aggregates would need a definition of equality per
 type, which the language does not have. Comparing raw pointers exposes addresses, so it needs
-`Unsafe` (bugs 134 and 140).
+`Unsafe` (bugs 134 and 140). Pointer arithmetic written as `p + k` is the form TRUST-1 replaces
+with `ptr::offset` (pending).
 
 ```con reject name=compare-structs code=E0229 stage=check pair=same-type-operands
 struct Copy P { n: Int }
@@ -269,7 +270,7 @@ fn main() -> Int {
 <a id="TYPE-7"></a>
 ### TYPE-7. Aggregates are built and read by their declarations
 
-**TYPE-7@1.** A struct literal names a declared struct and gives each of its fields exactly once, a field access names a field of a struct, an enum literal or pattern names a variant of a declared enum, an array literal has at least one element, and only an array is indexed, by an integer.
+**TYPE-7@1.** A struct literal names a declared struct and gives each of its fields exactly once (directly or, for the fields it does not name, from a `..base`), a field access names a field of a struct, an enum literal or pattern names a variant of a declared enum, an array literal has at least one element, and only an array is indexed, by an integer.
 
 - Kind: refusal
 - Uses: none
@@ -622,7 +623,8 @@ fn main() -> Int {
 Copy only at instantiations whose arguments are Copy (OWN-D1), which Mono computes as a fixpoint
 over the type graph. Under this rule a declaration like `struct Copy Box<T> { v: T }` with a bare
 `T` is refused, and `struct Copy Box<T: Copy> { v: T }` is the way to write it. When it lands,
-OWN-D1 gets a new version.
+OWN-D1 gets a new version, and E0571's rule tag moves from OWN-14 to this entry (OWN-14 is then
+subsumed and retired).
 
 ```con reject name=copy-over-bare-parameter code=E0571 stage=core-check pair=copy-over-copy-parameter pending=R-0510 now=accept:42
 struct Copy Bx<T> { v: T }

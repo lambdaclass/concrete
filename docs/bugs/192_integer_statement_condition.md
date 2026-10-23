@@ -1,4 +1,4 @@
-# Bug 192 — an integer condition of an `if`, `while` or `for` statement compiled
+# Bug 192 — an integer condition of an `if`, `while` or `for` statement, or a match guard, compiled
 
 **Status:** FIXED (branch `wip/spec-single-source`)
 **Found:** 2026-10-23, by the language-specification examples (`docs/spec/types.md`, TYPE-5's
@@ -21,26 +21,30 @@ fn main() -> Int {
 
 Expected: refused, E0223 (TYPE-5: the condition of an `if` or `while` has type `bool`). Observed on
 `wip/spec-single-source` `2ff6bfbf` (train 4 base): the binary exits 42; `--interp` fails with
-"if condition is not a boolean". `while n { .. }` and a `for` header condition behaved the same. The
+"if condition is not a boolean". `while n { .. }`, a `for` header condition and a match guard
+(`3 if n => ..`) behaved the same. The
 value form `let x = if n { 1 } else { 2 };` was already refused with E0223.
 
 ## Cause
 
 - `Concrete/Check/Check.lean`, `checkStmt`: the `.ifElse`, `.while_` and `.forLoop` cases computed
   the condition's type and discarded it (`let _condTy ← checkExpr cond`). Only the expression form
-  (`checkExprCore`, `.ifExpr`) compared it with `bool`.
+  (`checkExprCore`, `.ifExpr`) compared it with `bool`. `checkGuard` passed `bool` as an inference
+  hint to a match guard and discarded the result, so a guard of another type was not refused.
 - `Concrete/Check/CoreCheck.lean`, `ccCheckStmt` and `ccCheckExpr`: the re-check admitted any
   integer type (`cond.ty != .bool && !isInteger cond.ty`), C-style truthiness the language never
-  had, so the defense in depth let it through too. The `.ifExpr` case also reported a non-`bool`
+  had, so the defense in depth let it through too. `ccCheckMatchArm` did not check a guard's type
+  at all. The `.ifExpr` case also reported a non-`bool`
   condition with the `while` code (E0540).
 
 ## Fix
 
-`checkStmt` refuses a non-`bool` condition of an `if`, `while` or `for` statement with E0223
-(`condNotBool`, the statement form of `ifCondNotBool`), and CoreCheck drops the integer allowance
-(E0541 for `if`, E0540 for `while`; the `if` expression now reports E0541). Regression fixtures:
-`error_192_int_if_condition.con`, `error_192_int_while_condition.con` and
-`error_192_int_for_condition.con` (E0223, in `run_tests.sh`), and TYPE-5's reject example in
+`checkStmt` refuses a non-`bool` condition of an `if`, `while` or `for` statement, and `checkGuard`
+a non-`bool` match guard, with E0223 (`condNotBool`, the statement form of `ifCondNotBool`).
+CoreCheck drops the integer allowance (E0541 for `if`, E0540 for `while`) and checks guards (E0541);
+its `if` expression now reports E0541, not the `while` code. Regression fixtures:
+`error_192_int_if_condition.con`, `error_192_int_while_condition.con`,
+`error_192_int_for_condition.con` and `error_192_int_match_guard.con` (E0223, in `run_tests.sh`), and TYPE-5's reject example in
 `docs/spec/types.md`, which `check_spec.sh` runs natively and with `--interp`.
 
 ## Structural cause

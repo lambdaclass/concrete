@@ -18,7 +18,8 @@ type and discarded it, and CoreCheck admitted any integer as a condition, so the
 program with C truthiness while `--interp` stopped with a run-time error. The language
 specification's TYPE-5 example found it, because the specification's examples run on both
 consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
-rather than the `while` code. It is pinned by `error_192_int_{if,while,for}_condition.con`.
+rather than the `while` code. A match guard had the same hole and is refused the same way. It is pinned by
+`error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`.
 
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
