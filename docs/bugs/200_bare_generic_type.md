@@ -29,8 +29,12 @@ type arguments.
 ## Fix
 
 The `.named` case refuses a known type whose declaration has type parameters with E0113 (0 type
-arguments given), before the capability check. Fixtures: `error_200_bare_generic_type.con`
-(E0113) and `regress_200_generic_type_with_arguments.con` (run 42), in `run_tests.sh`. A
+arguments given), before the capability check. A type parameter in scope (the function's or its
+impl's) shadows a declaration of the same name, and a name declared as an alias or trait never
+falls back to the builtin table (`type Vec = Box1<Int>` takes no arguments); both held for the
+capability check too, and both are pinned by `regress_200_type_param_shadows_generic.con`. Fixtures: `error_200_bare_generic_type.con`
+(E0113), `regress_200_generic_type_with_arguments.con` and
+`regress_200_type_param_shadows_generic.con` (run 42), in `run_tests.sh`. A
 rule-impact scan over the 2,169 units of the train 4 corpus found no program newly refused.
 
 ## Structural cause
