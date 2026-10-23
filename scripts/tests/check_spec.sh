@@ -149,6 +149,10 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "n
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \
   && control "N1d: Uses names a missing definition" S1 "Uses names 'REF-D9'" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's.rstrip("\n").removesuffix("```")' \
+  && control "N1e: an example fence that is never closed" S1 "is never closed" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", "```con pseudocode\nfn f() {}\n```\n<!-- CONFORMANCE", 1) if "<!-- CONFORMANCE" in s else s.replace("**Conformance fixtures.**", "```con pseudocode\nfn f() {}\n```\n\n**Conformance fixtures.**", 1)' \
+  && control "N1f: a pseudocode block inside an entry" S1 "inside entry" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"```con accept name=fn-pointer-field.*?```\n", "", s, count=1, flags=re.S)' \
   && control "N2a: an example deleted while still registered" S2 "REF-3/fn-pointer-field is registered live" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("No assignment through a reference stores", "No assignment through a reference ever stores", 1)' \
