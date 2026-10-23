@@ -3284,8 +3284,6 @@ environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Che
 skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
 `VariantIdx`; contract expressions; `ElabVerify`.
 
-(Before: Status (2026-10-18): planned; starts now.)
-
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration
 handle allocated before body elaboration, preserving callable namespaces, specialization arguments
