@@ -603,7 +603,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   -- global instead of against itself (bug 050's family, in the checker).
   | .call (.indirect binding) _typeArgs args _ty =>
     let env ← getEnv
-    match env.vars.lookup binding with
+    match env.vars.lookup binding.name with
     | some (.fn_ paramTys ptrCaps _) =>
       -- The call exercises the authority the fn TYPE declares — no capability
       -- smuggling through callbacks (mirrors the Check-pass fn-pointer rule).
