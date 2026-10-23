@@ -16,7 +16,8 @@ The `else` block of a `let ... else` must end every path in `return`, `break`, `
 call that never returns, and one that can fall through is now refused with E0308. The construct is
 desugared to a `match` before checking, so the rule its design stated had no enforcing site: falling
 out of the block silently skipped the rest of the function. The language specification's patterns
-chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`.
+chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`. A `let ... else`
+over a field-less variant is not recognized yet (it binds nothing; the record says why).
 
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 

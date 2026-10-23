@@ -1587,7 +1587,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- would continue after the whole statement with the pattern's bindings never made.
     match arms with
     | [.mk _ _ _ bs _ _, .varArm sp "_" none elseBody] =>
-      if !bs.isEmpty && bs.all (·.letBound) && !(blockDiverges elseBody) && !(blockNonTerminating elseBody) then
+      if !bs.isEmpty && bs.all (·.letBound) && !(blockEndUnreachable elseBody) then
         throwCheck .letElseFallsThrough (some sp)
     | _ => pure ()
     -- `match *r` reads the pointee BY VALUE: a non-Copy pointee is E0290 (its payloads

@@ -1,6 +1,7 @@
 # Bug 195 — a `let ... else` whose `else` block falls through compiled
 
-**Status:** FIXED (branch `wip/bug195`)
+**Status:** FIXED for every pattern that binds a field (branch `wip/bug195`); a `let ... else` over
+a field-less variant, which binds nothing, is not recognized yet (see Fix)
 **Found:** 2026-10-23, by the language specification's patterns chapter (`docs/spec/patterns.md`,
 PAT-5: the `else` block diverges on every path), on `wip/spec-single-source`
 **Severity:** a documented rule had no enforcing site. In a function without a result type the
@@ -39,12 +40,15 @@ falls through"). Observed on `wip/spec-single-source` `dbb19f87` (train 4 base):
 
 `checkExprCore`'s `match` case recognizes the desugared form (a variant arm whose binders are
 `letBound`, then a catch-all `_` arm) and refuses an `else` body that can fall through
-(`blockDiverges` and `blockNonTerminating` both false) with the new code E0308. Fixtures:
+(its end is reachable by `blockEndUnreachable`, which looks at every statement of the block, the
+same predicate as bug 194's) with the new code E0308. Fixtures:
 `error_195_let_else_falls_through_unit.con` and `error_195_let_else_falls_through.con` (E0308, in
 `run_tests.sh`). A rule-impact scan over the 2,169 units of the train 4 corpus found no program
-newly refused. Limit: a pattern with no binders (`let E::A {} = e else { .. }`) is not recognized,
-because nothing marks its desugared arm; R-0499 removes the limit by checking Core's own
-`let ... else` form.
+newly refused. Limit: a pattern with no binders (a field-less variant, `let E::A {} = e else { .. }`)
+is not recognized, because the only mark the desugaring leaves is on the binders. Such a statement
+binds nothing, so the rest of the function stays meaningful, but a falling-through `else` still
+skips it. The long-term fix keeps `let ... else` as a construct until the checker has seen it
+(preserving its origin rather than inferring it), which R-0499's checker on Core does.
 
 ## Structural cause
 
@@ -54,5 +58,6 @@ erased the only place the rule could be stated.
 
 ## Structural owner
 
-R-0499 (S8: checker rules on Core; elaboration keeps `let ... else` as a construct with its own
-judgment instead of erasing it first) and R-0496 (S7: the elaboration relation defines it).
+R-0499 (S8: checker rules on Core), on the condition that `let ... else` reaches that checker as
+its own construct: moving the check later does not restore information a desugaring already
+erased. R-0496 (S7) gives the construct its elaboration rule.
