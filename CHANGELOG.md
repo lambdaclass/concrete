@@ -10,6 +10,13 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Generic Type Is Named With Its Arguments (bug 200, 2026-10-23)
+
+A generic type written without its argument list (`Box1` for a `struct Box1<T>`) is now refused with
+E0113, as a list of the wrong length already was (bug 073). Before this fix the program compiled and
+ran with the parameter never bound. It is pinned by `error_200_bare_generic_type.con` and
+`regress_200_generic_type_with_arguments.con`.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
