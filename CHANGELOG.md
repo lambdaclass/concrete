@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Block Never Confers Trust (bug 189, 2026-10-23)
+
+`trusted impl` is refused. It made every method of the block trusted whether or not the method
+declared it, so a method added to the block later was audited by nobody. Each function now
+declares `trusted fn` itself. Std and the corpus were migrated by compiling: every `trusted impl`
+became `impl`, and a method was marked `trusted fn` exactly when the compiler then refused it.
+That gave 175 of 326 methods, plus thirteen fixtures marked by hand where an intended earlier
+error hid the need. The other 151 methods were trusted only through their block. The stdlib
+surface manifest was regenerated, and 89 rows lose an inherited `trusted-boundary` class. Pinned
+by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh`.
+
 ### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
 
 A function generic over a capability variable could perform any effect. `capsContain` treated a

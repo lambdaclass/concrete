@@ -112,6 +112,9 @@ declare -A BUG_TEST_MAP=(
   [175]="regress_175_match_arms_all_diverge.con"
   # Bug 188: a capability variable entailed every requirement (Unsafe included). Also
   # check_capability_judgment.sh and three mutation families.
+  # Bug 189: `trusted impl` conferred trust on every method of the block. Also
+  # check_trusted_method.sh's bug 189 section.
+  [189]="error_189_trusted_impl_refused.con"
   [188]="error_188_capvar_console.con error_188_capvar_process.con error_188_capvar_unsafe_call.con error_188_capvar_unsafe_op.con error_188_capvar_unsafe_callback.con error_188_capparam_named_unsafe.con error_188_capvar_method_unsafe_callback.con error_188_capvar_impl_receiver.con error_188_bodyless_capparam.con regress_188_capvar_polymorphism.con"
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
