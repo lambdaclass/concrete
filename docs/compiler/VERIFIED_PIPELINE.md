@@ -609,6 +609,35 @@ branch `vp-r0492`, unlanded).**
     move to the identity one at a time, and then the coercions go.
   - `Callee.indirect` (a call through a fn-typed local) still names its local by a string.
 
+**S5 slice contract 5 — the backends key locals by identity (R-0492 step 4, 2026-10-23; one
+backend per slice; depends on contract 4).**
+- *Representation:*
+  - `CLocal.key : LocalKey` is the binding's `LocalId`, or its Core name for a compiler
+    temporary. `CFnDef.paramKeys` gives the parameters' keys.
+  - `Callee.indirect` carries a `CLocal`, and ElabVerify checks it as a use.
+  - Each migrated backend switches the name coercion off for its own file
+    (`attribute [-instance] CLocal.coeName`), so any remaining read of a local by its spelling is a
+    compile error there.
+- *Slices:*
+  - 4a, the interpreter: the environment and borrow bases (`RefPath.base`, with `baseName` kept
+    for display) are keyed by `LocalKey`.
+  - 4b, Lower: the variable map, loop phis, break/continue snapshots, promoted allocas and `&mut`
+    write-backs are keyed by `LocalKey`. ElabVerify also runs after Mono, because Lower reads
+    post-Mono Core.
+- *Invariant made structural:* in a migrated backend, which binding a reference reads is the
+  identity ElabVerify checked, not the spelling.
+- *Byte identity:*
+  - `--emit-core`, the reports (fingerprints, subject-facts) and `--interp` are identical on the
+    corpus: 1569 Core files, 111 report entry points and 1451 interpreter runs.
+  - `--emit-ssa` / `--emit-llvm` differ on 7 files, and only in register numbering and phi order.
+    The old name-keyed variable map overwrote a dead sibling binding of the same Core name in
+    place (consecutive `for (let mut i …)` loops). Keyed by identity, the new binding is a new
+    entry, so phis are created in a different order. The programs' behaviour is the same, and
+    every gate passes: run_tests, examples, codegen differential and fuzz.
+- *Not yet:* Mono, CoreCheck and `PExpr` extraction (slices 4c – 4e), then the removal of
+  `CLocal.coeName`.
+
+
 
 
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
