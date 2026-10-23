@@ -2640,8 +2640,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                          (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
-                typeBounds := ib.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+                typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -2649,8 +2648,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,
-                typeBounds := tb.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+                typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let localCallIds : List (String × CallableId) := allFnPairs.map fun (f, implTy) =>

@@ -4056,12 +4056,11 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
-    -- A method of a `trusted impl` is trusted (as Elab records it): the trusted-only
-    -- rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
+    -- A method is trusted only when it declares `trusted` itself (bug 189); the
+    -- trusted-only rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
-              , typeBounds := ib.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -4069,8 +4068,7 @@ def checkModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
-              , typeBounds := tb.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>

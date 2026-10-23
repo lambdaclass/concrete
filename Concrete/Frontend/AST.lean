@@ -537,7 +537,6 @@ structure ImplBlock where
   capParams : List String := []
   typeBounds : List (String × List String) := []  -- impl-level param bounds: V -> [Copy], enforced at method-call sites
   methods : List FnDef
-  isTrusted : Bool := false        -- trusted impl: all methods inherit trusted boundary
   span : Span := default
 
 structure TraitDef where
@@ -556,7 +555,6 @@ structure ImplTraitBlock where
   typeBounds : List (String × List String) := []  -- impl-level param bounds (conditional trait impls, H18)
   methods : List FnDef
   capSet : CapSet := .empty        -- capabilities on the impl (used by Destroy in Phase 3)
-  isTrusted : Bool := false        -- trusted impl Trait for Type: methods inherit trusted boundary
   span : Span := default
 
 structure Module where

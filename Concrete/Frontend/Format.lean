@@ -446,24 +446,22 @@ def fmtTraitDef (t : TraitDef) (ind : Nat) : String :=
 
 def fmtImplBlock (ib : ImplBlock) (ind : Nat) : String :=
   let pfx := indent ind
-  let trustedStr := if ib.isTrusted then "trusted " else ""
   let tparamsStr := fmtTypeParams ib.typeParams ib.typeBounds ib.capParams
   -- Include type params on the type name: impl<T, E> Result<T, E> { ... }, and the self
   -- type's capability arguments after them: impl<cap C> Writer<C> { ... }
   let typeNameArgs := if ib.typeParams.isEmpty && ib.capParams.isEmpty then ""
     else s!"<{", ".intercalate (ib.typeParams ++ ib.capParams)}>"
   let methods := ib.methods.map fun m => fmtFnDef m (ind + 1)
-  s!"{pfx}{trustedStr}impl{tparamsStr} {ib.typeName}{typeNameArgs} \{\n{"\n\n".intercalate methods}\n{pfx}}"
+  s!"{pfx}impl{tparamsStr} {ib.typeName}{typeNameArgs} \{\n{"\n\n".intercalate methods}\n{pfx}}"
 
 def fmtImplTraitBlock (itb : ImplTraitBlock) (ind : Nat) : String :=
   let pfx := indent ind
-  let trustedStr := if itb.isTrusted then "trusted " else ""
   let tparamsStr := fmtTypeParams itb.typeParams
   let typeNameArgs := if itb.typeParams.isEmpty then ""
     else s!"<{", ".intercalate itb.typeParams}>"
   let capStr := fmtCapSetTop itb.capSet
   let methods := itb.methods.map fun m => fmtFnDef m (ind + 1)
-  s!"{pfx}{trustedStr}impl{tparamsStr} {itb.traitName} for {itb.typeName}{typeNameArgs}{capStr} \{\n{"\n\n".intercalate methods}\n{pfx}}"
+  s!"{pfx}impl{tparamsStr} {itb.traitName} for {itb.typeName}{typeNameArgs}{capStr} \{\n{"\n\n".intercalate methods}\n{pfx}}"
 
 -- ============================================================
 -- Module formatting
