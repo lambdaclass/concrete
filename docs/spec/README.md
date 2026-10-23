@@ -198,7 +198,14 @@ example states, never only with the other legs.
 
 - **accept**: the program builds natively and the binary exits `N`. `--interp` exits 0 and
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
-  every exemption.
+  every exemption. A third leg runs the Lean semantics (decision B17), for accept and abort
+  examples that are not pending and not project examples: `--report model-diff` evaluates every
+  function of the program that extracts to the ProofCore model (`Concrete.Proof.eval`, scalar
+  signatures today) on boundary inputs, with the model and with the interpreter. A `MISMATCH` row
+  (both produced a value and they differ) or a failing report fails the example; rows where one side
+  produced no value (`partial`, `model_stuck`, `ERROR`, `exhausted`) compare nothing and do not. A
+  program with no extracted function has no third leg; the gate prints how many examples it compared
+  and on how many agreeing inputs.
 - **abort**: the program compiles and traps at run time: the binary is killed by `SIGABRT` (the
   abort helpers of checked operations) and `--interp` stops with a run-time error, not a
   diagnostic that names the trap given by `trap=`. It takes no `exit`, `code` or `stage`.
@@ -240,13 +247,13 @@ and it is counted in SKIPPED.
 | S1 format | Every chapter parses under §2. IDs are unique across chapters, and each ID's prefix is its chapter's. Each entry has one sentence and every field. Every `Uses` names a live definition. A refusal names at least one code, and other kinds name none. Every relative link resolves. |
 | S2 registry | `ids.tsv` has one row per allocated key: an entry version (`REF-3@1`) or an example (`REF-3/stored-field`). Columns: `key`, `state` (`live`, `pending`, `superseded` or `retired:<reason>`) and, for an entry version, the SHA-256 of its normalized sentence (`-` for an example). The `live` and `pending` rows equal what the chapters contain, state for state. A sentence whose hash differs from its version's row needs a new version row. |
 | S3 history | Against a base revision: no `ids.tsv` row is removed, a hash never changes, and a row's state changes only along `pending → live`, `live → superseded` (only when a newer version of the same entry exists) and `pending` or `live → retired:<reason>`. A `superseded` or `retired` row is final, so an ID is never reused. `codes.tsv` gains no `unmigrated` row. When a definition gains a version, every entry that uses it gains one in the same change. The base is `$SPEC_BASE`, or else the merge base with `origin/main`, or `HEAD~1` when that merge base is `HEAD`. |
-| S4 examples | Every example behaves as §2.2 says, on both consumers. |
+| S4 examples | Every example behaves as §2.2 says, on both consumers, and an accepted example's extracted functions agree between the Lean model and the interpreter. |
 | S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. One exception, named by the check: a library contract whose `Enforced by:` names only std declarations may be covered by a native project example, since the interpreter runs single files. |
 | S6 codes | Every code in `--report diagnostic-codes` has exactly one row in `codes.tsv`. The class is `rule` (named by an entry), `unmigrated:<chapter>`, `internal` (a compiler invariant failure, such as `ssa-verify` or `lower`), `tooling` (proof, policy and evidence tooling, not language) or `retired`. Class `rule` holds exactly for the codes some entry names. For each code, the ledger's `rules` field equals the set of `<ID>@<version>` of the entries that name it. The spec owns that mapping, and the compiler's copy is checked against it. |
 | S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |
 | S9 manifests | Every generated manifest (§5) is byte-equal to its generator's output. |
-| S10 site | The site generator (§4) writes one page per chapter with every entry's anchor, and `zola build` succeeds on a scratch copy of `site/`. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
+| S10 site | The site generator (§4) writes one page per chapter with every entry's anchor and the rule index, `scripts/gen/site_reference.py` writes the reference pages, and `zola build` succeeds on a scratch copy of `site/`. `check_site_generated.sh` keeps both sections generated: no tracked copy, every site build runs both generators first, and every site link resolves. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
 | S11 restatement | No normative sentence occurs in a Markdown file outside `docs/spec/` (§6). |
 
 Code-to-rule mapping (S6), behaviour (S4) and coverage (S5) are mechanical. The association
@@ -283,13 +290,18 @@ page per chapter. On each page it:
 - adds Zola front matter;
 - keeps the anchors;
 - labels each example ("accepted, exits 42", "rejected: E0302 at check", "pending: bug-182");
-- rewrites relative repository links to absolute links into the repository.
+- rewrites relative repository links to absolute links into the repository;
 
-`site/content/spec/` is gitignored and contains only that output. `make docs-site`,
-`make docs-serve` and `.github/workflows/book.yml` run the generator before `zola build`.
-When a chapter is published, any hand-copied page under `site/content/reference/` that
-restates its rules is deleted in the same change, and every link to that page is repointed
-to the spec.
+and it writes `rules.md`, the rule index: every entry with its kind, status and codes.
+
+The reference section is generated the same way: `scripts/gen/site_reference.py --out
+site/content/reference` writes one page per document it lists (ABI, architecture, safety, the value
+model and so on), from the document itself, with links to other listed documents and to spec
+chapters rewritten to site links. Both directories are gitignored and contain only that output.
+`make docs-site`, `make docs-serve` and `.github/workflows/book.yml` run both generators before
+`zola build`, and `check_site_generated.sh` refuses a tracked copy, a build that skips a generator
+and a site link to a page that does not exist. The reference pages were hand copies until
+2026-10-23, and every one had drifted from its document.
 
 ## 5. One source for the acceptance manifests
 

@@ -5,7 +5,8 @@
 #
 #   S1 format, S2 registry, S5 coverage, S8 tracking, S11 restatement   spec.py lint (no compiler)
 #   S3 history     ids.tsv / codes.tsv / Semantics: links against a base revision
-#   S4 examples    every example natively and with --interp; pending examples must match `now=` exactly
+#   S4 examples    every example natively and with --interp, accepted ones also under the Lean model
+#                  (--report model-diff); pending examples must match `now=` exactly
 #   S6 codes       every `--report diagnostic-codes` code classified; ledger rule tags == the spec's
 #   S7 sites       `spec: ID` comments at every Enforced by: declaration; names resolve in Lean
 #   S9 manifests   tests/rules/exit_2i.tsv == `spec.py manifest exit_2i`
@@ -83,7 +84,8 @@ step manifest exit_2i --check
 
 echo ""
 echo "=== S10: website ==="
-site_gen() { "${SPECPY[@]}" site --out "$1/content/spec" > /dev/null; }
+site_gen() { "${SPECPY[@]}" site --out "$1/content/spec" > /dev/null \
+  && python3 scripts/gen/site_reference.py --out "$1/content/reference" > /dev/null; }
 site_check() {  # $1 = site copy dir with generated pages; 0 when every chapter and anchor is there
   local d="$1" ch id
   for ch in $(python3 -c 'import sys; sys.path.insert(0,"scripts/spec"); import spec; s=spec.Spec("docs/spec"); print(" ".join(c for c in s.chapters if c in s.text))'); do
@@ -179,6 +181,9 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=struct-field code=E0239 s
   && control "N4c: a wrong stage" S4 "REF-3/struct-field" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-3/struct-field
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("**REF-1@1.**", "**REF-1@2.**", 1)' \
   && control "N4d: a reject example whose diagnostic carries another rule version" S4 "REF-1/return-param" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-param
+# the Lean semantics leg: the model value of `add` is perturbed (TEST-ONLY hook of --report
+# model-diff), so the example must fail on the model alone (native and --interp still agree)
+CONCRETE_MODEL_DIFF_PERTURB=main.add control "N4m: the Lean model disagrees with the interpreter" S4 "the Lean model disagrees" -- run-examples --compiler "$CC" --work "$TMP/n4m" --only TYPE-9/right-arity
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=borrow-each-use exit=42", "name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N4e: a pending example that already holds" S4 "pending example already holds" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/borrow-each-use
 fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-0500 now=accept:41\nmod num", 1)' \

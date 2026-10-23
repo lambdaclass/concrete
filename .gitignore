@@ -183,3 +183,4 @@ tests/regressions/*/*/*
 
 # CI triage reports (scripts/ci/triage.sh writes .triage/<run>.md and rerun markers)
 /.triage/
+site/content/reference/
