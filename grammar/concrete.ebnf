@@ -63,7 +63,7 @@ decl_keyword = 'fn' IDENT [ type_params ] '(' [ param_list ] ')' [ cap_clause ] 
              | 'const' IDENT ':' type '=' expr ';'
              | 'type' IDENT '=' type ';'
              | 'import' IDENT { '.' IDENT } '{' import_sym { ',' import_sym } '}' ';'
-             | 'extern' 'fn' IDENT '(' [ param_list ] ')' [ '->' type ] ';'
+             | 'extern' 'fn' IDENT '(' [ param_list ] ')' [ cap_clause ] [ '->' type ] ';'
              | 'mod' IDENT '{' { top_decl } '}'
              ;
 
@@ -112,10 +112,16 @@ type = '&' [ 'mut' ] type
      | IDENT [ type_args ]
      ;
 
-type_args = '<' type_list '>' ;    (* parser handles >> splitting *)
+type_args = '<' type_arg { ',' type_arg } '>' ;    (* parser handles >> splitting *)
+(* A generic argument is a type or a capability argument (R-0484): `{}` is the  *)
+(* empty capability set and `A + B` a union; a lone name is classified by the   *)
+(* declaration's parameter kinds, after parsing.                                *)
+type_arg  = '{' '}'
+          | type [ '+' IDENT { '+' IDENT } ]
+          ;
 type_list = type { ',' type } ;
 
-cap_clause = 'with' '(' cap_list ')' ;
+cap_clause = 'with' '(' [ cap_list ] ')' ;
 cap_list   = IDENT { ',' IDENT } ;
 
 

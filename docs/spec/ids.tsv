@@ -292,7 +292,7 @@ MOD-1/declared-name	live	-
 MOD-2@1	live	05636d529019c2bc87b42ff7b165954c
 MOD-2/import-private	live	-
 MOD-2/import-public	live	-
-MOD-3@1	live	b95cc81afcc076c2826fa4b3edbe2068
+MOD-3@1	superseded	b95cc81afcc076c2826fa4b3edbe2068
 MOD-3/import-clashes-with-local	live	-
 MOD-3/renamed-import	live	-
 REF-12@1	live	059bcabd15b038011f31128911765406
@@ -312,3 +312,6 @@ SYN-2/precedence-levels	live	-
 SYN-3@1	live	014ff6888bc76bf32600559110ce82a7
 SYN-3/compiler-spelling	live	-
 SYN-3/ordinary-spelling	live	-
+MOD-3@2	live	7380ba88b930e73ce7b44b22b6f93820
+TYPE-15/bare-generic-type	pending	-
+CON-4/ghost-reads-ghost	pending	-

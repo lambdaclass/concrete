@@ -30,8 +30,9 @@ work starts. The design record is
 - Obligation: resolution by identity (`DefId`, `LocalId`), never by spelling (R-0492)
 - Evidence: tested
 
-**Rationale.** Resolution happens once, so every later pass works with what a name denotes rather
-than how it is spelled. Bugs 039 to 045 were names resolved more than once, differently; binders
+**Rationale.** Resolution validates every name once, before checking. Later passes do not yet
+work only with what a name denotes: Elab and CoreCheck still look some names up by spelling, and
+R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
 
@@ -98,7 +99,7 @@ mod m {
 <a id="MOD-3"></a>
 ### MOD-3. A module binds each name once
 
-**MOD-3@1.** A module binds each name at most once, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no declaration takes a name the compiler reserves.
+**MOD-3@2.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a name the compiler reserves.
 
 - Kind: refusal
 - Uses: none
@@ -110,7 +111,10 @@ mod m {
 - Evidence: tested
 
 **Rationale.** A name bound twice in a module made the meaning of a call depend on which binding a
-lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a clash.
+lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a clash. Importing
+the same declaration twice binds the name to one declaration and is accepted. The reserved names
+are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
+reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
 
 ```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
 mod a {

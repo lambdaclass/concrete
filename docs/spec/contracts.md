@@ -117,7 +117,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0420 (elab)
-- Status: enforced
+- Status: partial R-0499
 - Enforced by: Concrete.throwElab
 - Semantics: none
 - Obligation: ghost erasure preserves runtime behaviour (R-0496)
@@ -125,7 +125,8 @@ fn main() -> Int {
 
 **Rationale.** A ghost value names something a proof needs and the program does not keep. Proof
 code cannot change runtime ownership in the other direction either (OWN-11). Ghost destructuring
-bindings are not supported. The code E0420 is also used, wrongly, for an unsupported `append()`
+bindings are not supported. A ghost initializer is elaborated as runtime code today, so it cannot
+read another ghost binding yet (the pending example below). The code E0420 is also used, wrongly, for an unsupported `append()`
 argument; only the ghost case is this rule.
 
 ```con reject name=ghost-read-at-runtime code=E0420 stage=elab pair=ghost-in-contract
@@ -145,6 +146,24 @@ fn f() -> Int {
     let mut acc: Int = 0;
     #[invariant(0 <= i && i <= bound)]
     #[variant(bound - i)]
+    for (let mut i: Int = 0; i < 8; i = i + 1) {
+        acc = acc + i;
+    }
+    return acc;
+}
+
+fn main() -> Int {
+    return f();
+}
+```
+
+```con accept name=ghost-reads-ghost exit=28 pending=R-0499 now=reject:E0420:elab
+fn f() -> Int {
+    ghost let bound: Int = 8;
+    ghost let limit: Int = bound;
+    let mut acc: Int = 0;
+    #[invariant(0 <= i && i <= limit)]
+    #[variant(limit - i)]
     for (let mut i: Int = 0; i < 8; i = i + 1) {
         acc = acc + i;
     }

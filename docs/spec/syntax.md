@@ -22,7 +22,7 @@ rejected (tuples, nested patterns, macros).
 - Status: enforced
 - Enforced by: Concrete.parse
 - Semantics: none
-- Obligation: the recursive-descent parser accepts exactly the grammar's language (checked by tests, not proved)
+- Obligation: the recursive-descent parser accepts exactly the grammar's language (tested by examples; a gate comparing them is part of R-0335)
 - Evidence: tested
 
 **Rationale.** One grammar, LL(1), with one hand-written parser that follows it production by

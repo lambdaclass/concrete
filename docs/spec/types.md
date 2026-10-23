@@ -664,7 +664,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0113 (resolve), E0114 (resolve), E0115 (resolve)
-- Status: enforced
+- Status: partial R-0499
 - Enforced by: Concrete.resolveProgram
 - Semantics: none
 - Obligation: none
@@ -675,7 +675,8 @@ and ran (bug 073), and a missing one surfaced later as an unrelated error on the
 parameter. A capability argument says what a handle may do (R-0484), so a bare `Writer` for a
 `Writer<cap C>` would leave the authority to inference; it is refused instead. The parser
 classifies each argument as a type or a capability by position, and resolution checks the kind
-and the count in both directions.
+and the count in both directions. A generic type named bare, with no argument list, is still
+accepted (the pending example below); only its missing capability arguments are refused.
 
 ```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: T }
@@ -692,6 +693,18 @@ struct Copy Box1<T> { v: T }
 fn main() -> Int {
     let b: Box1<Int> = Box1::<Int> { v: 42 };
     return b.v;
+}
+```
+
+```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments pending=R-0499 now=accept:42
+struct Copy Box1<T> { v: Int }
+
+fn get(b: Box1) -> Int {
+    return b.v;
+}
+
+fn main() -> Int {
+    return get(Box1::<Int> { v: 42 });
 }
 ```
 
