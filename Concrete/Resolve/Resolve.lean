@@ -276,6 +276,12 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       | some _ => ctx
       | none => addError ctx .selfOutsideImpl span
     else if isKnownType ctx name then
+      -- Bug 200: a generic type named bare (`B` for `B<T>`) is E0113 (0 type arguments
+      -- given), as an explicit list of the wrong length is. Before this the missing
+      -- argument was accepted and left an unresolved parameter for later passes.
+      let ctx := match declaredTypeArity ctx name with
+        | some tp => if tp > 0 then addError ctx (.wrongTypeArgCount name tp 0) span else ctx
+        | none => ctx
       -- A struct with capability parameters cannot be named bare: `Writer` alone says
       -- nothing about what the handle may do, so it is an E0115 (0 capability
       -- arguments given), not something to infer later.
