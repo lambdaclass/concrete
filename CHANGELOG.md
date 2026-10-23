@@ -10,6 +10,15 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### One Argument Mode For `&mut` (decision D1, 2026-10-23)
+
+Passing a `&mut` binding to a call is an implicit reborrow whatever made the binding: a parameter,
+a borrow-block binder or an arm binder. `inc(r); inc(r);` inside a borrow block, refused before
+(E0205: the first call consumed `r`), now runs. One checker function decides the mode for every
+call form, and a `&mut self` receiver is the same reborrow. Exclusivity still holds: two exclusive
+arguments of one call reborrowing one reference are E0293, and a deferred call holds its `&mut`
+loan until it runs (`defer inc(r); inc(r);` is E0206). MUT_REF_SEMANTICS §2 – §4 rewritten.
+
 ### References Have A Variable Root: The Austral Model (decision D2, bug 182, 2026-10-23)
 
 A reference is formed only by borrowing a variable, or a string literal as a static immutable root,

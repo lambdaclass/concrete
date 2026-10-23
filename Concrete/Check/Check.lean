@@ -175,11 +175,34 @@ def liveAliasesOf (r : String) (info : VarInfo) (onlyExclusive : Bool) : CheckM 
       (!onlyExclusive || (match vi.ty with | .refMut _ => true | _ => false)) &&
       (match vi.borrowedFrom with | some src => roots.contains src | none => false)).map (·.1)
 
+/-- D1 (decision Q1): a reference binding whose loan a pending deferred call holds (`defer inc(r);`)
+    may not be used again before that call runs (MEMORY_SEMANTICS §15.3, the deferred loan). -/
+def refuseDeferHeldRef (r : String) (info : VarInfo) (span : Option Span) : CheckM Unit := do
+  match info.ty with
+  | .ref _ | .refMut _ => if info.state == .reserved then throwCheck (.variableReservedByDefer r) span
+  | _ => pure ()
+
+/-- D1 (decision Q1, R-0496): ONE argument mode for a reference binding. Passing a reference
+    binding (`r`, whatever made it: a parameter, a borrow-block binder, an arm binder) where a
+    reference is expected is an implicit REBORROW (a copy, for `&T`): the binding stays usable after
+    the call. An owned binding passed where a value is expected is moved, as before. Every call form
+    uses this one function (free, method, static, function-pointer calls), so the mode cannot
+    differ by binding or by call form again. -/
+def consumeCallArgIdent (varName : String) (pTy : Ty) (span : Option Span) : CheckM Unit := do
+  match ← lookupVarInfo varName with
+  | none => pure ()
+  | some info =>
+    match info.ty, pTy with
+    | .ref _, _ | .refMut _, _ => refuseDeferHeldRef varName info span
+    | _, .ref _ | _, .refMut _ => pure ()
+    | _, _ => consumeVarIfExists varName span
+
 /-- Using an exclusive reference binding `r` (`&mut T`) while another live reference shares its
     storage is the aliasing E0232 forbids for an owned binding. -/
 def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo r with
   | some info =>
+    refuseDeferHeldRef r info span
     match info.ty with
     | .refMut _ =>
       if !(← liveAliasesOf r info false).isEmpty then
@@ -192,6 +215,7 @@ def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
 def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo r with
   | some info =>
+    refuseDeferHeldRef r info span
     if !(← liveAliasesOf r info true).isEmpty then
       throwCheck (.cannotBorrowMutablyBorrowed r) span
   | none => pure ()
@@ -316,8 +340,12 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
   match selfKind with
   | some .refMut =>
     match objTy, obj with
+    -- D1: a `&mut self` receiver given a reference binding is an implicit reborrow (it used to
+    -- consume a borrow-block binder only).
     | .refMut _, .ident _ varName =>
-      if (← getEnv).borrowRefs.contains varName then consumeVarIfExists varName span
+      match ← lookupVarInfo varName with
+      | some info => refuseDeferHeldRef varName info span
+      | none => pure ()
     | _, _ => pure ()
   | some .value =>
     let refusedRef := throwCheck (.nonCopyProjection (tyToString innerTy)
@@ -1247,7 +1275,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident _ varName => consumeCallArgIdent varName pTy (some e.getSpan)
         | _ => pure ()
       -- Function pointers are Copy, no need to consume
       useVar fnName (some e.getSpan)
@@ -1393,21 +1421,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         let argTy ← checkExpr arg (some pTy) .callArg
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{fnName}'" (some e.getSpan)
-        -- If arg is a bare identifier of a linear type, consume it —
-        -- but NOT if the parameter type is a reference (borrow, not move).
-        -- Exception: borrow-block exclusive refs (&mut T) must be consumed on call,
-        -- since they are scoped linear views into an alloca.
-        -- Function parameter &mut T refs are reborrowable and not consumed.
+        -- An owned identifier argument is moved; a reference binding is reborrowed (D1).
         match stripParens arg with
-        | .ident _ varName =>
-          match pTy with
-          | .ref _ => pure ()  -- shared reference: Copy, no consume needed
-          | .refMut _ =>
-            let env ← getEnv
-            if env.borrowRefs.contains varName then
-              consumeVarIfExists varName (some e.getSpan)
-            else pure ()
-          | _ => consumeVarIfExists varName (some e.getSpan)
+        | .ident _ varName => consumeCallArgIdent varName pTy (some e.getSpan)
         | _ => pure ()
       return retTy
     | none =>
@@ -2131,7 +2147,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkRefArg arg argTy (some e.getSpan)
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match stripParens arg with
-            | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+            | .ident _ varName => consumeCallArgIdent varName p.ty (some e.getSpan)
             | _ => pure ()
           if foundBuiltin == some .destroy && methodName == destroyMethodName then
             consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
@@ -2173,7 +2189,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident _ varName => consumeCallArgIdent varName pTy (some e.getSpan)
         | _ => pure ()
       -- A concrete call of a type's Destroy impl is the same public destruction as the
       -- bound call: it consumes (bug 091 round 3).
@@ -2207,7 +2223,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident _ varName => consumeCallArgIdent varName pTy (some e.getSpan)
         | _ => pure ()
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
@@ -2758,6 +2774,13 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | .ident _ varName =>
           let env ← getEnv
           match env.vars.lookup varName with
+          -- D1: a reference binding passed to a deferred call is reborrowed, not consumed, and the
+          -- deferred call holds that loan until it runs: the binding is reserved, so no use of it
+          -- may come before (`defer inc(r); inc(r);` is refused).
+          | some info@{ ty := .refMut _, .. } =>
+            let vars' := env.vars.map fun (n, vi) =>
+              if vi.uid == info.uid then (n, { vi with state := .reserved }) else (n, vi)
+            setEnv { env with vars := vars' }
           | some info =>
             if info.state == .consumed then
               let vars' := env.vars.map fun (n, vi) =>

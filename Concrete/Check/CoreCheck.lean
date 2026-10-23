@@ -519,9 +519,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let env ← getEnv
     match lookupBuiltinCap helper with
     | some calleeCaps =>
-      let capD := Capabilities.decideCall env.currentCapSet calleeCaps
-      if !capD.satisfied then
-        addCCError (.insufficientCapabilities helper (capSetToString capD.required) (capSetToString capD.callerHas))
+      let helperD := Capabilities.decideCall env.currentCapSet calleeCaps
+      unless helperD.satisfied do
+        addCCError (.insufficientCapabilities helper (capSetToString helperD.required) (capSetToString helperD.callerHas))
     | none => pure ()
     for arg in args do
       ccCheckExpr arg

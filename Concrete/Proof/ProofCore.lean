@@ -245,8 +245,14 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
       | _ => bare  -- intrinsic, extern, unknown, or ambiguous
   let fnEntries := m.functions.map fun f =>
     let qualName := qualPrefix ++ "." ++ f.sourceName
-    let callees := collectCallsStmts f.body |>.eraseDups |>.map resolveCallee
-    (qualName, callees)
+    -- A compiler-generated runtime call (bug 165) is an edge to its INTRINSIC, by the helper's
+    -- name and never resolved against the program (a module's own `print_string` is another
+    -- node); the capability chains of `--report authority` end at it as before.
+    let callees := (collectCalleesStmts f.body).filterMap fun c => match c with
+      | .direct n => some (resolveCallee n)
+      | .runtime h => some h
+      | .indirect _ => none
+    (qualName, callees.eraseDups)
   fnEntries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildCallGraphModule qualNameMap aliases sub qualPrefix) []
 
@@ -568,9 +574,11 @@ private partial def fingerprintExpr : CExpr → String
   -- Distinct prefix: a direct call and an indirect call through a same-named
   -- local are different programs, so they must not fingerprint alike.
   | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b} {fingerprintExprs args})"
-  -- A compiler-generated runtime-helper call (bug 165) is not a call of a program definition
-  -- of the same spelling, so it does not fingerprint like one.
-  | .call (.runtime h) _ args _ => s!"(rtcall {h} {fingerprintExprs args})"
+  -- A compiler-generated runtime-helper call (bug 165). The V1 fingerprint is FROZEN (its golden
+  -- must not move; V2 is built alongside it), so it keeps the rendering the call had when it was
+  -- a direct call of the helper's spelling. The distinction lives in Core's callee form and in the
+  -- V2 identities, not in this legacy rendering (as bug 135 kept the lossy float rendering).
+  | .call (.runtime h) _ args _ => s!"(call {h} {fingerprintExprs args})"
   | .structLit name _ fields _ =>
     let fs := fields.map fun (n, e) => s!"{n}={fingerprintExpr e}"
     s!"(struct {name} {" ".intercalate fs})"

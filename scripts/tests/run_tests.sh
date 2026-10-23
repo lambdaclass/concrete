@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -8161,6 +8161,12 @@ run_ok "tests/regressions/bug181_generic_borrowed_scrutinee_binder_mode/repro.co
 # Bug 182 / D2 (the Austral model): only a variable or a string literal is a reference's root
 # (E0238), and loans are keyed by root (E0293).
 run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
+# D1: every &mut argument is an implicit reborrow; a deferred call holds its loan; two exclusive
+# reborrows of one reference in one call overlap.
+run_ok "$TESTDIR/regress_d1_mut_ref_reborrow.con" 42
+run_err "$TESTDIR/error_d1_defer_holds_loan.con" "(E0206)"
+run_err "$TESTDIR/error_d1_defer_holds_loan_param.con" "(E0206)"
+run_err "$TESTDIR/error_d1_overlapping_mut_args.con" "(E0293)"
 for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal branch_receiver; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
 done
@@ -8182,7 +8188,7 @@ run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
 run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
 # Bug 165 (silent): a module defining `fn print_int` got it called by every `println`; the
 # reproducer aborted. --interp agreement: the r165 block.
-run_ok "$TESTDIR/regress_165_generated_helper_call.con" $'7 hi true x\nn=hi ok' 42
+run_ok "$TESTDIR/regress_165_generated_helper_call.con" "7 hi true x n=hi ok" 42
 run_ok "tests/regressions/bug165_generated_helper_call_binds_by_spelling/repro.con" 7
 # Bug 088: an unhinted literal is a range-checked `Int` (2^64-1 was accepted:
 # interp 2^64-1, binary -1), and constant casts fold with the interpreter's

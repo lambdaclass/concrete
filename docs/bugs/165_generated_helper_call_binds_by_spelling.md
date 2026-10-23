@@ -74,7 +74,12 @@ form over) build it. Each consumer reads the form instead of the spelling:
   the module's own `fn print_int`), and `capSuppliers` lists it as the intrinsic that supplies the
   capability; `hasIndirectCallExpr` asks `isIndirect`, so a runtime call does not make a body
   uncertifiable;
-- the ProofCore fingerprint renders it `(rtcall h ..)`, distinct from a direct call `(call h ..)`.
+- the legacy V1 fingerprint keeps rendering it `(call h ..)`: that fingerprint is frozen (its golden
+  must not move; a first version rendered `(rtcall h ..)` and moved it), so the distinction lives in
+  Core's callee form and the V2 identities;
+- the proof call graph (and `--report authority`'s capability chains) has an edge from the caller to
+  the helper's intrinsic node, by the helper's name and never resolved against the program, so
+  `main <- main -> print_string` still explains `Console`.
 
 An explicit `print_int(7)` in a module that defines `print_int` still calls the user's function
 (it is a direct call); one in a module that does not is bound to the helper as before
@@ -83,7 +88,7 @@ An explicit `print_int(7)` in a module that defines `print_int` still calls the 
 Regression fixture: `tests/programs/regress_165_generated_helper_call.con` defines `print_int`,
 `print_string`, `print_bool`, `print_char`, `string_append` and `string_append_int` with other
 signatures, prints through `print` / `println` / `append`, and calls the user functions
-explicitly: stdout `7 hi true x` / `n=hi ok`, exit 42, natively and under `--interp`
+explicitly: stdout `7 hi true x n=hi ok`, exit 42, natively and under `--interp`
 (`run_tests.sh`, `run_ok` and the interpreter-agreement loop). Before the fix it is refused
 (E0522: the generated `string_append` call was checked against the user's one-parameter function);
 the original reproducer, which aborted, now prints 7 and exits 0 (`run_ok`).

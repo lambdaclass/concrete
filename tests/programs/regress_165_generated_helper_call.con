@@ -3,7 +3,7 @@
 // were spelled, so a module that defines its own function under a helper's name got it called by
 // every `println` in the module (the reproducer aborted). The generated call now carries the
 // helper's identity (`Callee.runtime`). An EXPLICIT call of the user's function still reaches the
-// user's function. Expected stdout: `7 hi true x` then `n=hi ok`; exit code 42.
+// user's function. Expected stdout: `7 hi true x n=hi ok` (one line); exit code 42.
 
 fn print_int(x: Int) -> Int {
     return x + 35;
@@ -33,7 +33,7 @@ fn string_append_int(x: Int) -> Int {
 fn main() with(Console, Alloc) -> Int {
     let s: String = "hi";
     print(7, " ", &s);
-    println(" ", true, " ", 'x');
+    print(" ", true, " ", 'x', " ");
     let mut out: String = "";
     append(&mut out, "n=", &s, " ok");
     println(&out);

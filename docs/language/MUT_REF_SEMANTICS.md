@@ -14,36 +14,46 @@ This document specifies exactly when `&mut T` references are consumed, when they
 
 ---
 
-## 2. Two Kinds of `&mut T` Variable
+## 2. One Argument Mode for Every `&mut T` Binding (decision D1, implemented 2026-10-23)
 
-The checker distinguishes two kinds of `&mut T` variable:
+Every `&mut T` binding, whatever made it (a function parameter, a borrow-block binder
+`borrow mut n as r in R { .. }`, a match arm binder), is passed the same way: **passing it where a
+reference is expected is an implicit reborrow**, and the binding stays usable after the call
+([TIGHTENING_DECISIONS D1](TIGHTENING_DECISIONS.md#d1-mut-arguments-one-mode-q1-g9-design-examples-b1-and-b2)).
+One function in the checker decides it for every call form (`consumeCallArgIdent`: free function,
+method argument, static method, function pointer), and a `&mut self` receiver given a reference
+binding is the same reborrow. An exclusive reference that is never used may lapse: it owns nothing.
 
-**Borrow-block refs** — created by `borrow mut n as r in R { ... }`. These are scoped linear views into an alloca. They are tracked in `env.borrowRefs` and are consumed when passed to a function.
+Before D1 a borrow-block binder was consumed by the first call it was passed to (`inc(r); inc(r);`
+inside a borrow block was E0205) while a parameter was reborrowed: two modes for one type.
 
-**Function parameter refs** — received as `fn foo(x: &mut T)`. These are reborrowable pointers. They can be used multiple times in function calls without consumption. Each call implicitly reborrows through the pointer.
+What still holds every exclusive use apart:
 
-This distinction exists because borrow-block refs are tied to a specific scope and alloca, while function parameter refs are incoming pointers with no scope to manage.
+- two exclusive arguments of ONE call that reborrow the same reference overlap (`two(r, r)`,
+  E0293);
+- a deferred call holds the loan of a `&mut` reference it was given until it runs: after
+  `defer inc(r);` no use of `r` may come before the deferred call (E0206,
+  `error_d1_defer_holds_loan*.con`);
+- a live exclusive reborrow (`let s = &mut *r` where allowed) still freezes `r` (E0232).
 
-**Decided 2026-10-23, not yet implemented** ([TIGHTENING_DECISIONS D1](TIGHTENING_DECISIONS.md#d1-mut-arguments-one-mode-q1-g9-design-examples-b1-and-b2)): the distinction goes. Every `&mut` argument is an implicit reborrow, borrow-block refs included, and an unused `&mut` may lapse. Section 3's "consumes" rows for passing a borrow-block ref to a call and for a `&mut self` receiver become reborrows when R-0496's Core reborrow form lands (MEMORY_SEMANTICS §15.7 G9). This document describes the enforced behavior until then.
+There is no explicit reborrow syntax; the reborrow is implicit in the call. Making it an explicit
+Core form (R-0496 / design example B5) is not done here: it would move every function's legacy V1
+fingerprint, which is frozen, so it waits for the V2-only identities.
 
-To be precise about "reborrowable": the reborrowing of parameter refs is **implicit** — the checker simply does not consume a `&mut T` argument unless it is a borrow-block ref (it checks `env.borrowRefs` before consuming). There is **no explicit reborrow syntax** (`&mut *r` does not parse); see section 10. Borrow-block refs get no reborrowing of either kind — passing one to a function consumes it, per section 3.
-
-## 3. What Consumes a Borrow-Block `&mut T` Ref
+## 3. What Consumes a `&mut T` Ref
 
 | Operation | Consumes? | Mechanism |
 |-----------|-----------|-----------|
-| Pass `r` to a function taking `&mut T` | **Yes** | `consumeVar` via `borrowRefs` check |
-| Return `r` from a function | **Yes** | Standard linear consumption |
-| Rebind: `let r2 = r` | **Yes** | `r` is consumed; `r2` is the new owner |
-| Method call with `&mut self` receiver (if `r` is in borrowRefs) | **Yes** | Receiver consumed |
+| Return `r` from a function | refused (REF-1) | references are never returned |
+| Rebind: `let r2 = r` | refused (REF-6) | a `let` may not hold a reference |
+| Pass `r` to a call taking `&mut T` | **No** | implicit reborrow (D1) |
+| Method call with `&mut self` receiver | **No** | implicit reborrow (D1) |
 
-After consumption, `r` is in `consumed` state. Any further use is a `variableUsedAfterMove` error.
-
-## 4. What Does NOT Consume a Function Parameter `&mut T`
+## 4. What Does NOT Consume a `&mut T` Argument (any binding)
 
 | Operation | Consumes? | Why |
 |-----------|-----------|-----|
-| Pass `tasks` to a function taking `&mut T` | **No** | Function param refs are reborrowable |
+| Pass `tasks` to a function taking `&mut T` | **No** | Every `&mut` binding is reborrowed (D1) |
 | Method call with `&mut self` on `tasks` | **No** | Same — implicit reborrow |
 | Multiple sequential calls with `tasks` | **No** | Each call reborrows independently |
 

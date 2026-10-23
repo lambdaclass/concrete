@@ -58,7 +58,7 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
     (f : CFnDef) (cap : String) (aliases : List (String × String) := []) : List CapSupplier :=
   -- An import alias (`helper_a as ha`) names its target through the calling module's linker
   -- aliases, exactly as the summary resolves it; the explanation shows the spelling written.
-  let spelled := (collectCallsStmts f.body).eraseDups.filterMap fun written =>
+  let spelledSupplier (written : String) : Option CapSupplier :=
     let c := (aliases.lookup written).getD written
     if (lookup.find? (·.1 == c)).isSome then
       match lookupCalleeCap lookup c with
@@ -74,14 +74,18 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
         | none => none
   -- A compiler-generated runtime call (`println`'s `print_int`) is its intrinsic, never a
   -- program definition of the same spelling (bug 165).
-  let generated := (collectRuntimeCallsStmts f.body).eraseDups.filterMap fun h =>
+  let runtimeSupplier (h : String) : Option CapSupplier :=
     match resolveIntrinsic h with
-    | some iid =>
-      if iid.capability == some cap then some ({ callee := h, kind := "intrinsic" } : CapSupplier) else none
+    | some iid => if iid.capability == some cap then some { callee := h, kind := "intrinsic" } else none
     | none => none
-  -- Deduplicated by spelling AND kind: a body calling both `print(7)` and a user `print_int`
-  -- has two suppliers, the program function and the intrinsic (Codex review).
-  spelled ++ generated.filter fun g => !spelled.any (fun x => x.callee == g.callee && x.kind == g.kind)
+  -- One walk, in source order (the explanation lists callees as written); deduplicated by spelling
+  -- AND kind: a body calling both `print(7)` and a user `print_int` has two suppliers, the program
+  -- function and the intrinsic (Codex review).
+  let all := (collectCalleesStmts f.body).filterMap fun c => match c with
+    | .direct n => spelledSupplier n
+    | .runtime h => runtimeSupplier h
+    | .indirect _ => none
+  all.foldl (fun acc x => if acc.any (fun y => y.callee == x.callee && y.kind == x.kind) then acc else acc ++ [x]) []
 
 def CapSupplier.render (s : CapSupplier) : String :=
   match s.kind, s.targets with
