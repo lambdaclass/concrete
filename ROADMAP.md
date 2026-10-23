@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 10** (3 silent, 1 loud, 6 filed before the discovery record) of 157 bug records.
+**Open bugs: 10** (3 silent, 1 loud, 6 filed before the discovery record) of 158 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -125,7 +125,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 17 attribution-only batches (reviews, follow-ons, CI, controls, development) found 27 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 18 attribution-only batches (reviews, follow-ons, CI, controls, development) found 28 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

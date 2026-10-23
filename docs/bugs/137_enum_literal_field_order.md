@@ -74,8 +74,12 @@ The temporaries are named `ev.t<n>`, which no source identifier can spell.
   not evaluated, and every omitted field is read after the explicit initializers, so it keeps the
   old inline form; so does an update that omits nothing.
 
-The evidence (proof identity) of both literals is unchanged: it records the literal's fields in
-declaration order, as before.
+Check decides ownership for an enum literal's initializers in source order too, since that is now
+the order they run in (a borrow written after a move is the borrow of a moved value). The enum
+literal's evidence (its proof identity) records the fields in source order, so two literals that
+differ only in written order, and therefore in execution order, have different identities; a
+literal written in declaration order keeps its identity. All three were found by the Codex review
+of the first version, with the array case below.
 
 Regression fixture: `tests/programs/regress_136_137_literal_eval_order.con`: an enum literal written
 in reverse declaration order, a three-field variant with a literal in the middle, a functional

@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)
+
+`let t = xs;`, a `match` arm binding an array, and an array passed by value no longer share the
+source's storage in the binary. Lower represents an array value by its storage's address, and
+those three sites passed the address on, so a later write to `xs` changed `t` (`--interp` copied).
+One helper, `snapshotArrayValue`, now copies at each by-value site. Found by the Codex review of
+the bug 136/137 fix; pinned by `regress_190_array_value_copy.con`.
+
 ### Literals Evaluate In Source Order, A Functional-Update Base Once (bugs 136 and 137, 2026-10-23)
 
 `E::V { b: f(), a: g() }` now runs `f()` before `g()`, and `P { b: f(), ..mk() }` runs `f()` and

@@ -337,6 +337,24 @@ private def computeTySize (ty : Ty) : LowerM Nat := do
   let ctx ← getLayoutCtx
   return Layout.tySize ctx ty
 
+/-- Bug 190: an array VALUE is the address of its storage in Lower (an `arrayLit` is its alloca,
+    a variable read is the variable's slot), so binding one from a place, or passing one by value,
+    shared the source's storage: `let t = xs; xs[0] = 9;` changed `t`. Wherever an array is bound
+    or passed BY VALUE from an expression that is not a fresh value (an array literal or a call
+    result), the value is copied into its own storage first. Arrays are Copy, so a copy is what the
+    program means; the interpreter already copies. -/
+private def snapshotArrayValue (value : CExpr) (val : SVal) : LowerM SVal := do
+  match value.ty with
+  | .array _ _ =>
+    match value with
+    | .arrayLit .. | .call .. => return val
+    | _ =>
+      let dst ← freshReg "arrcopy."
+      emitEntryAlloca (.alloca dst value.ty)
+      emit (.store val (.reg dst value.ty))
+      return .reg dst value.ty
+  | _ => return val
+
 /-- Is this type an aggregate that should use stable alloca storage
     instead of phi-transporting through loop headers?
     Only true value-typed aggregates (structs, enums, strings, vecs, arrays)
@@ -1007,7 +1025,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- STABLE base address (promoted local or pointer) — never a loaded copy.
         -- The old `&mut field` special case GEP'd into `lowerExpr obj`, a loaded
         -- struct VALUE, so the field write was silently lost.
-        let v ← lowerExpr arg
+        -- A by-value array argument is the callee's own copy (bug 190).
+        let v ← snapshotArrayValue arg (← lowerExpr arg)
         aVals := aVals ++ [v]
     -- Resolve fn-pointer variables: if the call target is a local variable
     -- holding a fn pointer, resolve it to the actual function / register name.
@@ -1125,7 +1144,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
   | .match_ scrutinee arms ty =>
     -- Bug #3 fix: actual pattern comparison dispatch
     -- Bug #4 fix: capture real result values for phi nodes
-    let scrVal ← lowerExpr scrutinee
+    -- A binder arm binds the scrutinee BY VALUE (bug 190: an array scrutinee is copied).
+    let scrVal ← snapshotArrayValue scrutinee (← lowerExpr scrutinee)
     let mergeLabel ← freshLabel "merge"
     let mergeDst ← freshReg
     let mut phiIncoming : List (SVal × String) := []
@@ -1889,7 +1909,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       emit (.store val (.reg allocaReg ty))
       addPromotedAlloca name allocaReg ty
     else
-      setVar name val
+      setVar name (← snapshotArrayValue value val)
 
   | .assign name value =>
     let val ← lowerExpr value

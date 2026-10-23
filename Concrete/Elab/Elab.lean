@@ -959,9 +959,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             srcInits := srcInits ++ [(sf.name, cExprEv.core)]
             srcEvs := srcEvs ++ [(sf.name, cExprEv.evidence)]
           | none => pure ()  -- unknown field: reported by the checker
-        -- Evidence stays in declaration order (the proof identity of the literal is unchanged).
-        let fieldEvsRev : List (String × Proof.EvidenceExprV2) :=
-          (ev.fields.filterMap fun sf => (srcEvs.lookup sf.name).map (sf.name, ·)).reverse
+        -- Evidence in SOURCE order: the written order is now observable (it is the evaluation
+        -- order), so two literals differing only in it are different implementations and must
+        -- not share an identity (Codex review). A literal written in declaration order keeps its
+        -- previous evidence.
+        let fieldEvsRev : List (String × Proof.EvidenceExprV2) := srcEvs.reverse
         let resultTy := if effectiveTypeArgs.isEmpty then Ty.named enumName
                          else Ty.generic enumName effectiveTypeArgs [] -- enums take no capability parameters
         let declOrder (ops : List (String × CExpr)) : List (String × CExpr) :=

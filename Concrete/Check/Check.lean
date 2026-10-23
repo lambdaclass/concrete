@@ -1554,19 +1554,25 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       match ed.variants.find? fun v => v.name == variant with
       | some ev =>
         for sf in ev.fields do
-          let fieldTy := substTy mapping sf.ty
-          match fields.find? fun (fn, _) => fn == sf.name with
-          | some (_, expr) =>
+          if !(fields.any fun (fn, _) => fn == sf.name) then
+            throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
+        for (fn, _) in fields do
+          match ev.fields.find? fun sf => sf.name == fn with
+          | some _ => pure ()
+          | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+        -- SOURCE ORDER (bug 137): the initializers run in the order written, so ownership is
+        -- decided in that order too; checking them in declaration order credited a borrow
+        -- before a move the program executes first (Codex review).
+        for (fn, expr) in fields do
+          match ev.fields.find? fun sf => sf.name == fn with
+          | some sf =>
+            let fieldTy := substTy mapping sf.ty
             let exprTy ← checkExpr expr (some fieldTy)
             expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
             -- Bug 092: a payload holding a reference (`Option::Some { value: &s }`).
             if tyStoresRef exprTy then
               throwCheck (.refStoredInAggregate s!"payload '{sf.name}' of {enumName}::{variant}" (tyToString exprTy)) (some expr.getSpan)
-          | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
-        for (fn, _) in fields do
-          match ev.fields.find? fun sf => sf.name == fn with
-          | some _ => pure ()
-          | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+          | none => pure ()
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
