@@ -235,7 +235,9 @@ PY
 bug_neg hand_edited "import re; s,n=re.subn(r'\*\*Open bugs: (\d+)\*\*', lambda m: '**Open bugs: '+str(int(m.group(1))+1)+'**', s); assert n==1" ROADMAP.md 1
 bug_neg markers_missing "old='<!-- END GENERATED: bug dashboard -->'; assert s.count(old)==1; s=s.replace(old,'')" ROADMAP.md 2
 bug_neg bug_fixed_not_regenerated "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" docs/bugs/136_functional_update_base_reevaluated.md 1
-bug_neg batch_changed_not_regenerated "old='\tsemantics\tsemantics probes'; assert s.count(old)==1; s=s.replace(old,'\thunt\tsemantics probes')" docs/bugs/discovery.tsv 1
+# The dashboard lists only the most recent counting batches, so the control edits the newest one
+# (a fixed row scrolls out of the table as batches are added, and its edit then changes nothing).
+bug_neg batch_changed_not_regenerated "C={'hunt','examples','workload','design-proofs','semantics','spec','fuzz','interp-coverage'}; L=s.split(chr(10)); i=max(j for j,l in enumerate(L) if len(l.split(chr(9)))>1 and l.split(chr(9))[1] in C); f=L[i].split(chr(9)); f[1]='fuzz' if f[1]=='hunt' else 'hunt'; L[i]=chr(9).join(f); s=chr(10).join(L)" docs/bugs/discovery.tsv 1
 bug_neg unattributed_bug "import re; s,n=re.subn(r',137\t', '\t', s); assert n==1; s,n=re.subn(r',137$', '', s, flags=re.M); assert n==1" docs/bugs/discovery.tsv 2
 bug_neg bug_in_two_batches "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,136\t-')" docs/bugs/discovery.tsv 2
 bug_neg silent_not_found "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134\t133')" docs/bugs/discovery.tsv 2
