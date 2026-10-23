@@ -938,7 +938,7 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
   -- it makes the function non-proof-extractable (disclosed in identifyUnsupported).
   | .enumArm enumName variant bindings none body => do
     let pbody ← cStmtsToPExpr body
-    some (.enumPat enumName variant (bindings.map Prod.fst), pbody)
+    some (.enumPat enumName variant (bindings.map (·.1.name)), pbody)
   | .litArm value none body => do
     -- Literal patterns must extract to PExpr values; we then read
     -- the literal value back out for the pattern shape. Only int
