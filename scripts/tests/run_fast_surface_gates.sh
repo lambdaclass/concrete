@@ -41,22 +41,34 @@ GATES=(
   "site pages generated from docs|bash scripts/tests/check_site_generated.sh"
 )
 
+# Every constituent's output is kept in its own log. The runner used to discard it, so a
+# constituent that failed inside the runner and passed when re-run alone left no evidence of why
+# (2026-10-23: docs drift failed once on fede-256gb and the cause could not be recovered). A
+# failure now prints the constituent's own FAIL lines, its exit code, its time and its log, and
+# the logs of a failing run are kept (FAST_SURFACE_LOG_DIR to choose where).
 run_all() {
-  local pass=0 fail=0 failed=""
+  local pass=0 fail=0 failed="" logdir keep=0
+  logdir="${FAST_SURFACE_LOG_DIR:-$(mktemp -d)}"; mkdir -p "$logdir"
   for entry in "${GATES[@]}"; do
-    local fam="${entry%%|*}" cmd="${entry#*|}"
-    if eval "$cmd" >/dev/null 2>&1; then
+    local fam="${entry%%|*}" cmd="${entry#*|}" log rc t0
+    log="$logdir/$(printf '%s' "$fam" | tr -c 'A-Za-z0-9' '_').log"
+    t0=$(date +%s)
+    eval "$cmd" > "$log" 2>&1; rc=$?
+    if [ "$rc" -eq 0 ]; then
       pass=$((pass+1))
     else
-      fail=$((fail+1))
-      failed="$failed\n  FAILED SURFACE GATE [$fam]:\n    $cmd"
+      fail=$((fail+1)); keep=1
+      failed="$failed\n  FAILED SURFACE GATE [$fam] (exit $rc, $(( $(date +%s) - t0 ))s, log $log):\n    $cmd"
+      failed="$failed\n$(grep -E '^\s*(FAIL|INCOMPLETE|error)' "$log" | awk 'NR<=10 {print "      " $0}')"
     fi
   done
   echo "FAST-SURFACE-GATES: PASS=$pass FAIL=$fail"
   if [ "$fail" -ne 0 ]; then
     echo -e "Re-run the exact failing constituent(s):$failed"
+    echo "Constituent logs kept in $logdir"
     return 1
   fi
+  [ -n "${FAST_SURFACE_LOG_DIR:-}" ] || [ "$keep" -ne 0 ] || rm -rf "$logdir"
   return 0
 }
 
@@ -112,11 +124,15 @@ mutate_self_test() {
     if [ "$did" != "1" ]; then
       echo "  WARN $fam: needle matched no row (stale) — NOT proven"
       bad=$((bad+1))
-    elif run_all >/dev/null 2>&1; then
+    elif FAST_SURFACE_LOG_DIR="$base/logs/$ok$bad" run_all > "$base/agg.out" 2>&1; then
       echo "  BAD  $fam: aggregate still PASSED after removing a row (gate is hollow)"
       bad=$((bad+1))
+    elif ! grep -qE '^      .*FAIL' "$base/agg.out"; then
+      # the aggregate must show WHY: the failing constituent's own FAIL lines, not only its name
+      echo "  BAD  $fam: the aggregate failed without showing the constituent's FAIL lines"
+      bad=$((bad+1))
     else
-      echo "  ok   $fam: removing a row turns the aggregate RED"
+      echo "  ok   $fam: removing a row turns the aggregate RED and shows the constituent's FAIL lines"
       ok=$((ok+1))
     fi
     cat "$bak" > "$file"; rm -f "$bak"
