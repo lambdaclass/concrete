@@ -8372,7 +8372,8 @@ run_ok "$TESTDIR/regress_220_radix_literals.con" 203
 run_err "$TESTDIR/error_218_duplicate_function.con" "(E0299)"
 run_err "$TESTDIR/error_218_duplicate_struct.con" "(E0299)"
 run_err "$TESTDIR/error_218_struct_and_enum.con" "(E0299)"
-run_err "$TESTDIR/error_218_function_and_constant.con" "(E0299)"
+run_err "$TESTDIR/error_218_duplicate_constant.con" "(E0299)"
+run_err "$TESTDIR/error_218_duplicate_alias.con" "(E0299)"
 run_ok "$TESTDIR/regress_218_type_and_value_namespaces.con" 42
 # Bug 215: an unknown type written in a cast or a type-argument list (backend panic / silent
 # acceptance before); Resolve refuses it with E0108.

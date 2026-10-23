@@ -5,8 +5,7 @@
 refusal carry a code?).
 **Severity:** silent acceptance, and a backend failure. Two `struct S` declarations compiled with
 the first silently winning (a literal of the second's shape was refused against the first's
-fields); a struct and an enum `E`, two type aliases `A`, and a function and a constant `f` were
-accepted. Two functions `f` failed in `llvm-as` ("invalid redefinition of function") while
+fields); a struct and an enum `E` and two type aliases `A` were accepted. Two functions `f` failed in `llvm-as` ("invalid redefinition of function") while
 `--interp` refused the call; two constants `X` failed at `lower` (E0602) with a message about two
 modules.
 
@@ -37,14 +36,18 @@ Every later consumer keyed its tables by name and took the first (Check, Elab) o
 ## Fix
 
 `Check.declarationCollisions`, run by `checkModule` beside `importBindingCollisions` for every
-module and submodule: within a module, values (functions, constants, `extern` declarations) and
-types (structs, enums, newtypes, aliases, traits) each bind a name once; the later declaration is
-refused with E0299 (`CheckError.declarationCollision`). Two `extern` declarations of one name stay
-with the link-name rule (E0118). A type and a value may share a spelling, as may declarations in
-different modules (`regress_218_type_and_value_namespaces.con`, 42 on both backends). Regression
-legs in `run_tests.sh`: `error_218_duplicate_function.con`, `error_218_duplicate_struct.con`,
-`error_218_struct_and_enum.con` and `error_218_function_and_constant.con` (`run_err ... (E0299)`).
-E0299's registry text names the new shape.
+module and submodule: within a module, callables (functions, `extern` declarations), constants
+and types (structs, enums, newtypes, aliases, traits) each bind a name once; the later declaration
+is refused with E0299 (`CheckError.declarationCollision`). Two `extern` declarations of one name
+stay with the link-name rule (E0118). A type and a callable may share a spelling, as may
+declarations in different modules (`regress_218_type_and_value_namespaces.con`, 42 on both
+backends), and so may a constant and a function: `subject_const_fn_collision.con` (the R-0004
+witness) states that the language permits it, and whether MOD-3's "one declaration per name"
+reaches across those two namespaces is left to the language owner. The parser now records the
+spans of constants and type aliases, so the later of two is the one reported. Regression legs in
+`run_tests.sh`: `error_218_duplicate_function.con`, `error_218_duplicate_struct.con`,
+`error_218_struct_and_enum.con`, `error_218_duplicate_constant.con` and
+`error_218_duplicate_alias.con` (`run_err ... (E0299)`). E0299's registry text names the new shape.
 
 ## Structural cause
 

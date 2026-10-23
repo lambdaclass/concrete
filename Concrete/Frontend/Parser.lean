@@ -2150,6 +2150,7 @@ partial def parseNewtypeDef : ParseM NewtypeDef := do
 
 /-- Parse a const declaration: const name: Type = value; -/
 partial def parseConstDef : ParseM ConstDef := do
+  let sp ← peekSpan
   expect .const_
   let name ← expectIdent
   expect .colon
@@ -2157,16 +2158,17 @@ partial def parseConstDef : ParseM ConstDef := do
   expect .assign
   let value ← parseExpr
   expect .semicolon
-  return { name, ty, value }
+  return { name, ty, value, span := sp }
 
 /-- Parse a type alias: type Alias = Type; -/
 partial def parseTypeAlias : ParseM TypeAlias := do
+  let sp ← peekSpan
   expect .type_
   let name ← expectIdent
   expect .assign
   let targetTy ← parseType
   expect .semicolon
-  return { name, targetTy }
+  return { name, targetTy, span := sp }
 
 /-- Parse an extern fn declaration: extern fn name(params) -> RetType; -/
 partial def parseExternFn : ParseM ExternFnDecl := do

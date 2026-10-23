@@ -129,7 +129,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 220: a radix prefix with no digits (E0001).
   [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
-  [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_function_and_constant.con regress_218_type_and_value_namespaces.con"
+  [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 215: an unknown type in a cast or a type-argument list (E0108).
   [215]="error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con"
   # Bug 213: an arm after an unguarded catch-all arm (SSA verifier natively).

@@ -1,8 +1,0 @@
-// Bug 218: a function and a constant of one name (MOD-3: values share one namespace). Accepted.
-// Expected: E0299.
-fn f() -> Int { return 1; }
-const f: Int = 5;
-
-fn main() -> Int {
-    return f();
-}

@@ -3682,15 +3682,18 @@ end
 /-- Bug 218 (MOD-3): a module binds each name to at most one DECLARATION too, not only one per
     import. Two functions `f` reached `llvm-as` as a redefinition (`--interp` refused the call),
     two structs `S` or a struct and an enum `S` compiled with the first declaration silently
-    winning, and two aliases `A` likewise. Values (functions, constants, `extern` declarations)
-    and types (structs, enums, newtypes, aliases, traits) are separate namespaces, as in a
-    program that names a struct and a function alike. Two `extern` declarations of one name are
-    left to the link-name rule (E0118), which judges whether they bind one C symbol. -/
+    winning, and two aliases `A` likewise. Callables (functions, `extern` declarations),
+    constants and types (structs, enums, newtypes, aliases, traits) are separate namespaces: a
+    struct and a function may share a spelling, and so may a constant and a function
+    (`subject_const_fn_collision.con`, the R-0004 witness, relies on it). Two `extern`
+    declarations of one name are left to the link-name rule (E0118), which judges whether they
+    bind one C symbol. -/
 def declarationCollisions (m : Module) : Diagnostics :=
-  let values : List (String × String × Span) :=
+  let callables : List (String × String × Span) :=
     m.functions.map (fun f => (f.name, "a function", f.span))
-      ++ m.constants.map (fun c => (c.name, "a constant", c.span))
       ++ m.externFns.map (fun e => (e.name, "an extern declaration", e.span))
+  let constants : List (String × String × Span) :=
+    m.constants.map (fun c => (c.name, "a constant", c.span))
   let types : List (String × String × Span) :=
     m.structs.map (fun d => (d.name, "a struct", d.span))
       ++ m.enums.map (fun d => (d.name, "an enum", d.span))
@@ -3713,7 +3716,7 @@ def declarationCollisions (m : Module) : Diagnostics :=
           (seen, errs ++ [d])
       | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
     errs
-  dupes values ++ dupes types
+  dupes callables ++ dupes constants ++ dupes types
 
 -- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
