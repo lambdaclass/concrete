@@ -338,3 +338,4 @@ MOD-3@2	live	7380ba88b930e73ce7b44b22b6f93820
 TYPE-15/bare-generic-type	live	-
 CON-4/ghost-reads-ghost	pending	-
 OWN-5/bare-variant-drops-payload	live	-
+TRUST-4/capability-variable-named-unsafe	live	-

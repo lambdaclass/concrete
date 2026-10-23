@@ -93,7 +93,7 @@ any other.
 
 - Kind: refusal
 - Uses: none
-- Codes: E0240 (check), E0242 (check), E0520 (core-check), E0521 (core-check)
+- Codes: E0121 (resolve), E0240 (check), E0242 (check), E0520 (core-check), E0521 (core-check)
 - Status: enforced
 - Enforced by: Concrete.ccCheckExpr, Concrete.checkExprCore
 - Semantics: none
@@ -108,6 +108,8 @@ every one but `Unsafe`, and `cap IO = File + Console;` declares an alias. A trai
 method may require only the capabilities its trait method declares, and the specialized call graph
 is re-checked after monomorphization. Raw-pointer dereference and assignment, pointer arithmetic,
 pointer casts other than a reference to a pointer, and calls to an `extern fn` require `Unsafe`.
+A capability variable (`<cap C>`) entails only itself, so it may not be spelled like a capability:
+`<cap Unsafe>` would hold the real `Unsafe` by name without being granted it (bug 188, E0121).
 
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=declared-capability
 fn needs() with(File) -> Int {
@@ -126,6 +128,20 @@ fn rd(p: *const Int) -> Int {
 
 fn main() -> Int {
     return 0;
+}
+```
+
+```con reject name=capability-variable-named-unsafe code=E0121 stage=resolve pair=declared-capability
+fn apply<cap Unsafe>(f: fn(Int) with(Unsafe) -> Int) with(Unsafe) -> Int {
+    return f(41);
+}
+
+fn add_one(x: Int) -> Int {
+    return x + 1;
+}
+
+fn main() -> Int {
+    return apply(add_one);
 }
 ```
 
