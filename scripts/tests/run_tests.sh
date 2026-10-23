@@ -1956,7 +1956,7 @@ run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
 run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0302)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0201)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0100)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
