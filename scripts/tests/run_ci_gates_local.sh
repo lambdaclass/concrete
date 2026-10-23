@@ -205,8 +205,10 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   check_spec.sh); verified-pipeline +1 (check_pipeline_artifacts.sh, the only workflow step the
 #   train adds); spec-single-source after train 4 +0 (types.md and patterns.md run inside check_spec.sh).
 #   267 + 0 + 0 + 1 + 0 = 268.
-# 268 -> 269: check_local_identity.sh (R-0492 slice 1, branch vp-r0492: local binder identity in the
-#   checker; bug 202).
+# Train 6 (recounted with --plan on the integrated tree at b7ad714b: 269 lines): train 5's 268;
+#   spec-t6 +0 (statements, patterns, trusted, ffi, contracts, modules and syntax chapters run inside
+#   check_spec.sh; the branch adds no workflow step); vp-r0492 +1 (check_local_identity.sh, R-0492
+#   slice 1: local binder identity in the checker; bug 202). 268 + 0 + 1 = 269.
 EXPECTED_GATE_COMMANDS=269
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
