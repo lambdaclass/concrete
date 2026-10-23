@@ -41,10 +41,6 @@ namespace CLocal
     compiled and silently stopped matching Elab's Core (found in PipelineTest). Without the
     coercion such a pattern is a type error. -/
 def ofName (n : String) : CLocal := { name := n }
-/-- The name coercion, for consumers not yet keyed by identity. A migrated backend switches it
-    off for its own file (`attribute [-instance] CLocal.coeName`), so every place it still reads a
-    local by name is a compile error there, not a silent identity drop. -/
-instance coeName : Coe CLocal String := ⟨CLocal.name⟩
 instance : BEq CLocal := ⟨fun a b => a.name == b.name⟩
 instance : Hashable CLocal := ⟨fun a => hash a.name⟩
 instance : Ord CLocal := ⟨fun a b => compare a.name b.name⟩

@@ -9,9 +9,8 @@ import Concrete.Semantics.BindingMode
 
 namespace Concrete
 
--- R-0492 step 4: Lower keys locals by binding identity (`CLocal.key`). The name coercion is off in
--- this file, so any remaining read of a local by its spelling is a compile error.
-attribute [-instance] CLocal.coeName
+-- R-0492 step 4: Lower keys locals by binding identity (`CLocal.key`). There is no CLocal -> String
+-- coercion (removed at the end of step 4), so any remaining read of a local by its spelling is a compile error.
 
 /-! ## Lowering: Core IR → SSA IR
 

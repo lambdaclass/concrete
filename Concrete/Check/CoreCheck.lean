@@ -9,9 +9,8 @@ import Concrete.Semantics.RefWellFormed
 
 namespace Concrete
 
--- R-0492 step 4: CoreCheck reads locals by binding identity (`CLocal.key`). The name coercion is off
--- in this file, so any read of a local by its spelling is explicit.
-attribute [-instance] CLocal.coeName
+-- R-0492 step 4: CoreCheck reads locals by binding identity (`CLocal.key`). There is no CLocal -> String
+-- coercion (removed at the end of step 4), so any read of a local by its spelling is explicit.
 
 /-! ## Core IR Validation — post-elaboration semantic authority
 
