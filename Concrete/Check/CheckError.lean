@@ -252,6 +252,8 @@ inductive CheckError where
       decided by lookup order, and Check, Elab and the backends used different
       orders. -/
   | importBindingCollision (name : String) (other : String)
+  /-- Bug 218 (MOD-3): two declarations of one name in one namespace of a module. -/
+  | declarationCollision (name : String) (kind : String) (otherKind : String) (otherLine : Nat)
   -- Slice 5: Struct/enum/field + function calls
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
@@ -531,6 +533,8 @@ def CheckError.message : CheckError → String
   | .structLiteralPrivateField structName fieldName => s!"cannot construct '{structName}' here: field '{fieldName}' is private to its defining module"
   | .fieldAccessPrivate structName fieldName => s!"field '{fieldName}' of '{structName}' is private to its defining module"
   | .importBindingCollision name other => s!"import binds '{name}', which {other}"
+  | .declarationCollision name kind otherKind otherLine =>
+    s!"{kind} named '{name}' is also declared in this module as {otherKind} (line {otherLine}); a module binds each name once"
   | .discardNonCopy tyName => s!"`discard(...)` only acknowledges discarding a Copy value; '{tyName}' is a non-Copy resource"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
@@ -593,6 +597,7 @@ def CheckError.hint : CheckError → Option String
   | .newtypeConstructPrivate name => some s!"use {name}'s public constructor function (e.g. `{name}::try_new(...)`); its representation is opaque across modules (docs/language/CONSTRUCTION_RIGHTS.md)"
   | .structLiteralPrivateField structName _ => some s!"'{structName}''s representation is private; construct it through a public constructor function of its defining module, or mark the field `pub` (docs/language/CONSTRUCTION_RIGHTS.md)"
   | .fieldAccessPrivate structName _ => some s!"use a public accessor method on '{structName}', or mark the field `pub` in its defining module (docs/language/CONSTRUCTION_RIGHTS.md)"
+  | .declarationCollision name _ _ _ => some s!"rename one of the two declarations of '{name}'"
   | .importBindingCollision name _ => some s!"a name has one binding per module: rename the import (`import m.\{{name} as other_name}`) or the local definition, or call it qualified as `module::{name}`"
   | .discardNonCopy _ => some "use `destroy(expr)` to run its destructor, or consume it (bind and move it / return it)"
   | .letUnderscoreRemoved => some "`_` ignores only Copy data; consume a non-Copy value (move / return / destroy()) or destructure it exhaustively"
@@ -748,6 +753,7 @@ def CheckError.code : CheckError → String
   | .returnsReference _ _ => "E0236"
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
+  | .declarationCollision _ _ _ _ => "E0299"
 
 /-- The exit 2i rule (with its version) a diagnostic enforces, MEMORY_SEMANTICS §15.5 item 2.
     A code that serves several rules (E0238) has a default here and is overridden at the sites

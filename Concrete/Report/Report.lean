@@ -6396,7 +6396,7 @@ def diagnosticCodesReport : String :=
     entryR "E0305" "check" "error" "a contract expression binds a name (contracts are binder-free propositions; exit 2i)" "SCOPE-1@1",
     entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
-    entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
+    entry "E0299" "check" "error" "a module binds one name twice (two declarations, an import vs a local definition, or two imports)",
     entry "E0307" "check" "error" "the end of a function with a result type is reachable without a return (bug 194)",
     entry "E0308" "check" "error" "the else block of a let ... else can fall through (bug 195)",
     entry "E0309" "check" "error" "a match arm's pattern does not fit the scrutinee's type (bug 196)",

@@ -1,0 +1,8 @@
+// Bug 218: two functions of one name in a module (MOD-3). The binary failed in llvm-as ("invalid
+// redefinition"); `--interp` refused the call. Expected: E0299.
+fn f() -> Int { return 1; }
+fn f() -> Int { return 2; }
+
+fn main() -> Int {
+    return f();
+}

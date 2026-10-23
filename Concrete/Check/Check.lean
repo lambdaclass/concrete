@@ -3679,10 +3679,41 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
+/-- Bug 218 (MOD-3): a module binds each name to at most one DECLARATION too, not only one per
+    import. Two functions `f` reached `llvm-as` as a redefinition (`--interp` refused the call),
+    two structs `S` or a struct and an enum `S` compiled with the first declaration silently
+    winning, and two aliases `A` likewise. Values (functions, constants, `extern` declarations)
+    and types (structs, enums, newtypes, aliases, traits) are separate namespaces, as in a
+    program that names a struct and a function alike. Two `extern` declarations of one name are
+    left to the link-name rule (E0118), which judges whether they bind one C symbol. -/
+def declarationCollisions (m : Module) : Diagnostics :=
+  let values : List (String × String × Span) :=
+    m.functions.map (fun f => (f.name, "a function", f.span))
+      ++ m.constants.map (fun c => (c.name, "a constant", c.span))
+      ++ m.externFns.map (fun e => (e.name, "an extern declaration", e.span))
+  let types : List (String × String × Span) :=
+    m.structs.map (fun d => (d.name, "a struct", d.span))
+      ++ m.enums.map (fun d => (d.name, "an enum", d.span))
+      ++ m.newtypes.map (fun d => (d.name, "a newtype", d.span))
+      ++ m.typeAliases.map (fun d => (d.name, "a type alias", d.span))
+      ++ m.traits.map (fun d => (d.name, "a trait", d.span))
+  let dupes := fun (decls : List (String × String × Span)) =>
+    let (_, errs) := decls.foldl (fun (seen, errs) (n, kind, sp) =>
+      match seen.lookup n with
+      | some (otherKind, otherSp) =>
+        if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
+        else
+          let e := CheckError.declarationCollision n kind otherKind otherSp.line
+          (seen, errs ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
+                            hint := e.hint, code := e.code } : Diagnostic])
+      | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
+    errs
+  dupes values ++ dupes types
+
 -- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
-  let collisions := importBindingCollisions m imports
+  let collisions := declarationCollisions m ++ importBindingCollisions m imports
   if !collisions.isEmpty then .error collisions else
   -- Bug 111: the entry wrapper calls `main` with no arguments, so `main` may not declare
   -- parameters (MAIN_EXIT_MODEL.md, decision of 2026-10-21). Every module-level `main` is

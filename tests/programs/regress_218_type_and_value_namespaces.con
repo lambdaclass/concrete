@@ -1,0 +1,13 @@
+// Bug 218: a type and a value may share a spelling (separate namespaces), and the same name may be
+// declared in two different modules. Expected: 42.
+struct Copy val { n: Int }
+
+fn val(v: val) -> Int { return v.n; }
+
+mod other {
+    pub fn val() -> Int { return 2; }
+}
+
+fn main() -> Int {
+    return val(val { n: 40 }) + other::val();
+}
