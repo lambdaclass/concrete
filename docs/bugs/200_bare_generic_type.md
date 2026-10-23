@@ -4,20 +4,24 @@
 **Found:** 2026-10-23, by the Codex review of the language specification's types chapter (TYPE-15
 claims a named type takes exactly the type arguments its declaration has), then probed on both
 consumers
-**Severity:** a type written with a missing argument compiled. Bug 073 refused a wrong-length
+**Severity:** silent on the interpreter, fails closed natively. Bug 073 refused a wrong-length
 argument list (`Box1<i32, bool>`) but not a missing list, so `B` for a `B<T>` reached the later
-passes with `T` never bound.
+passes with `T` never bound: a value of the bare type failed in `llvm-as` natively while `--interp`
+ran the program, and a signature that names it but is never called compiled and ran on both.
 
 ## Reproducer
 
 ```con pseudocode
 struct Copy Box1<T> { v: Int }
-fn get(b: Box1) -> Int { return b.v; }
-fn main() -> Int { return get(Box1::<Int> { v: 42 }); }
+fn main() -> Int {
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
+}
 ```
 
-Expected: refused (E0113, `Box1` takes 1 type argument, 0 given). Observed on `wip/train4`
-`a4a9c05d`: both consumers return 42.
+Expected: refused (E0113, `Box1` takes 1 type argument, 0 given). Observed on `main` `1b2dba60`:
+natively `llvm-as` fails (`Cannot allocate unsized type`, `alloca %struct.Box1`); `--interp`
+returns 42. With `fn get(b: Box1) -> Int` declared and never called, both consumers return 42.
 
 ## Cause
 
@@ -32,8 +36,8 @@ The `.named` case refuses a known type whose declaration has type parameters wit
 arguments given), before the capability check. A type parameter in scope (the function's or its
 impl's) shadows a declaration of the same name, and a name declared as an alias or trait never
 falls back to the builtin table (`type Vec = Box1<Int>` takes no arguments); both held for the
-capability check too, and both are pinned by `regress_200_type_param_shadows_generic.con`. Fixtures: `error_200_bare_generic_type.con`
-(E0113), `regress_200_generic_type_with_arguments.con` and
+capability check too, and both are pinned by `regress_200_type_param_shadows_generic.con`. Fixtures: `error_200_bare_generic_type.con` and
+`error_200_bare_generic_signature.con` (E0113), `regress_200_generic_type_with_arguments.con` and
 `regress_200_type_param_shadows_generic.con` (run 42), in `run_tests.sh`. A
 rule-impact scan over the 2,169 units of the train 4 corpus found no program newly refused.
 
