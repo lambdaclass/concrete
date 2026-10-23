@@ -6283,6 +6283,7 @@ def diagnosticCodesReport : String :=
     entry "E0118" "resolve" "error" "invalid #[link_name]",
     entry "E0119" "resolve" "error" "invalid #[export_name]",
     entry "E0120" "resolve" "error" "import alias names an intrinsic",
+    entry "E0121" "resolve" "error" "capability parameter spelled like a capability (bug 188)",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
