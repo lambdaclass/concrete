@@ -937,8 +937,8 @@ fn main() -> Int {
 | `break_` | may not skip unconsumed loop-local linear values (E0210); `break f;` **moves** an ident value out (H14), with a one-level loop-depth exemption (a break fires at most once per loop entry) | conservation (H14 rows) + scope |
 | `continue_` | may not skip unconsumed loop-local linear values (E0211) | scope |
 | `defer` | the deferred call **reserves** its operands, consumed at scope exit (OWN-12); a discarded non-Copy or fallible result is refused (E0287 / E0286) | discard |
-| `assert_` | proof-only, erased before Core; must not consume (OWN-11) | — |
-| `assume_` | proof-only, erased before Core; must not consume (OWN-11) | — |
+| `assert_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |
+| `assume_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |
 | `borrowIn` | a borrow block: the source is frozen for the block; the reference is scoped and may not escape (REF-6, REF-8) | conservation (escape rows) |
 | `letDestructure` | enum destructure or let-else: **consumes** the source; bindings **own** payloads; a let-else over a non-Copy enum is **refused** (**E0288**: the no-match path would discard it) | conservation + discard |
 | `letStructDestructure` | a whole-owner **move**: the source is consumed, all fields must be bound (a partial pattern is **E0252**), and each binding is owned (it must be consumed) | conservation |
