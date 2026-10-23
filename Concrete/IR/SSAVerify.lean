@@ -142,7 +142,7 @@ def SSAVerifyError.code : SSAVerifyError → String
   | .aggregatePhi _ _ _ => "E0714"
   | .binopTypeMismatch _ _ _ _ => "E0715"
 
-private def addError (ctx : VerifyCtx) (msg : String) (code : String := "") : VerifyCtx :=
+private def addError (ctx : VerifyCtx) (msg : String) (code : String) : VerifyCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := ctx.declSpan, hint := none, code := code }] }
 
 private def addSSAError (ctx : VerifyCtx) (e : SSAVerifyError) : VerifyCtx :=

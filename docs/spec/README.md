@@ -57,7 +57,7 @@ areas exist (§8).
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-10 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path, test functions) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
-| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
+| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4 (name resolution, visibility, one binding per name, module files) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | pilot: TRAIT-D1, TRAIT-1 to TRAIT-7 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence) |
 

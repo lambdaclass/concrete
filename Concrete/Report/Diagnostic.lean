@@ -138,7 +138,7 @@ def codeRuleTag : String → Option String
   -- docs/spec/contracts.md (one rule since bug 203 moved the append() refusal to E0421)
   | "E0420" => some "CON-4@1"
   -- bug 206: codes for the refusals that had none
-  | "E0122" => some "MOD-1@1"
+  | "E0122" | "E0123" | "E0124" => some "MOD-4@1"
   | "E0313" => some "TYPE-9@1"
   | "E0314" => some "TYPE-10@1"
   | "E0315" => some "TYPE-10@1"

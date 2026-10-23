@@ -39,20 +39,39 @@ no_message_only_helper Concrete \
 # A Diagnostic literal is a `{ ... }` whose fields include `severity := .<ctor>` (the report-side
 # records with string severities are other structures). Its code, when a string literal, must be
 # E<4 digits>; a computed code (`e.code`, `importCode pass true`) is left to the types.
-bad_code_literals() {  # $1 = source root; prints offending blocks
+bad_code_literals() {  # $1 = source root; prints offending sites
   python3 -I - "$1" <<'PY'
 import glob, re, sys
+
+def blocks(s):
+    """Every `{ ... }` span, matched while skipping string literals and comments."""
+    stack, out, i, n = [], [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == '"':
+            i += 1
+            while i < n and s[i] != '"':
+                i += 2 if s[i] == '\\' else 1
+        elif s.startswith('--', i):
+            i = s.find('\n', i); i = n if i < 0 else i
+        elif c == '{': stack.append(i)
+        elif c == '}' and stack: out.append((stack.pop(), i))
+        i += 1
+    return out
+
 for p in sorted(glob.glob(sys.argv[1] + '/**/*.lean', recursive=True)):
     s = open(p, encoding='utf-8').read()
-    for m in re.finditer(r'\{\s*severity\s*:=\s*\.', s):
-        i, d, j = m.start(), 0, m.start()
-        while j < len(s):
-            d += {'{': 1, '}': -1}.get(s[j], 0)
-            if d == 0: break
-            j += 1
-        for c in re.findall(r'\bcode\s*:=\s*"([^"]*)"', s[i:j + 1]):
+    for a, b in blocks(s):
+        body = s[a:b + 1]
+        # a Diagnostic record: a `severity := .<ctor>` field of this block (not of a nested one)
+        inner = re.sub(r'\{[^{}]*\}', '', body[1:-1])
+        if not re.search(r'\bseverity\s*:=\s*\.', inner): continue
+        for c in re.findall(r'\bcode\s*:=\s*"([^"]*)"', inner):
             if not re.fullmatch(r'E[0-9]{4}', c):
-                print(f'{p}:{s.count(chr(10), 0, i) + 1}: code "{c}"')
+                print(f'{p}:{s.count(chr(10), 0, a) + 1}: code "{c}"')
+    # a helper that lets its caller leave the code out
+    for m in re.finditer(r'\(code\s*:\s*String\s*:=\s*"[^"]*"\)', s):
+        print(f'{p}:{s.count(chr(10), 0, m.start()) + 1}: a code parameter with a default')
 PY
 }
 echo "=== B. every code literal is E<4 digits> ==="
@@ -73,7 +92,11 @@ if field_has_no_default "$TMP/D.lean"; then no "control A1: a restored default w
 mkdir -p "$TMP/src"; printf 'def throwCheckMsg (msg : String) : Nat := 0\n' > "$TMP/src/X.lean"
 if no_message_only_helper "$TMP/src"; then no "control A2: a message-only helper was not detected"; else ok "control A2: a message-only helper is detected"; fi
 printf 'def d := { severity := .error, message := "m", pass := "check", span := none, hint := none, code := "" }\n' > "$TMP/src/X.lean"
-[ -n "$(bad_code_literals "$TMP/src")" ] && ok "control B: an empty code literal is detected" || no "control B: an empty code literal was not detected"
+[ -n "$(bad_code_literals "$TMP/src")" ] && ok "control B1: an empty code literal is detected" || no "control B1: an empty code literal was not detected"
+printf 'def d := { message := "m {x}", severity := .error, pass := "check", span := none, hint := none, code := "E12" }\n' > "$TMP/src/X.lean"
+[ -n "$(bad_code_literals "$TMP/src")" ] && ok "control B2: a malformed code in a reordered record is detected" || no "control B2: a malformed code in a reordered record was not detected"
+printf 'private def addError (msg : String) (code : String := "") : Nat := 0\n' > "$TMP/src/X.lean"
+[ -n "$(bad_code_literals "$TMP/src")" ] && ok "control B3: a defaulted code parameter is detected" || no "control B3: a defaulted code parameter was not detected"
 
 # C. the output check run_tests.sh applies
 echo "=== C. the run_err output check ==="
@@ -81,6 +104,10 @@ coded='a.con: error[check]: (E0201) undeclared variable '"'"'x'"'"''
 codeless='a.con: error[check]: undeclared variable '"'"'x'"'"''
 [ -z "$(codeless_error_lines <<<"$coded")" ] && ok "a coded error line passes" || no "a coded error line was flagged"
 [ -n "$(codeless_error_lines <<<"$codeless")" ] && ok "control C: a code-less error line is flagged" || no "control C: a code-less error line was not flagged"
+quoted='a.con: error[check]: see b.con: error[check]: (E0201) there'
+[ -n "$(codeless_error_lines <<<"$quoted")" ] && ok "control C2: a code-less header quoting a coded one is flagged" || no "control C2: a code-less header quoting a coded one passed"
+snippet=' 3 |     let s = "error[check]: not a header";'
+[ -z "$(codeless_error_lines <<<"$snippet")" ] && ok "a source snippet that spells a header is not read as one" || no "a source snippet was read as a header"
 grep -q 'codeless_error_lines' scripts/tests/run_tests.sh \
   && ok "run_tests.sh applies the check to run_err output" || no "run_tests.sh does not apply the check"
 

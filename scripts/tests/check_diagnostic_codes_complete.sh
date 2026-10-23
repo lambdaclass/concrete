@@ -21,10 +21,10 @@ missing=0
 # CheckError / CoreCheck / Elab map errors to codes (`=> "E…"`); the post-mono verifier builds its
 # diagnostics directly (`code := "E…"`), so both spellings are scanned (exit 2i G2: Verify.lean's
 # E0236 was outside this gate).
-# Bug 206 added the sites that wrote their codes outside these mappings (Check, Pipeline,
-# FileSummary, SSAVerify).
-for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean Concrete/Check/Verify.lean Concrete/Resolve/Resolve.lean Concrete/Elab/Elab.lean Concrete/Check/Check.lean Concrete/Pipeline/Pipeline.lean Concrete/Resolve/FileSummary.lean Concrete/IR/SSAVerify.lean; do
-  codes="$(grep -oE '(=> |code := )"E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
+# Bug 206 added the sites that wrote their codes outside these mappings (Check, the module
+# loader in Project, FileSummary, SSAVerify).
+for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean Concrete/Check/Verify.lean Concrete/Resolve/Resolve.lean Concrete/Elab/Elab.lean Concrete/Check/Check.lean Concrete/Resolve/Project.lean Concrete/Resolve/FileSummary.lean Concrete/IR/SSAVerify.lean; do
+  codes="$(grep -oE '(=> |code := |loadError )"E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
   [ -z "$codes" ] && { no "$f: extracted no codes (pattern drift?)"; continue; }
   while IFS= read -r c; do
     # `entryR` is an entry that also names the exit 2i rules the code enforces (§15.5)

@@ -379,3 +379,6 @@ STMT-10/test-with-parameter	live	-
 STMT-10/test-shape	live	-
 CON-3/integer-requires	live	-
 CON-3/spec-fn-calls-runtime-code	live	-
+MOD-4@1	live	bb85f92ea02f27becafa6ee073014d8b
+MOD-4/missing-module-file	live	-
+MOD-4/inline-module	live	-

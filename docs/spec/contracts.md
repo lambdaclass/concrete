@@ -87,7 +87,9 @@ checked like runtime code, so machine types leak into a claim (`#[requires(x < 9
 `i32`), and an ill-typed contract such as `(x > 0) + 1 > 0` is accepted (KNOWN_HOLES H27). The
 binder-free part is already enforced as SCOPE-1 (E0305). Two more parts are enforced: a clause or
 spec function body of the wrong sort (an integer `requires`, a boolean `variant`) is E0320, and a
-call to a function that is not a specification function, or that requires a capability, is E0321.
+call that the clause may not make is E0321: from a spec function body, a call to anything but a
+spec function; from a contract clause, a call to a function that requires a capability (a
+capability-free runtime function is still callable there until the full judgment lands).
 Under the full judgment, operand sorts must agree inside an expression too and literals are
 mathematical.
 

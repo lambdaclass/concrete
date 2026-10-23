@@ -35,11 +35,17 @@ def dirOf (path : String) : String :=
 
 -- Module resolution: read `mod X;` files from disk, recursively (#16b stage 2).
 
+/-- A module-loading refusal (MOD-4). Bug 206: these were strings, which `resolveFiles` wrapped in
+    one code-less diagnostic, so a parse error inside a loaded module lost its own code. -/
+private def loadError (code msg : String) (file : String := "") : Diagnostics :=
+  [{ severity := .error, message := msg, pass := "resolve", span := none, hint := none, code := code, file := file }]
+
 /-- Resolve `mod X;` declarations by reading X.con files from the same directory.
     Detects circular imports via parsedPaths. Collects source map entries. -/
+-- spec: MOD-4 (docs/spec/modules.md; this declaration enforces the rule)
 partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List String)
     (srcMap : SourceMap := [])
-    : IO (Except String (Module × List String × SourceMap)) := do
+    : IO (Except Diagnostics (Module × List String × SourceMap)) := do
   let mut resolvedSubs : List Module := []
   let mut paths := parsedPaths
   let mut sources := srcMap
@@ -56,7 +62,7 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
         | none =>
           match ← (try pure (some (← readFile dirPath)) catch _ => pure none) with
           | some s => pure (dirPath, s)
-          | none => return .error s!"module file not found: {filePath} or {dirPath}"
+          | none => return .error (loadError "E0122" s!"module file not found: {filePath} or {dirPath}" m.sourceFile)
       let filePath := actualPath
       -- For directory modules, resolve sub-stubs from the subdirectory
       let subBaseDir := if actualPath == dirPath then
@@ -74,10 +80,11 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
       let canonPaths ← paths.mapM fun q =>
         try pure (← IO.FS.realPath ⟨q⟩).toString catch _ => pure q
       if canonPaths.contains canon then
-        return .error s!"circular module import: {filePath}"
+        return .error (loadError "E0123" s!"circular module import: {filePath}" m.sourceFile)
       sources := sources ++ [(filePath, source)]
       match parse source with
-      | .error e => return .error s!"error in module '{sub.name}': {renderDiagnostics e}"
+      -- The parser's own diagnostics, with their codes, stamped with the module's file.
+      | .error e => return .error ((e.stampFile filePath).addContext s!"in module '{sub.name}'")
       | .ok subModules =>
         match subModules with
         | [subMod] =>
@@ -88,7 +95,7 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
             sources := newSources
             resolvedSubs := resolvedSubs ++ [resolved]
           | .error e => return .error e
-        | _ => return .error s!"module file '{filePath}' must contain exactly one module"
+        | _ => return .error (loadError "E0124" s!"module file '{filePath}' must contain exactly one module" filePath)
     else
       -- Inline module (mod X { ... }), recurse to resolve nested stubs
       match ← resolveModules baseDir sub paths sources with
@@ -101,7 +108,7 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
 
 /-- Resolve all modules in a program. Returns resolved modules and source map. -/
 def resolveAllModules (baseDir : String) (modules : List Module) (inputPath : String)
-    : IO (Except String (List Module × SourceMap)) := do
+    : IO (Except Diagnostics (List Module × SourceMap)) := do
   let mut resolved : List Module := []
   let mut paths : List String := [inputPath]
   let mut sources : SourceMap := []
@@ -808,7 +815,7 @@ partial def loadDependency (depName : String) (depPath : String)
   | .ok modules =>
     let baseDir := depPath ++ "/src"
     match ← resolveAllModules baseDir modules libPath with
-    | .error e => return .error s!"dependency '{depName}': {e}"
+    | .error e => return .error s!"dependency '{depName}': {renderDiagnostics e}"
     | .ok (resolved, srcMap) =>
       let srcMap := [(libPath, source)] ++ srcMap
       -- The dependency's root modules were parsed from ITS lib.con, not the

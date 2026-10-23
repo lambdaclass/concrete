@@ -24,7 +24,9 @@ E0118	rule	invalid #[link_name]
 E0119	rule	invalid #[export_name]
 E0120	rule	import alias names an intrinsic
 E0121	rule	capability parameter spelled like a capability (bug 188)
-E0122	rule	a `mod X;` declaration's file could not be loaded (bug 206)
+E0122	rule	a `mod X;` module file not found (bug 206)
+E0123	rule	circular `mod` import (bug 206)
+E0124	rule	a module file holds other than one module (bug 206)
 E0200	rule	Self outside impl block
 E0201	rule	undeclared variable
 E0202	rule	assignment to undeclared variable

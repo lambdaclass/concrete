@@ -143,12 +143,11 @@ def parsePartial (source : String) : ParsedProgram × Diagnostics :=
     Wraps `resolveAllModules` (IO because it reads files).
     Returns the resolved program and a source map for diagnostics. -/
 def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
-    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (Except Diagnostics (ParsedProgram × SourceMap)) := do
   match ← resolveAllModules baseDir prog.modules inputPath with
-  | .error e =>
-    -- Bug 206: a `mod X;` whose file cannot be loaded is MOD-1's E0122.
-    return .error [{ severity := .error, message := e, pass := "resolve", span := none, hint := none, code := "E0122" }]
+  -- Bug 206: the loader reports coded diagnostics (MOD-4, or the parser's own for a loaded file).
+  | .error ds => return .error ds
   | .ok (modules, srcMap) =>
     return .ok ({ modules := normalizeProgramCapArgs modules }, srcMap)
 
@@ -346,7 +345,7 @@ def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option St
     This is the common prefix of all CLI entry points (except interface report).
     Returns validated Core alongside earlier artifacts for diagnostic rendering. -/
 def runFrontend (inputPath source : String)
-    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (Except Diagnostics (ParsedProgram × SummaryTable × ValidatedCore × SourceMap)) := do
   let mainSrcMap : SourceMap := [(inputPath, source)]
   match Pipeline.parse source with
@@ -388,7 +387,7 @@ def runFrontend (inputPath source : String)
     elaboration/core-check passes whose inputs must be fully resolved). When the
     full chain runs, `partial = false` even if later passes reported errors. -/
 def runFrontendDiagnostics (inputPath source : String)
-    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (Diagnostics × Bool) := do
   -- Parse error-tolerantly: recovered parse errors are collected and the
   -- well-formed declarations still flow downstream (#12c).
