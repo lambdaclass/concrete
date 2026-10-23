@@ -20,8 +20,8 @@ On main `dcc48dc1`: SURVIVED. With the anchor moved: KILLED (gate, confirmed gre
 ## Cause
 
 `Concrete/Proof/ProofCore.lean` has two copies of the `.call (.indirect binding)` arm. One is in
-`cExprToPExprImpl`, the partial extractor that `cStmtsToPExpr` and every report run. The other is
-in `cExprToPExpr`, the non-partial wrapper that exists so the ProofSoundness theorems can reduce
+`cExprToPExprImpl`, the extractor in the mutual block that `cStmtsToPExpr` and every report run. The other is
+in `cExprToPExpr`, the wrapper outside that block that exists so the ProofSoundness theorems can reduce
 literal cases by `rfl`; no executable path calls it. The family's anchor
 (`some (.applyVar binding pargs)` followed by `| .structLit ...`) matched exactly once, in the
 wrapper, so the harness's "matches exactly once" freshness check passed while the mutant changed
