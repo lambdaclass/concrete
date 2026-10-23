@@ -12,8 +12,8 @@ before the first call and follow it; it owns the prompt, the round count and the
 rounds. Until it is on your base, run the equivalent by hand:
 
 ```sh
-git diff <base>...HEAD | codex exec --sandbox read-only "$(cat .claude/codex-review-prompt.md)"   # round 1
-git diff <sha reviewed last round>..HEAD | codex exec --sandbox read-only "<same prompt; say it is a delta>"   # rounds 2-5
+git diff <base>...HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "$(cat .claude/codex-review-prompt.md)"   # round 1
+git diff <sha reviewed last round>..HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "<same prompt; say it is a delta>"   # rounds 2-5
 ```
 
 The prompt is neutral: it states what the change claims and asks Codex to refute it. Do not tell
@@ -26,7 +26,9 @@ Codex what you believe is correct.
 3. **Rounds 2 to 5** see only the delta since the last reviewed SHA, plus the open findings.
 4. Stop when a round reports no remaining findings, or after round 5. Never exceed 5 rounds; list
    whatever is still open as follow-ups in the report and, when it matters, in the record or roadmap.
-5. If Codex leaves an `index.lock` behind in a worktree, remove it only when no process owns it.
+5. Always run Codex with `GIT_OPTIONAL_LOCKS=0` (bug 209): its sandboxed `git status` otherwise
+   takes the worktree's `index.lock`, and a command stopped mid-refresh leaves it behind. If a lock
+   is still found, remove it only when no process owns it.
 
 Report: the rounds run, each round's findings with the fix commit or the rejection reason, the
 final verdict, and the head SHA reviewed.

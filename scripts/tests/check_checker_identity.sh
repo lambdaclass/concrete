@@ -159,25 +159,69 @@ stub dupname "s#^(CONCRETE-CHECKER-IMAGE [0-9a-f]+ )(.*/)(libleanshared\\.(dylib
 stub edit   '/^CONCRETE-CHECKER-ID /s/\|[^|]*\|/|forged-commit|/'
 stub foreign 's/^(CONCRETE-CHECKER-ID )([0-9a-f]+)(.*)$/\1\2\3\n\1deadbeef 9.99.0|forged|forged|\/forged/'
 
-for c in "drop:no identity line" "dup:two identity lines" "nokern:no libleanshared loaded" "noimg:no loaded-image list" "dupname:two loaded images sharing a file name"; do
-  s="${c%%:*}"; why="${c#*:}"
+# Each refusal NAMES ITS CAUSE, in the checker line and in every receipt it refuses: "UNIDENTIFIED"
+# alone once hid a missing `shasum` for hours (2026-10-23). The cause is matched as a fixed string.
+for c in "drop:no identity line:the checker printed no identity line for this run" \
+         "dup:two identity lines:the checker printed 2 identity lines for this run" \
+         "nokern:no libleanshared loaded:no libleanshared was loaded" \
+         "noimg:no loaded-image list:the checker listed no loaded images" \
+         "dupname:two loaded images sharing a file name:two loaded images share a file name"; do
+  s="${c%%:*}"; rest="${c#*:}"; why="${rest%%:*}"; cause="${rest#*:}"
   OUT="$(PATH="$TMP/stub_$s:$PATH" consume)"
-  if grep -q 'Checker now: UNIDENTIFIED' <<<"$OUT" \
+  if grep -qF "Checker now: UNIDENTIFIED ($cause" <<<"$OUT" \
      && [ "$(tally "$OUT")" = "0 current, 5 not current, 0 unreadable" ] \
-     && [ "$(grep -c 'cannot be checked \[checker_unidentified\]' <<<"$OUT")" = "5" ]; then
-    ok "$why: identity refused, every receipt 'cannot be checked [checker_unidentified]'"
+     && [ "$(grep -c 'cannot be checked \[checker_unidentified\]' <<<"$OUT")" = "5" ] \
+     && [ "$(grep 'cannot be checked \[checker_unidentified\]' <<<"$OUT" | grep -cF "$cause")" = "5" ]; then
+    ok "$why: identity refused with its cause named, in the checker line and in all 5 refusals"
   else
-    no "$why did not refuse: $(tally "$OUT") now='$(checker "$OUT")'"
+    no "$why did not refuse with its cause ('$cause'): $(tally "$OUT") now='$(checker "$OUT")'"
   fi
 done
 
 # ...and the same at issuance: nothing is minted when the run cannot say who checked it.
 ISS_DROP="$(PATH="$TMP/stub_drop:$PATH" "$BIN" "$SRC" --report receipts --out "$TMP/none.txt" 2>&1 || true)"
-if grep -q '^Checker: UNIDENTIFIED' <<<"$ISS_DROP" && grep -q 'Summary: 0 issued, 5 withheld' <<<"$ISS_DROP" \
-   && grep -q 'checker executable and build' <<<"$ISS_DROP"; then
-  ok "issuance under an unidentified checker withholds all 5 and says why"
+DROP_CAUSE="the checker printed no identity line for this run"
+if grep -qF "Checker: UNIDENTIFIED ($DROP_CAUSE" <<<"$ISS_DROP" && grep -q 'Summary: 0 issued, 5 withheld' <<<"$ISS_DROP" \
+   && [ "$(grep 'checker executable and build' <<<"$ISS_DROP" | grep -cF "$DROP_CAUSE")" = "5" ]; then
+  ok "issuance under an unidentified checker withholds all 5 and names the cause in each"
 else
   no "an unidentified checker still minted: $(grep -E '^Summary|^Checker' <<<"$ISS_DROP" | tr '\n' ' ')"
+fi
+
+# THE HOST TOOL THE IDENTITY NEEDS, MISSING. The build digest is computed with the host's `shasum`
+# (Replay.lean, sha256Files). A PATH holding every executable of the real PATH EXCEPT shasum (first
+# hit wins, as PATH does) must refuse with that tool named — at issuance, in every withheld receipt,
+# and at consumption. The control: the same PATH still runs the checker (it printed an identity),
+# so what refused is the hash, not a missing lake.
+NOSHA="$TMP/noshasum"; mkdir -p "$NOSHA"
+IFS=: read -r -a _pdirs <<<"$PATH"
+for d in "${_pdirs[@]}"; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    n="${f##*/}"
+    [ "$n" = shasum ] && continue
+    [ -x "$f" ] && [ ! -e "$NOSHA/$n" ] && [ ! -L "$NOSHA/$n" ] && ln -s "$f" "$NOSHA/$n"
+  done
+done
+if PATH="$NOSHA" command -v shasum >/dev/null 2>&1 || ! PATH="$NOSHA" command -v lake >/dev/null 2>&1; then
+  no "CONTROL: the stripped PATH still has shasum or lost lake — this leg lost its target"
+else
+  SHA_CAUSE="shasum unavailable"
+  ISS_NOSHA="$(PATH="$NOSHA" "$BIN" "$SRC" --report receipts --out "$TMP/nosha.txt" 2>&1 || true)"
+  if grep -qF "Checker: UNIDENTIFIED ($SHA_CAUSE" <<<"$ISS_NOSHA" && grep -q 'Summary: 0 issued, 5 withheld' <<<"$ISS_NOSHA" \
+     && [ "$(grep 'checker executable and build' <<<"$ISS_NOSHA" | grep -cF "$SHA_CAUSE")" = "5" ]; then
+    ok "without shasum on PATH, issuance names it ('$SHA_CAUSE') in the checker line and all 5 withheld receipts"
+  else
+    no "without shasum, issuance did not name the cause: $(grep -E '^Summary|^Checker' <<<"$ISS_NOSHA" | tr '\n' ' ')"
+  fi
+  CON_NOSHA="$(PATH="$NOSHA" consume)"
+  if grep -qF "Checker now: UNIDENTIFIED ($SHA_CAUSE" <<<"$CON_NOSHA" \
+     && [ "$(tally "$CON_NOSHA")" = "0 current, 5 not current, 0 unreadable" ] \
+     && [ "$(grep 'cannot be checked \[checker_unidentified\]' <<<"$CON_NOSHA" | grep -cF "$SHA_CAUSE")" = "5" ]; then
+    ok "without shasum on PATH, the consumer names it and refuses all 5 stored receipts with it"
+  else
+    no "without shasum, the consumer did not name the cause: $(tally "$CON_NOSHA") now='$(checker "$CON_NOSHA")'"
+  fi
 fi
 
 # An edited self-report is a DIFFERENT identity, never a match for the old one.

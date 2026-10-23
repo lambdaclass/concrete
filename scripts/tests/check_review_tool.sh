@@ -50,6 +50,9 @@ EOF
 FAKE_LOG="$T/fake"
 mkdir -p "$FAKE_LOG" "$T/bin"
 export FAKE_LOG
+# Bug 209's legs prove review.sh OVERRIDES the caller's setting: the gate runs with optional locks
+# explicitly on, so a value inherited from whoever launched it cannot satisfy them.
+export GIT_OPTIONAL_LOCKS=1
 cat >"$T/bin/codex" <<'EOF'
 #!/usr/bin/env bash
 # Fake reviewer: `codex exec --sandbox read-only ... -o <file> <prompt>`, diff on stdin.
@@ -73,6 +76,7 @@ kind=standard
 grep -q "routine code review" "$FAKE_LOG/prompt.$n" && kind=neutral
 files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | tr '\n' ',')"
 echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
+echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
 reply() { printf '%s\n' "$1" >"$out"; }
@@ -130,6 +134,10 @@ review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
 check "reviewer runs with --sandbox read-only" grep -q "sandbox=read-only" "$FAKE_LOG/calls"
+# Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
+# mid-`git status` cannot leave the caller's worktree with a stale index.lock.
+check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
+check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | grep -q .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
 check "round 1 reviews the full diff from the merge-base" grep -q "files=old.txt,$" "$FAKE_LOG/calls"
 R1="$(g rev-parse HEAD)"

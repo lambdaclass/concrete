@@ -102,9 +102,10 @@ inductive IssueRefusal where
       digests that do not correspond to their tables, an empty environment identity, or a trust
       claim inconsistent with its boundaries. -/
   | materialRefused (subject : String)
-  /-- The CURRENT checker could not be identified, so there is nothing to compare a stored receipt's
-      checker against. Never treated as a match: two unknown checkers are not the same checker. -/
-  | checkerUnidentified (subject : String)
+  /-- The CURRENT checker could not be identified, for the reason given, so there is nothing to
+      compare a stored receipt's checker against. Never treated as a match: two unknown checkers are
+      not the same checker. -/
+  | checkerUnidentified (subject : String) (why : String)
   deriving Repr
 
 def IssueRefusal.canonical : IssueRefusal → String
@@ -119,7 +120,7 @@ def IssueRefusal.canonical : IssueRefusal → String
   | .claimNamesNoSpec _ => "claim_names_no_spec"
   | .notProved ..       => "claim_not_proved"
   | .materialRefused _  => "receipt_material_refused"
-  | .checkerUnidentified _ => "checker_unidentified"
+  | .checkerUnidentified .. => "checker_unidentified"
 
 def IssueRefusal.explain : IssueRefusal → String
   | .replay t why        => s!"'{t}': {why.explain}"
@@ -136,9 +137,9 @@ def IssueRefusal.explain : IssueRefusal → String
       s!"'{sub}' names no specification, so nothing witnesses that its theorem is about it"
   | .notProved s st       => s!"'{s}' is '{st}', not 'proved' — the kernel accepted a theorem, which says nothing about whether it still proves this body"
   | .materialRefused s    => s!"'{s}' assembled material that the receipt envelope refused"
-  | .checkerUnidentified s =>
-      s!"'{s}': the checker that would run now could not be identified (executable and build), so no "
-      ++ "stored receipt can be compared against it"
+  | .checkerUnidentified s why =>
+      s!"'{s}': the checker that would run now could not be identified (executable and build: {why}), "
+      ++ "so no stored receipt can be compared against it"
 
 /-- One claim's issuance outcome, keyed by the subject it is about. -/
 structure IssueOutcome where
@@ -271,7 +272,7 @@ def issueFor (pc : ProofCore) (res : ReplayResult) (env : IssueEnvironment)
 
     `checker` is passed in rather than read here: it comes from `resolveChecker`, the one producer
     of "which checker would run", so a status report can ask without paying for a kernel run. -/
-def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option CheckerIdentity)
+def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : CheckerResolution)
     (trustedDepsOf : String → List String)
     (e : ProofCoreEntry) : Except IssueRefusal ReceiptFacts := do
   let subject := e.qualName
@@ -300,7 +301,9 @@ def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option Ch
     | .ok m => pure m
   let boundaries := trustedDepsOf subject
   if rootMat.carriesTrust != !boundaries.isEmpty then throw (.materialRefused subject)
-  let some checker := checker | throw (.checkerUnidentified subject)
+  let checker ← match checker with
+    | .identified c => pure c
+    | .unidentified why => throw (.checkerUnidentified subject why)
   let ev := edgeEvidenceOfRow row
   let some material := ReceiptMaterial.of? (some subjDigest) ev rootMat.preimage
       rootMat.carriesTrust boundaries env.compilerVersion sid.scope pc.identity.context.digest env.importsId
@@ -325,7 +328,7 @@ def freshFactsFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option Ch
     program says right now, and this is the only question it is ever asked. A receipt swapped onto
     another claim's name in the storage file disagrees here, because the comparison reads the subject
     digest rather than the file key. -/
-def storedDispositionFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option CheckerIdentity)
+def storedDispositionFor (pc : ProofCore) (env : IssueEnvironment) (checker : CheckerResolution)
     (trustedDepsOf : String → List String) (e : ProofCoreEntry)
     (st : StoredReceipt) : Except IssueRefusal ReceiptDisposition := do
   let fresh ← freshFactsFor pc env checker trustedDepsOf e
@@ -336,7 +339,7 @@ def storedDispositionFor (pc : ProofCore) (env : IssueEnvironment) (checker : Op
 
 /-- Which bound fields of a stored receipt differ from material computed fresh, by name. Reporting
     only; `storedDispositionFor` decides. -/
-def storedDifferenceFor (pc : ProofCore) (env : IssueEnvironment) (checker : Option CheckerIdentity)
+def storedDifferenceFor (pc : ProofCore) (env : IssueEnvironment) (checker : CheckerResolution)
     (trustedDepsOf : String → List String) (e : ProofCoreEntry)
     (st : StoredReceipt) : Except IssueRefusal (List String) := do
   let fresh ← freshFactsFor pc env checker trustedDepsOf e

@@ -2930,7 +2930,7 @@ def compileAndReport (inputPath : String) (reportType : String)
           , imports := ["Concrete", "Examples"], targets := [] }
         let checker := match checkerNow with
           | some (_, e) => e.checker
-          | none => none
+          | none => .unidentified "no Lake workspace was found for the input or the working directory"
         -- THE PROOF LIBRARY, BY CONTENT. A receipt that did not identify whose theorems were
         -- accepted could be replayed against a different library and still read current.
         let importsId := match checkerNow with
@@ -2958,7 +2958,12 @@ def compileAndReport (inputPath : String) (reportType : String)
           | .error _ => pure none
         let freshRecheck := fun (thm : String) =>
           ((fresh.bind fun r => (r.recheck.find? (·.1 == thm)).map (·.2)).getD Proof.RecheckVerdict.notRun)
-        let freshChecker := (fresh.bind (·.environment.checker)).map (·.canonical)
+        let freshChecker := (fresh.bind (·.environment.checker.identity?)).map (·.canonical)
+        -- The fresh re-check's checker can fail to identify even when the probe above succeeded;
+        -- its policy is then `unknown`, and the line says why rather than leaving a bare status.
+        let freshUnidentified : String := match fresh.map (·.environment.checker) with
+          | some (Proof.CheckerResolution.unidentified w) => s!" (this run's re-check: checker UNIDENTIFIED ({w}))"
+          | _ => ""
         let mut lines : List String := []
         let mut policyCounts : Array Proof.AdvisoryStatus := #[]
         let mut acceptedNow := 0
@@ -2997,7 +3002,7 @@ def compileAndReport (inputPath : String) (reportType : String)
                 let rv := freshRecheck st.theoremArtifact
                 if Proof.acceptedNow d rv then acceptedNow := acceptedNow + 1
                 lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"
-                                 , s!"        checker policy: {d.status.canonical}{why}"
+                                 , s!"        checker policy: {d.status.canonical}{why}{freshUnidentified}"
                                  , s!"        fresh kernel re-check in this run: {rv.canonical}"]
               | .ok .notCurrent =>
                 notCurrent := notCurrent + 1
@@ -3032,7 +3037,9 @@ def compileAndReport (inputPath : String) (reportType : String)
               , "  Status above is derived from source facts and does not itself mean the kernel ran."
               -- WHAT "current" DOES NOT YET MEAN (R-0208, open slices). Stated so a reader cannot take
               -- identity agreement for a re-check or for advisory acceptance.
-              , s!"  Checker now: {(checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can be current"}"
+              , s!"  Checker now: {match checker with
+                  | .identified c => c.canonical
+                  | .unidentified why => s!"UNIDENTIFIED ({why}) — no receipt can be current"}"
               , "  This compiler mints a receipt only after a fresh kernel re-check, but a store's records may come"
               , "  from anywhere, so that history is not relied on here."
               , "  'current' means the stored facts match this program, proof library and checker identity."
@@ -3196,7 +3203,9 @@ def compileAndReport (inputPath : String) (reportType : String)
       out := out ++ s!"Toolchain: {res.environment.toolchain} (declared pin; the checker below is what ran)\n"
       -- THE CHECKER THAT RAN, as its own process reported it (R-0208). This, not the pin above, is
       -- what each receipt's toolchain identity binds; without it nothing minted.
-      out := out ++ s!"Checker: {(res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED — no receipt can bind it, so none was minted"}\n"
+      out := out ++ s!"Checker: {match res.environment.checker with
+        | .identified c => c.canonical
+        | .unidentified why => s!"UNIDENTIFIED ({why}) — no receipt can bind it, so none was minted"}\n"
       -- NAMED, not just bound. The receipt binds a digest of (compiler, toolchain), so without this
       -- line nothing observable says WHICH compiler produced the evidence — and an identity that
       -- cannot be read cannot be checked against the executable it claims to describe.
@@ -3380,7 +3389,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         let leanErr := if generalFailure || !failed.isEmpty then String.ofList (combined.toList.take 800) else ""
         IO.println (String.join [
           "{\n  \"schema_version\": ", q "1", ",\n  \"toolchain\": ", q tc,
-          ",\n  \"checker\": ", q ((res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"),
+          ",\n  \"checker\": ", q ((res.environment.checker.identity?.map (·.canonical)).getD "UNIDENTIFIED"),
+          (match res.environment.checker with
+           | .identified _ => ""
+           | .unidentified why => ",\n  \"checker_unidentified_reason\": " ++ q why),
           ",\n  \"all_checked\": ", (if allChecked then "true" else "false"),
           ",\n  \"checks\": [\n", ",\n".intercalate allObjs, "\n  ],\n",
           "  \"lean_error\": ", q leanErr,
@@ -3398,7 +3410,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       out := out ++ (if wsFromInput then " (from input)\n" else " (from working directory; the input is outside any workspace)\n")
       out := out ++ s!"\nToolchain: "
       out := out ++ tc ++ " (declared pin)\n"
-      out := out ++ s!"Checker: {(res.environment.checker.map (·.canonical)).getD "UNIDENTIFIED"}\n"
+      out := out ++ s!"Checker: {res.environment.checker.display}\n"
       -- THE FRESH KERNEL RE-CHECK (R-0208 decision 1), separately from the lookup below: "Kernel-
       -- verified" counts names found in compiled .oleans; only `rechecked` means the kernel re-ran.
       let rc := res.recheck
