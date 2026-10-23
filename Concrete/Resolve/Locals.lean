@@ -35,7 +35,14 @@ private abbrev LocalsM := StateM LocalTable
     binding is introduced either way, so one collision is reported once. -/
 private def bindLocal (vis : List Visible) (key : BinderKey) (name : String) (sp : Span)
     (kind : String) : LocalsM (List Visible) := do
-  if name == "_" || name.isEmpty then return vis
+  if name.isEmpty then return vis
+  -- `_` binds nothing visible (no use can name it, and it collides with nothing), but where the
+  -- checker registers it (a `_` parameter, a borrow reference, a destructured field) it is still
+  -- a binding with an obligation, so it has an identity.
+  if name == "_" then
+    let (t', _) := (← get).bind key name
+    set t'
+    return vis
   if let some prev := vis.find? (·.name == name) then
     modify fun t => t.recordCollision { name, kind, at_ := sp, earlier := prev.span }
   let (t', id) := (← get).bind key name

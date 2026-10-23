@@ -53,14 +53,27 @@ neg F2 "$PRIV" 'def forged : LocalId := LocalId.mk 0'
 neg F3 "$PRIV" 'def forged : LocalTable := ⟨true, #[], [], [], [], []⟩'
 neg F4 "$PRIV" 'def forged (t : LocalTable) : LocalTable := { t with uses := [] }'
 neg F5 "$MISMATCH" 'def byName (env : TypeEnv) : Option VarInfo := env.vars.lookup "x"'
+neg F6 'failed to synthesize|Inhabited' 'def forged : LocalId := default'
 
 echo ""
 echo "=== S: one minting site, no name-keyed lookup ==="
-MINT="$(grep -rnE 'LocalTable\.(start|bind|recordUse|recordCollision)\b|\.(recordUse|recordCollision) ' --include='*.lean' Concrete Main.lean \
-  | grep -v '^Concrete/Frontend/LocalId.lean:' | grep -v '^Concrete/Resolve/Locals.lean:' || true)"
-[ -z "$MINT" ] && ok "S: LocalTable minting is called only from Resolve/Locals.lean" || no "S: minting outside the walk: $MINT"
-HELP="$(grep -nE 'def lookupVarInfo|def lookupVarTy|def checkNoLiveShadow|def guardShadowedSource|nextVarUid' Concrete/Check/*.lean || true)"
-[ -z "$HELP" ] && ok "S: the checker has no name-keyed binding lookup and no private uid counter" || no "S: $HELP"
+# The minting functions are public (the walk is in another module), so this is an AUDIT of the API
+# boundary, not a type-level guarantee: every spelling of a call (qualified, dot notation on a
+# table, an open of the namespace) outside the two owning files is refused.
+MINT_RE='LocalTable\.(start|bind|recordUse|recordCollision)\b|\.(recordUse|recordCollision)\b|\.bind[[:space:]]+(\(\.(param|site)|key\b)|open[[:space:]]+(Concrete\.)?LocalTable'
+MINT_RAW="$(grep -rnE "$MINT_RE" --include='*.lean' Concrete Main.lean tests 2>&1)"; MRC=$?
+MINT="$(grep -v '^Concrete/Frontend/LocalId.lean:' <<<"$MINT_RAW" | grep -v '^Concrete/Resolve/Locals.lean:' | grep . || true)"
+if [ "$MRC" -gt 1 ]; then
+  no "S: the minting audit could not search the tree (grep rc=$MRC)"
+elif [ -n "$MINT" ]; then
+  no "S: minting outside the walk: $MINT"
+elif ! grep -q '^Concrete/Resolve/Locals.lean:' <<<"$MINT_RAW"; then
+  no "S: the minting audit found no call in the walk itself, so its pattern is stale"
+else
+  ok "S: LocalTable minting is called only from Resolve/Locals.lean (qualified, dot and open forms)"
+fi
+HELP="$(grep -nE 'def lookupVarInfo|def lookupVarTy|def checkNoLiveShadow|def guardShadowedSource|nextVarUid' Concrete/Check/*.lean)"; HRC=$?
+[ "$HRC" -le 1 ] && [ -z "$HELP" ] && ok "S: the checker has no name-keyed binding lookup and no private uid counter" || no "S: $HELP"
 
 echo ""
 echo "=== T: the walk's answers ==="
@@ -90,6 +103,16 @@ def src : String := "mod m {
         if a > 0 { let x: i32 = 2; return x; }
         return x;
     }
+    struct P { u: i32, t: i32 }
+    enum E { A { p: i32 }, B {} }
+    fn h(f: fn(i32) -> i32, e: E) -> i32 {
+        let mut s: i32 = 0;
+        for (let mut i: i32 = 0; i < 3; i = i + 1) { s = s + f(i); }
+        let i: i32 = s;
+        let E::A { p } = e else { return i; };
+        let P { u, t } = P { u: p, t: i };
+        return u + t;
+    }
 }"
 
 /-- The line of the binder a use (line, spelling) denotes; 0 for a parameter. -/
@@ -114,6 +137,7 @@ def main : IO Unit := do
     let fns := m.functions.map resolveFnLocals
     let f := fns.headD LocalTable.unresolved
     let g := (fns.drop 1).headD LocalTable.unresolved
+    let h := (fns.drop 2).headD LocalTable.unresolved
     check "T: a resolved table" f.resolved
     check "T: the valid function records no collision and no conflict"
       (f.collisions.isEmpty && f.conflicts.isEmpty)
@@ -137,15 +161,21 @@ def main : IO Unit := do
       (g.collisions.length == 1 && (g.collisions.headD default).earlier.line == 19)
     check "T: inside the branch, 'x' denotes the branch's own binding (line 20)"
       (binderLineOf g 20 "x" == [20])
+    check "T: the for header 'i' (line 27) is read in the header and body; the call through the fn-typed parameter 'f' denotes the parameter"
+      (binderLineOf h 27 "i" == [27] && binderLineOf h 27 "f" == [0])
+    check "T: the sibling 'let i' after the loop (line 28) is the one the let-else's else branch returns (line 29)"
+      (binderLineOf h 29 "i" == [28] && h.collisions.isEmpty)
+    check "T: the let-else binder 'p' (line 29) is read by the struct literal (line 30) and the struct-destructure binders by the return (line 31)"
+      (binderLineOf h 30 "p" == [29] && binderLineOf h 31 "u" == [30] && binderLineOf h 31 "t" == [30])
 
 #eval main
 LEAN
 WALK="$(lake env lean "$TMP/walk.lean" 2>&1)"; WRC=$?
 NOK="$(grep -c '^  ok   T:' <<<"$WALK" || true)"; NFAIL="$(grep -c '^  FAIL' <<<"$WALK" || true)"
-if [ "$WRC" -ne 0 ] || [ "$NOK" -ne 12 ] || [ "$NFAIL" -ne 0 ]; then
-  no "T: the walk probe ($NOK of 12 ok, rc=$WRC): $(grep -E 'FAIL|error' <<<"$WALK" | head -n5 | tr '\n' ' ' | cut -c1-600)"
+if [ "$WRC" -ne 0 ] || [ "$NOK" -ne 15 ] || [ "$NFAIL" -ne 0 ]; then
+  no "T: the walk probe ($NOK of 15 ok, rc=$WRC): $(grep -E 'FAIL|error' <<<"$WALK" | head -n5 | tr '\n' ' ' | cut -c1-600)"
 else
-  ok "T: 12 walk answers (loops, branches, arms, a borrow block, sibling reuse, a collision)"
+  ok "T: 15 walk answers (loops, a for header, branches, arms, let-else, struct destructure, a borrow block, a fn-pointer call, sibling reuse, a collision)"
 fi
 
 echo ""
@@ -165,8 +195,8 @@ def src : String := "mod m { fn f(a: i32) -> i32 { let b: i32 = a; return b; } p
       let fns := r.modules.flatMap (·.module.functions)
       IO.println s!"R-TABLES {fns.length} {(fns.filter (·.locals.resolved)).length}"
 LEAN
-PIPE="$(lake env lean "$TMP/pipe.lean" 2>&1)"
-if grep -qE '^R-TABLES 2 2$' <<<"$PIPE"; then
+PIPE="$(lake env lean "$TMP/pipe.lean" 2>&1)"; PRC=$?
+if [ "$PRC" -eq 0 ] && grep -qE '^R-TABLES 2 2$' <<<"$PIPE"; then
   ok "R: Pipeline.resolve attaches a resolved local table to every function"
 else
   no "R: $(grep -E 'R-|error' <<<"$PIPE" | head -n3 | tr '\n' ' ')"

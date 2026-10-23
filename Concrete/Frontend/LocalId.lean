@@ -21,7 +21,8 @@ outside `Concrete/Resolve/Locals.lean`.
 structure LocalId where
   private mk ::
   idx : Nat
-  deriving BEq, Hashable, Repr, Inhabited
+  -- No `Inhabited`: a `default` identity would be a forged one.
+  deriving BEq, Hashable, Repr
 
 instance : ToString LocalId := ⟨fun l => s!"local#{l.idx}"⟩
 
@@ -42,7 +43,7 @@ structure LocalBinder where
   id : LocalId
   name : String
   key : BinderKey
-  deriving Repr, Inhabited
+  deriving Repr
 
 /-- A binder that reuses the spelling of a binding still visible at it (SCOPE-1@1, E0301): the
     new binder, what kind of binder it is, and where the earlier binding was introduced. The
@@ -66,13 +67,16 @@ structure LocalTable where
   uses : List ((SiteKey × String) × LocalId)
   conflicts : List String
   collisions : List ScopeCollision
-  deriving Repr, Inhabited
+  deriving Repr
 
 namespace LocalTable
 
 /-- The table of a function the local walk has not run on. Every lookup in it fails, so a
     consumer that receives it refuses instead of guessing. -/
 def unresolved : LocalTable := ⟨false, #[], [], [], [], []⟩
+
+/-- The default table is the unresolved one, which every consumer refuses. -/
+instance : Inhabited LocalTable := ⟨unresolved⟩
 
 /-- MINTING (Resolve/Locals.lean only): an empty table for a function about to be walked. -/
 def start : LocalTable := ⟨true, #[], [], [], [], []⟩

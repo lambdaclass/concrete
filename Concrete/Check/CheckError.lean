@@ -43,7 +43,7 @@ inductive VarState where
 structure LocalRef where
   id : LocalId
   name : String
-  deriving Repr, Inhabited
+  deriving Repr
 
 instance : BEq LocalRef := ⟨fun a b => a.id == b.id⟩
 instance : Hashable LocalRef := ⟨fun a => hash a.id⟩
@@ -71,7 +71,7 @@ structure VarInfo where
   -- Identity of this binding (bugs 093/094; R-0492): the `LocalId` the local walk minted for its
   -- binder. Ownership state is matched across env snapshots by this id, never by name. Equal
   -- to the key the binding is stored under in `TypeEnv.vars` (`addVar` is the only writer).
-  uid : LocalId := default
+  uid : LocalId
   -- Defer rule (a) (bug 143): a pending deferred call BORROWS this binding (`defer
   -- peek(&t);`). The borrow discharges nothing, so the binding must still be consumed,
   -- but nothing may move or consume it before the deferred call runs at the exit of the
