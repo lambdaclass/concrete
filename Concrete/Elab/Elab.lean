@@ -492,8 +492,8 @@ private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Op
     owns one); `match value { t => body }` with a single unguarded binder arm is exactly
     `let t = value in body` in every consumer (Lower, the interpreter, the proof model bind a
     variable arm's scrutinee once), so it is the one encoding used, built only here. A temporary's
-    name `ev.t<n>` contains `.`, which no source identifier does, and it is never entered into
-    `vars`, so source code cannot name it. -/
+    name `ev.t<n>` contains `.`, which no source identifier does, and it has no entry in the local
+    table, so source code cannot name it. -/
 private def freshEvalTemp : ElabM String := do
   let env ← getEnv
   setEnv { env with freshBinder := env.freshBinder + 1 }
@@ -580,12 +580,11 @@ private def tombstoneBlock (saved cur : Proof.BodyScope) : Proof.BodyScope :=
     | none    => f.map fun _ => dead
   { frames := fixed.reverse }
 
-/-- Bug 087: leave a lexical block — restore the lexical state (visible vars,
-    surface→Core renames, ghost names) and retire the block's binders from the
-    frame stack. Everything else the block produced (fresh counter, coverage,
-    recorded uses) is kept. Before this, an inner `let x` stayed visible after
-    its block: Interp and Lower read the inner slot, and evidence resolved the
-    outer `x` to the inner binder. -/
+/-- Bug 087: leave a lexical block — retire the block's binders from the frame stack (their
+    positions stay, their spellings are tombstoned). Everything else the block produced (fresh
+    counter, coverage, bound locals) is kept. Since R-0492 step 2 no reference resolves by
+    spelling: which binding a use denotes is the local walk's answer, so a block's bindings
+    cannot answer for a later use whatever this keeps. -/
 private def exitBlock (saved : ElabEnv) : ElabM Unit := do
   let cur ← getEnv
   setEnv { cur with bodyScope := tombstoneBlock saved.bodyScope cur.bodyScope }
