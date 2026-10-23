@@ -38,7 +38,9 @@ A variant pattern written without a field list over an owned scrutinee refuses e
 of the variant with E0288 (`wildcardDiscardsNonCopy`), exactly as an explicit `_` would. Through a
 reference nothing is moved, so it stays allowed, and so does ignoring Copy fields. Fixtures:
 `error_197_variant_pattern_drops_payload.con` (E0288) and `regress_197_variant_pattern_ignores_copy.con`
-(run 42, both consumers), in `run_tests.sh`.
+(run 42, both consumers), in `run_tests.sh`. A rule-impact scan over the 2,169 units of the train 4 corpus found
+one program newly refused, `tests/programs/result_generic_propagation.con`, whose `Result::Err =>`
+arm dropped a non-Copy `MyError`: the bug itself, in a test. It now binds and consumes the error.
 
 ## Structural cause
 
