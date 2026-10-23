@@ -135,8 +135,10 @@ duplicating one would let it be freed twice. Concretely:
 - **`if let` / `while let`** desugar the same way and follow the same rule (decision
   re-confirmed 2026-07-01): over a **non-Copy** enum they are rejected (**E0288**);
   write an explicit exhaustive `match`. Over a `Copy` enum they work as expected.
-  Since conditional Copy landed (2026-07-05), `Option<i32>`-class instantiations ARE
-  Copy, so `if let` over them is legal *for the right reason* — the rule is unbent;
+  `Option<i32>`-class instantiations ARE Copy (decision D6, 2026-10-23: a generic declared
+  `Copy` is Copy exactly when every type argument is Copy, decided from the declaration,
+  which is checked once with its parameters taken as Copy; a generic not declared `Copy` is
+  never Copy), so `if let` over them is legal *for the right reason* — the rule is unbent;
   `Option<File>` still rejects. Gated by `check_pattern_ergonomics.sh`
   (`neg_if_let_noncopy`, now over a linear payload).
 - **Assigning to a non-Copy field** (`o.f = v`) is rejected (**E0219**): overwriting
