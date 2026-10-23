@@ -111,6 +111,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 179: concurrent compiles of one source shared the intermediate <input>.ll / <main>.ll;
   # both fixtures are compiled concurrently by run_tests.sh (file mode and project mode).
   [179]="regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con"
+  # Bug 186: trait impl selection was a search (duplicate, overlapping, specialized, orphan impls;
+  # a method name from two impls; bound calls by order). E0590 - E0595, plus the two-order positive control.
+  [186]="error_186_duplicate_impl.con error_186_duplicate_generic_impl.con error_186_overlap_generic_impl.con error_186_overlap_blanket_impl.con error_186_orphan_impl.con error_186_specialized_impl.con error_186_method_clash.con error_186_inherent_clash.con error_186_ambiguous_bound_method.con error_186_duplicate_primitive_spelling.con error_186_orphan_sibling.con error_186_imported_alias_target.con error_186_builtin_arity.con regress_186_coherent_impls.con regress_186_primitive_impl_spellings.con regress_186_coherent_impls_reversed.con regress_186_visible_targets.con"
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"

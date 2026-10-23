@@ -539,6 +539,10 @@ structure ImplBlock where
   typeBounds : List (String × List String) := []  -- impl-level param bounds: V -> [Copy], enforced at method-call sites
   methods : List FnDef
   span : Span := default
+  /-- The type arguments written on the impl's target (`impl<T> Name<T>`), `none` when the
+      target is written bare. Recorded so trait coherence (E0593) can judge them: they were
+      parsed and DROPPED, so `impl Name<i32>` silently meant every `Name<_>` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure TraitDef where
   name : String
@@ -557,6 +561,9 @@ structure ImplTraitBlock where
   methods : List FnDef
   capSet : CapSet := .empty        -- capabilities on the impl (used by Destroy in Phase 3)
   span : Span := default
+  /-- The type arguments written on the impl's target (`for Vec<T>`), `none` when bare. See
+      `ImplBlock.targetArgs` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure Module where
   name : String

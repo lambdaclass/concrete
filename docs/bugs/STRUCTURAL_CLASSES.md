@@ -34,7 +34,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 
 | class | bugs | structural owner |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C), 132 (two modules' constants of one name), 165 (a compiler-generated `print_int` call binds to a same-named user function), 151 (two nested modules' functions flattened to one name) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 039, 044, 050, 051, 054, 055, 056, 061, 069, 074, 077, 081, 082, 096, 097, 098, 114, 118, 122 (the builtin/user `Option`/`Result` name join), 129 (a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C), 132 (two modules' constants of one name), 165 (a compiler-generated `print_int` call binds to a same-named user function), 151 (two nested modules' functions flattened to one name), 186 (an impl keyed by its type's spelling with its arguments dropped, and a method by `Type_method`: impl selection was a first-match search) | R-0492 (S5 `DefId`), applied to the shared front end by R-0514 (row 4); R-0510 (S8a) for specialization names |
 | 2. Binder identity by name, not a `LocalId` | 040, 041, 045, 087, 093, 094, 107, 124, 176 (a loop body's shadowing `let` outlived the loop in the checker) (and 068's binder half) | R-0492 (S5 `LocalId`); R-0499/R-0514 (row 4) for the checker's environments. Since exit 2i the source rule SCOPE-1@1 (E0301) keeps every shadowing shape of this class out of the compiler (124 closed by it); the identity repair stays R-0492's |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 052, 091 (nested-module `Destroy`), 099, 100, 103, 116 | R-0510 (S8a checked specialization) with R-0492; cleanup edges R-0501 (S10) |
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
@@ -66,7 +66,9 @@ packages' modules with one name became one LLVM module), 077 (a relative call in
 submodule lowered to an unprefixed symbol), 081 (a call's key in the proof model was the call-site
 spelling, so an import alias could borrow another function's proof), 082 (an import alias lost to
 any same-named definition), 096 – 098 (same-named types, private functions and generic functions in
-two modules resolved to one definition).
+two modules resolved to one definition), 186 (an impl was keyed by its type's spelling with the
+target's arguments dropped, and a method by `Type_method`, so "which impl?" was answered by the
+first match and nothing established that there was only one).
 
 **Design cause.** Names stay `String` after resolution: Core binders and callees (with a
 `Coe String Callee`), SSA registers, the alias pools and `PExpr` are joined by spelling, and module
@@ -79,7 +81,9 @@ namespaces, specialization arguments and the extern/intrinsic/generated distinct
 
 **Owner.** R-0492 (verified-pipeline S5, whose exit names 081 and 082), applied to the shared front
 end for every user by R-0514 (queue row 4); R-0510 (S8a) owns specialization identity (051, 054,
-098). R-0002, R-0436 and R-0442 already retired the string encodings behind 050, 056 and 061.
+098). R-0002, R-0436 and R-0442 already retired the string encodings behind 050, 056 and 061. Bug
+186's coherence judgment is typed (`TraitId`, `TypeId`, `MethodKey`); R-0548 moves the method
+tables themselves off the `Type_method` spelling.
 
 ## 2. Binder identity by name, not a `LocalId`
 

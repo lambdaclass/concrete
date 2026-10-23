@@ -542,9 +542,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveTypeE ty catch _ => pure .placeholder
   subst := substTy
@@ -1197,16 +1195,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        let mut foundSig : Option FnSigDef := none
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- Unique by Check (E0595): an ambiguous call never reaches Elab.
+        let found := boundMethodUnique env.traits bounds methodName
+        let foundBuiltin : Option BuiltinTraitId := found.bind (·.1.builtinId)
+        match found.map Prod.snd with
         | none => throwElab (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Replace Self with the type variable
