@@ -246,7 +246,7 @@ and it is counted in SKIPPED.
 | S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |
 | S9 manifests | Every generated manifest (§5) is byte-equal to its generator's output. |
-| S10 site | The site generator (§4) writes one page per chapter with every entry's anchor, and `zola build` succeeds on a scratch copy of `site/`. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
+| S10 site | The site generator (§4) writes one page per chapter with every entry's anchor and the rule index, `scripts/gen/site_reference.py` writes the reference pages, and `zola build` succeeds on a scratch copy of `site/`. `check_site_generated.sh` keeps both sections generated: no tracked copy, every site build runs both generators first, and every site link resolves. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
 | S11 restatement | No normative sentence occurs in a Markdown file outside `docs/spec/` (§6). |
 
 Code-to-rule mapping (S6), behaviour (S4) and coverage (S5) are mechanical. The association
@@ -283,13 +283,18 @@ page per chapter. On each page it:
 - adds Zola front matter;
 - keeps the anchors;
 - labels each example ("accepted, exits 42", "rejected: E0302 at check", "pending: bug-182");
-- rewrites relative repository links to absolute links into the repository.
+- rewrites relative repository links to absolute links into the repository;
 
-`site/content/spec/` is gitignored and contains only that output. `make docs-site`,
-`make docs-serve` and `.github/workflows/book.yml` run the generator before `zola build`.
-When a chapter is published, any hand-copied page under `site/content/reference/` that
-restates its rules is deleted in the same change, and every link to that page is repointed
-to the spec.
+and it writes `rules.md`, the rule index: every entry with its kind, status and codes.
+
+The reference section is generated the same way: `scripts/gen/site_reference.py --out
+site/content/reference` writes one page per document it lists (ABI, architecture, safety, the value
+model and so on), from the document itself, with links to other listed documents and to spec
+chapters rewritten to site links. Both directories are gitignored and contain only that output.
+`make docs-site`, `make docs-serve` and `.github/workflows/book.yml` run both generators before
+`zola build`, and `check_site_generated.sh` refuses a tracked copy, a build that skips a generator
+and a site link to a page that does not exist. The reference pages were hand copies until
+2026-10-23, and every one had drifted from its document.
 
 ## 5. One source for the acceptance manifests
 
