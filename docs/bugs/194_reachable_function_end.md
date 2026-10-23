@@ -33,9 +33,10 @@ missing value. CoreCheck has no such check either, so Lower emitted `ret void`.
 
 `checkFn` refuses a function whose result type is not `Unit` or `!` when its body can reach its
 end (`blockDiverges` and `blockNonTerminating` both false), with the new code E0307. Fixtures:
-`error_194_missing_return_plain.con`, `error_194_missing_return_if.con`,
-`error_194_missing_return_method.con` and `error_194_let_else_falls_through.con` (E0307, in
-`run_tests.sh`). A rule-impact scan (`scripts/tools/rule_impact.sh`, 2,169 units of the train 4
+`error_194_missing_return_plain.con`, `error_194_missing_return_if.con` and
+`error_194_missing_return_method.con` (E0307, in `run_tests.sh`). A falling-through
+`let ... else` is refused earlier and more precisely by bug 195's rule (E0308, the `else` block
+must diverge), so it has no fixture here. A rule-impact scan (`scripts/tools/rule_impact.sh`, 2,169 units of the train 4
 corpus) found no program newly refused.
 
 ## Structural cause
