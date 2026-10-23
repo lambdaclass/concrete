@@ -249,7 +249,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
   let mut ds : Diagnostics := []
   -- Shape (TC-4): the target is the head applied to exactly `expected`.
   let shapeCheck := fun (what typeName : String) (typeParams expected : List String)
-      (targetArgs : Option (List Ty)) (decl : Option TypeDecl) (span : Span) =>
+      (targetArgs : Option (List Ty)) (decl : Option TypeDecl) =>
     let args := targetArgs.getD []
     let argNames := args.map fun
       | .named n => some n
@@ -294,7 +294,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     infos := infos ++ [{ owner := .trait tid, head, target, typeName := ti.typeName,
                          module := sc.path, span := ti.span, file,
                          methods := ti.methods.map (·.name) }]
-    if let some why := shapeCheck what ti.typeName ti.typeParams ti.typeParams ti.targetArgs decl ti.span then
+    if let some why := shapeCheck what ti.typeName ti.typeParams ti.typeParams ti.targetArgs decl then
       ds := ds ++ [mkDiag "E0593" why ti.span file
         (some "write `impl<T, ..> Trait for Type<T, ..>` with the type's own parameters (docs/language/TRAITS.md TC-4)")]
     -- TC-3: instance locality.
@@ -327,7 +327,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     infos := infos ++ [{ owner := .inherent, head, target := .app ((head.map (·.key)).getD ib.typeName) [],
                          typeName := ib.typeName, module := sc.path, span := ib.span, file,
                          methods := ib.methods.map (·.name) }]
-    if let some why := shapeCheck what ib.typeName ib.typeParams (ib.typeParams ++ ib.capParams) ib.targetArgs decl ib.span then
+    if let some why := shapeCheck what ib.typeName ib.typeParams (ib.typeParams ++ ib.capParams) ib.targetArgs decl then
       ds := ds ++ [mkDiag "E0593" why ib.span file
         (some "write `impl<T, ..> Type<T, ..>` with the type's own parameters (docs/language/TRAITS.md TC-4)")]
   return (infos, ds)
