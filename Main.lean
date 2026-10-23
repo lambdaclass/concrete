@@ -369,6 +369,7 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
     -- "Undefined symbols: _main" (bug 025). Reject it here as a diagnostic.
     -- `--emit-llvm` is exempt: dumping IR for inspection is legitimate with no
     -- entry point (and there is no separate library/embedded build profile).
+    -- spec: PASS-10 (docs/spec/pipeline.md; an executable without an entry point is a `link` diagnostic)
     if !emitLLVM && !(ssa.ssaModules.any fun m => m.functions.any (·.isEntryPoint)) then
       IO.eprintln "error[link]: no `main` function found; an executable needs an entry point — define `fn main() -> Int` in the root module"
       return 1

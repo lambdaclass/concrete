@@ -618,6 +618,8 @@ def outcome_interp(cc, src):
     rc, out, stdout = run([cc, src, "--interp"])
     if rc is None or rc < 0:
         return ("fail", f"interpreter {'timeout' if rc is None else 'signal ' + str(-rc)}")
+    if rc != 0 and LEAK_RE.search(out):
+        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0))
     if rc == 0:
         last = [l for l in stdout.split("\n") if l.strip()]
         v = last[-1].strip() if last else ""
@@ -769,7 +771,10 @@ DECL_RE = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|partial|nonco
 def lean_decls(src_dir):
     """last-name -> [(file, start, end, text)] for every top-level declaration."""
     out = {}
-    for p in sorted(glob.glob(os.path.join(src_dir, "**", "*.lean"), recursive=True)):
+    files = sorted(glob.glob(os.path.join(src_dir, "**", "*.lean"), recursive=True))
+    main_lean = os.path.join(os.path.dirname(os.path.abspath(src_dir)), "Main.lean")
+    if os.path.exists(main_lean): files.append(main_lean)   # the driver's root `main`
+    for p in files:
         lines = open(p, encoding="utf-8").read().split("\n")
         starts = []
         for i, ln in enumerate(lines):

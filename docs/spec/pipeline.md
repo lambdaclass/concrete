@@ -129,7 +129,7 @@ an unsupported mapping fails explicitly (VERIFIED_PIPELINE, "IR chain").
 <a id="PASS-5"></a>
 ### PASS-5. After Check: linearity resolved, operand types agree
 
-**PASS-5@1.** A program that Check accepts has every owned linear local, parameter and branch or arm local consumed on every normal exit and every binary operation's operands at one numeric type, so no later stage receives either violation.
+**PASS-5@1.** A program that Check accepts has every owned linear local, parameter and branch or arm local consumed on every normal exit and every arithmetic, bitwise or comparison operation on numeric operands at one numeric type, so no later stage receives either violation.
 
 - Kind: preservation
 - Uses: none
@@ -181,7 +181,7 @@ mod m {
 <a id="PASS-6"></a>
 ### PASS-6. After Elab: desugaring adds nothing
 
-**PASS-6@1.** Elaboration into Core introduces no type, operand width or capability use that the checked program did not have, so lowering sugar never smuggles an effect past the capability check.
+**PASS-6@1.** Elaboration into Core introduces no ill-typed term, no mixed-width operation and no capability call hidden from the capability check, and CoreCheck refuses any Core in which it would have, so desugaring never smuggles an effect past the check.
 
 - Kind: preservation
 - Uses: none
@@ -342,7 +342,7 @@ fn main() -> Int {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Pipeline.emit
+- Enforced by: Concrete.Pipeline.emit, compileSSA
 - Semantics: none
 - Obligation: none (the LLVM profile is trusted, PASS-4)
 - Evidence: tested
