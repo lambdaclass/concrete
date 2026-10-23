@@ -658,7 +658,10 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   `&*h` is accepted and moves the heap, so a later use of `h` fails (E0213 in the probe, an
   `if` without `else` that freed it); on `land2-fix` the borrow itself is E0230, because the
   dereference consumes `h` before the shared-access check sees the consumed root. The **root** of a canonical
-  place is its binding.
+  place is its binding. **Static place (decided 2026-10-23, TIGHTENING_DECISIONS D2):** a string
+  literal is also a canonical place, with no projections; its root is static, read-only storage
+  that exists for the whole run, not a binding. It can be borrowed shared (`&"text"`), never
+  exclusively, and nothing moves, frees or writes it.
 - A **reference binding** is a local whose type is a reference type. Since the 2026-10-21 decision it
   is a parameter, a borrow-block binder, or a `match`-arm, `if let` or `while let` pattern binder that
   binds through a scrutinee of reference type; a `let` binder never is (REF-6). An arm-scoped
@@ -686,9 +689,11 @@ The rules establish two invariants, which are the proof targets for S8 and V1:
 
 - **INV-REF (references only flow down).** In safe code a reference value is held only by a local
   binding or a call argument of some activation `F`, and it denotes a canonical place whose root
-  binding belongs to `F` or to an activation below `F` on the stack. Wherever the reference can be
-  used, that root binding is in scope, is the binding the reference was made from, and has not
-  been moved, consumed, freed or destroyed. No reference resides in an aggregate, a heap cell, a
+  binding belongs to `F` or to an activation below `F` on the stack, or a static place (a string
+  literal), whose storage outlives every activation and is never moved, freed or written. Wherever
+  the reference can be used, that root binding is in scope, is the binding the reference was made
+  from, and has not been moved, consumed, freed or destroyed (for a static place this holds
+  trivially). No reference resides in an aggregate, a heap cell, a
   constant or the return channel. The only storage holding a reference is a local reference
   binding's own slot (or an argument slot during a call); a reference to such a slot
   (`& &T`) is allowed, but the inner reference can never be read out of it (REF-5) or written
@@ -1317,7 +1322,7 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-8 | `error_named_ref_mut_conflict.con` † (E0232), `error_091_norm_copied_mut_ref.con` † (E0231), `error_091_norm_assign_under_shared_ref.con` † (E0232) | reject E0302 REF-6@1 once REF-6 lands (each needs two named references, or a named reference and a write, live across statements); the code given before |
 | REF-8 | `error_2i_ref8_free_in_borrow_block.con` (new; `borrow h as r in R { free(h); }`) | reject E0203 REF-8@1 |
 | REF-8 | `regress_2i_ref8_free_after_ref_block.con` (new; a borrow block over `h` ends, then `free(h)`) | run 42 |
-| REF-8 | `error_2i_ref8_match_borrow_scrutinee_moved.con` (new; the `match &o` shape of G17, moving `o` inside the arm) | reject E0203 REF-8@1 (G17) |
+| REF-8 | `error_g17_match_borrow_root_moved_in_arm.con`, `error_g17_if_let_borrow_root_moved.con`, `error_g17_match_borrow_heap_freed_in_arm.con` (exist since 2026-10-23; the `match &o` and `if let` shapes of G17 and a heap freed in the arm, moving the root inside the arm) | reject E0204 REF-8@1 (G17, closed) |
 | REF-8 | `regress_2i_ref8_match_borrow_scrutinee.con` (new; the same `match &o` without the move, `o` consumed after the `match`) | run 42 |
 | REF-6 | `error_2i_ref8_free_under_projected_borrow.con` (new; `let r = &h.v; free(h);`, bug 091's projected case) | reject E0302 REF-6@1 (the shape is unwritable once REF-6 lands; E0204 REF-8@1 on `land2-fix` before) |
 | REF-6 | `error_2i_ref8_assign_under_shared.con` (new; `x = 1` under `let r = &x`) | reject E0302 REF-6@1 (likewise; E0232 REF-8@1 before) |

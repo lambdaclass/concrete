@@ -35,7 +35,7 @@ address of a slot that holds the heap pointer (the one-hop rule of MEMORY_SEMANT
 126), so `peek` loads the payload as a pointer. Check (`checkExpr`, the borrow case) accepts the
 operand because it is not a place it refuses (only `&(40 + 2)`, constants and temporary `&mut self`
 receivers are refused), and no pass gives the temporary a slot or a destruction point, so a linear
-temporary is dropped on the floor. A string literal temporary (`&"text"`, 79 corpus sites) is
+temporary is dropped on the floor. A string literal temporary (`&"text"`, 77 corpus sites) is
 harmless only because a literal `String` owns no heap memory (capacity 0).
 
 ## Structural cause

@@ -175,9 +175,11 @@ are not candidates here. Two other items are settled and are not repeated in the
 
   `n(&int_to_string(12345))` returns 5, but valgrind reports 32 bytes definitely lost: the
   temporary `String` is never destroyed. A string literal temporary is harmless, because a literal
-  `String` has capacity 0 and owns no heap. The corpus borrows string literals at 79 sites and an
-  integer literal at 1 site; it has no call-result or aggregate-literal borrows (a textual scan of
-  `std`, `examples` and `tests`).
+  `String` has capacity 0 and owns no heap. The corpus borrows string literals at 77 sites, an
+  integer literal at 2 (one in an already-refused fixture) and a call result at 2 (bug 182's
+  reproducers), with no aggregate-literal borrows; this is the operand scan of
+  [D2](#d2-only-places-are-borrowable-q2-ref-5-g12), which supersedes an earlier, cruder textual
+  count of 79 / 1 / 0.
 - **Class.** HOLE: a leak of a linear value and a miscompile, both in safe code.
 - **Rule options.**
   - (A) REF-5@1 as written. Every non-place borrow is E0238, and the 80 literal sites migrate to
