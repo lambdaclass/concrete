@@ -40,12 +40,18 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
 - Lifetime tied to the borrow scope.
 - `&"literal"` borrows a global constant directly with no heap allocation. The backing `String` struct has `cap = 0` to signal it is not heap-owned.
 
-### `Text` (borrowed, immutable text view)
+### `Text` (owned, immutable, validated UTF-8)
 
-- Layout: `{ ptr: *const u8, len: u64 }`
-- Created from `&String` via `Text::from_string`.
-- No ownership, no capacity field, no mutation.
-- Intended as the lightweight read-only text view for functions that only need to inspect string content.
+- Layout: `{ ptr: *mut u8, len: u64, cap: u64 }`, all fields private (`std/src/text.con`).
+- **Owns its storage.** Every constructor copies: `Text::from_string(&s)` copies the `String`'s
+  bytes, and `Text::copy_from_raw(ptr, len)` validates UTF-8 and copies. A `Text` never aliases
+  another value's buffer.
+- Linear, not `Copy`: it must be consumed exactly once (`drop`, or `Destroy`).
+- Immutable: there is no `&mut` accessor and no raw-parts escape, so the UTF-8 property
+  established at construction holds for the value's whole life.
+- R-0483 (closed 2026-10-09) made it owning. Before that, `Text` was a `Copy` pointer-and-length
+  pair that borrowed another value's bytes. It could outlive its buffer, and its validation went
+  stale when the source was mutated. The rule is TYPE-3 in [docs/spec/types.md](../spec/types.md#TYPE-3).
 
 ### `Bytes` (owned, mutable byte buffer)
 
@@ -70,7 +76,7 @@ Concrete maintains an explicit split between byte-level and text-level types. Th
 |------|----------|--------------------|---------|
 | `Bytes` | Arbitrary bytes | None | I/O buffers, binary data, network packets |
 | `String` | UTF-8 bytes | Valid UTF-8 (target) | Text that will be printed, compared, searched |
-| `Text` | UTF-8 bytes (borrowed) | Inherits from source `String` | Read-only text inspection |
+| `Text` | UTF-8 bytes (owned copy) | Validated at construction, immutable after | Read-only validated text |
 | `[u8; N]` | Arbitrary bytes | None | Fixed-size buffers, wire formats |
 | `*const u8` / `*mut u8` | Arbitrary bytes | None | Raw FFI, trusted internals |
 
@@ -78,8 +84,8 @@ Concrete maintains an explicit split between byte-level and text-level types. Th
 
 - `Bytes` to `String`: Explicit `to_string()`. Caller asserts the bytes are valid UTF-8. No runtime validation in the current implementation; a validating conversion (`Bytes::to_string_checked` returning `Result<String, EncodingError>`) should exist before freeze.
 - `String` to `Bytes`: Not yet implemented. Should be a zero-copy ownership transfer (the reverse of `to_string`).
-- `&String` to `Text`: `Text::from_string(&s)`. Zero-copy, borrows the pointer.
-- `Text` to `String`: Requires allocation (clone the viewed bytes into an owned buffer).
+- `&String` to `Text`: `Text::from_string(&s)`. Copies the bytes into storage the `Text` owns (`with(Alloc)`).
+- `Text` to `String`: Requires allocation (copy the bytes into a new `String`).
 - There is no implicit `Bytes` to `String` or `String` to `Bytes` conversion. There is no implicit `[u8; N]` to `String` conversion.
 
 ---
@@ -271,7 +277,7 @@ The vocabulary should be consistent across `String`, `Bytes`, `Vec`, `Slice`, an
 | Internal encoding | UTF-8, always |
 | Multiple encodings | No. One encoding. Convert at boundaries. |
 | Owned string type | `String` (heap-allocated, linear, growable) |
-| Borrowed text view | `&String` for borrow, `Text` for lightweight view |
+| Borrowed text view | `&String` (a reference, scoped like every reference). `Text` is an owned, validated copy, not a view |
 | Byte buffer type | `Bytes` (no encoding guarantee) |
 | Implicit byte-to-text coercion | No. Explicit conversion only. |
 | Implicit text-to-byte coercion | No. Explicit conversion only. |
@@ -297,6 +303,6 @@ The vocabulary should be consistent across `String`, `Bytes`, `Vec`, `Slice`, an
 
 4. **Null termination guarantee.** Should `String` always maintain a trailing null byte for C interop convenience (like Rust's `CString`)? Or should this remain a separate concern? The former adds one byte of overhead per string but simplifies FFI. The latter is simpler but requires explicit `as_c_str` at every FFI call.
 
-5. **`Text` vs `&str`.** Is `Text` the right borrowed-view type, or should there be a more integrated borrowed string slice (like Rust's `&str`)? `Text` currently has no connection to the type system's borrow checker -- it is a plain struct with a raw pointer. A language-level borrowed slice would be safer but requires deeper compiler support.
+5. **`Text` vs `&str`.** Resolved by R-0483: `Text` is owned, not a borrowed view, so it needs no connection to the borrow checker. The borrowed form is `&String`. A borrowed string slice like Rust's `&str` would be a reference stored in a value, which the second-class reference rules exclude ([references.md](../spec/references.md#REF-3)).
 
 6. **Escape sequence completeness.** `\xHH` and `\u{HHHH}` remain approved additions. Tightening unknown escapes into a compile error is follow-up lexer hardening, not a sign that the frozen surface is undefined.

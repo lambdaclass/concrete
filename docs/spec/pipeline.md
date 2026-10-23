@@ -83,3 +83,39 @@ fn main() -> Int {
     return get::<Int>(&o, read);
 }
 ```
+
+<a id="PASS-3"></a>
+### PASS-3. The native profile is a forward simulation from checked Core to AArch64
+
+**PASS-3@1.** For the native profile, every behaviour of the compiled AArch64 image is a behaviour of the checked Core program it was compiled from, proved as a forward simulation through each stage under the stated premises of the trusted base.
+
+- Kind: preservation
+- Uses: none
+- Codes: none
+- Status: pending R-0508
+- Semantics: none
+- Obligation: the composed compiler-correctness theorem (R-0508), with the native image checked by R-0505
+- Evidence: tested
+
+**Rationale.** This is the theorem the verified pipeline exists for (VERIFIED_PIPELINE, Part 2).
+Forward simulation is turned into backward refinement only after its receptiveness and
+determinacy hypotheses are proved. Each stage's own preservation entry in this chapter is one
+link of the chain.
+
+<a id="PASS-4"></a>
+### PASS-4. The LLVM profile is trusted and differential-tested
+
+**PASS-4@1.** The LLVM profile is outside PASS-3: its binaries are labelled unverified, its BIR-to-LLVM printer is trusted, and its results are differential-tested against the interpreter and the native profile.
+
+- Kind: preservation
+- Uses: none
+- Codes: none
+- Status: pending R-0503
+- Semantics: none
+- Obligation: none (trusted; TRUSTED_COMPUTING_BASE section 4)
+- Evidence: tested
+
+**Rationale.** LLVM is the fast profile, not the verified one. Unverified does not mean
+unspecified: the printer adds no poison- or UB-generating flags without their preconditions, and
+an unsupported mapping fails explicitly (VERIFIED_PIPELINE, "IR chain").
+

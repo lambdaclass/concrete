@@ -55,3 +55,22 @@ mod m {
     }
 }
 ```
+
+<a id="FFI-2"></a>
+### FFI-2. One Layout authority for AAPCS64
+
+**FFI-2@1.** Every size, alignment, field offset and AAPCS64 argument and return classification comes from one `Layout` authority, which the checker, the lowering and the ABI adapter all consult.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0502
+- Semantics: none
+- Obligation: `Layout` is the single proved authority, and the representation certificates it emits are checked (R-0502)
+- Evidence: tested
+
+**Rationale.** When two components compute a layout separately, they can disagree, and the
+disagreement shows up as wrong code at the boundary (structural classes 8 and 12). One authority,
+used by every consumer and stated for the AAPCS64 calling convention of the native profile,
+removes the second copy.
+

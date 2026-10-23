@@ -48,8 +48,14 @@ areas exist (§8).
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | stub: PAT-1, the renamed pattern binder that SCOPE-1 depends on (it was gap G4) |
-| `ffi.md` | `FFI-` | stub: FFI-1, foreign function values |
-| `pipeline.md` | `PASS-` | stub: PASS-1 and PASS-2, the preservation statements for generic substitution and binder modes |
+| `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
+| `pipeline.md` | `PASS-` | stub: PASS-1 to PASS-4 (substitution, binder modes, the native-profile theorem, the trusted LLVM profile) |
+| `types.md` | `TYPE-` | stub: TYPE-1 to TYPE-3 (callable values, no dynamic dispatch, owned `Text`) |
+| `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
+| `trusted.md` | `TRUST-` | stub: TRUST-1 and TRUST-2 (pointer operations, no undefined behaviour in safe code) |
+| `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
+| `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
+| `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -355,6 +361,9 @@ Each step lands with the gate green. The steps run in this order:
    control, evaluation order, `main` and the exit status. It replaces
    STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL, EXECUTION_MODEL and the language half of
    MAIN_EXIT_MODEL. T-ORDER enters as pending.
+5a. **memory.md** (`MEM-`, grown from the stub): allocations, `Heap<T>`, what safe code may
+   observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
+   MEMORY_SEMANTICS.
 6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,

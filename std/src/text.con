@@ -54,6 +54,7 @@ mod text {
     // The storage is managed here rather than held as a `Bytes` because `bytes.con`
     // imports `validate_utf8` from this module, and owning a `Bytes` would close that
     // import cycle.
+    // spec: TYPE-3 (docs/spec/types.md: Text is owned)
     pub struct Text {
         ptr: *mut u8,
         len: u64,
