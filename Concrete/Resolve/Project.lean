@@ -42,7 +42,8 @@ private def loadError (code msg : String) (file : String := "") : Diagnostics :=
 
 /-- Resolve `mod X;` declarations by reading X.con files from the same directory.
     Detects circular imports via parsedPaths. Collects source map entries. -/
--- spec: MOD-4 (docs/spec/modules.md; this declaration enforces the rule)
+-- MOD-4 (docs/spec/modules.md): its refusals; `Pipeline.resolveFiles` is the boundary the spec names
+-- (this module is not imported by `Concrete`).
 partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List String)
     (srcMap : SourceMap := [])
     : IO (Except Diagnostics (Module × List String × SourceMap)) := do

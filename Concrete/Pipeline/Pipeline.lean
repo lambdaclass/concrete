@@ -142,6 +142,7 @@ def parsePartial (source : String) : ParsedProgram × Diagnostics :=
 /-- Resolve `mod X;` declarations by reading sub-module files from disk.
     Wraps `resolveAllModules` (IO because it reads files).
     Returns the resolved program and a source map for diagnostics. -/
+-- spec: MOD-4 (docs/spec/modules.md; the module files a program loads, through the loader it is given)
 def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
     (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (Except Diagnostics (ParsedProgram × SourceMap)) := do

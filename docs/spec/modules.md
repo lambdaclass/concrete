@@ -159,7 +159,7 @@ mod m {
 - Uses: none
 - Codes: E0122 (resolve), E0123 (resolve), E0124 (resolve)
 - Status: enforced
-- Enforced by: Concrete.resolveModules
+- Enforced by: Concrete.Pipeline.resolveFiles
 - Semantics: none
 - Obligation: none
 - Evidence: tested
