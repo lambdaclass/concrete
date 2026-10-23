@@ -36,7 +36,10 @@ The `.named` case refuses a known type whose declaration has type parameters wit
 arguments given), before the capability check. A type parameter in scope (the function's or its
 impl's) shadows a declaration of the same name, and a name declared as an alias or trait never
 falls back to the builtin table (`type Vec = Box1<Int>` takes no arguments); both held for the
-capability check too, and both are pinned by `regress_200_type_param_shadows_generic.con`. Fixtures: `error_200_bare_generic_type.con` and
+capability check too, and both are pinned by `regress_200_type_param_shadows_generic.con`. A method's `self`, which the
+parser writes as the impl's bare type name, takes the impl target's arguments and is exempt
+(`regress_200_self_receiver_of_generic_impl.con`; bug 186's impl fixtures caught the first
+version of the fix refusing it). Fixtures: `error_200_bare_generic_type.con` and
 `error_200_bare_generic_signature.con` (E0113), `regress_200_generic_type_with_arguments.con` and
 `regress_200_type_param_shadows_generic.con` (run 42), in `run_tests.sh`. A
 rule-impact scan over the 2,169 units of the train 4 corpus found no program newly refused.

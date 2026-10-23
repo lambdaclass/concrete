@@ -568,7 +568,17 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : 
   -- Validate parameter types and add params to scope
   let ctx := f.params.foldl (fun ctx p =>
     let ctx := addLocal ctx p.name (.var (some p.ty) false)
-    checkTyDeep ctx p.ty none) ctx
+    -- The parser writes a method's `self` as the impl's bare type name (`&Box2` in
+    -- `impl Tr for Box2<i32>`); its arguments are the impl target's, so it is not a bare
+    -- generic type and no arity is looked up for it (bug 200).
+    match implType with
+    | some tn =>
+      if p.name == "self" then
+        let saved := ctx.typeParams
+        let ctx := checkTyDeep { ctx with typeParams := tn :: saved } p.ty none
+        { ctx with typeParams := saved }
+      else checkTyDeep ctx p.ty none
+    | none => checkTyDeep ctx p.ty none) ctx
   -- Validate return type
   let ctx := checkTyDeep ctx f.retTy none
   -- Walk body
