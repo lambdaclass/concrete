@@ -2967,7 +2967,9 @@ partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
         -- A declared type addVar itself rejects (E0239) would throw from the
         -- recovery path and drop the diagnostics already accumulated.
         let placeholderTy := if tyHoldsRefInAggregate placeholderTy then .placeholder else placeholderTy
-        addVar (← binderAt ldSp name) placeholderTy false
+        -- recovery only: a binder the walk did not mint (`let _`) gets no binding
+        if let some id := (← getEnv).locals.binderAt? (.site (SiteKey.ofSpan ldSp) name) then
+          addVar { id, name } placeholderTy false
       | _ => pure ()
   if !accumulated.isEmpty then
     throw accumulated

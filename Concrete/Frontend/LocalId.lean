@@ -77,13 +77,16 @@ def unresolved : LocalTable := ⟨false, #[], [], [], [], []⟩
 /-- MINTING (Resolve/Locals.lean only): an empty table for a function about to be walked. -/
 def start : LocalTable := ⟨true, #[], [], [], [], []⟩
 
-/-- MINTING (Resolve/Locals.lean only): introduce a binding. -/
+/-- MINTING (Resolve/Locals.lean only): introduce a binding. A key seen before is the SAME source
+    binder reached again: the parser copies an or-pattern arm's body once per alternative
+    (`0 | 1 => { let a = …; }`), with the same positions, into mutually exclusive arms. It keeps
+    its one identity. -/
 def bind (t : LocalTable) (key : BinderKey) (name : String) : LocalTable × LocalId :=
-  let id : LocalId := ⟨t.binders.size⟩
-  let conflicts := if t.bindersByKey.any (·.1 == key)
-    then t.conflicts ++ [s!"binder '{name}' introduced twice at one position"] else t.conflicts
-  ({ t with binders := t.binders.push { id, name, key }, bindersByKey := (key, id) :: t.bindersByKey,
-            conflicts }, id)
+  match t.bindersByKey.lookup key with
+  | some id => (t, id)
+  | none =>
+    let id : LocalId := ⟨t.binders.size⟩
+    ({ t with binders := t.binders.push { id, name, key }, bindersByKey := (key, id) :: t.bindersByKey }, id)
 
 /-- MINTING (Resolve/Locals.lean only): record that the use of `name` at `at_` denotes `id`. -/
 def recordUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : LocalTable :=

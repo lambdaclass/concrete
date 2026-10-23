@@ -44,7 +44,7 @@ neg() {
     no "$id: failed, but not for the expected reason /$want/: $(grep -m2 'error' <<<"$out" | cut -c1-400)"
   fi
 }
-PRIV='private|[Uu]nknown (constant|identifier) `Concrete\.[A-Za-z]+\.mk`'
+PRIV='private|[Uu]nknown (constant|identifier) .Concrete\.[A-Za-z]+\.mk.'
 MISMATCH='type mismatch|Application type mismatch|has type|failed to synthesize'
 
 echo "=== F: identities cannot be forged, the environment cannot be searched by spelling ==="
@@ -92,7 +92,7 @@ def src : String := "mod m {
     }
 }"
 
-/-- The line of the binder a use (line, spelling) denotes; `0` for a parameter. -/
+/-- The line of the binder a use (line, spelling) denotes; 0 for a parameter. -/
 def binderLineOf (t : LocalTable) (line : Nat) (name : String) : List Nat :=
   t.uses.filterMap fun (((l, _, _, _), n), id) =>
     if l == line && n == name then
@@ -117,25 +117,25 @@ def main : IO Unit := do
     check "T: a resolved table" f.resolved
     check "T: the valid function records no collision and no conflict"
       (f.collisions.isEmpty && f.conflicts.isEmpty)
-    check "T: `v` read in the loop body denotes the outer `let mut v` (line 3)"
+    check "T: 'v' read in the loop body denotes the outer 'let mut v' (line 3)"
       (binderLineOf f 6 "v" == [3])
-    check "T: `w` after the loop and the branch denotes the sibling `let w` of line 10, not the loop's (6) or the branch's (9)"
+    check "T: 'w' after the loop and the branch denotes the sibling 'let w' of line 10, not the loop's (6) or the branch's (9)"
       (binderLineOf f 16 "w" == [10])
-    check "T: the branch's `w` read denotes the branch's own `let w` (line 9)"
+    check "T: the branch's 'w' read denotes the branch's own 'let w' (line 9)"
       (binderLineOf f 9 "w" == [9])
-    check "T: the parameter `a` read denotes the parameter"
+    check "T: the parameter 'a' read denotes the parameter"
       (binderLineOf f 3 "a" == [0])
-    check "T: the arm binder `n` read denotes the arm binder (line 12)"
+    check "T: the arm binder 'n' read denotes the arm binder (line 12)"
       (binderLineOf f 12 "n" == [12])
-    check "T: the borrow block's `rz` read denotes the block's reference (line 15) and `z` its owner (line 14)"
+    check "T: the borrow block's 'rz' read denotes the block's reference (line 15) and 'z' its owner (line 14)"
       (binderLineOf f 15 "rz" == [15] && binderLineOf f 15 "z" == [14])
-    check "T: the assignment target `v` (line 12) denotes the outer `v`"
+    check "T: the assignment target 'v' (line 12) denotes the outer 'v'"
       (binderLineOf f 12 "v" == [3])
-    check "T: `x` after the branch denotes the outer `let x` (line 19)"
+    check "T: 'x' after the branch denotes the outer 'let x' (line 19)"
       (binderLineOf g 21 "x" == [19])
-    check "T: the shadowing `let x` of line 20 records exactly one SCOPE-1 collision, against line 19"
+    check "T: the shadowing 'let x' of line 20 records exactly one SCOPE-1 collision, against line 19"
       (g.collisions.length == 1 && (g.collisions.headD default).earlier.line == 19)
-    check "T: inside the branch, `x` denotes the branch's own binding (line 20)"
+    check "T: inside the branch, 'x' denotes the branch's own binding (line 20)"
       (binderLineOf g 20 "x" == [20])
 
 #eval main
@@ -177,7 +177,7 @@ P="$TMP/p197"; mkdir -p "$P/src"
 printf '[package]\nname = "let_else"\nversion = "0.1.0"\n' > "$P/Concrete.toml"
 cp tests/programs/let_else.con "$P/src/main.con"
 if (cd "$P" && "$BIN" build -o "$P/out" >"$TMP/b197.log" 2>&1) && "$P/out" >/dev/null; then
-  ok "R: bug 197: a project's \`let … else\` (tests/programs/let_else.con) builds and runs (exit 0)"
+  ok "R: bug 197: a project's 'let … else' (tests/programs/let_else.con) builds and runs (exit 0)"
 else
   no "R: bug 197: the let-else project failed: $(head -c 400 "$TMP/b197.log")"
 fi

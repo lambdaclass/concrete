@@ -416,10 +416,10 @@ MUT_DESC+=("Check: disable use-after-move")
 # 10. Check: disable loop-depth linearity check (enforcement lives in CheckHelpers)
 MUT_FILE+=("Concrete/Check/CheckHelpers.lean")
 MUT_OLD+=("      if info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
-          && env.rebindingVar != some name then
+          && env.rebindingVar != some r then
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_NEW+=("      if false && (info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
-          && env.rebindingVar != some name) then -- MUTATION: loop-depth disabled
+          && env.rebindingVar != some r) then -- MUTATION: loop-depth disabled
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_DESC+=("Check: disable loop-depth linearity")
 
