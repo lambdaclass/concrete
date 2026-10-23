@@ -111,15 +111,15 @@ mod ordered_set {
     }
 
     // Composition: OrderedSet is destroyable iff K is.
-    trusted impl<K: Destroy> Destroy for OrderedSet<K> {
-        pub fn destroy(&self) with(Alloc) {
+    impl<K: Destroy> Destroy for OrderedSet<K> {
+        pub trusted fn destroy(&self) with(Alloc) {
             (&self.inner).destroy();
         }
     }
 
     struct OSKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for OSKey {
-        pub fn destroy(&self) {
+    impl Destroy for OSKey {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

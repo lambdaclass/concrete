@@ -345,8 +345,8 @@ echo "=== 5. linear payloads: carried through a specialization, destroyed once =
 # interpreter does not implement the raw-pointer cast used for the counter, so
 # this is a compiled-only oracle.
 compiles_to linear_payload_once 8 'struct Tracked { cell: *mut u64 }
-trusted impl Destroy for Tracked {
-    pub fn destroy(&self) { *self.cell = *self.cell + 1; }
+impl Destroy for Tracked {
+    pub trusted fn destroy(&self) { *self.cell = *self.cell + 1; }
 }
 enum Wrap<T> { W { v: T }, N }
 trusted fn main() -> Int {
@@ -370,7 +370,7 @@ rejects() {
   else no "$name NOT rejected with $want — got: $(head -1 <<<"$out")"; fi
 }
 rejects linear_payload_leak "E0208" 'struct Tracked { cell: *mut u64 }
-trusted impl Destroy for Tracked { pub fn destroy(&self) { *self.cell = *self.cell + 1; } }
+impl Destroy for Tracked { pub trusted fn destroy(&self) { *self.cell = *self.cell + 1; } }
 enum Wrap<T> { W { v: T }, N }
 trusted fn main() -> Int {
     let mut counter: u64 = 0;

@@ -293,7 +293,7 @@ mod numeric {
         pos: u64,
     }
 
-    trusted impl RawCursor {
+    impl RawCursor {
         pub fn from_raw(data: *const u8, len: u64) with(Unsafe) -> RawCursor {
             return RawCursor { ptr: data, len: len, pos: 0 };
         }
@@ -344,7 +344,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: self.pos };
         }
 
-        fn read_be_n(&mut self, n: u64) -> Result<u64, CursorError> {
+        trusted fn read_be_n(&mut self, n: u64) -> Result<u64, CursorError> {
             if !self.has(n) {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -358,7 +358,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: acc };
         }
 
-        fn read_le_n(&mut self, n: u64) -> Result<u64, CursorError> {
+        trusted fn read_le_n(&mut self, n: u64) -> Result<u64, CursorError> {
             if !self.has(n) {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -618,7 +618,7 @@ mod numeric {
         pos: u64,
     }
 
-    trusted impl ByteWriter {
+    impl ByteWriter {
         /// Create a writer over a raw mutable pointer and length.
         /// Caller must ensure the pointer is valid for `len` bytes.
         pub fn from_raw(data: *mut u8, len: u64) with(Unsafe) -> ByteWriter {
@@ -635,7 +635,7 @@ mod numeric {
 
         // ---- Single byte write ----
 
-        pub fn write_u8(&mut self, val: u8) -> Result<u64, CursorError> {
+        pub trusted fn write_u8(&mut self, val: u8) -> Result<u64, CursorError> {
             if self.pos >= self.len {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -647,7 +647,7 @@ mod numeric {
 
         // ---- Big-endian writes ----
 
-        pub fn write_u16_be(&mut self, val: u16) -> Result<u64, CursorError> {
+        pub trusted fn write_u16_be(&mut self, val: u16) -> Result<u64, CursorError> {
             if 2 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -660,7 +660,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: self.pos };
         }
 
-        pub fn write_u32_be(&mut self, val: u32) -> Result<u64, CursorError> {
+        pub trusted fn write_u32_be(&mut self, val: u32) -> Result<u64, CursorError> {
             if 4 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -677,7 +677,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: self.pos };
         }
 
-        pub fn write_u64_be(&mut self, val: u64) -> Result<u64, CursorError> {
+        pub trusted fn write_u64_be(&mut self, val: u64) -> Result<u64, CursorError> {
             if 8 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -703,7 +703,7 @@ mod numeric {
 
         // ---- Little-endian writes ----
 
-        pub fn write_u16_le(&mut self, val: u16) -> Result<u64, CursorError> {
+        pub trusted fn write_u16_le(&mut self, val: u16) -> Result<u64, CursorError> {
             if 2 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -716,7 +716,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: self.pos };
         }
 
-        pub fn write_u32_le(&mut self, val: u32) -> Result<u64, CursorError> {
+        pub trusted fn write_u32_le(&mut self, val: u32) -> Result<u64, CursorError> {
             if 4 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }
@@ -733,7 +733,7 @@ mod numeric {
             return Result::<u64, CursorError>::Ok { value: self.pos };
         }
 
-        pub fn write_u64_le(&mut self, val: u64) -> Result<u64, CursorError> {
+        pub trusted fn write_u64_le(&mut self, val: u64) -> Result<u64, CursorError> {
             if 8 > self.len - self.pos {
                 return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
             }

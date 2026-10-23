@@ -2405,6 +2405,8 @@ run_err "$TESTDIR/error_int_to_ptr_no_unsafe.con" "requires capability"
 # Trusted boundary tests
 run_ok "$TESTDIR/trusted_fn_ptr_deref.con" 0
 run_ok "$TESTDIR/trusted_impl_basic.con" 0
+# Bug 189: `trusted impl` is refused — a block never confers trust; each method declares it.
+run_err "$TESTDIR/error_189_trusted_impl_refused.con" "'trusted impl' is not allowed"
 run_ok "$TESTDIR/trusted_ptr_assign.con" 0
 run_ok "$TESTDIR/trusted_ptr_cast.con" 0
 run_ok  "$TESTDIR/trusted_absorbs_extern_unsafe.con" 0   # R-0484 R2: trusted absorbs extern Unsafe
@@ -2985,10 +2987,8 @@ echo "=== Report output tests ==="
 # The heading reads "trusted methods in impl X", not "trusted impl X". Since per-method
 # `trusted` exists (2026-09-25), `trustedImplOrigin` is set from the FUNCTION's flag, so a
 # method may be audited inside a block that is NOT — and the old wording asserted
-# something about the block that need not be true. This fixture happens to use a whole
-# `trusted impl`, where the old text was accurate; the new text is accurate in both cases
-# and cannot overclaim. The impl-level fact is still available in the source and in
-# `--report trust-edges`.
+# something about the block that need not be true. Since bug 189 there is no block-level
+# trust at all: this fixture's method declares `trusted fn` itself.
 check_report_multi "$TESTDIR/trusted_report_check.con" unsafe \
     "trusted_report_check.con --report unsafe shows trusted boundaries" \
     "trusted_report_check.con --report unsafe missing trusted boundaries" \

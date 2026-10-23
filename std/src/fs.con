@@ -26,7 +26,7 @@ mod fs {
         return h;
     }
 
-    trusted impl File {
+    impl File {
         pub trusted fn open(path: &String, mode: &String) with(File, Alloc) -> Result<File, FsError> {
             let h: *const u8 = fopen_cstr(path, mode);
             if h == (0 as *const u8) {
@@ -55,11 +55,11 @@ mod fs {
             return fread(buf, 1, len, self.handle);
         }
 
-        pub fn seek(&self, offset: i64, whence: i32) with(File) -> i32 {
+        pub trusted fn seek(&self, offset: i64, whence: i32) with(File) -> i32 {
             return fseek(self.handle, offset, whence);
         }
 
-        pub fn tell(&self) with(File) -> i64 {
+        pub trusted fn tell(&self) with(File) -> i64 {
             return ftell(self.handle);
         }
 
@@ -68,7 +68,7 @@ mod fs {
         /// succeeds; retrying would close a released stream. A failure here
         /// usually means buffered writes did not reach the file, so check it.
         /// (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
-        pub fn close(self) with(File) -> Result<u64, FsError> {
+        pub trusted fn close(self) with(File) -> Result<u64, FsError> {
             let File { handle } = self;
             if fclose(handle) != 0 {
                 return Result::<u64, FsError>::Err { error: FsError::CloseFailed };
