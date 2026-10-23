@@ -658,8 +658,8 @@ con_fixed_tmp_scan() {
       next unless defined $1;
       my ($lit, $at) = ($1, $-[1]);
       # A /tmp path starts the literal or follows a separator (space, `=`, `:`, `,`, `;`, a quote
-      # or a bracket); after anything else (`build//tmp`, `x+/tmp`) it is part of a relative path.
-      next unless $lit =~ m#(?:^|[\s=:,;\x27(\[{])/tmp/#;
+      # (an escaped `\"` too) or a bracket); after anything else (`build//tmp`, `x+/tmp`) it is part of a relative path.
+      next unless $lit =~ m#(?:^|[\s=:,;"\x27(\[{])/tmp/#;
       my $line = 1 + (substr($src, 0, $at) =~ tr/\n//);
       (my $shown = $lit) =~ s/\n/\\n/g;
       print "$ARGV:$line:$shown\n";
@@ -699,7 +699,8 @@ fn main() with(Std) -> Int {
 line.txt";
     let x: String = "/tmp/x other.txt";
     let k: String = "key=/tmp/after_separator.txt";
-    drop_string(r); drop_string(m); drop_string(x); drop_string(k);
+    let q: String = "touch \"/tmp/quoted.txt\"";
+    drop_string(r); drop_string(m); drop_string(x); drop_string(k); drop_string(q);
     return 0;
 }
 CONEOF
@@ -716,8 +717,8 @@ fn main() with(Std) -> Int {
     return 0;
 }
 CONEOF
-[ "$( (cd "$CTMP" && con_fixed_tmp_scan fixed.con) | tr '\n' ' ')" = "fixed.con:2:/tmp/shared_name.txt fixed.con:4:/tmp/after_label.txt fixed.con:6:/tmp/after_quote_char.txt fixed.con:7:/tmp/multi\\nline.txt fixed.con:9:/tmp/x other.txt fixed.con:10:key=/tmp/after_separator.txt " ] \
-  && ok "CONTROL: the .con fixed-/tmp scan flags /tmp literals (plain, after a loop label, after a '\"' char, spanning lines, an exempt prefix of a longer literal, after a separator) whole, at their lines" \
+[ "$( (cd "$CTMP" && con_fixed_tmp_scan fixed.con) | tr '\n' ' ')" = "fixed.con:2:/tmp/shared_name.txt fixed.con:4:/tmp/after_label.txt fixed.con:6:/tmp/after_quote_char.txt fixed.con:7:/tmp/multi\\nline.txt fixed.con:9:/tmp/x other.txt fixed.con:10:key=/tmp/after_separator.txt fixed.con:11:touch \\\"/tmp/quoted.txt\\\" " ] \
+  && ok "CONTROL: the .con fixed-/tmp scan flags /tmp literals (plain, after a loop label, after a '\"' char, spanning lines, an exempt prefix of a longer literal, after a separator or an escaped quote) whole, at their lines" \
   || no "CONTROL: the .con fixed-/tmp scan missed or misplaced a hit: $(con_fixed_tmp_scan "$CTMP/fixed.con" | tr '\n' ' ')"
 [ -z "$(con_fixed_tmp_scan "$CTMP/clean.con")" ] \
   && ok "CONTROL: the .con fixed-/tmp scan ignores comments, doc examples and relative paths containing /tmp/" \
