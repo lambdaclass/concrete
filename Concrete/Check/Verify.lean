@@ -416,6 +416,55 @@ partial def verifyComparisonTypes (modules : List CModule) : Diagnostics :=
     code := "E0229"
   }
 
+/-- The operator rule after monomorphization (bug 211, TYPE-6@1): every arithmetic,
+    wrapping/saturating and bitwise operator in an instance applies to operands of one numeric type
+    (integers for wrapping/saturating and bitwise), or, for arithmetic in trusted or `Unsafe` code, to
+    a raw pointer and an integer. CoreCheck defers an operand whose type is a type parameter to the
+    instantiation (`isOpaqueOperandTy`); this is that check, on each monomorphized copy, so
+    `add<T: Copy>` at a struct is a user error (E0501) instead of an ill-typed call that only
+    `llvm-as` rejected. `none` = not a refused operator, keep walking. -/
+private def operatorTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) : Option (List VerifyViolation) :=
+  match e with
+  | .binOp op lhs rhs _ =>
+    let free : Ty → Bool := fun t => match t with | .never | .placeholder => true | _ => false
+    let isPtr : Ty → Bool := fun t => match t with | .ptrMut _ | .ptrConst _ => true | _ => false
+    let lt := lhs.ty
+    let rt := rhs.ty
+    let ok? : Option Bool := match op with
+      | .add | .sub | .mul | .div | .mod =>
+        some (free lt || isNumeric lt || (isPtr lt && isInteger rt && unsafeOk))
+      | .wrappingAdd | .wrappingSub | .wrappingMul
+      | .saturatingAdd | .saturatingSub | .saturatingMul
+      | .bitand | .bitor | .bitxor | .shl | .shr =>
+        some (free lt || isInteger lt)
+      | _ => none
+    match ok? with
+    | some false =>
+      some [{ fnName, message := s!"operator is not defined on '{tyToStr lt}' after monomorphization: arithmetic takes two operands of one numeric type (bitwise, shift, wrapping and saturating operators take integers), and pointer arithmetic needs trusted or `Unsafe` code" }]
+    | _ => none
+  | _ => none
+
+/-- **Post-Mono operator verifier** (bug 211): see `operatorTypeHook`. Generic definitions are
+    skipped; only their instances are checked. -/
+partial def verifyOperatorTypes (modules : List CModule) : Diagnostics :=
+  let rec goModule (m : CModule) : List VerifyViolation :=
+    let noTy : Ty → Bool := fun _ => false
+    let fnVs := m.functions.foldl (fun acc fn =>
+      if !fn.typeParams.isEmpty then acc
+      else fn.body.foldl (fun acc2 st =>
+        acc2 ++ collectStmtViolations fn.name noTy "" st
+          (hook := operatorTypeHook fn.name (Capabilities.capsAllowUnsafeOp fn.isTrusted fn.capSet))) acc) []
+    fnVs ++ m.submodules.foldl (fun acc sub => acc ++ goModule sub) []
+  let violations := modules.foldl (fun acc m => acc ++ goModule m) []
+  violations.map fun v => {
+    severity := .error
+    message := s!"{v.fnName}: {v.message}"
+    pass := "post-mono"
+    span := none
+    hint := some "a generic arithmetic or bitwise operator instantiated at a non-numeric type: instantiate at a numeric type, or compute through a named function of the type"
+    code := "E0501"
+  }
+
 /-- Bug 092 (post-mono): does a value of this type store a reference inside an
     aggregate (array, `Heap`, generic argument)? A bare `&T` is a reference, not
     an aggregate; raw pointers and function types are not looked through. Same
@@ -636,6 +685,7 @@ def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules
     ++ verifyComparisonTypes modules
+    ++ verifyOperatorTypes modules
     ++ verifyCapsPostMono modules ++ verifyNoRefBindingsPostMono modules
 
 -- ============================================================
