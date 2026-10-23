@@ -21,8 +21,9 @@ def binOpSymbol : BinOp → String
   | .wrappingAdd => "wrapping_add" | .wrappingSub => "wrapping_sub" | .wrappingMul => "wrapping_mul"
   | .saturatingAdd => "saturating_add" | .saturatingSub => "saturating_sub" | .saturatingMul => "saturating_mul"
 
-def throwCheckMsg (msg : String) (span : Option Span := none) : CheckM α :=
-  throw [{ severity := .error, message := msg, pass := "check", span := span, hint := none }]
+-- Bug 206: there is no message-only refusal. Every Check refusal is a `CheckError`, whose
+-- constructor fixes its code (`CheckError.code`), and `Diagnostic.code` has no default, so a
+-- diagnostic without a code does not typecheck.
 
 -- ============================================================
 -- Helpers
@@ -320,7 +321,7 @@ def localAt? (sp : Span) (name : String) : CheckM (Option LocalRef) := do
 def binderRef (key : BinderKey) (name : String) (span : Option Span := none) : CheckM LocalRef := do
   match (← getEnv).locals.binderAt? key with
   | some id => return { id, name }
-  | none => throwCheckMsg s!"internal: the binder '{name}' has no identity in the local table (R-0492)" span
+  | none => throwCheck (.binderTableMissing s!"the binder '{name}'" "has no identity in the local table") span
 
 /-- The binding introduced by the construct at `sp` spelled `name`. -/
 def binderAt (sp : Span) (name : String) : CheckM LocalRef :=

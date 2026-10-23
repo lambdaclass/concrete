@@ -23,7 +23,9 @@ structure Diagnostic where
   pass     : String         -- "check", "elab", "ssa-verify", etc.
   span     : Option Span    -- primary span (line/col from Token.lean)
   hint     : Option String  -- suggested fix (the "help" section)
-  code     : String := ""   -- stable error code (e.g. "E0201"), empty if unclassified
+  -- Bug 206: no default. Every diagnostic names its stable code (e.g. "E0201"), so a code-less
+  -- one cannot be written; `check_diagnostic_codes_present.sh` refuses an empty or malformed one.
+  code     : String
   file     : String := ""   -- source file path (empty = unknown)
   context  : List String := []  -- context chain, outermost first
   -- rich diagnostic surface (Phase 4 #11). All default empty, so a diagnostic that
@@ -135,6 +137,17 @@ def codeRuleTag : String → Option String
   | "E0595" => some "TRAIT-6@1"
   -- docs/spec/contracts.md (one rule since bug 203 moved the append() refusal to E0421)
   | "E0420" => some "CON-4@1"
+  -- bug 206: codes for the refusals that had none
+  | "E0122" => some "MOD-1@1"
+  | "E0313" => some "TYPE-9@1"
+  | "E0314" => some "TYPE-10@1"
+  | "E0315" => some "TYPE-10@1"
+  | "E0316" => some "TYPE-7@1"
+  | "E0317" => some "TYPE-9@1"
+  | "E0318" => some "PAT-8@1"
+  | "E0319" => some "STMT-10@1"
+  | "E0320" => some "CON-3@1"
+  | "E0321" => some "CON-3@1"
   | _ => none
 
 /-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`

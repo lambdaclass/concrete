@@ -566,7 +566,7 @@ private def checkBinOpTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 
 private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   if f.blocks.isEmpty then
-    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none }]
+    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none, code := SSAVerifyError.code .functionHasNoBlocks }]
   else
     let blockLabels : Std.HashSet String := f.blocks.foldl (·.insert ·.label) ∅
     let predecessors := buildPredecessors f.blocks

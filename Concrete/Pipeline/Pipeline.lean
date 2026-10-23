@@ -147,7 +147,8 @@ def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
     : IO (Except Diagnostics (ParsedProgram × SourceMap)) := do
   match ← resolveAllModules baseDir prog.modules inputPath with
   | .error e =>
-    return .error [{ severity := .error, message := e, pass := "resolve", span := none, hint := none }]
+    -- Bug 206: a `mod X;` whose file cannot be loaded is MOD-1's E0122.
+    return .error [{ severity := .error, message := e, pass := "resolve", span := none, hint := none, code := "E0122" }]
   | .ok (modules, srcMap) =>
     return .ok ({ modules := normalizeProgramCapArgs modules }, srcMap)
 

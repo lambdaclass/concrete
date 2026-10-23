@@ -274,7 +274,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0306 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check)
+- Codes: E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0306 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check), E0316 (check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
 - Semantics: none
@@ -311,6 +311,15 @@ struct Copy P { a: Int, b: Int }
 fn main() -> Int {
     let p: P = P { a: 1, b: 2, a: 40 };
     return p.a + p.b;
+}
+```
+
+```con reject name=newtype-field-other-than-zero code=E0316 stage=check pair=every-field
+newtype Meters = Int;
+
+fn main() -> Int {
+    let m: Meters = Meters(42);
+    return m.1;
 }
 ```
 
@@ -367,7 +376,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check)
+- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check), E0313 (check), E0317 (check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -388,6 +397,21 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=newtype-constructor-arity code=E0313 stage=check pair=right-arity
+newtype Meters = Int;
+
+fn main() -> Int {
+    let m: Meters = Meters(40, 2);
+    return m.0;
+}
+```
+
+```con reject name=receiverless-trait-method code=E0317 stage=check pair=right-arity
+trait Make { fn make() -> Int; }
+fn call<T: Make>(x: &T) -> Int { return x.make(); }
+fn main() -> Int { return 0; }
+```
+
 ```con accept name=right-arity exit=42
 fn add(a: Int, b: Int) -> Int {
     return a + b;
@@ -405,7 +429,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check), E0421 (check, elab)
+- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check), E0421 (check, elab), E0314 (check), E0315 (check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -429,6 +453,20 @@ fn main() with(Alloc) -> Int {
 fn main() with(Std) -> Int {
     let x: Int = 42;
     free(x);
+    return 0;
+}
+```
+
+```con reject name=wrapping-on-non-integers code=E0314 stage=check pair=free-heap
+fn main() -> Int {
+    let b: bool = wrapping_add(true, false);
+    return 0;
+}
+```
+
+```con reject name=print-without-arguments code=E0315 stage=check pair=free-heap
+fn main() with(Std) -> Int {
+    print();
     return 0;
 }
 ```

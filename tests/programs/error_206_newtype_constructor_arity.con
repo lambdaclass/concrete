@@ -1,0 +1,8 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0313
+// (docs/spec/types.md, example newtype-constructor-arity).
+newtype Meters = Int;
+
+fn main() -> Int {
+    let m: Meters = Meters(40, 2);
+    return m.0;
+}

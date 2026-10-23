@@ -829,7 +829,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: OWN-D1
-- Codes: E0571 (core-check)
+- Codes: E0571 (core-check, post-mono)
 - Status: enforced
 - Enforced by: Concrete.ccCheckModuleDecls
 - Semantics: none

@@ -27,6 +27,7 @@ cd "$ROOT_DIR"
 # family | gate command (relative to repo root). Order is stable/documented.
 GATES=(
   "diagnostic-code completeness|bash scripts/tests/check_diagnostic_codes_complete.sh"
+  "every diagnostic has a code|bash scripts/tests/check_diagnostic_codes_present.sh"
   "quadratic-append ratchet|bash scripts/tests/check_no_quadratic_append.sh"
   "public API inventory + import firewall|bash scripts/tests/check_compiler_api_boundary.sh"
   "backend interface contract|bash scripts/tests/check_backend_contracts.sh"

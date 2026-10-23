@@ -1,0 +1,57 @@
+# Bug 206 — Check refusals built from a bare message carried no diagnostic code
+
+**Status:** FIXED (branch `wip/bug206`, based on `main` `1b2dba60` with `wip/train6` `36bf7612` and `wip/bug203` merged)
+**Found:** 2026-10-23, while splitting E0420 (bug 203): the `append()` refusal reached the user
+from Check with no code at all, through the message-only helper `throwCheckMsg`, which eighteen
+other Check refusals also used
+**Severity:** a diagnostic-identity defect, not a soundness one. Every program involved was
+refused, but the diagnostic named no code, so no rule tag or specification link could be attached
+to it, and the specification's code mapping (check_spec S6) could not see the refusal at all.
+
+## Reproducer
+
+```con pseudocode
+newtype Meters = Int;
+fn main() -> Int {
+    let m: Meters = Meters(40, 2);
+    return m.0;
+}
+```
+
+Expected: a coded refusal (TYPE-9). Observed on `wip/train6` `36bf7612`:
+`error[check]: newtype 'Meters' constructor takes exactly 1 argument`, with no code.
+
+## Cause
+
+`Concrete/Check/CheckHelpers.lean` defined `throwCheckMsg`, which built a `Diagnostic` from a
+message alone, and `Diagnostic.code` defaulted to `""`, so a diagnostic without a code
+typechecked anywhere. Twenty Check sites used the helper (builtin arities and argument types,
+newtype constructors and fields, receiverless trait methods, a destructuring `let` in a `for`
+header, `#[test]` shapes, internal binder-table failures), and eleven literal diagnostics in Check,
+Verify, SSAVerify, Pipeline and FileSummary left the field out (spec functions and contract
+clauses, reserved function names, a Copy struct after specialization, a function with no blocks,
+an unreadable `mod` file, unknown or private imports).
+
+## Fix
+
+`Diagnostic.code` has no default, so every construction site names a code, and `throwCheckMsg`
+is gone: every Check refusal is a `CheckError` whose constructor fixes the code. The refusals
+reuse the code of the rule they enforce where one existed (E0268 – E0270 builtin signatures,
+E0201 unknown names, E0301 shadowed parameters, E0571 post-specialization Copy, E0578 reserved
+names, E0701, E0110/E0111/E0284/E0285/E0418/E0419 imports) and take new codes otherwise: E0122
+(MOD-1), E0312 (internal), E0313 and E0317 (TYPE-9), E0314 and E0315 (TYPE-10), E0316 (TYPE-7),
+E0318 (new PAT-8), E0319 (new STMT-10), E0320 and E0321 (CON-3, now partial). The gate
+`check_diagnostic_codes_present.sh` keeps the field without a default, the helper absent and every
+literal code well formed, with negative controls; `run_tests.sh` fails any `run_err` fixture whose
+output holds an error without a code. Fixtures: nine `error_206_*.con`, one per new user-facing
+code, taken from the specification's examples.
+
+## Structural cause
+
+Class 11, absence read as a fact: an empty code was a valid value, so a site that forgot its code
+produced a well-formed diagnostic that no table could classify.
+
+## Structural owner
+
+The `Diagnostic` type (a code is a required field) and the specification's code mapping
+(`docs/spec`, S6), with `check_diagnostic_codes_present.sh` for the parts types cannot hold.

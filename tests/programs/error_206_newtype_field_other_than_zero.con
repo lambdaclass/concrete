@@ -1,0 +1,8 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0316
+// (docs/spec/types.md, example newtype-field-other-than-zero).
+newtype Meters = Int;
+
+fn main() -> Int {
+    let m: Meters = Meters(42);
+    return m.1;
+}
