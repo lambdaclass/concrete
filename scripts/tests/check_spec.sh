@@ -187,9 +187,10 @@ fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
   && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
-# an unmigrated code (whichever is first today), reclassified as a rule code no entry names
-UNM="$(awk -F'\t' '$2 ~ /^unmigrated:/ {print $1; exit}' docs/spec/codes.tsv)"
-[ -n "$UNM" ] || no "N6b: codes.tsv has no unmigrated code left to plant; update this control"
+# an internal code (whichever is first today; no entry names one), reclassified as a rule code.
+# Every user-facing code is migrated, so an internal one is the code no entry names.
+UNM="$(awk -F'\t' '$2 == "internal" {print $1; exit}' docs/spec/codes.tsv)"
+[ -n "$UNM" ] || no "N6b: codes.tsv has no internal code left to plant; update this control"
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^$UNM\t[^\t\n]*', '$UNM\trule', s, flags=re.M)" \
   && control "N6b: a rule-class code that no entry names" S6 "$UNM: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 

@@ -1431,6 +1431,9 @@ run_ok "$TESTDIR/integration_state_machine.con" 42
 run_ok "$TESTDIR/integration_compiler_stress.con" 42
 run_ok "$TESTDIR/integration_multi_module.con" 42
 run_ok "$TESTDIR/integration_recursive_structures.con" 42
+# Bug 205 (silent on --interp): a struct holding itself through a generic instantiation.
+run_err "$TESTDIR/error_205_recursive_through_instantiation.con" "(E0583)"
+run_ok "$TESTDIR/regress_205_instantiations_without_cycle.con" 42
 run_ok "$TESTDIR/integration_multi_file_calculator.con" 42
 run_ok "$TESTDIR/integration_type_registry.con" 42
 run_ok "$TESTDIR/integration_pipeline_processor.con" 42
@@ -2493,6 +2496,10 @@ run_err "$TESTDIR/error_unknown_label.con" "unknown loop label"
 run_err "$TESTDIR/error_label_not_loop.con" "label can only precede while or for"
 # Trait bound errors
 run_err "$TESTDIR/error_trait_bound_missing.con" "does not implement trait"
+# Bug 204 (silent): a trait bound on a primitive type argument was never checked.
+run_err "$TESTDIR/error_204_primitive_bound_unchecked.con" "(E0241)"
+run_err "$TESTDIR/error_204_primitive_bound_unused.con" "(E0241)"
+run_ok "$TESTDIR/regress_204_primitive_bound_satisfied.con" 42
 # Trait dispatch errors
 run_err "$TESTDIR/error_trait_dispatch_missing.con" "no method"
 # File I/O errors

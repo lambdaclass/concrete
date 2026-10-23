@@ -1077,6 +1077,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     impl-block bounds enforced at method-call sites (so `impl<V: Copy>` methods
     are not callable on a non-Copy instantiation — closing the decorative-bound
     soundness gap). -/
+-- spec: TRAIT-10 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
     (context : String) : CheckM Unit := do
   let env ← getEnv
@@ -1160,7 +1161,13 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
             let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
             if !callerBounds.contains traitName then
               throwCheck (.traitBoundNotSatisfied n traitName context)
-          | _ => pure ()  -- primitive types, skip non-Copy bound checking
+          | t =>
+            -- Bug 204: a primitive (or any other unnamed) type argument needs an impl too. An
+            -- impl of a primitive names it by any spelling of its canonical type (`Int`/`i64`,
+            -- the TRAIT-D1 reading), so the impl's head is compared canonically. This arm
+            -- skipped the check, and the missing method surfaced only in the backend.
+            if !(env.traitImpls.any fun (tn, tr) => tr == traitName && tyCanonical (tyFromName tn) == tyCanonical t) then
+              throwCheck (.traitBoundNotSatisfied (tyToString t) traitName context)
     | none => pure ()
 
 /-- Infer a method's OWN type params and capability params from its argument
