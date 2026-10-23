@@ -206,7 +206,8 @@ def resolvedButUnmappedFailsClosed : Bool :=
           -- and Direction, but their evidence provenance is absent.
           let resolved := buildFileSummary m
           let raw := { resolved with structs := m.structs, enums := m.enums }
-          match elabModule m raw with
+          -- R-0492 step 2: Elab reads the local binder table that Pipeline.resolve attaches.
+          match elabModule (resolveModuleLocals (desugarModule m)) raw with
           | .error _ => false
           | .ok cm =>
               match cm.declFacts.head? with

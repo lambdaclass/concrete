@@ -15,6 +15,7 @@ import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.BuiltinEnums
 import Concrete.Resolve.TypeId
 import Concrete.Resolve.Resolve
+import Concrete.Resolve.Locals
 import Concrete.Resolve.Shared
 import Concrete.Resolve.PeekType
 import Concrete.Semantics.TypeJudgment
@@ -33,8 +34,22 @@ No linearity checking, no borrow checking, no capability validation.
 -- Elaboration environment
 -- ============================================================
 
+/-- One local binding as Elab has elaborated it (R-0492 step 2): its Core name, type, whether
+    it is a `ghost let`, and the lexical frame position its binder took (absolute frame index,
+    outermost first, and index in that frame), which is what evidence binder references are
+    computed from. -/
+structure BoundLocal where
+  core : String
+  ty : Ty
+  ghost : Bool := false
+  pos : Option (Nat × Nat) := none
+
 structure ElabEnv where
-  vars : List (String × Ty)
+  -- R-0492 step 2: the function's local table (minted by `Resolve/Locals.lean`) and the
+  -- bindings elaborated so far, keyed by identity. A use of a local name is resolved through
+  -- the table at its position, never by searching for the spelling.
+  locals : LocalTable := LocalTable.unresolved
+  bound : List (LocalId × BoundLocal) := []
   structs : List StructDef
   enums : List EnumDef
   fnSigs : List (String × FnSummary)
@@ -47,11 +62,6 @@ structure ElabEnv where
   traits : List TraitDef := []
   allFnSigPairs : List (String × FnSummary) := []
   newtypes : List NewtypeDef := []
-  -- Names bound by `ghost let`. Tracked but NOT in `vars`: ghost bindings are
-  -- erased before Core, so a runtime expression referencing one resolves to
-  -- nothing — we report it as a ghost-in-runtime leak rather than a generic
-  -- undeclared variable.
-  ghostVars : List String := []
   -- Lexical frame stack for ProofBodyCanonicalV2. PARALLEL to `vars`, and
   -- deliberately not derived from it: `vars` is a flat list whose indices shift as
   -- branches and loops push and pop, so a position read off it is not a stable
@@ -92,9 +102,7 @@ structure ElabEnv where
   -- surface name in a function-flat table: a nested same-named binder
   -- silently CLOBBERED the outer one on both backends (rc=4 shadow probe),
   -- invisible to differential testing because interp and compiled agreed.
-  -- `renames` maps surface name → current Core name (prepend = shadow);
-  -- both this list and `vars` are snapshot-restored around each arm.
-  renames : List (String × String) := []
+  -- The Core name of each binding is recorded in `bound` (R-0492 step 2), keyed by identity.
   freshBinder : Nat := 0
   /-- Did every identity in the current body resolve? `false` records a normal language
       resolution whose EVIDENCE identity could not be produced, so the subject fails
@@ -139,6 +147,9 @@ inductive ElabError where
   | importSpellingCollision (localName : String) (spelling : String) (target : String) (other : String)
   -- Bug 091 round 3 containment (Check's E0237 decides it first): never build `&mut &T`.
   | mutReceiverThroughSharedRef (method : String)
+  -- R-0492 internal invariant: every binder and function reaching Elab carries the resolver's
+  -- local binder table (bug 206: every diagnostic names a code).
+  | binderTableMissing (detail : String)
 
 def ElabError.message : ElabError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
@@ -162,6 +173,7 @@ def ElabError.message : ElabError → String
   | .inSubmodule subName innerError => s!"in submodule '{subName}': {innerError}"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .binderTableMissing detail => s!"internal: {detail}"
   | .mutReceiverThroughSharedRef method =>
     s!"cannot call `&mut self` method '{method}' through a shared reference"
   | .importSpellingCollision localName spelling target other =>
@@ -200,6 +212,7 @@ def ElabError.code : ElabError → String
   | .notPublicInModule _ _ => "E0419"
   | .importSpellingCollision _ _ _ _ => "E0299"
   | .mutReceiverThroughSharedRef _ => "E0237"
+  | .binderTableMissing _ => "E0422"
 
 -- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
@@ -400,9 +413,16 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
     return .fn_ (← params.mapM resolveTypeE) capSet (← resolveTypeE retTy)
   | _ => return ty
 
-private def lookupVar (name : String) : ElabM (Option Ty) := do
+/-- The binding the use of `name` at `sp` denotes, as elaborated so far (R-0492 step 2). `none`
+    when `name` there is not a local (a constant, a function). -/
+private def useLocal? (sp : Span) (name : String) : ElabM (Option (LocalId × BoundLocal)) := do
   let env ← getEnv
-  return env.vars.lookup name
+  match env.locals.useAt? sp name with
+  | some id => return (env.bound.lookup id).map (id, ·)
+  | none => return none
+
+private def lookupVar (sp : Span) (name : String) : ElabM (Option Ty) := do
+  return (← useLocal? sp name).bind fun (_, b) => if b.ghost then none else some b.ty
 
 private def lookupFnSig (name : String) : ElabM (Option FnSummary) := do
   let env ← getEnv
@@ -432,10 +452,15 @@ private def extendFrame (sc : Proof.BodyScope) (pending : Bool) (name : String)
     | []      => sc.push [name]
     | f :: fs => { frames := (f.concat name) :: fs }
 
-private def addBinder (name : String) : ElabM Unit := do
+/-- Record `name` in the lexical frame stack and return the position it took: the absolute
+    frame index (outermost first) and the index in that frame. -/
+private def addBinder (name : String) : ElabM (Nat × Nat) := do
   let env ← getEnv
-  setEnv { env with bodyScope := extendFrame env.bodyScope env.pendingFrame name
-                    pendingFrame := false }
+  let sc := extendFrame env.bodyScope env.pendingFrame name
+  setEnv { env with bodyScope := sc, pendingFrame := false }
+  let frame := sc.frames.length - 1
+  let idx := ((sc.frames.head?.map (·.length)).getD 1) - 1
+  return (frame, idx)
 
 /-- Mark a scope as entered. Idempotent, and cheap: nothing is allocated until a
     binder actually arrives. -/
@@ -443,34 +468,34 @@ private def openScope : ElabM Unit := do
   let env ← getEnv
   setEnv { env with pendingFrame := true }
 
-private def addVar (name : String) (ty : Ty) : ElabM Unit := do
-  addBinder name
-  let env ← getEnv
-  setEnv { env with vars := (name, ty) :: env.vars }
+/-- The identity the local walk minted for the binder at `key`; refused when it has none. -/
+private def binderId (key : BinderKey) (name : String) (span : Option Span) : ElabM LocalId := do
+  match (← getEnv).locals.binderAt? key with
+  | some id => return id
+  | none => throwElab (.binderTableMissing s!"the binder '{name}' has no identity in the local table (R-0492)") span
 
-/-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core
-    name. Registers the type under the surface name (ident type lookup is
-    surface-keyed) and pushes surface→fresh into `renames` (prepend =
-    innermost shadows). Returns the Core name to put in the arm's binding
-    list. `_` stays `_`. -/
-private def bindArmVar (binding : String) (ty : Ty) : ElabM String := do
+/-- Register a binding: its frame position, Core name and type. -/
+private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM Unit := do
+  let pos ← addBinder name
+  modify fun env => { env with bound := (id, { core, ty, pos := some pos }) :: env.bound }
+
+/-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core name (`value` →
+    `value.b7`) and return it. `_` stays `_` and binds nothing. -/
+private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM String := do
   if binding == "_" then return binding
+  let id ← binderId key binding span
   let env ← getEnv
   let fresh := s!"{binding}.b{env.freshBinder}"
-  setEnv { env with
-    vars := (binding, ty) :: env.vars
-    bodyScope := extendFrame env.bodyScope env.pendingFrame binding
-    pendingFrame := false
-    renames := (binding, fresh) :: env.renames
-    freshBinder := env.freshBinder + 1 }
+  setEnv { env with freshBinder := env.freshBinder + 1 }
+  registerBound id binding fresh ty
   return fresh
 
 /-- Evaluation-order temporaries (bugs 136, 137). Core has no expression-level `let` yet (R-0496
     owns one); `match value { t => body }` with a single unguarded binder arm is exactly
     `let t = value in body` in every consumer (Lower, the interpreter, the proof model bind a
     variable arm's scrutinee once), so it is the one encoding used, built only here. A temporary's
-    name `ev.t<n>` contains `.`, which no source identifier does, and it is never entered into
-    `vars`, so source code cannot name it. -/
+    name `ev.t<n>` contains `.`, which no source identifier does, and it has no entry in the local
+    table, so source code cannot name it. -/
 private def freshEvalTemp : ElabM String := do
   let env ← getEnv
   setEnv { env with freshBinder := env.freshBinder + 1 }
@@ -502,26 +527,31 @@ private def withSourceOrder (inits : List (String × CExpr))
       operandsRev := (f, .ident t e.ty) :: operandsRev
   return bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) (mk operandsRev.reverse)
 
-/-- Bug 087: bind a block-scoped local (`let`, borrow ref). Registers the type
-    under the surface name and returns the Core name to emit. A binding that
-    SHADOWS a visible name (a parameter, an outer `let`, an earlier `let` in the
-    same block, a match binder) is alpha-renamed like a match binder (bug 045),
-    so reads after the inner block closes resolve to the outer binder instead of
-    whichever store ran last. A non-shadowing binding keeps its spelling: Core
-    names of programs that never shadow do not churn, and a sibling scope's
-    reuse of a dead name is harmless because the earlier binder is no longer
-    readable (`exitBlock` removed it). -/
+/-- Bug 087: bind a block-scoped local (`let`, borrow ref, parameter, destructure binder or
+    temporary) and return its Core name. A binder that SHADOWS a binding of the same spelling
+    visible where it is introduced is alpha-renamed like a match binder (bug 045); the local walk
+    records that fact (`LocalTable.shadowsAt`), so Elab keeps no scope of its own (R-0492 step 2).
+    A non-shadowing binder keeps its spelling: Core names of programs that never shadow do not
+    churn. -/
 -- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
-private def bindLocal (name : String) (ty : Ty) : ElabM String := do
-  addBinder name
+private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM String := do
+  let id ← binderId key name span
   let env ← getEnv
-  let shadows := (env.vars.lookup name).isSome
+  let shadows := env.locals.shadowsAt id
   let core := if shadows then s!"{name}.b{env.freshBinder}" else name
-  setEnv { env with
-    vars := (name, ty) :: env.vars
-    renames := (name, core) :: env.renames
-    freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
+  setEnv { env with freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
+  registerBound id name core ty
   return core
+
+/-- The evidence reference for a use of a binding: its frame position, made relative to the
+    current frame stack. A binding with no position (a ghost) is a gap. -/
+private def binderRefEv (b : BoundLocal) : ElabM Proof.EvidenceExprV2 := do
+  let depth := (← getEnv).bodyScope.frames.length
+  match b.pos with
+  | some (frame, idx) =>
+    if frame < depth then return Proof.evBinderRefAt (depth - 1 - frame) idx
+    else return .gap { code := .unplaceableBinder, detail := "binder frame is not on the stack" }
+  | none => return .gap { code := .unplaceableBinder, detail := "local not in any lexical frame" }
 
 /-- Bug 087: enter a lexical block (if/else branch, value-if branch, loop body,
     `for` header, borrow block). Returns the state to hand to `exitBlock`.
@@ -552,25 +582,14 @@ private def tombstoneBlock (saved cur : Proof.BodyScope) : Proof.BodyScope :=
     | none    => f.map fun _ => dead
   { frames := fixed.reverse }
 
-/-- Bug 087: leave a lexical block — restore the lexical state (visible vars,
-    surface→Core renames, ghost names) and retire the block's binders from the
-    frame stack. Everything else the block produced (fresh counter, coverage,
-    recorded uses) is kept. Before this, an inner `let x` stayed visible after
-    its block: Interp and Lower read the inner slot, and evidence resolved the
-    outer `x` to the inner binder. -/
+/-- Bug 087: leave a lexical block — retire the block's binders from the frame stack (their
+    positions stay, their spellings are tombstoned). Everything else the block produced (fresh
+    counter, coverage, bound locals) is kept. Since R-0492 step 2 no reference resolves by
+    spelling: which binding a use denotes is the local walk's answer, so a block's bindings
+    cannot answer for a later use whatever this keeps. -/
 private def exitBlock (saved : ElabEnv) : ElabM Unit := do
   let cur ← getEnv
-  setEnv { cur with
-    vars := saved.vars
-    renames := saved.renames
-    bodyScope := tombstoneBlock saved.bodyScope cur.bodyScope
-    ghostVars := saved.ghostVars }
-
-/-- Current Core name for a surface identifier (identity unless an
-    enclosing match arm renamed it). -/
-private def coreNameOf (name : String) : ElabM String := do
-  let env ← getEnv
-  return (env.renames.lookup name).getD name
+  setEnv { cur with bodyScope := tombstoneBlock saved.bodyScope cur.bodyScope }
 
 /-- Scope restore that keeps `freshBinder` MONOTONE: sibling and
     sequential arms must never mint the same Core name (Lower's slot table
@@ -584,9 +603,11 @@ private def restoreScope (saved : ElabEnv) : ElabM Unit := do
     freshBinder := cur.freshBinder
     bodyIdentityCovered := cur.bodyIdentityCovered }
 
-private def addGhostVar (name : String) : ElabM Unit := do
-  let env ← getEnv
-  setEnv { env with ghostVars := name :: env.ghostVars }
+/-- A `ghost let`: an identity with no Core name and no frame position. A runtime read of it is
+    reported as a ghost leak. -/
+private def addGhostVar (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM Unit := do
+  let id ← binderId key name span
+  modify fun env => { env with bound := (id, { core := name, ty, ghost := true }) :: env.bound }
 
 
 
@@ -596,7 +617,7 @@ private def addGhostVar (name : String) : ElabM Unit := do
 /-- Elab's view of the environment for the shared argument-type peek
     (`Resolve.PeekType`, single-sourced with Check — bug 099). -/
 private def elabPeekCtx : PeekCtx ElabM where
-  var _ name := lookupVar name
+  var sp name := lookupVar sp name
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFnSig name
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
@@ -661,12 +682,20 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
   | .strLit _ s => return ElaboratedExprV2.mk (CExpr.strLit s) (Proof.evStrLit s)
   | .charLit _ c => return ElaboratedExprV2.mk (CExpr.charLit c) (Proof.evCharLit c)
 
-  | .ident _ name =>
+  | .ident isp name =>
     let env ← getEnv
     -- A local shadows a module constant of the same name (Check resolves locals first too).
-    -- Resolving the constant first emitted the bare name, which bug 087's alpha-renaming no
-    -- longer gives a shadowing local: `let X = 1; let X = 2; return X;` read the first `X`.
-    match env.vars.lookup name with
+    -- R-0492 step 2: which binding `name` denotes is the local walk's answer at this use.
+    -- A `ghost let` is not a runtime variable: as before, a constant or function of the same
+    -- spelling answers first, and only then is the read reported as a ghost leak.
+    let use? ← useLocal? isp name
+    let isGhostUse := match use? with | some (_, b) => b.ghost | none => false
+    match use?.filter (fun (_, b) => !b.ghost) with
+    | some (_, b) =>
+      -- COVERAGE: a binding with no frame position leaves the body uncovered rather than
+      -- encoded against a guessed position.
+      if b.pos.isNone then markBodyIdentityUncovered
+      return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)
     | none =>
       match env.constants.lookup name with
       | some ty => return ElaboratedExprV2.mk (CExpr.ident name ty) (Proof.evConstRef env.proofPath name)
@@ -679,20 +708,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
       | none =>
-        -- A name bound by `ghost let` is erased: reading it from runtime code is
-        -- a leak, reported precisely instead of as a generic undeclared var.
-        if env.ghostVars.contains name then
-          throwElab (.ghostInRuntime name) (some e.getSpan)
+        -- A name bound by `ghost let` is erased: reading it from runtime code is a leak,
+        -- reported precisely instead of as a generic undeclared var.
+        if isGhostUse then throwElab (.ghostInRuntime name) (some e.getSpan)
         throwElab (.undeclaredVariable name) (some e.getSpan)
-    | some ty => do
-      -- COVERAGE ONLY. The binder reference itself is emitted structurally by
-      -- `evBinderRef` on the next line; this arm no longer records a second copy of
-      -- it. If the frame stack cannot place the local, the body is uncovered rather
-      -- than encoded against a guessed position.
-      match env.bodyScope.resolve? name with
-      | some _ => pure ()
-      | none   => markBodyIdentityUncovered
-      return ElaboratedExprV2.mk (CExpr.ident (← coreNameOf name) ty) (Proof.evBinderRef env.bodyScope name)
 
   | .paren _ inner => elabExprEv inner hint
 
@@ -1028,7 +1047,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           -- scope. Lazy: an arm with no bindings materializes no frame.
           openScope
           match arm with
-          | .mk _ _armEnum armVariant patBinds guard body =>
+          | .mk armSp _armEnum armVariant patBinds guard body =>
             let ev ← match ed.variants.find? fun v => v.name == armVariant with
               | some ev => pure ev
               | none => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
@@ -1052,7 +1071,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               -- Keep `_` in the binding list (positional field mapping) but do not
               -- bind it in scope — it is a wildcard, not a readable variable.
               -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
-              let coreBinding ← bindArmVar binding bty
+              let coreBinding ← bindArmVar (.site (SiteKey.ofSpan armSp) binding) binding bty (some armSp)
               typedBindings := typedBindings ++ [(coreBinding, bty)]
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
@@ -1077,10 +1096,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             cArms := cArms ++ [.litArm cVal cGuard cBody]
             armEvsRev := (.arm (Proof.evLitPattern cValEv.evidence)
                             (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
-          | .varArm _ binding guard body =>
+          | .varArm varSp binding guard body =>
             -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
             let wholeTy := wholeBinderTy scrTy innerTyR
-            let coreBinding ← bindArmVar binding wholeTy
+            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
@@ -1115,10 +1134,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
-          | .varArm _ binding guard body =>
+          | .varArm varSp binding guard body =>
             -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
             let wholeTy := wholeBinderTy scrTy innerTyR
-            let coreBinding ← bindArmVar binding wholeTy
+            let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
@@ -1155,10 +1174,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
           cArms := cArms ++ [.litArm cVal cGuard cBody]
-        | .varArm _ binding guard body =>
+        | .varArm varSp binding guard body =>
           -- D3: a variable arm over `&T` binds the reference (`wholeBinderTy`).
           let wholeTy := wholeBinderTy scrTy innerTyR
-          let coreBinding ← bindArmVar binding wholeTy
+          let coreBinding ← bindArmVar (.site (SiteKey.ofSpan varSp) binding) binding wholeTy (some varSp)
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
@@ -1768,7 +1787,8 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
   -- the callee is a value in scope rather than a global definition, so it is the
   -- one place that can record it (bug 050): downstream passes must never
   -- re-decide by looking the name up in a global fn/alias map.
-  match ← lookupVar fnName with
+  let fnLocal? ← useLocal? (span.getD default) fnName
+  match fnLocal?.bind (fun (_, b) => if b.ghost then none else some b.ty) with
   | some (.fn_ paramTys _ retTy) =>
     let mut cArgs : List CExpr := []
     let mut argEvs : List Proof.EvidenceExprV2 := []
@@ -1777,7 +1797,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
       let cArg := cArgEv.core
       cArgs := cArgs ++ [cArg]
       argEvs := cArgEv.evidence :: argEvs
-    return ElaboratedExprV2.mk (CExpr.call (.indirect (← coreNameOf fnName)) [] cArgs retTy)
+    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD fnName)) [] cArgs retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
@@ -1822,7 +1842,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
 
 partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
   match stmt with
-  | .letDecl _ name mutable ty value isGhost =>
+  | .letDecl letSp name mutable ty value isGhost =>
     let valHint ← match ty with
       | some t => do let t' ← resolveTypeE t; pure (some t')
       | none => pure none
@@ -1835,25 +1855,26 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
       | some t => resolveTypeE t
       | none => pure cVal.ty
     if isGhost then
-      addGhostVar name
+      addGhostVar (.site (SiteKey.ofSpan letSp) name) name finalTy (some letSp)
       let declRef ← match ty with
         | some t => do pure (some (← typeRefOf (← resolveTypeE t)))
         | none => pure none
       return ElaboratedStmtV2.mk [] (Proof.EvidenceStmtV2.letBind true declRef cValEv.evidence)
-    let coreName ← bindLocal name finalTy
+    let coreName ← bindLocal (.site (SiteKey.ofSpan letSp) name) name finalTy (some letSp)
     let declRef ← match ty with
       | some t => do pure (some (← typeRefOf (← resolveTypeE t)))
       | none => pure none
     return ElaboratedStmtV2.mk [.letDecl coreName mutable finalTy cVal]
       (Proof.EvidenceStmtV2.letBind false declRef cValEv.evidence)
 
-  | .assign _ name value =>
-    match ← lookupVar name with
-    | some varTy =>
-      let cValEv ← elabExprEv value (some varTy)
+  | .assign asgSp name value =>
+    match ← useLocal? asgSp name with
+    | some (_, b) =>
+      if b.ghost then throwElab (.assignToUndeclaredVariable name) (some stmt.getSpan)
+      let cValEv ← elabExprEv value (some b.ty)
       let cVal := cValEv.core
-      return ElaboratedStmtV2.mk [.assign (← coreNameOf name) cVal]
-        (Proof.EvidenceStmtV2.assign (Proof.evBinderRef (← getEnv).bodyScope name) cValEv.evidence)
+      return ElaboratedStmtV2.mk [.assign b.core cVal]
+        (Proof.EvidenceStmtV2.assign (← binderRefEv b) cValEv.evidence)
     | none => throwElab (.assignToUndeclaredVariable name) (some stmt.getSpan)
 
   | .return_ _ (some value) =>
@@ -2150,14 +2171,13 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     let cBody := cBodyEv.core
     return ElaboratedStmtV2.mk [.defer cBody] (Proof.EvidenceStmtV2.deferStmt cBodyEv.evidence)
 
-  | .borrowIn _ var ref region isMut body =>
-    let varTy ← match ← lookupVar var with
-      | some ty => pure ty
+  | .borrowIn bsp var ref region isMut body =>
+    let (varTy, coreVar) ← match ← useLocal? bsp var with
+      | some (_, b) => if b.ghost then throwElab (.borrowUndeclaredVariable var) (some stmt.getSpan) else pure (b.ty, b.core)
       | none => throwElab (.borrowUndeclaredVariable var) (some stmt.getSpan)
     let refTy := if isMut then Ty.refMut varTy else Ty.ref varTy
-    let coreVar ← coreNameOf var
     let blk ← enterBlock
-    let coreRef ← bindLocal ref refTy
+    let coreRef ← bindLocal (.site (SiteKey.ofSpan bsp) ref) ref refTy (some bsp)
     let cBodyEv ← elabStmtsEv body
     exitBlock blk
     let cBody := cBodyEv.flatMap (·.core)
@@ -2174,13 +2194,23 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- hidden temp + field-access binds. Sound at runtime: the source is moved into the
     -- temp, each field value is copied into its binding, and the temp is dead storage
     -- afterward (its resource has moved to the bindings). See docs/language/OWNERSHIP_MODEL.md.
-    let tmpName := "__destr_" ++ structName
+    let tmpName := destructureTempName structName
     let tmpLet := Stmt.letDecl sp tmpName false none value false
-    let fieldLets := bindings.map fun b =>
-      Stmt.letDecl sp b.name false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b.fieldName) false
+    -- The temporary is bound by the ordinary `let` path (the local walk minted its identity
+    -- under its own position and name); each field binder is bound under the walk's
+    -- destructure key (R-0492: position + field + spelling, so two `_`s are two bindings).
+    let tmpPart ← elabStmtEv tmpLet
+    -- prepended and reversed once (the quadratic-append ratchet)
+    let mut fieldPartsRev : List ElaboratedStmtV2 := []
+    for b in bindings do
+      let cValEv ← elabExprEv (Expr.fieldAccess sp (Expr.ident sp tmpName) b.fieldName) none
+      let cVal := cValEv.core
+      let coreName ← bindLocal (destructureKey sp b) b.name cVal.ty (some sp)
+      fieldPartsRev := ElaboratedStmtV2.mk [.letDecl coreName false cVal.ty cVal]
+        (Proof.EvidenceStmtV2.letBind false none cValEv.evidence) :: fieldPartsRev
     -- A destructure desugars to several statements; evidence keeps them as ONE block so
     -- the tree mirrors the source construct rather than the desugaring.
-    let parts ← elabStmtsEv ([tmpLet] ++ fieldLets)
+    let parts := tmpPart :: fieldPartsRev.reverse
     return ElaboratedStmtV2.mk (parts.flatMap (·.core))
       (Proof.EvidenceStmtV2.block (parts.map (·.evidence)))
   -- assert(e)/assume(e): proof-only, ERASED before Core (like contracts/ghost).
@@ -2272,9 +2302,11 @@ partial def elabStmtsEv (stmts : List Stmt) (valueHint : Option Ty := none) : El
       -- so later statements referencing it don't cascade spurious errors.
       setEnv envBefore
       match s with
-      | .letDecl _ name _ ty _ _ =>
+      | .letDecl ldSp name _ ty _ _ =>
         let placeholderTy := ty.getD .placeholder
-        addVar name placeholderTy
+        -- recovery only: a binder the walk did not mint gets no binding
+        if (← getEnv).locals.binderAt? (.site (SiteKey.ofSpan ldSp) name) |>.isSome then
+          discard <| bindLocal (.site (SiteKey.ofSpan ldSp) name) name placeholderTy (some ldSp)
       | _ => pure ()
   if !accumulated.isEmpty then
     throw accumulated
@@ -2302,7 +2334,10 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   --
   -- Reset here rather than at the end of the previous function: an early return or an error path
   -- would skip a teardown, and the whole class of defect is a frame that outlives its owner.
-  setEnv { env with bodyScope := {}, pendingFrame := false, renames := [] }
+  -- R-0492 step 2: this function's binding identities; no binding of another function is bound.
+  if !f.locals.resolved then
+    throwElab (.binderTableMissing s!"function '{f.name}' reached elaboration without a local binder table (R-0492)") (some f.span)
+  setEnv { env with bodyScope := {}, pendingFrame := false, locals := f.locals, bound := [] }
   let env ← getEnv
   -- Set up type params and return type
   let allTypeParams := f.typeParams
@@ -2341,9 +2376,9 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   let resolvedRetTy ← resolveTypeE retTy
   modify fun e => { e with currentRetTy := resolvedRetTy }
   -- Add parameters to scope (resolve type aliases so params don't carry unresolved alias names)
-  for (pname, pty) in params do
+  for ((pname, pty), pIdx) in params.zipIdx do
     let resolvedPty ← resolveTypeE pty
-    addVar pname resolvedPty
+    discard <| bindLocal (.param pIdx) pname resolvedPty (some f.span)
   -- Elaborate body
   -- THE COLLECTION POINT. The function's evidence body is assembled STRUCTURALLY here,
   -- from the same traversal that produced Core — not accumulated into a side channel,
@@ -2366,7 +2401,8 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
     { uses := Proof.flatUsesOf evidenceBody
       covered := envAfter.bodyIdentityCovered }
   setEnv { envAfter with
-    vars := env.vars
+    locals := env.locals
+    bound := env.bound
     currentTypeParams := env.currentTypeParams
     currentTypeBounds := env.currentTypeBounds
     currentRetTy := env.currentRetTy
@@ -2988,7 +3024,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- would also leave a transient window where callee identity silently resolves to
   -- none, so every path running in it would emit gaps for a reason that is not real.
   let initEnv : ElabEnv := {
-    vars := []
+    bound := []
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
     callSpellings := callSpellings
@@ -3080,7 +3116,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let hintTy ← resolveTypeE c.ty
       let ev ← elabExprEv c.value (some hintTy)
       pure ev.core
-    let constResult := constElab.run initEnv |>.run
+    -- R-0492 step 2: the initializer's own binding identities
+    let constResult := constElab.run { initEnv with locals := c.locals } |>.run
     match constResult with
     | ((.ok cExpr), _) => Except.ok (c.name, c.ty, cExpr)
     -- An initializer that does not elaborate is an error, never a silent 0 (bug 123 review: a

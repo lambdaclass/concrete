@@ -534,6 +534,38 @@ diagnostic-path bypass.
   - Resolve's pre-desugar E0100 walk is a separate visibility computation.
   - Core, SSA and `PExpr` keep their string binders (R-0492 steps 2–4).
 
+**S5 slice contract 3 — Elab consumes `LocalId` (R-0492 step 2, 2026-10-23; depends on slice 2,
+branch `vp-r0492`, unlanded).**
+- *Representation:* Elab's name-keyed scope (`vars`, `renames`, `ghostVars`) is gone. `ElabEnv`
+  holds the function's `LocalTable` and `bound : List (LocalId × BoundLocal)`. A `BoundLocal`
+  records a binding's Core name, type, ghost flag, and the absolute frame position its binder
+  took.
+  - A use resolves through the table at its position (`useLocal?`).
+  - A binder takes its identity from the table (`binderId`).
+  - The Core name is the binder's spelling, or a fresh `name.bN` for an arm binder or for a
+    binder the walk records as shadowing (`LocalTable.shadowsAt`; `_` binders and Elab's
+    struct-destructure temporary count).
+  - Evidence binder references are computed from the recorded position (`evBinderRefAt`), not by
+    searching the frames for the spelling (`BodyScope.resolve?`).
+  - The walk mints the destructure temporary (`destructureTempName`) and its synthesized uses.
+- *Invariant made structural:* no front-end pass decides by spelling which binding a local name
+  denotes. Check and Elab both read the one walk.
+  - The Core names and evidence positions are the same as before. `--emit-core` is identical on
+    all 1474 corpus files (`tests/programs`, example sources) against the pre-step-2 compiler, and
+    `--report fingerprints` / `subject-facts` are identical on 111 example entry points.
+    `check_local_identity.sh` leg E pins the exact name profile of the edge cases.
+  - The walk's `shadows` fact counts exactly what Elab's old scope held as runtime variables.
+    Region names and `ghost let`s do not count; `_` binders and the destructure temporary do.
+  - One intended difference: a source use can no longer resolve to Elab's destructure temporary.
+    A parameter spelled `__destr_P` used to be captured by the temporary in Elab while Check read
+    the parameter; both now read the parameter. No corpus program is affected.
+- *Not in this slice:*
+  - `BodyScope`'s frames keep their spellings and are still tombstoned at block exit; they are
+    now positional bookkeeping only.
+  - Core, SSA and `PExpr` binders stay strings (R-0492 steps 3–4).
+  - Contract expressions name parameters by spelling.
+
+
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
 evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
 specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width

@@ -1,5 +1,7 @@
-examples/contract_negatives/spec_ghost_totality/src/main.con:17:5: error[check]: contract on 'bad': impure call 'tick' — spec/ghost must be pure and total
+examples/contract_negatives/spec_ghost_totality/src/main.con:17:5: error[check]: (E0321) contract on 'bad': impure call 'tick' — spec/ghost must be pure and total
  17 |     fn bad(x: i32) -> i32 { return x; }
     |     ^
   hint: a contract may call `spec fn`s and capability-free functions; a capability-requiring function performs I/O, so the contract's meaning would depend on runtime effects
+  rule: CON-3@1
+  spec: docs/spec/contracts.md#CON-3
   = while checking module 'cn'

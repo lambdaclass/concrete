@@ -1,0 +1,12 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0318
+// (docs/spec/patterns.md, example destructure-in-for-header).
+enum Copy E { A { v: Int } }
+
+fn main() -> Int {
+    let e: E = E::A { v: 0 };
+    let mut out: Int = 0;
+    for (let E::A { v } = e; v < 1; v = v + 1) {
+        out = 42;
+    }
+    return out;
+}

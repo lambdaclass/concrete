@@ -1,0 +1,10 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0320
+// (docs/spec/contracts.md, example integer-requires).
+#[requires(x + 1)]
+fn f(x: i32) -> i32 {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42) as Int;
+}

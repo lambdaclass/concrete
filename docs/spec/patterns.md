@@ -422,3 +422,48 @@ fn main() -> Int {
 }
 ```
 
+<a id="PAT-8"></a>
+### PAT-8. An enum destructuring `let` is a block statement
+
+**PAT-8@1.** A `let` that destructures an enum variant appears as a statement of a block, not as the initializer of a `for` header.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0318 (check)
+- Status: enforced
+- Enforced by: Concrete.checkStmt
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A `let` over an enum variant is lowered to a `match` over the rest of its block
+(PAT-5); a `for` header has no block of its own to become that match, so the form is refused
+rather than skipped. A struct destructuring needs no match (it becomes field reads) and is
+accepted there. Destructure the enum before the loop.
+
+```con reject name=destructure-in-for-header code=E0318 stage=check pair=destructure-before-loop
+enum Copy E { A { v: Int } }
+
+fn main() -> Int {
+    let e: E = E::A { v: 0 };
+    let mut out: Int = 0;
+    for (let E::A { v } = e; v < 1; v = v + 1) {
+        out = 42;
+    }
+    return out;
+}
+```
+
+```con accept name=destructure-before-loop exit=42
+enum Copy E { A { v: Int } }
+
+fn main() -> Int {
+    let e: E = E::A { v: 0 };
+    let E::A { v } = e;
+    let mut out: Int = 0;
+    for (let mut i: Int = v; i < 1; i = i + 1) {
+        out = 42;
+    }
+    return out;
+}
+```

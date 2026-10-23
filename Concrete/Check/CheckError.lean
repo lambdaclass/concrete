@@ -275,6 +275,15 @@ inductive CheckError where
   | builtinWrongFirstArg (fnName : String) (expectedDesc : String) (actualTy : String)
   -- Bug 203: an `append()` / print-family argument of a type the builtin does not format.
   | builtinArgUnsupported (fnName : String) (actualTy : String)
+  -- Bug 206: every refusal below was a bare-message diagnostic with no code (`throwCheckMsg`).
+  | builtinTooFewArgs (fnName : String) (minimum : Nat) (shape : String)
+  | builtinIntOperands (fnName : String) (detail : String)
+  | newtypeCtorShape (name : String) (detail : String)
+  | newtypeFieldNotZero (name : String)
+  | traitMethodNoReceiver (traitName : String) (methodName : String)
+  | destructureInForHeader
+  | testFnShape (fnName : String) (detail : String)
+  | binderTableMissing (what : String) (detail : String)
   | builtinBadKeyType (fnName : String) (ty : String)
   | destroyRequiresNamed (ty : String)
   | typeDoesNotImplDestroy (typeName : String)
@@ -483,6 +492,14 @@ def CheckError.message : CheckError → String
     s!"method '{method}' on type variable '{typeVar}' is ambiguous: it is declared by more than one of its bounds ({", ".intercalate traits}); bound order does not choose one"
   | .methodCallOnNonNamedType => "method call on non-named type"
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
+  | .builtinTooFewArgs fnName minimum shape => s!"{fnName}() requires at least {minimum} argument{if minimum == 1 then "" else "s"}{shape}"
+  | .builtinIntOperands fnName detail => s!"{fnName} {detail}"
+  | .newtypeCtorShape name detail => s!"newtype '{name}' constructor {detail}"
+  | .newtypeFieldNotZero name => s!"newtype '{name}' only supports .0 field access"
+  | .traitMethodNoReceiver traitName methodName => s!"trait method '{traitName}::{methodName}' has no `self` receiver and cannot be called as a method"
+  | .destructureInForHeader => "a destructuring `let` is not supported in a `for` header; destructure before the loop"
+  | .testFnShape fnName detail => s!"#[test] function '{fnName}' must {detail}"
+  | .binderTableMissing what detail => s!"internal: {what} {detail} (R-0492)"
   | .builtinArgUnsupported fnName actualTy => s!"{fnName}() argument has unsupported type '{actualTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
   | .builtinWrongArgCount fnName expected =>
     if expected == 0 then s!"{fnName}() takes no arguments"
@@ -681,6 +698,14 @@ def CheckError.code : CheckError → String
   | .builtinWrongTypeArgCount _ _ => "E0269"
   | .builtinWrongFirstArg _ _ _ => "E0270"
   | .builtinArgUnsupported _ _ => "E0421"
+  | .binderTableMissing _ _ => "E0312"
+  | .newtypeCtorShape _ _ => "E0313"
+  | .builtinIntOperands _ _ => "E0314"
+  | .builtinTooFewArgs _ _ _ => "E0315"
+  | .newtypeFieldNotZero _ => "E0316"
+  | .traitMethodNoReceiver _ _ => "E0317"
+  | .destructureInForHeader => "E0318"
+  | .testFnShape _ _ => "E0319"
   | .builtinBadKeyType _ _ => "E0271"
   | .destroyRequiresNamed _ => "E0272"
   | .typeDoesNotImplDestroy _ => "E0273"

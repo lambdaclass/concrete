@@ -523,8 +523,8 @@ MUT_DESC+=("Mono: generic enums detected but unmapped (E0808 backstop)")
 # resolution". It must be caught by the fn-pointer fixtures, not merely by
 # something downstream noticing an undefined symbol.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("    return ElaboratedExprV2.mk (CExpr.call (.indirect (← coreNameOf fnName)) [] cArgs retTy)")
-MUT_NEW+=("    return ElaboratedExprV2.mk (CExpr.call (.direct (← coreNameOf fnName)) [] cArgs retTy) -- MUTATION: indirect call resolved by name")
+MUT_OLD+=("    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD fnName)) [] cArgs retTy)")
+MUT_NEW+=("    return ElaboratedExprV2.mk (CExpr.call (.direct ((fnLocal?.map (·.2.core)).getD fnName)) [] cArgs retTy) -- MUTATION: indirect call resolved by name")
 MUT_DESC+=("Elab: indirect call emitted as direct (bug 050)")
 
 # 22. std map: forget the remembered tombstone (R-0003 / bug 047)
@@ -963,18 +963,16 @@ gate_for_last "scripts/tests/check_type_identity.sh"
 # Repointed when the accumulator was deleted: dropping the node now means dropping the
 # STRUCTURAL one, so the mutation replaces the builder call with a gap.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("(Proof.evBinderRef env.bodyScope name)")
-MUT_NEW+=("(Proof.evUnhandledExpr \"local\") -- MUTATION: local reference emits no V2 node")
+MUT_OLD+=("      return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)")
+MUT_NEW+=("      return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (Proof.evUnhandledExpr \"local\") -- MUTATION: local reference emits no V2 node")
 MUT_DESC+=("Elab V2 input: local binder references silently dropped")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
 # 55. Frames open EAGERLY. Every positional leg still passes; only the empty-scope
 # property breaks, so this is the mutation that proves that leg is load-bearing.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("  setEnv { env with bodyScope := extendFrame env.bodyScope env.pendingFrame name
-                    pendingFrame := false }")
-MUT_NEW+=("  setEnv { env with bodyScope := extendFrame env.bodyScope true name
-                    pendingFrame := false } -- MUTATION: eager frames")
+MUT_OLD+=("  let sc := extendFrame env.bodyScope env.pendingFrame name")
+MUT_NEW+=("  let sc := extendFrame env.bodyScope true name -- MUTATION: eager frames")
 MUT_DESC+=("Elab V2 input: binder frames open eagerly, not on first binder")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
@@ -984,8 +982,8 @@ gate_for_last "scripts/tests/check_binder_refs.sh"
 # Repointed when the accumulator was deleted: the position is now minted once, by the
 # structural builder, so that is where the mutation has to bite.
 MUT_FILE+=("Concrete/Proof/EvidenceBuild.lean")
-MUT_OLD+=("  | some (out, idx) => .binderRef out idx")
-MUT_NEW+=("  | some (out, idx) => .binderRef idx out -- MUTATION: swapped")
+MUT_OLD+=("def evBinderRefAt (framesOut idx : Nat) : EvidenceExprV2 := .binderRef framesOut idx")
+MUT_NEW+=("def evBinderRefAt (framesOut idx : Nat) : EvidenceExprV2 := .binderRef idx framesOut -- MUTATION: swapped")
 MUT_DESC+=("evBinderRef: binder position components swapped")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
@@ -1317,16 +1315,24 @@ gate_for_last "scripts/tests/check_capability_explanations.sh"
 # instead of the innermost. check_local_identity.sh's walk legs (branch-local `w`, the shadowing
 # `x` of g) read the wrong binder.
 MUT_FILE+=("Concrete/Resolve/Locals.lean")
-MUT_OLD+=("  if let some v := vis.find? (·.name == name) then")
-MUT_NEW+=("  if let some v := vis.reverse.find? (·.name == name) then -- MUTATION: outermost binding wins")
+MUT_OLD+=("  if let some v := vis.find? (fun v => v.name == name && v.cls == .source) then")
+MUT_NEW+=("  if let some v := vis.reverse.find? (fun v => v.name == name && v.cls == .source) then -- MUTATION: outermost binding wins")
 MUT_DESC+=("local identity: a use denotes the outermost visible binding of its spelling")
+gate_for_last "scripts/tests/check_local_identity.sh"
+
+# 99. R-0492 step 2: Elab ignores the walk's shadow fact and keeps every block-scoped binder's
+# spelling. check_local_identity.sh leg E reads the second destructure temporary's Core name.
+MUT_FILE+=("Concrete/Elab/Elab.lean")
+MUT_OLD+=("  let shadows := env.locals.shadowsAt id")
+MUT_NEW+=("  let shadows := false && env.locals.shadowsAt id -- MUTATION: shadow fact ignored")
+MUT_DESC+=("Elab: a shadowing block-scoped binder keeps its spelling")
 gate_for_last "scripts/tests/check_local_identity.sh"
 
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=98
+EXPECTED_MUTATIONS=99
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

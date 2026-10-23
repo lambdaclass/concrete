@@ -3,8 +3,8 @@
 A program is a tree of modules (`mod name { ... }`, or one file per module in a package). Every
 declaration is private to its module unless it is declared `pub`, and another module reaches it
 only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
-one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2) and one binding
-per name in a module (MOD-3). Representation privacy (which fields and constructors another module
+one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2), one binding
+per name in a module (MOD-3) and loading module files (MOD-4). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
 Two decisions are recorded without an entry yet. SCOPE-4, whether a local may reuse the name of a
@@ -103,7 +103,7 @@ mod m {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0299 (check), E0120 (resolve), E0578 (core-check)
+- Codes: E0299 (check), E0120 (resolve), E0578 (check, core-check)
 - Status: enforced
 - Enforced by: Concrete.checkModule
 - Semantics: none
@@ -147,5 +147,44 @@ mod m {
     pub fn main() -> Int {
         return g() + f();
     }
+}
+```
+
+<a id="MOD-4"></a>
+### MOD-4. A `mod` declaration loads one module file
+
+**MOD-4@1.** A `mod X;` declaration loads exactly one module from `X.con` or `X/mod.con` beside the declaring file, and a file that does not exist, holds other than one module, or was already loaded by another `mod` declaration of the program is refused.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0122 (resolve), E0123 (resolve), E0124 (resolve)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolveFiles
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A module file is a module body, so a program's module tree is the tree of its
+`mod` declarations, each file read once: a file reached twice, by a cycle or by two declarations,
+is refused (E0123). A parse error inside a loaded file is that file's own
+SYN-1 diagnostic (E0001), reported with the file's path, not a loading failure (bug 206).
+
+```con reject name=missing-module-file code=E0122 stage=resolve pair=inline-module
+mod missing;
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=inline-module exit=42
+mod present {
+    pub fn answer() -> Int {
+        return 42;
+    }
+}
+
+fn main() -> Int {
+    return present::answer();
 }
 ```

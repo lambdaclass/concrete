@@ -145,7 +145,8 @@ fi
 # checking the side channel rather than the node that reaches evidence; the structural
 # builder is the one producer now, and the behavioural legs above already pin the positions
 # it mints.
-if grep -q "Proof.evBinderRef env.bodyScope name" Concrete/Elab/Elab.lean; then
+if grep -q "(CExpr.ident b.core b.ty) (← binderRefEv b)" Concrete/Elab/Elab.lean \
+   && grep -q "Proof.evBinderRefAt (depth - 1 - frame) idx" Concrete/Elab/Elab.lean; then
   ok "a placeable local emits a typed binderRef node via the structural builder"
 else
   no "the local-reference path does not emit a binderRef"

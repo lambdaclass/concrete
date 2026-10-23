@@ -962,8 +962,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- than advisory.
       if !(← getEnv).localNewtypeNames.contains fnName then
         throwCheck (.newtypeConstructPrivate fnName) (some e.getSpan)
-      if args.length != 1 then throwCheckMsg s!"newtype '{fnName}' constructor takes exactly 1 argument"
-      if !typeArgs.isEmpty then throwCheckMsg s!"newtype '{fnName}' constructor does not take type arguments"
+      if args.length != 1 then throwCheck (.newtypeCtorShape fnName "takes exactly 1 argument") (some e.getSpan)
+      if !typeArgs.isEmpty then throwCheck (.newtypeCtorShape fnName "does not take type arguments") (some e.getSpan)
       -- For generic newtypes, infer type args from hint
       let inferredTypeArgs := if nt.typeParams.isEmpty then []
         else match hint with
@@ -993,13 +993,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg (← peekResolved arg) (some e.getSpan)
     -- Intercept sizeof::<T>() and alignof::<T>() builtins
     if intrinsic == some .sizeof || intrinsic == some .alignof then
-      if args.length != 0 then throwCheckMsg s!"{fnName} takes no value arguments"
-      if typeArgs.length != 1 then throwCheckMsg s!"{fnName} requires exactly 1 type argument: {fnName}::<T>()"
+      if args.length != 0 then throwCheck (.builtinWrongArgCount fnName 0) (some e.getSpan)
+      if typeArgs.length != 1 then throwCheck (.builtinWrongTypeArgCount fnName s!"1 type argument: {fnName}::<T>()") (some e.getSpan)
       return .uint
     -- T-RAWDUP: `read_owned(p)` moves the value out of the raw slot `p` points to (`*mut T` or
     -- `*const T`), leaving it logically uninitialized. Raw memory, so trusted or `Unsafe` code only.
     if intrinsic == some .readOwned then
-      if args.length != 1 then throwCheckMsg s!"read_owned takes exactly 1 argument (a raw pointer)"
+      if args.length != 1 then throwCheck (.builtinWrongArgCount "read_owned" 1) (some e.getSpan)
       let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
       let argTy ← checkExpr arg none .callArg
       let env ← getEnv
@@ -1007,38 +1007,38 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         throwCheck (.missingCapability "read_owned" "Unsafe" env.currentFnName) (some e.getSpan)
       match ← resolvedOr argTy with
       | .ptrMut t | .ptrConst t => return t
-      | t => throwCheckMsg s!"read_owned takes a raw pointer (`*mut T` / `*const T`), got '{tyToString t}'"
+      | t => throwCheck (.builtinWrongFirstArg "read_owned" "a raw pointer (`*mut T` / `*const T`)" s!"'{tyToString t}'") (some e.getSpan)
     -- Intercept unwrap(x) for newtype unwrapping (only if not a user-defined function)
     if intrinsic == some .unwrap && args.length == 1 then
         let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
         let argTy ← checkExpr arg
         let ntName := match argTy with | .named n => n | _ => ""
-        if ntName == "" then throwCheckMsg s!"unwrap() requires a newtype argument, got {tyToString argTy}"
+        if ntName == "" then throwCheck (.builtinWrongFirstArg "unwrap" "a newtype argument" (tyToString argTy)) (some e.getSpan)
         match ← lookupNewtype ntName with
         | some nt =>
           return nt.innerTy
-        | none => throwCheckMsg s!"unwrap() requires a newtype argument, '{ntName}' is not a newtype"
+        | none => throwCheck (.builtinWrongFirstArg "unwrap" "a newtype argument" s!"'{ntName}', which is not a newtype") (some e.getSpan)
     -- Intercept wrapping_*/saturating_*(a, b) — explicit modular/clamping
     -- arithmetic. Integer-only, both operands the same type; result is that type.
     if intrinsic == some .wrappingAdd || intrinsic == some .wrappingSub
        || intrinsic == some .wrappingMul || intrinsic == some .saturatingAdd
        || intrinsic == some .saturatingSub || intrinsic == some .saturatingMul then
       if args.length != 2 then
-        throwCheckMsg s!"{fnName} takes exactly 2 arguments, got {args.length}"
+        throwCheck (.builtinWrongArgCount fnName 2) (some e.getSpan)
       let a := match args with | a :: _ => a | [] => Expr.intLit default 0
       let b := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
       let aTy ← checkExpr a hint
       let aTyR ← resolveType aTy
       if !isInteger aTyR then
-        throwCheckMsg s!"{fnName} requires integer operands, got {tyToString aTyR}"
+        throwCheck (.builtinIntOperands fnName s!"requires integer operands, got {tyToString aTyR}") (some e.getSpan)
       let bTy ← checkExpr b (some aTyR)
       let bTyR ← resolveType bTy
       if aTyR != bTyR then
-        throwCheckMsg s!"{fnName} operands must have the same integer type, got {tyToString aTyR} and {tyToString bTyR}"
+        throwCheck (.builtinIntOperands fnName s!"operands must have the same integer type, got {tyToString aTyR} and {tyToString bTyR}") (some e.getSpan)
       return aTy
     -- Intercept print(...) / println(...) — variadic mixed-arg output
     if intrinsic == some .print || intrinsic == some .println then
-      if args.isEmpty then throwCheckMsg s!"{fnName}() requires at least 1 argument"
+      if args.isEmpty then throwCheck (.builtinTooFewArgs fnName 1 "") (some e.getSpan)
       for arg in args do
         -- callArg: a String ident is AUTO-BORROWED by print (not moved)
         let argTy ← checkExpr arg none .callArg
@@ -1057,8 +1057,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         let bufTy ← checkExpr bufArg none .callArg
         match bufTy with
         | .refMut .string => pure ()
-        | _ => throwCheckMsg s!"append() first argument must be &mut String, got '{tyToString bufTy}'"
-        if rest.isEmpty then throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
+        | _ => throwCheck (.builtinWrongFirstArg "append" "a first argument of type &mut String" s!"'{tyToString bufTy}'") (some e.getSpan)
+        if rest.isEmpty then throwCheck (.builtinTooFewArgs "append" 2 " (&mut String, ...values)") (some e.getSpan)
         for arg in rest do
           -- D1: a reference binding argument is read through, never consumed; an owned String is
           -- moved as before.
@@ -1076,7 +1076,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | .char => pure ()
           | _ => throwCheck (.builtinArgUnsupported "append" (tyToString argTy)) (some arg.getSpan)
         return .unit
-      | [] => throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
+      | [] => throwCheck (.builtinTooFewArgs "append" 2 " (&mut String, ...values)") (some e.getSpan)
     -- Intercept abort() calls
     if intrinsic == some .abort then
       if args.length != 0 then throwCheck (.builtinWrongArgCount "abort" 0) (some e.getSpan)
@@ -1622,7 +1622,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             if mode != .place && !(← isCopyType innerFieldTy) then
               throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}'") (some e.getSpan)
           return innerFieldTy
-        else throwCheckMsg s!"newtype '{structName}' only supports .0 field access"
+        else throwCheck (.newtypeFieldNotZero structName) (some e.getSpan)
       | none =>
       match ← lookupStruct structName with
       | some sd =>
@@ -2220,7 +2220,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           if args.length != params.length then
             throwCheck (.wrongArgCount s!"method '{methodName}'" params.length args.length) (some e.getSpan)
           if sig.selfKind.isNone then
-            throwCheckMsg s!"trait method '{foundTrait}::{methodName}' has no `self` receiver and cannot be called as a method"
+            throwCheck (.traitMethodNoReceiver foundTrait methodName) (some e.getSpan)
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
           let parts := (← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)
@@ -2351,7 +2351,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -3049,7 +3049,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Desugared before Check everywhere a block can hold one; what survives is a destructuring `let`
   -- in a `for` header, which has no match form to become (exit 2i review: it was skipped silently)
   | .letDestructure sp _ _ _ _ _ =>
-    throwCheckMsg "a destructuring `let` is not supported in a `for` header; destructure before the loop" (some sp)
+    throwCheck .destructureInForHeader (some sp)
   | .letStructDestructure lsdSp structName bindings value =>
     -- Linear move-destructure: `let Struct { a, b } = value` CONSUMES `value` and
     -- moves each named field out into an owned binding. Checked natively (not via
@@ -3339,13 +3339,13 @@ def scope1Diagnostics (f : FnDef) : List Diagnostic :=
 def checkConstInit (c : ConstDef) : CheckM Unit := do
   -- R-0492: the initializer's own binding identities (it sees no function's locals)
   if !c.locals.resolved then
-    throwCheckMsg s!"internal: constant '{c.name}' reached the checker without a local binder table (R-0492)" (some c.span)
+    throwCheck (.binderTableMissing s!"constant '{c.name}'" "reached the checker without a local binder table") (some c.span)
   modify fun env => { env with locals := c.locals, vars := [], borrowRefs := [] }
   let ty ← resolveType c.ty
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
--- spec: REF-1, spec: STMT-9 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-1, spec: STMT-9, spec: STMT-10 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
@@ -3353,19 +3353,19 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- R-0492: the local walk ran on this body (Pipeline.resolve); a function that bypassed it has
   -- no binding identities and no SCOPE-1 verdict, so it is refused rather than checked by name.
   if !f.locals.resolved then
-    throwCheckMsg s!"internal: function '{f.name}' reached the checker without a local binder table (R-0492)" (some f.span)
+    throwCheck (.binderTableMissing s!"function '{f.name}'" "reached the checker without a local binder table") (some f.span)
   if !f.locals.conflicts.isEmpty then
-    throwCheckMsg s!"internal: the local binder table of '{f.name}' is ambiguous: {"; ".intercalate f.locals.conflicts} (R-0492)" (some f.span)
+    throwCheck (.binderTableMissing s!"the local binder table of '{f.name}'" s!"is ambiguous: {"; ".intercalate f.locals.conflicts}") (some f.span)
   let scopeDs := scope1Diagnostics f
   if !scopeDs.isEmpty then throw scopeDs
   -- Validate #[test] constraints
   if f.isTest then
     if !f.params.isEmpty then
-      throwCheckMsg s!"#[test] function '{f.name}' must have no parameters" f.span
+      throwCheck (.testFnShape f.name "have no parameters") f.span
     if !f.typeParams.isEmpty then
-      throwCheckMsg s!"#[test] function '{f.name}' must not be generic" f.span
+      throwCheck (.testFnShape f.name "not be generic") f.span
     if f.retTy != .i32 then
-      throwCheckMsg s!"#[test] function '{f.name}' must return i32" f.span
+      throwCheck (.testFnShape f.name "return i32") f.span
   -- Save env state (vars from previous functions shouldn't leak)
   let envBefore ← getEnv
   -- Resolve type parameter names: .named "T" -> .typeVar "T"
@@ -3679,7 +3679,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
--- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
@@ -3793,7 +3793,7 @@ def checkModule (m : Module) (summary : FileSummary)
     | .error e => .error e
     | .ok () =>
       if isReservedFnName f.name then
-        .error [{ severity := .error, message := CheckError.message (.reservedName f.name), pass := "check", span := some f.span, hint := none }]
+        .error [{ severity := .error, message := CheckError.message (.reservedName f.name), pass := "check", span := some f.span, hint := none, code := "E0578" }]
       else .ok ()
   match reservedNameCheck with
   | .error e => .error e
@@ -3932,6 +3932,7 @@ def checkModule (m : Module) (summary : FileSummary)
                   , hint := some "TEMPORARY: parameter substitution is by name and would capture a shadowing binding. The restriction lifts once substitution is capture-avoiding — until then keep the body free of `let`, match patterns, and loops." }]
         else if !free.isEmpty then
           .error [{ severity := .error
+                  , code := "E0201"
                   , message := s!"spec fn '{sd.name}' body references unknown name(s): {", ".intercalate free}"
                   , pass := "check", span := some sd.span
                   , hint := some "a spec body may only mention its own parameters" }]
@@ -3943,11 +3944,13 @@ def checkModule (m : Module) (summary : FileSummary)
             | none => false
           then
           .error [{ severity := .error
+                  , code := "E0320"
                   , message := s!"spec fn '{sd.name}' body has the wrong sort: declared -> {tyToString sd.retTy}, but the body is {if sd.retTy == (Ty.bool) then "an integer" else "a boolean"} expression"
                   , pass := "check", span := some sd.span
                   , hint := some "a spec body must produce the declared return type" }]
         else if !unknownCalls.isEmpty then
           .error [{ severity := .error
+                  , code := "E0321"
                   , message := s!"spec fn '{sd.name}' body calls non-spec function(s): {", ".intercalate unknownCalls}"
                   , pass := "check", span := some sd.span
                   , hint := some "a spec body may only call other `spec fn`s — calling executable code would make the spec depend on runtime behaviour" }]
@@ -4118,6 +4121,7 @@ def checkModule (m : Module) (summary : FileSummary)
           | none => false
         if !impureCalls.isEmpty then
           .error [{ severity := .error
+                  , code := "E0321"
                   , message := s!"contract on '{f.name}': impure call '{impureCalls.headD ""}' — spec/ghost must be pure and total"
                   , pass := "check", span := some f.span
                   , hint := some "a contract may call `spec fn`s and capability-free functions; a capability-requiring function performs I/O, so the contract's meaning would depend on runtime effects" }]
@@ -4125,6 +4129,7 @@ def checkModule (m : Module) (summary : FileSummary)
         -- rule tag and related span); this older untagged refusal stays only as defense in depth.
         else if !shadowedParams.isEmpty && (scope1Diagnostics f).isEmpty then
           .error [{ severity := .error
+                  , code := "E0301"
                   , message := s!"contract on '{f.name}' names parameter(s) shadowed by a local: {", ".intercalate shadowedParams}"
                   , pass := "check", span := some f.span
                   , hint := some "TEMPORARY: the contract carries the bare name, so which binding it means is recorded nowhere. Rename the local until contract expressions carry binding identities." }]
@@ -4134,16 +4139,19 @@ def checkModule (m : Module) (summary : FileSummary)
                     -- already reported this exact defect under `--report contracts`; it just could
                     -- not REJECT it, so the name still reached the VC hypotheses. Two vocabularies
                     -- for one defect would read as two different problems.
+                  , code := "E0201"
                   , message := s!"contract on '{f.name}': {", ".intercalate (free.map (fun n => s!"unknown identifier '{n}'"))}"
                   , pass := "check", span := some f.span
                   , hint := some "a contract may mention parameters, constants, `result` (in `ensures`), and locals (in loop invariants)" }]
         else if !wrongVariant.isEmpty then
           .error [{ severity := .error
+                  , code := "E0320"
                   , message := s!"contract on '{f.name}': `variant` is a boolean, not a decreasing measure"
                   , pass := "check", span := some f.span
                   , hint := some "a `#[variant]` must be an integer expression that strictly decreases each iteration (e.g. `n - i`), not a condition" }]
         else if !wrongSort.isEmpty then
           .error [{ severity := .error
+                  , code := "E0320"
                   , message := s!"contract on '{f.name}' is an integer expression, not a proposition"
                   , pass := "check", span := some f.span
                   , hint := some "a `requires`/`ensures` clause must be a boolean condition" }]

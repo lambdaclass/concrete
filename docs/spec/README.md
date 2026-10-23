@@ -47,17 +47,17 @@ areas exist (§8).
 |---|---|---|
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
-| `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-7 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives) |
+| `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-8 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives, where an enum destructuring `let` may appear) |
 | `ffi.md` | `FFI-` | migrated: FFI-1 to FFI-5 (foreign function values, Layout authority, extern declarations, layout attributes, symbol names) |
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
 | `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-16 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds, generic arguments, finite size) |
 | `memory.md` | `MEM-` | migrated: MEM-1 to MEM-6 (two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
 | `trusted.md` | `TRUST-` | migrated: TRUST-1 to TRUST-7 (pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules, moving out of raw memory); handle capabilities and callable-value capabilities still in their documents |
-| `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
+| `statements.md` | `STMT-` | migrated: STMT-1 to STMT-10 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path, test functions) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
-| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
+| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4 (name resolution, visibility, one binding per name, module files) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
 

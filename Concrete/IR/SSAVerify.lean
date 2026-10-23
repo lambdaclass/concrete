@@ -142,7 +142,7 @@ def SSAVerifyError.code : SSAVerifyError → String
   | .aggregatePhi _ _ _ => "E0714"
   | .binopTypeMismatch _ _ _ _ => "E0715"
 
-private def addError (ctx : VerifyCtx) (msg : String) (code : String := "") : VerifyCtx :=
+private def addError (ctx : VerifyCtx) (msg : String) (code : String) : VerifyCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := ctx.declSpan, hint := none, code := code }] }
 
 private def addSSAError (ctx : VerifyCtx) (e : SSAVerifyError) : VerifyCtx :=
@@ -566,7 +566,7 @@ private def checkBinOpTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 
 private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   if f.blocks.isEmpty then
-    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none }]
+    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none, code := SSAVerifyError.code .functionHasNoBlocks }]
   else
     let blockLabels : Std.HashSet String := f.blocks.foldl (·.insert ·.label) ∅
     let predecessors := buildPredecessors f.blocks

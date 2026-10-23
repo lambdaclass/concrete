@@ -1,0 +1,10 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0319
+// (docs/spec/statements.md, example test-with-parameter).
+#[test]
+fn t(x: i32) -> i32 {
+    return x;
+}
+
+fn main() -> Int {
+    return 42;
+}
