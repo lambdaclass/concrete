@@ -1,0 +1,226 @@
+# Classification of every code in `--report diagnostic-codes` (docs/spec/README.md S6). Classes: rule (named by a
+# spec entry), unmigrated:<chapter> (only shrinks, S3), internal (compiler invariant), tooling (proof/policy/evidence), retired.
+# code	class	ledger description
+E0001	unmigrated:syntax	syntax error
+E0100	unmigrated:modules	undeclared variable
+E0101	unmigrated:modules	unknown function
+E0102	unmigrated:modules	unknown struct type
+E0103	unmigrated:modules	unknown enum variant
+E0104	unmigrated:modules	not an enum
+E0105	unmigrated:modules	unknown enum
+E0106	unmigrated:modules	unknown static method
+E0107	unmigrated:modules	unknown function reference
+E0108	unmigrated:modules	unknown type
+E0109	unmigrated:modules	Self outside impl block
+E0110	unmigrated:modules	unknown module
+E0111	unmigrated:modules	symbol not public in module
+E0200	unmigrated:modules	Self outside impl block
+E0201	unmigrated:modules	undeclared variable
+E0202	unmigrated:modules	assignment to undeclared variable
+E0203	rule	variable frozen by borrow
+E0204	rule	cannot move linear variable: borrowed
+E0205	rule	linear variable used after move
+E0206	rule	variable reserved or borrowed by a pending defer
+E0207	rule	cannot consume linear variable in loop
+E0208	rule	linear variable never consumed
+E0209	rule	match arms disagree on consumption
+E0210	rule	break skips unconsumed linear variable
+E0211	rule	continue skips unconsumed linear variable
+E0212	rule	linear consumed in one branch not other
+E0213	rule	linear consumed in then-branch (no else)
+E0214	rule	borrow ref shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
+E0215	rule	borrow region shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
+E0216	unmigrated:statements	unknown loop label
+E0217	rule	assignment to immutable variable
+E0218	rule	assignment to frozen variable
+E0219	rule	reassignment of linear variable
+E0220	rule	type mismatch
+E0221	rule	dereference of non-reference type
+E0222	rule	while break/else type mismatch
+E0223	rule	if condition not Bool
+E0224	rule	if branch type mismatch
+E0225	rule	match arm type mismatch
+E0226	rule	break value type mismatch
+E0227	unmigrated:arithmetic	integer literal out of range
+E0228	rule	binary operand type mismatch
+E0229	rule	comparison not defined on this type (integers, floats, bool, char; raw pointers in Unsafe code; bugs 134/140)
+E0230	rule	cannot borrow: already moved
+E0231	rule	cannot borrow: already mutably borrowed
+E0232	rule	cannot mutably borrow: already borrowed
+E0233	rule	cannot mutably borrow immutable variable
+E0234	rule	reference escapes borrow block
+E0235	rule	cannot mutably borrow: already immutably borrowed
+E0236	rule	a function, function type or instantiation returns a reference (front end and post-mono)
+E0237	unmigrated:references	mutable borrow (explicit or `&mut self` receiver) through a shared reference
+E0238	rule	place or reference source that does not normalize to a traceable place
+E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
+E0240	unmigrated:trusted	missing capability
+E0241	unmigrated:trusted	trait bound not satisfied
+E0242	unmigrated:trusted	cannot infer capability variable
+E0243	rule	proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)
+E0244	rule	right operand of && or || moves a value it may never run to move (bug 148)
+E0250	rule	unknown struct type
+E0251	rule	struct has no field
+E0252	rule	missing field in literal
+E0253	rule	unknown field in literal
+E0254	rule	field access on non-struct
+E0255	retired	heap access required
+E0256	retired	arrow access on non-heap type
+E0257	retired	arrow access on non-struct inner type
+E0258	retired	arrow assign on non-heap type
+E0259	retired	arrow assign on non-struct
+E0260	rule	unknown variant
+E0261	rule	unknown enum type
+E0262	rule	wrong argument count
+E0263	unmigrated:modules	undeclared function
+E0264	rule	no method on type
+E0265	rule	no method on type variable
+E0266	rule	method call on non-named type
+E0267	unmigrated:modules	unknown function reference
+E0268	rule	builtin wrong argument count
+E0269	rule	builtin wrong type argument count
+E0270	rule	builtin wrong first argument type
+E0271	rule	builtin bad key type
+E0272	rule	destroy requires named type
+E0273	rule	type does not implement Destroy
+E0274	rule	free requires Heap type
+E0275	retired	former ? operator required Result type
+E0276	retired	former ? operator required Ok/Err variants
+E0277	retired	former ? operator required an Ok value field
+E0278	unmigrated:statements	return/break/continue inside a call argument, literal element or operator operand (bug 142)
+E0279	rule	deferred call argument is not a local, a borrow of a local, or a constant (bug 143)
+E0280	unmigrated:statements	break outside loop
+E0281	unmigrated:statements	continue outside loop
+E0282	rule	defer body must be a function call
+E0283	unmigrated:statements	reserved identifier
+E0284	unmigrated:modules	unknown module
+E0285	unmigrated:modules	symbol not public in module
+E0286	rule	fallible result discarded (must use)
+E0287	rule	non-Copy value discarded without consumption
+E0288	rule	wildcard would discard a non-Copy value
+E0289	rule	let _ removed (wildcard is not a discard)
+E0290	rule	non-Copy sub-place read by value (would duplicate)
+E0291	rule	non-Copy overwrite would leak the old value
+E0292	rule	shadowing a still-live non-Copy binding
+E0293	rule	overlapping borrows of one place in a single call
+E0294	rule	pure value computed then discarded (dead computation)
+E0295	rule	discard() of a non-Copy value (use destroy or consume it)
+E0296	rule	newtype constructed outside its defining module (construction rights, 0b)
+E0297	rule	struct literal touches a field private to its defining module (0b)
+E0298	rule	read/write of a struct field private to its defining module (0b)
+E0299	unmigrated:modules	a module binds one name twice (import vs local definition, or two imports)
+E0300	rule	a match guard moves a non-Copy value (guards are read-only; bug 090)
+E0301	rule	a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)
+E0302	rule	a `let` binding holds a reference (references are scoped; exit 2i)
+E0303	rule	a reference binding is assigned (references are never re-pointed; exit 2i)
+E0304	rule	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
+E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
+E0306	rule	a struct or enum literal gives a field more than once (bug 193)
+E0310	unmigrated:statements	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
+E0400	internal	Self outside impl block
+E0401	internal	undeclared variable
+E0402	internal	undeclared function
+E0403	internal	unknown function reference
+E0404	internal	assignment to undeclared variable
+E0405	internal	borrow of undeclared variable
+E0406	internal	unknown struct type
+E0407	internal	arrow access on unknown struct
+E0408	internal	struct has no field
+E0409	internal	field access on non-struct
+E0410	internal	unknown enum type
+E0411	internal	unknown variant
+E0412	internal	missing field in variant
+E0413	internal	no method on type variable
+E0414	internal	no method on type
+E0415	internal	method call on non-named type
+E0416	rule	empty array literal
+E0417	internal	submodule elaboration error
+E0418	unmigrated:modules	unknown module
+E0419	unmigrated:modules	symbol not public in module
+E0500	rule	variable type mismatch
+E0501	rule	arithmetic on non-numeric type
+E0502	rule	binary operand type mismatch
+E0503	rule	comparison operand type mismatch
+E0504	rule	comparison result not Bool
+E0505	rule	logical operator on non-Bool
+E0506	rule	bitwise operator on non-integer
+E0507	rule	negation on non-numeric type
+E0508	rule	logical not on non-Bool
+E0509	rule	bitwise not on non-integer
+E0510	internal	binding type mismatch (let, assignment, argument, field or store)
+E0520	unmigrated:trusted	insufficient capabilities
+E0521	unmigrated:trusted	missing capability
+E0522	unmigrated:trusted	argument count mismatch
+E0530	rule	non-exhaustive match: missing variant
+E0531	rule	match arm wrong enum
+E0532	rule	duplicate match arm
+E0533	rule	variant field count mismatch
+E0534	rule	non-enum match without default arm
+E0540	rule	while condition not Bool
+E0541	rule	if condition not Bool
+E0542	unmigrated:statements	break outside loop
+E0543	unmigrated:statements	continue outside loop
+E0550	rule	empty array literal
+E0551	rule	array index not integer
+E0552	rule	indexing non-array type
+E0553	unmigrated:arithmetic	cannot cast between types
+E0554	rule	dereference of non-reference type
+E0555	rule	assign through a target that is not `&mut T` or `*mut T`
+E0560	rule	return type mismatch
+E0570	rule	Copy/Destroy conflict
+E0571	rule	Copy struct has non-Copy field
+E0572	unmigrated:ffi	repr(C) struct has generics
+E0573	unmigrated:ffi	repr(C) field not FFI-safe
+E0574	unmigrated:ffi	extern fn parameter not FFI-safe
+E0575	unmigrated:ffi	extern fn return not FFI-safe
+E0576	unmigrated:ffi	repr(packed) and repr(align) conflict
+E0577	unmigrated:ffi	repr(align) not power of two
+E0578	unmigrated:modules	reserved function name
+E0579	unmigrated:modules	builtin trait redeclared
+E0580	unmigrated:traits	unknown trait
+E0581	unmigrated:traits	missing trait method
+E0582	unmigrated:traits	trait method return type mismatch
+E0583	unmigrated:traits	recursive type has infinite size
+E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)
+E0585	unmigrated:ffi	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
+E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
+E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
+E0590	rule	duplicate impl: a trait implemented twice for one type (TRAIT-1)
+E0591	rule	overlapping impls: two impls of one trait whose targets unify (TRAIT-2)
+E0592	rule	orphan impl: the module defines neither the trait nor the type (TRAIT-3)
+E0593	rule	impl target is not its type applied to exactly the impl's own parameters (specialized, blanket, alias or arity; TRAIT-4)
+E0594	rule	one method name provided by two impls of the same type (TRAIT-5)
+E0595	rule	method call through type-parameter bounds is ambiguous: several bound traits declare it (TRAIT-6)
+E0600	tooling	post-elab: placeholder type survived elaboration
+E0601	tooling	post-mono: type variable survived monomorphization
+E0602	internal	lowering failure
+E0610	tooling	predictable profile violation
+E0611	tooling	denied capability used
+E0612	tooling	proof-eligible function unproved
+E0700	internal	duplicate register definition
+E0701	internal	function has no blocks
+E0702	internal	use before definition
+E0703	internal	use in non-dominating block
+E0704	internal	undefined register
+E0705	internal	branch to unknown label
+E0706	internal	phi missing predecessor
+E0707	internal	phi extra predecessor
+E0708	internal	phi not dominated by source
+E0709	internal	phi uses undefined register
+E0710	internal	phi type mismatch
+E0711	internal	call arity mismatch
+E0712	internal	ret void in non-void function
+E0713	internal	ret value in void function
+E0714	internal	phi on aggregate type
+E0715	internal	binop operand type mismatch
+E0800	tooling	stale proof: fingerprint changed
+E0801	tooling	missing proof: eligible but unproved
+E0802	tooling	ineligible: fails profile gates
+E0803	tooling	blocked: unsupported construct in extraction
+E0804	tooling	trusted: marked trusted
+E0805	tooling	attachment integrity: registry entry is invalid
+E0806	tooling	theorem lookup: Lean proof name not found
+E0807	tooling	lean check failure: Lean kernel rejected proof
+E0808	internal	user-defined generic enum reached codegen un-monomorphized — would corrupt memory; rejected fail-closed (bug 051)
+E0809	internal	a monomorphized specialization's name is already declared in the program — one name cannot carry two layouts (R-0001)
+E0810	tooling	proof link unbound: no stored proof-subject digest, so freshness cannot be checked and the claim is not proved (R-0004, bug 058)

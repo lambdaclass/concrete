@@ -101,14 +101,30 @@ declare -A BUG_TEST_MAP=(
   [116]="regress_116_vec_push_first_field.con"
   # Bug 133: &mut (*p).f borrowed a copy of *p (a write through it was lost).
   [133]="regress_133_deref_field_borrow.con"
+  # Bug 184: --interp read all of stdin before main ran (waited for an open pipe to close);
+  # both fixtures run under run_tests.sh's r184_leg with stdin held open.
+  [184]="regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con"
+  # Bug 191: test programs and std tests wrote fixed /tmp paths (rc 139 for any other user on a
+  # shared host); both programs build their path from CONCRETE_TEST_TMPDIR and check fopen
+  # (run_tests.sh regress_191 legs), and check_gate_hygiene.sh refuses /tmp literals in .con sources.
+  [191]="file_write_read.con file_read_basic.con regress_191_test_scratch.con"
   # Bug 179: concurrent compiles of one source shared the intermediate <input>.ll / <main>.ll;
   # both fixtures are compiled concurrently by run_tests.sh (file mode and project mode).
   [179]="regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con"
+  # Bug 186: trait impl selection was a search (duplicate, overlapping, specialized, orphan impls;
+  # a method name from two impls; bound calls by order). E0590 - E0595, plus the two-order positive control.
+  [186]="error_186_duplicate_impl.con error_186_duplicate_generic_impl.con error_186_overlap_generic_impl.con error_186_overlap_blanket_impl.con error_186_orphan_impl.con error_186_specialized_impl.con error_186_method_clash.con error_186_inherent_clash.con error_186_ambiguous_bound_method.con error_186_duplicate_primitive_spelling.con error_186_orphan_sibling.con error_186_imported_alias_target.con error_186_builtin_arity.con regress_186_coherent_impls.con regress_186_primitive_impl_spellings.con regress_186_coherent_impls_reversed.con regress_186_visible_targets.con"
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
   # Bug 185: a raw-pointer comparison through a safe generic escaped E0229 (instances lost `trusted`).
   [185]="error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_authority.con"
+  # Bug 188: a capability variable entailed every requirement (Unsafe included). Also
+  # check_capability_judgment.sh and three mutation families.
+  # Bug 189: `trusted impl` conferred trust on every method of the block. Also
+  # check_trusted_method.sh's bug 189 section.
+  [189]="error_189_trusted_impl_refused.con"
+  [188]="error_188_capvar_console.con error_188_capvar_process.con error_188_capvar_unsafe_call.con error_188_capvar_unsafe_op.con error_188_capvar_unsafe_callback.con error_188_capparam_named_unsafe.con error_188_capvar_method_unsafe_callback.con error_188_capvar_impl_receiver.con error_188_bodyless_capparam.con regress_188_capvar_polymorphism.con"
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
   [134]="error_134_enum_eq.con error_134_struct_eq.con"
@@ -144,6 +160,13 @@ declare -A BUG_TEST_MAP=(
   [183]="regress_183_deref_assign_rhs_first.con"
   # Bug 166: an extern fn taken as a value is refused (E0588, D4).
   [166]="error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con error_166_foreign_fn_value_scalar.con error_166_imported_extern_value.con error_166_extern_value_in_const.con error_166_extern_value_after_scope.con regress_166_wrapper_value.con"
+  # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
+  # Also check_pipeline_artifacts.sh legs B, U and D.
+  [180]="regress_180_report_scope/src/main.con"
+  # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
+  [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
+  # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).
+  [192]="error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
@@ -169,6 +192,11 @@ declare -A BUG_TEST_MAP=(
   # Bug 176: a loop body's / for header's shadowing let outlived the loop in Check (run_tests.sh
   # also requires --interp == binary == 42 for the valid fixture).
   [176]="regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type.con error_176_while_shadow_ssa.con error_176_while_shadow_mut.con error_176_for_header_type.con error_176_loop_body_linear_leak.con error_176_loop_body_leak_while_let.con error_176_loop_body_leak_labelled_break.con error_176_loop_body_leak_labelled_break_mid.con"
+  # Bug 177: CoreCheck never compared a binder's type with its value's. The defence-in-depth
+  # check itself is covered by pipeline-test corecheck/binder-agreement (eight cases planted in
+  # Core, all accepted by the previous compiler) and check_corecheck_boundary.sh class 7 (bug
+  # 176's program never compiles); this fixture covers the Elab alias-hint sites the check found.
+  [177]="regress_177_alias_value_hints.con"
 )
 
 # Bugs that don't need a .con regression test (with reason).

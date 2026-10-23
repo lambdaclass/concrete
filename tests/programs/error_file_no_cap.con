@@ -6,7 +6,7 @@ trusted fn read_file(path: &String) with(File) -> Int {
 }
 
 fn main() -> Int {
-    let path: String = "/tmp/test.txt";
+    let path: String = "data.txt";
     let data: Int = read_file(&path);
     drop_string(path);
     return 0;

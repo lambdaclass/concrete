@@ -1,4 +1,9 @@
-# Resource Cleanup: `defer`
+# Resource Cleanup: `defer` (design record)
+
+**Superseded as the normative text (2026-10-23).** The rule is OWN-12 of
+[docs/spec/ownership.md](../spec/ownership.md#OWN-12). The decided refinements (loans retained by a
+deferred call, the exit order) are TIGHTENING_DECISIONS §4.5 and enter the spec when implemented.
+This note keeps the implementation notes, the V1 boundaries and the routed design questions.
 
 Status: CORE-COMPLETE — ROADMAP old Phase 6 #7. The `defer <call>;` form and its
 cleanup semantics are implemented and gated (`scripts/tests/check_defer.sh`,

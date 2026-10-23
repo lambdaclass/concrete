@@ -107,7 +107,7 @@ structure TypeEnv where
   -- loop (a loop nested INSIDE the exiting branch iterates before the return,
   -- so it needs its own exiting branch).
   inFnExitingBranch : Bool := false
-  -- Exit 2i REF-6@2: > 0 while checking an expression Elab erases before monomorphization (a
+  -- Exit 2i REF-6@1: > 0 while checking an expression Elab erases before monomorphization (a
   -- `ghost let` initializer, an `assert` / `assume` condition). Post-mono re-checks runtime
   -- bindings at `T := &Int`; erased ones never reach it, so inside them a `let` or assignment
   -- whose type could become a reference by instantiation is refused here.
@@ -190,6 +190,9 @@ inductive CheckError where
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
   | ifCondNotBool (ty : String)
+  -- Bug 192: the condition of an `if` / `while` / `for` STATEMENT (TYPE-5; the expression form
+  -- uses `ifCondNotBool`). Its type was computed and discarded, so an integer condition compiled.
+  | condNotBool (what : String) (ty : String)
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
@@ -235,6 +238,9 @@ inductive CheckError where
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
   | missingFieldInLiteral (fieldName : String) (containerDesc : String)
+  -- Bug 193 (TYPE-7): a struct or enum literal names a field twice. The checker read the first
+  -- occurrence and the backend stored the last, so the consumers disagreed.
+  | duplicateFieldInLiteral (fieldName : String) (containerDesc : String)
   | unknownFieldInLiteral (fieldName : String) (containerDesc : String)
   | fieldAccessNonStruct
   | unknownVariant (variant : String) (enumName : String)
@@ -243,6 +249,7 @@ inductive CheckError where
   | undeclaredFunction (name : String)
   | noMethodOnType (method : String) (typeName : String)
   | noMethodOnTypeVar (method : String) (typeVar : String)
+  | ambiguousBoundMethod (method : String) (typeVar : String) (traits : List String)
   | methodCallOnNonNamedType
   | unknownFunctionRef (name : String)
   | builtinWrongArgCount (fnName : String) (expected : Nat)
@@ -317,13 +324,13 @@ inductive CheckError where
   -- match/`if let`/`while let` binders, `for` header binders, borrow-block reference and
   -- region names). `kind` names the new binder's form.
   | shadowsVisibleBinding (name : String) (kind : String)
-  -- Exit 2i REF-6@2 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
+  -- Exit 2i REF-6@1 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
   -- reference, whether written, through an alias or inferred.
   | letBindsReference (name : String) (tyName : String)
-  -- Exit 2i REF-6@2 (b): no reference binding (parameter, borrow-block binder, arm binder)
+  -- Exit 2i REF-6@1 (b): no reference binding (parameter, borrow-block binder, arm binder)
   -- is the target of an assignment.
   | assignsReferenceBinding (name : String) (tyName : String)
-  -- REF-6@2 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
+  -- REF-6@1 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
   -- erased before monomorphization, where a runtime `let` at `T := &Int` is re-checked, so it is
   -- refused here (exit 2i review).
   | ghostLetAtTypeParam (name : String) (tyName : String)
@@ -341,7 +348,7 @@ inductive CheckError where
   | erasedRefInstantiation (what : String) (param : String) (tyName : String)
   -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
   -- function, function type or reference instantiation would return a reference. The
-  -- message is the site's; `rule` is the rule it enforces (`REF-1@2`, `REF-2@2`, `REF-4@1`).
+  -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
   | returnsReference (msg : String) (rule : String)
   -- #18 container-not-in-context enforcement: within ONE call's arguments
   -- (including the auto-borrowed method receiver), a variable may be borrowed
@@ -412,6 +419,7 @@ def CheckError.message : CheckError → String
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
+  | .condNotBool what ty => s!"{what} condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
@@ -437,6 +445,7 @@ def CheckError.message : CheckError → String
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .missingFieldInLiteral fieldName containerDesc => s!"missing field '{fieldName}' in {containerDesc}"
+  | .duplicateFieldInLiteral fieldName containerDesc => s!"field '{fieldName}' is given more than once in {containerDesc}"
   | .unknownFieldInLiteral fieldName containerDesc => s!"unknown field '{fieldName}' in {containerDesc}"
   | .fieldAccessNonStruct => "field access on non-struct type"
   | .unknownVariant variant enumName => s!"unknown variant '{variant}' in enum '{enumName}'"
@@ -445,6 +454,8 @@ def CheckError.message : CheckError → String
   | .undeclaredFunction name => s!"call to undeclared function '{name}'"
   | .noMethodOnType method typeName => s!"no method '{method}' on type '{typeName}'"
   | .noMethodOnTypeVar method typeVar => s!"no method '{method}' for type variable '{typeVar}'"
+  | .ambiguousBoundMethod method typeVar traits =>
+    s!"method '{method}' on type variable '{typeVar}' is ambiguous: it is declared by more than one of its bounds ({", ".intercalate traits}); bound order does not choose one"
   | .methodCallOnNonNamedType => "method call on non-named type"
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
   | .builtinWrongArgCount fnName expected =>
@@ -506,6 +517,7 @@ def CheckError.message : CheckError → String
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
+  | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/spec/traits.md TRAIT-6)"
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
@@ -598,6 +610,7 @@ def CheckError.code : CheckError → String
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
   | .ifCondNotBool _ => "E0223"
+  | .condNotBool _ _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"
   | .breakTypeMismatch _ _ => "E0226"
@@ -623,6 +636,7 @@ def CheckError.code : CheckError → String
   | .unknownStructType _ => "E0250"
   | .structHasNoField _ _ => "E0251"
   | .missingFieldInLiteral _ _ => "E0252"
+  | .duplicateFieldInLiteral _ _ => "E0306"
   | .unknownFieldInLiteral _ _ => "E0253"
   | .fieldAccessNonStruct => "E0254"
   | .unknownVariant _ _ => "E0260"
@@ -631,6 +645,7 @@ def CheckError.code : CheckError → String
   | .undeclaredFunction _ => "E0263"
   | .noMethodOnType _ _ => "E0264"
   | .noMethodOnTypeVar _ _ => "E0265"
+  | .ambiguousBoundMethod _ _ _ => "E0595"
   | .methodCallOnNonNamedType => "E0266"
   | .unknownFunctionRef _ => "E0267"
   | .builtinWrongArgCount _ _ => "E0268"
@@ -679,9 +694,6 @@ def CheckError.code : CheckError → String
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 
-/-- The normative statement every rule tag points at (MEMORY_SEMANTICS §15.5). -/
-def ruleSpecRef : String := "docs/language/MEMORY_SEMANTICS.md §15"
-
 /-- The exit 2i rule (with its version) a diagnostic enforces, MEMORY_SEMANTICS §15.5 item 2.
     A code that serves several rules (E0238) has a default here and is overridden at the sites
     that enforce another rule (`throwCheck (rule := ...)`). `none`: not a §15 rule. -/
@@ -690,17 +702,19 @@ def CheckError.rule : CheckError → Option String
   | .contractBinds _ _ => some "SCOPE-1@1"
   | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
   | .shadowsLiveLinear _ => some "SCOPE-1@1"
-  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@2"
-  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@2"
-  | .referenceEscapesBorrowBlock _ => some "REF-6@2"
+  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"
+  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@1"
+  | .referenceEscapesBorrowBlock _ => some "REF-6@1"
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"
-  | .untraceablePlace _ _ => some "REF-5@2"
-  | .temporaryNotBorrowable _ => some "REF-5@2"
-  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@2"
-  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@2"
-  | .conflictingCallBorrows _ => some "REF-8@2"
-  | _ => none
+  | .untraceablePlace _ _ => some "REF-5@1"
+  | .temporaryNotBorrowable _ => some "REF-5@1"
+  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
+  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
+  | .conflictingCallBorrows _ => some "REF-8@1"
+  -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
+  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
+  | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
     rendered as `next:` / `next_action`. Keyed by the rule tag so a site override gets the
@@ -708,20 +722,21 @@ def CheckError.rule : CheckError → Option String
 def ruleNextAction (rule : String) : Option String :=
   match rule with
   | "SCOPE-1@1" => some "give the new binding its own name; for a pattern field write `Variant { value: inner }`; to replace the value of a `mut` binding, assign instead (`value = ...`)"
-  | "REF-1@2" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
-  | "REF-2@2" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
+  | "REF-1@1" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
+  | "REF-2@1" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
   | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
   | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
-  | "REF-5@2" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
-  | "REF-6@2" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
+  | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
+  | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
-  | "REF-8@2" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
+  | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
 def ruleEvidence (rule : Option String) : List (String × String) :=
   match rule with
-  | some r => [("rule", r), ("spec", ruleSpecRef)]
+  | some r => [("rule", r), ("spec", ruleSpecRef r)]
   | none => []
 
 def throwCheck (e : CheckError) (span : Option Span := none)

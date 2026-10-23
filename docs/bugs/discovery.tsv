@@ -46,9 +46,16 @@ date	kind	probe	effort	bugs	silent
 2026-10-22	development	safety-eval2 work (a pre-existing limitation noted while fixing it)	unrecorded	175	-
 2026-10-22	review	Codex reviews of safety-eval2 (rule (c), bug 144 migration, bug 146, operand and exit-path checks)	unrecorded	145,146,147,148,149	149
 2026-10-22	fuzz	fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z	269145 programs	176	176
+2026-10-22	follow-on	bug 176 fix (its defence-in-depth follow-up: CoreCheck re-check of binder types)	unrecorded	177	177
 2026-10-22	development	devshell toolchain change (Nix clang ahead on PATH) exposing a run_tests race	unrecorded	179	-
 2026-10-22	development	compiler perf tracking (scripts/perf synthetic growth families)	unrecorded	178	-
+2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-
 2026-10-23	semantics	language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3	47 programs	181,182	181,182
+2026-10-23	development	landing train 3 pre-push hook run as a second user on the OVH server (fixed /tmp test paths owned by dev)	unrecorded	191	-
+2026-10-23	review	Codex review of Concrete/Semantics/Capabilities.lean (capability variables) and trusted impl inheritance, confirmed by a second review	unrecorded	188,189	188,189
+2026-10-23	review	Codex audit of trait resolution (coherence), confirmed by probes on wip/train3 1df4cf48	unrecorded	186	186
+2026-10-23	development	verified-pipeline R-0497 slice 1 (sealing the pipeline artifacts refused a record update that replaced a certificate's payload)	unrecorded	180	180
+2026-10-23	spec	language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews)	116 programs	192,193	192,193
 2026-10-23	review	Codex review of the bug 136/137 evaluation-order fix	unrecorded	190	190
 2026-10-23	follow-on	raw-pointer generic leak (TIGHTENING_DECISIONS T-RAWDUP), numbered while implementing	unrecorded	198	198
 2026-10-23	review	Codex review of the bug 198 fix	unrecorded	199	-

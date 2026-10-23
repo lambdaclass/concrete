@@ -9,10 +9,11 @@ import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
 import Concrete.Semantics.BindingMode
+import Concrete.Check.Coherence
 
 namespace Concrete
 
-/-- Expression checking mode (docs/language/VALUE_FLOW_SPEC.md — the auto-consume
+/-- Expression checking mode (docs/spec/ownership.md OWN-15 — the auto-consume
     inversion, 2026-07-06). Consumption is decided HERE, in ONE place, not in
     every AST handler; a new syntax form that forgets to pick a mode gets
     `value` and fails closed (over-rejects) instead of silently leaking.
@@ -110,6 +111,7 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
     root — explicit or an implicit receiver — sees it. A reference whose source does not
     normalize is refused (E0238). Provenance is one source per binding and is not joined
     across branches, so a reassignment may not RE-POINT a reference at different storage. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
     (reassign : Bool := false) (pre : Option Norm := none) : CheckM Unit := do
   match ← resolvedOr ty with
@@ -129,7 +131,7 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
       | none => none
     let curPath := ((← getEnv).vars.lookup name).map (fun i => (i.borrowedPath, i.borrowedExact))
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
-      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@2")
+      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@1")
     let parent := match parent? with | some q => if q != name then some q else none | none => none
     -- the binding in scope under `name` only (binding identity, bug 094) — a shadowed entry of
     -- the same name keeps its own provenance
@@ -145,11 +147,12 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
 /-- Every binding introduction (let, match binder, destructuring) goes through this guard:
     provenance and reborrow ancestry are recorded BY NAME, so shadowing a name that a live
     reference records as its source or parent would silently re-point it (E0238). -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
   if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
       (vi.borrowedFrom == some name || vi.refParent == some name)) then
     throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
-      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@2")
+      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@1")
 
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
 def refAncestors (r : String) : CheckM (List String) := do
@@ -223,6 +226,7 @@ def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit :
     (E0237); an owned root must be `mut` and unborrowed (E0233 / E0232) and not moved; an
     exclusive reference must not be in use by a newer reborrow (E0232); a place that does not
     normalize is refused (E0238). -/
+-- spec: OWN-10 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -254,6 +258,7 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
     for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
     is live (E0232), and not into an owned root that a live reference borrows (E0232). (The
     binding-mutability rule for field writes is unchanged.) -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
   let subject := "the assignment target"
   match n with
@@ -277,6 +282,7 @@ def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
 /-- The rules of `&place`, for every shared access to a normalized place: an owned root is not
     moved and not under a live `&mut` (E0231); through a reference binding, no newer exclusive
     reborrow of its storage is live (E0231); a place that does not normalize is E0238. -/
+-- spec: OWN-1 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -304,6 +310,7 @@ def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : Check
     place (which branch's borrow is live is decided at run time), and the backend miscompiles
     one (bug 105: the binary segfaulted where --interp printed the value). The normalized place
     rule refuses it at its source, wherever it would flow (E0238). -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : CheckM Unit := do
   match ty with
   | .ref _ | .refMut _ =>
@@ -313,6 +320,7 @@ def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : Check
 
 /-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
     yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def checkRefArg (arg : Expr) (argTy0 : Ty) (span : Option Span) : CheckM Unit := do
   let argTy ← resolvedOr argTy0
   -- A reference argument is an ACCESS through its normalized place, checked like any other:
@@ -534,6 +542,7 @@ def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
 /-- Bug 147: a proof-only statement (`assert`, `assume`, `ghost let`) is erased before Core, so it
     may not move, consume or reserve a runtime binding: the obligation would be discharged by an
     operation that never runs. `before` is the environment when the statement started. -/
+-- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   for (n, vi) in env.vars do
@@ -550,6 +559,7 @@ def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Uni
 /-- Bug 148: the right operand of `&&`/`||` is conditional, so it may not change a non-Copy
     binding's ownership state (a move there may not run). `before` is the environment after the
     left operand was checked. -/
+-- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   for (n, vi) in env.vars do
@@ -666,6 +676,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -878,7 +890,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
         let ty ← checkExpr tExpr hint
-        -- value mode auto-consumes a trailing ident (VALUE_FLOW_SPEC)
+        -- value mode auto-consumes a trailing ident (docs/spec/ownership.md OWN-15)
         pure ty
       | some (.return_ _ v) =>
         match v with
@@ -1286,9 +1298,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       do
         let env ← getEnv
         -- Anti-smuggling: an indirect call must hold the pointer type's caps AND
-        -- its cap variables (Capabilities.missingCapsThroughPtr) — the stricter
-        -- through-pointer variant of the one shared missing-caps decision.
-        for cap in Capabilities.missingCapsThroughPtr env.currentCapSet fnPtrCapSet do
+        -- its cap variables — the one entailment rule (Capabilities.missingCaps),
+        -- the same one every direct call reads (bug 188).
+        for cap in Capabilities.missingCaps env.currentCapSet fnPtrCapSet do
           throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
@@ -1406,12 +1418,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
           | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps, capBindings)
           | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
-      -- Resolve cap variables in parameter types for type comparison
-      let capBindings' := if sig.capParams.isEmpty then [] else
-        sig.capParams.map fun cp =>
-          match resolvedCapSet with
-          | .concrete caps => (cp, caps.filter fun c => !sig.capParams.contains c)
-          | _ => (cp, ([] : List String))
+      -- Resolve cap variables in parameter types for type comparison, from the INFERRED
+      -- bindings — the same ones the method path uses (CheckHelpers). These were rebuilt
+      -- from the whole resolved set minus names equal to a callee parameter, which gave
+      -- every parameter the callee's fixed caps too (`with(C, Unsafe)` compared its
+      -- callback at `with(Unsafe)`) and erased a caller variable that shares the
+      -- parameter's name (`twice<cap C>` forwarding to `apply<cap C>`): two false E0220s
+      -- (Codex review of bug 188).
+      let capBindings' : List (String × List String) := if sig.capParams.isEmpty then [] else
+        sig.capParams.map fun cp => (cp, ((inferredCapBindings.find? (·.1 == cp)).map (·.2)).getD [])
       let resolveCapInTy : Ty → Ty := fun ty =>
         match ty with
         | .fn_ params (.concrete caps) ret =>
@@ -1432,13 +1447,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
-        -- One shared direct-call decision (Capabilities.missingCaps): the caps the
-        -- caller lacks for this call. Same computation CoreCheck's satisfaction
-        -- check and the reports read, so they cannot disagree.
-        -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge and checks
-        -- every call (see the method path in CheckHelpers).
-        for cap in (Capabilities.missingCaps env.currentCapSet resolvedCapSet).filter (· != unsafeCapName) do
-          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- One entailment rule (Capabilities.missingCaps) on the INSTANTIATED set: the
+        -- caps the caller lacks for this call. `Unsafe` included (bug 188): CoreCheck
+        -- sees this call without the inferred binding, so a callback's `Unsafe`
+        -- reaching the callee through `C` is decided here or nowhere. A trusted body
+        -- discharges it exactly as CoreCheck's call-site discharge does.
+        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+          if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
@@ -1531,6 +1547,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         match sd.fields.find? fun sf => sf.name == fn with
         | some _ => pure ()
         | none => throwCheck (.unknownFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
+        -- Bug 193 (TYPE-7): each field once (the checker reads the first, the backend the last).
+        if (fields.filter fun (f, _) => f == fn).length > 1 then
+          throwCheck (.duplicateFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
@@ -1641,6 +1660,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+          if (fields.filter fun (f, _) => f == fn).length > 1 then
+            throwCheck (.duplicateFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         -- SOURCE ORDER (bug 137): the initializers run in the order written, so ownership is
         -- decided in that order too; checking them in declaration order credited a borrow
         -- before a move the program executes first (Codex review).
@@ -1701,7 +1722,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
-            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@2 (a))
+            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
             let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
@@ -2128,18 +2149,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        -- Find the method in one of the bound traits
-        let mut foundSig : Option FnSigDef := none
-        let mut foundTrait : String := ""
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundTrait := traitName; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
+        -- that had the method used to win, so `T: A + B` resolved by declaration order.
+        let cands := boundMethodCandidates env.traits bounds methodName
+        if cands.length > 1 then
+          throwCheck (.ambiguousBoundMethod methodName n (cands.map (·.1.name))) (some e.getSpan)
+        let foundTrait : String := (cands.head?.map (·.1.name)).getD ""
+        let foundBuiltin : Option BuiltinTraitId := cands.head?.bind (·.1.builtinId)
+        match cands.head?.map Prod.snd with
         | none => throwCheck (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Bug 091: a call through a trait bound exercises the authority the TRAIT
@@ -2151,7 +2168,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.
           let envC ← getEnv
           for cap in Capabilities.missingCaps envC.currentCapSet sig.capSet do
-            if !(cap == unsafeCapName && envC.currentFnTrusted) then
+            if !Capabilities.trustedDischarges envC.currentFnTrusted cap then
               throwCheck (.missingCapability s!"{foundTrait}::{methodName}" cap envC.currentFnName) (some e.getSpan)
           -- Replace Self with the type variable in the trait signature
           let selfTy := Ty.typeVar n
@@ -2270,6 +2287,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     and moving a non-Copy value in it is E0300. A false guard falls through to
     the next arm, which is checked from the same pre-arm env and may move the
     same value — the guard's move would then be a second one at run time. -/
+-- spec: PAT-4 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def checkGuard (guard : Option Expr) : CheckM Unit := do
   match guard with
   | none => pure ()
@@ -2280,7 +2298,10 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     let live := before.vars.filterMap fun (_, vi) =>
       if !vi.isCopy && vi.state != .consumed then some vi.uid else none
     setEnv { before with guardUids := live ++ before.guardUids }
-    discard (checkExpr g (some .bool))
+    -- Bug 192 (TYPE-5): a guard is a condition; the `.bool` hint does not assert the type.
+    let gTy ← checkExpr g (some .bool)
+    if gTy != .bool then
+      throwCheck (.condNotBool "match guard" (tyToString gTy)) (some g.getSpan)
     let after0 ← getEnv
     setEnv { after0 with guardUids := before.guardUids }
     let after ← getEnv
@@ -2288,6 +2309,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -2307,7 +2329,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- exempts; a source `let` may not take that spelling (exit 2i review).
     if name.startsWith "__destr_" then
       throwCheck (.reservedName name) (some stmt.getSpan)
-    -- REF-6@2 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
+    -- REF-6@1 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
     -- is refused before the initializer is checked; an inferred one right after.
     match ty with
     | some t =>
@@ -2335,7 +2357,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
     if (_isGhost || env.erasedDepth > 0) && tyMayHoldRefAt env.currentTypeParams finalTy then
       throwCheck (.ghostLetAtTypeParam name (tyToString finalTy)) (some stmt.getSpan)
-    -- Escape analysis (defense in depth under REF-6@2 (a)): a borrow ref into a new binding
+    -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
     match value with
     | .ident _ vn =>
       if env.borrowRefs.contains vn then
@@ -2368,7 +2390,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | [] => pure ()
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
-    -- REF-6@2 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
+    -- REF-6@1 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
     -- binder; a `let` never is one) is the target of an assignment, whatever the value.
     match ← lookupVarInfo name with
     | some info =>
@@ -2496,7 +2518,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             throwCheck (.discardedPureValue (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    -- Bug 192 (TYPE-5): the condition is a `bool`; an integer is not a condition.
+    if condTy != .bool then
+      throwCheck (.condNotBool "if" (tyToString condTy)) (some cond.getSpan)
     -- Snapshot variable states before branches
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
@@ -2559,7 +2584,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
     setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    if condTy != .bool then
+      throwCheck (.condNotBool "while" (tyToString condTy)) (some cond.getSpan)
     let envC ← getEnv
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
@@ -2592,7 +2619,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
       let env0 ← getEnv
       setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-      let _condTy ← checkExpr cond
+      let condTy ← checkExpr cond
+      if condTy != .bool then
+        throwCheck (.condNotBool "for" (tyToString condTy)) (some cond.getSpan)
       let envC ← getEnv
       setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
       -- Body + step in loop scope, push label if present
@@ -3063,6 +3092,7 @@ partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
     merge point: it cannot disagree with the other branch, and it contributes
     nothing to the merged state — `if c { consume(x); return 1; } else { … }
     use(x)` is sound. Only the fall-through branches must agree. -/
+-- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def mergeVarStates
     (before : List (String × VarInfo))
     (afterThen : List (String × VarInfo))
@@ -3101,6 +3131,7 @@ partial def mergeVarStates
 
 /-- For if-without-else: the then branch must not consume any linear var
     that existed before the if. -/
+-- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def checkNoBranchConsumption
     (before : List (String × VarInfo))
     (afterThen : List (String × VarInfo))
@@ -3350,7 +3381,8 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
     code := e.code, evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
 
 
-/-- SCOPE-1@1 and REF-6@2 over one constant initializer. -/
+/-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
+-- spec: SCOPE-1 (docs/spec/scope.md; this declaration enforces the rule)
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
@@ -3359,6 +3391,7 @@ def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagno
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
+-- spec: SCOPE-D1, spec: SCOPE-1, spec: SCOPE-2, spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 def scope1Diagnostics (f : FnDef) : List Diagnostic :=
   let go : Scope1M Unit := do
     let mut vis : List ScopeBinder := []
@@ -3373,6 +3406,7 @@ def checkConstInit (c : ConstDef) : CheckM Unit := do
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
+-- spec: REF-1 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
@@ -3404,7 +3438,7 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- value, an owned view, a scoped callback (with_value/with_at), or a raw
   -- pointer (*const/*mut) for low-level/unsafe access.
   if tyContainsRef retTy then
-    throwCheck (.returnsReference s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" "REF-1@2") (some f.span)
+    throwCheck (.returnsReference s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" "REF-1@1") (some f.span)
   modify fun env => { env with currentRetTy := retTy }
   -- Add params to env. H17 (ruled 2026-07-05): params are OWNED LOCALS — the
   -- caller moved the value in, so the callee holds its obligation and must
@@ -3694,6 +3728,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
+-- spec: REF-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
@@ -3836,24 +3871,24 @@ def checkModule (m : Module) (summary : FileSummary)
   let expand (ty : Ty) : Ty := expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty
   let wfViolations : List (String × Ty × Span × String) :=
     (refFields.filterMap fun (desc, ty, sp) =>
-      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@2") else none)
+      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@1") else none)
     -- A type alias is a written type even when nothing uses it (Codex review).
     ++ (m.typeAliases.filterMap fun ta =>
       if tyHasRefReturningFnType (expand ta.targetTy)
-      then some (s!"type alias '{ta.name}'", ta.targetTy, ta.span, "REF-2@2") else none)
+      then some (s!"type alias '{ta.name}'", ta.targetTy, ta.span, "REF-2@1") else none)
     ++ (m.traits.flatMap fun td => td.methods.filterMap fun sig =>
       -- The trait's own type parameters shadow module aliases of the same name, in the result
       -- and in the parameters alike (Codex review).
       let own (t : Ty) : Ty := expand (substTy (td.typeParams.map fun n => (n, Ty.typeVar n)) t)
       let rt := own sig.retTy
       if tyContainsRef rt || tyHasRefReturningFnType rt then
-        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@2")
+        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@1")
       else
         let bad := sig.params.find? fun p => tyHasRefReturningFnType (own p.ty)
-        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@2"))
+        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@1"))
   match wfViolations.head? with
   | some (desc, ty, sp, rule) =>
-    let msg := if rule == "REF-1@2"
+    let msg := if rule == "REF-1@1"
       then s!"{desc} may not return a reference ('{tyToString ty}'); references are second-class and cannot be returned (VALUE_MODEL.md)"
       else s!"{desc}: '{tyToString ty}' contains a function type that returns a reference; a function type may not return a reference (REF-2, VALUE_MODEL.md)"
     .error [{ severity := .error, message := CheckError.message (.returnsReference msg rule),
@@ -3870,7 +3905,7 @@ def checkModule (m : Module) (summary : FileSummary)
               code := CheckError.code (.refStoredInAggregate desc (tyToString ty)),
               evidence := ruleEvidence (some "REF-3@1"), nextAction := ruleNextAction "REF-3@1" }]
   | none =>
-  -- SCOPE-1@1 / REF-6@2 inside constant initializers, which checkFn never visits (exit 2i review)
+  -- SCOPE-1@1 / REF-6@1 inside constant initializers, which checkFn never visits (exit 2i review)
   match m.constants.flatMap (constInitDiagnostics typeAliasMap) with
   | d :: ds => .error (d :: ds)
   | [] =>
@@ -4190,12 +4225,11 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
-    -- A method of a `trusted impl` is trusted (as Elab records it): the trusted-only
-    -- rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
+    -- A method is trusted only when it declares `trusted` itself (bug 189); the
+    -- trusted-only rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
-              , typeBounds := ib.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -4203,8 +4237,7 @@ def checkModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
-              , typeBounds := tb.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>
@@ -4277,6 +4310,10 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     happened) and uses summary table for import resolution. -/
 def checkProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics Unit :=
+  -- Trait coherence FIRST (bug 186): every impl is unique, local and fully generic, and every
+  -- (type, method) names one method, before any method table below is built from them.
+  let coherence := Coherence.checkProgram (resolved.map (·.module)) summaryTable
+  if !coherence.isEmpty then .error coherence else
   -- Build sibling module summaries for inline modules (mod A {} mod B {}).
   -- Each module's summary is indexed by name for qualified :: access.
   let moduleSummaryList : List (String × FileSummary) := resolved.map fun rm =>

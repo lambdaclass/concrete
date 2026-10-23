@@ -35,7 +35,7 @@ address of a slot that holds the heap pointer (the one-hop rule of MEMORY_SEMANT
 126), so `peek` loads the payload as a pointer. Check (`checkExpr`, the borrow case) accepts the
 operand because it is not a place it refuses (only `&(40 + 2)`, constants and temporary `&mut self`
 receivers are refused), and no pass gives the temporary a slot or a destruction point, so a linear
-temporary is dropped on the floor. A string literal temporary (`&"text"`, 79 corpus sites) is
+temporary is dropped on the floor. A string literal temporary (`&"text"`, 77 corpus sites) is
 harmless only because a literal `String` owns no heap memory (capacity 0).
 
 ## Structural cause
@@ -48,18 +48,21 @@ spill), the shape of bugs 102 and 126.
 
 ## Structural owner
 
-Exit 2i (R-0500) enforcing REF-5 over every non-place operand, or REF-5@2 specifying a temporary as
-an anonymous local of the enclosing statement, as decided in
-[TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md) (T-REF5); R-0501 (S10 Place MIR) gives
-temporaries places for good. Containment under exit 0b: refuse a borrow of a call result or
-aggregate literal whose type is not Copy (it is the only form that leaks or is miscompiled).
+The rule decided on 2026-10-23
+([TIGHTENING_DECISIONS D2](../language/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)):
+the Austral model: only a variable (or a string literal, a static root) is borrowed, a reference
+to a part is a projection through a reference, `&s.f` is front-end sugar, and loans are keyed by
+root; every other operand is E0238 (REF-5), enforced under exit 2i (R-0500). A temporary is never a
+root, so the semantics needs no temporary materialization. Measured migration for the operand rule:
+one corpus site (`std/src/map.con`, `m.remove(&2)`); both reproducers here become rejection
+fixtures.
 
 ## Fix
 
 Decision D2, the Austral model (TIGHTENING_DECISIONS; normative in MEMORY_SEMANTICS §15.3 REF-5 and
 REF-8, now version 2): a reference is formed only by borrowing a variable (a string literal counts
 as a static, immutable root) and by projecting through a reference. A temporary is never a root, so
-`&alloc(..)` and `&int_to_string(..)` are refused (E0238 REF-5@2), and neither the miscompile nor
+`&alloc(..)` and `&int_to_string(..)` are refused (E0238 REF-5@1), and neither the miscompile nor
 the leak can be written. The check is one test on the normalized place rule's existing verdict
 (`Norm.temp`, `refuseTemporaryBorrow` in `Check.lean`) at every reference-forming site: an explicit
 `&e` / `&mut e` (a projection of a temporary, `&mk().f`, included) and a method's implicit `&self`
@@ -69,7 +72,7 @@ as sugar: the normalized place is already "root `s`, projection `f`".
 D2's second half lands with it: loans are keyed by the root variable. Within one call, borrows of
 one root overlap whatever their fields (`pathsOverlap` compares roots), and a call that makes a new
 mutable loan on a root (an owned variable, or a projection such as a `self.offs` receiver) may not
-mention that root in another argument (`checkCallRootReads`, E0293 REF-8@2). A plain reborrow of a
+mention that root in another argument (`checkCallRootReads`, E0293 REF-8@1). A plain reborrow of a
 `&mut` parameter as a receiver beside a read through it (`self.sift_up(self.len - 1)`) makes no new
 loan and stays legal (D1).
 

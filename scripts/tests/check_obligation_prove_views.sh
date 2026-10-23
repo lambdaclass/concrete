@@ -13,7 +13,7 @@
 #   - the prove CLI and snapshot gates stay green (output parity).
 
 set -uo pipefail
-# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+# Per-run scratch (R-0546): a fixed /tmp path collides with a concurrent run of this gate.
 GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
@@ -54,7 +54,7 @@ ok={'proved_by_lean','proved_by_kernel_decision','proved_by_lean_replay','arithm
 sys.exit(0 if json.load(sys.stdin)['status'] in ok else 1)" && ok "show-obligation status ∈ canonical vocabulary" || no "status outside vocabulary"
 
 echo "=== prove CLI + snapshots stay green (output parity) ==="
-# DELEGATED, NOT RE-RUN (R-0547, scripts/tests/lib/delegated_gates.sh): test_prove_cli.sh and check_snapshots.sh are each its own CI
+# DELEGATED, NOT RE-RUN (R-0546, scripts/tests/lib/delegated_gates.sh): test_prove_cli.sh and check_snapshots.sh are each its own CI
 # step and its own command in the local full set, so re-running it here repeated every one of its
 # assertions in the same run. This gate now asserts only that the step exists and is unconditional.
 source scripts/tests/lib/delegated_gates.sh

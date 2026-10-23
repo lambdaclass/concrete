@@ -301,6 +301,7 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
     otherwise caught only in Check (see docs/compiler/COMPILER_BOUNDARY.md). Structural, no
     lifetime/provenance analysis. Post-mono, so the return type is fully
     substituted (a generic instantiated to a reference is caught too). -/
+-- spec: REF-1 (docs/spec/references.md; this declaration enforces the rule)
 partial def verifyNoReturnedRefs : List CModule → Diagnostics
   | [] => []
   | m :: ms =>
@@ -315,7 +316,7 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
                    span := fn.declSpan
                    hint := some "see docs/language/VALUE_MODEL.md — references are second-class"
                    code := "E0236"
-                   evidence := [("rule", "REF-1@2"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+                   evidence := [("rule", "REF-1@1"), ("spec", ruleSpecRef "REF-1@1")]
                    nextAction := some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code" } : Diagnostic)]
       else acc) ([] : Diagnostics)
     here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
@@ -439,6 +440,7 @@ private partial def tyHoldsRefInAggregateV : Ty → Bool
     every parameter, binding and expression type of an instantiated function, is
     checked here, as are module constants (their type and initializer). Extern
     (FFI) signatures are not: they are raw by contract. -/
+-- spec: REF-3, spec: REF-4 (docs/spec/references.md; this declaration enforces the rule)
 partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
   let rec goModule (m : CModule) : List VerifyViolation :=
     let label := "a reference stored in an aggregate after monomorphization"
@@ -469,8 +471,8 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
     hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/language/VALUE_MODEL.md)"
     code := "E0239"
     -- exit 2i §15.5: an instantiation storing a reference is REF-4@1 (b); a constant is REF-3@1
-    evidence := [("rule", if v.message.startsWith "a reference stored in an aggregate after monomorphization in constant" then "REF-3@1" else "REF-4@1"),
-                 ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+    evidence := let r := if v.message.startsWith "a reference stored in an aggregate after monomorphization in constant" then "REF-3@1" else "REF-4@1"
+                [("rule", r), ("spec", ruleSpecRef r)]
     nextAction := some "instantiate the generic at a value type, or pass the reference directly as an argument"
   }
 
@@ -539,7 +541,7 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
           else acc ++ [{ fnName := f.name
                          message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
   violationsToDiagnostics "post-mono" violations
-/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@2, MEMORY_SEMANTICS §15.3)
+/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@1, MEMORY_SEMANTICS §15.3)
 
 Check refuses every `let` of reference type (E0302) and every assignment to a reference binding
 (E0303) it can see. A generic body is checked once at its opaque `T`, so `let y: T = x;` and
@@ -602,9 +604,10 @@ private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (St
   | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref, refTy) :: env) body, env)
 end
 
-/-- REF-6@2 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
+/-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
     type became a reference by instantiating a type parameter. Generic originals are skipped
     (their `T` is opaque; Check saw them). -/
+-- spec: REF-6 (docs/spec/references.md; this declaration enforces the rule)
 partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
   | [] => []
   | m :: ms =>
@@ -615,9 +618,9 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
            message := s!"function '{fn.name}': {msg}"
            pass := "post-mono"
            span := fn.declSpan
-           hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/language/MEMORY_SEMANTICS.md §15, REF-6)"
+           hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/spec/references.md#REF-6)"
            code := code
-           evidence := [("rule", "REF-6@2"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+           evidence := [("rule", "REF-6@1"), ("spec", ruleSpecRef "REF-6@1")]
            nextAction := some "instantiate the generic at a value type, or restructure the generic so it passes its `T` argument on instead of binding or assigning it" } : Diagnostic)) ([] : Diagnostics)
     here ++ verifyNoRefBindingsPostMono m.submodules ++ verifyNoRefBindingsPostMono ms
 
@@ -627,6 +630,7 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
     literal fits its now-concrete type (bug 088). Mixed-width binops
     (class 3) are already re-asserted at the CoreCheck boundary (E0502) — see
     docs/compiler/COMPILER_BOUNDARY.md. -/
+-- spec: PASS-7 (docs/spec/pipeline.md; this stage boundary)
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules

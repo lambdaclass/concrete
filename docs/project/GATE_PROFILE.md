@@ -1,6 +1,6 @@
 # Gate Profile
 
-Status: measurement record (R-0546 step 1), taken 2026-10-22
+Status: measurement record (R-0546: step 1 profile, caches, parallel scaling), taken 2026-10-22
 
 This file records where CI time goes, why the slowest gates are slow, and what the build and
 compile caches changed. It is a measurement at named SHAs, not a live dashboard. Re-measure before
@@ -274,3 +274,142 @@ the verifying build always runs, the seed is never a substitute for building.
 `.lake/build`, so a shared read-only build directory cannot serve as a live build directory.
 Copy-on-write seeding gives the same speed-up without sharing a mutable directory between
 worktrees.
+
+## Parallel scaling on concrete-ci-1 (R-0546 step 4)
+
+The full local set (`run_ci_gates_local.sh`) was measured on concrete-ci-1 (AMD EPYC 8324P, 32 cores
+/ 64 threads, 251 GiB) through `concrete-remote`, one pass at a time, with the fuzz farm running at
+idle priority beside it. Every pass writes `.ci-gate-timings.tsv` (start, end, seconds, stage, verdict,
+command per gate execution); the numbers below come from those files and from a 5-second sampler of
+load and `MemTotal - MemAvailable`.
+
+### Before: `911c7db2` (wip/load-and-profile 2825d4c8 plus the timing rows only)
+
+"Pool wall" is the parallel phase alone. The runner then re-ran every pool failure **serially**; that
+tail was cut off in these measurements because it is serial and would dominate them (at JOBS=64 the
+partial tail alone ran past 40 minutes).
+
+| JOBS | pool wall | pool failures (of 257) | peak memory used | max load (1 min) |
+|---|---|---|---|---|
+| 8  | 1357 s (22.6 min) | 14 | 14.8 GB | 59 |
+| 16 | 1578 s (26.3 min) | 16 | 12.5 GB | 38 |
+| 32 | 865 s (14.4 min)  | 21 | 14.5 GB | 47 |
+| 48 | 413 s (6.9 min)   | 28 | 14.8 GB | 59 |
+| 64 | 461 s (7.7 min)   | 33 | 18.9 GB | 58 |
+
+It did not scale, and it did not finish: every width had 14 to 33 failing gates, nearly all of which
+passed when re-run alone. The 48/64 rows are short because the long gates failed early, not because
+they ran faster. Memory was never a limit (under 20 GB of 251).
+
+### What broke under parallelism, and the fix for each
+
+Every one of these is a race inside a gate (or the compiler), not load: the runner's sequential
+re-check had been absorbing them as "contention flakes".
+
+1. **`run_fast_surface_gates.sh --mutate` edited tracked files in place**, including
+   `Concrete/Report/Report.lean`. Every concurrent `require_fresh_binary` then rebuilt the shared
+   compiler from the mutated source: the binary vanished mid-relink, `.olean` files were missing,
+   the build identity moved. This alone explains most of the failures above. It now mutates a private
+   checkout (`scripts/tests/lib/private_checkout.sh`).
+2. **Other gates that wrote the shared tree**: `check_attestation_manifest.sh` appended a probe
+   function to `examples/hmac_sha256` and regenerated a tracked `.lean` in place;
+   `check_build_identity_freshness.sh` rewrote `Concrete/BuildIdentity.lean` and appended to
+   `Concrete/Proof/Replay.lean`; `check_receipt_consumption.sh` added a module under
+   `Concrete/Proof/`; five gates created probe directories inside the checkout, which made the
+   mutation driver's `cp -a` of the checkout fail when they vanished. All now work on private copies
+   or write to `$TMPDIR`.
+3. **The compiler wrote its IR to `<source>.ll` and deleted it after linking**, so two builds of one
+   source raced ("no such file or directory: .../main.con.ll"). The IR and test binaries now go to
+   a temporary directory private to each compile (bug 179: `privateIntermediate` and
+   `withPrivateDirKeptOnFailure` in Main.lean, which superseded this branch's per-process
+   `scratchPath` at train 4); `--emit-llvm` is unchanged.
+4. **Fixed `/tmp` names** in a dozen gates (and `EXAMPLES_OUT_DIR=/tmp/concrete_examples_out` in the
+   workflow) collided between concurrent passes on one host. They are per-run now, and
+   `check_gate_hygiene.sh` refuses a fixed `/tmp` path.
+5. **`concrete-remote` used a git worktree**, and the mutation drivers behind
+   `check_phase6c_observability.sh` and `check_campaign_summary_golden.sh` refuse worktrees, so a
+   server pass could never be green. It now uses `git clone --shared`.
+6. **Host gaps, reported, not hidden**: the server has no elan, so `check_external_checker.sh` is a
+   named host skip (`lib/host_tools.sh`), which keeps the pass PARTIAL. Two `run_tests.sh` cases and
+   one `check_example_outputs.sh` reproducer fail on this host on `main` too: the devshell clang
+   finds no `stddef.h` for C stubs, and the linker is lld, whose wording ("undefined symbol") the
+   bug-114 expectation does not list. These are environment defects of the server, not races.
+
+### Duplicated work removed (one run per assertion)
+
+Measured from CI run 39775852735 (main 713778e2). Each removed re-run's assertions still run exactly
+once, in their own step, and the umbrella asserts that the step exists and is unconditional
+(`scripts/tests/lib/delegated_gates.sh`, with a negative-control fixture).
+
+| Re-run removed | CI before | What remains |
+|---|---|---|
+| `check_phase3_obligation_core.sh` re-running 8 sub-gates | 797 s | own probes, about 60 s |
+| `check_phase2_vc.sh` re-running 9 sub-gates | 483 s | delegation check, under 1 s |
+| `check_phase1_contracts.sh` re-running 2 sub-gates | 165 s | own legs, about 16 s |
+| nested `check_snapshots.sh` / `test_prove_cli.sh` in the two obligation view gates | about 195 s | delegation check |
+| standalone steps for identity, kernel re-check, checker policy, claim inventory (CI also ran them inside `checker_acceptance_evidence.sh`) | 643 s | the acceptance step is now their only run; it runs them concurrently (about 115 s on the server) |
+
+That is about 37 CI-minutes less per push, before counting the faster acceptance step. The local
+inventory went from 257 to 253 commands (`EXPECTED_GATE_COMMANDS`).
+`check_mint_batch_accounting.sh` was **not** de-duplicated: its nine runs of
+`check_dependency_edges.sh` each set a different self-test flag and assert a different refusal, and
+one case's shape check depends on the full assertion total. Its cases now run concurrently instead
+(396 s to about 70-90 s); removing the repeated ordinary sections needs a mint-only mode in that gate.
+
+### Longest gates made parallel inside
+
+`check_claim_inventory` (per-source replay), `check_showcase` (per flagship), both fuzzers (cases
+generated in order, checked concurrently, lowest failing case reported), and the acceptance step
+(its five gates under one lock). The runner starts gates longest-first from
+`scripts/tests/gate_weights.tsv` (ordering only; a stale weight never changes a verdict).
+
+### After
+
+Measured at `4e596e24` (all fixes above except the campaign-golden isolation and the two
+capture-then-grep fixes, which came after). Rechecks are included in "total".
+
+| JOBS | pool wall | pool failures (of 252 run) | recheck | total | peak memory used | max load |
+|---|---|---|---|---|---|---|
+| 16 | 445 s (7.4 min) | 3 | 1 passed, 2 failed | 836 s | 15.9 GB | 41 |
+| 32 | **372 s (6.2 min)** | 3 | 1 passed, 2 failed | 930 s | 16.1 GB | 61 |
+| 48 | 456 s (7.6 min) | 4 | 2 passed, 2 failed | 1008 s | 24.9 GB | 107 |
+| 64 | 422 s (7.0 min) | 6 | 4 passed, 2 failed | 1242 s | 24.9 GB | 115 |
+
+(The 48 and 64 passes overlapped another session's gate pass on the host: load 107 to 115.)
+
+**It stops scaling at about 32.** The pool is now bounded by its longest gate, not by width: at
+JOBS=32 every gate starts in the first seconds (longest first), and the pass ends when
+`run_tests.sh --trust-gate` does (373 s), followed by `check_obligation_core.sh` (327 s),
+`check_phase6c_observability.sh` (317 s), `check_replay_producer.sh` (294 s) and
+`check_slice8_adversarial.sh` (289 s). Wider pools only add contention to those same gates.
+
+**The two failures in every row are the server's environment** (item 6 above): `run_tests.sh`
+(stddef.h) and `check_example_outputs.sh` (lld wording). They fail identically on `main`. Because the
+runner re-checks a pool failure serially, they add about 7 minutes to every pass on this host; with
+the devshell clang fixed, a pass would take the pool wall plus about 40 s of seeding and build.
+
+The remaining pool-only failures at 48/64 were `check_campaign_summary_golden.sh` (it counted other
+campaign runs' evidence directories; now isolated), `check_qualification_record.sh` and
+`check_identity_separation.sh` C6 (`| grep -q` under pipefail; now captured first), and one
+`check_mint_batch_accounting.sh` case and one `check_phase6c_observability.sh` artifact write at
+JOBS=64, which passed on re-check and are not yet explained.
+
+**Final candidate, `5852dd12`, JOBS=32** (the command in CONCURRENT_WORK.md): pool wall **407 s
+(6.8 min)**, 250 passed, no gate failed only under parallelism, peak memory used 18.9 GB, max load 75.
+The only failures were the two host-environment gates above (they failed in the pool and again on
+re-check); their serial re-check brought the total to 799 s. `check_external_checker.sh` was a named
+host skip. The pass before it, at `3b8fa74a`, measured 378 s with the same verdicts. Critical path:
+`run_tests.sh --trust-gate` 408 s, `check_obligation_core.sh` 367 s,
+`check_phase6c_observability.sh` 365 s, `check_replay_producer.sh` 337 s and
+`check_slice8_adversarial.sh` 330 s, all starting at second 0.
+
+Against the 25-minute JOBS=8 pass this replaces: the pool is about 3.3 times faster (1357 s to
+407 s) and, unlike before, green apart from the host gaps. A whole `concrete-remote` invocation is
+about 7 minutes once the server's clang is fixed, 13 minutes until then.
+
+### Recommendation
+
+`JOBS=32` on concrete-ci-1, which `concrete-remote` sets by default there
+(`CONCRETE_GATE_JOBS_DEFAULT`; `CONCRETE_REMOTE_JOBS` overrides). The next reductions are inside the
+critical-path gates: `run_tests.sh --trust-gate` runs its 21 sections and its corpus loops serially,
+and `check_obligation_core.sh` / `check_phase6c_observability.sh` each run one long serial probe.

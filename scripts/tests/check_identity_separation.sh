@@ -322,6 +322,31 @@ elif [ -n "$C6_REFS" ]; then
 else
   ok "C6: PackageIdentity and its three producers are deleted, not deprecated"
 fi
+# SECOND CONTROL (fast-gates' fixture, run through the same lib/lean_idents.py scan): a line comment
+# that opens `/-`, a block comment glued between tokens, a string holding `--`, and a character literal
+# holding a double quote must not hide the code references on lines 1, 6, 8, 9 and 12.
+_c6_fx="$(mktemp)"
+cat > "$_c6_fx" <<'LEAN'
+def a := Proof.PackageIdentity.of x
+  | .noPackageIdentity w => w
+-- PackageIdentity was deleted
+/- syntheticForModules, in a block comment /- nested packageIdentityOf -/ still comment PackageIdentity -/
+-- /-
+def legacy := syntheticForModules x
+-- -/
+def/- c -/packageIdentityOf := 1
+def s := "--" ++ toString PackageIdentity
+def quote : Char := '"'
+-- " /-
+def legacy2 := packageIdentityOf x
+def h' := 1
+LEAN
+_c6_rc=0; _c6_ctl="$(python3 -I "$ROOT_DIR/scripts/tests/lib/lean_idents.py" "$C6_NAMES" "$_c6_fx")" || _c6_rc=$?
+_c6_ctl="$(cut -d: -f2 <<<"$_c6_ctl" | tr '\n' ' ')"
+rm -f "$_c6_fx"
+[ "$_c6_rc" = 0 ] && [ "$_c6_ctl" = "1 6 8 9 12 " ] \
+  && ok "CONTROL: the C6 scan flags code references (also after '-- /-', a glued block comment, a string holding --, and a quote character literal) and ignores noPackageIdentity and comments" \
+  || no "CONTROL: the C6 scan reported lines '$_c6_ctl' (exit $_c6_rc) on its fixture (want: 1 6 8 9 12)"
 
 echo ""
 echo "=== M: the old-to-new map ==="
@@ -491,11 +516,13 @@ APP_SRC='mod main {
         return 1;
     }
 
+    // Bug 189: Bytes::len is no longer trusted (it was, only through its block), so blen also
+    // reaches the still-trusted get_unchecked to keep a trust-carrying closure.
     #[spec(Concrete.Proof.checkNonceExpr)]
     #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
     #[proof_coverage(iff)]
     #[proof_fingerprint("")]
-    fn blen(b: &Bytes) -> u64 { return b.len(); }
+    fn blen(b: &Bytes) -> u64 { if b.len() == 0 { return 0; } return b.get_unchecked(0) as u64; }
 
     pub fn main() -> Int { return verify_message(42, 100, 7, 4207, 1000); }
 }'
@@ -567,13 +594,13 @@ xroots > "$TMP/x.s2"; XS2="$(xctx)"; cp "$TMP/bytes.orig" "$W/std/src/bytes.con"
 echo ""
 echo "=== X4/X5: rooting is not evidence — refusals that must survive P1 ==="
 grep -q "^blen	[0-9a-f]* \[carries trust\]" "$TMP/x.r0" \
-  && ok "X4: blen's closure is only trusted std methods, and its root says it carries trust" \
+  && ok "X4: blen's closure reaches a trusted std method (Bytes::get_unchecked), and its root says it carries trust" \
   || no "X4: blen's root does not carry trust: $(grep '^blen' "$TMP/x.r0")"
 XS="$(CONCRETE_STD="$W/std" "$WBIN" "$XF" --report proof-status 2>/dev/null)"
 xstatus(){ awk -v q="\`main.$1\`" '/^-- /{if (hit) exit; st=$0} index($0, q){hit=1} END{if (hit) print st}' <<<"$XS"; }
 case "$(xstatus blen)" in
-  "-- proof stale"*) ok "X4: a trusted-only closure that roots is still not proved: check_nonce_correct is not about blen's body (bug 079)" ;;
-  *) no "X4: blen is $(xstatus blen) — a rooted, trusted-only closure must not make a borrowed theorem evidence" ;;
+  "-- proof stale"*) ok "X4: a trust-carrying closure that roots is still not proved: check_nonce_correct is not about blen's body (bug 079)" ;;
+  *) no "X4: blen is $(xstatus blen) — a rooted, trust-carrying closure must not make a borrowed theorem evidence" ;;
 esac
 case "$(xstatus verify_message)" in
   "-- dependency not current"*) ok "X5: missing evidence — verify_message binds its specification but reaches p1x_nlib.check_nonce, which has no proof, so it is not proved" ;;

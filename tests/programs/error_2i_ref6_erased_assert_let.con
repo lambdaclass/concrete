@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2: a `let` of a type-parameter type inside an `assert` condition. The condition
+// Exit 2i REF-6@1: a `let` of a type-parameter type inside an `assert` condition. The condition
 // is erased before monomorphization, so post-mono never sees the binding at `T := &Int`; it is
 // refused at Check (exit 2i review). Rejected: E0302.
 fn probe<T: Copy>(x: T) -> Int {

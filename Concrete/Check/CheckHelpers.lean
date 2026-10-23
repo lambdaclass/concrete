@@ -107,6 +107,7 @@ def isReferenceType : Ty → Bool
     not looked through either: a struct/enum field may not hold a reference
     (rejected at the declaration), so a named type can only hold one through
     its generic arguments. -/
+-- spec: REF-D2 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyStoresRef : Ty → Bool
   | .ref _ | .refMut _ => true
   | .heap inner | .heapArray inner => tyStoresRef inner
@@ -117,6 +118,7 @@ partial def tyStoresRef : Ty → Bool
 /-- Bug 092: a binding of this type would keep a reference stored INSIDE an
     aggregate (looking through a bare outer reference: `&[&T; 2]` too). A bare
     `&T` binding is not an aggregate — its source is frozen by `borrowedFrom`. -/
+-- spec: REF-D2 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyHoldsRefInAggregate : Ty → Bool
   | .ref inner | .refMut inner => tyHoldsRefInAggregate inner
   | .heap inner | .heapArray inner => tyStoresRef inner
@@ -154,6 +156,7 @@ def setEnv (env : TypeEnv) : CheckM Unit :=
   modify fun cur => { env with nextVarUid := max cur.nextVarUid env.nextVarUid }
 
 /-- Resolve type aliases. -/
+-- spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
 def resolveType (ty : Ty) : CheckM Ty := do
   match ty with
   | .named name =>
@@ -174,7 +177,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
         -- An alias is checked after expansion like the type it names (G16): `type Cb = fn(&Int)
         -- -> &Int;` is the same ill-formed function type as the spelled-out one.
         if tyHasRefReturningFnType resolved then
-          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@2")
+          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@1")
         return resolved
       | none => return ty
   | .ref inner =>
@@ -209,7 +212,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then
-      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@2")
+      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@1")
     return .fn_ params' capSet retTy'
   | _ => return ty
 
@@ -234,6 +237,7 @@ partial def tyParamOccursNested (name : String) : Ty → Bool
     position the body can read a `T` out of (`w: &W<T>`, `h: Heap<T>`, `a: [T; N]`) would let
     the body read a stored reference the rule never saw. Refused at the instantiation; a
     top-level `x: T` (the caller's own reference, checked at the call) stays allowed. -/
+-- spec: REF-4 (docs/spec/references.md; this declaration enforces the rule)
 def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
     (paramTys : List Ty) (retTy : Ty := .unit) : CheckM Unit := do
   for (pName, pTy0) in mapping do
@@ -276,6 +280,7 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- (`T: Copy`). Core stages (Mono/Verify/CoreCheck) call `Layout.isCopyTyCore`,
 -- the same judgment with Core defs. There is now ONE Copy recursion, so the two
 -- cannot drift (they previously disagreed on typeVar/newtype).
+-- spec: OWN-D1, spec: TYPE-13 (docs/spec/ownership.md; this declaration enforces the rule)
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
   -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
@@ -404,6 +409,7 @@ def normalizeTyForCmp : Ty → Ty
   | .array t n => .array (normalizeTyForCmp t) n
   | t => t
 
+-- spec: TYPE-4 (docs/spec/types.md; this declaration enforces the rule)
 def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) : CheckM Unit := do
   if expected == actual then return ()
   -- Never type is compatible with anything (bottom type)
@@ -452,6 +458,7 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
     entry to that loop — pass 1 to relax the loop-depth rule by one level
     (H14). Deeper outer values stay rejected: an enclosing loop could re-enter
     the broken loop and re-consume. -/
+-- spec: REF-8, spec: OWN-1, spec: OWN-4, spec: OWN-12 (docs/spec/references.md; this declaration enforces the rule)
 def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
   let env ← getEnv
   match env.vars.lookup name with
@@ -503,6 +510,7 @@ def consumeVarIfExists (name : String) (span : Option Span := none) (breakDepthE
     `reserved` is allowed because the deferred destroy will run at scope exit.
     Each binding is looked up by IDENTITY (bug 093): a shadowed entry is
     checked as itself, not through the innermost binding sharing its name. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkScopeExit (entries : List (String × VarInfo)) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
   for (name, entry) in entries do
@@ -846,6 +854,7 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
     Enforced wherever a diverging branch is exempted from the consumption
     MERGE: the exemption is about agreement at the merge point, not about the
     exit itself. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkReturnPathConsumed (before after : List (String × VarInfo))
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do
@@ -883,6 +892,7 @@ def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
     when the block diverges (its textual end is unreachable). This is what the
     function-level `checkScopeExit` could not see for `if`/`else` branch locals and
     matched payload bindings, which are dropped at the branch/arm merge. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkBlockLocalsConsumed
     (before after : List (String × VarInfo))
     (diverges : Bool)
@@ -940,9 +950,7 @@ def checkPeekCtx : PeekCtx CheckM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveType ty catch _ => pure .placeholder
   subst := substTy
@@ -1190,12 +1198,13 @@ partial def inferMethodParamAndRetTys
       | .ok caps => pure caps
       | .error cv => throwCheck (.cannotInferCapVariable cv callName) (some sp)
     let env ← getEnv
-    -- Shared direct-call decision (Capabilities.missingCaps) — see Check.lean.
-    -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge (an audited
-    -- body vouches for a callee's `Unsafe` obligation) and checks every call. Checking it
-    -- here too would refuse a trusted body for what CoreCheck correctly accepts.
-    for cap in (Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps)).filter (· != unsafeCapName) do
-      throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
+    -- One entailment rule on the INSTANTIATED set (Capabilities.missingCaps) — see
+    -- Check.lean. `Unsafe` included (bug 188): CoreCheck cannot see the instantiation,
+    -- so a callback's `Unsafe` reaching the method through `C` is decided here. A
+    -- trusted body discharges it exactly as CoreCheck's call-site discharge does.
+    for cap in Capabilities.missingCaps env.currentCapSet (.concrete resolvedCaps) do
+      if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
   -- 4. Resolve cap variables inside fn-typed param types so a pure/empty-cap
   --    callback argument matches the declared `with(C)` parameter.
   let resolveCapInTy : Ty → Ty := fun ty =>
@@ -1302,6 +1311,7 @@ def resolvedOr (t : Ty) : CheckM Ty := tryCatch (resolveType t) (fun _ => pure t
 
 mutual
 /-- The storage the place expression `e` names. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def normPlace (e : Expr) : CheckM Norm := do
   match e with
   | .paren _ inner => normPlace inner
@@ -1436,6 +1446,7 @@ def pathsOverlap (a b : String × List String) : Bool :=
     or `&mut w` + `&mut w.f`), and single-hop ALIASES: an ident argument
     whose binding is a ref/&mut with a tracked `borrowedFrom` root counts as
     a borrow of that root. Shared+shared overlap is fine. -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (span : Option Span) : CheckM Unit := do
   let mut seen : List ((String × List String) × Bool) := []
   for (path, isMut) in parts do

@@ -1,4 +1,4 @@
-// Exit 2i REF-1@2, gap G15: an extern fn parameter may not be a raw pointer to a reference (C could
+// Exit 2i REF-1@1, gap G15: an extern fn parameter may not be a raw pointer to a reference (C could
 // retain the address of a reference slot). E0574.
 trusted extern fn keep(p: *const &Int) with();
 

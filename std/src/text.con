@@ -12,7 +12,7 @@ mod text {
 
     pub newtype AsciiText = String;
 
-    trusted impl AsciiText {
+    impl AsciiText {
         /// Validate `s` as ASCII and wrap it. RETURNED ON FAILURE: a rejected
         /// string comes back unchanged in `Err`, so the caller still owns it
         /// (ownership-on-failure convention, docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md).
@@ -54,13 +54,14 @@ mod text {
     // The storage is managed here rather than held as a `Bytes` because `bytes.con`
     // imports `validate_utf8` from this module, and owning a `Bytes` would close that
     // import cycle.
+    // spec: TYPE-3 (docs/spec/types.md: Text is owned)
     pub struct Text {
         ptr: *mut u8,
         len: u64,
         cap: u64,
     }
 
-    trusted impl Text {
+    impl Text {
         /// Copy and validate `[ptr, ptr+len)`. None if it is not well-formed UTF-8.
         /// The caller must ensure the region is live for `len` bytes; the copy means
         /// the resulting `Text` no longer depends on it afterwards.
@@ -102,14 +103,14 @@ mod text {
         /// The byte at `at`, or None if out of range. Bounds-checked: the unchecked
         /// accessor is gone, because a validated value handing out unchecked reads was
         /// part of what made the old type unsafe.
-        pub fn byte(&self, at: u64) -> Option<u8> {
+        pub trusted fn byte(&self, at: u64) -> Option<u8> {
             if at >= self.len {
                 return Option::<u8>::None;
             }
             return Option::<u8>::Some { value: byte_at(self.ptr as *const u8, at) };
         }
 
-        pub fn eq(&self, other: &Text) -> bool {
+        pub trusted fn eq(&self, other: &Text) -> bool {
             if self.len != other.len {
                 return false;
             }
@@ -124,14 +125,14 @@ mod text {
         }
 
         /// Release the storage. `Text` is linear; this is the consume.
-        pub fn drop(self) with(Alloc) {
+        pub trusted fn drop(self) with(Alloc) {
             let Text { ptr, len, cap } = self;
             dealloc::<u8>(ptr);
         }
     }
 
-    trusted impl Destroy for Text {
-        pub fn destroy(&self) with(Alloc) {
+    impl Destroy for Text {
+        pub trusted fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
     }

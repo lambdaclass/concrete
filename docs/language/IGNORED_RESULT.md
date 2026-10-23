@@ -1,6 +1,8 @@
-# Ignored-Result Diagnostics
+# Ignored-Result Diagnostics (design record)
 
-Status: implemented + gated (ROADMAP old Phase 6 #13).
+**Superseded as the normative text (2026-10-23).** The rules are OWN-6 (a fallible result is
+used), OWN-7 (no dead computation) and OWN-5 (`discard` is Copy-only) of
+[docs/spec/ownership.md](../spec/ownership.md). This note keeps the reasoning and history.
 
 ## What it is
 

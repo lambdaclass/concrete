@@ -1,4 +1,4 @@
-// Exit 2i REF-2@2, control for G16: a callback type whose PARAMETER borrows is well formed in a
+// Exit 2i REF-2@1, control for G16: a callback type whose PARAMETER borrows is well formed in a
 // field and through an alias; only a callback RESULT may not contain a reference. Exit 42.
 type Reader = fn(&Int) -> Int;
 

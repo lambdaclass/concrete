@@ -86,8 +86,9 @@ The location of an intermediate artifact was derived from a shared input (the so
 machine-wide clock) instead of being private to the compile that owns it. The driver treated a
 compile as the only process touching the source's directory. Nothing named which compile owns
 the `.ll`, so a compile could remove a file another compile was reading. No other recorded bug
-has this cause; it is the first entry of class 16 in
-[STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md).
+had this cause when it was filed; it is the first entry of class 16 in
+[STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md). Bug 191 (test scratch files at fixed `/tmp`
+names) later joined the class.
 
 ## Structural owner
 
@@ -99,8 +100,9 @@ intermediate should use `privateIntermediate` inside `IO.FS.withTempDir`. No roa
 the driver; this record proposes the rule above as its owner until the driver is restructured.
 
 **Integration note (train 3, 2026-10-23).** Landing train 2 carried a partial fix for the same race
-from fast-gates (R-0547, `b5b9dbea`), which put the intermediates at per-process paths beside the
+from fast-gates (R-0546, `b5b9dbea`), which put the intermediates at per-process paths beside the
 source (`<source>.<pid>.ll`). It kept concurrent builds apart, but it left files in the source
 tree and did not clean them up on every failure path. Train 3 keeps this record's private
 directory and removes that `scratchPath` helper, so the repository has one mechanism: the
-structural owner named above.
+structural owner named above. Train 4 merged fast-gates' later version of that helper (under
+`$TMPDIR` with the process id and a clock stamp) and dropped it the same way.

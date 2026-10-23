@@ -994,6 +994,7 @@ partial def parseStmtList : ParseM (List Stmt) := do
     tk ← peek
   return stmts
 
+-- spec: PAT-6, spec: PAT-7 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseStmt : ParseM Stmt := do
   let sp ← peekSpan
   let tk ← peek
@@ -1110,6 +1111,7 @@ partial def parseStmt : ParseM Stmt := do
 
 /-- A pattern's field binders: `{ a, b }` (shorthand) or `{ value: inner, b }` (a renamed
     binder, exit 2i G4). Shared by `match`, `if let`, `while let` and destructuring `let`. -/
+-- spec: PAT-1 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseBindingList : ParseM (List PatBind) := do
   let mut bindings : List PatBind := []
   let mut tk ← peek
@@ -1771,12 +1773,13 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let firstName ← expectIdent
   -- Check for turbofish on impl type: impl<T> Name<T> { ... }
   let next0 ← peek
+  -- `impl Name<T> { ... }`: the target's type arguments. Kept, not consumed: coherence
+  -- (E0593) refuses any that are not exactly the impl's own parameters (bug 186).
+  let mut firstArgs : Option (List Ty) := none
   if next0 == .lt then
-    -- Could be impl Name<T> { ... } type args
     advance
-    let _implTypeArgs ← parseTypeArgList
+    firstArgs := some (← parseTypeArgList)
     expect .gt
-    pure ()  -- we just consume them for now
   -- Check: is it "impl Trait for Type" or "impl Type"?
   let tk ← peek
   match tk with
@@ -1785,16 +1788,20 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
     if !implCapParams.isEmpty then
       throwParse "capability parameters on a trait impl are not supported; declare them on an inherent impl (`impl<cap C> Writer<C>`)"
     advance
-    let typeName ← expectIdent
+    -- The head is spelled canonically (`i64` → `Int`, `bool` → `Bool`): every later pass keys an
+    -- impl's methods by this spelling, and Elab names the method definitions by the canonical
+    -- type, so `impl Tr for bool` reached Check and the interpreter as `bool_m` beside a
+    -- definition `Bool_m` (bug 186).
+    let typeName := tyName (tyFromName (← expectIdent))
     -- Conditional trait impl target may be generic: `impl<T: Destroy> Destroy
     -- for Vec<T>` — consume the target's type args (the impl's typeParams
     -- already name them).
     let tkTA ← peek
+    let mut targetArgs : Option (List Ty) := none
     if tkTA == .lt then
       advance
-      let _targetTypeArgs ← parseTypeArgList
+      targetArgs := some (← parseTypeArgList)
       expect .gt
-      pure ()
     let implCapSet ← parseWithCaps
     expect .lbrace
     let mut methods : List FnDef := []
@@ -1822,10 +1829,13 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp }
+    -- `impl Tr<..> for X` has no meaning (traits take no arguments here); refuse rather than drop.
+    if firstArgs.isSome then
+      throwParse "a trait in `impl Trait for Type` takes no type arguments"
+    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp, targetArgs }
   | _ =>
-    -- Inherent impl: impl TypeName { ... }
-    let typeName := firstName
+    -- Inherent impl: impl TypeName { ... }. Head spelled canonically, as for a trait impl.
+    let typeName := tyName (tyFromName firstName)
     expect .lbrace
     let mut methods : List FnDef := []
     let mut tk ← peek
@@ -1851,10 +1861,9 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
         else none
       let isPub := tk == .pub_
       if isPub then advance; tk ← peek
-      -- PER-METHOD `trusted` — see the trait-impl loop above for why the axes stay
-      -- independent. Whole-impl `trusted impl` still applies to every method; Elab
-      -- ORs the two, so marking one method does not widen the block's trust and
-      -- marking the block does not need every method to repeat it.
+      -- PER-METHOD `trusted` — the only way a method is trusted. There is no
+      -- block-level trust: a `trusted impl` is refused (bug 189), because a marker
+      -- on a block would confer trust on methods that never declared it.
       let isTrustedM := tk == .trusted_
       if isTrustedM then advance; tk ← peek
       let (f0, selfKind) ← parseMethodDef
@@ -1880,7 +1889,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp }
+    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp, targetArgs := firstArgs }
 
 partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan
@@ -1995,6 +2004,13 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     pure .unit
   let tk2 ← peek
   if tk2 == .semicolon then
+    -- A bodiless declaration (a foreign binding or an intrinsic) has no call-site
+    -- instantiation: its capability parameters would be dropped here and its `with(C)`
+    -- would require a variable nobody binds, which a direct call's check then treats as
+    -- the callee's own (instantiated) parameter — `trusted fn f<cap C>() with(C);` was
+    -- callable with no authority (Codex review of bug 188). Refused.
+    if !capParams.isEmpty then
+      throwParse s!"a bodiless declaration cannot take capability parameters ('{name}' declares {", ".intercalate capParams}): a foreign binding declares the concrete effects it exercises" (span := some sp)
     advance  -- consume ';'
     let declCaps : Option CapSet :=
       if wroteWith then some (match capSet with | .concrete [] => CapSet.empty | other => other)
@@ -2311,13 +2327,13 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       else
         let isPub := tk == .pub_
         if isPub then advance; tk ← peek
-        -- Check for 'trusted' modifier (only valid before fn and impl)
+        -- Check for 'trusted' modifier (only valid before fn and extern fn)
         let isTrusted := tk == .trusted_
         if isTrusted then advance; tk ← peek
         if tk == .struct_ then
           if isTrusted then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           if pendingIsTest then
             let sp ← peekSpan
             throwParse "#[test] can only be applied to function definitions" (span := some sp)
@@ -2334,7 +2350,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         else if tk == .hash then
           if isTrusted then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           -- Attribute before a declaration (after pub)
           let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
           if key == "repr" then
@@ -2379,10 +2395,17 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if pendingIsTest && tk != .fn then
             let sp ← peekSpan
             throwParse "#[test] can only be applied to function definitions" (span := some sp)
-          -- Reject 'trusted' on non-fn/impl/extern declarations
-          if isTrusted && tk != .fn && tk != .impl_ && tk != .extern_ then
+          -- Bug 189: trust is never conferred by a block. `trusted impl` used to make every
+          -- method of the block trusted whether or not it declared it, so a method added to
+          -- the block later was audited by nobody. Each function declares `trusted` itself.
+          if isTrusted && tk == .impl_ then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
+            throwParse "'trusted impl' is not allowed: trust is never conferred by a block (bug 189)" (span := some sp)
+              (hint := some "remove `trusted` from the impl and write `trusted fn` on each method that needs it")
+          -- Reject 'trusted' on non-fn/extern declarations
+          if isTrusted && tk != .fn && tk != .extern_ then
+            let sp ← peekSpan
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           -- `#[intrinsic]` belongs to a bodiless declaration only; on anything else it would
           -- otherwise stay pending and attach to a LATER declaration.
           if pendingIntrinsic.isSome && tk != .fn && tk != .extern_ then
@@ -2408,8 +2431,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           else if tk == .impl_ then
             let result ← parseImplBlock
             match result with
-            | .inl ib => implBlocks := implBlocks ++ [{ ib with isTrusted }]
-            | .inr tb => traitImpls := traitImpls ++ [{ tb with isTrusted }]
+            | .inl ib => implBlocks := implBlocks ++ [ib]
+            | .inr tb => traitImpls := traitImpls ++ [tb]
           else if tk == .trait_ then
             let t ← parseTraitDef
             traits := traits ++ [{ t with isPublic := isPub }]

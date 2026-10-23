@@ -148,7 +148,7 @@ structure CFnDef where
   isTest : Bool := false
   isTrusted : Bool := false
   isEntryPoint : Bool := false  -- tagged by Elab when name == mainFnName
-  trustedImplOrigin : Option String := none  -- "TypeName" if from a trusted impl/trait-impl
+  trustedImplOrigin : Option String := none  -- "TypeName" for a `trusted` method of an impl/trait-impl
   /-- The declaration's own name when Core spells its symbol differently (bugs 096 - 098:
       a method of a type two modules declare is `a_P_get`, a function two top-level modules
       define is `a_h`). `none` when the Core name IS the declaration name. Proof and report

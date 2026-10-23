@@ -17,8 +17,8 @@ from the declaration alone, as a derived `Copy` is; the declaration is checked o
 parameters taken as Copy (E0571, now for enum payloads too); a generic not declared `Copy` is never
 Copy. Mono's demotion fixpoint over specializations is removed: Copy-ness no longer depends on the
 type graph, so it is invariant under substitution. The builtin `Option` and `Result` are declared
-Copy the same way. Measured with `rule_impact.sh`: no corpus program changes. Also (D3 with REF-6,
-now REF-6@2): a destructuring `let` of a struct through a reference is refused (E0302) like the enum
+Copy the same way. Measured with `rule_impact.sh`: no corpus program changes. Also (D3 with REF-6):
+a destructuring `let` of a struct through a reference is refused (E0302) like the enum
 form; the one fixture that accepted it became a rejection with a field-read rewrite.
 
 ### A Cast To A Type Alias Compiles (bug 199, 2026-10-23)
@@ -49,9 +49,9 @@ loan until it runs (`defer inc(r); inc(r);` is E0206). MUT_REF_SEMANTICS §2 –
 A reference is formed only by borrowing a variable, or a string literal as a static immutable root,
 and by projecting through a reference; `&s.f` is that, spelled as sugar. A temporary is never a root,
 so `&alloc(..)` (which segfaulted) and `&int_to_string(..)` (which leaked) are refused, as are a
-literal, a field of a temporary and a temporary method receiver (E0238, REF-5@2). Loans are keyed by
+literal, a field of a temporary and a temporary method receiver (E0238, REF-5@1). Loans are keyed by
 the root variable: one call may not take a mutable loan on a root and also borrow or read it in
-another argument, disjoint fields included (E0293, REF-8@2); a reborrow of a `&mut` parameter beside
+another argument, disjoint fields included (E0293, REF-8@1); a reborrow of a `&mut` parameter beside
 a read through it stays legal. Two std sites and three fixtures migrated, measured with
 `rule_impact.sh`. Bug 182 and gap G12 are closed.
 
@@ -76,7 +76,7 @@ post-mono verifier. Four spellings escaped it: a trait method declaration return
 reference-returning function type behind a type alias or in a field (G16), and a generic reached at
 `*const &Int` only through another generic's type parameter, which the post-mono check's weaker
 predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. The
-tightening moves the rules to REF-1@2 and REF-2@2 (§15.5 versioning). Each spelling has a reject row
+rules' sentences are unchanged (REF-1@1, REF-2@1); their pending spec examples are now enforced. Each spelling has a reject row
 and a rewritten run row in `exit_2i.tsv` (233 rule checks pass); extern signatures are now expanded
 through type aliases; 0 corpus programs were affected.
 
@@ -117,6 +117,185 @@ Check's predicate to them, so a safe generic at a raw pointer is E0229 while std
 and generics declaring `Unsafe` compile as before. Pinned by `error_185_generic_rawptr_eq_safe.con`
 and `regress_185_generic_rawptr_eq_authority.con`.
 
+### An `extern fn` Is Never A Value (bug 166, 2026-10-23)
+
+Taking an `extern fn` as a value is refused (E0588). The C calling convention and the extern's
+authority are decided at a direct call; a function type carries neither, so a call through a value
+passed a small `#[repr(C)]` struct by address (C read it as the field) and ran under the function
+type's capabilities. A Concrete function whose body calls the extern is the supported value. The
+rule is normative in FFI.md "Foreign Function Values"; the long-term form, a C function type
+`extern "C" fn(..)`, is decided and waits for a callback workload (TIGHTENING_DECISIONS D4). One
+corpus program migrated (bug 129's imported-extern value test now passes a wrapper). Pinned by four
+E0588 fixtures, the reproducer and a wrapper control.
+
+### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
+
+`println`, `print` and the variadic `append` reach the runtime helpers whatever the module
+defines. Elab desugared them into calls spelled `print_int`, `print_string`, `string_append` and
+so on, and every later pass bound a call by its spelling, so a module that defined its own
+`fn print_int` had it called by each `println` (the reproducer aborted). Core now has a third
+callee form, `Callee.runtime`, built by those desugarings. CoreCheck charges the helper's
+intrinsic capability, Lower emits the helper's reserved `_C$rt.` symbol, the interpreter
+dispatches to its builtin, and none of them resolves the spelling. The call collector is one
+walk with views by callee form (the direct and indirect walks were two copies), so a runtime
+call adds no call-graph edge to a same-named definition and still explains which intrinsic
+supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
+`regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
+
+### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
+
+Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
+On a shared host the first user to run the suite owned those files, so for every other user `fopen`
+returned NULL: `file_write_read` and `file_read_basic` dereferenced it and segfaulted (rc 139), and
+`concrete test` failed. Concurrent runs by one user shared the files too. The test runner now owns
+the scratch location. `concrete test` and `--test` run the binary with `CONCRETE_TEST_TMPDIR` set to
+a directory inside the run's private directory, and `run_tests.sh` and `test_ssa.sh` set it per run
+and per job. std tests get paths from the new `std.test.scratch_path`, which has no fallback. The
+two programs check `fopen` and report an environment error by exit code (100/101/102). The
+`examples/*/bench.sh` scripts use `mktemp -d`. `check_gate_hygiene.sh` now refuses a `/tmp` string
+literal in any `.con` source, as it already did for gate scripts, and also scans the examples'
+scripts. Record: [bug 191](docs/bugs/191_test_scratch_at_fixed_tmp_paths.md).
+
+### A Block Never Confers Trust (bug 189, 2026-10-23)
+
+`trusted impl` is refused. It made every method of the block trusted whether or not the method
+declared it, so a method added to the block later was audited by nobody. Each function now
+declares `trusted fn` itself. Std and the corpus were migrated by compiling: every `trusted impl`
+became `impl`, and a method was marked `trusted fn` exactly when the compiler then refused it.
+That gave 175 of 326 methods, plus thirteen fixtures marked by hand where an intended earlier
+error hid the need. The other 151 methods were trusted only through their block. The stdlib
+surface manifest was regenerated, and 89 rows lose an inherited `trusted-boundary` class. Pinned
+by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh`.
+
+### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
+
+A function generic over a capability variable could perform any effect. `capsContain` treated a
+caller holding any capability variable as covering every requirement, `Unsafe` included, because
+the variable "is resolved at instantiation", but a generic body is checked once and nothing checks
+it again when it is instantiated. So `fn f<cap C>(..) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and a `main` declaring nothing ran it by
+instantiating `C := {}`. Now one entailment rule (`Capabilities.missingCaps`) serves direct calls,
+calls through function pointers, method calls, trait-bound calls and the raw-operation gate. A
+requirement is met by a concrete capability the caller declares, or by a capability variable of
+the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
+capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
+discharge. A capability parameter may not be spelled like a capability (E0121).
+`std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
+declare `trusted`. A bodiless declaration may not take capability parameters, and two
+legitimate shapes that Check refused with a false E0220 (forwarding a variable to a
+same-named parameter, a variable beside a concrete capability) now compile. The fix is pinned
+by nine witnesses, a positive control that agrees with `--interp`,
+`check_capability_judgment.sh` and five mutation families.
+
+### A Literal Gives Each Field Once (bug 193, 2026-10-23)
+
+A struct or enum literal that names a field twice is now refused with E0306. Before this fix the
+checker type-checked the first occurrence, the binary stored the last and `--interp` used the
+first, so `P { n: 1, n: 41 }` gave 41 natively and 1 in the interpreter. The specification's types
+chapter (TYPE-7, each field exactly once) led to it. It is pinned by
+`error_193_duplicate_{struct,variant}_field.con`.
+
+### An Integer Is Not A Condition (bug 192, 2026-10-23)
+
+An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as
+the expression form already was. Before this fix the checker computed the statement condition's
+type and discarded it, and CoreCheck admitted any integer as a condition, so the binary ran the
+program with C truthiness while `--interp` stopped with a run-time error. The language
+specification's TYPE-5 example found it, because the specification's examples run on both
+consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
+rather than the `while` code. A match guard had the same hole and is refused the same way. It is pinned by
+`error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`.
+
+### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
+
+`concrete p.con --interp` read all of standard input before `main` ran, so a program that never
+reads stdin, fed by a pipe that stays open (`sleep 30 | concrete p.con --interp`), waited for the
+writer to close it while the binary returns at once. The interpreter-coverage pass (728a2a98)
+had modelled stdin as a byte snapshot the driver took up front. It is now a source
+(`Interp.StdinSource`) that the `read` builtin pulls from, `n` bytes at the moment of each
+`read(0, buf, n)`. Two `run_tests.sh` legs hold stdin open under `timeout 10` and compare with the
+binary: a program that never reads (21) and a control whose single two-byte read returns at once
+(131). Record: [bug 184](docs/bugs/184_interp_reads_stdin_up_front.md).
+
+### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+
+[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
+gap that could be tightened. The gaps covered are:
+
+- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
+- checked arithmetic and lossy casts;
+- the trusted raw-pointer duplication;
+- bugs 165 and 166;
+- evaluation order;
+- `main`'s exit status;
+- contract typing.
+
+Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
+program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
+records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
+deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
+borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
+Holes and semantic cases are tightened; style-only rules wait for a workload.
+
+`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
+with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
+shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
+E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
+standalone files and 7 inline gate probes.
+
+The witness programs found three silent defects, filed as open under exit 0b:
+
+- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
+  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
+  safe code at `T := Int`.
+- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
+  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
+- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
+  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
+
+Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+
+The user decided the four questions the same day ("do the best long term solution for this problem
+and every problem"):
+
+- **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
+- **D2:** first "only places are borrowable", then replaced by the Austral model ("ok do the austral
+  model with `&s.f` sugar"). Only a variable or a string literal is borrowed, and a reference to a
+  part is a projection through a reference. `&s.f` is front-end sugar, and loans are keyed by root.
+  This closes bug 182; 2 std sites and 1 train3 fixture migrate.
+- **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
+  fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
+- **D4:** every foreign function value is refused now (bug 166), revised after review from an
+  aggregate-only refusal. Function types will carry calling convention, capabilities and safety
+  obligations later.
+
+A second set of decisions the same day ("the best long term solution for everything we discussed")
+adds:
+
+- a bare `T` is Any (linear-capable) and `T: Copy` stays the only kind annotation (revised from
+  "two declared kinds"), with Copy for structs declared and checked, never derived;
+- trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
+  identity;
+- global state: immutable globals everywhere, and mutable state only as declared global cells.
+  Cells live in an unsafe-marked module and are reached through capability-requiring functions;
+  there is no `static mut`, and the compiler's own globals are inventoried as trusted base (revised
+  from "no mutable globals");
+- one file per module, with generated interface artifacts;
+- a `trusted mod` marker in source: only marked modules may hold trusted, foreign and raw code.
+  The marker never confers trust, and a gate lists every marked module (it replaces the allowlist
+  idea);
+- the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
+- disciplines for every pass and every gate.
+
+The doc's §5 orders the work: traits; then the binder, kinds, references, loans and foreign-value
+refusal; then the spec pilot; the trusted base; `read_owned`, contracts and casts; and generated
+interfaces.
+
+G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
+case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
+recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
+implemented yet.
+
 ### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
 
 The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
@@ -128,6 +307,25 @@ closed their scope by hand. Every block now closes through one helper (`closeBlo
 `inBlockScope` applying the block-local consumption rule). A loop body's linear locals are
 therefore checked at the end of the body, which also catches a per-iteration leak in a
 non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
+
+### CoreCheck Compares Every Binder With Its Value: Bug 177 (2026-10-22)
+
+CoreCheck is the independent re-check of elaborated Core, but it never compared a `let`'s declared
+type with its value's type. It compared call arguments by count only, and assignments, fields and
+stores not at all. Returns were compared with a helper that treats every numeric type as equal.
+So when bug 176's checker leak let `let y: u8 = <i32>` through, CoreCheck passed it too, and the
+binary printed 300 from a `u8`. One binder-agreement relation, `bindTyAgrees`, now checks every
+binder: `let`, assignment, direct and indirect call arguments, struct and variant fields, field
+stores, stores through `&mut`/`*mut`, array element stores, array literal elements and the
+branch values of a value `if` or `match` (E0510), and returns (E0560). A fn binder must also declare
+every capability of the fn value it holds. It is exact
+on scalars and on the shape of references, pointers, arrays and fn types, and defers only on
+named, generic and type-variable types, which stay Check's to decide. A `for` loop's
+step is now checked, and CoreCheck's own blocks close their scope. A pass-level test plants
+mismatched values in Core directly, so it stays meaningful after bug 176's fix. The new check also found
+that Elab gave a struct or enum literal's field value an unexpanded alias as its expected type, so
+`S { a: 1 }` with `a: Id` (`type Id = i32`) stored an `Int` literal; field hints now expand aliases. Record:
+[bug 177](docs/bugs/177_corecheck_never_compared_binder_types.md).
 
 ### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
 
@@ -183,68 +381,70 @@ and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_
 `check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
 (heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
 
-### An `extern fn` Is Never A Value (bug 166, 2026-10-23)
+### Proof Replay Ready For Lean 4.35's Removed Native Axioms (2026-10-22)
 
-Taking an `extern fn` as a value is refused (E0588). The C calling convention and the extern's
-authority are decided at a direct call; a function type carries neither, so a call through a value
-passed a small `#[repr(C)]` struct by address (C read it as the field) and ran under the function
-type's capabilities. A Concrete function whose body calls the extern is the supported value. The
-rule is normative in FFI.md "Foreign Function Values"; the long-term form, a C function type
-`extern "C" fn(..)`, is decided and waits for a callback workload (TIGHTENING_DECISIONS D4). One
-corpus program migrated (bug 129's imported-extern value test now passes a wrapper). Pinned by four
-E0588 fixtures, the reproducer and a wrapper control.
+Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and `Lean.trustCompiler` (lean4#14953;
+release notes and `Init/Core.lean` checked at both tags). The re-check probe in
+`Concrete/Proof/Replay.lean` named two of them as double-backtick literals, which must resolve, so on
+4.35 the probe would not compile and every theorem would read `notRun`. The pin stays at 4.34.1.
 
-### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
+- The native-trust classifier is one piece of Lean source (`nativeAxiomClassifierSrc`) spliced into
+  the probe: the legacy names as unresolved single-backtick literals, plus the `._native.` axioms
+  `Lean.Meta.nativeEqTrue` mints on both toolchains (unchanged between them). `Lean.ofReduceNat`,
+  previously unrecognised (a theorem on it was refused as a generic failure), is now classified native.
+- `check_kernel_recheck.sh` gains two legs: a scan refusing any resolved reference to a removed name
+  in Lean sources, probes held in strings included; and the classifier compiled on its own under
+  4.34.1 and under 4.35, where `native_decide`, `decide +native` and `bv_decide` proofs must read
+  native, a classical proof must not, and every axiom the toolchain declares must be classified
+  (4.35 declares exactly 4.34.1's set minus the three). CI's checker-gates job installs 4.35 and
+  requires the leg; elsewhere it SKIPs when that toolchain is absent.
+- `check_axiom_inventory.sh` lists `Lean.ofReduceNat` as native trust too; on 4.35 its legacy list
+  matches nothing. Two mutation families (134 -> 136) show the new legs kill a reintroduced resolved
+  literal and a dropped legacy name.
 
-`println`, `print` and the variadic `append` reach the runtime helpers whatever the module
-defines. Elab desugared them into calls spelled `print_int`, `print_string`, `string_append` and
-so on, and every later pass bound a call by its spelling, so a module that defined its own
-`fn print_int` had it called by each `println` (the reproducer aborted). Core now has a third
-callee form, `Callee.runtime`, built by those desugarings. CoreCheck charges the helper's
-intrinsic capability, Lower emits the helper's reserved `_C$rt.` symbol, the interpreter
-dispatches to its builtin, and none of them resolves the spelling. The call collector is one
-walk with views by callee form (the direct and indirect walks were two copies), so a runtime
-call adds no call-graph edge to a same-named definition and still explains which intrinsic
-supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
-`regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
+### External Checker Pins Kept Current; con-leche Single-Threaded (2026-10-22)
 
-### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+con-leche and nanoda, which re-check every theorem outside the Lean kernel, are trust anchors, and
+an independent checker protects us only while it is current: kernel bug lean4#14576 also got past a
+week-old nanoda. Lean 4.35.0's #15288 fixed thread-sharing undefined behaviour that its notes say
+may affect con-leche.
 
-[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
-gap that could be tightened. The gaps covered are:
+- con-leche runs with `--jobs=1` at every call in `check_external_checker.sh`; its default was one
+  worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
+  about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
+  fix is already in con-leche's own toolchain (v4.35.0; v4.35.0-rc3 via backport #15306 at the
+  earlier pins), so this is defence in depth.
+- con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
+  results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
+  the gate 22/0. The next day the Arena published a new round, the freshness check reported both
+  pins stale, and they moved again: con-leche `ae1f319` (Lean 4.35.0) and nanoda `998e0a8`, gate
+  22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external checkers, so
+  no identity row changes.
+- `check_checker_pin_freshness.sh` compares the pins with the Arena's published revisions (falling
+  back to upstream heads): a warning when landing, a finding in the nightly campaign tier, and an
+  explicit SKIP offline.
+- Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
+  [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
 
-- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
-- checked arithmetic and lossy casts;
-- the trusted raw-pointer duplication;
-- bugs 165 and 166;
-- evaluation order;
-- `main`'s exit status;
-- contract typing.
+### Sealed, Certified Pipeline Artifacts (R-0497 slice 1, bug 180, 2026-10-23)
 
-Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
-program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
-records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
-deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
-borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
-Holes and semantic cases are tightened; style-only rules wait for a workload.
+Pipeline artifacts now carry proof of their own validity. `ValidatedCore`, `MonomorphizedProgram`
+and `SSAProgram` have private constructors. Each carries an erased `Prop` stating what its producer
+established about its exact payload: CoreCheck accepted these modules, Mono produced these modules
+from that source and the post-Mono verifier is clean on them, and the SSA verifier accepts these
+modules after cleanup. Forging one, or replacing its payload with `{ a with … }`, no longer
+compiles. The `ssa-unverified` debugging view is a separate `UnverifiedSSA` that `emit` refuses.
+Modules drawn from a validated program are a `CoreSubset`, which proof extraction reads and Mono
+does not. The emitted output is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
+payload-replacement and diagnostic-bypass cases by elaboration.
 
-`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
-with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
-shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
-E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
-standalone files and 7 inline gate probes.
-
-The witness programs found three silent defects, filed as open under exit 0b:
-
-- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
-  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
-  safe code at `T := Int`.
-- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
-  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
-- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
-  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
-
-Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and `traceability`
+replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
+dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
+specializations where the build emits 61, and the verify gates called that program clean. These
+reports now run their passes on the whole validated program and list the invoked file's part of
+the result (9 wordfreq specializations). The bug is pinned by
+`regress_180_report_scope`.
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 

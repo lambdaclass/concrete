@@ -3,7 +3,7 @@
 // caller's storage; `local` dies at return and the caller reads a dangling reference.
 // Refused (E0238, REF-7@1), as storing a reference in an aggregate is (E0239).
 // Exit 2i: the caller reaches the shape through a borrow-block binder (a `let` may not bind a
-// reference, REF-6@2), so the fixture still pins its own rule.
+// reference, REF-6@1), so the fixture still pins its own rule.
 fn replace(slot: &mut &Int) {
     let local: Int = 42;
     *slot = &local;

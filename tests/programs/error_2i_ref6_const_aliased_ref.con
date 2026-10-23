@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (review round 9): a constant initializer's `let` has a reference type through an
+// Exit 2i REF-6@1 (review round 9): a constant initializer's `let` has a reference type through an
 // alias; aliases are expanded before the test. E0302.
 type R = &i32;
 const K: i32 = if true {

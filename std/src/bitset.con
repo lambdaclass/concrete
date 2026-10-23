@@ -16,8 +16,8 @@ mod bitset {
         cap_words: u64,
     }
 
-    trusted impl BitSet {
-        pub fn new() -> BitSet {
+    impl BitSet {
+        pub trusted fn new() -> BitSet {
             let b: BitSet = BitSet {
                 data: 0 as *mut u64,
                 n_bits: 0,
@@ -51,7 +51,7 @@ mod bitset {
             *word_ptr = *word_ptr | (1 << offset);
         }
 
-        pub fn unset(&mut self, bit: u64) {
+        pub trusted fn unset(&mut self, bit: u64) {
             if bit >= self.n_bits {
                 return;
             }
@@ -62,7 +62,7 @@ mod bitset {
             *word_ptr = *word_ptr & (mask ^ 0xFFFFFFFFFFFFFFFF);
         }
 
-        pub fn test(&self, bit: u64) -> bool {
+        pub trusted fn test(&self, bit: u64) -> bool {
             if bit >= self.n_bits {
                 return false;
             }
@@ -88,7 +88,7 @@ mod bitset {
             return self.test(bit);
         }
 
-        pub fn count(&self) -> u64 {
+        pub trusted fn count(&self) -> u64 {
             let mut total: u64 = 0;
             let mut i: u64 = 0;
             while i < self.cap_words {
@@ -122,7 +122,7 @@ mod bitset {
         }
 
         /// In-place intersection: self &= other.
-        pub fn intersect(&mut self, other: &BitSet) {
+        pub trusted fn intersect(&mut self, other: &BitSet) {
             let mut min_words: u64 = self.cap_words;
             if other.cap_words < min_words {
                 min_words = other.cap_words;
@@ -170,7 +170,7 @@ mod bitset {
             self.cap_words = new_words;
         }
 
-        pub fn drop(self) with(Alloc) {
+        pub trusted fn drop(self) with(Alloc) {
             let BitSet { data, n_bits, cap_words } = self;
             if cap_words > 0 {
                 dealloc::<u64>(data);

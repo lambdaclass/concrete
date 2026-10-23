@@ -14,6 +14,7 @@ namespace Concrete
     the "references are second-class — never returned" invariant
     (docs/language/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
     are allowed in return position (they are the audit-visible unsafe escape). -/
+-- spec: REF-D1 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyContainsRef : Ty → Bool
   | .ref _ | .refMut _ => true
   | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner

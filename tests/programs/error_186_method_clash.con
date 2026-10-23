@@ -1,0 +1,10 @@
+// Bug 186 / TRAIT-5 (E0594): two traits of one type declare the same method name. Both methods
+// are spelled `Foo_m`: --interp ran the one declared first (1, or 2 with the impls swapped),
+// llvm-as refused the redefinition.
+trait A { fn m(&self) -> Int; }
+trait B { fn m(&self) -> Int; }
+struct Copy Foo { a: Int }
+impl A for Foo { fn m(&self) -> Int { return 1; } }
+impl B for Foo { fn m(&self) -> Int { return 2; } }
+fn call<T: A>(x: &T) -> Int { return x.m(); }
+pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }

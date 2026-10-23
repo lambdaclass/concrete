@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 control: a `ghost let` whose type mentions a type parameter only behind a raw
+// Exit 2i REF-6@1 control: a `ghost let` whose type mentions a type parameter only behind a raw
 // pointer or inside a function type cannot become a reference binding under substitution, so it
 // is accepted (exit 2i review: the first ghost check refused these). Run 42, binary = --interp.
 fn probe<T: Copy>(p: *const T, f: fn(T) -> Int) -> Int {

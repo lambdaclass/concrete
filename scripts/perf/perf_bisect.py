@@ -2,7 +2,7 @@
 """Name the commit that introduced a performance regression.
 
   perf_bisect.py --repo CLONE --metric NAME --good SHA --bad SHA --out result.json
-                 [--band B] [--machine M] [--work DIR] [--repeats N] [--retries R]
+                 [--band B] [--machine M] [--work DIR] [--repeats N]
 
 (Named perf_bisect, not bisect: a bisect.py next to suite.py shadows the
 standard library module that `random` and `tempfile` import.)
@@ -19,8 +19,9 @@ chain (verdict "not_ancestor" otherwise).
 2. Otherwise binary-search with perflib.next_probe; a probe is bad when it is
    above that same alarm line (perflib.classify / regression_limit), so a
    partial step is named where it first crosses the line. A commit that does
-   not build, or whose measurement stays contaminated after --retries, is
-   skipped, which can widen the answer to a candidate range.
+   not build, or whose probe could not count instructions, is skipped, which can
+   widen the answer to a candidate range. Probes count instructions:u, so a
+   bisect can run on a busy machine.
 Every probe writes its own record file, and a probe counts only when the suite
 exited 0 and its record names the probed sha with status ok.
 """
@@ -37,16 +38,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import perflib  # noqa: E402
 
-SECTION = {"compile": "compile", "check": "compile", "pass": "compile", "growth": "synthetic",
-           "lake": "lake", "tests": "tests", "gate": "gates"}
-UNIT = {"ms": "ms", "kb": "kb", "s": "s", "exp": "exp"}
+SECTION = {"compile": "compile", "check": "compile", "pass": "compile", "frontend": "compile",
+           "growth": "synthetic", "lake": "lake", "tests": "tests", "gate": "gates"}
 
 
 def section_for(metric):
     group, bench, _ = metric.split(".", 2)
-    if group in ("compile", "pass") and bench.startswith("syn_"):
+    if group in ("compile", "pass", "frontend") and bench.startswith("syn_"):
         return "synthetic", bench
     return SECTION[group], bench
+
+
+def unit_for(metric):
+    q = metric.rsplit(".", 1)[-1]
+    if q == "instr":
+        return "instr"
+    for suffix, unit in (("_kb", "kb"), ("_exp", "exp"), ("_ms", "ms"), ("_s", "s")):
+        if q.endswith(suffix):
+            return unit
+    return "instr"
 
 
 def sh(cmd, cwd=None, check=True):
@@ -66,12 +76,11 @@ def main():
     ap.add_argument("--threshold", type=float, default=perflib.DEFAULTS["threshold"])
     ap.add_argument("--band", type=float, default=perflib.DEFAULTS["min_band"],
                     help="the noise band detect.py used for this metric (summary.json)")
-    ap.add_argument("--retries", type=int, default=2, help="re-measure a contaminated probe this many times")
     a = ap.parse_args()
 
     repo = os.path.abspath(a.repo)
     section, bench = section_for(a.metric)
-    unit = UNIT.get(a.metric.rsplit("_", 1)[-1], "ms")
+    unit = unit_for(a.metric)
     good = sh(["git", "-C", repo, "rev-parse", a.good]).stdout.strip()
     bad = sh(["git", "-C", repo, "rev-parse", a.bad]).stdout.strip()
     result = {"schema": "concrete.perf.bisect.v1", "metric": a.metric, "machine": a.machine,
@@ -102,15 +111,11 @@ def main():
     entries = {}
     seq = [0]
 
-    def suite_quiet():
-        subprocess.run([sys.executable, os.path.join(HERE, "suite.py"), "quiet", "--wait", "1800"],
-                       capture_output=True)
-
     def measure_once(sha):
         if section != "lake":
             b = subprocess.run(["lake", "build"], cwd=wt, capture_output=True, text=True)
             if b.returncode != 0:
-                return None, None, "build failed"
+                return None, "build failed"
         seq[0] += 1
         out = os.path.join(work, "probe-%03d-%s.json" % (seq[0], sha[:12]))
         cmd = [sys.executable, os.path.join(HERE, "suite.py"), "run", "--repo", wt, "--machine", a.machine,
@@ -119,29 +124,26 @@ def main():
         try:
             rec = json.load(open(out))
         except (OSError, ValueError):
-            return None, None, "suite exit %d, no record: %s" % (r.returncode, r.stderr[-300:])
+            return None, "suite exit %d, no record: %s" % (r.returncode, r.stderr[-300:])
         if r.returncode != 0 or rec.get("sha") != sha or rec.get("status") != "ok":
-            return None, None, "suite exit %d, record sha %s status %s" % (
+            return None, "suite exit %d, record sha %s status %s" % (
                 r.returncode, str(rec.get("sha"))[:12], rec.get("status"))
+        if rec.get("comparable") is not True:
+            return None, "probe counted %s, not instructions; not comparable" % rec.get("counter")
         e = rec["metrics"].get(a.metric)
         if e is None:
-            return None, None, "metric absent"
-        return e, bool(rec.get("contaminated")), None
+            return None, "metric absent"
+        return e, None
 
     def measure(sha):
         sh(["git", "-C", wt, "checkout", "-q", "--force", "--detach", sha])
-        for attempt in range(1 + a.retries):
-            e, contaminated, err = measure_once(sha)
-            probes_log.append({"sha": sha, "value": e["median"] if e else None, "attempt": attempt,
-                               "contaminated": contaminated, "note": err})
-            if e is None:
-                return None
-            if not contaminated:
-                entries[sha] = e
-                sys.stderr.write("[bisect] %s %s = %s\n" % (sha[:12], a.metric, e["median"]))
-                return e["median"]
-            suite_quiet()
-        return None   # contaminated every time: skipped, never classified
+        e, err = measure_once(sha)
+        probes_log.append({"sha": sha, "value": e["median"] if e else None, "note": err})
+        if e is None:
+            return None
+        entries[sha] = e
+        sys.stderr.write("[bisect] %s %s = %s\n" % (sha[:12], a.metric, e["median"]))
+        return e["median"]
 
     try:
         gv = measure(commits[0])

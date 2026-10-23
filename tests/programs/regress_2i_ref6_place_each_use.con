@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): the rewrite of a `let`-bound projection borrow: borrow the place at each use (`f(&w.p); g(&w.p);`); also the twin of the inferred-alias and `&mut` rows. Run 42, binary = --interp.
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): the rewrite of a `let`-bound projection borrow: borrow the place at each use (`f(&w.p); g(&w.p);`); also the twin of the inferred-alias and `&mut` rows. Run 42, binary = --interp.
 struct P { n: Int }
 struct W { p: P, q: P }
 

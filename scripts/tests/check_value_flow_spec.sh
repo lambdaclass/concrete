@@ -2,7 +2,7 @@
 # Value-flow constructor-coverage gate (ROADMAP 13c / 13e prevention program).
 #
 # Every surface AST constructor (Expr / MatchArm / Stmt in Concrete/Frontend/AST.lean)
-# must have a row in docs/language/VALUE_FLOW_SPEC.md declaring its value-flow behavior
+# must have a row in the value-flow tables of docs/spec/ownership.md (OWN-15) declaring its value-flow behavior
 # (creates / moves / borrows / copies / overwrites / rejects) and naming the
 # gate that locks it. The H13-H17 sweep existed because value flow is
 # distributed across syntax handlers and new forms kept landing without a
@@ -18,9 +18,9 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 AST="Concrete/Frontend/AST.lean"
-SPEC="docs/language/VALUE_FLOW_SPEC.md"
+SPEC="docs/spec/ownership.md"   # OWN-15; was docs/language/VALUE_FLOW_SPEC.md (now its design record)
 [ -f "$AST" ] || { echo "error: $AST missing" >&2; exit 2; }
-[ -f "$SPEC" ] || { echo "error: $SPEC missing — write the value-flow spec (ROADMAP 13c)" >&2; exit 1; }
+[ -f "$SPEC" ] || { echo "error: $SPEC missing — the value-flow tables of OWN-15 (ROADMAP 13c)" >&2; exit 1; }
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -49,9 +49,10 @@ check_inductive() {
   if [ -z "$names" ]; then no "$ind: extracted no constructors (parser drift?)"; return; fi
   local missing=0
   while IFS= read -r c; do
-    # a row mentions the constructor as `name` (backtick-quoted)
-    if ! grep -q "\`$c\`" "$SPEC"; then
-      no "$ind.$c has no row in docs/language/VALUE_FLOW_SPEC.md — declare its value flow before landing"
+    # the constructor is named (backtick-quoted) in the FIRST cell of a row of its own table
+    # ("#### Value flow: <inductive>"), not anywhere in the chapter's prose
+    if ! awk -v t="#### Value flow: $ind" '$0==t{g=1;next} g && /^#/{g=0} g && /^\| /{split($0,c,"|"); print c[2]}' "$SPEC" | grep -q "\`$c\`"; then
+      no "$ind.$c has no row in docs/spec/ownership.md (OWN-15) — declare its value flow before landing"
       missing=1
     fi
   done <<< "$names"
@@ -67,10 +68,11 @@ check_inductive Stmt
 
 echo "=== checkExpr modes: every Expr constructor has a row in the modes table ==="
 # The Expression-modes section must also cover every Expr constructor.
-MODES_SECTION="$(awk '/^## Expression modes/{grab=1} grab{print} /^## Change discipline/{grab=0}' "$SPEC")"
+MODES_SECTION="$(awk '/^#### Expression modes/{grab=1} grab && /^#{2,3} |^<a id=/{grab=0} grab{print}' "$SPEC")"
+[ -n "$MODES_SECTION" ] || no "the Expression-modes table (#### Expression modes in $SPEC) is missing"
 missing=0
 while IFS= read -r c; do
-  if ! grep -q "\`$c\`" <<<"$MODES_SECTION"; then
+  if ! awk '/^\| /{split($0,c,"|"); print c[2]}' <<<"$MODES_SECTION" | grep -q "\`$c\`"; then
     no "Expr.$c has no row in the Expression-modes table (which UseMode does what?)"
     missing=1
   fi
@@ -87,7 +89,7 @@ CALLARG_ACTUAL="$(grep -c '\.callArg' Concrete/Check/Check.lean)"
 if [ "$CALLARG_ACTUAL" -eq "$CALLARG_PIN" ]; then
   ok "callArg use-site count matches the pin ($CALLARG_PIN)"
 else
-  no "callArg use-site count drifted: $CALLARG_ACTUAL (pin: $CALLARG_PIN) — if intentional, justify the new site in docs/language/VALUE_FLOW_SPEC.md and update the pin"
+  no "callArg use-site count drifted: $CALLARG_ACTUAL (pin: $CALLARG_PIN) — if intentional, justify the new site in docs/spec/ownership.md (OWN-15) and update the pin"
 fi
 
 echo ""

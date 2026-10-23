@@ -1,4 +1,7 @@
-# Type Aliases
+# Type Aliases (design record)
+
+**Superseded as the normative text (2026-10-23).** The rule is TYPE-12 of
+[docs/spec/types.md](../spec/types.md#TYPE-12). This note keeps the details and history.
 
 Status: IMPLEMENTED — ROADMAP old Phase 6 #3. Gated by
 `scripts/tests/check_type_alias.sh` (fixtures in `tests/programs/type_alias/`).

@@ -213,7 +213,7 @@ Concrete now has the three-way split described in the research notes:
 That means:
 
 - `trusted` does **not** suppress ordinary capabilities
-- `trusted fn`/`trusted impl` absorbs the `Unsafe` of an `extern fn` call (since R-0484, 2026-10-01) — never the binding's declared effects, which every `extern` must state
+- `trusted fn` (a function or a method) absorbs the `Unsafe` of an `extern fn` call (since R-0484, 2026-10-01) — never the binding's declared effects, which every `extern` must state
 - `trusted extern fn` is a separate, narrower mechanism: it marks a specific foreign binding as safe to call, rather than granting blanket trust to a block of code
 - builtin and stdlib internals are aligned to this same model instead of relying on silent exemptions
 
@@ -236,9 +236,10 @@ pub trusted fn read_header(fd: i32) with(File, Unsafe) -> Int {
 
 The stdlib demonstrates this pattern throughout:
 
-- `trusted impl Vec<T>` wraps pointer arithmetic behind safe push/pop/get
-- `trusted impl HashMap<K, V>` wraps raw allocation behind safe insert/get/remove
-- `trusted impl TextFile` wraps POSIX file I/O behind open/read/write/close
+- `Vec<T>`'s trusted methods wrap pointer arithmetic behind safe push/pop/get
+- `HashMap<K, V>`'s trusted methods wrap raw allocation behind safe insert/get/remove
+- `TextFile`'s trusted methods wrap POSIX file I/O behind open/read/write/close
+- each method declares `trusted fn` itself; an impl block confers no trust (bug 189)
 - `trusted fn print/println` wraps extern console I/O behind `with(Console)`
 - `trusted extern fn sqrt` marks a pure foreign function as safe to call without `with(Unsafe)`
 
@@ -259,6 +260,34 @@ fn log(msg: &String) with(IO) { ... }
 An alias expands to its constituent capabilities at parse time — the rest of the compiler sees only concrete capability names. Aliases can use the fixed `Std` capability alias (`cap All = Std;` expands to all standard capabilities except `Unsafe`). This is not a macro system.
 
 Aliases are validated at definition time: all constituent names must be known capabilities. Unknown names produce a parse error.
+
+## Calling convention in function types (decided 2026-10-23, not implemented)
+
+**Now.** Taking **any** `extern fn` as a value is refused; direct calls are unchanged (decided
+2026-10-23, revised after review; not yet enforced, [bug 166](../bugs/166_foreign_fn_value_abi.md)).
+A direct call of an extern with a small aggregate passes it the way C does (in registers), while a
+call through a `fn(..)` value uses the Concrete convention (a pointer to the aggregate), so the
+value would call C with the wrong ABI. Scalar-only externs happen to pass alike under both
+conventions, but exempting them would keep a second rule that rests on that coincidence; the
+rewrite is a Concrete wrapper that calls the extern directly.
+
+**Long term** ([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
+the calling convention is part of the function type.
+
+- `fn(A) -> R` is a Concrete function type and `extern "C" fn(A) -> R` a C function type. They are
+  distinct types, and neither converts to the other implicitly. A function type carries its
+  calling convention, its required capabilities and its safety obligations (whether a call needs
+  `Unsafe`).
+- An `extern fn` used as a value has type `extern "C" fn(..)`; a Concrete function never has it.
+- A call through an `extern "C" fn` value lowers with the C ABI, the same aggregate flattening as
+  a direct extern call, and requires what a direct call of the extern requires (`with(Unsafe)`,
+  unless it is declared `trusted extern`).
+- A Concrete function that C calls through a pointer is exported explicitly, as an adapter with the
+  C ABI (`#[export_name]`), not coerced to `extern "C" fn`.
+
+It is built when the first workload passes a callback to C or stores a foreign function value. The
+refusal above is then lifted for `extern "C" fn` values and a mismatch becomes a type error between
+the two function types, so code written under the containment needs no change. Owner: R-0283 / R-0287 (ABI checks).
 
 ## Future Refinement
 

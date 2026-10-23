@@ -1,5 +1,5 @@
 // Bug 092 positive control: references still flow DOWN — reference arguments (a
-// `let` may not bind a reference since exit 2i REF-6@2; the old `let r = &h` became
+// `let` may not bind a reference since exit 2i REF-6@1; the old `let r = &h` became
 // a borrow at each use), and a struct holding a fn pointer whose parameter is a
 // reference (a fn pointer stores no reference). A borrow-block binder over a Heap
 // passed to a `&Heap<B>` parameter is miscompiled (bug 126, borrow-block form).

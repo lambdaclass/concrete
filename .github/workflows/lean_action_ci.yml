@@ -404,6 +404,25 @@ jobs:
       - name: External-checker gate (proof evidence re-checked by con-leche)
         run: bash scripts/tests/check_external_checker.sh
 
+      # LANDING TIER: a pin behind the revision the Lean Kernel Arena evaluates is a warning
+      # annotation, never a failure (landings stay reproducible). Offline, it prints SKIP.
+      - name: Checker pin freshness (warns when a pin lags the Lean Kernel Arena)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier landing
+
+  checker-pin-freshness:
+    name: Checker pin freshness (campaign finding)
+    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
+    # A con-leche or nanoda pin that differs from the revision the Lean Kernel Arena currently
+    # evaluates fails this job: a finding to act on (docs/verification/EXTERNAL_CHECKER.md), not a
+    # merge blocker. Needs only network access, no build.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checker pins vs the Lean Kernel Arena (stale pin = finding)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier campaign
+
   fuzz-campaign:
     name: Nightly differential fuzz (rotating seed)
     # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
@@ -1131,6 +1150,23 @@ jobs:
       - name: "Exit 2i rules (MEMORY_SEMANTICS §15 — second-class references and one binding per visible name, with versioned migration diagnostics)"
         run: bash scripts/tests/check_rules_2i.sh
 
+      - name: Install Zola for the spec gate's site build (pinned, the version book.yml publishes with)
+        run: |
+          if command -v zola >/dev/null; then zola --version; else
+            tag="v0.19.2"
+            mkdir -p "$RUNNER_TEMP/zola"
+            curl -fsSL "https://github.com/getzola/zola/releases/download/${tag}/zola-${tag}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz --directory="$RUNNER_TEMP/zola"
+            echo "$RUNNER_TEMP/zola" >> "$GITHUB_PATH"
+          fi
+
+      - name: "Language specification (docs/spec — one normative statement; examples run natively and with --interp, codes, enforcing sites, Lean names, generated manifest and site, no restated rules)"
+        # S3 compares the spec's registries with a base revision: fetch the parent and main so the
+        # merge base (or HEAD~1) resolves in the shallow checkout. A missing base fails the gate.
+        run: |
+          git fetch --no-tags --deepen=1 origin || true
+          git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main || true
+          bash scripts/tests/check_spec.sh
+
       - name: "Effect opacity (R-0484 — an empty capability set is not a claim of purity)"
         run: bash scripts/tests/check_effect_opacity.sh
 
@@ -1283,9 +1319,6 @@ jobs:
 
       - name: Source-span gate (every pass anchors its diagnostic to the original source line)
         run: bash scripts/tests/check_source_spans.sh
-
-      - name: Pipeline-contracts gate (Phase 6.5 #3 — each boundary violation caught at the first responsible pass, no leak)
-        run: bash scripts/tests/check_pipeline_contracts.sh
 
       - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
         run: bash scripts/tests/check_linear_discard.sh
@@ -1492,9 +1525,18 @@ jobs:
       # SELF-CONTAINED: the identity, the hostile controls with their logs (and tied to that
       # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
       # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
-      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0547): they used to
+      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0546): they used to
       # be steps of their own as well, so each assertion ran twice per workflow run.
+      # check_kernel_recheck (run inside this step) also compiles the replay probe's native-trust
+      # classifier under Lean 4.35, which removes Lean.ofReduceBool/ofReduceNat/trustCompiler; here
+      # that leg is required, not skipped. Only the toolchain is installed; this repository still
+      # builds with its own pin.
+      - name: Install the Lean 4.35 toolchain (classifier compatibility leg only)
+        run: elan toolchain install leanprover/lean4:v4.35.0
+
       - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
+        env:
+          CONCRETE_REQUIRE_LEAN435: "1"
         run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
 
       - name: "Upload checker acceptance evidence"
@@ -1661,6 +1703,9 @@ jobs:
 
       - name: "Type identity (R-0004 V2 input — aliases, transport, nesting, builtins, and Elab use sites)"
         run: bash scripts/tests/check_type_identity.sh
+
+      - name: "Pipeline artifacts (R-0497 slice 1 / bug 180 — sealed, certified ValidatedCore/Mono/SSA; forgery, mutation reuse and diagnostic bypass do not elaborate)"
+        run: bash scripts/tests/check_pipeline_artifacts.sh
 
       - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
         run: bash scripts/tests/check_fnptr_values.sh

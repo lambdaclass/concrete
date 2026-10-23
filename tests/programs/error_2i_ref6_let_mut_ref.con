@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a `let` binds an exclusive reference. Rejected: E0302 (before: E0208, it had no discharging use).
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` binds an exclusive reference. Rejected: E0302 (before: E0208, it had no discharging use).
 fn main() -> Int {
     let mut x: Int = 1;
     let r: &mut Int = &mut x;

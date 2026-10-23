@@ -489,7 +489,13 @@ cd "$ROOT_DIR"
 # build is invisible to the role that audits it.
 # 132 -> 134 with bug 088's literal-default-range and post-mono-literal-range families (both
 # killed by check_cast_matrix.sh's both-paths-reject rows).
-EXPECTED_FAMILIES=134
+# 134 -> 136 with the Lean 4.35 readiness families (legacy native names unresolved and complete),
+# both killed by check_kernel_recheck.sh's classifier legs.
+# 136 -> 141 with bug 188's capvar-entails-only-itself, capvar-instantiated-unsafe,
+# capvar-method-instantiated-unsafe, bodyless-capparams-refused and capparam-name-reserved
+# families (killed by check_capability_judgment.sh's bug 188 rows). Train 5 integrates these on
+# top of train 4's 136; the cap-soundness branch alone counted 134 -> 139.
+EXPECTED_FAMILIES=141
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -708,6 +714,29 @@ add "checked-arith-trap" "Concrete/Backend/EmitSSA.lean" "check_checked_arith.sh
 add "capability-requirement" "Concrete/Check/CoreCheck.lean" "check_capability_judgment.sh" yes \
   'if !capD.satisfied then' \
   'if false then'
+# Bug 188: a capability VARIABLE entailed every requirement. Three experiments, one per leg
+# of the fix, each killed by its own rows of check_capability_judgment.sh:
+#   * restore the blanket ("any caller variable covers everything") in the one rule;
+#   * restore Check's `Unsafe` filter on the INSTANTIATED set of a cap-polymorphic call,
+#     which CoreCheck cannot see (the Unsafe-callback row);
+#   * the same filter on the METHOD path (CheckHelpers; Codex review);
+#   * accept capability parameters on a bodiless declaration (Codex review);
+#   * stop reserving capability spellings for capability parameters (the E0121 row).
+add "capvar-entails-only-itself" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
+  $'  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)' \
+  $'  if !callerVars.isEmpty then [] else\n  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)'
+add "capvar-instantiated-unsafe" "Concrete/Check/Check.lean" "check_capability_judgment.sh" yes \
+  $'          if !Capabilities.trustedDischarges env.currentFnTrusted cap then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)' \
+  $'          if cap != unsafeCapName then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)'
+add "capvar-method-instantiated-unsafe" "Concrete/Check/CheckHelpers.lean" "check_capability_judgment.sh" yes \
+  $'      if !Capabilities.trustedDischarges env.currentFnTrusted cap then\n        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)' \
+  $'      if cap != unsafeCapName then\n        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)'
+add "bodyless-capparams-refused" "Concrete/Frontend/Parser.lean" "check_capability_judgment.sh" yes \
+  $'    if !capParams.isEmpty then\n      throwParse s!"a bodiless declaration cannot take capability parameters' \
+  $'    if false then\n      throwParse s!"a bodiless declaration cannot take capability parameters'
+add "capparam-name-reserved" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
+  $'  validCaps.contains name || name == stdCapMacroName || aliases.contains name' \
+  $'  false && (validCaps.contains name || name == stdCapMacroName || aliases.contains name)'
 add "walker-constructor" "Concrete/Check/CoreCheck.lean" "check_constructor_coverage.sh" no \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()' \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | _ => pure ()'
@@ -1746,8 +1775,21 @@ add "recheck-replays-workspace-closure" "Concrete/Proof/Replay.lean" "check_kern
 # NATIVE EVALUATION IS NAMED, never re-checked: a bv_decide theorem must read native_trust, not a
 # generic failure that hides why the kernel could not re-establish it.
 add "recheck-native-never-rechecked" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
-  $'    if extra.any (fun a => a == ``Lean.ofReduceBool || a == ``Lean.trustCompiler\n                           || (a.toString.splitOn "._native.").length > 1) then' \
-  $'    if false && extra.isEmpty then'
+  '    if extra.any _concreteIsNativeAxiom then' \
+  '    if false && extra.isEmpty then'
+
+# LEAN 4.35 READINESS: THE LEGACY NATIVE NAMES STAY UNRESOLVED. A double-backtick literal must resolve,
+# so the probe stops compiling on Lean 4.35 (which removes the name) and every theorem reads notRun.
+# Builds and replays fine on 4.34.1; killed by the removed-name scan (and by the 4.35 leg when present).
+add "recheck-legacy-native-literal-unresolved" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '  [`Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]' \
+  '  [``Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]'
+
+# ...AND COMPLETE. Dropping a legacy name lets a 4.34 theorem resting on it read as a generic failure
+# instead of native trust; killed by the 4.34.1 leg, where that toolchain axiom is then unclassified.
+add "recheck-legacy-native-list-complete" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
+  '  [`Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]' \
+  '  [`Lean.ofReduceBool, `Lean.trustCompiler]'
 
 # ONE VERDICT PER THEOREM. Taking the first of two lines lets an injected verdict decide.
 add "recheck-verdict-unambiguous" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
@@ -1804,7 +1846,7 @@ add "consumer-acceptance-requires-recheck" "Concrete/Proof/CheckerPolicy.lean" "
 # declared axiom re-check (the kernel takes axioms on trust) — the hole the upgrade exposed.
 add "recheck-allowlists-kernel-axioms" "Concrete/Proof/Replay.lean" "check_kernel_recheck.sh" yes \
   '    let extra := axs.filter (fun a => !(a == ``propext || a == ``Classical.choice || a == ``Quot.sound))' \
-  '    let extra := axs.filter (fun a => a == ``Lean.ofReduceBool || (a.toString.splitOn "._native.").length > 1)'
+  '    let extra := axs.filter _concreteIsNativeAxiom'
 
 # THE REPORT MUST USE THE RULE. `acceptedNow` is tested on synthetic inputs everywhere; this family
 # keeps PRODUCTION covered: bypassing the call (acceptance from policy alone) must fail a gate. Killed by

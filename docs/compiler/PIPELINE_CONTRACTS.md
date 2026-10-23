@@ -1,4 +1,12 @@
-# Pipeline stage contracts
+# Pipeline stage contracts (design record)
+
+**Superseded as the normative text (2026-10-23).** The boundary contracts are now preservation
+entries of the language specification, [docs/spec/pipeline.md](../spec/pipeline.md): PASS-5
+(after Check), PASS-6 (after Elab), PASS-7 (after Mono), PASS-8 (after CoreCheck), PASS-9 (after
+Lower), PASS-10 (after Emit) and PASS-11 (BackendIR, planned). Their fixtures are that chapter's
+examples, run natively and with `--interp` by `scripts/tests/check_spec.sh`, which also refuses a
+lower-layer leak (`llvm-as`, the linker, a panic). `check_pipeline_contracts.sh` is retired. This
+note keeps the original rationale.
 
 ROADMAP old Phase 6.5 #3. The compiler is a sequence of stages, each of which
 consumes the previous stage's output and **promises** something to the next.
@@ -7,8 +15,8 @@ every later pass can point to the earlier contract that makes a case
 impossible, and every user-triggerable violation is caught at the **first
 responsible boundary** — never leaked to Lower, LLVM, the linker, or a panic.
 
-`scripts/tests/check_pipeline_contracts.sh` enforces the "caught at the right
-boundary, no leak" property with one violating fixture per contract. This is the
+The retired `check_pipeline_contracts.sh` enforced the "caught at the right
+boundary, no leak" property with one violating fixture per contract (now docs/spec/pipeline.md). This is the
 gate-based V1 of the deliverable; a `concrete inspect --pipeline-contracts
 --json` surface can be layered on later without changing the contracts.
 

@@ -13,7 +13,7 @@
 # GitHub uses closely enough to catch indicator/indentation errors).
 
 set -uo pipefail
-# Per-run scratch (R-0547): a fixed /tmp path collides with a concurrent run of this gate.
+# Per-run scratch (R-0546): a fixed /tmp path collides with a concurrent run of this gate.
 GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"

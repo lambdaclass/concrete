@@ -151,7 +151,7 @@ The Core IR → SSA → LLVM IR → binary chain is entirely unverified. This is
 
 **Trusted for:**
 
-- Correctness of code behind `trusted fn` / `trusted impl` boundaries
+- Correctness of code behind `trusted fn` boundaries (functions and methods)
 - Correctness of foreign code behind `extern fn` / `trusted extern fn` boundaries
 - Correctness of wrappers that intentionally concentrate unsafety
 

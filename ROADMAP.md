@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 8** (1 silent, 1 loud, 6 filed before the discovery record) of 160 bug records.
+**Open bugs: 8** (1 silent, 1 loud, 6 filed before the discovery record) of 169 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -117,14 +117,14 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 | found bugs |
 | semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 | semantics: second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes) | 2026-10-21 | unrecorded | 4 | 3 | 1 | found bugs |
 | interp-coverage: interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary | 2026-10-21 | unrecorded | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
+| spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 20 attribution-only batches (reviews, follow-ons, CI, controls, development) found 30 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 26 attribution-only batches (reviews, follow-ons, CI, controls, development) found 37 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -386,7 +386,7 @@ agree with the classes.
 | exit | owner | closes when | acceptance test | class | why this class |
 |---|---|---|---|---|---|
 | 0a | R-0482 | bug 079's subject/model/spec binding is closed at status, issuance and receipt consumption, and the evidence and model repairs land: the bug 080 cast model, 081, 083 – 086, 089, 101 and the 065 stack-depth policy verdict | each bug's reproducer is a permanent gate leg (the `check_model_diff.sh` legs for 080, 084 – 086 and 101; the 079, 081, 083 and 089 reproducers in the evidence gates; 065's in the stack-depth policy gates), and the [bug ledger](docs/bugs/README.md) records each fixed on main | blocks features | known false proofs and unsound claims |
-| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095, 096 – 100, 102 – 105, 107, 111, 113, 115, 121 – 123, 126 – 129, 131 – 133, 135 – 137, 140, 142 – 149, 150 – 152, 165, 166, 176, 181, 182, 183, and the silent defects found while writing the [2026-10-21 semantics decisions](#decisions) into the docs, once they are filed in the bug ledger: an arm binder through a borrowed scrutinee whose root is moved inside the arm ([MEMORY_SEMANTICS §15.7](docs/language/MEMORY_SEMANTICS.md) G17), the binary evaluating a dereference assignment's destination before its right-hand side while the interpreter does the reverse ([evaluation order](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)) | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091, and 104 and 131: a reference assigned from an inner block outlives its source, to a local or to a reference parameter), a safe user function named like a C symbol replacing it for the whole program (129: `fn malloc` becomes the allocator `alloc` calls), a comparison operator consuming its linear operands (140: `Heap == Heap` compared addresses and leaked both cells), a `return` inside a call argument or literal field leaking the values already moved into the construct (142), a deferred call reading a local freed after its `defer` was registered (143: `defer pb(&h); free(h);`), heap-shell interiors exempt from linearity (144: a field read twice double-frees, `free(h)` drops a linear interior), the raw `vec_set`/`vec_free` intrinsics losing non-Copy elements (145), `*h` never freeing its cell (146), a move inside an erased `assert`/`ghost let` counted as a release that never runs (147), a move inside the right operand of `&&`/`||` counted although it may not run (148), loop conditions, returns in nested blocks and labelled exits not checked for owned values (149), double free through `vec_get` taking a non-Copy element by value (115), silent wrong code (082, 088, 096 – 098, 102, 107, 111, and 123: a borrow of a module constant reads an uninitialized slot; 127: struct-literal initializers run in declaration order natively and in the ratified source order in the interpreter; 128 (fixed 2026-10-21): the interpreter, the differential reference, modelled an integer-to-float cast as the identity; 150 (fixed 2026-10-21): SSA cleanup folded `x != x` to false for a float `x`, so a NaN passed every such check; 152 (fixed 2026-10-21): `string_trim("")` returned a byte past its source; 151 (contained by E0299): `a.b_f` and `a_b.f` flattened to one name and the binary's `a_b::f()` ran `a.b_f`; 133: a write through `&mut (*p).f` lands in a copy of `*p`; 136: functional update `S { .., ..base }` evaluates its base once per omitted field; 137: enum-variant literal fields run in declaration order in both consumers; 176: a loop body's shadowing `let` outlived the loop in the checker, so a `u8` binding held 300 natively and in the interpreter; 105: a reference-valued `if`/`match` reached through a generic instantiated at a reference type, which the checker containment did not cover, segfaulted natively), a silent semantic change by a tool (135: `concrete fmt` rewrote float literals to six decimals, so `0.0000000001` became `0.000000`), missing extern effect declarations accepted in nested submodules (113; calls still charged `Unsafe`), a foreign destructor silently replaced by an empty body (103, a leak of every C resource released through a `*_destroy` function), and LLVM type layouts that disagree with the compiler's own, so aggregate copies move fields (121: conlog freed a corrupted String pointer; 122: the canonical builtin `Option`/`Result` union, including a stack overrun); the defects found on 2026-10-21 are a read through an arm binder after its source moved, and an interpreter/native disagreement on dereference-assignment order; and heap-slot corruption through a `&mut Heap<T>` argument (126: the callee treats the caller's heap-pointer slot as the struct, so a field write overwrites the slot and `free` receives a corrupted pointer) |
+| 0b | R-0482 | the wrong-code and memory/capability-safety repairs land: 052, 082, 087, 088, 090 – 095, 096 – 100, 102 – 105, 107, 111, 113, 115, 121 – 123, 126 – 129, 131 – 133, 135 – 137, 140, 142 – 149, 150 – 152, 165, 166, 176, 181, 182, 183, and the silent defect found while writing the [2026-10-21 semantics decisions](#decisions) into the docs: the binary evaluating a dereference assignment's destination before its right-hand side while the interpreter does the reverse ([evaluation order](docs/language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment); filed as bug 183). The other one recorded then, an arm binder through a borrowed scrutinee whose root is moved inside the arm ([MEMORY_SEMANTICS §15.7](docs/language/MEMORY_SEMANTICS.md) G17), is refused on main (E0204, re-probed 2026-10-23) and pinned by rejection fixtures; bugs 181 and 182 close under the [2026-10-23 tightening decisions](docs/language/TIGHTENING_DECISIONS.md#4-decisions-of-2026-10-23) D3 and D2, and bug 166 under D4's refusal | each bug's reproducer is a permanent gate leg, and the bug ledger records each fixed on main | blocks features | use-after-free, double free, skipped destruction and capability escape in safe code (052, 087, 090 – 093, 099 – 100, 091, and 104 and 131: a reference assigned from an inner block outlives its source, to a local or to a reference parameter), a safe user function named like a C symbol replacing it for the whole program (129: `fn malloc` becomes the allocator `alloc` calls), a comparison operator consuming its linear operands (140: `Heap == Heap` compared addresses and leaked both cells), a `return` inside a call argument or literal field leaking the values already moved into the construct (142), a deferred call reading a local freed after its `defer` was registered (143: `defer pb(&h); free(h);`), heap-shell interiors exempt from linearity (144: a field read twice double-frees, `free(h)` drops a linear interior), the raw `vec_set`/`vec_free` intrinsics losing non-Copy elements (145), `*h` never freeing its cell (146), a move inside an erased `assert`/`ghost let` counted as a release that never runs (147), a move inside the right operand of `&&`/`||` counted although it may not run (148), loop conditions, returns in nested blocks and labelled exits not checked for owned values (149), double free through `vec_get` taking a non-Copy element by value (115), silent wrong code (082, 088, 096 – 098, 102, 107, 111, and 123: a borrow of a module constant reads an uninitialized slot; 127: struct-literal initializers run in declaration order natively and in the ratified source order in the interpreter; 128 (fixed 2026-10-21): the interpreter, the differential reference, modelled an integer-to-float cast as the identity; 150 (fixed 2026-10-21): SSA cleanup folded `x != x` to false for a float `x`, so a NaN passed every such check; 152 (fixed 2026-10-21): `string_trim("")` returned a byte past its source; 151 (contained by E0299): `a.b_f` and `a_b.f` flattened to one name and the binary's `a_b::f()` ran `a.b_f`; 133: a write through `&mut (*p).f` lands in a copy of `*p`; 136: functional update `S { .., ..base }` evaluates its base once per omitted field; 137: enum-variant literal fields run in declaration order in both consumers; 176: a loop body's shadowing `let` outlived the loop in the checker, so a `u8` binding held 300 natively and in the interpreter; 105: a reference-valued `if`/`match` reached through a generic instantiated at a reference type, which the checker containment did not cover, segfaulted natively), a silent semantic change by a tool (135: `concrete fmt` rewrote float literals to six decimals, so `0.0000000001` became `0.000000`), missing extern effect declarations accepted in nested submodules (113; calls still charged `Unsafe`), a foreign destructor silently replaced by an empty body (103, a leak of every C resource released through a `*_destroy` function), and LLVM type layouts that disagree with the compiler's own, so aggregate copies move fields (121: conlog freed a corrupted String pointer; 122: the canonical builtin `Option`/`Result` union, including a stack overrun); the defects found on 2026-10-21 are a read through an arm binder after its source moved, and an interpreter/native disagreement on dereference-assignment order; and heap-slot corruption through a `&mut Heap<T>` argument (126: the callee treats the caller's heap-pointer slot as the struct, so a field write overwrites the slot and `free` receives a corrupted pointer) |
 | 0c | R-0482 | campaign isolation is repaired and a qualified campaign result naming its exact commit is retained before the identity migration closes | a [stage (c)](#promotion-pipeline) qualification record with `verdict=qualified` at that commit: every required job succeeded there, the mutation aggregate's `qualified=1` among them | continues alongside | qualification of the identity migration; no deliverable depends on it |
 | 1a | R-0482 | the manifestful std/dependency controls are permanent gates, D3's manifestless distinction and its negative controls are retained, and the result is published only after 0a's subject-binding repair | the P1 controls run as permanent legs of the full gate set, and the manifestless negative controls fail when the D3 distinction is collapsed | continues alongside | cross-package claims are not a dependency of RocksDB slice 1 or V1 |
 | 2a | R-0494 | one `Verdict` authority renders every evidence surface (contracts, vcs, obligation-ledger, audit, check-proofs text and JSON, proof-status, issuance) | R-0494's exit: status spellings only in the renderer table; bug 089's reproducers (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`) read not-proved on every surface; a cross-surface gate (new) pins the expected positive and negative judgment for every claim and clause | blocks features | the proof surface is feature-frozen until it lands ([verified-compiler decision](#decisions)), so V1's published claim needs it |
@@ -1009,6 +1009,24 @@ allocation (`try_*` collection operations and a non-aborting allocator path) and
 showed stale documentation (the wrapping-overflow text in NUMERIC_MODEL, `--report profile`'s
 wrap-gap line, the removed `->` heap syntax), corrected with the decisions. No exit or acceptance
 criterion is removed; exit 2i's acceptance and exits 2j and 2k's scopes are made precise.
+
+**Tightening decisions, 2026-10-23:** the user approved selective tightening (a rule lands when it
+closes a soundness hole or removes a case from the semantics the verified pipeline must formalize;
+style-only rules wait for a workload) and answered the four open questions of
+[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) with "do the best long term
+solution for this problem and every problem". **Adopted:** every `&mut` argument is an implicit
+reborrow and an unused `&mut` may lapse, as an exclusive scoped loan that suspends its parent (D1,
+G9 / B1 / B2; R-0496 with exit 2i); the Austral model, "ok do the austral model with `&s.f`
+sugar": only a variable (or a string literal, a static root) is borrowed, a reference to a part is
+a projection through a reference, `&s.f` is front-end sugar, and loans are keyed by root, so a
+borrow of a temporary is refused and disjoint field borrows wait for a workload (D2, REF-5, G12;
+closes bug 182; 2 std sites and 1 train3 fixture migrate); every binder through a scrutinee of
+reference type is a reference, Copy or not, carried explicitly through Core (D3; closes bug 181; 2
+fixtures migrate; G17's Copy case reopens under it); every foreign function value is refused now
+(bug 166), and function types will carry calling convention, capabilities and safety obligations
+when the first callback workload needs them (D4, [FFI.md](docs/platform/FFI.md)). G17's moving
+shapes are closed (refused on main, pinned by fixtures). The ordered implementation plan is TIGHTENING_DECISIONS §5; exit 2i owns D1 –
+D3's checker rules and exit 0b the bug repairs.
 
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
@@ -3264,8 +3282,8 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (`ValidatedCore` is
-publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (slice 1 sealed `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram`, 2026-10-23), with diagnostic artifacts typed separately.
 
 **Semantics decisions (2026-10-21):** the compiler refers to `Option` and `Result` only by resolved
 identity, never by spelling, so a user enum named `Result` is a distinct type (LAYOUT_CONTRACT §3.4);
@@ -3440,9 +3458,16 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Immutable, payload-bound pipeline artifacts — the artifact half of stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md); R-0492 owns the identity half.
 
-**Status (2026-10-18): planned; starts with R-0492.**
+**Status (2026-10-23): slice 1 landed on branch `verified-pipeline`; the slice contract is in
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (S5 slice contract 1).** `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram` are sealed and carry erased certificates about their exact
+payload. `ElaboratedProgram` is sealed. `UnverifiedSSA` and `CoreSubset` are separate uncertified
+types. Compile-fail controls are in `check_pipeline_artifacts.sh`. The slice found bug 180: a project
+report replaced a certificate's payload and ran Mono on the result. Remaining: the stage types
+after SSA as each IR lands; binding `ElaboratedProgram` to its input; payload-bound evidence
+records (class 10); the identity half under R-0492.
 
-Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (`ValidatedCore` is publicly constructible today, `Pipeline.lean` ~:48); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
+Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (slice 1, 2026-10-23, sealed `ValidatedCore`, `MonomorphizedProgram` and `SSAProgram` in `Pipeline.lean`); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
 
 **Exit:** compile-fail controls cover artifact forgery, certificate reuse after mutation and the diagnostic-path bypass; `Pipeline.lean` exposes only typed stages.
 
@@ -4379,10 +4404,17 @@ unexplained drop is rejected.
 **Status (2026-10-19): planned; after R-0473/R-0474.** Links R-0175 (frame inference) and R-0239
 (frame/flow contracts). Unsupported heap and reborrow shapes refuse explicitly.
 
-**Exit:** `old` and frame clauses on records and arrays are typed, generated against Core's
-two-state semantics and replayed; a contract omitting a mutated field is refused; ghost locals and
-parameters erase with a proved erasure lemma for the admitted forms; unsupported shapes report
-`unsupported` rather than `proved`.
+**Increment A:** `old` and frame clauses on records and arrays are typed, generated against Core's
+two-state semantics and replayed; a contract omitting a mutated field is refused. This increment
+can serve R-0486 before ghost support is complete.
+
+**Increment B:** ghost locals and parameters erase with a proved erasure lemma for the admitted
+forms. Ghost observations must not consume runtime linear resources, extend runtime borrows, or
+influence executable decisions. Logical definitions obey R-0526's totality/admissibility boundary;
+unsupported observations of moved values or reborrows refuse until their snapshot semantics exists.
+
+**Exit:** both increments accepted; unsupported shapes report `unsupported` rather than `proved`.
+Reference: [Dafny specifications and ghost code](https://dafny.org/latest/DafnyRef/DafnyRef.html).
 
 ### Task R-0525
 
@@ -5860,7 +5892,8 @@ pinned by a gate assertion written to flip when the gap closes:
   name bound only *after* the loop is admitted and reaches the VC.
 
 **Language boundary added:** purity alone is not the final contract-callable
-criterion. Define `spec fn`, checked `total fn`, ordinary runtime functions,
+criterion. R-0526 owns totality/admissibility for `spec fn` and checked `total fn`;
+this task consumes that boundary when distinguishing them from ordinary runtime functions
 and trusted functions. A `total fn` enters contracts only after effect freedom,
 termination, trap obligations, logical interpretation, and partial-operation
 preconditions close. Until that type exists, executable calls accepted by the
@@ -5896,20 +5929,12 @@ six fixtures while still storing the original name-based AST expression would le
 reconstruct exactly the unsafe information the record exists to eliminate — and R-0474 would
 inherit the problem intact.
 
-**Dependency correction (2026-08-07).** The plan as first written was circular: this task's record
-"must carry resolved identities", while binding identities were assigned to R-0474. A record
-cannot honestly retain identities that do not exist yet, and storing names now with a promise to
-swap them later is exactly the failure the boundary above forbids — the names would be in the
-record, and every consumer built against it.
-
-So **the identity substrate begins here**, even though capture-safe substitution stays in R-0474:
-
-1. introduce the internal lexical `BindingId`;
-2. assign it to parameters, locals, ghost bindings, loop variables, and `result`;
-3. resolve contract identifiers to a `BindingId` or a `CallableId`;
-4. build `CheckedContract` over resolved, typed expressions;
-5. *(R-0474)* implement identity-based substitution;
-6. *(R-0474)* delete name-based substitution once the evaluation-law gate passes.
+**Identity dependency (reconciled 2026-10-22):** R-0492 owns allocation of Resolve's
+`LocalId`/`DefId`. This task consumes those identities through checked adapters for parameters,
+locals, ghost bindings, loop binders, `result`, and callable references; it does not create a
+second identity allocator during elaboration. R-0474 owns identity-based substitution and retires
+name-based substitution after its evaluation-law gate passes. The `BindingId`/`CallableId` names
+below describe contract-reference roles, not independent identity authorities.
 
 The resolved reference must be a SUM, not a string with a companion type table — a string field
 is how the name survives in practice:
@@ -5925,8 +5950,8 @@ ResolvedContractRef
 ```
 
 `BindingId` here stays the *internal lexical* identity from `docs/language/BINDING_IDENTITY_DESIGN.md` —
-assigned during elaboration, regenerated every build, never serialized. It must not be conflated
-with stable evidence identity, which has to survive harmless source edits.
+supplied by R-0492's Resolve-owned identities and regenerated every build. It must not be serialized
+as stable evidence identity, which has to survive harmless source edits.
 
 **Boundary caveat on the closed gap 6.** It rejects capability-requiring calls, which is narrower
 than purity or totality: a capability-free function that traps, diverges, or is `#[trusted]` is
@@ -5946,7 +5971,7 @@ a contract defect can sit behind an unrelated earlier error. Until that mode exi
 defensible claim is "no unexpected rejection among the 964 files that reached contract checking",
 which is materially weaker than "the corpus is compatible".
 
-**Depends on:** nothing. **Blocks:** R-0474.
+**Depends on:** R-0492. **Blocks:** R-0474.
 
 ### Task R-0474
 
@@ -8297,6 +8322,24 @@ and required author assistance. The scenario does not reorder qualification, ide
 contract or independent-consumer prerequisites, or require a registry, new backend or
 general heap model.
 
+**Staged acceptance (2026-10-22; Dafny/Jasmin review):** use this same component at each
+checkpoint; partial results do not graduate the final exit or reorder prerequisite gates.
+
+| Checkpoint | Prerequisites and acceptance |
+|---|---|
+| Baseline | Record R-0150's proof/annotation burden and the declared FFI assumptions in the currently admitted fragment. Wrong-contract and stale-evidence controls run as their existing contract/identity/replay owners become available; unavailable checks remain explicitly pending. |
+| Compositional calls | After R-0473/R-0474, prove a caller using the exported contract. A separate negative control requests a fact true of the private body but not implied by the public contract: contract-only verification must not establish it. |
+| Mutation | After R-0524's frame increment, establish `old` and preservation of untouched parser state. Ghost state is not required merely to pass this checkpoint. |
+| Model and lemma | After the relevant R-0526/R-0060 support, connect the implementation to a small total specification model and reuse one lemma. Use existing loop obligations; claim termination only when its obligations close. |
+| Consumer | Complete the existing change-and-repair and non-author replay exit with R-0353. Every checkpoint names its theorem boundary and remaining backend/runtime trust; native transport is claimed only for the subset its existing owner has accepted. |
+
+The FFI inventory distinguishes export preconditions required of foreign callers from imported
+foreign guarantees. Each condition is checked at the boundary, established by evidence, or explicitly
+assumed/trusted. Body-derived safety conditions may suggest a contract but must not silently strengthen
+the published precondition or become accepted assumptions. Declared contracts remain authoritative;
+implementation revalidation establishes that they suffice. This does not pull R-0284's alignment
+surface into the queue. Reference: [Jasmin safety preconditions](https://jasmin-lang.readthedocs.io/en/latest/tools/safety_checker.html).
+
 **Exit:** a consumer relies on a public contract without inspecting private bodies;
 calls establish preconditions and use exported postconditions without inlining;
 frame/`old` semantics cover the admitted mutation fragment. A contract-preserving
@@ -9965,6 +10008,15 @@ regression cases and controls of these tasks transfer here unless the reason ret
  feel like debugging a minimized program, not reading a wall of theorem-state
  text. The fixture is evidence of failure only; it must never upgrade a claim
  to proof.
+
+**Bounded proof-cost diagnostics:** when R-0150's measurements on R-0486 expose expensive or
+unstable automation, isolate existing obligations without adding proof-language syntax. Report
+failure to establish a goal, timeout, resource exhaustion and unsupported fragments distinctly,
+using the existing artifact schema and R-0494 verdict authority rather than new verdict spellings.
+A timeout or failed proof search is neither proof nor a refutation. Retain per-obligation time
+and, where the solver supplies it, resource counts with the solver version/configuration; do not
+claim cross-solver or cross-version determinism. Isolated runs retain the same checked hypotheses
+and dependency closure. Reference: [Dafny verification optimization](https://dafny.org/latest/VerificationOptimization/VerificationOptimization).
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.

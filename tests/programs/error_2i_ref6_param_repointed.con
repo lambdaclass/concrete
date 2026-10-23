@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a reference parameter is re-pointed: at another parameter, and at a block local (the dead-slot read of bug 131). Rejected: E0303.
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a reference parameter is re-pointed: at another parameter, and at a block local (the dead-slot read of bug 131). Rejected: E0303.
 fn f(r: &Int, q: &Int) -> Int {
     r = q;
     return *r;

@@ -30,6 +30,32 @@ private def collectFnNames (modules : List CModule) : List String :=
   modules.foldl (fun acc m =>
     acc ++ m.functions.map (·.name) ++ collectSubFnNames m) []
 
+/-- The first module named `n`, and the list without it. -/
+def takeNamesake (n : String) : List CModule → Option (CModule × List CModule)
+  | [] => none
+  | m :: ms => if m.name == n then some (m, ms)
+    else (takeNamesake n ms).map fun (t, rest) => (t, m :: rest)
+
+/-- The part of a monomorphized program that corresponds to a listing scope: for each scope module,
+    its namesake in `mono` at the same level, keeping that module's functions (originals and the
+    specializations Mono placed there) only when the scope module itself lists functions, and
+    descending into the scope's submodules alone. A scope wrapper (`scopeUserModulesToFile`'s empty
+    parent) therefore contributes only its matched children. With the whole program as scope this
+    is `mono` itself, up to module order (bug 180: the mono report runs Mono on the validated whole
+    program and restricts the listing, instead of running Mono on the scope). -/
+partial def restrictMonoToScope (scope mono : List CModule) : List CModule :=
+  -- Match by OCCURRENCE, in order: a scope module takes the first not-yet-taken namesake, so two
+  -- sibling modules of one name map to their own counterparts (Mono keeps module order).
+  let step (acc : List CModule × List CModule) (sm : CModule) : List CModule × List CModule :=
+    let (out, rest) := acc
+    match takeNamesake sm.name rest with
+    | none => (out, rest)
+    | some (tm, rest') =>
+      let kept := { tm with functions := if sm.functions.isEmpty then [] else tm.functions,
+                            submodules := restrictMonoToScope sm.submodules tm.submodules }
+      (out ++ [kept], rest')
+  (scope.foldl step ([], mono)).1
+
 /-- Count generic functions across all modules including submodules. -/
 private partial def countGenericFns (m : CModule) : Nat :=
   let local_ := (m.functions.filter fun f => !f.typeParams.isEmpty).length
@@ -1402,7 +1428,7 @@ def provableV1ConformanceReport (modules : List CModule) (locMap : FnLocMap := [
             ++ excludedLines)
   let footer :=
     if blockedEntries.isEmpty then
-      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted impls, capability use), not counted against conformance."
+      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted functions and methods, capability use), not counted against conformance."
     else
       s!"{blockedEntries.length} function(s) are proof-eligible but use constructs\noutside the current ProvableV1 supported surface (see docs/verification/PROVABLE_V1.md)."
   s!"{header}\n\n{"\n".intercalate chunks}\n\nStatus: {conformance}\n{footer}\n"
@@ -6217,8 +6243,16 @@ def schemaReport : String :=
 open Json in
 /-- Produce a machine-readable listing of all stable diagnostic error codes. -/
 def diagnosticCodesReport : String :=
+  -- A code with a whole-code rule (`codeRuleTag`, docs/spec) names it, like `entryR` below.
   let entry (code pass severity description : String) : Val :=
-    .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    let rules := match codeRuleTag code with
+      | some r => r
+      | none => ", ".intercalate (codeSharedRules code)
+    if rules.isEmpty then
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    else
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
+            ("description", .str description), ("rules", .str rules)]
   -- A code that enforces exit 2i rules names them with their versions (MEMORY_SEMANTICS §15.5
   -- item 1); `scripts/tests/check_rules_2i.sh` checks every manifest row's tag against this.
   let entryR (code pass severity description rules : String) : Val :=
@@ -6244,8 +6278,8 @@ def diagnosticCodesReport : String :=
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
     entry "E0202" "check" "error" "assignment to undeclared variable",
-    entryR "E0203" "check" "error" "variable frozen by borrow" "REF-8@2",
-    entryR "E0204" "check" "error" "cannot move linear variable: borrowed" "REF-8@2",
+    entryR "E0203" "check" "error" "variable frozen by borrow" "REF-8@1",
+    entryR "E0204" "check" "error" "cannot move linear variable: borrowed" "REF-8@1",
     entry "E0205" "check" "error" "linear variable used after move",
     entry "E0206" "check" "error" "variable reserved or borrowed by a pending defer",
     entry "E0207" "check" "error" "cannot consume linear variable in loop",
@@ -6265,7 +6299,7 @@ def diagnosticCodesReport : String :=
     entry "E0220" "check" "error" "type mismatch",
     entry "E0221" "check" "error" "dereference of non-reference type",
     entry "E0222" "check" "error" "while break/else type mismatch",
-    entry "E0223" "check" "error" "if condition not Bool",
+    entry "E0223" "check" "error" "condition of if / while / for not Bool",
     entry "E0224" "check" "error" "if branch type mismatch",
     entry "E0225" "check" "error" "match arm type mismatch",
     entry "E0226" "check" "error" "break value type mismatch",
@@ -6274,14 +6308,14 @@ def diagnosticCodesReport : String :=
     entry "E0229" "check" "error" "comparison not defined on this type (integers, floats, bool, char; raw pointers in Unsafe code; bugs 134/140)",
     -- Check: borrow/escape (E0230–E0235)
     entry "E0230" "check" "error" "cannot borrow: already moved",
-    entryR "E0231" "check" "error" "cannot borrow: already mutably borrowed" "REF-8@2",
-    entryR "E0232" "check" "error" "cannot mutably borrow: already borrowed" "REF-8@2",
+    entryR "E0231" "check" "error" "cannot borrow: already mutably borrowed" "REF-8@1",
+    entryR "E0232" "check" "error" "cannot mutably borrow: already borrowed" "REF-8@1",
     entry "E0233" "check" "error" "cannot mutably borrow immutable variable",
-    entryR "E0234" "check" "error" "reference escapes borrow block" "REF-6@2",
+    entryR "E0234" "check" "error" "reference escapes borrow block" "REF-6@1",
     entry "E0235" "check" "error" "cannot mutably borrow: already immutably borrowed",
     entryR "E0239" "check" "error" "a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)" "REF-3@1, REF-4@1",
     entry "E0237" "check" "error" "mutable borrow (explicit or `&mut self` receiver) through a shared reference",
-    entryR "E0238" "check" "error" "place or reference source that does not normalize to a traceable place" "REF-4@1, REF-5@2, REF-6@2, REF-7@1, REF-8@2",
+    entryR "E0238" "check" "error" "place or reference source that does not normalize to a traceable place" "REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1",
     -- Check: capability (E0240–E0242)
     entry "E0240" "check" "error" "missing capability",
     entry "E0241" "check" "error" "trait bound not satisfied",
@@ -6336,7 +6370,7 @@ def diagnosticCodesReport : String :=
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
     entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding" "SCOPE-1@1",
-    entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@2",
+    entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@1",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     entry "E0296" "check" "error" "newtype constructed outside its defining module (construction rights, 0b)",
@@ -6344,12 +6378,13 @@ def diagnosticCodesReport : String :=
     entry "E0298" "check" "error" "read/write of a struct field private to its defining module (0b)",
     entry "E0300" "check" "error" "a match guard moves a non-Copy value (guards are read-only; bug 090)",
     entryR "E0301" "check" "error" "a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)" "SCOPE-1@1",
-    entryR "E0302" "check" "error" "a `let` binding holds a reference (references are scoped; exit 2i)" "REF-6@2",
-    entryR "E0303" "check" "error" "a reference binding is assigned (references are never re-pointed; exit 2i)" "REF-6@2",
+    entryR "E0302" "check" "error" "a `let` binding holds a reference (references are scoped; exit 2i)" "REF-6@1",
+    entryR "E0303" "check" "error" "a reference binding is assigned (references are never re-pointed; exit 2i)" "REF-6@1",
     entryR "E0305" "check" "error" "a contract expression binds a name (contracts are binder-free propositions; exit 2i)" "SCOPE-1@1",
-    entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@2, REF-2@2, REF-4@1",
+    entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
+    entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     entry "E0311" "check" "error" "`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)",
     -- Elab (E0400–E0419)
@@ -6385,6 +6420,8 @@ def diagnosticCodesReport : String :=
     entry "E0507" "core-check" "error" "negation on non-numeric type",
     entry "E0508" "core-check" "error" "logical not on non-Bool",
     entry "E0509" "core-check" "error" "bitwise not on non-integer",
+    -- Core-check: binder agreement (bug 177)
+    entry "E0510" "core-check" "error" "binding type mismatch (let, assignment, argument, field or store)",
     -- Core-check: capability (E0520–E0522)
     entry "E0520" "core-check" "error" "insufficient capabilities",
     entry "E0521" "core-check" "error" "missing capability",
@@ -6413,8 +6450,8 @@ def diagnosticCodesReport : String :=
     entry "E0571" "core-check" "error" "Copy struct has non-Copy field",
     entry "E0572" "core-check" "error" "repr(C) struct has generics",
     entry "E0573" "core-check" "error" "repr(C) field not FFI-safe",
-    entryR "E0574" "core-check" "error" "extern fn parameter not FFI-safe (a pointee holding a reference is REF-1)" "REF-1@2",
-    entryR "E0575" "core-check" "error" "extern fn return not FFI-safe (a pointee holding a reference is REF-1)" "REF-1@2",
+    entryR "E0574" "core-check" "error" "extern fn parameter not FFI-safe (a pointee holding a reference is REF-1)" "REF-1@1",
+    entryR "E0575" "core-check" "error" "extern fn return not FFI-safe (a pointee holding a reference is REF-1)" "REF-1@1",
     entry "E0576" "core-check" "error" "repr(packed) and repr(align) conflict",
     entry "E0577" "core-check" "error" "repr(align) not power of two",
     entry "E0578" "core-check" "error" "reserved function name",
@@ -6428,6 +6465,13 @@ def diagnosticCodesReport : String :=
     entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
     entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
     entry "E0588" "core-check" "error" "extern fn taken as a value (bug 166)",
+    -- Check: trait coherence (bug 186; docs/spec/traits.md TRAIT-1 … TRAIT-6)
+    entry "E0590" "check" "error" "duplicate impl: a trait implemented twice for one type (TRAIT-1)",
+    entry "E0591" "check" "error" "overlapping impls: two impls of one trait whose targets unify (TRAIT-2)",
+    entry "E0592" "check" "error" "orphan impl: the module defines neither the trait nor the type (TRAIT-3)",
+    entry "E0593" "check" "error" "impl target is not its type applied to exactly the impl's own parameters (specialized, blanket, alias or arity; TRAIT-4)",
+    entry "E0594" "check" "error" "one method name provided by two impls of the same type (TRAIT-5)",
+    entry "E0595" "check" "error" "method call through type-parameter bounds is ambiguous: several bound traits declare it (TRAIT-6)",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

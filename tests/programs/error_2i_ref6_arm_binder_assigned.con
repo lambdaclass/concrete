@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): an arm binder bound through a borrowed scrutinee is assigned in its arm. Rejected: E0303.
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): an arm binder bound through a borrowed scrutinee is assigned in its arm. Rejected: E0303.
 struct P { n: Int }
 struct W { p: P, q: P }
 

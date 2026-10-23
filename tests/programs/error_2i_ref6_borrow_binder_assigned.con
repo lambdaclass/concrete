@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a borrow-block reference is assigned another reference. Rejected: E0303.
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a borrow-block reference is assigned another reference. Rejected: E0303.
 fn read(r: &Int) -> Int {
     return *r;
 }

@@ -1,4 +1,4 @@
-// Exit 2i REF-2@2, gap G16: a struct field may not have a function type that returns a reference.
+// Exit 2i REF-2@1, gap G16: a struct field may not have a function type that returns a reference.
 // E0236.
 struct H {
     f: fn(&Int) -> &Int,

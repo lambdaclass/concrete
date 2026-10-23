@@ -215,4 +215,86 @@ def Except.addContext (ctx : String) : Except Diagnostics α → Except Diagnost
   | .ok a => .ok a
   | .error ds => .error (ds.map (·.addContext ctx))
 
+/-- The `spec` evidence of a rule-tagged diagnostic: the rule's anchor in the language
+    specification (`docs/spec/<chapter>.md#<ID>`), computed from its versioned tag (`REF-3@1`).
+    The chapter of each ID prefix is the inventory of docs/spec/README.md §1, and
+    `scripts/tests/check_rules_2i.sh` compares every tagged diagnostic's evidence with
+    `scripts/spec/spec.py anchors`. -/
+def ruleSpecRef (rule : String) : String :=
+  let id := (rule.splitOn "@").headD rule
+  let chapter := match (id.splitOn "-").headD "" with
+    | "REF" => "references"
+    | "SCOPE" => "scope"
+    | "PAT" => "patterns"
+    | "FFI" => "ffi"
+    | "PASS" => "pipeline"
+    | "OWN" => "ownership"
+    | "TYPE" => "types"
+    | "MEM" => "memory"
+    | "TRUST" => "trusted"
+    | "STMT" => "statements"
+    | "ARITH" => "arithmetic"
+    | "CON" => "contracts"
+    | "TRAIT" => "traits"
+    | _ => "README"
+  s!"docs/spec/{chapter}.md#{id}"
+
+/-- The versioned rule a diagnostic code enforces, for the codes whose rule is a whole-code
+    property (one rule per code). The language specification owns this mapping: every entry's
+    `Codes:` field in docs/spec, checked equal to this table and to the `--report
+    diagnostic-codes` ledger by `scripts/tests/check_spec.sh` (S6). A code that several rules
+    share (E0236, E0238, E0239) is tagged at its sites instead (`CheckError.rule`). -/
+def codeRuleTag : String → Option String
+  -- docs/spec/ownership.md
+  | "E0205" | "E0230" => some "OWN-1@1"
+  | "E0208" | "E0210" | "E0211" => some "OWN-2@1"
+  | "E0209" | "E0212" | "E0213" => some "OWN-3@1"
+  | "E0207" => some "OWN-4@1"
+  | "E0287" | "E0288" | "E0289" | "E0295" => some "OWN-5@1"
+  | "E0286" => some "OWN-6@1"
+  | "E0294" => some "OWN-7@1"
+  | "E0290" => some "OWN-8@1"
+  | "E0219" | "E0291" => some "OWN-9@1"
+  | "E0217" | "E0233" => some "OWN-10@1"
+  | "E0243" | "E0244" => some "OWN-11@1"
+  | "E0206" | "E0279" | "E0282" => some "OWN-12@1"
+  | "E0570" | "E0584" | "E0272" | "E0273" => some "OWN-13@1"
+  | "E0571" => some "OWN-14@1"
+  -- docs/spec/types.md
+  | "E0220" | "E0222" | "E0224" | "E0225" | "E0226" | "E0500" | "E0560" => some "TYPE-4@1"
+  | "E0223" | "E0504" | "E0505" | "E0508" | "E0540" | "E0541" => some "TYPE-5@1"
+  | "E0228" | "E0229" | "E0501" | "E0502" | "E0503" | "E0506" | "E0507" | "E0509" => some "TYPE-6@1"
+  | "E0250" | "E0251" | "E0253" | "E0254" | "E0260" | "E0261" | "E0306" | "E0416" | "E0550"
+  | "E0551" | "E0552" => some "TYPE-7@1"
+  | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
+  | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
+  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
+  | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
+  -- docs/spec/patterns.md
+  | "E0530" | "E0534" => some "PAT-2@1"
+  | "E0304" | "E0531" | "E0532" | "E0533" => some "PAT-3@1"
+  | "E0300" => some "PAT-4@1"
+  -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
+  | "E0218" | "E0235" => some "REF-8@1"
+  -- docs/spec/traits.md (trait coherence, bug 186)
+  | "E0590" => some "TRAIT-1@1"
+  | "E0591" => some "TRAIT-2@1"
+  | "E0592" => some "TRAIT-3@1"
+  | "E0593" => some "TRAIT-4@1"
+  | "E0594" => some "TRAIT-5@1"
+  | "E0595" => some "TRAIT-6@1"
+  | _ => none
+
+/-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`
+    for it): its sites tag each diagnostic (`CheckError.rule`), and the ledger lists them all. -/
+def codeSharedRules : String → List String
+  | "E0252" => ["PAT-5@1", "TYPE-7@1"]
+  | _ => []
+
+/-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/
+def codeRuleEvidence (code : String) : List (String × String) :=
+  match codeRuleTag code with
+  | some r => [("rule", r), ("spec", ruleSpecRef r)]
+  | none => []
+
 end Concrete

@@ -1,4 +1,4 @@
-// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a `let` binds a shared reference to a projection. Rejected: E0302.
+// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` binds a shared reference to a projection. Rejected: E0302.
 struct P { n: Int }
 struct W { p: P, q: P }
 

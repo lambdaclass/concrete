@@ -56,6 +56,41 @@ obligations.
 
 ## Area: Verified-Compiler Pipeline, Stabilization And Usability
 
+### Task R-0548
+
+**Phase:** 4
+
+**Pull trigger:** a program needs two traits that declare one method name implemented for one type (TRAIT-5 refuses it today), traits become importable across modules, or R-0492/R-0514 reach method identities.
+
+**Objective:** Key every method table by the typed `MethodKey` (owner, target `TypeId`, method name)
+that bug 186's coherence judgment introduced, instead of the `Type_method` spelling: the impl-method
+summaries (`FileSummary.implMethodSigs`), Check's function table, Elab's method resolution and module
+prefixing, Mono's `T$m` specialization, the interpreter's `traitImplKey`, and the evidence and report
+consumers that read method names. The link symbol becomes a derived spelling of the key.
+
+**Status (2026-10-23): planned.** Bug 186 made the spelling injective within a type by refusing a
+method name supplied by two impls (TRAIT-5, E0594), so the spelling is safe today but still carries
+the identity.
+
+**Exit:** no pass recovers a method's owner or type from a string; a type implementing two traits
+that both declare `m` compiles, with each bound call reaching its own trait's method natively and
+under `--interp`, once TRAIT-5 is relaxed in the same change.
+
+### Task R-0549
+
+**Phase:** 4
+
+**Pull trigger:** a workload that needs a type parameter bounded by two traits that declare one method name (TRAIT-6, E0595, refuses the call today), or R-0548 relaxing TRAIT-5.
+
+**Objective:** Qualified trait-method calls, `Trait::method(x)`, which name the trait a call
+dispatches through, so an ambiguous bound call can be written instead of refused.
+
+**Status (2026-10-23): pull-gated.** `Trait::method(x)` parses today as a static call on a type named
+`Trait` and fails as an unknown method.
+
+**Exit:** `A::m(x)` and `B::m(x)` on `x: &T` with `T: A + B` call their own traits' methods natively
+and under `--interp`; an unqualified ambiguous call stays E0595.
+
 ### Task R-0522
 
 **Phase:** 5
@@ -81,6 +116,15 @@ set; a mutation in the shared path fails both entry points.
 **Status (2026-10-19): research.** Ordinary refinement does not preserve noninterference; the
 verified-compiler plan's refinement is not a relational theorem. R-0459's 2-safety proposal and the
 paired-execution prose merge here; R-0136/R-0225/R-0226 keep source-flow restrictions.
+
+**Research questions (Jasmin comparison, 2026-10-22):** specify whether termination, traps,
+external calls and variable-latency operations are observable, and justify each declassification.
+On the existing bounded example, determine whether R-0136's enforced restriction implies the
+selected leakage property; supply a soundness argument or a counterexample that identifies the
+missing restriction. Separately enumerate what each lowering/optimization and target must preserve.
+Proceed to implementation only with a named admitted fragment, observation model, validation plan
+and workload benefit; otherwise record the limitation and reopening trigger. Functional refinement
+alone does not discharge these obligations. Reference: [Jasmin leakage models](https://jasmin-lang.readthedocs.io/en/latest/tools/ct.html).
 
 **Exit:** a decision record with the observation and declassification contract, one worked
 self-composition example on a bounded program, and an explicit statement of what native transport
@@ -133,6 +177,9 @@ evaluation receipts remain withheld until issued with distinct trust labels (R-0
 Reverting both policy and minimum defeats the local rollback guard; that limitation stays published
 until a threat-model-specific guard exists. Narrowing an advisory to a fragment requires an
 independently checked environment footprint; whole-version refusal is the safe fallback.
+It also owns KNOWN_HOLES H29 (2026-10-22), external-checker pins lagging upstream soundness
+fixes: controlled by single-threaded con-leche and `check_checker_pin_freshness.sh` (warning when
+landing, finding in the nightly campaign); docs/verification/EXTERNAL_CHECKER.md.
 
 **Exit:** each of the three has an implemented control or a published limitation with its threat
 model and owner.
@@ -539,6 +586,12 @@ multiple fixtures or workloads, but the public flagship count remains three.
  loop bound. Wire `scripts/tests/check_secret_flow.sh`; the gate must reject
  every negative and must never present source-flow enforcement as timing
  proof.
+
+**Scope controls:** include checked-overflow/trap paths, early exits and calls whose observable
+behavior may depend on secrets in the profile's design and fixtures. Unsupported call summaries
+must not silently pass a broader leakage claim. Variable-latency operations require the target/model
+analysis in R-0527; a structural source-flow pass alone cannot certify their timing. Preserve the
+existing distinction between an enforced source restriction and a proved leakage property.
 
 ## Area: Proof Authoring And Automation
 

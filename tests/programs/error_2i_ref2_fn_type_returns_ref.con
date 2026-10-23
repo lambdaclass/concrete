@@ -1,4 +1,4 @@
-// Exit 2i REF-2@2 (MEMORY_SEMANTICS §15.3): a function-pointer type returns a reference. Rejected: E0236 (no code before exit 2i).
+// Exit 2i REF-2@1 (MEMORY_SEMANTICS §15.3): a function-pointer type returns a reference. Rejected: E0236 (no code before exit 2i).
 fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
     return 0;
 }

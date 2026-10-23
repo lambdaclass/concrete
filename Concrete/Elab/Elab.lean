@@ -202,7 +202,8 @@ def ElabError.code : ElabError → String
   | .mutReceiverThroughSharedRef _ => "E0237"
 
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
-  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
+  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
+           evidence := codeRuleEvidence e.code }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
@@ -505,6 +506,7 @@ private def withSourceOrder (inits : List (String × CExpr))
     names of programs that never shadow do not churn, and a sibling scope's
     reuse of a dead name is harmless because the earlier binder is no longer
     readable (`exitBlock` removed it). -/
+-- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 private def bindLocal (name : String) (ty : Ty) : ElabM String := do
   addBinder name
   let env ← getEnv
@@ -524,6 +526,7 @@ private def bindLocal (name : String) (ty : Ty) : ElabM String := do
     fingerprint is over that encoding. Opening a frame here would move the
     digest of every body with a `let` inside a branch without changing what any
     reference resolves to. Scoping is instead enforced at `exitBlock`. -/
+-- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 private def enterBlock : ElabM ElabEnv := getEnv
 
 /-- Bug 087: the binder frames after a block closes. Binders the block added
@@ -597,9 +600,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveTypeE ty catch _ => pure .placeholder
   subst := substTy
@@ -629,6 +630,14 @@ structure ElaboratedExprV2 where
 structure ElaboratedStmtV2 where
   core     : List CStmt
   evidence : Proof.EvidenceStmtV2
+
+/-- A declared field or payload type with the program's type aliases expanded (a type's own
+    parameters shadow them), as Core's field types are. Used as the expected type of the value
+    written into the field (bug 177), so a literal written for `a: Id` (`type Id = i32`) is an
+    `i32`, not an `Int` default. -/
+private def expandFieldAliases (typeParams : List String) (ty : Ty) : ElabM Ty := do
+  let aliases := (← getEnv).typeAliases.filter fun (n, _) => !typeParams.contains n
+  return expandAliasDeep aliases (aliases.length + 64) ty
 
 mutual
 
@@ -802,7 +811,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       for (fname, expr) in fields do
         match sd.fields.find? fun sf => sf.name == fname with
         | some sf =>
-          let fieldTy := substCapNamesTy (hintCapMap.getD []) (substTy mapping sf.ty)
+          -- Bug 177: the hint is the field's type with aliases expanded, as the struct's Core
+          -- field types are. An unexpanded alias (`a: Id` with `type Id = i32`) was no hint
+          -- for a literal, which defaulted to Int and was stored in the i32 field.
+          let fieldTy := substCapNamesTy (hintCapMap.getD [])
+            (substTy mapping (← expandFieldAliases sd.typeParams sf.ty))
           recordFieldUse sd sf.name
           let cExprEv ← elabExprEv expr (some fieldTy)
           cFields := cFields ++ [(sf.name, cExprEv.core)]
@@ -956,7 +969,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         for (fname, expr) in fields do
           match ev.fields.find? fun sf => sf.name == fname with
           | some sf =>
-            let fieldTy := substTy mapping sf.ty
+            -- aliases expanded, as for struct literal fields (bug 177)
+            let fieldTy := substTy mapping (← expandFieldAliases ed.typeParams sf.ty)
             let cExprEv ← elabExprEv expr (some fieldTy)
             srcInitsRev := (sf.name, cExprEv.core) :: srcInitsRev
             srcEvsRev := (sf.name, cExprEv.evidence) :: srcEvsRev
@@ -1300,16 +1314,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        let mut foundSig : Option FnSigDef := none
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- Unique by Check (E0595): an ambiguous call never reaches Elab.
+        let found := boundMethodUnique env.traits bounds methodName
+        let foundBuiltin : Option BuiltinTraitId := found.bind (·.1.builtinId)
+        match found.map Prod.snd with
         | none => throwElab (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Replace Self with the type variable
@@ -2062,7 +2070,8 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
       | some f =>
         recordFieldUse sd field
         let mapping := sd.typeParams.zip tArgs
-        fieldTy := some (substTy mapping f.ty)
+        -- aliases expanded, as for struct literal fields (bug 177)
+        fieldTy := some (substTy mapping (← expandFieldAliases sd.typeParams f.ty))
         fieldOwner := sd.typeId?
       | none => pure ()
     | none => pure ()
@@ -2319,6 +2328,11 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
     currentRetTy := retTy
     currentImplType := implTy
     bodyIdentityCovered := true }
+  -- Bug 177 (Codex round 4): the return type is the hint for every `return` value, so its
+  -- aliases are resolved as a parameter's are (`-> Id` with `type Id = i32` hinted a literal
+  -- with `Id`, which defaulted it to Int against Core's i32 return type).
+  let resolvedRetTy ← resolveTypeE retTy
+  modify fun e => { e with currentRetTy := resolvedRetTy }
   -- Add parameters to scope (resolve type aliases so params don't carry unresolved alias names)
   for (pname, pty) in params do
     let resolvedPty ← resolveTypeE pty
@@ -2772,8 +2786,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                          (ib.capParams.map fun c => CapSet.concrete [c])
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
-                typeBounds := ib.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+                typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -2781,8 +2794,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams,
-                typeBounds := tb.typeBounds ++ f.typeBounds,
-                isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+                typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let localCallIds : List (String × CallableId) := allFnPairs.map fun (f, implTy) =>
@@ -3055,7 +3067,13 @@ partial def elabModule (m : Module) (summary : FileSummary)
     -- constant dependency binding does not exist yet: the constant's initializer digest
     -- is what a `constRef` must eventually resolve to, so this is the site that will
     -- feed it. Recorded rather than silent.
-    let constResult := ((·.core) <$> elabExprEv c.value (some c.ty)).run initEnv |>.run
+    -- The hint is the declared type with aliases resolved (bug 177, Codex round 4: `const X: Id
+    -- = 1` elaborated its initializer as Int while every use reads X at the expanded i32).
+    let constElab : ElabM CExpr := do
+      let hintTy ← resolveTypeE c.ty
+      let ev ← elabExprEv c.value (some hintTy)
+      pure ev.core
+    let constResult := constElab.run initEnv |>.run
     match constResult with
     | ((.ok cExpr), _) => Except.ok (c.name, c.ty, cExpr)
     -- An initializer that does not elaborate is an error, never a silent 0 (bug 123 review: a

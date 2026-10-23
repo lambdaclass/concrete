@@ -654,10 +654,12 @@ paper-ec: ## Build the evidence-carrying workflow paper PDF (typst)
 
 papers: paper paper-ec ## Build all paper PDFs
 
-docs-site: ## Build the documentation site (zola)
+docs-site: ## Build the documentation site (zola); the spec pages are generated from docs/spec first
+	python3 scripts/spec/spec.py site --out site/content/spec
 	$(NIX_DEVELOP) zola --root site build
 
 docs-serve: ## Serve the documentation site locally on port 18080
+	python3 scripts/spec/spec.py site --out site/content/spec
 	$(NIX_DEVELOP) zola --root site serve --interface 127.0.0.1 --port 18080
 
 ##@ Misc

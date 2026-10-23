@@ -5,6 +5,25 @@ import Concrete.Semantics.Capabilities
 
 namespace Concrete
 
+/-- Every bound trait of a type parameter that declares `method` (TRAIT-6, bug 186). The ONE
+    lookup for a call through bounds: Check refuses when this has more than one element
+    (E0595), and every other consumer takes the answer only when it is unique. Taking the
+    first bound that has the method made `T: A + B` resolve by declaration order.
+    Bounds are deduplicated by name, so `T: A + A` is one candidate. -/
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
+def boundMethodCandidates (traits : List TraitDef) (bounds : List String) (method : String)
+    : List (TraitDef × FnSigDef) :=
+  bounds.eraseDups.filterMap fun traitName =>
+    (traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
+      (td.methods.find? fun (ms : FnSigDef) => ms.name == method).map (td, ·)
+
+/-- The unique bound method, or `none` (absent or ambiguous). -/
+def boundMethodUnique (traits : List TraitDef) (bounds : List String) (method : String)
+    : Option (TraitDef × FnSigDef) :=
+  match boundMethodCandidates traits bounds method with
+  | [c] => some c
+  | _ => none
+
 /-! ## Shared semantic helpers
 
 Used by Check, CoreCheck, and other passes that need type classification

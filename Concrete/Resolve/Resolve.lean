@@ -63,6 +63,7 @@ inductive ResolveError where
   | invalidLinkName (name : String) (symbol : String) (reason : String)
   | invalidExport (name : String) (symbol : String) (reason : String)
   | importAliasIsIntrinsic (name : String) (alias : String)
+  | capParamNamesCapability (owner : String) (param : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -85,6 +86,8 @@ def ResolveError.message : ResolveError → String
     s!"foreign binding '{name}' is declared with no effects, but '{name}' is a known effectful C symbol; declare the capability it exercises"
   | .invalidLinkName name symbol reason =>
     s!"foreign binding '{name}' cannot bind the C symbol '{symbol}': {reason}"
+  | .capParamNamesCapability owner param =>
+    s!"capability parameter '{param}' of '{owner}' is spelled like a capability: a capability variable entails only itself, so a parameter named '{param}' would stand for the real capability '{param}' without being granted it; rename the parameter"
   | .importAliasIsIntrinsic name alias =>
     s!"'{name}' may not be imported as '{alias}': '{alias}' is the name of a compiler intrinsic, so a call spelled '{alias}' is compiled as the intrinsic and never reaches '{name}'"
   | .invalidExport name symbol reason =>
@@ -170,6 +173,7 @@ def ResolveError.code : ResolveError → String
   | .invalidLinkName _ _ _ => "E0118"
   | .invalidExport _ _ _ => "E0119"
   | .importAliasIsIntrinsic _ _ => "E0120"
+  | .capParamNamesCapability _ _ => "E0121"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -633,6 +637,28 @@ private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : Resolve
       | none => ctx) ctx) ctx
   m.submodules.foldl (fun ctx sub => externEffectsCheck sub ctx) ctx
 
+/-- Bug 188: a capability parameter may not be spelled like a capability (a built-in
+    capability, `Std`, or one of the module's capability aliases). Inside a fn-pointer
+    type a capability variable is spelled as a plain name (`fn() with(C)`), and the one
+    entailment rule (`Capabilities.missingCaps`) matches a requirement against the
+    caller's variables by name, so `fn f<cap Unsafe>(..) with(Unsafe)` would hold the
+    real `Unsafe` without being granted it. Keeping the two namespaces disjoint is what
+    makes name matching sound. Descends into nested submodules, like the extern walk. -/
+private partial def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+  let aliases := m.capAliases.map (·.name)
+  let check (owner : String) (params : List String) (sp : Span) (ctx : ResolveCtx) : ResolveCtx :=
+    params.foldl (fun ctx p =>
+      if Capabilities.capParamNameReserved aliases p
+      then addError ctx (.capParamNamesCapability owner p) (some sp) else ctx) ctx
+  let ctx := m.functions.foldl (fun ctx f => check f.name f.capParams f.span ctx) ctx
+  let ctx := m.structs.foldl (fun ctx sd => check sd.name sd.capParams sd.span ctx) ctx
+  let ctx := m.implBlocks.foldl (fun ctx ib =>
+    let ctx := check ib.typeName ib.capParams ib.span ctx
+    ib.methods.foldl (fun ctx f => check s!"{ib.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
+  let ctx := m.traitImpls.foldl (fun ctx ti =>
+    ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
+  m.submodules.foldl (fun ctx sub => capParamNamesCheck sub ctx) ctx
+
 /-- Resolve all names in a module's function bodies. -/
 private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
     (traitMethods : List (String × List String))
@@ -657,7 +683,8 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let externCtx0 : ResolveCtx :=
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
-  let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors
+  let capParamErrors := (capParamNamesCheck m externCtx0).errors
+  let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 
 -- ============================================================

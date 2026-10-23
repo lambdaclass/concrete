@@ -1,59 +1,60 @@
-# Measured seconds per gate command (R-0547), read by run_ci_gates_local.sh to start the longest
+# Measured seconds per gate command (R-0546), read by run_ci_gates_local.sh to start the longest
 # gates first. ORDERING ONLY: a stale or missing row changes when a gate starts, never whether it
 # runs or what it concludes. Commands are the runner's normalized spelling (`--plan` output).
-# Source: .ci-gate-timings.tsv of a full pass on concrete-ci-1 at JOBS=32 (8f5f2ba4), pool rows >= 20 s.
+# Source: .ci-gate-timings.tsv of two full passes on concrete-ci-1 at JOBS=32 (8f5f2ba4, 453367d0);
+# per command the larger pool time, rows >= 20 s. A gate that failed early in one pass is short there.
 # Regenerate from a pass's .ci-gate-timings.tsv (columns start, end, secs, stage, verdict, cmd):
 #   awk -F'\t' 'NR>1 && $4=="pool" && $3>=20 {printf "%d\t%s\n", $3+0.5, $6}' .ci-gate-timings.tsv | sort -rn
-320	./scripts/tests/run_tests.sh --trust-gate
-280	bash scripts/tests/check_phase6c_observability.sh
-254	bash scripts/tests/check_replay_producer.sh
-243	bash scripts/tests/check_slice8_adversarial.sh
-233	bash scripts/tests/check_identity_rows.sh
-220	bash scripts/tests/check_contract_negatives.sh
-220	bash scripts/tests/check_obligation_report_views.sh
-217	bash scripts/tests/check_table_migration.sh
-212	bash scripts/tests/check_artifact_fuzz.sh
-210	bash scripts/tests/run_fast_surface_gates.sh --mutate
-207	./scripts/tests/run_tests.sh
-203	bash scripts/tests/check_receipt_consumption.sh
-197	bash scripts/tests/check_attestation_manifest.sh
-186	EXAMPLE_VALGRIND=1 bash scripts/tests/check_example_outputs.sh
+365	./scripts/tests/run_tests.sh --trust-gate
+315	bash scripts/tests/check_phase6c_observability.sh
+289	bash scripts/tests/check_obligation_core.sh
+283	bash scripts/tests/check_slice8_adversarial.sh
+269	bash scripts/tests/check_replay_producer.sh
+266	bash scripts/tests/check_obligation_report_views.sh
+262	./scripts/tests/run_tests.sh
+258	bash scripts/tests/check_table_migration.sh
+257	bash scripts/tests/run_fast_surface_gates.sh --mutate
+246	bash scripts/tests/check_identity_rows.sh
+237	bash scripts/tests/check_receipt_consumption.sh
+234	EXAMPLE_VALGRIND=1 bash scripts/tests/check_example_outputs.sh
+230	bash scripts/tests/check_contract_negatives.sh
+219	bash scripts/tests/check_artifact_fuzz.sh
+202	bash scripts/tests/check_attestation_manifest.sh
+190	bash scripts/tests/check_vcgen_diff.sh
 178	bash scripts/tests/check_campaign_summary_golden.sh
-159	bash scripts/tests/check_vcgen_diff.sh
-120	bash scripts/tests/check_identity_separation.sh
-118	bash scripts/tests/check_clean_checkout.sh
-116	bash scripts/tests/check_examples.sh
-115	bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
-112	bash scripts/tests/check_callable_identity.sh
-108	bash scripts/tests/check_subject_binding.sh
-106	bash scripts/tests/check_evidence_corpus.sh
-101	bash scripts/tests/check_obligation_redteam.sh
-100	bash scripts/tests/check_snapshots.sh
-99	bash scripts/tests/check_std_compiled_coverage.sh
-98	bash scripts/tests/check_policy.sh
-95	bash scripts/tests/check_cli_plumbing.sh
-90	bash scripts/tests/check_mint_batch_accounting.sh
-90	bash scripts/tests/check_stack_budget.sh
-80	bash scripts/tests/check_mutation_shard_aggregate.sh
-77	bash scripts/tests/check_div_migration.sh
-75	bash scripts/tests/check_obligation_policy_views.sh
+166	bash scripts/tests/check_showcase.sh
+140	bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
+133	bash scripts/tests/check_identity_separation.sh
+128	bash scripts/tests/check_clean_checkout.sh
+128	bash scripts/tests/check_examples.sh
+126	bash scripts/tests/check_subject_binding.sh
+123	bash scripts/tests/check_gate_lock.sh
+120	bash scripts/tests/check_callable_identity.sh
+118	bash scripts/tests/check_policy.sh
+117	bash scripts/tests/check_evidence_corpus.sh
+117	bash scripts/tests/check_obligation_redteam.sh
+116	bash scripts/tests/check_snapshots.sh
+115	bash scripts/tests/check_std_compiled_coverage.sh
+106	bash scripts/tests/check_stack_budget.sh
+105	bash scripts/tests/check_cli_plumbing.sh
+104	bash scripts/tests/check_mint_batch_accounting.sh
+92	bash scripts/tests/check_mutation_shard_aggregate.sh
+87	bash scripts/tests/check_div_migration.sh
+85	bash scripts/tests/check_obligation_policy_views.sh
+75	bash scripts/tests/check_vc_schema.sh
 73	bash scripts/tests/check_model_diff.sh
 68	bash scripts/tests/check_subject_coverage.sh
+66	bash scripts/tests/check_shadow_body_v2.sh
 65	bash scripts/tests/check_dependency_edges.sh
+65	bash scripts/tests/check_receipt_issuance.sh
 65	bash scripts/tests/check_subject_facts.sh
-64	bash scripts/tests/check_obligation_core.sh
 64	python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
-63	bash scripts/tests/check_gate_lock.sh
 62	bash scripts/tests/check_native_libs.sh
-62	bash scripts/tests/check_shadow_body_v2.sh
 62	bash scripts/tests/run_fast_surface_gates.sh
 61	bash scripts/tests/check_bounds_migration.sh
 60	bash scripts/tests/check_phase3_obligation_core.sh
-58	bash scripts/tests/check_vc_schema.sh
-57	bash scripts/tests/check_proof_patterns.sh
-57	bash scripts/tests/check_showcase.sh
+58	bash scripts/tests/check_proof_patterns.sh
 55	bash scripts/tests/check_compile_cache.sh
-54	bash scripts/tests/check_receipt_issuance.sh
 53	bash scripts/tests/test_prove_cli.sh
 49	bash scripts/tests/check_mint_missing_result.sh
 43	bash scripts/tests/check_view_lifetime.sh
@@ -63,23 +64,24 @@
 41	bash scripts/tests/check_assume_migration.sh
 41	bash scripts/tests/check_loop_migration.sh
 37	bash scripts/tests/check_discharge_adapters.sh
+37	bash scripts/tests/check_smt_redteam.sh
 37	bash scripts/tests/test_release_bundle.sh
 36	bash scripts/tests/check_assumptions.sh
-35	bash scripts/tests/check_smt_redteam.sh
+34	bash scripts/tests/check_vc_discharge_examples.sh
 34	bash scripts/tests/test_ssa.sh
-32	bash scripts/tests/check_vc_discharge_examples.sh
-29	bash scripts/tests/check_cli_contract.sh
-27	bash scripts/tests/check_compiler_ledger.sh
-26	bash scripts/tests/check_attestation_refs_order.sh
-26	bash scripts/tests/check_vc_examples.sh
+30	bash scripts/tests/check_cli_contract.sh
+30	bash scripts/tests/check_compiler_ledger.sh
+29	bash scripts/tests/check_vc_examples.sh
+27	bash scripts/tests/check_attestation_refs_order.sh
 25	bash scripts/tests/check_campaign_supervisor.sh
 25	bash scripts/tests/check_migration_manifest.sh
+25	bash scripts/tests/check_proof_freshness.sh
+25	bash scripts/tests/check_smt_examples.sh
 25	python3 scripts/tests/fuzz_linearity.py --n 400 --seed "$SEED"
 24	bash scripts/tests/check_multi_kernel.sh
 24	bash scripts/tests/check_phase1_contracts.sh
-24	bash scripts/tests/check_smt_examples.sh
-23	bash scripts/tests/check_proof_freshness.sh
 22	bash scripts/tests/check_call_site_migration.sh
 22	python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
 21	bash scripts/tests/check_known_wrong_corpus.sh
+20	bash scripts/tests/check_contracts_ledger_parity.sh
 20	bash scripts/tests/check_effect_opacity.sh
