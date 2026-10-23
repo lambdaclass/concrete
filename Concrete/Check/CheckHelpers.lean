@@ -1166,7 +1166,13 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
             let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
             if !callerBounds.contains traitName then
               throwCheck (.traitBoundNotSatisfied n traitName context)
-          | _ => pure ()  -- primitive types, skip non-Copy bound checking
+          | t =>
+            -- Bug 204: a primitive (or any other unnamed) type argument needs an impl too. An
+            -- impl of a primitive names it by any spelling of its canonical type (`Int`/`i64`,
+            -- the TRAIT-D1 reading), so the impl's head is compared canonically. This arm
+            -- skipped the check, and the missing method surfaced only in the backend.
+            if !(env.traitImpls.any fun (tn, tr) => tr == traitName && tyCanonical (tyFromName tn) == tyCanonical t) then
+              throwCheck (.traitBoundNotSatisfied (tyToString t) traitName context)
     | none => pure ()
 
 /-- Infer a method's OWN type params and capability params from its argument

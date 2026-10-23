@@ -1,0 +1,5 @@
+// Bug 204: with the bound's method never called, the unsatisfied bound compiled and ran (42) on
+// both consumers. It must be refused with E0241 (TRAIT-10).
+trait Tr { fn m(&self) -> Int; }
+fn noop<T: Tr>(x: &T) -> Int { return 42; }
+fn main() -> Int { let n: Int = 1; return noop::<Int>(&n); }

@@ -1,0 +1,6 @@
+// Bug 204 control: an impl for a primitive, under either spelling of its type, satisfies the
+// bound. Runs 42 on both consumers.
+trait Tr { fn m(&self) -> Int; }
+impl Tr for i64 { fn m(&self) -> Int { return *self; } }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+fn main() -> Int { let n: Int = 40; let k: i64 = 2; return call::<Int>(&n) + call::<i64>(&k); }
