@@ -17,17 +17,19 @@ fn main() -> Int {
 ```
 
 Expected: refused (TYPE-7). Observed on `wip/spec-single-source` `bcd7a019`: the binary exits 41,
-`--interp` prints 1. An enum variant literal (`Option::Some { value: 1, value: 2 }`) took the same
-path.
+`--interp` prints 1. An enum variant literal (`Option::Some { value: 1, value: 2 }`) was accepted
+too, but there both consumers used the first occurrence and silently dropped the second.
 
 ## Cause
 
 `Concrete/Check/Check.lean`, `checkExprCore`, the `.structLit` and `.enumLit` cases: each declared
 field is looked up in the literal with `fields.find?` (the first occurrence is type-checked and
 ownership-checked), and the field list is only checked for unknown names, never for repeats. The
-parser keeps duplicates. Elaboration and lowering then stored every occurrence in order, so the last
-one won in the binary, while the interpreter built the value from the first. A linear value given
-in the second occurrence was never checked at all.
+parser keeps duplicates. For a struct literal, lowering stored every occurrence in order, so the
+last one won in the binary, while the interpreter evaluated every occurrence and then read the
+first. For an enum literal, elaboration selected the first occurrence (`Concrete/Elab/Elab.lean`),
+so both consumers agreed and the second occurrence vanished. Either way a linear value given in a
+later occurrence was never checked.
 
 ## Fix
 
@@ -38,8 +40,8 @@ TYPE-7). Regression fixtures: `error_193_duplicate_struct_field.con` and
 
 ## Structural cause
 
-Class 7, semantics implemented several times: the checker, the interpreter and the backend each
-decided which occurrence of a field counts, and they disagreed. It is also class 13 (a documented
+Class 7, semantics implemented several times: the checker, elaboration, the interpreter and the
+backend each decided which occurrence of a field counts, and for structs they disagreed. It is also class 13 (a documented
 rule with no enforcing site): "each field once" was the evident rule of a struct literal, enforced
 for patterns (E0304) but not for literals.
 

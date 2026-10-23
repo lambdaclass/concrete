@@ -144,7 +144,7 @@ mod text_owned {
 <a id="TYPE-4"></a>
 ### TYPE-4. One type per expression, no implicit conversion
 
-**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a `break` value) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position.
+**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a `break` value) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position other than a condition (TYPE-5).
 
 - Kind: refusal
 - Uses: none
@@ -224,7 +224,7 @@ fn main() -> Int {
 <a id="TYPE-6"></a>
 ### TYPE-6. Operators take operands of one numeric type
 
-**TYPE-6@1.** Arithmetic operators take two operands of one numeric type, except that trusted or `Unsafe` code may add an integer offset to a raw pointer, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool`, `char` and, in `Unsafe` code, raw pointers.
+**TYPE-6@1.** Arithmetic operators take two operands of one numeric type, except that trusted or `Unsafe` code may apply them to a raw pointer and an integer, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool`, `char` and, in `Unsafe` code, raw pointers.
 
 - Kind: refusal
 - Uses: none
