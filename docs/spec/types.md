@@ -424,7 +424,7 @@ fn main() with(Std) -> Int {
 }
 ```
 
-```con accept name=free-heap exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=free-heap exit=42
 struct Copy B { v: Int }
 
 fn main() with(Std) -> Int {

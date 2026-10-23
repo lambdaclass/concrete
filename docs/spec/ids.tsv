@@ -240,7 +240,7 @@ STMT-5/exit-in-branch	live	-
 STMT-6@1	live	dd615bd67c7b04e750663d5d71405db9
 STMT-6/break-outside-loop	live	-
 STMT-6/labeled-break	live	-
-STMT-7@1	live	9fd89d43e2af0ceb439acf9a0490a62a
+STMT-7@1	superseded	9fd89d43e2af0ceb439acf9a0490a62a
 STMT-7/main-with-parameter	live	-
 STMT-7/main-exit-status	live	-
 STMT-8@1	live	96d6ed62aeb1001538826241bb0a8319
@@ -250,10 +250,12 @@ STMT-9/one-branch-returns	pending	-
 STMT-9/every-path-returns	live	-
 MEM-3@1	live	9c0ef84006c376f5db13a4971ffd2369
 MEM-3/initialized-bindings	live	-
-MEM-4@1	live	d3ca42138342faea35dcdc9b305ed0d0
+MEM-4@1	superseded	d3ca42138342faea35dcdc9b305ed0d0
 MEM-4/one-hop-field-access	live	-
 MEM-5@1	live	634e85340fc2862e9b71d25aa73985e2
 MEM-5/heap-ownership	live	-
 MEM-6@1	live	3e364363e82e7bd2fb5ad9764032a77f
 MEM-6/index-in-bounds	live	-
 MEM-6/index-out-of-bounds	live	-
+MEM-4@2	live	603aac6676929f9ebdef7f3dd982c089
+STMT-7@2	live	d1636ae0975798d4d22f83353a7379ea

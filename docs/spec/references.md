@@ -654,7 +654,7 @@ fn main() -> Int {
 }
 ```
 
-```con accept name=free-after-block exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=free-after-block exit=42
 struct Copy B { v: Int }
 
 fn read(r: &Int) -> Int {

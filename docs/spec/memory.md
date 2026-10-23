@@ -80,7 +80,7 @@ fn main() -> Int {
 <a id="MEM-4"></a>
 ### MEM-4. Field access dereferences one reference, then one heap layer
 
-**MEM-4@1.** A field access `e.f`, read or written, dereferences at most one reference and then at most one `Heap` (or `HeapArray`) layer, in that order, so `e` of type `S`, `&S`, `&mut S`, `Heap<S>`, `&Heap<S>` or `&mut Heap<S>` reaches field `f` of the one struct those denote.
+**MEM-4@2.** A field access `e.f`, read or written, dereferences at most one reference and then at most one `Heap` layer, in that order, so `e` of type `S`, `&S`, `&mut S`, `Heap<S>`, `&Heap<S>` or `&mut Heap<S>` reaches field `f` of the one struct those denote.
 
 - Kind: guarantee
 - Uses: none
@@ -94,9 +94,10 @@ fn main() -> Int {
 **Rationale.** A reference to any place, a heap shell included, denotes that place: `&h` and
 `&mut h` denote the slot `h`. Every consumer gives `e.f` this one meaning; a write through
 `&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`,
-`Heap<Heap<S>>`) need an explicit `*`. A field access does not consume a heap pointer.
+`Heap<Heap<S>>`) need an explicit `*`; a `HeapArray<T>` auto-dereferences only directly, not
+through a reference. A field access does not consume a heap pointer.
 
-```con accept name=one-hop-field-access exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=one-hop-field-access exit=42
 struct Copy B { v: Int }
 
 fn bump(h: &mut Heap<B>) {
@@ -135,7 +136,7 @@ destroyed exactly once (OWN-2), and allocation needs `with(Alloc)`. Discarding t
 returns is allowed only when it is Copy (OWN-5), and reading a non-Copy field out of a cell by
 value is refused (OWN-8, bug 144). A node is taken apart with `let n = *h;` and a pattern.
 
-```con accept name=heap-ownership exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=heap-ownership exit=42
 struct Copy B { v: Int }
 
 fn main() with(Std) -> Int {

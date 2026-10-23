@@ -214,7 +214,7 @@ fn main() -> Int {
 <a id="STMT-7"></a>
 ### STMT-7. `main` takes no parameters and its result is the exit status
 
-**STMT-7@1.** The entry point is a module-level `fn main()` with no parameters, returning `Int`, a narrower integer or `Unit`, and its result masked to 0–255 is the process exit status (`Unit` exits 0), with nothing written by the runtime.
+**STMT-7@2.** The entry point is a module-level `fn main()` with no parameters, and the process exit status is its result: an integer masked to 0–255, `true` 1 and `false` 0, and 0 for `Unit` or any other result type, with nothing written by the runtime.
 
 - Kind: refusal
 - Uses: none
@@ -227,7 +227,8 @@ fn main() -> Int {
 
 **Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
 used to read an undefined register (bug 111). There is no `std.process.exit`: an early exit would
-skip cleanup the linear rules promise, so status flows back through `main`. Narrowing the result
+skip cleanup the linear rules promise, so status flows back through `main`. The `bool` and
+non-scalar cases are deprecated corners kept from stage 1 of MAIN_EXIT_MODEL. Narrowing the result
 to `u8` (so masking is unrepresentable) is a recorded preference, not the rule
 (MAIN_EXIT_MODEL). `--interp` prints the result instead of exiting with it.
 
