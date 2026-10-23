@@ -26,23 +26,23 @@ these. Identity is typed: a trait is `TraitId` (compiler builtin, or defining mo
 impl target is `ImplHead` (a `TypeId` minted from the declaration it resolves to, never from the
 spelling at the impl site), and a method is a `MethodKey` (owner, target, name).
 
-The rules (docs/language/TRAITS.md, rule IDs TC-1 … TC-6):
+The rules (docs/spec/traits.md, rule IDs TRAIT-1 … TRAIT-6):
 
-* **TC-1 (E0590)** one trait has at most one impl for one type.
-* **TC-2 (E0591)** no two impls of one trait have unifiable targets.
-* **TC-3 (E0592)** instance locality (Austral's rule, at module granularity): an impl of trait `Tr`
+* **TRAIT-1 (E0590)** one trait has at most one impl for one type.
+* **TRAIT-2 (E0591)** no two impls of one trait have unifiable targets.
+* **TRAIT-3 (E0592)** instance locality (Austral's rule, at module granularity): an impl of trait `Tr`
   for type `X` lives in the module that defines `Tr` or the module that defines `X`. The compiler's
   builtin `Destroy` is defined in no module, so its impls live with their type.
-* **TC-4 (E0593)** an impl's target is its type's declaration applied to exactly the impl's own
+* **TRAIT-4 (E0593)** an impl's target is its type's declaration applied to exactly the impl's own
   parameters, in order: no specialized arguments (`Box<i32>`), no blanket target (`impl<T> Tr for
   T`), no alias, no missing or extra argument. Every impl therefore covers every instantiation of
-  its type, which is what makes TC-1 and TC-2 decidable from the type's identity alone.
-* **TC-5 (E0594)** one type has at most one method of a given name across its inherent impls and
+  its type, which is what makes TRAIT-1 and TRAIT-2 decidable from the type's identity alone.
+* **TRAIT-5 (E0594)** one type has at most one method of a given name across its inherent impls and
   its trait impls, so a method call on a known type has exactly one candidate.
-* **TC-6 (E0595, Check)** a call through a type parameter's bounds is refused when more than one
+* **TRAIT-6 (E0595, Check)** a call through a type parameter's bounds is refused when more than one
   bound trait declares the method. Order never decides.
 
-TC-3 makes TC-1/TC-2 module-local in principle (Austral's argument: uniqueness never needs the
+TRAIT-3 makes TRAIT-1/TRAIT-2 module-local in principle (Austral's argument: uniqueness never needs the
 whole program); the pass still compares every impl in the program, so a violation is reported
 even when the locality rule is the one broken.
 -/
@@ -86,7 +86,7 @@ def ImplOwner.display : ImplOwner → String
   | .inherent => "an inherent impl"
   | .trait t => s!"impl {t.display}"
 
-/-- A method's identity: (owner, target type, method name). TC-5 makes `(target, name)` alone
+/-- A method's identity: (owner, target type, method name). TRAIT-5 makes `(target, name)` alone
     determine the owner, which is why the derived `Type_method` spelling cannot collide within
     one type. -/
 structure MethodKey where
@@ -184,7 +184,7 @@ def resolveHead (sc : Scope) (n : String) : Option TypeDecl ⊕ ImplHead :=
   else .inr (.unresolved sc.path n)
 
 /-- `Ty` → `Term`, with the impl's own parameters as variables. Nested heads are compared by
-    spelling; TC-4 refuses every target whose arguments are not bare parameters, so a nested
+    spelling; TRAIT-4 refuses every target whose arguments are not bare parameters, so a nested
     head never decides a well-formed program. -/
 partial def tyTerm (params : List String) : Ty → Term
   | .typeVar n => if params.contains n then .var n else .app ("'" ++ n) []
@@ -236,18 +236,26 @@ partial def Term.canon (t : Term) : Term :=
       (.app h as', seen')
   (go [] t).1
 
-def mkDiag (code msg : String) (span : Span) (file : String) (hint : Option String := none) : Diagnostic :=
-  { severity := .error, message := msg, pass := "check", span := some span, hint := hint,
-    code := code, file := file }
+/-- The spec rule each coherence code enforces (docs/spec/traits.md). -/
+def ruleOf : String → String
+  | "E0590" => "TRAIT-1" | "E0591" => "TRAIT-2" | "E0592" => "TRAIT-3"
+  | "E0593" => "TRAIT-4" | "E0594" => "TRAIT-5" | _ => "TRAIT-6"
 
-/-- The judgment over one module: collect its impls (with identities) and its TC-3/TC-4
+def mkDiag (code msg : String) (span : Span) (file : String) (hint : Option String := none) : Diagnostic :=
+  let rule := ruleOf code
+  { severity := .error, message := msg, pass := "check", span := some span, hint := hint,
+    code := code, file := file,
+    evidence := [("rule", rule ++ "@1"), ("spec", "docs/spec/traits.md#" ++ rule)],
+    nextAction := hint }
+
+/-- The judgment over one module: collect its impls (with identities) and its TRAIT-3/TRAIT-4
     refusals. Submodules are walked by the caller. -/
 def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := Id.run do
   let m := sc.module
   let localTraits := m.traits.map (·.name)
   let mut infos : List ImplInfo := []
   let mut ds : Diagnostics := []
-  -- Shape (TC-4): the target is the head applied to exactly `expected`.
+  -- Shape (TRAIT-4): the target is the head applied to exactly `expected`.
   let shapeCheck := fun (what typeName : String) (typeParams expected : List String)
       (targetArgs : Option (List Ty)) (decl : Option TypeDecl) =>
     let args := targetArgs.getD []
@@ -296,8 +304,8 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
                          methods := ti.methods.map (·.name) }]
     if let some why := shapeCheck what ti.typeName ti.typeParams ti.typeParams ti.targetArgs decl then
       ds := ds ++ [mkDiag "E0593" why ti.span file
-        (some "write `impl<T, ..> Trait for Type<T, ..>` with the type's own parameters (docs/language/TRAITS.md TC-4)")]
-    -- TC-3: instance locality.
+        (some "write `impl<T, ..> Trait for Type<T, ..>` with the type's own parameters (docs/spec/traits.md TRAIT-4)")]
+    -- TRAIT-3: instance locality.
     let traitLocal := match tid with
       | .user dm _ => dm == sc.path
       | .builtin _ => false
@@ -315,7 +323,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
       ds := ds ++ [mkDiag "E0592"
         s!"orphan impl: {what} is in module '{sc.path}', which defines neither the trait '{tid.display}' nor the type '{ti.typeName}' ({where_}); an impl lives with its trait or with its type, so no two modules can both supply it"
         ti.span file
-        (some "move the impl into the module that defines the type (or the trait) (docs/language/TRAITS.md TC-3)")]
+        (some "move the impl into the module that defines the type (or the trait) (docs/spec/traits.md TRAIT-3)")]
   for ib in m.implBlocks do
     let what := s!"impl {ib.typeName}"
     let (decl, head) : Option TypeDecl × Option ImplHead :=
@@ -329,7 +337,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
                          methods := ib.methods.map (·.name) }]
     if let some why := shapeCheck what ib.typeName ib.typeParams (ib.typeParams ++ ib.capParams) ib.targetArgs decl then
       ds := ds ++ [mkDiag "E0593" why ib.span file
-        (some "write `impl<T, ..> Type<T, ..>` with the type's own parameters (docs/language/TRAITS.md TC-4)")]
+        (some "write `impl<T, ..> Type<T, ..>` with the type's own parameters (docs/spec/traits.md TRAIT-4)")]
   return (infos, ds)
 
 /-- Every module of the program, with its definition path and source file. -/
@@ -339,12 +347,12 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
   ({ path, module := m, summaryTable }, file) ::
     m.submodules.flatMap fun sub => allScopes summaryTable (path ++ "." ++ sub.name) file sub
 
-/-- TC-1 / TC-2 / TC-5 over every impl of the program. Pairs are judged by identity, so the
+/-- TRAIT-1 / TRAIT-2 / TRAIT-5 over every impl of the program. Pairs are judged by identity, so the
     verdict does not depend on the order impls or imports were written in. -/
 def pairwise (infos : List ImplInfo) : Diagnostics := Id.run do
   let mut ds : Diagnostics := []
-  -- Indices of impls shadowed by an earlier conflicting one: excluded from TC-5 so one
-  -- duplicate is reported once (as TC-1/TC-2), not again as a method collision.
+  -- Indices of impls shadowed by an earlier conflicting one: excluded from TRAIT-5 so one
+  -- duplicate is reported once (as TRAIT-1/TRAIT-2), not again as a method collision.
   let mut shadowed : List Nat := []
   let indexed := (List.range infos.length).zip infos
   for (j, b) in indexed do
@@ -363,13 +371,13 @@ def pairwise (infos : List ImplInfo) : Diagnostics := Id.run do
             if a.target.canon == b.target.canon then
               ds := ds ++ [mkDiag "E0590"
                 s!"duplicate impl: trait '{tb.display}' is implemented twice for '{b.typeName}' (the other impl is in module '{a.module}' at {a.span.line}:{a.span.col}); impl selection would depend on which one is found first"
-                b.span b.file (some "delete one of the two impls (docs/language/TRAITS.md TC-1)")]
+                b.span b.file (some "delete one of the two impls (docs/spec/traits.md TRAIT-1)")]
             else
               ds := ds ++ [mkDiag "E0591"
                 s!"overlapping impls: this impl of trait '{tb.display}' for '{b.typeName}' and the one in module '{a.module}' at {a.span.line}:{a.span.col} both apply to some type; impl selection would depend on which one is found first"
-                b.span b.file (some "keep one impl that covers the type (docs/language/TRAITS.md TC-2)")]
+                b.span b.file (some "keep one impl that covers the type (docs/spec/traits.md TRAIT-2)")]
         | .inherent => pure ()
-  -- TC-5: one method name per type across all of its impls.
+  -- TRAIT-5: one method name per type across all of its impls.
   let live := indexed.filter fun (i, _) => !shadowed.contains i
   let mut seen : List (String × (MethodKey × ImplInfo)) := []
   for (_, info) in live do
@@ -384,7 +392,7 @@ def pairwise (infos : List ImplInfo) : Diagnostics := Id.run do
               && prevInfo.module == info.module then continue
           ds := ds ++ [mkDiag "E0594"
             s!"method '{mn}' of '{info.typeName}' is provided by both {info.owner.display} (here) and {prev.owner.display} (module '{prevInfo.module}' at {prevInfo.span.line}:{prevInfo.span.col}); a call `x.{mn}()` would have two candidates"
-            info.span info.file (some "rename one of the methods (docs/language/TRAITS.md TC-5)")]
+            info.span info.file (some "rename one of the methods (docs/spec/traits.md TRAIT-5)")]
         | none => seen := seen ++ [(k, ({ owner := info.owner, target := head, method := mn }, info))]
   return ds
 
@@ -394,7 +402,9 @@ def checkProgram (modules : List Module) (summaryTable : List (String × FileSum
   let scopes := modules.flatMap fun m => allScopes summaryTable m.name m.sourceFile m
   let per := scopes.map fun (sc, file) => moduleImpls sc file
   let infos := per.flatMap (·.1)
-  per.flatMap (·.2) ++ pairwise infos
+  -- Pair verdicts (TRAIT-1, -2, -5) first: an overlapping specialized impl is reported as the
+  -- overlap before its own shape (TRAIT-4).
+  pairwise infos ++ per.flatMap (·.2)
 
 end Coherence
 

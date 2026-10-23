@@ -1,4 +1,4 @@
-// Bug 186 / TC-1 (E0590): two generic impls equal up to the naming of their parameters are
+// Bug 186 / TRAIT-1 (E0590): two generic impls equal up to the naming of their parameters are
 // the same impl twice.
 trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }

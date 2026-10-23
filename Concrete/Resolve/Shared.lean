@@ -5,7 +5,7 @@ import Concrete.Semantics.Capabilities
 
 namespace Concrete
 
-/-- Every bound trait of a type parameter that declares `method` (TC-6, bug 186). The ONE
+/-- Every bound trait of a type parameter that declares `method` (TRAIT-6, bug 186). The ONE
     lookup for a call through bounds: Check refuses when this has more than one element
     (E0595), and every other consumer takes the answer only when it is unique. Taking the
     first bound that has the method made `T: A + B` resolve by declaration order.

@@ -1,4 +1,4 @@
-// Bug 186 / TC-4 (E0593): the target's type arguments were parsed and DROPPED, so this impl
+// Bug 186 / TRAIT-4 (E0593): the target's type arguments were parsed and DROPPED, so this impl
 // for Box2<i32> implemented Tr for every Box2<_>: a Box2<bool> satisfied the bound and ran the
 // i32 body (binary and --interp both returned 7). Silent wrong code.
 trait Tr { fn m(&self) -> Int; }

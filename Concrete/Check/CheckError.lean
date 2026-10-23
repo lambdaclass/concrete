@@ -498,7 +498,7 @@ def CheckError.message : CheckError → String
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
-  | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/language/TRAITS.md TC-6)"
+  | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/spec/traits.md TRAIT-6)"
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
@@ -689,6 +689,7 @@ def CheckError.rule : CheckError → Option String
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
+  | .ambiguousBoundMethod _ _ _ => some "TRAIT-6@1"
   | _ => none
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
@@ -704,13 +705,17 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
   | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
+  | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
   | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
 def ruleEvidence (rule : Option String) : List (String × String) :=
   match rule with
-  | some r => [("rule", r), ("spec", ruleSpecRef)]
+  | some r =>
+    -- The trait-coherence rules are stated in their spec chapter, not in MEMORY_SEMANTICS §15.
+    if r.startsWith "TRAIT-" then [("rule", r), ("spec", "docs/spec/traits.md#" ++ ((r.splitOn "@").headD r))]
+    else [("rule", r), ("spec", ruleSpecRef)]
   | none => []
 
 def throwCheck (e : CheckError) (span : Option Span := none)

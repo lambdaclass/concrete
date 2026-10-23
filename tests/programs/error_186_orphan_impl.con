@@ -1,4 +1,4 @@
-// Bug 186 / TC-3 (E0592): a foreign trait (the compiler's Destroy) for a foreign type (defs's
+// Bug 186 / TRAIT-3 (E0592): a foreign trait (the compiler's Destroy) for a foreign type (defs's
 // Foo) in a third module. An impl lives with its trait or with its type, so no two modules can
 // both supply one.
 mod defs {

@@ -1,4 +1,4 @@
-// Bug 186 / TC-2 (E0591): a blanket impl over a type parameter overlaps every other impl of
+// Bug 186 / TRAIT-2 (E0591): a blanket impl over a type parameter overlaps every other impl of
 // its trait. Before, `impl<T> Tr for T` was accepted as an impl for a type NAMED `T`.
 trait Tr { fn m(&self) -> Int; }
 struct Copy Foo { a: Int }

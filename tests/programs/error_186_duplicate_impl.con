@@ -1,4 +1,4 @@
-// Bug 186 / TC-1 (E0590): one trait implemented twice for one type. Before, both impls
+// Bug 186 / TRAIT-1 (E0590): one trait implemented twice for one type. Before, both impls
 // entered the method tables: llvm-as refused a redefined `Foo_m`, --interp refused at run time.
 trait Tr { fn m(&self) -> Int; }
 struct Copy Foo { a: Int }

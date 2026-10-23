@@ -1,5 +1,5 @@
-// Bug 186 positive control: every impl here is unique, local (TC-3) and fully generic (TC-4),
-// and every (type, method) names one method (TC-5), so impl selection is a function of the
+// Bug 186 positive control: every impl here is unique, local (TRAIT-3) and fully generic (TRAIT-4),
+// and every (type, method) names one method (TRAIT-5), so impl selection is a function of the
 // type. regress_186_coherent_impls_reversed.con is this program with its modules, imports and
 // impls written in the opposite order; both must give 42, natively and under --interp.
 mod shapes {
@@ -8,7 +8,7 @@ mod shapes {
 }
 mod owned {
     pub struct Token { pub id: Int }
-    // Destroy is the compiler's trait: its impl lives with its type (TC-3).
+    // Destroy is the compiler's trait: its impl lives with its type (TRAIT-3).
     impl Destroy for Token {
         pub fn destroy(self) { let Token { id } = self; }
     }
@@ -18,14 +18,14 @@ mod owned {
 mod main {
     import owned.{Token, make, id_of};
     import shapes.{Square, Cell};
-    // A local trait may be implemented for foreign types (TC-3) and for a primitive.
+    // A local trait may be implemented for foreign types (TRAIT-3) and for a primitive.
     trait Area { fn area(&self) -> Int; }
     trait Label { fn label(&self) -> Int; }
     impl Area for Square { fn area(&self) -> Int { return self.side * self.side; } }
     impl Label for Square { fn label(&self) -> Int { return 1; } }
     impl Area for Int { fn area(&self) -> Int { return 2; } }
     impl<T: Copy> Area for Cell<T> { fn area(&self) -> Int { return 3; } }
-    // Two bounds with DISTINCT method names: each call has exactly one candidate (TC-6).
+    // Two bounds with DISTINCT method names: each call has exactly one candidate (TRAIT-6).
     fn both<T: Area + Label>(x: &T) -> Int { return x.area() + x.label(); }
     fn one<T: Area>(x: &T) -> Int { return x.area(); }
     pub fn main() -> Int {

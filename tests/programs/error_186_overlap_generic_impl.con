@@ -1,4 +1,4 @@
-// Bug 186 / TC-2 (E0591): a generic impl and a specialized one whose targets unify. Before,
+// Bug 186 / TRAIT-2 (E0591): a generic impl and a specialized one whose targets unify. Before,
 // the binary ran whichever body was emitted first (1) for a Box2<i32>; --interp refused.
 trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }

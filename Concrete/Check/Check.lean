@@ -2045,7 +2045,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        -- The method's bound trait: exactly one, or a refusal (TC-6, bug 186). The first bound
+        -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
         -- that had the method used to win, so `T: A + B` resolved by declaration order.
         let cands := boundMethodCandidates env.traits bounds methodName
         if cands.length > 1 then
