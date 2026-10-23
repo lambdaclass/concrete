@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Literals Evaluate In Source Order, A Functional-Update Base Once (bugs 136 and 137, 2026-10-23)
+
+`E::V { b: f(), a: g() }` now runs `f()` before `g()`, and `P { b: f(), ..mk() }` runs `f()` and
+then `mk()` exactly once, as evaluation-order rules 4 and 6 say, natively and under `--interp`. Elab
+walked an enum variant's declared fields, and filled each field omitted from a functional update
+with its own copy of the base expression. Both literals are now built with evaluation-order
+temporaries (`letInExpr`: a single-binder `match`, which is `let` in every consumer, until Core has
+an expression-level `let` under R-0496); a literal whose order is already the rule's, and a
+variable base, keep their Core form. Pinned by `regress_136_137_literal_eval_order.con` and both
+reproducers.
+
 ### A Dereference Assignment Evaluates Its Right-Hand Side First (bug 183, 2026-10-23)
 
 `*(&mut a[i()]) = j()` now runs `j()` before `i()` in the binary, as evaluation-order rule 7 and

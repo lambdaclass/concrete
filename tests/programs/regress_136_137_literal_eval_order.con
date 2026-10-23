@@ -1,0 +1,57 @@
+// Bugs 136 and 137 (evaluation-order rules 4 and 6, STATEMENT_EXPRESSION_MODEL):
+// - an enum-variant literal runs its initializers in SOURCE order, whatever the variant's
+//   declaration order (bug 137: declaration order, 65 instead of 56);
+// - a functional update runs its explicit initializers in source order, then its base EXACTLY ONCE
+//   (bug 136: once per omitted field, 599 instead of 59).
+// Each helper returns the order its ticks recorded; main checks each and exits 42.
+struct Copy P { a: Int, b: Int, c: Int }
+
+enum E { V { a: Int, b: Int } }
+
+enum G { W { x: Int, y: Int, z: Int } }
+
+fn tick(t: &mut Int, v: Int) -> Int {
+    *t = *t * 10 + v;
+    return v;
+}
+
+fn mk(t: &mut Int) -> P {
+    *t = *t * 10 + 9;
+    return P { a: 1, b: 2, c: 3 };
+}
+
+fn enum_order() -> Int {
+    let mut t: Int = 0;
+    let e: E = E::V { b: tick(&mut t, 5), a: tick(&mut t, 6) };
+    match e {
+        E::V { a, b } => { return t * 100 + a * 10 + b; }
+    }
+}
+
+fn enum_three() -> Int {
+    let mut t: Int = 0;
+    let g: G = G::W { z: tick(&mut t, 1), x: 7, y: tick(&mut t, 2) };
+    match g {
+        G::W { x, y, z } => { return t * 1000 + x * 100 + y * 10 + z; }
+    }
+}
+
+fn update_once() -> Int {
+    let mut t: Int = 0;
+    let p: P = P { b: tick(&mut t, 5), ..mk(&mut t) };
+    return t * 1000 + p.a * 100 + p.b * 10 + p.c;
+}
+
+fn update_two_explicit() -> Int {
+    let mut t: Int = 0;
+    let p: P = P { c: tick(&mut t, 4), a: tick(&mut t, 3), ..mk(&mut t) };
+    return t * 1000 + p.a * 100 + p.b * 10 + p.c;
+}
+
+fn main() -> Int {
+    if enum_order() != 5665 { return 1; }
+    if enum_three() != 12721 { return 2; }
+    if update_once() != 59153 { return 3; }
+    if update_two_explicit() != 439324 { return 4; }
+    return 42;
+}

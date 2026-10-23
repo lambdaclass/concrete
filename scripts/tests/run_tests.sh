@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -8150,6 +8150,11 @@ run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
 # right-hand side first). --interp agreement: the r102 loop.
 run_ok "$TESTDIR/regress_183_deref_assign_rhs_first.con" 129
 run_ok "tests/regressions/bug183_deref_assign_destination_first/repro.con" 21
+# Bugs 136 and 137 (silent): functional update evaluated its base once per omitted field;
+# enum-variant literal fields ran in declaration order. --interp agreement: the r102 loop.
+run_ok "$TESTDIR/regress_136_137_literal_eval_order.con" 42
+run_ok "tests/regressions/bug136_functional_update_base_reevaluated/repro.con" 59
+run_ok "tests/regressions/bug137_enum_literal_field_order/repro.con" 56
 # Bug 150: a float self-comparison is not folded (x != x is true for NaN).
 run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
 # Bug 152: string_trim("") is the empty string (it was one byte, read past the source).

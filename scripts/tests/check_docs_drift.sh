@@ -231,15 +231,15 @@ PY
 }
 bug_neg hand_edited "import re; s,n=re.subn(r'\*\*Open bugs: (\d+)\*\*', lambda m: '**Open bugs: '+str(int(m.group(1))+1)+'**', s); assert n==1" ROADMAP.md 1
 bug_neg markers_missing "old='<!-- END GENERATED: bug dashboard -->'; assert s.count(old)==1; s=s.replace(old,'')" ROADMAP.md 2
-bug_neg bug_fixed_not_regenerated "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" docs/bugs/136_functional_update_base_reevaluated.md 1
+bug_neg bug_fixed_not_regenerated "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 1
 bug_neg batch_changed_not_regenerated "old='\tsemantics\tsemantics probes'; assert s.count(old)==1; s=s.replace(old,'\thunt\tsemantics probes')" docs/bugs/discovery.tsv 1
 bug_neg unattributed_bug "import re; s,n=re.subn(r',137\t', '\t', s); assert n==1; s,n=re.subn(r',137$', '', s, flags=re.M); assert n==1" docs/bugs/discovery.tsv 2
 bug_neg bug_in_two_batches "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,136\t-')" docs/bugs/discovery.tsv 2
 bug_neg silent_not_found "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134\t133')" docs/bugs/discovery.tsv 2
 bug_neg unknown_kind "old='\tsemantics\tsemantics probes'; assert s.count(old)==1; s=s.replace(old,'\tvibes\tsemantics probes')" docs/bugs/discovery.tsv 2
 bug_neg bug_without_record "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,999\t-')" docs/bugs/discovery.tsv 2
-bug_neg status_malformed "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" docs/bugs/136_functional_update_base_reevaluated.md 2
-bug_neg status_missing "import re; s,n=re.subn(r'^\*\*Status:\*\*[^\n]*\n', '', s, count=1, flags=re.M); assert n==1" docs/bugs/136_functional_update_base_reevaluated.md 2
+bug_neg status_malformed "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 2
+bug_neg status_missing "import re; s,n=re.subn(r'^\*\*Status:\*\*[^\n]*\n', '', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 2
 bug_neg counting_batch_effort_unrecorded "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tcontrol campaign\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
 bug_neg empty_cell "old='\tunrecorded\t134\t'; assert s.count(old)==1; s=s.replace(old,'\t\t134\t')" docs/bugs/discovery.tsv 2
 # Positive control: a new quiet counting batch, regenerated, passes and moves the signal.
