@@ -676,7 +676,8 @@ parameter. A capability argument says what a handle may do (R-0484), so a bare `
 `Writer<cap C>` would leave the authority to inference; it is refused instead. The parser
 classifies each argument as a type or a capability by position, and resolution checks the kind
 and the count in both directions. A generic type named bare, with no argument list, is still
-accepted (the pending example below); only its missing capability arguments are refused.
+accepted (bug 200, the pending example below): natively `llvm-as` then fails, while `--interp`
+runs the program. Only its missing capability arguments are refused.
 
 ```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: T }
@@ -696,15 +697,12 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments pending=R-0499 now=accept:42
+```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments pending=R-0499 now=fail:Cannot_allocate_unsized_type now-interp=accept:42
 struct Copy Box1<T> { v: Int }
 
-fn get(b: Box1) -> Int {
-    return b.v;
-}
-
 fn main() -> Int {
-    return get(Box1::<Int> { v: 42 });
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
 }
 ```
 
