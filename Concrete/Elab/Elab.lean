@@ -3791,8 +3791,8 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
   | .ident n t =>
     match t with
     | .fn_ .. =>
-      if c.locals.contains n then [] else
-      match c.fns n with
+      if c.locals.contains n.name then [] else
+      match c.fns n.name with
       | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]
       | none => []
     | _ => []
@@ -3863,7 +3863,7 @@ partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAg
     payload ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
   | .varArm n bt g b =>
     -- a catch-all binder holds the scrutinee itself
-    let c' := { c with locals := n :: c.locals }
+    let c' := { c with locals := n.name :: c.locals }
     [(bt, scrutTy, s!"the binding '{n}' of a match", c.tps)]
       ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
   | .litArm v g b => tyAgreeExpr c v ++ ((g.map (tyAgreeExpr c)).getD []) ++ tyAgreeStmts c b
@@ -3877,7 +3877,7 @@ partial def tyAgreeStmts (c : TyAgreeCtx) (ss : List CStmt) : List TyAgreePair :
     match st with
     | .letDecl n _ t v =>
       (((t, v.ty, s!"the initializer of '{n}'", c.tps) :: tyAgreeExpr c v) :: acc,
-       { c with locals := n :: c.locals })
+       { c with locals := n.name :: c.locals })
     | _ => (tyAgreeStmt c st :: acc, c)) (([] : List (List TyAgreePair)), c)
   chunks.reverse.flatten
 
@@ -3895,7 +3895,7 @@ partial def tyAgreeStmt (c : TyAgreeCtx) : CStmt → List TyAgreePair
     | none => []
   | .derefAssign t v => tyAgreeExpr c t ++ tyAgreeExpr c v
   | .arrayIndexAssign a i v => tyAgreeExpr c a ++ tyAgreeExpr c i ++ tyAgreeExpr c v
-  | .borrowIn v rf _ _ _ b => tyAgreeStmts { c with locals := v :: rf :: c.locals } b
+  | .borrowIn v rf _ _ _ b => tyAgreeStmts { c with locals := v.name :: rf.name :: c.locals } b
   | _ => []
 end
 
