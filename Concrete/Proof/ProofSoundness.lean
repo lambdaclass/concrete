@@ -165,7 +165,7 @@ theorem lit_int_preservation (n : Int) (ty : Ty) (fuel : Nat)
     cExprToPExpr (.intLit n ty) = some (.lit (.int n))
   ∧ eval fns env (fuel + 1) (.lit (.int n)) = some (.int n)
   ∧ evalSourceLit (.intLit n ty) = some (.int n) := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-02: `lit_bool_preservation` (against real extractor)
@@ -177,7 +177,7 @@ theorem lit_bool_preservation (b : Bool) (fuel : Nat)
     cExprToPExpr (.boolLit b) = some (.lit (.bool b))
   ∧ eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
   ∧ evalSourceLit (.boolLit b) = some (.bool b) := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-03: `var_preservation` (against real extractor)
@@ -203,7 +203,7 @@ theorem var_preservation (name : String) (ty : Ty) (fuel : Nat)
     cExprToPExpr (.ident (CLocal.ofName name) ty) = some (.var name)
   ∧ eval fns env (fuel + 1) (.var name) = env name
   ∧ evalSourceIdent env (.ident (CLocal.ofName name) ty) = env name := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl, CLocal.ofName], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-04: `binop_preservation` (compositional form)
@@ -251,13 +251,8 @@ theorem binop_preservation
     (h_lhs : cExprToPExpr lhs = some pl)
     (h_rhs : cExprToPExpr rhs = some pr) :
     cExprToPExpr (.binOp op lhs rhs ty) = some (.binOp pop pl pr) := by
-  show (do
-    let pop' ← binOpToPBinOp op (CExpr.ty lhs)
-    let pl' ← cExprToPExpr lhs
-    let pr' ← cExprToPExpr rhs
-    some (PExpr.binOp pop' pl' pr')) = some (.binOp pop pl pr)
-  rw [h_op, h_lhs, h_rhs]
-  rfl
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_op, h_lhs, h_rhs]
 
 /-! ## R-04: eval-side compositional reduction
 
@@ -370,7 +365,8 @@ theorem field_access_preservation
     (po : PExpr) (h_obj : cExprToPExpr obj = some po) :
     cExprToPExpr (.fieldAccess obj field ty)
       = some (.fieldAccess po field) := by
-  simp [cExprToPExpr, h_obj]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_obj]
 
 /-! ## R-13: `cast_identity_preservation` (extraction + eval)
 
@@ -381,7 +377,8 @@ theorem cast_preservation
     (inner : CExpr) (ty : Ty)
     (pi : PExpr) (h_inner : cExprToPExpr inner = some pi) :
     cExprToPExpr (.cast inner ty) = castToPExpr (CExpr.ty inner) ty pi := by
-  simp [cExprToPExpr, h_inner]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_inner]
 
 /-- Bug 080. The identity model is reserved for VALUE-PRESERVING integer casts: a cast whose target
     range does not contain the source's is a wrap. `cast_identity_preservation` stated the identity
@@ -416,7 +413,8 @@ theorem array_index_preservation
     (h_idx : cExprToPExpr idx = some pi) :
     cExprToPExpr (.arrayIndex arr idx ty)
       = some (.arrayIndex pa pi) := by
-  simp [cExprToPExpr, h_arr, h_idx]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_arr, h_idx]
 
 /-! ## R-19: `array_set_preservation` (extraction)
 
@@ -505,7 +503,8 @@ theorem call_preservation
     (pargs : List PExpr)
     (h_args : cExprListToPExpr args = some pargs) :
     cExprToPExpr (.call fn typeArgs args ty) = some (.call fn pargs) := by
-  simp [cExprToPExpr, h_args]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_args]
 
 /-! ## R-09: `struct_lit_preservation` (extraction) -/
 theorem struct_lit_preservation
@@ -515,7 +514,8 @@ theorem struct_lit_preservation
     (h_fields : cFieldsToPExpr fields = some pfields) :
     cExprToPExpr (.structLit name typeArgs fields ty)
       = some (.structLit name pfields) := by
-  simp [cExprToPExpr, h_fields]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_fields]
 
 /-! ## R-11: `enum_lit_preservation` (extraction) -/
 theorem enum_lit_preservation
@@ -525,7 +525,8 @@ theorem enum_lit_preservation
     (h_fields : cFieldsToPExpr fields = some pfields) :
     cExprToPExpr (.enumLit enumName variant typeArgs fields ty)
       = some (.enumLit enumName variant pfields) := by
-  simp [cExprToPExpr, h_fields]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_fields]
 
 /-! ## R-15: `array_lit_preservation` (extraction) -/
 theorem array_lit_preservation
@@ -533,7 +534,8 @@ theorem array_lit_preservation
     (pelems : List PExpr)
     (h_elems : cExprListToPExpr elems = some pelems) :
     cExprToPExpr (.arrayLit elems ty) = some (.arrayLit pelems) := by
-  simp [cExprToPExpr, h_elems]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_elems]
 
 /-! ## R-12: `match_preservation` (extraction) -/
 theorem match_preservation
@@ -543,7 +545,8 @@ theorem match_preservation
     (h_arms : cMatchArmsToP arms = some parms) :
     cExprToPExpr (.match_ scrutinee arms ty)
       = some (.match_ ps parms) := by
-  simp [cExprToPExpr, h_scrut, h_arms]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_scrut, h_arms]
 
 /-! ## R-18: `while_flat_preservation` (extraction)
 
