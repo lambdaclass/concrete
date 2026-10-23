@@ -489,13 +489,13 @@ private def isBoundedCond (cond : CExpr) (step : List CStmt) : Bool :=
   match cond with
   -- `i < n` / `i <= n`: i must increase.   `i > n` / `i >= n`: i must decrease.
   | .binOp op (.ident v _) _ _ =>
-      if op == .lt || op == .leq then stepsToward v true step
-      else if op == .gt || op == .geq then stepsToward v false step
+      if op == .lt || op == .leq then stepsToward v.name true step
+      else if op == .gt || op == .geq then stepsToward v.name false step
       else false
   -- the commuted form: `n > i` means i increases; `n < i` means i decreases.
   | .binOp op _ (.ident v _) _ =>
-      if op == .gt || op == .geq then stepsToward v true step
-      else if op == .lt || op == .leq then stepsToward v false step
+      if op == .gt || op == .geq then stepsToward v.name true step
+      else if op == .lt || op == .leq then stepsToward v.name false step
       else false
   | _ => false
 
@@ -574,13 +574,13 @@ private partial def fingerprintExpr : CExpr → String
   | .boolLit v => s!"(bool {v})"
   | .strLit v => s!"(str {repr v})"
   | .charLit v => s!"(char {repr v})"
-  | .ident name _ => s!"(var {stripAlpha name})"
+  | .ident name _ => s!"(var {stripAlpha name.name})"
   | .binOp op lhs rhs _ => s!"(binop {repr op} {fingerprintExpr lhs} {fingerprintExpr rhs})"
   | .unaryOp op inner _ => s!"(unary {repr op} {fingerprintExpr inner})"
   | .call (.direct fn) _ args _ => s!"(call {fn} {fingerprintExprs args})"
   -- Distinct prefix: a direct call and an indirect call through a same-named
   -- local are different programs, so they must not fingerprint alike.
-  | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b} {fingerprintExprs args})"
+  | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b.name} {fingerprintExprs args})"
   -- A compiler-generated runtime-helper call (bug 165). The V1 fingerprint is FROZEN (its golden
   -- must not move; V2 is built alongside it), so it keeps the rendering the call had when it was
   -- a direct call of the helper's spelling. The distinction lives in Core's callee form and in the
@@ -609,13 +609,13 @@ where
   fingerprintExprs (es : List CExpr) : String :=
     " ".intercalate (es.map fingerprintExpr)
   fingerprintArm : CMatchArm → String
-    | .enumArm en v binds guard body => s!"(arm {en}::{v} [{" ".intercalate (binds.map fun b => stripAlpha b.fst)}]{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .enumArm en v binds guard body => s!"(arm {en}::{v} [{" ".intercalate (binds.map fun b => stripAlpha b.fst.name)}]{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
     | .litArm val guard body => s!"(lit {fingerprintExpr val}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
-    | .varArm b _ guard body => s!"(var {stripAlpha b}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .varArm b _ guard body => s!"(var {stripAlpha b.name}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
     | .rangeArm lo hi incl guard body => s!"(range {fingerprintExpr lo} {fingerprintExpr hi} {incl}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
   fingerprintStmt : CStmt → String
-    | .letDecl name _ _ val => s!"(let {stripAlpha name} {fingerprintExpr val})"
-    | .assign name val => s!"(set {stripAlpha name} {fingerprintExpr val})"
+    | .letDecl name _ _ val => s!"(let {stripAlpha name.name} {fingerprintExpr val})"
+    | .assign name val => s!"(set {stripAlpha name.name} {fingerprintExpr val})"
     | .return_ (some val) _ => s!"(ret {fingerprintExpr val})"
     | .return_ none _ => "(ret)"
     | .expr e _ => fingerprintExpr e
@@ -713,7 +713,7 @@ def cExprLitToPExpr : CExpr → Option Proof.PExpr
     Companion to `cExprLitToPExpr` for variable references; same
     motivation (`partial def` opacity) and same usage pattern. -/
 def cExprIdentToPExpr : CExpr → Option Proof.PExpr
-  | .ident name _ => some (.var name)
+  | .ident name _ => some (.var name.name)
   | _             => none
 
 
@@ -844,7 +844,7 @@ partial def pexprMentions (n : String) : Proof.PExpr → Bool
 def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
   | [] => declared
   | (.return_ _ _) :: _ => []
-  | (.letDecl n _ _ _) :: rest => cStmtsLetsAtEnd (n :: declared) rest
+  | (.letDecl n _ _ _) :: rest => cStmtsLetsAtEnd (n.name :: declared) rest
   | [.expr _ true] => []  -- a value tail is the block's value; nothing falls through
   | (.ifElse _ t (some e)) :: rest =>
     if cStmtsDiverge t && cStmtsDiverge e then [] else cStmtsLetsAtEnd declared rest
@@ -877,7 +877,7 @@ mutual
 def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b => some (.lit (.bool b))
-  | .ident name _ => some (.var name)
+  | .ident name _ => some (.var name.name)
   | .binOp op lhs rhs _ => do
     -- Pass operand type (from lhs.ty) — for width-sensitive ops
     -- (mod, bitxor) this picks the right typed PBinOp; for
@@ -903,7 +903,7 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
   -- local, answerable only by `FnTable.callables` (R-0442).
   | .call (.indirect binding) _ args _ => do
     let pargs ← cExprListToPExpr args
-    some (.applyVar binding pargs)
+    some (.applyVar binding.name pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
@@ -956,7 +956,7 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     some (.litPat v, pbody)
   | .varArm binding _bindTy none body => do
     let pbody ← cStmtsToPExpr body
-    some (.varPat binding, pbody)
+    some (.varPat binding.name, pbody)
   | .enumArm _ _ _ (some _) _ | .litArm _ (some _) _ | .varArm _ _ (some _) _ => none
   | .rangeArm _ _ _ _ _ =>
     -- Range patterns are not yet modelled in the proof path (V1). A function
@@ -994,7 +994,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
-    some (.letIn name pv pb)
+    some (.letIn name.name pv pb)
   -- Array index assignment `arr[i] = v`.  Only supported when
   -- `arr` is a simple identifier — we model the mutation as a
   -- shadowing letIn that rebinds the name to (arraySet arr idx
@@ -1006,7 +1006,7 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
     let pi ← cExprToPExprImpl idx
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
-    some (.letIn name (.arraySet (.var name) pi pv) pb)
+    some (.letIn name.name (.arraySet (.var name.name) pi pv) pb)
   -- Bounded while loop with flat-assign body.  CStmt.while_
   -- carries `body` containing the source body with the for-loop
   -- step already concatenated (see Elab.lean's forLoop desugar:
@@ -1083,7 +1083,7 @@ def extractCarried : List CStmt → List String
   | [] => []
   | (.assign name _) :: rest =>
     let r := extractCarried rest
-    if r.contains name then r else name :: r
+    if r.contains name.name then r else name.name :: r
   | (.ifElse _ thenBr (some elseBr)) :: rest =>
     (extractCarried thenBr ++ extractCarried elseBr ++ extractCarried rest).eraseDups
   | (.ifElse _ thenBr none) :: rest =>
@@ -1142,19 +1142,19 @@ def cStmtsToStepExprK
   | (.letDecl name _ _ val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToStepExprK (name :: locals) assigns rest k
-    some (.letIn name pv pb)
+    let pb ← cStmtsToStepExprK (name.name :: locals) assigns rest k
+    some (.letIn name.name pv pb)
   | [.assign name val], none => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let as := upsertAssign assigns name pv
+    let as := upsertAssign assigns name.name pv
     if as.any (locals.contains ·.1) then none  -- see `[], none`
     some (.enumLit "LoopStep" "Cont" as)
   | (.assign name val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToStepExprK locals (upsertAssign assigns name (.var name)) rest k
-    some (.letIn name pv pb)
+    let pb ← cStmtsToStepExprK locals (upsertAssign assigns name.name (.var name.name)) rest k
+    some (.letIn name.name pv pb)
   -- A branch is a new scope (`locals := []`); its continuation runs in THIS block's scope.
   | (.ifElse cond thenBr none) :: rest, k => do
     if !cExprNoEscape cond then none
@@ -1226,13 +1226,13 @@ def cAssignBodyToUpdates :
       if !cExprNoEscape val then none
       let pv ← cExprToPExprImpl val
       let prest ← cAssignBodyToUpdates rest
-      some ((name, pv) :: prest)
+      some ((name.name, pv) :: prest)
     | .arrayIndexAssign (.ident name _) idx val => do
       if !(cExprNoEscape idx && cExprNoEscape val) then none
       let pi ← cExprToPExprImpl idx
       let pv ← cExprToPExprImpl val
       let prest ← cAssignBodyToUpdates rest
-      some ((name, .arraySet (.var name) pi pv) :: prest)
+      some ((name.name, .arraySet (.var name.name) pi pv) :: prest)
     | _ => none
 end
 
@@ -1257,7 +1257,7 @@ end
 def cExprToPExpr : CExpr → Option Proof.PExpr
   | .intLit n _   => some (.lit (.int n))
   | .boolLit b    => some (.lit (.bool b))
-  | .ident name _ => some (.var name)
+  | .ident name _ => some (.var name.name)
   | .binOp op lhs rhs _ => do
     let pop ← binOpToPBinOp op (CExpr.ty lhs)
     let pl ← cExprToPExpr lhs
@@ -1290,7 +1290,7 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
   -- local, answerable only by `FnTable.callables` (R-0442).
   | .call (.indirect binding) _ args _ => do
     let pargs ← cExprListToPExpr args
-    some (.applyVar binding pargs)
+    some (.applyVar binding.name pargs)
   | .structLit name _ fields _ => do
     let pfields ← cFieldsToPExpr fields
     some (.structLit name pfields)
@@ -1329,13 +1329,13 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
     if !cExprNoEscape val then none
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
-    some (.letIn name pv pb)
+    some (.letIn name.name pv pb)
   | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
     if !(cExprNoEscape idx && cExprNoEscape val) then none
     let pi ← cExprToPExpr idx
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
-    some (.letIn name (.arraySet (.var name) pi pv) pb)
+    some (.letIn name.name (.arraySet (.var name.name) pi pv) pb)
   -- if-without-else (early-return shape): then branch's cont
   -- is `rest with k`; implicit else is the same.
   | (.ifElse cond thenBranch none) :: rest, k => do
