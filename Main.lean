@@ -2959,6 +2959,11 @@ def compileAndReport (inputPath : String) (reportType : String)
         let freshRecheck := fun (thm : String) =>
           ((fresh.bind fun r => (r.recheck.find? (·.1 == thm)).map (·.2)).getD Proof.RecheckVerdict.notRun)
         let freshChecker := (fresh.bind (·.environment.checker.identity?)).map (·.canonical)
+        -- The fresh re-check's checker can fail to identify even when the probe above succeeded;
+        -- its policy is then `unknown`, and the line says why rather than leaving a bare status.
+        let freshUnidentified : String := match fresh.map (·.environment.checker) with
+          | some (.unidentified w) => s!" (this run's re-check: checker UNIDENTIFIED ({w}))"
+          | _ => ""
         let mut lines : List String := []
         let mut policyCounts : Array Proof.AdvisoryStatus := #[]
         let mut acceptedNow := 0
@@ -2997,7 +3002,7 @@ def compileAndReport (inputPath : String) (reportType : String)
                 let rv := freshRecheck st.theoremArtifact
                 if Proof.acceptedNow d rv then acceptedNow := acceptedNow + 1
                 lines := lines ++ [s!"    ✓ {subject} — kernel-replayed, receipt current ({st.theoremArtifact}){trust}"
-                                 , s!"        checker policy: {d.status.canonical}{why}"
+                                 , s!"        checker policy: {d.status.canonical}{why}{freshUnidentified}"
                                  , s!"        fresh kernel re-check in this run: {rv.canonical}"]
               | .ok .notCurrent =>
                 notCurrent := notCurrent + 1
