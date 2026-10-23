@@ -233,6 +233,7 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
+  [216]="OPEN -- a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused (needs the OWN-10 scope decision); reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)"
   [209]="FIXED 2026-10-23 -- a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture"
   [207]="FIXED 2026-10-23 -- check_binder_refs.sh aborted before its verdict on a failed assertion. Regression vehicle is the mutation harness (families 55-57 KILLED), not a tests/programs fixture"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"
