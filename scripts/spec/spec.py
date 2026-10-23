@@ -989,6 +989,23 @@ def main():
         with open(path, "a") as f:
             for k, st, h in new: f.write(f"{k}\t{st}\t{h}\n")
         print(f"registered {len(new)} new keys")
+    elif c == "bump":
+        # a changed sentence gets a new version: the chapter's tag moves to @n+1, the old version
+        # row becomes `superseded` (its only allowed transition) and the new row is appended
+        e = spec.by_id().get(a.arg)
+        if e is None: ap.error(f"no entry {a.arg}")
+        old, new = e.tag, f"{e.id}@{e.version + 1}"
+        cp = os.path.join(spec.dir, e.chapter + ".md")
+        txt = open(cp, encoding="utf-8").read()
+        assert txt.count(f"**{old}.**") == 1
+        open(cp, "w", encoding="utf-8").write(txt.replace(f"**{old}.**", f"**{new}.**"))
+        path = os.path.join(spec.dir, "ids.tsv")
+        lines = open(path, encoding="utf-8").read().split("\n")
+        lines = [("\t".join([old, "superseded", l.split("\t")[2]]) if l.split("\t")[0] == old else l) for l in lines]
+        spec2 = Spec(spec.dir)
+        lines = [l for l in lines if l.strip()] + [f"{new}\tlive\t{sentence_hash(spec2.by_id()[e.id])}"]
+        open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+        print(f"{old} -> {new}; update the compiler's tags for {e.id}")
     elif c == "restatements":
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":

@@ -62,7 +62,7 @@ fn main() -> Int {
 <a id="PAT-2"></a>
 ### PAT-2. A match is exhaustive
 
-**PAT-2@1.** A `match` covers every value of its scrutinee: over an enum, every variant has an unguarded arm or an unguarded catch-all (`_` or a binding) follows, and over any other type an unguarded catch-all follows the literal and range arms, a guarded arm never counting as coverage.
+**PAT-2@2.** A `match` covers every value of its scrutinee: over an enum, every variant has an unguarded arm or the match has an unguarded catch-all (`_` or a binding), over `bool` both `true` and `false` have unguarded arms or the match has an unguarded catch-all, and over any other type the match has an unguarded catch-all, a guarded arm never counting as coverage.
 
 - Kind: refusal
 - Uses: none
@@ -127,7 +127,7 @@ fn main() -> Int {
 <a id="PAT-3"></a>
 ### PAT-3. Every arm fits its scrutinee
 
-**PAT-3@1.** A variant pattern names a variant of the scrutinee's enum and binds or ignores every one of its fields, a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
+**PAT-3@2.** A variant pattern names a variant of the scrutinee's enum and either lists every one of its fields or, written without a field list, ignores them all (which, like `_`, only a Copy field allows), a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
 
 - Kind: refusal
 - Uses: none
@@ -142,9 +142,11 @@ fn main() -> Int {
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
 arm that can never be reached is a mistake. Two gaps fail closed at a later stage instead of at
 the checker: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
-reports `unknown variant`, and a range arm over an enum reaches the SSA verifier natively while
-`--interp` runs it. Both are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
-examples become enforced when it lands.
+reports `unknown variant`, a variant of another enum that shares a name with one of the
+scrutinee's is silently taken as that one, and a range arm over an enum reaches the SSA verifier
+natively while `--interp` runs it. These are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
+examples become enforced when it lands. A bare variant name over a variant with a non-Copy field
+silently dropped the payload (bug 197, fixed on `wip/bug197` with E0288).
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -192,6 +194,32 @@ fn main() -> Int {
     match e {
         0..=9 => { return 1; },
         _ => { return 42; }
+    }
+}
+```
+
+```con reject name=same-name-other-enum code=new stage=check pair=arms-fit pending=R-0499 now=accept:42
+enum Copy E { A, B }
+enum Copy F { A, X }
+
+fn main() -> Int {
+    let e: E = E::B;
+    match e {
+        F::A => { return 1; },
+        _ => { return 42; }
+    }
+}
+```
+
+```con reject name=bare-variant-drops-payload code=new stage=check pair=arms-fit pending=R-0499 now=accept:1
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn main() -> Int {
+    let e: E = E::A { r: R { v: 42 } };
+    match e {
+        E::A => { return 1; },
+        E::B => { return 0; }
     }
 }
 ```
@@ -268,7 +296,7 @@ fn main() -> Int {
 <a id="PAT-5"></a>
 ### PAT-5. A destructuring `let` binds every field
 
-**PAT-5@1.** A destructuring `let` consumes its scrutinee and binds every field of its pattern, a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
+**PAT-5@2.** A destructuring `let` consumes its scrutinee and binds every field of its pattern (a pattern over a Copy struct may omit fields), a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
 
 - Kind: refusal
 - Uses: none
@@ -329,7 +357,7 @@ fn main() -> Int {
 <a id="PAT-6"></a>
 ### PAT-6. `if let` and `while let` are matches with a catch-all
 
-**PAT-6@1.** `if let P = e { A } else { B }` means `match e { P => { A }, _ => { B } }` (an empty `B` when there is no `else`), and `while let P = e { A }` re-evaluates `e` before each iteration and ends the loop at the first value that does not match `P`.
+**PAT-6@2.** For an enum variant pattern `P`, `if let P = e { A } else { B }` means `match e { P => { A }, _ => { B } }` (an empty `B` when there is no `else`), and `while let P = e { A }` re-evaluates `e` before each iteration and ends the loop at the first value that does not match `P`.
 
 - Kind: guarantee
 - Uses: none

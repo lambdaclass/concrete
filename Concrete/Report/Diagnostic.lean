@@ -270,8 +270,8 @@ def codeRuleTag : String → Option String
   | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
   -- docs/spec/patterns.md
-  | "E0530" | "E0534" => some "PAT-2@1"
-  | "E0304" | "E0531" | "E0532" | "E0533" => some "PAT-3@1"
+  | "E0530" | "E0534" => some "PAT-2@2"
+  | "E0304" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"
   | "E0300" => some "PAT-4@1"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"
@@ -280,7 +280,7 @@ def codeRuleTag : String → Option String
 /-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`
     for it): its sites tag each diagnostic (`CheckError.rule`), and the ledger lists them all. -/
 def codeSharedRules : String → List String
-  | "E0252" => ["PAT-5@1", "TYPE-7@1"]
+  | "E0252" => ["PAT-5@2", "TYPE-7@1"]
   | _ => []
 
 /-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/
