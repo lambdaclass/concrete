@@ -1,0 +1,19 @@
+// MEMORY_SEMANTICS §15.7 G17 (closed 2026-10-23, TIGHTENING_DECISIONS T-G17): the root of a
+// `match &o` scrutinee is moved inside the arm while the arm binder still borrows it. Rejected: E0204.
+struct P { n: Int }
+fn take_ref(p: &P) -> Int { return p.n; }
+fn consume(o: Option<P>) -> Int {
+    match o {
+        Option::Some { value } => { let P { n } = value; return n; },
+        Option::None => { return 0; }
+    }
+}
+fn main() -> Int {
+    let o: Option<P> = Option::Some { value: P { n: 42 } };
+    let mut out: Int = 0;
+    match &o {
+        Option::Some { value } => { out = consume(o) + take_ref(value); },
+        Option::None => {}
+    }
+    return out;
+}
