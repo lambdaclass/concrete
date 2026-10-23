@@ -103,7 +103,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|scripts/dev/seed-lake\.sh' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|scripts/dev/seed-lake\.sh|check_checker_pin_freshness\.sh --tier campaign' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u
@@ -179,7 +179,11 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 264 -> 265: train 3 adds check_rules_2i.sh (exit 2i acceptance manifest tests/rules/exit_2i.tsv:
 #   REF-1..REF-8, SCOPE-1..SCOPE-3 and G4, with negative controls), from train 1b.
 # 265 -> 266: check_ssa_lowering_scaling.sh (bug 178: match lowering scales <= n^1.3 in arms).
-EXPECTED_GATE_COMMANDS=266
+# 266 -> 267: check_checker_pin_freshness.sh --tier landing (external-checker pins vs the Lean Kernel
+#   Arena; warns, never fails; SKIPs offline), from train 4 (wip/checker-pins). Its `--tier campaign`
+#   spelling is excluded above with the campaign driver: there a stale pin is a finding (exit 1), and an
+#   upstream commit must not turn a local pre-push or closure pass red.
+EXPECTED_GATE_COMMANDS=267
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

@@ -12,7 +12,8 @@
 #     in ConLeche/MainTheorem.lean). Run in --verified, the mode the theorem is about.
 #   nanoda (ammkrn/nanoda_lib, Rust) — no consistency proof; implementation diversity.
 #
-#   P  the three tools are the pinned revisions (external_checker.pins);
+#   P  the three tools are the pinned revisions (external_checker.pins), and con-leche runs with one
+#      worker at every call site;
 #   I  population: every source module declaring a theorem contributes to it; no sorryAx, and every non-standard axiom is a native axiom minted by a lemma
 #      declared in axiom_native_owners.txt — exactly those owners, each named in AXIOMS.md; the
 #      evidence theorems among the native ones are exactly axiom_native_trust.txt;
@@ -36,6 +37,12 @@
 # reused. lean4export is built with THIS repository's toolchain (it must read our .olean files);
 # con-leche with its own (it reads exports from older toolchains: the Lean Kernel Arena runs it on
 # Lean 4.34.1 exports); nanoda with cargo.
+#
+# con-leche runs single-threaded (--jobs=1; its default is one worker per hardware thread). Lean
+# 4.35.0's #15288 fixed undefined behaviour when an object whose single-threaded reference count had
+# overflowed is shared between threads, and named Lean-based checkers such as con-leche as possibly
+# affected. One worker shares no object between concurrently running threads. Leg P checks that
+# every con-leche run here passes the flag. See docs/verification/EXTERNAL_CHECKER.md.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -99,6 +106,14 @@ CHECK_DIR=$(build_lake_tool con-leche "$CONLECHE_URL" "$CONLECHE_REV" "" con-lec
   || { no "could not build con-leche at $CONLECHE_REV"; finish; }
 EXPORTER="$EXPORT_DIR/.lake/build/bin/lean4export"
 CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"
+CONLECHE_FLAGS=(--verified --jobs=1)
+# conleche FILE → runs con-leche on FILE with CONLECHE_FLAGS and records its wall time in $CL_SECS
+conleche() { local t0=$SECONDS; "$CONLECHE" "${CONLECHE_FLAGS[@]}" "$1"; local rc=$?; CL_SECS=$((SECONDS-t0)); return $rc; }
+# Every con-leche run goes through conleche(): a direct call would run at the default worker count.
+DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$0" | grep -v 'CONLECHE_FLAGS\[@\]' || true)
+[ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
+  && ok "con-leche runs single-threaded (${CONLECHE_FLAGS[*]}) at every call site" \
+  || no "con-leche flags are [${CONLECHE_FLAGS[*]}], expected [--verified --jobs=1]; direct calls: $(echo $DIRECT | cut -c1-200)"
 NANODA_DIR="$TOOLS/nanoda-$NANODA_REV"
 if [ ! -f "$NANODA_DIR/.built" ]; then
   rm -rf "$NANODA_DIR"
@@ -226,9 +241,9 @@ NCMP=$(grep -c . "$TMP/st-joined.tsv")
   || no "statement fidelity: $NCMP of $NALL compared, $(grep -c . "$TMP/st-diff.txt") differ: $(head -3 "$TMP/st-diff.txt" | tr '\n' ' ')"
 
 echo "=== C/K: re-check ==="
-"$CONLECHE" --verified "$EXPORT" > "$TMP/c.out" 2>&1; rc=$?
+conleche "$EXPORT" > "$TMP/c.out" 2>&1; rc=$?
 [ "$rc" = 0 ] && grep -qE "^con-leche: accepted [0-9]+ declarations \(--verified\)" "$TMP/c.out" \
-  && ok "con-leche --verified accepts the standard export ($(grep -oE 'accepted [0-9]+ declarations' "$TMP/c.out"))" \
+  && ok "con-leche --verified --jobs=1 accepts the standard export ($(grep -oE 'accepted [0-9]+ declarations' "$TMP/c.out"), ${CL_SECS}s)" \
   || no "con-leche rc=$rc on the standard export: $(grep -v 'stats:' "$TMP/c.out" | tail -3 | tr '\n' ' ')"
 # shellcheck disable=SC2086
 nanoda "$EXPORT" $STANDARD_AXIOMS > "$TMP/k.out" 2>&1; rc=$?
@@ -238,7 +253,7 @@ nanoda "$EXPORT" $STANDARD_AXIOMS > "$TMP/k.out" 2>&1; rc=$?
 
 echo "=== X: hostile control (swapped proof) ==="
 read -r RECEIVER DONOR < <(python3 "$INV" swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
-"$CONLECHE" --verified "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
+conleche "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
 [ "$rc" = 1 ] && grep -qF "type mismatch in theorem $RECEIVER " "$TMP/cx.out" \
   && ok "con-leche rejects a proof of $DONOR handed in as $RECEIVER as a type mismatch there" \
   || no "con-leche on the swapped export: rc=$rc, expected 1 with a type mismatch at ${RECEIVER:-?}: $(grep -v 'stats:' "$TMP/cx.out" | tail -2 | tr '\n' ' ')"
@@ -250,7 +265,7 @@ nanoda "$TMP/swapped.ndjson" $STANDARD_AXIOMS > "$TMP/kx.out" 2>&1; rc=$?
 
 echo "=== N: native trust ==="
 if [ "$NNAT" -gt 0 ]; then
-  "$CONLECHE" --verified "$NATIVE_EXPORT" > "$TMP/cn.out" 2>&1; rc=$?
+  conleche "$NATIVE_EXPORT" > "$TMP/cn.out" 2>&1; rc=$?
   [ "$rc" = 2 ] && grep -qE "non-standard axiom \([^)]*\._native\.(bv_decide|native_decide)\.ax_" "$TMP/cn.out" \
     && ok "con-leche declines the native export for its ._native axiom (exit 2), never accepts it" \
     || no "con-leche on the native export: rc=$rc, expected 2 declining a ._native axiom: $(grep -v 'stats:' "$TMP/cn.out" | tail -2 | tr '\n' ' ')"

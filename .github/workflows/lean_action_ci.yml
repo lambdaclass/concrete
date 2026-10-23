@@ -404,6 +404,25 @@ jobs:
       - name: External-checker gate (proof evidence re-checked by con-leche)
         run: bash scripts/tests/check_external_checker.sh
 
+      # LANDING TIER: a pin behind the revision the Lean Kernel Arena evaluates is a warning
+      # annotation, never a failure (landings stay reproducible). Offline, it prints SKIP.
+      - name: Checker pin freshness (warns when a pin lags the Lean Kernel Arena)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier landing
+
+  checker-pin-freshness:
+    name: Checker pin freshness (campaign finding)
+    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
+    # A con-leche or nanoda pin that differs from the revision the Lean Kernel Arena currently
+    # evaluates fails this job: a finding to act on (docs/verification/EXTERNAL_CHECKER.md), not a
+    # merge blocker. Needs only network access, no build.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checker pins vs the Lean Kernel Arena (stale pin = finding)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier campaign
+
   fuzz-campaign:
     name: Nightly differential fuzz (rotating seed)
     # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).

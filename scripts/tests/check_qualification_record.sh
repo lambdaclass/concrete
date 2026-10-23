@@ -105,7 +105,12 @@ for c in same_comment same_quoted same_anchor same_reindent; do
   else no "$c changed or broke the required set"; fi
 done
 for c in keep_coe_false keep_if_true keep_if_expr_true keep_coe_expr_false; do
-  if python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" 2>/dev/null | grep -q '^step	ssa-tests	Run SSA test suite$'; then
+  # Captured to a file first, never piped into `grep -q`: under pipefail, grep exiting at its first
+  # match SIGPIPEs the still-writing producer and the pipeline reads as a failure. Once the workflow
+  # grew past a pipe buffer of required rows this failed a random variant under load (3 of 7 runs on
+  # 2026-10-23, a different variant each time) — the race check_gate_hygiene.sh describes.
+  _rc=0; python3 -I "$REC" --list-required --workflow "$TMP/$c.yml" > "$TMP/req_$c" 2>/dev/null || _rc=$?
+  if [ "$_rc" = 0 ] && grep -q '^step	ssa-tests	Run SSA test suite$' "$TMP/req_$c"; then
     ok "$c keeps the SSA gate step required"
   else no "$c made the SSA gate step optional"; fi
 done

@@ -33,6 +33,40 @@ pointer-typed local being its value (bug 102), and a reference-valued
 `if`/`match` reached through a generic segfaulting (bug 105). R-0010 will replace the legacy skip-based audit with mechanically
 checked per-bug states.
 
+### H29. Checker pins can lag upstream soundness fixes — OPEN (controlled)
+
+The external re-check (con-leche, nanoda; `check_external_checker.sh`) uses revisions pinned in
+`scripts/tests/external_checker.pins` so that landings are reproducible. A pinned checker does not
+pick up upstream soundness fixes, and an independent checker protects us only while it is current:
+kernel bug [lean4#14576](https://github.com/leanprover/lean4/issues/14576) also got past a week-old
+nanoda. Lean 4.35.0's [#15288](https://github.com/leanprover/lean4/pull/15288) fixed thread-sharing
+undefined behaviour that its notes say may affect con-leche. On 2026-10-22 our con-leche pin
+`dd695ca` was one round behind the Arena's evaluated `c26f793`; nanoda `e0d76f5` matched.
+
+**Controls (2026-10-22):**
+
+- con-leche bumped to `c26f793` (2026-10-22), then con-leche `ae1f319` and nanoda `998e0a8` when the
+  Arena published its next round the following day and the freshness check reported both stale
+  (gate 22/0 each time; R-0208 identity gates unaffected, they bind the Lean kernel replay, not the
+  external checkers).
+- con-leche runs with one worker (`--jobs=1`) at every call; gate leg P fails otherwise. The
+  #15288 fix is already in con-leche's own toolchain (`v4.35.0` at `ae1f319`); this is defence in
+  depth.
+- `check_checker_pin_freshness.sh` compares the pins with the revisions behind the Lean Kernel
+  Arena's published results: a **warning** in the landing tier (never a merge failure; SKIP
+  offline) and a **finding** in the nightly campaign tier (job `Checker pin freshness (campaign
+  finding)`), which withholds qualification until the pin is bumped or the finding answered.
+
+**Not closed:** the check compares against the Arena's *published* revision, by policy (AXIOMS.md
+prefers Arena-evaluated revisions). So the gap between an upstream fix and our bump is the Arena's
+publication delay, which nothing here bounds, plus the nightly cadence and the time to evaluate and
+land a bump. While the Arena's published revision is readable, an upstream fix not yet in a published
+round is invisible to the finding: the upstream head is printed, not compared (it is compared only
+as the fallback when the Arena page cannot be read). The Arena's suite is also curated rather than adversarial.
+The Lean toolchain itself (4.34.1) is outside this check; its bump to 4.35 is planned as a
+separate slice. **Owner:** R-0532 (R-0208's checker-advisory residuals). Operation and the bump
+record: [EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md).
+
 ### H28. Places are checked by a syntactic normalized-place rule — OPEN (deliberate restriction)
 
 Borrows, receivers, reference arguments, reference provenance and the call-overlap check all

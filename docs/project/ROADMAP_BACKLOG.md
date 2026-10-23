@@ -142,6 +142,9 @@ evaluation receipts remain withheld until issued with distinct trust labels (R-0
 Reverting both policy and minimum defeats the local rollback guard; that limitation stays published
 until a threat-model-specific guard exists. Narrowing an advisory to a fragment requires an
 independently checked environment footprint; whole-version refusal is the safe fallback.
+It also owns KNOWN_HOLES H29 (2026-10-22), external-checker pins lagging upstream soundness
+fixes: controlled by single-threaded con-leche and `check_checker_pin_freshness.sh` (warning when
+landing, finding in the nightly campaign); docs/verification/EXTERNAL_CHECKER.md.
 
 **Exit:** each of the three has an implemented control or a published limitation with its threat
 model and owner.
