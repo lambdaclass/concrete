@@ -1,0 +1,8 @@
+// Bug 203: an append() argument of an unsupported type (here a float) was reported as E0420,
+// the code of a ghost value read at run time. It has its own code, E0421 (TYPE-10).
+fn main() with(Alloc) -> Int {
+    let mut out: String = "";
+    append(&mut out, 1.5);
+    drop_string(out);
+    return 0;
+}

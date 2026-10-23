@@ -268,7 +268,7 @@ def codeRuleTag : String → Option String
   | "E0551" | "E0552" => some "TYPE-7@1"
   | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
   | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
-  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
+  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" | "E0421" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@1"

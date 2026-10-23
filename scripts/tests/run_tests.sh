@@ -1432,6 +1432,9 @@ run_ok "$TESTDIR/bug_if_expression.con" 0
 run_ok "$TESTDIR/bug_print_builtins.con" "hello 42" 0
 run_ok "$TESTDIR/bug_string_building.con" 0
 run_ok "$TESTDIR/variadic_append.con" 0
+# Bug 203: E0420 named two unrelated errors; the append() refusal is now E0421.
+run_err "$TESTDIR/error_203_append_unsupported_argument.con" "(E0421)"
+run_err "$TESTDIR/error_203_ghost_read_at_runtime.con" "(E0420)"
 run_ok "$TESTDIR/bug_clock_builtin.con" 0
 run_ok "$TESTDIR/bug_enum_in_struct.con" 0
 run_ok "$TESTDIR/bug_stack_array_borrow_copy.con" 42

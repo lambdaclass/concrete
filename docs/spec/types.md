@@ -405,7 +405,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check)
+- Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check), E0421 (elab)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -415,6 +415,15 @@ fn main() -> Int {
 **Rationale.** Builtins (`alloc`, `free`, `destroy`, the collection intrinsics) are checked by
 their own signatures rather than by a declaration, so each misuse has its own diagnostic.
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
+
+```con reject name=append-unsupported-argument code=E0421 stage=elab pair=free-heap
+fn main() with(Alloc) -> Int {
+    let mut out: String = "";
+    append(&mut out, 1.5);
+    drop_string(out);
+    return 0;
+}
+```
 
 ```con reject name=free-non-heap code=E0274 stage=check pair=free-heap
 fn main() with(Std) -> Int {

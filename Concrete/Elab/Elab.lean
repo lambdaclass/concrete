@@ -1792,7 +1792,9 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
                      , pass := "elab"
                      , span := some sp
                      , hint := some "pass primitive values or string references; complex values must be formatted first"
-                     , code := "E0420" }]
+                     -- Bug 203: its own code. It shared E0420 with a ghost read at run time, so
+                     -- the code did not identify the rule (TYPE-10 here, CON-4 there).
+                     , code := "E0421" }]
           stmts := stmts ++ [call]
         return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
       | _ =>
