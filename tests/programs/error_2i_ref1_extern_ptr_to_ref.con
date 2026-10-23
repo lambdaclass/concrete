@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1, gap G15 (MEMORY_SEMANTICS §15.3, FFI.md): an extern fn may not return a raw
+// FFI-3 (docs/spec/ffi.md), gap G15 (MEMORY_SEMANTICS §15.3, FFI.md): an extern fn may not return a raw
 // pointer to a reference (C would hand back the address of a reference slot). E0575.
 trusted extern fn f() with() -> *const &Int;
 

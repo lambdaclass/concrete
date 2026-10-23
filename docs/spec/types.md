@@ -628,7 +628,7 @@ fn main() -> Int {
 - Status: enforced
 - Enforced by: Concrete.Layout.isCopyTyGeneric
 - Semantics: none
-- Obligation: Copy is a fact of the declaration, invariant under substitution (R-0510)
+- Obligation: Copy is decided from the declaration and the type arguments alone, with no fixpoint over the type graph (R-0510)
 - Evidence: tested
 
 **Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D6, option (a)) and enforced the same

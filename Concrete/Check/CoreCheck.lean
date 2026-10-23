@@ -1168,7 +1168,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | _ => false
 
 -- spec: OWN-13, spec: OWN-14 (docs/spec/ownership.md; this declaration enforces the rule)
--- spec: REF-1 (docs/spec/references.md; E0574 / E0575 for a pointee holding a reference)
+-- spec: FFI-3 (docs/spec/ffi.md; E0574 / E0575 for a type containing a reference)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
@@ -1181,8 +1181,9 @@ def ccCheckModuleDecls (m : CModule)
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == sd.name then
         errors := errors ++ [mkDeclDiag (.copyDestroyConflict sd.name) sd.declSpan]
       for (fname, fty) in sd.fields do
-        -- Skip Copy check for fields whose type is a type parameter of this struct.
-        -- After monomorphization, concrete types will be checked.
+        -- A field whose type is a type parameter of this struct is Copy: the declaration is
+        -- checked once with its parameters taken as Copy, and an instantiation is Copy only when
+        -- every argument is (D6, OWN-14@2); nothing is re-checked after monomorphization.
         let isTypeParam := match fty with
           | .named n => sd.typeParams.contains n
           | _ => false
@@ -1243,10 +1244,10 @@ def ccCheckModuleDecls (m : CModule)
     -- G15 (exit 2i, R-0285): a raw pointer is FFI-safe, but not one whose pointee holds a
     -- reference (`*const &Int`): C would receive or hand back the address of a reference slot.
     -- The pointee is looked through with the shared REF-1 judgment.
-    -- A pointee reference is a REF-1 violation at the C boundary, so its diagnostic carries the
+    -- A pointee reference is an FFI-3 violation at the C boundary, so its diagnostic carries the
     -- rule evidence (rule, spec anchor in docs/spec, rewrite).
     let refRule (d : Diagnostic) : Diagnostic :=
-      { d with evidence := [("rule", "REF-1@1"), ("spec", ruleSpecRef "REF-1@1")]
+      { d with evidence := [("rule", "FFI-3@1"), ("spec", ruleSpecRef "FFI-3@1")]
                nextAction := some "pass or return a raw pointer to a value type (`*const T` where `T` contains no reference), or an owned value" }
     -- The REF-1 evidence is attached whenever the type holds a reference, whichever FFI branch
     -- refuses it (a bare `&Int` fails `isFFISafe` first; Codex review).

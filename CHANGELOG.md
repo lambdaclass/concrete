@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Tightening Batch Is In The Spec, With A Gate And Eighteen Mutation Families (landing train 6, 2026-10-23)
+
+The batch's rules are now checked entries of `docs/spec`: REF-9 (binder mode), REF-10 (implicit
+`&mut` reborrow), REF-11 (loans keyed by root, version 2 stating the reborrow exception), FFI-1
+(no foreign function value), PASS-2 (binder modes carried in Core, version 2), and new entries
+FFI-3 (no reference crosses the C boundary, E0574 / E0575), TRUST-4 (`read_owned`, E0311) and CON-2
+(ghost reads, E0420). The pending examples they close now hold on both consumers. D6 option (a)
+changes the definition of Copy, so OWN-D1 and its users move to version 2 and TYPE-14's pending
+bound-based version is retired for the declared form. `check_tightening_rules.sh` (CI language
+gates) runs every reproducer of the batch on both consumers, and the mutation inventory grows from
+141 to 159 families, one per slice, each killed by that gate.
+
 ### Copy Is Declared, Not Derived From Fields (decision D6, 2026-10-23)
 
 A generic struct or enum declared `Copy` is Copy exactly when every type argument is Copy, decided
@@ -72,12 +84,12 @@ std and the examples are unchanged.
 REF-1 (no function returns a reference) and REF-2 (no function type returns one) are decided by one
 judgment, `Concrete/Semantics/RefWellFormed.lean`, shared by Check, CoreCheck's FFI rule and the
 post-mono verifier. Four spellings escaped it: a trait method declaration returning `&Int` (G13), an
-`extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 with REF-1 evidence), a
+`extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 under the new spec rule FFI-3), a
 reference-returning function type behind a type alias or in a field (G16), and a generic reached at
 `*const &Int` only through another generic's type parameter, which the post-mono check's weaker
 predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. The
-rules' sentences are unchanged (REF-1@1, REF-2@1); their pending spec examples are now enforced. Each spelling has a reject row
-and a rewritten run row in `exit_2i.tsv` (233 rule checks pass); extern signatures are now expanded
+sentences of REF-1 and REF-2 are unchanged; their pending spec examples now hold. Each spelling has a
+reject example or conformance row with its rewrite; extern signatures are now expanded
 through type aliases; 0 corpus programs were affected.
 
 ### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)

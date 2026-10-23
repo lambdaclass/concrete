@@ -64,9 +64,9 @@ because REF-3 forbids reference fields. For a binding, the outer reference is lo
 
 - Kind: refusal
 - Uses: REF-D1
-- Codes: E0236 (check, post-mono), E0574 (core-check), E0575 (core-check)
+- Codes: E0236 (check, post-mono)
 - Status: enforced
-- Enforced by: Concrete.checkFn, Concrete.verifyNoReturnedRefs, Concrete.checkModule, Concrete.ccCheckModuleDecls
+- Enforced by: Concrete.checkFn, Concrete.verifyNoReturnedRefs, Concrete.checkModule
 - Semantics: none
 - Obligation: INV-REF (R-0500; V1, R-0507)
 - Evidence: tested
@@ -74,8 +74,8 @@ because REF-3 forbids reference fields. For a binding, the outer reference is lo
 **Rationale.** A returned reference would outlive the frame that made it. The escape for
 low-level code is a raw pointer to the referent, returned from trusted code. A trait method
 *declaration* is checked like a definition (gap G13, closed 2026-10-23). An `extern fn` whose
-parameter or result holds a reference, directly or behind a raw pointer, is refused at the C
-boundary with E0574 or E0575 (gap G15, closed 2026-10-23). A generic reached at a
+parameter or result contains a reference, also behind a raw pointer, is refused at the C boundary
+by FFI-3 (gap G15, closed 2026-10-23). A generic reached at a
 reference-returning instantiation only through another generic is refused after
 monomorphization by the same judgment (gap G2).
 
@@ -122,10 +122,6 @@ fn main() -> Int {
 | `tests/programs/regress_2i_ref1_return_value.con` | `run:42` | `ref1` | `binary,interp` |
 | `tests/programs/error_2i_ref1_trait_decl_returns_ref.con` | `reject:E0236:REF-1@1` | `ref1g13` | `-` |
 | `tests/programs/regress_2i_ref1_trait_decl_value.con` | `run:42` | `ref1g13` | `binary,interp` |
-| `tests/programs/error_2i_ref1_extern_ptr_to_ref.con` | `reject:E0575:REF-1@1` | `ref1g15` | `-` |
-| `tests/programs/error_2i_ref1_extern_alias_ptr_to_ref.con` | `reject:E0575:REF-1@1` | `ref1g15` | `-` |
-| `tests/programs/error_2i_ref1_extern_param_ptr_to_ref.con` | `reject:E0574:REF-1@1` | `ref1g15` | `-` |
-| `tests/programs/regress_2i_ref1_extern_ptr_to_value.con` | `run:42` | `ref1g15` | `binary,interp` |
 | `tests/programs/error_2i_ref1_transitive_generic.con` | `reject:E0236:REF-1@1` | `ref1g2` | `json-exempt:post-mono` |
 | `tests/programs/regress_2i_ref1_transitive_generic_value.con` | `run:42` | `ref1g2` | `binary,interp` |
 
@@ -803,7 +799,7 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@1.** A borrow through a projection is a loan on the projection's root binding, so within one call two borrows of the same root conflict when at least one is exclusive, and an exclusive borrow conflicts with any other use of its root, whatever their projections.
+**REF-11@2.** A borrow through a projection is a loan on the projection's root binding, so within one call two borrows of the same root conflict when at least one is exclusive, and a new exclusive loan conflicts with any other use of its root in the same call, whatever their projections, where passing on a reference binding the caller already holds is an implicit reborrow (REF-10) and makes no new loan.
 
 - Kind: refusal
 - Uses: none
@@ -823,7 +819,10 @@ with `let` first) and this conformance fixture. Both `upd(&mut s.a, &s.b)` and
 `regress_2i_ref8_call_disjoint.con` became `error_d2_call_disjoint_fields.con`). Field-precise
 loans are deferred until a workload needs two simultaneous borrows of different fields of one
 owner and cannot be restructured with a `let` or a borrow block. A conflict between two borrows
-of one place, or of a place and a projection of it, is REF-8's.
+of one place, or of a place and a projection of it, is REF-8's. Version 2 states what version 1
+left out: re-lending a reference the caller already holds (`r.add(r.step)` with `r: &mut S`, or
+`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the root, so reading
+through the same reference in another argument is not a second loan.
 
 ```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
 struct Copy W { a: Int, b: Int }
@@ -859,9 +858,9 @@ fn main() -> Int {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
-| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
-| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
+| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
+| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |

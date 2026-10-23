@@ -57,7 +57,7 @@ fn main() -> Int {
 <a id="PASS-2"></a>
 ### PASS-2. Binder modes are fixed before specialization
 
-**PASS-2@1.** Every pattern binder's mode (by reference or by value) is decided once by the checker, carried explicitly in Core, and is the same in every specialization.
+**PASS-2@2.** Every pattern binder's mode (by reference or by value) is decided once by the checker and carried explicitly in Core as the binder's type, and it is the same in every specialization, except that a whole-value binder over an owned scrutinee instantiated at a reference type may change mode where both modes bind the same value.
 
 - Kind: preservation
 - Uses: none
@@ -74,7 +74,10 @@ address. The decision was made in one place and recomputed in another, and nothi
 the two. REF-9 removes the Copy dependence from the rule. This entry requires the mode to be
 data in Core rather than recomputed: since 2026-10-23 a binder's Core type is its mode (a
 reference type is a borrowed binder), decided once from the scrutinee's type, and Lower and the
-interpreter read it from there. The re-check after Mono is the open obligation.
+interpreter read it from there. The re-check after Mono is the open obligation. Version 2 (the
+first enforced one) names the one case where the carried type changes under substitution: a
+whole-value binder `n` over a scrutinee of type `T` at `T := &Int` gets a reference type, and
+Lower and the interpreter bind the scrutinee itself in both modes.
 
 ```con accept name=binder-mode-survives-mono exit=42
 fn get<T>(o: &Option<T>, k: fn(&T) -> Int) -> Int {

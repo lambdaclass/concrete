@@ -173,8 +173,8 @@ E0570	rule	Copy/Destroy conflict
 E0571	rule	Copy struct has non-Copy field
 E0572	unmigrated:ffi	repr(C) struct has generics
 E0573	unmigrated:ffi	repr(C) field not FFI-safe
-E0574	rule	extern fn parameter not FFI-safe (a pointee holding a reference is REF-1)
-E0575	rule	extern fn return not FFI-safe (a pointee holding a reference is REF-1)
+E0574	rule	extern fn parameter not FFI-safe (a type containing a reference is FFI-3)
+E0575	rule	extern fn return not FFI-safe (a type containing a reference is FFI-3)
 E0576	unmigrated:ffi	repr(packed) and repr(align) conflict
 E0577	unmigrated:ffi	repr(align) not power of two
 E0578	unmigrated:modules	reserved function name

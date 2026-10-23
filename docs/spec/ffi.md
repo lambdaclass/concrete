@@ -1,6 +1,7 @@
 # Foreign Functions
 
-This chapter is a stub. It holds the decided rule on foreign function values. The C boundary,
+This chapter is a stub. It holds the decided rule on foreign function values and the reference
+rule at the C boundary. The rest of the C boundary,
 raw pointers and `trusted` code migrate here and to `trusted.md` later (README §8, step 6),
 from [FFI.md](../platform/FFI.md), SAFETY and TWO_AXIS_SAFETY.
 
@@ -76,4 +77,50 @@ mod m {
 disagreement shows up as wrong code at the boundary (structural classes 8 and 12). One authority,
 used by every consumer and stated for the AAPCS64 calling convention of the native profile,
 removes the second copy.
+
+<a id="FFI-3"></a>
+### FFI-3. No reference crosses the C boundary
+
+**FFI-3@1.** No `extern fn` has a parameter or result type that contains a reference, also behind a raw pointer.
+
+- Kind: refusal
+- Uses: REF-D1
+- Codes: E0574 (core-check), E0575 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: INV-REF (R-0500) at the foreign boundary (R-0285)
+- Evidence: tested
+
+**Rationale.** A reference is second-class and never outlives the call that lends it (REF-1,
+REF-3). C could keep a reference it was handed, or hand back the address of a reference slot,
+and nothing on the Concrete side could see it. A raw pointer to a value type stays FFI-safe.
+Gap G15 (2026-10-23): E0574 and E0575 rejected only a direct reference, and now look through raw
+pointers with the REF-D1 judgment. The two codes also refuse other FFI-unsafe types, which is
+not yet part of this chapter (README §8, step 6).
+
+```con reject name=returns-pointer-to-ref code=E0575 stage=core-check pair=pointer-to-value
+trusted extern fn f() with() -> *const &Int;
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con reject name=param-pointer-to-ref code=E0574 stage=core-check pair=pointer-to-value
+trusted extern fn keep(p: *const &Int) with();
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con accept name=pointer-to-value exit=42
+trusted extern fn f() with() -> *const Int;
+trusted extern fn keep(p: *const Int) with();
+
+fn main() -> Int {
+    return 42;
+}
+```
 

@@ -80,7 +80,7 @@ any other.
 <a id="TRUST-4"></a>
 ### TRUST-4. Moving a value out of raw memory is explicit
 
-**TRUST-4@1.** In trusted or `Unsafe` code, `*p` through a raw pointer `p` reads by value only a Copy pointee, and a non-Copy value is moved out of raw memory only by `read_owned(p)`, after which the slot is logically uninitialized until a value is stored back.
+**TRUST-4@1.** In trusted or `Unsafe` code, `*p` through a raw pointer `p` reads by value only a Copy pointee, and a non-Copy value is moved out of raw memory only by `read_owned(p)`.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -93,7 +93,9 @@ any other.
 
 **Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS T-RAWDUP; bug 198). `trusted` does not
 relax linearity. A by-value `*p` of a non-Copy pointee copied a value the slot still owned, so a
-trusted helper could free one heap cell twice. `read_owned(p)` states the transfer. Place uses
+trusted helper could free one heap cell twice. `read_owned(p)` states the transfer; afterwards the
+slot is logically uninitialized until a value is stored back, a premise the trusted code's author
+discharges (TRUST-2), which no checker tracks yet. Place uses
 (`(*p).f`, `&*p`), Copy pointees and stores through `*p` are unchanged.
 
 ```con reject name=raw-deref-moves-linear code=E0311 stage=check pair=read-owned-moves

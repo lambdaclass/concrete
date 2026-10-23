@@ -39,7 +39,7 @@ REF-9@1	retired:whole-value-binder-keeps-the-scrutinee-reference-type	cde1ef74ac
 REF-9/copy-payload-is-ref	live	-
 REF-10@1	live	63dc8107de80fbe74f8e72e1bfe85be6
 REF-10/reborrow-in-borrow-block	live	-
-REF-11@1	live	97454bcc4fd20c562dce878c05b25e6a
+REF-11@1	retired:reborrow-exception-stated-in-version-2	97454bcc4fd20c562dce878c05b25e6a
 REF-11/disjoint-fields-one-call	live	-
 REF-11/fields-in-sequence	live	-
 SCOPE-D1@1	live	7c4e5273e014f57bbfa31a35e0f9147b
@@ -58,7 +58,7 @@ FFI-1/extern-as-value	live	-
 FFI-1/wrapper-as-value	live	-
 PASS-1@1	live	2e98c040643df62bd919e8059b8889cd
 PASS-1/generic-at-int	live	-
-PASS-2@1	live	a233e3e00e6341419861b14162fbc285
+PASS-2@1	retired:whole-value-binder-exception-stated-in-version-2	a233e3e00e6341419861b14162fbc285
 PASS-2/binder-mode-survives-mono	live	-
 FFI-2@1	pending	1a3d776c94df438f5f7973b3c6b9b21b
 PASS-3@1	pending	390fe25d2ebce41f6deb3dfbc3f4cfac
@@ -248,10 +248,16 @@ OWN-15@2	live	5b9961b35b29ce0d859b8900018cbec7
 TYPE-13@2	live	acc3b6554a212b098a14fe51824bc228
 TYPE-14@2	live	c0304c86b0dfee972b5dfd0b8b964147
 TYPE-14/copy-over-bare-parameter-at-copy	live	-
-TRUST-4@1	live	efd8ec6457362a193479e3c7d74b472a
+TRUST-4@1	live	8006aea90f8708f2fd4159114297d742
 TRUST-4/raw-deref-moves-linear	live	-
 TRUST-4/read-owned-moves	live	-
 CON-2@1	live	ba005f22d1eb66eec1e2d577f0a4573e
 CON-2/ghost-read-at-runtime	live	-
 CON-2/ghost-in-assert	live	-
 OWN-14/generic-with-linear-field	live	-
+REF-11@2	live	2e5940103e613a43b813932690a9291d
+FFI-3@1	live	dcdaabf54b55a82cc8f2b3b55606e08a
+FFI-3/returns-pointer-to-ref	live	-
+FFI-3/param-pointer-to-ref	live	-
+FFI-3/pointer-to-value	live	-
+PASS-2@2	live	69f070f0620f8f5ef0986de279b99153

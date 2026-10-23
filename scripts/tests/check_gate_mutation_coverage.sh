@@ -495,7 +495,9 @@ cd "$ROOT_DIR"
 # capvar-method-instantiated-unsafe, bodyless-capparams-refused and capparam-name-reserved
 # families (killed by check_capability_judgment.sh's bug 188 rows). Train 5 integrates these on
 # top of train 4's 136; the cap-soundness branch alone counted 134 -> 139.
-EXPECTED_FAMILIES=141
+# 141 -> 159 with landing train 6's eighteen tightening families (bugs 165, 166, 183, 137, 190,
+# 185, 198, 199; D1, D2, D3, D6; G13, G15, G16), each killed by check_tightening_rules.sh.
+EXPECTED_FAMILIES=159
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -737,6 +739,69 @@ add "bodyless-capparams-refused" "Concrete/Frontend/Parser.lean" "check_capabili
 add "capparam-name-reserved" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
   $'  validCaps.contains name || name == stdCapMacroName || aliases.contains name' \
   $'  false && (validCaps.contains name || name == stdCapMacroName || aliases.contains name)'
+# Landing train 6 (the 2026-10-23 tightening batch): one family per slice, each killed by its own
+# rows of check_tightening_rules.sh. Bugs 165, 166 (FFI-1), 183, 137, 190, 185, 198 (TRUST-4) and
+# 199; D1 (REF-10: the reborrow mode, the deferred loan), D2 (REF-5 temporaries, REF-11 root-keyed
+# loans through the cross-argument read), D3 (REF-9 binder mode), D6 (OWN-D1@2 / TYPE-14: Copy iff every
+# argument is Copy; the enum payload declaration check) and the reference well-formedness gaps
+# G13 (trait declarations), G15 (FFI pointees) and G16 (aliases). REF-11's root key has two
+# enforcing sites, `pathsOverlap` (borrow against borrow) and `checkCallRootReads` (a new mutable loan
+# against any other mention of its root); the second subsumes the first for call arguments, so a
+# mutation of `pathsOverlap` alone survives (Codex review) and only the second is a family.
+add "runtime-helper-identity" "Concrete/Elab/Elab.lean" "check_tightening_rules.sh" yes \
+  $'            CStmt.expr (CExpr.call (.runtime "print_int") [] [cArg] .unit) false' \
+  $'            CStmt.expr (CExpr.call (.direct "print_int") [] [cArg] .unit) false'
+add "foreign-fn-value-refused" "Concrete/Elab/Elab.lean" "check_tightening_rules.sh" yes \
+  $'    if id.ns == .extern && (resolveIntrinsic name).isNone then\n      throwElab (.foreignFnValue name) span' \
+  $'    if false && id.ns == .extern && (resolveIntrinsic name).isNone then\n      throwElab (.foreignFnValue name) span'
+add "deref-assign-rhs-first" "Concrete/IR/Lower.lean" "check_tightening_rules.sh" yes \
+  $'    let vVal ← lowerExpr value\n    let tVal ← lowerExpr target\n    emit (.store vVal tVal)' \
+  $'    let tVal ← lowerExpr target\n    let vVal ← lowerExpr value\n    emit (.store vVal tVal)'
+add "enum-literal-source-order" "Concrete/Elab/Elab.lean" "check_tightening_rules.sh" yes \
+  $'        let core ← if inDeclOrder then\n            pure (CExpr.enumLit enumName variant effectiveTypeArgs srcInits resultTy)' \
+  $'        let core ← if inDeclOrder || true then\n            pure (CExpr.enumLit enumName variant effectiveTypeArgs (declOrder srcInits) resultTy)'
+add "array-value-snapshot" "Concrete/IR/Lower.lean" "check_tightening_rules.sh" yes \
+  $'private def snapshotArrayValue (value : CExpr) (val : SVal) : LowerM SVal := do\n  match value.ty with' \
+  $'private def snapshotArrayValue (value : CExpr) (val : SVal) : LowerM SVal := do\n  if true then return val\n  match value.ty with'
+add "instance-keeps-authority" "Concrete/IR/Mono.lean" "check_tightening_rules.sh" yes \
+  $'        isTrusted := fnDef.isTrusted\n        trustedImplOrigin := fnDef.trustedImplOrigin\n        declSpan := fnDef.declSpan' \
+  $'        isTrusted := false\n        trustedImplOrigin := fnDef.trustedImplOrigin\n        declSpan := fnDef.declSpan'
+add "raw-deref-moves-non-copy" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'      if mode != .place && !(← isCopyType t) then\n        throwCheck (.rawDerefMovesNonCopy (tyToString t)) (some e.getSpan)' \
+  $'      if false then\n        throwCheck (.rawDerefMovesNonCopy (tyToString t)) (some e.getSpan)'
+add "cast-target-through-alias" "Concrete/Elab/Elab.lean" "check_tightening_rules.sh" yes \
+  $'    let targetTyR := expandAliasDeep aliases (aliases.length + 64) targetTy' \
+  $'    let targetTyR := if aliases.isEmpty || true then targetTy else expandAliasDeep aliases (aliases.length + 64) targetTy'
+add "mut-arg-reborrow" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'    | .ref _, _ | .refMut _, _ => refuseDeferHeldRef varName info span' \
+  $'    | .ref _, _ => refuseDeferHeldRef varName info span\n    | .refMut _, _ => consumeVarIfExists varName span'
+add "defer-holds-loan" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'  if info.heldByDefer then throwCheck (.variableReservedByDefer r) span' \
+  $'  if false && info.heldByDefer then throwCheck (.variableReservedByDefer r) span'
+add "temporary-not-borrowable" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'  if isStrLit && !isMut then return' \
+  $'  if true || (isStrLit && !isMut) then return'
+add "call-root-reads" "Concrete/Check/CheckHelpers.lean" "check_tightening_rules.sh" yes \
+  $'  if mutRoots.isEmpty then return' \
+  $'  if true || mutRoots.isEmpty then return'
+add "binder-through-ref-is-ref" "Concrete/Semantics/BindingMode.lean" "check_tightening_rules.sh" yes \
+  $'  if bindsThroughReference scrutTy then .ref fieldTy else fieldTy' \
+  $'  if bindsThroughReference scrutTy && false then .ref fieldTy else fieldTy'
+add "declared-copy-generic" "Concrete/Check/Layout.lean" "check_tightening_rules.sh" yes \
+  $'    | some (isC, _, _) => isC && args.all (isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy)' \
+  $'    | some (isC, _, _) => isC && (args.all (isCopyTyGeneric lookupAgg lookupNewtype typeVarIsCopy) || true)'
+add "copy-enum-payload-declared" "Concrete/Check/CoreCheck.lean" "check_tightening_rules.sh" yes \
+  $'          if !isTypeParam && !isCopyTy allStructs allEnums fty then\n            errors := errors ++ [mkDeclDiag (.copyFieldNotCopy s!"{ed.name}::{vname}" fname) ed.declSpan]' \
+  $'          if false && !isTypeParam && !isCopyTy allStructs allEnums fty then\n            errors := errors ++ [mkDeclDiag (.copyFieldNotCopy s!"{ed.name}::{vname}" fname) ed.declSpan]'
+add "trait-decl-ref-result" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'      if tyContainsRef rt || tyHasRefReturningFnType rt then' \
+  $'      if false && (tyContainsRef rt || tyHasRefReturningFnType rt) then'
+add "ffi-pointee-ref" "Concrete/Check/CoreCheck.lean" "check_tightening_rules.sh" yes \
+  $'      if !Layout.isFFISafe lctx pTy || tyContainsRef pTy then' \
+  $'      if !Layout.isFFISafe lctx pTy then'
+add "alias-fn-type-wf" "Concrete/Check/Check.lean" "check_tightening_rules.sh" yes \
+  $'      if tyHasRefReturningFnType (expand ta.targetTy)\n      then some' \
+  $'      if false && tyHasRefReturningFnType (expand ta.targetTy)\n      then some'
 add "walker-constructor" "Concrete/Check/CoreCheck.lean" "check_constructor_coverage.sh" no \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()' \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | _ => pure ()'
