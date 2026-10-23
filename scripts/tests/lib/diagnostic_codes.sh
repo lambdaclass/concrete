@@ -13,8 +13,8 @@ codeless_error_lines() {
     if (i == 0) next;
     pre = substr($0, 1, i - 1); rest = substr($0, i);
     if (pre != "" && pre !~ /\.con(:[0-9]+(:[0-9]+)?)?: $/) next;
-    # the renderer's source lines (` 3 | ...`) and context lines (`  = ...`) are not headers; a
-    # header's prefix is the file path verbatim, so nothing else is excluded
+    # the renderer source lines (` 3 | ...`) and context lines (`  = ...`) are not headers; a
+    # header prefix is the file path verbatim, so nothing else is excluded
     if (pre ~ /^ *[0-9]+ *\|/ || pre ~ /^ += /) next;
     if (rest !~ /^error\[[a-z0-9-]+\]: /) next;
     sub(/^error\[[a-z0-9-]+\]: /, "", rest);
