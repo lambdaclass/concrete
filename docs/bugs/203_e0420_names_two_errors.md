@@ -1,6 +1,6 @@
 # Bug 203 — E0420 named two unrelated errors
 
-**Status:** FIXED (branch `wip/bug203`, based on `main` `1b2dba60`)
+**Status:** FIXED (branch `wip/bug203`, based on `main` `1b2dba60` with `wip/train6` `13bc2527` merged)
 **Found:** 2026-10-23, while migrating the language specification's contracts chapter: CON-4's
 code E0420 (a ghost binding read by runtime code) was also the code of an `append()` argument of
 an unsupported type, so the specification's one-code-one-rule mapping (S6) could not tag it
