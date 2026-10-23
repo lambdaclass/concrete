@@ -36,9 +36,12 @@ call instead of asking for qualification; adding the syntax is a follow-up (READ
 - Evidence: by-users
 
 **Rationale.** A name is resolved the way the checker resolves it: the module's own
-declarations and aliases, its imports, a sibling submodule's struct or enum, the compiler's
+declarations and aliases, its import artifact (explicit symbols and the types their signatures
+reach), a sibling or child submodule's struct or enum, the compiler's
 `Option` and `Result`, the always-visible std types, then the primitives, where `i64` and `Int`
-are one type. Before bug 186 the parser consumed and dropped the type arguments of an impl's
+are one type. A name that none of these answers is its own type, declared in no module: an
+inherent impl of it is a namespace for functions, and a trait impl of it is foreign everywhere
+(TRAIT-3). Before bug 186 the parser consumed and dropped the type arguments of an impl's
 target, so `impl Tr for Box<i32>` and `impl<T> Tr for Box<T>` were the same impl to every later
 pass. The arguments are now kept on the impl (`targetArgs`) so that TRAIT-2 and TRAIT-4 can judge
 them.
@@ -88,6 +91,7 @@ pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
 | `tests/programs/error_186_duplicate_generic_impl.con` | `reject:E0590:TRAIT-1@1` | `coherent` | `-` |
 | `tests/programs/error_186_duplicate_primitive_spelling.con` | `reject:E0590:TRAIT-1@1` | `primitive` | `-` |
 | `tests/programs/regress_186_primitive_impl_spellings.con` | `run:42` | `primitive` | `binary,interp` |
+| `tests/programs/regress_186_visible_targets.con` | `run:42` | `coherent` | `binary,interp` |
 | `tests/programs/regress_186_coherent_impls.con` | `run:42` | `coherent` | `binary,interp` |
 
 <a id="TRAIT-2"></a>
