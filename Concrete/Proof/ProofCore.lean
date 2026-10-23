@@ -16,6 +16,11 @@ import Concrete.Proof.ClassificationTable
 
 namespace Concrete
 
+-- R-0492 step 4e: the proof model's variables are SPELLINGS (`PExpr.var`, `.applyVar`, pattern
+-- binders) by design -- a theorem quantifies over the names it states. The name coercion is off
+-- here so that every place a Core binding becomes a model name is an explicit `.name`.
+attribute [-instance] CLocal.coeName
+
 /-! ## ProofCore — the proof-oriented compiler pass
 
 ProofCore is an explicit pipeline phase that runs after Core elaboration
