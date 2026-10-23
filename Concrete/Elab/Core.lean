@@ -20,66 +20,6 @@ Surface forms removed:
 -- Core IR Types
 -- ============================================================
 
-/-- What a call's callee IS, decided where scope is known.
-
-    Bug 050: Elab emitted a call through a fn-typed LOCAL as `.call name args`,
-    the same shape as a direct call, discarding the one fact that distinguishes
-    them. Mono then resolved that name against the global fn map and linker
-    aliases; when a generic function shared the local's name, the indirect call
-    was rewritten into a direct call of the generic — silent wrong code, and an
-    unbuildable project whenever a generic was named `f` (std's io calls local
-    fn-pointers by that name).
-
-    Lower and Interp each re-derived indirectness from their own variable scope,
-    so the same question was answered in three places and only two of them
-    could answer it. Carrying it here makes the callee's identity travel with
-    the call: `indirect` is resolved against the local environment and MUST NOT
-    be looked up in any global fn/alias map.
-
-    A `Coe String Callee` keeps existing construction sites meaning `direct`,
-    which is what every one of them is. The migration's compile errors land
-    where code CONSUMES a callee as a name — exactly the hazard set. -/
-inductive Callee where
-  /-- A call of a statically known function, by canonical definition name. -/
-  | direct (name : String)
-  /-- A call through a fn-typed local/parameter, named by that binding. -/
-  | indirect (binding : String)
-  /-- A call the COMPILER generated to one of its runtime helpers (`print_int` for `println`,
-      `Symbols.runtimeHelperNames`) or to an intrinsic it implements inline (`read_owned`, bug 198),
-      by name. Never resolved against the
-      program's definitions: a module that defines its own `fn print_int` keeps it, and
-      `println` still reaches the helper (bug 165). The Core counterpart of
-      `SCallee.foreign`; Lower emits it as the helper's reserved `_C$rt.` symbol. -/
-  | runtime (helper : String)
-deriving BEq, Repr, Inhabited, DecidableEq
-
-instance : Coe String Callee := ⟨Callee.direct⟩
-
-namespace Callee
-
-/-- The spelling of the callee: a definition name for `direct`, a binding name
-    for `indirect`. Use only for display/diagnostics or when the caller has
-    already established which case it is — never to resolve an `indirect`
-    callee against global definitions. -/
-def spelling : Callee → String
-  | .direct n => n
-  | .indirect b => b
-  | .runtime h => h
-
-def isIndirect : Callee → Bool
-  | .direct _ => false
-  | .indirect _ => true
-  | .runtime _ => false
-
-/-- The definition name, when this call has one. `none` for indirect calls,
-    which have no global definition to name. -/
-def directName? : Callee → Option String
-  | .direct n => some n
-  | .indirect _ => none
-  | .runtime _ => none
-
-end Callee
-
 /-- A local binder or local reference in Core (R-0492 step 3): its Core name (what every backend
     and printer spells) and, for a binding of the source program, the `LocalId` the local walk
     minted for it. Elab fills `id`. The struct-destructure temporary has one (the walk mints it);
@@ -112,6 +52,67 @@ instance : LT CLocal := ⟨fun a b => a.name < b.name⟩
 /-- The names of a binder list, for a consumer still keyed by spelling (migration helper). -/
 def names {α : Type} (bs : List (CLocal × α)) : List (String × α) := bs.map fun (b, x) => (b.name, x)
 end CLocal
+
+/-- What a call's callee IS, decided where scope is known.
+
+    Bug 050: Elab emitted a call through a fn-typed LOCAL as `.call name args`,
+    the same shape as a direct call, discarding the one fact that distinguishes
+    them. Mono then resolved that name against the global fn map and linker
+    aliases; when a generic function shared the local's name, the indirect call
+    was rewritten into a direct call of the generic — silent wrong code, and an
+    unbuildable project whenever a generic was named `f` (std's io calls local
+    fn-pointers by that name).
+
+    Lower and Interp each re-derived indirectness from their own variable scope,
+    so the same question was answered in three places and only two of them
+    could answer it. Carrying it here makes the callee's identity travel with
+    the call: `indirect` is resolved against the local environment and MUST NOT
+    be looked up in any global fn/alias map.
+
+    A `Coe String Callee` keeps existing construction sites meaning `direct`,
+    which is what every one of them is. The migration's compile errors land
+    where code CONSUMES a callee as a name — exactly the hazard set. -/
+inductive Callee where
+  /-- A call of a statically known function, by canonical definition name. -/
+  | direct (name : String)
+  /-- A call through a fn-typed local/parameter: that binding (its Core name and, for a source
+      binding, its identity — R-0492 step 4). -/
+  | indirect (binding : CLocal)
+  /-- A call the COMPILER generated to one of its runtime helpers (`print_int` for `println`,
+      `Symbols.runtimeHelperNames`) or to an intrinsic it implements inline (`read_owned`, bug 198),
+      by name. Never resolved against the
+      program's definitions: a module that defines its own `fn print_int` keeps it, and
+      `println` still reaches the helper (bug 165). The Core counterpart of
+      `SCallee.foreign`; Lower emits it as the helper's reserved `_C$rt.` symbol. -/
+  | runtime (helper : String)
+deriving BEq, Repr, Inhabited
+
+instance : Coe String Callee := ⟨Callee.direct⟩
+
+namespace Callee
+
+/-- The spelling of the callee: a definition name for `direct`, a binding name
+    for `indirect`. Use only for display/diagnostics or when the caller has
+    already established which case it is — never to resolve an `indirect`
+    callee against global definitions. -/
+def spelling : Callee → String
+  | .direct n => n
+  | .indirect b => b.name
+  | .runtime h => h
+
+def isIndirect : Callee → Bool
+  | .direct _ => false
+  | .indirect _ => true
+  | .runtime _ => false
+
+/-- The definition name, when this call has one. `none` for indirect calls,
+    which have no global definition to name. -/
+def directName? : Callee → Option String
+  | .direct n => some n
+  | .indirect _ => none
+  | .runtime _ => none
+
+end Callee
 
 mutual
 inductive CExpr where

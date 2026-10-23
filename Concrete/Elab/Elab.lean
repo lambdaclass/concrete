@@ -1798,7 +1798,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
       let cArg := cArgEv.core
       cArgs := cArgs ++ [cArg]
       argEvs := cArgEv.evidence :: argEvs
-    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD fnName)) [] cArgs retTy)
+    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD (CLocal.ofName fnName))) [] cArgs retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")

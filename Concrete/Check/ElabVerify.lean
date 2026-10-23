@@ -64,7 +64,11 @@ private partial def vExpr (fn : String) (vis : List VB) : CExpr → VM Unit
   | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => do vExpr fn vis l; vExpr fn vis r
   | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
     vExpr fn vis x
-  | .call _ _ args _ | .arrayLit args _ => args.forM (vExpr fn vis)
+  | .call callee _ args _ => do
+    -- a call through a fn-typed local is a use of that local (R-0492 step 4)
+    if let .indirect b := callee then use fn vis b
+    args.forM (vExpr fn vis)
+  | .arrayLit args _ => args.forM (vExpr fn vis)
   | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.forM (fun (_, e) => vExpr fn vis e)
   | .match_ s arms _ => do vExpr fn vis s; arms.forM (vArm fn vis)
   | .ifExpr c t e _ => do vExpr fn vis c; vBlock fn vis t; vBlock fn vis e
