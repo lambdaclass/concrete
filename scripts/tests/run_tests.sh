@@ -2482,6 +2482,10 @@ run_err "$TESTDIR/error_unknown_label.con" "unknown loop label"
 run_err "$TESTDIR/error_label_not_loop.con" "label can only precede while or for"
 # Trait bound errors
 run_err "$TESTDIR/error_trait_bound_missing.con" "does not implement trait"
+# Bug 204 (silent): a trait bound on a primitive type argument was never checked.
+run_err "$TESTDIR/error_204_primitive_bound_unchecked.con" "(E0241)"
+run_err "$TESTDIR/error_204_primitive_bound_unused.con" "(E0241)"
+run_ok "$TESTDIR/regress_204_primitive_bound_satisfied.con" 42
 # Trait dispatch errors
 run_err "$TESTDIR/error_trait_dispatch_missing.con" "no method"
 # File I/O errors
