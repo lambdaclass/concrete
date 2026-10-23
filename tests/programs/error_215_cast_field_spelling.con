@@ -1,0 +1,8 @@
+// Bug 215: the fuzz farm's shape (`s0 as y` for `s0.y`, findings crash-7b8a6f578aa1,
+// crash-7783960bed65, crash-eca71defcd8d, crash-5d3cd121011d, crash-452448d15b16). Expected: E0108.
+struct Copy P { x: i32, y: i32 }
+
+fn main() -> Int {
+    let s0: P = P { x: 1, y: 2 };
+    return ((s0 as y) as Int) * 17;
+}
