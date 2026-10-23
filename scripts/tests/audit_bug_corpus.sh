@@ -117,6 +117,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
+  # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
+  # Also check_local_identity.sh leg R.
+  [202]="regress_202_project_let_else/src/main.con"
   # Bug 188: a capability variable entailed every requirement (Unsafe included). Also
   # check_capability_judgment.sh and three mutation families.
   # Bug 189: `trusted impl` conferred trust on every method of the block. Also
@@ -145,9 +148,19 @@ declare -A BUG_TEST_MAP=(
   [148]="error_148_and_operand_consumes.con error_148_or_operand_consumes.con regress_148_short_circuit_reads.con"
   # Bug 149: exit paths account for owned values (E0207/E0208/E0210/E0211).
   [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con"
+  # Bug 194: a reachable end of a function with a result type (E0307).
+  [194]="error_194_missing_return_plain.con error_194_missing_return_if.con error_194_missing_return_method.con regress_194_unreachable_end_forms.con"
+  # Bug 195: a let ... else whose else block falls through (E0308).
+  [195]="error_195_let_else_falls_through_unit.con error_195_let_else_falls_through.con"
+  # Bug 196: a match arm whose pattern does not fit the scrutinee (E0309).
+  [196]="error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con"
+  # Bug 197: a variant pattern without a field list dropped a non-Copy payload (E0288).
+  [197]="error_197_variant_pattern_drops_payload.con regress_197_variant_pattern_ignores_copy.con"
   # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
   # Also check_pipeline_artifacts.sh legs B, U and D.
   [180]="regress_180_report_scope/src/main.con"
+  # Bug 200: a generic type named without its argument list (E0113, TYPE-15).
+  [200]="error_200_bare_generic_type.con error_200_bare_generic_signature.con regress_200_generic_type_with_arguments.con regress_200_type_param_shadows_generic.con regress_200_self_receiver_of_generic_impl.con"
   # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
   [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
   # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).

@@ -2349,6 +2349,12 @@ run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discrimin
 run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
 run_err "$TESTDIR/error_type_arg_count_extra.con"   "E0113"   # bug 073: extra type argument
 run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing type argument
+# Bug 200 (silent): a generic type named without its argument list compiled.
+run_err "$TESTDIR/error_200_bare_generic_type.con" "(E0113)"
+run_err "$TESTDIR/error_200_bare_generic_signature.con" "(E0113)"
+run_ok "$TESTDIR/regress_200_generic_type_with_arguments.con" 42
+run_ok "$TESTDIR/regress_200_type_param_shadows_generic.con" 42
+run_ok "$TESTDIR/regress_200_self_receiver_of_generic_impl.con" 42
 run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
 # R-0484: structs with capability parameters (`struct Sink<cap C>`). Positives build and use
 # them; negatives are the authority escapes they must refuse, and the kind/count checks.
@@ -8284,6 +8290,24 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 194: a function with a result type and a reachable end reached llvm-as (`ret void`).
+run_err "$TESTDIR/error_194_missing_return_plain.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_if.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_method.con" "(E0307)"
+run_ok "$TESTDIR/regress_194_unreachable_end_forms.con" 42
+# Bug 195: the else block of a let ... else fell through (the rest of the function was skipped).
+run_err "$TESTDIR/error_195_let_else_falls_through_unit.con" "(E0308)"
+run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
+# Bug 197: a variant pattern without a field list dropped a non-Copy payload.
+run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
+run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
+# Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
+run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
+run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
+run_err "$TESTDIR/error_196_variant_over_int.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_type.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_over_type_param.con" "(E0309)"
+run_err "$TESTDIR/error_196_same_name_other_enum.con" "(E0309)"
 # Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
 # the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
 run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"
@@ -12459,6 +12483,8 @@ fi
 #     the later `r` read the inner, dropped String: a heap use-after-free)
 #   regress_179_concurrent_build/src/main.con  (bug 179 — also built concurrently
 #     in the bug 102/105/175 block; pre-fix the builds shared src/main.con.ll)
+#   regress_202_project_let_else/src/main.con  (bug 202 — a project's `let … else`
+#     reached Check undesugared and was refused; desugaring is part of resolve now)
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
 # python3 it degrades to running without a watchdog rather than skipping the fixtures,
 # and says so once, so a hang on such a machine is at least explicable.

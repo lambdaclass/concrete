@@ -3,7 +3,7 @@
 Every expression has one type, and there are no implicit conversions. This chapter covers
 callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of expressions and
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
-kinds of type parameters (TYPE-13, TYPE-14). Copy itself is defined in the ownership chapter
+kinds of type parameters (TYPE-13, TYPE-14) and generic arguments (TYPE-15). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
 The design records are [TYPE_ALIASES.md](../language/TYPE_ALIASES.md),
@@ -367,7 +367,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check)
+- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
@@ -433,7 +433,7 @@ fn main() with(Std) -> Int {
 }
 ```
 
-```con accept name=free-heap exit=42 interp-exempt=no-heap-allocation-in-the-interpreter
+```con accept name=free-heap exit=42
 struct Copy B { v: Int }
 
 fn main() with(Std) -> Int {
@@ -665,3 +665,87 @@ fn main() -> Int {
 }
 ```
 
+<a id="TYPE-15"></a>
+### TYPE-15. A generic type takes the arguments it declares
+
+**TYPE-15@1.** A named type takes exactly as many type arguments and capability arguments as its declaration has type parameters and capability parameters, each of the matching kind, so a type with capability parameters is never named bare.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0113 (resolve), E0114 (resolve), E0115 (resolve)
+- Status: enforced
+- Enforced by: Concrete.resolveProgram
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** An extra type argument was once dropped silently, so `Box1<i32, bool>` compiled
+and ran (bug 073), and a missing one surfaced later as an unrelated error on the unresolved
+parameter. A capability argument says what a handle may do (R-0484), so a bare `Writer` for a
+`Writer<cap C>` would leave the authority to inference; it is refused instead. The parser
+classifies each argument as a type or a capability by position, and resolution checks the kind
+and the count in both directions. A generic type named bare, with no argument list, is refused
+too (bug 200).
+
+```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
+struct Copy Box1<T> { v: T }
+
+fn main() -> Int {
+    let b: Box1<Int, bool> = Box1::<Int, bool> { v: 42 };
+    return b.v;
+}
+```
+
+```con accept name=declared-type-arguments exit=42
+struct Copy Box1<T> { v: T }
+
+fn main() -> Int {
+    let b: Box1<Int> = Box1::<Int> { v: 42 };
+    return b.v;
+}
+```
+
+```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments
+struct Copy Box1<T> { v: Int }
+
+fn main() -> Int {
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
+}
+```
+
+```con reject name=type-where-capability code=E0114 stage=resolve pair=capability-argument
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<Int>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con reject name=capability-arity code=E0115 stage=resolve pair=capability-argument
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<{}, {}>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=capability-argument exit=42
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn take(s: Sink<{}>) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```

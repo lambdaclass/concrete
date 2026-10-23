@@ -1,6 +1,10 @@
-# Memory and Reference Semantics
+# Memory and Reference Semantics (design record)
 
-Status: canonical reference — the single authority for Concrete's ownership, borrowing, and cleanup rules.
+**Superseded as the normative text (2026-10-23).** The rules are in the language specification:
+[memory.md](../spec/memory.md) (MEM-1 to MEM-6), [ownership.md](../spec/ownership.md) (OWN-D1 to
+OWN-15), [references.md](../spec/references.md) (REF-1 to REF-11) and
+[scope.md](../spec/scope.md). This document keeps the operational explanation, the edge cases and
+the status history (status: was the canonical reference for ownership, borrowing and cleanup).
 
 This document describes the memory and reference model that the checker (`Check.lean`) enforces for safe Concrete code. Where the checker and this document disagree, one of them must be corrected. Neither is silently authoritative over the other.
 
@@ -1144,8 +1148,8 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
   stack copy Lower took at the borrow, which masks it), and assigning `x = 1` under a live `let r = &x` is accepted
   (`*r` reads 1). Both are refused on `land2-fix` (E0204 and E0232: the recorded path and
   `checkWriteAccess`). So: direct borrows **main**; projected borrows, writes under a shared
-  reference, shadowing and ancestry **land2** (part of G5). Once SCOPE-1 lands it rejects the shadowing case first (E0301), and
-  `guardShadowedSource` stays as defense in depth. Once REF-6 lands, the `let`-bound cases (moving,
+  reference, shadowing and ancestry **land2** (part of G5). SCOPE-1 rejects the shadowing case (E0301), and
+  provenance is recorded by binding identity (R-0492), so `guardShadowedSource` was removed. Once REF-6 lands, the `let`-bound cases (moving,
   freeing or writing the root under a named reference, the projected borrow, bug 107's shadow) are
   refused at the `let` (E0302), and the checks above stay as defense in depth for the borrow-block,
   arm and argument forms. The arm-binder freeze for a borrow-expression scrutinee was recorded as
@@ -1187,7 +1191,9 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
 - Diagnostic: E0301 (`shadowsVisibleBinding`), with the earlier binding as a related span, from the
   function-wide lexical pre-pass described under Status. Elab's `bindLocal` alpha-renaming (bug 087)
   stays mandatory as defense in depth ([PRINCIPLES.md](../project/PRINCIPLES.md) #12).
-- Defense in depth behind it: E0292 (`checkNoLiveShadow`) and E0238's shadowed-source guard. The
+- No name-keyed guard stands behind it: E0292 (`checkNoLiveShadow`) and E0238's shadowed-source
+  guard were removed by R-0492 slice 1, since the checker keys every binding by the `LocalId` the
+  same walk mints, and a spelling that is not visible names a different binding. The
   borrow-block E0214 / E0215 test was removed (exit 2i review): it looked names up in the
   ownership environment, which keeps a finished loop body's locals, so it refused legal sibling
   reuse (`regress_2i_scope2_borrow_after_loop.con`); E0301 covers every visible collision it
@@ -1195,7 +1201,7 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
 - Status: **enforced** (exit 2i). `checkFn` runs `scope1Diagnostics` (`Concrete/Check/Check.lean`)
   before the body: an explicit lexical scope chain over every binder kind (parameters in order, `let`,
   destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
-  and region names), so E0301 reports before E0292 and E0238, which stay as defense in depth. Every collision of a function is reported, each with the earlier binding as the related span.
+  and region names), so E0301 reports before the body is checked. Every collision of a function is reported, each with the earlier binding as the related span.
   The walk does not use the ownership environment, which keeps a loop body's locals after the loop.
   Code `checkFn` never visits is covered too. Constant initializers get the same walk
   (`constInitDiagnostics`), are type-checked as expressions of the constant's type
@@ -1340,7 +1346,7 @@ accepted fixtures, with the diagnostic text updated.
 | REF-6 | 1 | E0302 for (a) and E0303 for (b), at Check and after monomorphization; E0234 and E0238 kept as defense in depth | the 2026-10-21 decision, which replaced the draft's same-source comparison before any version of it landed; E0302/E0303 exit 2i; E0234 earlier; E0238 batch 2 |
 | REF-7 | 1 | E0238 | batch 2 (`a4ceab04`) |
 | REF-8 | 1 | E0204, E0203, E0231, E0232, E0293; E0238 | E0238 case batch 2 |
-| SCOPE-1 | 1 | E0301; E0305 for a binder in a contract expression; E0292 kept as defense in depth (E0214 / E0215 no longer emitted) | exit 2i (closes G3) |
+| SCOPE-1 | 1 | E0301; E0305 for a binder in a contract expression (E0214 / E0215 / E0292 no longer emitted, R-0492) | exit 2i (closes G3) |
 | SCOPE-3 | 1 | none: a semantics rule, pinned by fixtures comparing `--interp`, the binary and the extracted model | bug 087, batch 2 |
 
 **Diagnostic text.** For SCOPE-1:

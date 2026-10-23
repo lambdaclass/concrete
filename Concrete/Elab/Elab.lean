@@ -195,9 +195,13 @@ def ElabError.code : ElabError → String
   | .importSpellingCollision _ _ _ _ => "E0299"
   | .mutReceiverThroughSharedRef _ => "E0237"
 
+-- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
+  -- Every Elab code names one rule (bug 203 gave the `append()` refusal its own code, so E0420
+  -- is CON-4's alone and carries a whole-code tag).
+  let ev := codeRuleEvidence e.code
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
-           evidence := codeRuleEvidence e.code }]
+           evidence := ev }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
@@ -534,7 +538,7 @@ private def addGhostVar (name : String) : ElabM Unit := do
 /-- Elab's view of the environment for the shared argument-type peek
     (`Resolve.PeekType`, single-sourced with Check — bug 099). -/
 private def elabPeekCtx : PeekCtx ElabM where
-  var name := lookupVar name
+  var _ name := lookupVar name
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFnSig name
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name

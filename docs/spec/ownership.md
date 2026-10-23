@@ -319,7 +319,9 @@ owns a resource. A linear value is accounted for: it is consumed, passed on, ret
 with `destroy(x)`, or destructured exhaustively with its parts handed off. `destroy(x)` runs a
 linear value's destructor, and `discard(x)` acknowledges that a trivial Copy value is dropped.
 Over a non-Copy enum, a `let ... else`, `if let` or `while let` that has no arm for the other
-variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead.
+variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead. A
+variant pattern written without a field list ignores every field, so over an owned scrutinee it
+is refused when a field is not Copy (bug 197).
 
 ```con reject name=wildcard-drops-linear code=E0288 stage=check pair=account-for-it
 struct R { v: Int }
@@ -343,6 +345,19 @@ fn mk() -> R {
 fn main() -> Int {
     mk();
     return 0;
+}
+```
+
+```con reject name=bare-variant-drops-payload code=E0288 stage=check pair=account-for-it
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn main() -> Int {
+    let e: E = E::A { r: R { v: 42 } };
+    match e {
+        E::A => { return 1; },
+        E::B => { return 0; }
+    }
 }
 ```
 
@@ -924,7 +939,7 @@ fn main() -> Int {
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1; E0292 for a still-live linear binding remains as a backstop); `let _` is removed (**E0289**) | conservation + discard |
+| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `let _` is removed (**E0289**) | conservation + discard |
 | `assign` | the old value must already be consumed (otherwise **E0219**, OWN-9); an ident right-hand side **moves** (H13) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linear value (OWN-2) | conservation + scope |
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free(...)` is itself the consumption when its pointee is Copy (a non-Copy pointee would be dropped: **E0287**, bug 144) | discard |

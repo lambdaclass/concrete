@@ -10,6 +10,74 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Function With A Result Type Returns On Every Path (bug 194, 2026-10-23)
+
+A function whose result type is not `Unit` and whose body can reach its end without a `return` is
+now refused with E0307. Before this fix nothing checked it: the binary failed in `llvm-as` (a
+`ret void` in a non-void function) and `--interp` ran the program. A falling-through
+`let ... else` block in such a function was one way to write it; the language specification's
+patterns chapter found that case. It is pinned by three `error_194_*.con` fixtures (the `let ... else`
+shape is bug 195's).
+
+### A `let ... else` Block Diverges (bug 195, 2026-10-23)
+
+The `else` block of a `let ... else` must end every path in `return`, `break`, `continue` or a
+call that never returns, and one that can fall through is now refused with E0308. The construct is
+desugared to a `match` before checking, so the rule its design stated had no enforcing site: falling
+out of the block silently skipped the rest of the function. The language specification's patterns
+chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`. A `let ... else`
+over a field-less variant is not recognized yet (it binds nothing; the record says why).
+
+### A Variant Pattern Without Fields Ignores Only Copy Payloads (bug 197, 2026-10-23)
+
+A `match` arm written as a bare variant name (`E::A =>`) over an owned value whose variant carries
+a non-Copy field is now refused with E0288, as `E::A { _ }` already was. Before this fix the payload
+silently vanished: the discard rule was attached to `_` binders and CoreCheck's field count skips
+an empty list. Through a reference, and for Copy fields, a bare variant name stays legal. It is
+pinned by `error_197_variant_pattern_drops_payload.con` and `regress_197_variant_pattern_ignores_copy.con`.
+
+### A Match Arm Fits Its Scrutinee (bug 196, 2026-10-23)
+
+A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
+enum, a literal or range over an enum, a variant over a non-enum, a literal of another type, and a
+range over a scrutinee that is not an integer or `char`, and a literal or range over a type
+parameter. Before this fix the checker left these to
+CoreCheck, which runs after Elab: a foreign variant made the checker panic or, when it shared a name
+with one of the scrutinee's variants, was silently taken as that variant; and a range over an enum
+failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
+chapter (PAT-3) found it. It is pinned by six `error_196_*.con` fixtures.
+
+### A Generic Type Is Named With Its Arguments (bug 200, 2026-10-23)
+
+A generic type written without its argument list (`Box1` for a `struct Box1<T>`) is now refused with
+E0113, as a list of the wrong length already was (bug 073). Before this fix a value of the bare
+type failed in `llvm-as` natively while `--interp` ran the program, and an uncalled signature naming
+it compiled. It is pinned by `error_200_bare_generic_type.con`, `error_200_bare_generic_signature.con`
+and two run controls.
+
+### Local Binder Identity In The Checker (R-0492 slice 1, bug 202, 2026-10-23)
+
+The checker no longer decides by spelling which binding a name denotes.
+`Concrete/Resolve/Locals.lean` is the one lexical walk over each desugared function body (the
+former SCOPE-1 walk of `Check.lean`). It runs inside `Pipeline.resolve`, and it does three things:
+- it mints a `LocalId` for every local binding (private constructor);
+- it records the binding each use of a local name denotes;
+- it records each SCOPE-1 collision.
+
+The checker's environment is keyed by `LocalId`. Every use resolves through the table, and the
+references between bindings are identities: borrow sources, reborrow parents, borrow-block refs
+and the roots of normalized places. A binding left in the environment after its scope closed
+cannot answer for a later use of its spelling. That is structural class 2, the class of bugs 040,
+041, 045, 087, 093, 094, 107, 124 and 176. E0301 is rendered from the same walk. The name-keyed
+guards E0292 (live shadow) and E0238's shadowed-source rule had become unreachable and are
+removed. A function or constant without a table is refused.
+
+Moving the walk into resolve found bug 202. Desugaring was a step each driver had to call, and the
+project loader, debug bundle, reducer and Lean tests skipped it. A project's `let … else` was
+therefore refused while the same file compiled standalone. Desugaring is now part of
+`Pipeline.resolve`. `check_local_identity.sh` has compile-fail, minting-site, walk-answer and
+pipeline legs, and mutation family 98 (outermost binding wins) is killed by it.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.

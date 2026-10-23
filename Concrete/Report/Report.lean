@@ -6274,6 +6274,16 @@ def diagnosticCodesReport : String :=
     entry "E0109" "resolve" "error" "Self outside impl block",
     entry "E0110" "resolve" "error" "unknown module",
     entry "E0111" "resolve" "error" "symbol not public in module",
+    entry "E0112" "resolve" "error" "recursive type alias",
+    entry "E0113" "resolve" "error" "wrong number of type arguments",
+    entry "E0114" "resolve" "error" "capability argument of the wrong kind",
+    entry "E0115" "resolve" "error" "wrong number of capability arguments",
+    entry "E0116" "resolve" "error" "foreign binding does not declare its effects",
+    entry "E0117" "resolve" "error" "known effectful C symbol declared with()",
+    entry "E0118" "resolve" "error" "invalid #[link_name]",
+    entry "E0119" "resolve" "error" "invalid #[export_name]",
+    entry "E0120" "resolve" "error" "import alias names an intrinsic",
+    entry "E0121" "resolve" "error" "capability parameter spelled like a capability (bug 188)",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
@@ -6369,7 +6379,7 @@ def diagnosticCodesReport : String :=
     -- Check: conservation sweep + callable values (E0290–E0293, 2026-07-05/06)
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
-    entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding" "SCOPE-1@1",
+    entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding (no longer emitted: subsumed by E0301, R-0492)" "SCOPE-1@1",
     entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@1",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
@@ -6384,6 +6394,9 @@ def diagnosticCodesReport : String :=
     entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
+    entry "E0307" "check" "error" "the end of a function with a result type is reachable without a return (bug 194)",
+    entry "E0308" "check" "error" "the else block of a let ... else can fall through (bug 195)",
+    entry "E0309" "check" "error" "a match arm's pattern does not fit the scrutinee's type (bug 196)",
     entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)
@@ -6408,6 +6421,7 @@ def diagnosticCodesReport : String :=
     entry "E0418" "elab" "error" "unknown module",
     entry "E0419" "elab" "error" "symbol not public in module",
     entry "E0421" "check" "error" "append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)",
+    entry "E0420" "elab" "error" "ghost value used in runtime code",
     -- Core-check: type consistency (E0500–E0509)
     entry "E0500" "core-check" "error" "variable type mismatch",
     entry "E0501" "core-check" "error" "arithmetic on non-numeric type",

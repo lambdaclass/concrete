@@ -51,8 +51,11 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-
 2026-10-23	semantics	language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3	47 programs	181,182	181,182
 2026-10-23	development	landing train 3 pre-push hook run as a second user on the OVH server (fixed /tmp test paths owned by dev)	unrecorded	191	-
+2026-10-23	spec	language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews)	29 programs	194,195,196,197	194,195,196,197
 2026-10-23	review	Codex review of Concrete/Semantics/Capabilities.lean (capability variables) and trusted impl inheritance, confirmed by a second review	unrecorded	188,189	188,189
 2026-10-23	review	Codex audit of trait resolution (coherence), confirmed by probes on wip/train3 1df4cf48	unrecorded	186	186
 2026-10-23	development	verified-pipeline R-0497 slice 1 (sealing the pipeline artifacts refused a record update that replaced a certificate's payload)	unrecorded	180	180
 2026-10-23	spec	language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews)	116 programs	192,193	192,193
 2026-10-23	review	language-specification migration, contracts chapter (docs/spec/contracts.md: E0420 could not be mapped to one rule)	unrecorded	203	-
+2026-10-23	review	Codex review of the specification chapters trusted, ffi, contracts, modules, syntax and TYPE-15 (docs/spec), confirmed by probes on wip/train4 a4a9c05d	unrecorded	200	200
+2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	202	-

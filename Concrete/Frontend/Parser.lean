@@ -893,6 +893,7 @@ partial def binOpPrec (tk : TokenKind) : Option (Nat × BinOp) :=
   | .percent => some (10, .mod)
   | _ => none
 
+-- spec: SYN-2 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def parseExprPrec (minPrec : Nat) : ParseM Expr := do
   let mut lhs ← parsePrimary >>= parsePostfix
   let mut tk ← peek
@@ -994,7 +995,7 @@ partial def parseStmtList : ParseM (List Stmt) := do
     tk ← peek
   return stmts
 
--- spec: PAT-6, spec: PAT-7 (docs/spec/patterns.md; this declaration enforces the rule)
+-- spec: PAT-6, spec: PAT-7, spec: MEM-3 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseStmt : ParseM Stmt := do
   let sp ← peekSpan
   let tk ← peek
@@ -2666,6 +2667,7 @@ def parseProgramPartial (source : String) : (List Module × Diagnostics) :=
   -- combine it with whatever was recovered before it.
   | .error e => ([], finalSt.errors ++ e)
 
+-- spec: SYN-1 (docs/spec/syntax.md; this declaration enforces the rule)
 def parse (source : String) : Except Diagnostics (List Module) :=
   match parseProgramPartial source with
   | (modules, []) => .ok modules

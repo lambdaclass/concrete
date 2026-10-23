@@ -1,6 +1,7 @@
 # Concrete Contracts: A Practical Guide
 
-Status: usage guide for what works **today** (2026-06-03).
+Status: usage guide for what works **today** (2026-06-03). The language rules for contracts are
+[docs/spec/contracts.md](../spec/contracts.md) (CON-1 to CON-4); this guide shows how to use them.
 
 This is the hands-on companion to [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md)
 (the design/architecture). That document says where contracts are going; this

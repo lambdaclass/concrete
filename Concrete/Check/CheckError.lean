@@ -37,17 +37,29 @@ inductive VarState where
   deriving Repr, BEq
 
 
+/-- A local binding as the checker refers to it (R-0492): its identity, minted by the local walk
+    (`Resolve/Locals.lean`), and its spelling for messages. Equality is identity: two bindings of
+    one spelling are different references, and nothing compares a `LocalRef` by its name. -/
+structure LocalRef where
+  id : LocalId
+  name : String
+  deriving Repr
+
+instance : BEq LocalRef := ⟨fun a b => a.id == b.id⟩
+instance : Hashable LocalRef := ⟨fun a => hash a.id⟩
+instance : ToString LocalRef := ⟨(·.name)⟩
+
 structure VarInfo where
   ty : Ty
   state : VarState
   isCopy : Bool
   loopDepth : Nat
   borrowCount : Nat := 0
-  borrowedFrom : Option String := none
+  borrowedFrom : Option LocalRef := none
   -- Bug 091 round 3: the reference binding this reference was made from (a reborrow `&mut *r`
   -- or a copy `let t = r`), so the aliasing checks can tell a reference's ancestors from its
   -- live siblings and children.
-  refParent : Option String := none
+  refParent : Option LocalRef := none
   -- The projection path inside `borrowedFrom` that this reference points to (`&w.f` → ["f"]),
   -- exact unless a dereference crossed a reference whose path was unknown: `*r` then keys as
   -- the same place `w.f` does (normalized place rule).
@@ -56,11 +68,10 @@ structure VarInfo where
   mutable : Bool := true  -- whether the variable was declared with mut
   movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
   declSpan : Option Span := none  -- where it was declared (locates unconsumed-linear E0208)
-  -- Identity of this binding (bugs 093/094). Two bindings may share a NAME
-  -- (shadowing, arm binders, block locals); ownership state is matched across
-  -- env snapshots by this id, never by name. Assigned by `addVar` from
-  -- `TypeEnv.nextVarUid`.
-  uid : Nat := 0
+  -- Identity of this binding (bugs 093/094; R-0492): the `LocalId` the local walk minted for its
+  -- binder. Ownership state is matched across env snapshots by this id, never by name. Equal
+  -- to the key the binding is stored under in `TypeEnv.vars` (`addVar` is the only writer).
+  uid : LocalId
   -- Defer rule (a) (bug 143): a pending deferred call BORROWS this binding (`defer
   -- peek(&t);`). The borrow discharges nothing, so the binding must still be consumed,
   -- but nothing may move or consume it before the deferred call runs at the exit of the
@@ -76,7 +87,11 @@ structure VarInfo where
   deriving Repr
 
 structure TypeEnv where
-  vars : List (String × VarInfo)
+  -- R-0492: keyed by binding identity. A use finds its binding through the local table
+  -- (`localAt`), never by searching this list for a spelling.
+  vars : List (LocalRef × VarInfo)
+  -- The local table of the function being checked (`FnDef.locals`).
+  locals : LocalTable := LocalTable.unresolved
   structs : List StructDef
   enums : List EnumDef
   functions : List FnSummary
@@ -90,7 +105,7 @@ structure TypeEnv where
   currentFnTrusted : Bool := false       -- current function is `trusted` (discharges callee `Unsafe`)
   currentFnName : String := ""           -- current function name (for error messages)
   allFnSummarys : List (String × FnSummary) := []  -- all function signatures for fnRef resolution
-  borrowRefs : List String := []          -- names of refs created by borrow blocks (for escape analysis)
+  borrowRefs : List LocalRef := []        -- refs created by borrow blocks (for escape analysis)
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
@@ -112,21 +127,17 @@ structure TypeEnv where
   -- `name` there is a REBIND (`acc = f(acc, x)` in a fold loop) — the
   -- assignment restores the binding before the next iteration, so the
   -- consume-inside-loop rule (E0207) does not apply to it.
-  rebindingVar : Option String := none
+  rebindingVar : Option LocalRef := none
   -- Set while checking a `break value;` expression: the value ident's
   -- auto-consume gets the one-level loop-depth exemption (H14 — a break
   -- fires at most once per loop entry). Transient, like rebindingVar.
   breakConsumeExempt : Bool := false
 
-  -- Next binding identity (`VarInfo.uid`). Monotonic for the whole check:
-  -- `setEnv` keeps the larger counter, so restoring a snapshot never reissues
-  -- an id a sibling branch already used.
-  nextVarUid : Nat := 1
   -- Bug 090: non-Copy bindings live at the start of the match guard being
   -- checked. A guard is read-only: consuming one of them (directly, or through
   -- a `defer` that reserves it) is E0300 at the consumption itself, so no later
   -- state (reserved, reassigned) can hide the move. Transient, like rebindingVar.
-  guardUids : List Nat := []
+  guardUids : List LocalId := []
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
@@ -185,6 +196,13 @@ inductive CheckError where
   | typeMismatch (ctx : String) (expected : String) (actual : String)
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
+  -- Bug 194: the end of a function with a result type is reachable (a path with no `return`).
+  | missingReturn (fnName : String) (retTy : String)
+  -- Bug 195 (PAT-5): the `else` block of a `let ... else` can fall through.
+  | letElseFallsThrough
+  -- Bug 196 (PAT-3): a match arm's pattern does not fit the scrutinee's type (a variant of another
+  -- enum, a literal or range over an enum, a variant over a non-enum, a literal of another type).
+  | patternDoesNotFit (pattern : String) (scrutineeTy : String)
   | ifCondNotBool (ty : String)
   -- Bug 192: the condition of an `if` / `while` / `for` STATEMENT (TYPE-5; the expression form
   -- uses `ifCondNotBool`). Its type was computed and discarded, so an integer condition compiled.
@@ -411,6 +429,9 @@ def CheckError.message : CheckError → String
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
+  | .missingReturn fnName retTy => s!"function '{fnName}' returns '{retTy}', but the end of its body is reachable without a `return`"
+  | .letElseFallsThrough => "the `else` block of a `let ... else` must diverge (end in `return`, `break`, `continue` or a call that never returns), but it can fall through"
+  | .patternDoesNotFit pat ty => s!"{pat} does not fit a scrutinee of type '{ty}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
   | .condNotBool what ty => s!"{what} condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
@@ -599,6 +620,9 @@ def CheckError.code : CheckError → String
   | .typeMismatch _ _ _ => "E0220"
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
+  | .missingReturn _ _ => "E0307"
+  | .letElseFallsThrough => "E0308"
+  | .patternDoesNotFit _ _ => "E0309"
   | .ifCondNotBool _ => "E0223"
   | .condNotBool _ _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
@@ -701,7 +725,7 @@ def CheckError.rule : CheckError → Option String
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
-  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
+  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@2" else "TYPE-7@1")
   | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),

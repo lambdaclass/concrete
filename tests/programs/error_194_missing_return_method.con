@@ -1,0 +1,13 @@
+// Bug 194: a method with a result type and a reachable end. Expected: E0307.
+struct Copy S { v: Int }
+
+impl S {
+    fn get(&self) -> Int {
+        let x: Int = self.v;
+    }
+}
+
+fn main() -> Int {
+    let s: S = S { v: 1 };
+    return s.get();
+}

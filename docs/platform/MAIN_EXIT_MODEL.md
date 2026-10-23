@@ -1,5 +1,8 @@
 # Main return & process exit model
 
+The rule for `main` is STMT-7 of [docs/spec/statements.md](../spec/statements.md); this record
+keeps the decision history, the stages and the open end-state preference.
+
 **Status:** Stage 1 SHIPPED (2026-07-14). Stage 2 designed, workload-gated.
 **Decision record** — pulled by Phase 7 workload 1 (`examples/base64_cli`,
 FRICTION #4): the old runtime echoed `main`'s return value to stdout and always

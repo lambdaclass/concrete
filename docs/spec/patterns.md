@@ -62,7 +62,7 @@ fn main() -> Int {
 <a id="PAT-2"></a>
 ### PAT-2. A match is exhaustive
 
-**PAT-2@1.** A `match` covers every value of its scrutinee: over an enum, every variant has an unguarded arm or an unguarded catch-all (`_` or a binding) follows, and over any other type an unguarded catch-all follows the literal and range arms, a guarded arm never counting as coverage.
+**PAT-2@2.** A `match` covers every value of its scrutinee: over an enum, every variant has an unguarded arm or the match has an unguarded catch-all (`_` or a binding), over `bool` both `true` and `false` have unguarded arms or the match has an unguarded catch-all, and over any other type the match has an unguarded catch-all, a guarded arm never counting as coverage.
 
 - Kind: refusal
 - Uses: none
@@ -127,12 +127,12 @@ fn main() -> Int {
 <a id="PAT-3"></a>
 ### PAT-3. Every arm fits its scrutinee
 
-**PAT-3@1.** A variant pattern names a variant of the scrutinee's enum and binds or ignores every one of its fields, a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
+**PAT-3@2.** A variant pattern names a variant of the scrutinee's enum and either lists every one of its fields or, written without a field list, ignores them all (which, like `_`, only a Copy field allows), a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
 
 - Kind: refusal
 - Uses: none
-- Codes: E0304 (check), E0531 (core-check), E0532 (core-check), E0533 (core-check)
-- Status: partial R-0499
+- Codes: E0304 (check), E0309 (check), E0531 (core-check), E0532 (core-check), E0533 (core-check)
+- Status: enforced
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: a checked match never inspects a value its pattern does not describe (R-0507)
@@ -140,10 +140,11 @@ fn main() -> Int {
 
 **Rationale.** A pattern describes the shape the scrutinee has. Every field is listed, so a field
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
-arm that can never be reached is a mistake. Two gaps fail closed at a later stage instead of at
-the checker: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
-reports `unknown variant` (bug 196), and a range arm over an enum reaches the SSA verifier
-natively while `--interp` runs it (bug 195).
+arm that can never be reached is a mistake. Before bug 196 a pattern that did not fit the scrutinee
+was not checked: a variant of another enum made the compiler panic, one sharing a name with the
+scrutinee's own was silently taken as it, and a range arm over an enum reached the SSA verifier.
+Check now refuses each with E0309. A bare variant name over a variant with a non-Copy field
+silently dropped the payload until bug 197; that refusal is OWN-5's (E0288).
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -170,7 +171,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=other-enum-variant code=new stage=check pair=arms-fit pending=R-0499 now=fail:Option.get!
+```con reject name=other-enum-variant code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 enum Copy F { X, Y }
 
@@ -183,13 +184,26 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=range-over-enum code=new stage=check pair=arms-fit pending=R-0499 now=reject:E0715:ssa-verify now-interp=accept:42
+```con reject name=range-over-enum code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 
 fn main() -> Int {
     let e: E = E::B;
     match e {
         0..=9 => { return 1; },
+        _ => { return 42; }
+    }
+}
+```
+
+```con reject name=same-name-other-enum code=E0309 stage=check pair=arms-fit
+enum Copy E { A, B }
+enum Copy F { A, X }
+
+fn main() -> Int {
+    let e: E = E::B;
+    match e {
+        F::A => { return 1; },
         _ => { return 42; }
     }
 }
@@ -267,21 +281,23 @@ fn main() -> Int {
 <a id="PAT-5"></a>
 ### PAT-5. A destructuring `let` binds every field
 
-**PAT-5@1.** A destructuring `let` consumes its scrutinee and binds every field of its pattern, a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
+**PAT-5@2.** A destructuring `let` consumes its scrutinee and binds every field of its pattern (a pattern over a Copy struct may omit fields), a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
 
 - Kind: refusal
 - Uses: none
-- Codes: E0252 (check)
-- Status: partial R-0499
-- Enforced by: Concrete.checkStmt
+- Codes: E0252 (check), E0308 (check)
+- Status: enforced
+- Enforced by: Concrete.checkStmt, Concrete.checkExprCore
 - Semantics: none
 - Obligation: linear conservation (R-0507)
 - Evidence: tested
 
 **Rationale.** A struct always matches its own pattern; a multi-variant enum may not, so its
 pattern needs an `else`. Falling out of the `else` would continue with the bindings unbound. That
-divergence requirement has no enforcing site today: an `else` block that falls through reaches
-the backend, which fails in `llvm-as`, while `--interp` runs it (bug 194). Over a non-Copy enum the
+divergence requirement had no enforcing site until bug 195: an `else` block that fell through
+skipped the rest of the function, or reached the backend, which failed in `llvm-as` while
+`--interp` ran it. Check now refuses it with E0308. A function whose end is reachable without a
+`return` is STMT-9. Over a non-Copy enum the
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
 
@@ -295,7 +311,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=else-falls-through code=new stage=check pair=destructure-all pending=R-0499 now=fail:doesn't_match_function_result_type now-interp=accept:42
+```con reject name=else-falls-through code=E0308 stage=check pair=destructure-all
 fn main() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     let Option::Some { value } = o else {
@@ -325,7 +341,7 @@ fn main() -> Int {
 <a id="PAT-6"></a>
 ### PAT-6. `if let` and `while let` are matches with a catch-all
 
-**PAT-6@1.** `if let P = e { A } else { B }` means `match e { P => { A }, _ => { B } }` (an empty `B` when there is no `else`), and `while let P = e { A }` re-evaluates `e` before each iteration and ends the loop at the first value that does not match `P`.
+**PAT-6@2.** For an enum variant pattern `P`, `if let P = e { A } else { B }` means `match e { P => { A }, _ => { B } }` (an empty `B` when there is no `else`), and `while let P = e { A }` re-evaluates `e` before each iteration and ends the loop at the first value that does not match `P`.
 
 - Kind: guarantee
 - Uses: none
