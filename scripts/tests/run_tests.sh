@@ -7776,12 +7776,14 @@ if filter_match "$TESTDIR/regress_129_user_fn_named_malloc.con"; then
         FAIL=$((FAIL + 1))
     fi
 fi
-# Bug 166 (contained): a foreign fn value with a #[repr(C)] aggregate was called with the
-# Concrete ABI; taking one as a value is refused (E0588). The reproducer is refused too.
+# Bug 166 (contained, D4): a foreign fn value was called with the Concrete ABI and the fn type's
+# capabilities; an extern fn is never a value (E0588). The reproducer is refused too.
 run_err "$TESTDIR/error_166_foreign_fn_value_repr_c.con"     "(E0588)"
 run_err "$TESTDIR/error_166_foreign_fn_value_repr_c_let.con" "(E0588)"
 run_err "tests/regressions/bug166_foreign_fn_value_abi/repro.con" "(E0588)"
-run_ok  "$TESTDIR/regress_166_foreign_fn_value_scalar.con" 42
+run_err "$TESTDIR/error_166_foreign_fn_value_scalar.con"     "(E0588)"
+run_err "$TESTDIR/error_166_imported_extern_value.con"      "(E0588)"
+run_ok  "$TESTDIR/regress_166_wrapper_value.con" 42
 # #[export_name]: a C caller reaches the Concrete function by its exported name (rc 42).
 xp_ll="$TMPDIR/ffi_export_name.ll"
 xp_bin="$TMPDIR/ffi_export_name"

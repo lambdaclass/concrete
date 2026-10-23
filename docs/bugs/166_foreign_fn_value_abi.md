@@ -1,6 +1,6 @@
 # Bug 166 — a foreign function taken as a value is called with the Concrete ABI
 
-**Status:** FIXED by containment (branch `soundness-holes`): refused, E0588
+**Status:** FIXED by containment (branch `soundness-holes`): an extern fn is never a value, E0588
 **Found:** 2026-10-22, by the Codex review (round 5) of the symbol-name work (branch `symbols`).
 **Severity:** silent wrong code at the C boundary. A direct call of an `extern fn` whose parameter
 or result is a small `#[repr(C)]` struct is flattened to the C ABI (a struct of 8 bytes or less
@@ -53,27 +53,35 @@ type and a mismatch is refused. The narrow containment, under exit 0b: refuse ta
 
 ## Fix
 
-The containment rule (TIGHTENING_DECISIONS T-166, Q4 settled 2026-10-23 as "refuse now, defer the
-convention"; normative text in [FFI.md "Foreign Function Values"](../platform/FFI.md#foreign-function-values-normative-decided-2026-10-23)):
-taking as a value an `extern fn` whose signature has a `#[repr(C)]` struct among its parameters or
-as its result is refused with the new code E0588. CoreCheck decides it (`checkForeignFnValue`) at
-both forms a function value takes in Core: `.fnRef` and a fn-typed `.ident` that is not a local.
-"Foreign" is the resolver's own binding of the spelling in that function (`CFnDef.foreignCalls`,
-an own or imported `extern fn`, never a runtime helper), the binding emission uses for the direct
-call, so the refusal and the ABI decision cannot disagree about which name is foreign. A foreign
-function without a `#[repr(C)]` aggregate has the same LLVM signature in both conventions and stays
-usable as a value; a direct call stays legal.
+Decision D4 (TIGHTENING_DECISIONS, 2026-10-23, widened after its Codex review; normative text in
+[FFI.md "Foreign Function Values"](../platform/FFI.md#foreign-function-values-normative-decided-2026-10-23)):
+an `extern fn` is never a value. Taking one as a value, own or imported, is refused with the new
+code E0588 whatever its signature. The `#[repr(C)]` aggregates are where the conventions differ in
+codegen, but the refusal is not keyed on them: the extern's authority (`with(Unsafe)` unless
+`trusted extern`, its declared effects) is also a fact of the direct call that a function type
+does not carry, so a value would let a caller reach the C function under the type's capabilities.
+CoreCheck decides it (`checkForeignFnValue`) at both forms a function value takes in Core: `.fnRef`
+and a fn-typed `.ident` that is not a local. "Foreign" is the resolver's own binding of the
+spelling in that function (`CFnDef.foreignCalls`, an own or imported `extern fn`, never a runtime
+helper), the binding emission uses for the direct call. A direct call stays legal, and a Concrete
+function whose body calls the extern is the supported value.
 
 An adapter (a Concrete-ABI function whose body is the direct call) was implemented and reviewed
-first and is parked on `wip/soundness-166-adapter-parked`; the decision chose refusal until a
-workload needs foreign function values, and the long-term form is a calling convention in the
-function type (design note in FFI.md).
+first and is parked on `wip/soundness-166-adapter-parked`; the long-term form is a calling
+convention in the function type (`extern "C" fn`, D4).
 
-Regression fixtures: `error_166_foreign_fn_value_repr_c.con` (the reproducer's shape, passed as an
-argument) and `error_166_foreign_fn_value_repr_c_let.con` (let-bound, `#[repr(C)]` result), both
-E0588 (`run_err`); `regress_166_foreign_fn_value_scalar.con` (a scalar `extern fn` as a value and
-let-bound, exit 42). The reproducer is refused with E0588 too (`run_tests.sh`, the former pin leg).
-Before the fix all three compiled and the first two passed the struct's address to C.
+Migration (`scripts/tools/rule_impact.sh`, 2172 units against `wip/train3` 1df4cf48): one corpus
+program took an extern as a value, `regress_129_fn_value_extern.con` (bug 129's imported-extern
+case). It now passes a Concrete wrapper whose body calls the imported `abs`, which keeps its point
+(that call still binds C's `abs` beside a Concrete `abs`); the refused shape moved to
+`error_166_imported_extern_value.con`. std has no foreign function value.
+
+Regression fixtures (`run_tests.sh`): E0588 for `error_166_foreign_fn_value_repr_c.con` (the
+reproducer's shape), `error_166_foreign_fn_value_repr_c_let.con` (let-bound, `#[repr(C)]`
+result), `error_166_foreign_fn_value_scalar.con` (scalar signature) and
+`error_166_imported_extern_value.con`; the reproducer is refused with E0588; the control
+`regress_166_wrapper_value.con` passes a wrapper, exit 42. Before the fix all of them compiled, and
+the first two passed the struct's address to C.
 
 ## Containment while open (historical)
 

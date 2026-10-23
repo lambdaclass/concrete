@@ -1,0 +1,18 @@
+// Bug 166 (D4): an IMPORTED extern taken as a value is refused too (E0588); "foreign" is the
+// resolver's binding in the importing module, the binding the direct call uses.
+mod c {
+    pub trusted extern fn abs(x: i32) with() -> i32;
+}
+mod u {
+    import c.{abs};
+    pub fn call_c() -> i32 {
+        let f: fn(i32) -> i32 = abs;
+        return f(0 - 5);
+    }
+}
+mod m {
+    import u.{call_c};
+    pub fn main() -> i32 {
+        return call_c();
+    }
+}

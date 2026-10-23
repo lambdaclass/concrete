@@ -94,15 +94,16 @@ and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_
 `check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
 (heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
 
-### A Foreign Function With A `#[repr(C)]` Aggregate Is Not A Value (bug 166, 2026-10-23)
+### An `extern fn` Is Never A Value (bug 166, 2026-10-23)
 
-Taking as a value an `extern fn` whose signature has a `#[repr(C)]` struct is refused (E0588). The
-C calling convention is decided only at a direct call, which passes such a struct in registers; a
-function type carries no convention, so a call through a value passed the struct's address and C
-read it as the field. Foreign functions without such an aggregate have one ABI and stay usable as
-values. The rule is normative in FFI.md "Foreign Function Values", with a calling convention in
-the function type recorded as the long-term design note (TIGHTENING_DECISIONS Q4). Pinned by two
-E0588 fixtures, the reproducer, and a scalar control.
+Taking an `extern fn` as a value is refused (E0588). The C calling convention and the extern's
+authority are decided at a direct call; a function type carries neither, so a call through a value
+passed a small `#[repr(C)]` struct by address (C read it as the field) and ran under the function
+type's capabilities. A Concrete function whose body calls the extern is the supported value. The
+rule is normative in FFI.md "Foreign Function Values"; the long-term form, a C function type
+`extern "C" fn(..)`, is decided and waits for a callback workload (TIGHTENING_DECISIONS D4). One
+corpus program migrated (bug 129's imported-extern value test now passes a wrapper). Pinned by four
+E0588 fixtures, the reproducer and a wrapper control.
 
 ### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
 

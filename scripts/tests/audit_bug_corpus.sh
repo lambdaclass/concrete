@@ -132,8 +132,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 165: println/append desugared into spelled helper calls that bound to a same-named user fn.
   [165]="regress_165_generated_helper_call.con"
   [183]="regress_183_deref_assign_rhs_first.con"
-  # Bug 166: an extern fn with a repr(C) aggregate taken as a value is refused (E0588).
-  [166]="error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con regress_166_foreign_fn_value_scalar.con"
+  # Bug 166: an extern fn taken as a value is refused (E0588, D4).
+  [166]="error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con error_166_foreign_fn_value_scalar.con error_166_imported_extern_value.con regress_166_wrapper_value.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
