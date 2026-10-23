@@ -111,7 +111,7 @@ partial def arm (r : CoreRename) : CMatchArm → CMatchArm
     .enumArm (r.tyName en) v (binds.map fun (n, t) => (n, r.ty t)) (g.map (expr r')) (stmts r' body)
   | .litArm v g body => .litArm (expr r v) (g.map (expr r)) (stmts r body)
   | .varArm b t g body =>
-    let r' := r.bind [b]
+    let r' := r.bind [b.name]
     .varArm b (r.ty t) (g.map (expr r')) (stmts r' body)
   | .rangeArm lo hi incl g body =>
     .rangeArm (expr r lo) (expr r hi) incl (g.map (expr r)) (stmts r body)
@@ -129,7 +129,7 @@ partial def stmt (r : CoreRename) : CStmt → CStmt
   | .break_ v lbl => .break_ (v.map (expr r)) lbl
   | .continue_ lbl => .continue_ lbl
   | .defer e => .defer (expr r e)
-  | .borrowIn v rf reg isMut t body => .borrowIn v rf reg isMut (r.ty t) (stmts (r.bind [v, rf]) body)
+  | .borrowIn v rf reg isMut t body => .borrowIn v rf reg isMut (r.ty t) (stmts (r.bind [v.name, rf.name]) body)
 
 /-- A block, scoped: a `let`'s binder is in scope AFTER its initializer, to the end of the
     block (`let h = h` reads the global `h`, then binds the local). -/
@@ -137,7 +137,7 @@ partial def stmts (r : CoreRename) (ss : List CStmt) : List CStmt :=
   (ss.foldl (fun (acc, r) st =>
     let st' := stmt r st
     match st with
-    | .letDecl n .. => (st' :: acc, r.bind [n])
+    | .letDecl n .. => (st' :: acc, r.bind [n.name])
     | _ => (st' :: acc, r)) ([], r)).1.reverse
 end
 

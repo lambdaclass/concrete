@@ -85,9 +85,9 @@ UNKNOWN rather than empty — so it collects the binding names here, from the sa
 shape as `collectCalls*` so the two cannot disagree about which expressions are visited.
 -/
 def collectIndirectCallsExpr (e : CExpr) : List String :=
-  (collectCalleesExpr e).filterMap fun | .indirect b => some b | _ => none
+  (collectCalleesExpr e).filterMap fun | .indirect b => some b.name | _ => none
 def collectIndirectCallsStmts (ss : List CStmt) : List String :=
-  (collectCalleesStmts ss).filterMap fun | .indirect b => some b | _ => none
+  (collectCalleesStmts ss).filterMap fun | .indirect b => some b.name | _ => none
 
 /-- The runtime helpers a body calls through compiler-generated calls (`println`'s
     `print_int`, bug 165): the helper names, for reports that explain which intrinsic supplies

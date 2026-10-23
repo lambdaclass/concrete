@@ -131,7 +131,7 @@ mutual
 partial def extractExpr : CExpr → Option String
   | .intLit v _ => some (if v < 0 then s!"({v})" else s!"{v}")
   | .boolLit b => some (if b then "true" else "false")
-  | .ident n _ => some n
+  | .ident n _ => some n.name
   | .unaryOp op e _ => do
     let E ← extractExpr e
     match op with
