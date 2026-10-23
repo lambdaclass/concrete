@@ -49,9 +49,28 @@ instance : Repr CLocal := ⟨fun a p => reprPrec a.name p⟩
 instance : ToString CLocal := ⟨CLocal.name⟩
 instance : Inhabited CLocal := ⟨{ name := "" }⟩
 instance : LT CLocal := ⟨fun a b => a.name < b.name⟩
+/-- What a backend keys a local by (R-0492 step 4): the binding's identity when it has one (a
+    source binding), its Core name otherwise (a compiler temporary). ElabVerify guarantees that
+    every reference has the same key as the binder it denotes (U1, U2), so keying an environment
+    by this is keying it by the binding. -/
+inductive LocalKey where
+  | id (i : LocalId)
+  | name (n : String)
+  deriving BEq, Repr
+
+instance : Inhabited LocalKey := ⟨.name ""⟩
+instance : ToString LocalKey := ⟨fun | .id i => toString i | .name n => n⟩
+
+def key (c : CLocal) : LocalKey :=
+  match c.id with
+  | some i => .id i
+  | none => .name c.name
+
 /-- The names of a binder list, for a consumer still keyed by spelling (migration helper). -/
 def names {α : Type} (bs : List (CLocal × α)) : List (String × α) := bs.map fun (b, x) => (b.name, x)
 end CLocal
+
+abbrev LocalKey := CLocal.LocalKey
 
 /-- What a call's callee IS, decided where scope is known.
 

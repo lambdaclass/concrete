@@ -46,7 +46,8 @@ inductive RefStep where
     frames that may shadow the borrowed name. Structured-scope rules
     ensure the binding outlives every use of the borrow. -/
 structure RefPath where
-  base : String
+  -- the borrowed binding (R-0492 step 4: by identity, or by Core name for a temporary)
+  base : LocalKey
   frame : Nat
   steps : List RefStep
   isMut : Bool := false
@@ -107,17 +108,18 @@ inductive Flow where
 -- Environment (flat list, latest binding wins)
 -- ============================================================
 
-abbrev Env := List (String × IVal)
+-- R-0492 step 4: keyed by binding identity (`CLocal.key`); a temporary by its Core name.
+abbrev Env := List (LocalKey × IVal)
 
-partial def envGet (env : Env) (name : String) : Option IVal :=
+partial def envGet (env : Env) (name : LocalKey) : Option IVal :=
   match env with
   | [] => none
   | (n, v) :: rest => if n == name then some v else envGet rest name
 
-def envBind (env : Env) (name : String) (val : IVal) : Env :=
+def envBind (env : Env) (name : LocalKey) (val : IVal) : Env :=
   (name, val) :: env
 
-partial def envSet (env : Env) (name : String) (val : IVal) : Env :=
+partial def envSet (env : Env) (name : LocalKey) (val : IVal) : Env :=
   match env with
   | [] => []
   | (n, v) :: rest =>
@@ -128,13 +130,13 @@ partial def envSet (env : Env) (name : String) (val : IVal) : Env :=
     identifier). The environment is one list shared by all frames, so that borrows of a
     caller's bindings resolve; a NAME, though, is looked up in its own frame only. Without the
     boundary a callee reading a module constant `K` found a caller's local `K` first. -/
-def frameMarker : String := "$frame"
+def frameMarker : LocalKey := .name "$frame"
 
 /-- Push a new function frame. -/
 def envEnterFrame (env : Env) : Env := envBind env frameMarker .unit
 
 /-- Look a name up in the current frame only (stops at the frame boundary). -/
-partial def envGetLocal (env : Env) (name : String) : Option IVal :=
+partial def envGetLocal (env : Env) (name : LocalKey) : Option IVal :=
   match env with
   | [] => none
   | (n, v) :: rest =>
@@ -143,7 +145,7 @@ partial def envGetLocal (env : Env) (name : String) : Option IVal :=
     else envGetLocal rest name
 
 /-- Rebind a name of the current frame (stops at the frame boundary). -/
-partial def envSetLocal (env : Env) (name : String) (val : IVal) : Env :=
+partial def envSetLocal (env : Env) (name : LocalKey) (val : IVal) : Env :=
   match env with
   | [] => []
   | (n, v) :: rest =>
@@ -1442,7 +1444,7 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
 /-- Like envSet but only rewrites bindings at depth >= `skip` (counting
     from the head). Used so that a ref-update walks past intervening
     callee frames and rewrites the binding that was actually borrowed. -/
-private partial def envSetSkipping (env : Env) (skip : Nat) (name : String) (val : IVal) : Env :=
+private partial def envSetSkipping (env : Env) (skip : Nat) (name : LocalKey) (val : IVal) : Env :=
   match env, skip with
   | [], _ => []
   | (n, v) :: rest, 0 =>
@@ -2041,7 +2043,7 @@ partial def evalProjectionBase (cx : Ctx) (env : Env) (obj : CExpr)
         | .ptr blk off =>
           let blkSize := (((← get).heap[blk]?).map (·.size)).getD 0
           if off < 0 || off > blkSize then fail "interp: a projection through a pointer outside its allocation is not modelled"
-          else return (env, { base := "", frame := 0, steps := [], isMut := p.isMut || isMut, heap := some (blk, off.toNat, pt) })
+          else return (env, { base := .name "", frame := 0, steps := [], isMut := p.isMut || isMut, heap := some (blk, off.toNat, pt) })
         | .int 0 _ => fail "interp: projection through a null pointer (the binary crashes)"
         | _ => return (env, { p with isMut := p.isMut || isMut })
       | none => return (env, { p with isMut := p.isMut || isMut })
@@ -2055,7 +2057,7 @@ partial def evalProjectionBase (cx : Ctx) (env : Env) (obj : CExpr)
     | .ptr blk off, some pt =>
       let blkSize := (((← get).heap[blk]?).map (·.size)).getD 0
       if off < 0 || off > blkSize then fail "interp: a projection through a pointer outside its allocation is not modelled"
-      else return (env, { base := "", frame := 0, steps := [], isMut, heap := some (blk, off.toNat, pt) })
+      else return (env, { base := .name "", frame := 0, steps := [], isMut, heap := some (blk, off.toNat, pt) })
     | .ref p, _ => return (env, { p with isMut := p.isMut || isMut })
     | .int 0 _, _ => fail "interp: projection through a null pointer (the binary crashes)"
     | _, _ => evalBorrowTarget cx env obj isMut
@@ -2070,7 +2072,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     IM (Env × RefPath) := do
   match e with
   | .ident name _ =>
-    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
+    return (env, { base := name.key, frame := env.length, steps := [], isMut := isMut })
   | .fieldAccess obj fld _ => do
     let (env, p) ← evalProjectionBase cx env obj isMut
     return (env, { p with steps := p.steps ++ [.field fld] })
@@ -2091,7 +2093,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     | .ptr blk off, some pt =>
       let blkSize := (((← get).heap[blk]?).map (·.size)).getD 0
       if off < 0 || off > blkSize then fail "interp: a borrow through a pointer outside its allocation is not modelled"
-      else return (env, { base := "", frame := 0, steps := [], isMut, heap := some (blk, off.toNat, pt) })
+      else return (env, { base := .name "", frame := 0, steps := [], isMut, heap := some (blk, off.toNat, pt) })
     | .int 0 _, _ => fail "interp: borrow through a null pointer (the binary crashes)"
     | _, _ => fail "interp: deref of non-ref in borrow target"
   -- Borrowing a literal yields a ref to a temporary. The interpreter
@@ -2101,11 +2103,11 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
   -- same statement do not collide.
   | .strLit s => do
     let v ← newStringValue cx s.toUTF8 (s.utf8ByteSize + 1) (nul := true) (what := "a string literal's copy")
-    let name := s!"__interp_str_lit_{env.length}"
+    let name : LocalKey := .name s!"__interp_str_lit_{env.length}"
     let env := envBind env name v
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .charLit c => do
-    let name := s!"__interp_char_lit_{env.length}"
+    let name : LocalKey := .name s!"__interp_char_lit_{env.length}"
     let env := envBind env name (.int (Int.ofNat c.toNat) .char)
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   -- Any other borrow target is an owned TEMPORARY (a call result, a struct literal, an
@@ -2113,7 +2115,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
   -- of a value). Materialize it like a literal so the borrow has a place (bug 091 round 3).
   | other => do
     let (env, v) ← evalExprVal cx env other
-    let name := s!"__interp_tmp_{env.length}"
+    let name : LocalKey := .name s!"__interp_tmp_{env.length}"
     let env := envBind env name v
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
 
@@ -2133,7 +2135,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
   | .floatLit v ty => return (env, .val (.float (roundToFloatTy ty v) ty))
 
   | .ident name _ =>
-    match envGetLocal env name with
+    match envGetLocal env name.key with
     | some v => return (env, .val v)
     | none =>
       -- A module constant (bug 117): Core keeps the reference by name and Lower inlines the
@@ -2802,7 +2804,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | .ref pt | .refMut pt =>
         let size := ((← get).heap[blk]?).map (·.size) |>.getD 0
         if off < 0 || off > size then fail "interp: a reference outside its allocation is not modelled"
-        else return (env, .val (.ref { base := "", frame := 0, steps := [], isMut := true, heap := some (blk, off.toNat, pt) }))
+        else return (env, .val (.ref { base := .name "", frame := 0, steps := [], isMut := true, heap := some (blk, off.toNat, pt) }))
       | .int | .uint => do
         -- Only an address inside its allocation (or one past it) has a numeric behaviour the
         -- model can follow; a pointer moved outside may have wrapped around the address space.
