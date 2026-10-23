@@ -48,6 +48,21 @@ The witness programs found three silent defects, filed as open under exit 0b:
 
 Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
 
+The user decided the four questions the same day ("do the best long term solution for this problem
+and every problem"):
+
+- **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
+- **D2:** only places are borrowable, with string literals as static places. This closes bug 182,
+  and one corpus site migrates.
+- **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
+  fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
+- **D4:** foreign function values with `#[repr(C)]` aggregate signatures are refused now (bug 166).
+  Function types will carry their calling convention later.
+
+G17 is closed: its shapes are refused on main and are now rejection fixtures. The rules are
+recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
+implemented yet.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered

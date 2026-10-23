@@ -48,11 +48,12 @@ spill), the shape of bugs 102 and 126.
 
 ## Structural owner
 
-Exit 2i (R-0500) enforcing REF-5 over every non-place operand, or REF-5@2 specifying a temporary as
-an anonymous local of the enclosing statement, as decided in
-[TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md) (T-REF5); R-0501 (S10 Place MIR) gives
-temporaries places for good. Containment under exit 0b: refuse a borrow of a call result or
-aggregate literal whose type is not Copy (it is the only form that leaks or is miscompiled).
+The rule decided on 2026-10-23
+([TIGHTENING_DECISIONS D2](../language/TIGHTENING_DECISIONS.md#d2-only-places-are-borrowable-q2-ref-5-g12)):
+only places are borrowable, a string literal being a static place; every other non-place operand
+is E0238 (REF-5@1), enforced under exit 2i (R-0500). There are no temporaries to give places to, so
+the semantics needs no temporary materialization. Measured migration: one corpus site
+(`std/src/map.con`, `m.remove(&2)`); both reproducers here become rejection fixtures.
 
 ## Containment while open
 

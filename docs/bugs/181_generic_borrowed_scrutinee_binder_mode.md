@@ -57,13 +57,13 @@ mode keyed on Copy-ness is decided before monomorphization and means something e
 
 ## Structural owner
 
-R-0496 (S7 Core semantics): the binding mode becomes explicit in Core (a borrowed-payload binder of
-type `&T`, or a by-value binder of a Copy payload), produced once by Elab from the checker's decision
-and re-checked by CoreCheck after Mono. The language rule that removes the Copy dependence is decided
-in [TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md) (T-BIND). Narrow repair under
-exit 0b: Elab gives the binder Check's type (`&T` through a reference scrutinee when the payload type
-is not Copy at check time, kept through Mono), or Check refuses a match through a reference whose
-payload type is a type parameter.
+The rule decided on 2026-10-23
+([TIGHTENING_DECISIONS D3](../language/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
+every binder through a scrutinee of reference type is a reference, Copy or not, so the mode no
+longer depends on a property substitution changes. Check, Elab and Mono carry that one type (exit
+2i, R-0500), and R-0496 (S7 Core semantics) makes the binder's type explicit in Core, re-checked by
+CoreCheck after Mono. Measured migration: two fixtures (`tests/programs/patterns/match_ref_enum.con`,
+`match_ref_scalar.con`). The fix turns this reproducer into a run fixture (42, binary = `--interp`).
 
 ## Containment while open
 
