@@ -9,6 +9,10 @@ import Concrete.Semantics.BindingMode
 
 namespace Concrete
 
+-- R-0492 step 4: Lower keys locals by binding identity (`CLocal.key`). The name coercion is off in
+-- this file, so any remaining read of a local by its spelling is a compile error.
+attribute [-instance] CLocal.coeName
+
 /-! ## Lowering: Core IR → SSA IR
 
 Converts structured Core IR into SSA form with basic blocks,
@@ -33,15 +37,15 @@ structure LoopInfo where
   headerLabel : String
   exitLabel : String
   /-- Phi registers created at header: (varName, phiReg, preLoopVal, ty) -/
-  headerPhis : List (String × String × SVal × Ty) := []
+  headerPhis : List (LocalKey × String × SVal × Ty) := []
   /-- Var snapshots at each break: (varsSnapshot, sourceLabel) -/
-  breakEdges : List (List (String × SVal) × String) := []
+  breakEdges : List (List (LocalKey × SVal) × String) := []
   /-- Alloca slot for while-as-expression result (break stores value here). -/
   resultSlot : Option String := none
   /-- Type for the result slot. -/
   resultTy : Ty := .unit
   /-- Var snapshots at each continue: (varsSnapshot, sourceLabel) -/
-  continueEdges : List (List (String × SVal) × String) := []
+  continueEdges : List (List (LocalKey × SVal) × String) := []
   /-- Target label for continue (step block for for-loops, header for while-loops). -/
   continueTarget : String := ""
   /-- Optional loop label for labeled break/continue. -/
@@ -66,7 +70,8 @@ structure LowerState where
   currentInsts : List SInst
   labelCounter : Nat
   regCounter : Nat
-  vars : List (String × SVal)
+  -- R-0492 step 4: keyed by binding identity (a compiler temporary by its Core name)
+  vars : List (LocalKey × SVal)
   stringLits : List (String × String)
   structDefs : List CStructDef
   enumDefs : List CEnumDef
@@ -84,7 +89,7 @@ structure LowerState where
   /-- Aggregate variables promoted to stable allocas during loops.
       Maps (varName, allocaReg, ty). Field assignment GEPs directly into
       the alloca instead of phi-transporting whole struct values. -/
-  promotedAllocas : List (String × String × Ty) := []
+  promotedAllocas : List (LocalKey × String × Ty) := []
   scopeStack : List ScopeFrame := []
   /-- True after terminateBlock, cleared by startBlock. Used to detect
       dead code after early returns inside borrow blocks. -/
@@ -219,7 +224,7 @@ private def startBlock (label : String) : LowerM Unit := do
   let s ← getState
   setState { s with currentLabel := label, blockTerminated := false }
 
-private def setVar (name : String) (val : SVal) : LowerM Unit := do
+private def setVar (name : LocalKey) (val : SVal) : LowerM Unit := do
   let s ← getState
   -- If promoted to stable alloca, store there instead of updating var map
   match s.promotedAllocas.find? fun (n, _, _) => n == name with
@@ -232,7 +237,7 @@ private def setVar (name : String) (val : SVal) : LowerM Unit := do
       s.vars ++ [(name, val)]
     setState { s with vars := vars' }
 
-private def lookupVar (name : String) : LowerM (Option SVal) := do
+private def lookupVar (name : LocalKey) : LowerM (Option SVal) := do
   let s ← getState
   -- Check if this variable is promoted to a stable alloca (aggregate in loop)
   match s.promotedAllocas.find? fun (n, _, _) => n == name with
@@ -387,7 +392,7 @@ private def isAggregateForPromotion (ty : Ty) : LowerM Bool := do
     return (Layout.lookupStruct ctx name).isSome || (Layout.lookupEnum ctx name).isSome
 
 /-- Check if a variable is currently promoted to a stable alloca. -/
-private def isPromoted (name : String) : LowerM (Option (String × Ty)) := do
+private def isPromoted (name : LocalKey) : LowerM (Option (String × Ty)) := do
   let s ← getState
   match s.promotedAllocas.find? fun (n, _, _) => n == name with
   | some (_, reg, ty) => return some (reg, ty)
@@ -399,12 +404,12 @@ private def isPromoted (name : String) : LowerM (Option (String × Ty)) := do
     else { let mut x: [i32; 1] = [2]; .. }`. Appending made `find?` return the then-branch's
     storage inside the else branch, which on that path was never written (Codex review of
     bug 087). Prepending makes every lookup resolve the declaration in scope. -/
-private def addPromotedAlloca (name : String) (allocaReg : String) (ty : Ty) : LowerM Unit := do
+private def addPromotedAlloca (name : LocalKey) (allocaReg : String) (ty : Ty) : LowerM Unit := do
   let s ← getState
   setState { s with promotedAllocas := (name, allocaReg, ty) :: s.promotedAllocas }
 
 /-- Remove promoted allocas by name (at loop exit). -/
-private def removePromotedAllocas (names : List String) : LowerM Unit := do
+private def removePromotedAllocas (names : List LocalKey) : LowerM Unit := do
   let s ← getState
   setState { s with promotedAllocas := s.promotedAllocas.filter fun (n, _, _) => !names.contains n }
 
@@ -460,7 +465,7 @@ private def loopsExitedBy (label : Option String) : LowerM Nat := do
     | none => return 1
 
 /-- Record a break edge on a specific loop (identified by exitLabel). -/
-private def addBreakEdgeToLoop (vars : List (String × SVal)) (srcLabel : String) (targetExitLabel : String) : LowerM Unit := do
+private def addBreakEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : String) (targetExitLabel : String) : LowerM Unit := do
   let s ← getState
   let newStack := s.loopStack.map fun info =>
     if info.exitLabel == targetExitLabel then
@@ -469,7 +474,7 @@ private def addBreakEdgeToLoop (vars : List (String × SVal)) (srcLabel : String
   setState { s with loopStack := newStack }
 
 /-- Record a break edge on the innermost loop. -/
-private def addBreakEdge (vars : List (String × SVal)) (label : String) : LowerM Unit := do
+private def addBreakEdge (vars : List (LocalKey × SVal)) (label : String) : LowerM Unit := do
   let s ← getState
   match s.loopStack with
   | info :: rest =>
@@ -478,7 +483,7 @@ private def addBreakEdge (vars : List (String × SVal)) (label : String) : Lower
   | [] => pure ()
 
 /-- Record a continue edge on a specific loop (identified by headerLabel). -/
-private def addContinueEdgeToLoop (vars : List (String × SVal)) (srcLabel : String) (targetHeaderLabel : String) : LowerM Unit := do
+private def addContinueEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : String) (targetHeaderLabel : String) : LowerM Unit := do
   let s ← getState
   let newStack := s.loopStack.map fun info =>
     if info.headerLabel == targetHeaderLabel then
@@ -487,7 +492,7 @@ private def addContinueEdgeToLoop (vars : List (String × SVal)) (srcLabel : Str
   setState { s with loopStack := newStack }
 
 /-- Record a continue edge on the innermost loop. -/
-private def addContinueEdge (vars : List (String × SVal)) (label : String) : LowerM Unit := do
+private def addContinueEdge (vars : List (LocalKey × SVal)) (label : String) : LowerM Unit := do
   let s ← getState
   match s.loopStack with
   | info :: rest =>
@@ -2032,9 +2037,9 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let preLoopLabel ← getCurrentLabel
     -- Partition live variables: aggregate types get stable allocas,
     -- scalar types get phi nodes as before.
-    let mut headerPhis : List (String × String × SVal × Ty) := []
-    let mut allPromotedNames : List String := []  -- all aggregate names (including outer)
-    let mut newlyPromotedNames : List String := [] -- only promoted by THIS loop
+    let mut headerPhis : List (LocalKey × String × SVal × Ty) := []
+    let mut allPromotedNames : List LocalKey := []  -- all aggregate names (including outer)
+    let mut newlyPromotedNames : List LocalKey := [] -- only promoted by THIS loop
     -- Promote aggregate variables BEFORE terminating the block (stores go here)
     for (name, val) in preLoopVars do
       let ty := val.ty
