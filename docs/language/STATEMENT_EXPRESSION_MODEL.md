@@ -210,7 +210,7 @@ updated by the bug 127 fix, 2026-10-21):
 | 5. base before index | yes | yes | enforced (not yet gated) |
 | 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call), [bug 136](../bugs/136_functional_update_base_reevaluated.md), exit 0b. The explicit initializers run first in both consumers since the bug 127 fix (before it, the binary interleaved the base reads with them in declaration order) |
 | 7. assignment to an indexed place: right-hand side, then the index | yes | yes | enforced (not yet gated) |
-| 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, not yet filed (exit 0b) |
+| 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, [bug 183](../bugs/183_deref_assign_destination_first.md) (exit 0b) |
 
 Struct literals follow source order in both consumers since the bug 127 fix (`Lower` no longer
 reorders them). Changing enum literals to source order (bug 137) changes Elab, the positional

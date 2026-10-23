@@ -151,6 +151,85 @@ may affect con-leche.
 - Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
   [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
 
+### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+
+[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
+gap that could be tightened. The gaps covered are:
+
+- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
+- checked arithmetic and lossy casts;
+- the trusted raw-pointer duplication;
+- bugs 165 and 166;
+- evaluation order;
+- `main`'s exit status;
+- contract typing.
+
+Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
+program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
+records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
+deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
+borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
+Holes and semantic cases are tightened; style-only rules wait for a workload.
+
+`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
+with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
+shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
+E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
+standalone files and 7 inline gate probes.
+
+The witness programs found three silent defects, filed as open under exit 0b:
+
+- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
+  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
+  safe code at `T := Int`.
+- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
+  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
+- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
+  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
+
+Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+
+The user decided the four questions the same day ("do the best long term solution for this problem
+and every problem"):
+
+- **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
+- **D2:** first "only places are borrowable", then replaced by the Austral model ("ok do the austral
+  model with `&s.f` sugar"). Only a variable or a string literal is borrowed, and a reference to a
+  part is a projection through a reference. `&s.f` is front-end sugar, and loans are keyed by root.
+  This closes bug 182; 2 std sites and 1 train3 fixture migrate.
+- **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
+  fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
+- **D4:** every foreign function value is refused now (bug 166), revised after review from an
+  aggregate-only refusal. Function types will carry calling convention, capabilities and safety
+  obligations later.
+
+A second set of decisions the same day ("the best long term solution for everything we discussed")
+adds:
+
+- a bare `T` is Any (linear-capable) and `T: Copy` stays the only kind annotation (revised from
+  "two declared kinds"), with Copy for structs declared and checked, never derived;
+- trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
+  identity;
+- global state: immutable globals everywhere, and mutable state only as declared global cells.
+  Cells live in an unsafe-marked module and are reached through capability-requiring functions;
+  there is no `static mut`, and the compiler's own globals are inventoried as trusted base (revised
+  from "no mutable globals");
+- one file per module, with generated interface artifacts;
+- a `trusted mod` marker in source: only marked modules may hold trusted, foreign and raw code.
+  The marker never confers trust, and a gate lists every marked module (it replaces the allowlist
+  idea);
+- the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
+- disciplines for every pass and every gate.
+
+The doc's §5 orders the work: traits; then the binder, kinds, references, loans and foreign-value
+refusal; then the spec pilot; the trusted base; `read_owned`, contracts and casts; and generated
+interfaces.
+
+G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
+case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
+recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
+implemented yet.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered

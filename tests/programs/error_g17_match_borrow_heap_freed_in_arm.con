@@ -1,0 +1,20 @@
+// MEMORY_SEMANTICS §15.7 G17 (closed 2026-10-23, TIGHTENING_DECISIONS T-G17): the scrutinee's heap
+// payload is freed inside the arm (the root is moved into `release`), then read through the
+// binder: a use after free if accepted. Rejected: E0204.
+struct Copy B { v: Int }
+fn peek(b: &Heap<B>) -> Int { return b.v; }
+fn release(o: Option<Heap<B>>) {
+    match o {
+        Option::Some { value } => { free(value); },
+        Option::None => {}
+    }
+}
+fn main() with(Alloc) -> Int {
+    let o: Option<Heap<B>> = Option::Some { value: alloc(B { v: 42 }) };
+    let mut out: Int = 0;
+    match &o {
+        Option::Some { value } => { release(o); out = peek(value); },
+        Option::None => {}
+    }
+    return out;
+}

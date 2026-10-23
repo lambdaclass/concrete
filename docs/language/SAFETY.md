@@ -94,6 +94,22 @@ trusted impl Vec<T> {
 
 The stdlib demonstrates this pattern throughout: `trusted impl Vec<T>`, `trusted impl HashMap<K, V>`, `trusted impl TextFile`, `trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
+### Unsafe-marked modules and global state (decided 2026-10-23, not implemented)
+
+Decided in [TIGHTENING_DECISIONS D8 and D10](TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
+
+- **`trusted mod name { ... }`** marks a module as part of the trusted base. Only a marked module
+  may contain `trusted` functions, `extern` declarations, raw-pointer operations and global cells.
+  The marker never confers trust: each function still declares `trusted`, and its `with(...)`
+  obligations, `Unsafe` included, still apply. A gate lists every marked module.
+- **Global state.** Immutable globals (`const`, immutable statics) are allowed everywhere. Mutable
+  global state exists only as declared global cells. A cell is defined in a marked module and is
+  reachable only through functions that require a capability (`with(Alloc)` for allocator state,
+  or a named capability per cell). In the semantics it is part of the world state that capability
+  grants, like the process environment for `with(Env)`. There is no unrestricted `static mut`.
+- The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std.env's environment
+  mutation are inventoried as trusted base. Global cells are built when a workload pulls them.
+
 ### `with(Unsafe)`
 
 `with(Unsafe)` gates the explicit low-level boundary:
