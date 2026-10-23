@@ -858,7 +858,7 @@ partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any cStmtAssigns
 partial def cStmtAssigns : CStmt → Bool
   | .assign .. | .arrayIndexAssign .. | .fieldAssign .. | .derefAssign .. => true
   | .ifElse c t e => cExprAssigns c || cStmtsAssign t || (match e with | some b => cStmtsAssign b | none => false)
-  | .while_ c b _ => cExprAssigns c || cStmtsAssign b
+  | .while_ c b _ s => cExprAssigns c || cStmtsAssign b || cStmtsAssign s
   | .borrowIn _ _ _ _ _ b => cStmtsAssign b
   | .letDecl _ _ _ v => cExprAssigns v
   | .expr v _ => cExprAssigns v
