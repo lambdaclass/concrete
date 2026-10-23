@@ -836,7 +836,8 @@ order), bug 165 (generated calls carry the runtime callee).
       `patterns/match_ref_*` fixtures migrate, and bug 181's reproducer becomes a run fixture.
       G17's Copy-case shapes (§4: root reassigned, guard, `&mut` parent, defer, `while let` with
       early exit) become rejection fixtures, with run controls.
-   2. **Kinds and explicit Copy (D5, D6).** Mono's conditional-Copy fixpoint is removed.
+   2. **Explicit Copy (D6)**, with D5's bare-`T`-is-Any rule written down as normative (no syntax
+      change). Mono's conditional-Copy fixpoint is removed.
    3. **The D2 Austral references** (REF-5, E0238; closes bug 182 and G12):
       - `&s.f` / `&a[i]` is rewritten to borrow-then-project before checking;
       - only a variable or a string literal is borrowed;
