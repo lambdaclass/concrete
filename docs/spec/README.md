@@ -58,6 +58,7 @@ areas exist (§8).
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
+| `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -392,7 +393,7 @@ Each step lands with the gate green. The steps run in this order:
    with generated interfaces) enters as pending.
 9. **traits.md** (`TRAIT-`): traits, impls, bounds and coherence (D7). The trait-coherence
    branch may start this chapter at any point. It does not wait for its place in this order.
-10. **syntax.md** (`SYN-`): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
+10. **syntax.md** (`SYN-`, migrated 2026-10-23): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
     owners of the productions, and the chapter cites productions by name rather than copying
     them. Its entries cover what the grammar cannot say, such as the precedence and
     trailing-value rules.

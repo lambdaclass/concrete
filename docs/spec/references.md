@@ -819,3 +819,52 @@ fn main() -> Int {
     return w.a + w.b;
 }
 ```
+
+<a id="REF-12"></a>
+### REF-12. Nothing is mutated through a shared reference
+
+**REF-12@1.** No place reached through a shared reference is mutated: it is not borrowed with `&mut`, not the receiver of a `&mut self` method and not assigned.
+
+- Kind: refusal
+- Uses: REF-D1
+- Codes: E0237 (elab, check)
+- Status: enforced
+- Enforced by: Concrete.checkMutAccess, Concrete.checkWriteAccess
+- Semantics: none
+- Obligation: INV-REF (R-0500): a shared reference's target is not written while it lives
+- Evidence: tested
+
+**Rationale.** A shared reference may be one of several aliases of the same value, so a write
+through it would change what the other aliases read. Exclusivity comes only from `&mut`
+(REF-8). Elab refuses a `&mut self` call on a receiver of type `&T` before it builds the
+implicit borrow; Check refuses the rest on the normalized place, so `(*r).f`, `r.f.g` and a
+receiver reached through a conditional all count. A place Check cannot normalize is refused
+(E0238), never assumed to be owned.
+
+```con reject name=assign-through-shared code=E0237 stage=check pair=assign-through-exclusive
+struct Copy P { n: Int }
+
+fn set(p: &P) {
+    p.n = 42;
+}
+
+fn main() -> Int {
+    let p: P = P { n: 0 };
+    set(&p);
+    return p.n;
+}
+```
+
+```con accept name=assign-through-exclusive exit=42
+struct Copy P { n: Int }
+
+fn set(p: &mut P) {
+    p.n = 42;
+}
+
+fn main() -> Int {
+    let mut p: P = P { n: 0 };
+    set(&mut p);
+    return p.n;
+}
+```

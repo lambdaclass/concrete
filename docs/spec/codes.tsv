@@ -1,7 +1,7 @@
 # Classification of every code in `--report diagnostic-codes` (docs/spec/README.md S6). Classes: rule (named by a
 # spec entry), unmigrated:<chapter> (only shrinks, S3), internal (compiler invariant), tooling (proof/policy/evidence), retired.
 # code	class	ledger description
-E0001	unmigrated:syntax	syntax error
+E0001	rule	syntax error
 E0100	rule	undeclared variable
 E0101	rule	unknown function
 E0102	rule	unknown struct type
@@ -15,9 +15,9 @@ E0109	rule	Self outside impl block
 E0110	rule	unknown module
 E0111	rule	symbol not public in module
 E0112	rule	recursive type alias
-E0113	unmigrated:types	wrong number of type arguments
-E0114	unmigrated:trusted	capability argument of the wrong kind
-E0115	unmigrated:trusted	wrong number of capability arguments
+E0113	rule	wrong number of type arguments
+E0114	rule	capability argument of the wrong kind
+E0115	rule	wrong number of capability arguments
 E0116	rule	foreign binding does not declare its effects
 E0117	rule	known effectful C symbol declared with()
 E0118	rule	invalid #[link_name]
@@ -60,7 +60,7 @@ E0233	rule	cannot mutably borrow immutable variable
 E0234	rule	reference escapes borrow block
 E0235	rule	cannot mutably borrow: already immutably borrowed
 E0236	rule	a function, function type or instantiation returns a reference (front end and post-mono)
-E0237	unmigrated:references	mutable borrow (explicit or `&mut self` receiver) through a shared reference
+E0237	rule	mutable borrow (explicit or `&mut self` receiver) through a shared reference
 E0238	rule	place or reference source that does not normalize to a traceable place
 E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
 E0240	rule	missing capability
@@ -101,7 +101,7 @@ E0279	rule	deferred call argument is not a local, a borrow of a local, or a cons
 E0280	rule	break outside loop
 E0281	rule	continue outside loop
 E0282	rule	defer body must be a function call
-E0283	unmigrated:syntax	reserved identifier
+E0283	rule	reserved identifier
 E0284	rule	unknown module
 E0285	rule	symbol not public in module
 E0286	rule	fallible result discarded (must use)

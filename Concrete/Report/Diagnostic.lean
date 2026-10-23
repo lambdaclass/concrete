@@ -92,6 +92,12 @@ def codeRuleTag : String → Option String
   | "E0262" | "E0264" | "E0265" | "E0266" | "E0522" => some "TYPE-9@1"
   | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
+  | "E0113" | "E0114" | "E0115" => some "TYPE-15@1"
+  -- docs/spec/references.md
+  | "E0237" => some "REF-12@1"
+  -- docs/spec/syntax.md
+  | "E0001" => some "SYN-1@1"
+  | "E0283" => some "SYN-3@1"
   -- docs/spec/modules.md
   | "E0100" | "E0101" | "E0102" | "E0103" | "E0104" | "E0105" | "E0106" | "E0107" | "E0108"
   | "E0109" | "E0112" | "E0200" | "E0201" | "E0202" | "E0263" | "E0267" => some "MOD-1@1"

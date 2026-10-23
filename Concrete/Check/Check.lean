@@ -202,7 +202,7 @@ def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit :
     (E0237); an owned root must be `mut` and unborrowed (E0233 / E0232) and not moved; an
     exclusive reference must not be in use by a newer reborrow (E0232); a place that does not
     normalize is refused (E0238). -/
--- spec: OWN-10 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-10, spec: REF-12 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -234,7 +234,7 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
     for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
     is live (E0232), and not into an owned root that a live reference borrows (E0232). (The
     binding-mutability rule for field writes is unchanged.) -/
--- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-8, spec: REF-12 (docs/spec/references.md; this declaration enforces the rule)
 def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
   let subject := "the assignment target"
   match n with
@@ -2218,7 +2218,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
