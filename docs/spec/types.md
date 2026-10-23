@@ -761,7 +761,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0583 (core-check)
-- Status: partial R-0499
+- Status: enforced
 - Enforced by: Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: every type has a layout (R-0502)
@@ -770,15 +770,15 @@ fn main() -> Int {
 **Rationale.** A value is laid out inline, so a struct that holds itself by value has no finite
 size. CoreCheck refuses it before code generation, where it used to surface as an LLVM
 "recursive structure type" error. A reference cannot be a field (REF-3), so it does not break a
-cycle. The check does not look through a generic instantiation yet (bug 205, the pending
-example): `W<Node>` inside `Node` still reaches `llvm-as` natively, while `--interp` runs it.
+cycle. A generic instantiation is followed with its type arguments substituted, so `W<Node>`
+inside `Node` is refused too (bug 205; it used to reach `llvm-as` while `--interp` ran it).
 
 ```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
 struct Copy Node { v: Int, next: Node }
 fn main() -> Int { return 0; }
 ```
 
-```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct pending=R-0499 now=fail:is_recursive now-interp=accept:42
+```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct
 struct Copy W<T> { v: T }
 struct Copy Node { a: Int, w: W<Node> }
 fn main() -> Int { return 42; }

@@ -465,7 +465,7 @@ fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
 - Kind: refusal
 - Uses: TRAIT-D1
 - Codes: E0241 (check)
-- Status: partial R-0499
+- Status: enforced
 - Enforced by: Concrete.checkTraitBounds
 - Semantics: none
 - Obligation: every bound call has a candidate after specialization (TRAIT-6)
@@ -474,9 +474,8 @@ fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
 **Rationale.** A bound is a promise the caller makes for the generic body: the body calls the
 bound's methods on values of the parameter, and specialization then needs exactly one impl
 (TRAIT-6). A missing impl is refused at the call that gives the type argument. A primitive type
-argument is not checked yet (bug 204, the pending example): the call reaches the backend, where
-the missing method fails natively in `llvm-as` and under `--interp` as an undefined function, and
-when the body calls no bound method the program runs.
+argument needs an impl too, matched by its canonical type (`Int` and `i64` are one); before bug
+204 it was not checked, and the program ran when the body called no bound method.
 
 ```con reject name=bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
@@ -485,7 +484,7 @@ fn call<T: Tr>(x: &T) -> Int { return x.m(); }
 fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
 ```
 
-```con reject name=primitive-bound-unsatisfied code=E0241 stage=check pair=bound-satisfied pending=R-0499 now=fail:use_of_undefined_value now-interp=fail:undefined_function
+```con reject name=primitive-bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
 fn main() -> Int { let n: Int = 42; return call::<Int>(&n); }

@@ -356,8 +356,8 @@ TRAIT-9/conforming-impl	live	-
 TRAIT-10@1	live	b611d670436c8f855c8fee9532b9aecf
 TRAIT-10/bound-unsatisfied	live	-
 TRAIT-10/bound-satisfied	live	-
-TYPE-16/through-instantiation	pending	-
-TRAIT-10/primitive-bound-unsatisfied	pending	-
+TYPE-16/through-instantiation	live	-
+TRAIT-10/primitive-bound-unsatisfied	live	-
 REF-9@2	live	50e36dced8264773e4ad69993763e812
 PAT-4@2	live	3855ebde6d53197ac7fd3cb16503ef8a
 OWN-D1@2	live	771ce3aacaa2edea4ba559a2465c3dae
