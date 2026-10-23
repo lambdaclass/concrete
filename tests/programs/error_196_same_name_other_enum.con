@@ -1,0 +1,12 @@
+// Bug 196: a variant of another enum that shares a variant name with the scrutinee's enum was
+// accepted as the scrutinee's own variant (`F::A` over `E` matched `E::A`). Expected: E0309.
+enum Copy E { A, B }
+enum Copy F { A, X }
+
+fn main() -> Int {
+    let e: E = E::B;
+    match e {
+        F::A => { return 1; },
+        _ => { return 42; }
+    }
+}
