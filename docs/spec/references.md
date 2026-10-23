@@ -362,7 +362,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=borrow-int-literal code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42 now-interp=fail:unsupported_borrow_target_shape
+```con reject name=borrow-int-literal code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42
 fn read(r: &Int) -> Int {
     return *r;
 }
@@ -372,7 +372,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=borrow-call-result code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42 now-interp=fail:unsupported_borrow_target_shape
+```con reject name=borrow-call-result code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42
 fn mk() -> Int {
     return 42;
 }

@@ -572,6 +572,8 @@ def outcome_native(cc, src, workdir):
     if rc != 0:
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
+    if rc < 0:
+        return ("fail", f"signal {-rc}")
     return ("accept", rc) if rc != 124 else ("fail", "timeout")
 
 def outcome_interp(cc, src):
@@ -712,11 +714,27 @@ def lean_decls(src_dir):
         for i, ln in enumerate(lines):
             m = DECL_RE.match(ln)
             if m: starts.append((i, m.group(2)))
-        for k, (i, name) in enumerate(starts):
-            j = starts[k + 1][0] if k + 1 < len(starts) else len(lines)
+        def lead(i):
+            # the declaration's own leading comments: line comments and attributes directly above it,
+            # and one doc comment block (never the previous declaration's body)
             b = i
-            while b > 0 and (lines[b - 1].startswith(("/--", " ", "-/", "--")) or lines[b - 1].strip().endswith("-/")) and lines[b-1].strip():
-                b -= 1
+            while b > 0:
+                prev = lines[b - 1]
+                if prev.startswith(("--", "@[")):
+                    b -= 1
+                elif prev.rstrip().endswith("-/"):
+                    k = b - 1
+                    while k >= 0 and not lines[k].startswith(("/-", "/--")):
+                        k -= 1
+                    if k < 0: break
+                    b = k
+                else:
+                    break
+            return b
+        heads = [lead(i) for i, _ in starts]
+        for k, (i, name) in enumerate(starts):
+            j = heads[k + 1] if k + 1 < len(starts) else len(lines)
+            b = heads[k]
             out.setdefault(name.split(".")[-1], []).append((p, b, j, "\n".join(lines[b:j])))
     return out
 
