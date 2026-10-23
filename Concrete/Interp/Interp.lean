@@ -294,7 +294,9 @@ structure Block where
     `lazy pull`: the host's descriptor. `pull n` (`n > 0`) reads at most `n` more bytes:
     `ok (b, next)` with `b` empty at end of input, or `error msg` when the host read failed.
     Each source value is pulled at most once: the run's state threads it linearly, replacing
-    it with `next` after every read, so a lazy source never re-reads. -/
+    it with `next` after every read (nothing in `IM` restores an earlier state), so a lazy
+    source never re-reads. The host source and why its hidden effect is sound to call from
+    here: `hostStdinPull` in `Main.lean`. -/
 inductive StdinSource where
   | bytes (data : ByteArray) (pos : Nat)
   | lazy (pull : Nat → Except String (ByteArray × StdinSource))

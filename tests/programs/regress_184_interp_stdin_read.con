@@ -1,7 +1,7 @@
 // Bug 184 control: standard input is read when, and as far as, the program reads it. One
 // read(0, buf, 2) of a pipe holding "AB" and then left open returns at once with both bytes,
-// natively and under --interp (which used to wait for the pipe to close first). Then a read
-// of the rest counts what follows to end of input. Fed `printf AB` it returns 65 + 66 = 131.
+// natively and under --interp (which used to wait for the pipe to close first). Fed `AB` it
+// returns 65 + 66 = 131; a short read returns -1.
 extern fn read(fd: i32, buf: *mut u8, count: u64) with(Console) -> i64;
 
 trusted fn read_two() with(Console) -> Int {

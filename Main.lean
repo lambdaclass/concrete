@@ -438,17 +438,28 @@ def interpFrontend (inputPath : String) : IO (Option ValidatedCore) := do
     | .ok _ => return some validCore
 
 /-- The host's standard input as the interpreter's source: each pull is one read of at most
-    `n` bytes, performed when the program reads and not before (bug 184). The pure interface
-    hides an effect, so it is sound only because the run threads each source value linearly
-    and pulls it at most once (`Interp.StdinSource`). -/
-private unsafe def hostStdinPullImpl (h : IO.FS.Stream) (n : Nat) :
+    `n` bytes, performed when the program reads and not before (bug 184).
+
+    This exposes an effect behind a pure type, which Lean's compiler may reorder, duplicate,
+    delete or hoist (`unsafeBaseIO`'s contract). What keeps it observationally correct:
+    - the interpreter consumes the pull's result (deleting the call is impossible), and calls
+      it through a closure taken from the run's state, so no two calls are one static term;
+    - every node carries `pos`, the offset it reads at, so no two pulls of a run have equal
+      arguments, and none is a closed term (nothing to CSE or hoist to initialization);
+    - `@[never_extract, noinline]` forbids extracting or inlining the impure call;
+    - the run threads its state linearly (`IM` is `ExceptT` over `StateM`: a caught failure
+      keeps the state, nothing restores an earlier one), so each node is pulled at most once.
+    Making the interpreter monad effectful would remove the argument altogether; it would also
+    make `Interp.evalClosed` (the pure model-diff harness) effectful, so it is not done here. -/
+@[never_extract, noinline]
+private unsafe def hostStdinPullImpl (h : IO.FS.Stream) (pos : Nat) (n : Nat) :
     Except String (ByteArray × Interp.StdinSource) :=
   match unsafeIO (h.read (min n 65536).toUSize) with
-  | .ok b => .ok (b, .lazy (hostStdinPullImpl h))
+  | .ok b => .ok (b, .lazy (hostStdinPullImpl h (pos + b.size)))
   | .error e => .error (toString e)
 
 @[implemented_by hostStdinPullImpl]
-private opaque hostStdinPull (h : IO.FS.Stream) (n : Nat) :
+private opaque hostStdinPull (h : IO.FS.Stream) (pos : Nat) (n : Nat) :
     Except String (ByteArray × Interp.StdinSource)
 
 /-- Interpret a program via the source-level interpreter (no codegen), with `args` as its
@@ -458,7 +469,7 @@ def interpProgram (inputPath : String) (args : List String := []) : IO UInt32 :=
   let some validCore ← interpFrontend inputPath | return 1
   let stdinH ← IO.getStdin
   let stdinIsTty ← stdinH.isTty
-  let stdin : Interp.StdinSource := .lazy (hostStdinPull stdinH)
+  let stdin : Interp.StdinSource := .lazy (hostStdinPull stdinH 0)
   -- stdout's buffering follows the C library's rule: line-buffered on a terminal, else full.
   let stdoutIsTty ← (← IO.getStdout).isTty
   let run := Interp.interpret validCore.coreModules args stdin (stdoutIsTty := stdoutIsTty)

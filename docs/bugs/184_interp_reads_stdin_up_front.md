@@ -17,8 +17,11 @@ fn main() -> Int { return 3; }
 ```
 
 ```
-time (sleep 8 | concrete p.con --interp)
+sleep 8 | { time concrete p.con --interp; }
 ```
+
+(The `time` is inside the pipeline: timing the whole pipeline measures `sleep`, which the shell
+waits for whatever `concrete` does.)
 
 Train 3 printed `3` after 8 seconds; main (and the compiled binary) print it at once.
 
@@ -73,9 +76,17 @@ from, never a value supplied up front.
 - The `read` builtin pulls `n` bytes from the source when the program calls `read(0, buf, n)`
   (`n = 0` pulls nothing), and returns the count it got. A failed host read is an interpreter
   failure with the host's message, never made-up data.
-- `Main.interpProgram` no longer reads stdin. It passes `.lazy (hostStdinPull stdin)`, where
+- `Main.interpProgram` no longer reads stdin. It passes `.lazy (hostStdinPull stdin 0)`, where
   `hostStdinPull` reads at most `min n 65536` bytes from the host stream when it is forced
-  (`unsafeIO` behind an `implemented_by` opaque; sound because each source value is pulled once).
+  (`unsafeIO` behind an `implemented_by` opaque). That hides an effect behind a pure type, which
+  the Lean compiler may in principle reorder, duplicate, delete or hoist. The argument that it
+  does not, recorded at `hostStdinPull`: the result is always consumed; the call goes through a
+  closure taken from the run's state, never one static term; each node carries the input offset
+  it reads at, so no two pulls have equal arguments and none is a closed term;
+  `@[never_extract, noinline]` forbids extraction and inlining; and the run threads its state
+  linearly, so each node is pulled at most once. An effectful interpreter monad would remove the
+  argument, at the price of making the pure model-diff harness (`Interp.evalClosed`) effectful;
+  that is left to R-0496, which owns the interpreter's host effects.
 - Terminal input is still refused at the read, as before.
 
 ## Residual
@@ -89,8 +100,9 @@ host read with `read(2)` semantics needs a primitive the Lean runtime does not e
 
 ## Containment
 
-Two `run_tests.sh` legs (`r184_leg`), each feeding the program a pipe held open for 30 seconds
-under `timeout 10`, comparing `--interp` with the binary:
+Two `run_tests.sh` legs (`r184_leg`), each feeding the program a fifo whose writer holds it open
+for 30 seconds under `timeout 10` (the writer is killed and reaped after the run), comparing
+`--interp` with the binary:
 
 - `tests/programs/regress_184_interp_stdin_unread.con` never reads stdin: both give 21 at once.
 - `tests/programs/regress_184_interp_stdin_read.con` is the control that reads: the pipe carries
