@@ -230,6 +230,59 @@ else
   ok "no CoeFun on FnTable (every application names its namespace)"
 fi
 
+echo "=== the extraction rules exist once (bug 219) ==="
+# The public extractors `cExprToPExpr` / `cStmtsToPExprK` used to repeat the arms of the
+# implementation (`cExprToPExprImpl` / `cStmtsToPExprKImpl`) for the ProofSoundness theorems. Only
+# the implementation runs, so a theorem or a mutation aimed at a copy is about code nothing
+# executes: mutation 31 (bug 061 restored in the copy) survived. Each public name must be a bare
+# delegation, and exactly one site may build `.applyVar`.
+# single_copy <file>: prints one line per violation, nothing when the file is clean.
+single_copy() {
+  python3 -I - "$1" <<'PY'
+import re, sys
+src = open(sys.argv[1]).read()
+bad = []
+for name, impl in (("cExprToPExpr", "cExprToPExprImpl"), ("cStmtsToPExprK", "cStmtsToPExprKImpl")):
+    defs = [m.start() for m in re.finditer(r"^def %s\b" % name, src, re.M)]
+    if len(defs) != 1:
+        bad.append("%s is defined %d times" % (name, len(defs))); continue
+    # the definition runs to the next top-level item (a blank line followed by a non-indented line)
+    body = re.split(r"\n\s*\n(?=\S)", src[defs[0]:], maxsplit=1)[0]
+    if re.search(r"^\s*\|", body, re.M):
+        bad.append("%s has match arms of its own (a second copy of %s's rules)" % (name, impl))
+    if not re.search(r":=\s*%s\b" % impl, body):
+        bad.append("%s does not delegate to %s" % (name, impl))
+n = len(re.findall(r"some \(\.applyVar\b", src))
+if n != 1:
+    bad.append("%d sites build .applyVar (expected exactly 1, in cExprToPExprImpl)" % n)
+print("\n".join(bad))
+PY
+}
+SC="$(single_copy Concrete/Proof/ProofCore.lean)"
+if [ -z "$SC" ]; then
+  ok "cExprToPExpr and cStmtsToPExprK are bare delegations; one site builds .applyVar"
+else
+  no "a second copy of the extraction rules: $(tr '\n' ';' <<<"$SC")"
+fi
+# Controls: the check sees a copied arm and a second .applyVar site.
+python3 -I - Concrete/Proof/ProofCore.lean "$TMP/copy_arm.lean" "$TMP/copy_site.lean" <<'PY'
+import sys
+src = open(sys.argv[1]).read()
+old = "def cExprToPExpr (e : CExpr) : Option Proof.PExpr := cExprToPExprImpl e\n"
+assert old in src, "control anchor moved"
+arm = ("def cExprToPExpr : CExpr \u2192 Option Proof.PExpr\n"
+       "  | .call (.indirect binding) _ args _ => do\n"
+       "    let pargs \u2190 cExprListToPExpr args\n"
+       "    some (.applyVar binding.name pargs)\n"
+       "  | e => cExprToPExprImpl e\n")
+open(sys.argv[2], "w").write(src.replace(old, arm))
+open(sys.argv[3], "w").write(src + "\n-- control\ndef extra (b : String) : Option Proof.PExpr := some (.applyVar b [])\n")
+PY
+if [ -n "$(single_copy "$TMP/copy_arm.lean")" ]; then ok "CONTROL: a wrapper arm copying the bug-061 rule is detected"
+else no "CONTROL: a copied wrapper arm went unnoticed"; fi
+if [ -n "$(single_copy "$TMP/copy_site.lean")" ]; then ok "CONTROL: a second .applyVar construction site is detected"
+else no "CONTROL: a second .applyVar site went unnoticed"; fi
+
 echo
 echo "PROOFCORE-CALLABLE-IDENTITY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
