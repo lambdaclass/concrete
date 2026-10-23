@@ -652,7 +652,9 @@ backend per slice; depends on contract 4).**
     place (consecutive `for (let mut i …)` loops). Keyed by identity, the new binding is a new
     entry, so phis are created in a different order. The programs' behaviour is the same, and
     every gate passes: run_tests, examples, codegen differential and fuzz.
-- *Byte identity of 4c – 4e and the removal* (base: the 4b head): RESULTS_PLACEHOLDER
+- *Byte identity of 4c – 4e and the removal* (base: the 4b head): `--emit-core`, the reports,
+  `--interp` (stdin closed) and `--emit-ssa` / `--emit-llvm` are all identical: 1569 Core files, 111
+  report entry points, 1451 interpreter runs and 1562 SSA/LLVM programs, 0 differences.
 - *Not in this step:* the reports, the proof soundness layer and Elab's own type-agreement walk
   still read spellings, explicitly (`.name`). They print or compare model or global names, not
   bindings.
