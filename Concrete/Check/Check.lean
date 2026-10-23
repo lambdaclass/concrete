@@ -612,20 +612,24 @@ partial def typeParamsAsVars (ps : List String) : Ty → Ty
   | t => t
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
-def deferScopeEntry : CheckM (List Nat × List Nat) := do
+def deferScopeEntry : CheckM (List Nat × List Nat × List Nat) := do
   let env ← getEnv
+  -- Reservations, pins and (D1) reference holds are snapshotted SEPARATELY, so each is released
+  -- at the exit of the scope that took it (Codex review: a shared list let an outer pin keep an
+  -- inner hold alive).
   return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
-          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer || vi.heldByDefer then some vi.uid else none)
+          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none,
+          env.vars.filterMap fun (_, vi) => if vi.heldByDefer then some vi.uid else none)
 
 /-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
     trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
-def deferScopeExit (entry : List Nat × List Nat) : CheckM Unit := do
+def deferScopeExit (entry : List Nat × List Nat × List Nat) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
-    let vi := if vi.pinnedByDefer && !entry.2.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    let vi := if vi.pinnedByDefer && !entry.2.1.contains vi.uid then { vi with pinnedByDefer := false } else vi
     -- D1: the deferred call that held a reference's loan has run; the reference is usable again.
-    let vi := if vi.heldByDefer && !entry.2.contains vi.uid then { vi with heldByDefer := false } else vi
+    let vi := if vi.heldByDefer && !entry.2.2.contains vi.uid then { vi with heldByDefer := false } else vi
     (n, vi) }
 
 set_option backward.do.legacy true in
