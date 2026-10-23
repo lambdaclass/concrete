@@ -699,12 +699,9 @@ fn main() -> Int {
 ```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: Int }
 
-fn get(b: Box1) -> Int {
-    return b.v;
-}
-
 fn main() -> Int {
-    return get(Box1::<Int> { v: 42 });
+    let b: Box1 = Box1 { v: 42 };
+    return b.v;
 }
 ```
 
