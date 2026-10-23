@@ -322,7 +322,7 @@ theorem let_preservation
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK ((CStmt.letDecl (CLocal.ofName name) isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  simp [cStmtsToPExprK, h_esc, h_val, h_rest]
+  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -441,7 +441,7 @@ theorem array_set_preservation
       ((CStmt.arrayIndexAssign (.ident (CLocal.ofName name) idxTy) idx val) :: rest) k
       = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
   simp only [Bool.and_eq_true] at h_esc
-  simp [cStmtsToPExprK, h_esc, h_idx, h_val, h_rest]
+  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
 
 /-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
 
