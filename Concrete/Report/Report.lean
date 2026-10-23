@@ -6425,6 +6425,13 @@ def diagnosticCodesReport : String :=
     entry "E0585" "core-check" "error" "repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)",
     entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
     entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
+    -- Check: trait coherence (bug 186; docs/language/TRAITS.md TC-1 … TC-6)
+    entry "E0590" "check" "error" "duplicate impl: a trait implemented twice for one type (TC-1)",
+    entry "E0591" "check" "error" "overlapping impls: two impls of one trait whose targets unify (TC-2)",
+    entry "E0592" "check" "error" "orphan impl: the module defines neither the trait nor the type (TC-3)",
+    entry "E0593" "check" "error" "impl target is not its type applied to exactly the impl's own parameters (specialized, blanket, alias or arity; TC-4)",
+    entry "E0594" "check" "error" "one method name provided by two impls of the same type (TC-5)",
+    entry "E0595" "check" "error" "method call through type-parameter bounds is ambiguous: several bound traits declare it (TC-6)",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

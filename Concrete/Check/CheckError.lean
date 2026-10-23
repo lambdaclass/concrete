@@ -234,6 +234,7 @@ inductive CheckError where
   | undeclaredFunction (name : String)
   | noMethodOnType (method : String) (typeName : String)
   | noMethodOnTypeVar (method : String) (typeVar : String)
+  | ambiguousBoundMethod (method : String) (typeVar : String) (traits : List String)
   | methodCallOnNonNamedType
   | unknownFunctionRef (name : String)
   | builtinWrongArgCount (fnName : String) (expected : Nat)
@@ -434,6 +435,8 @@ def CheckError.message : CheckError → String
   | .undeclaredFunction name => s!"call to undeclared function '{name}'"
   | .noMethodOnType method typeName => s!"no method '{method}' on type '{typeName}'"
   | .noMethodOnTypeVar method typeVar => s!"no method '{method}' for type variable '{typeVar}'"
+  | .ambiguousBoundMethod method typeVar traits =>
+    s!"method '{method}' on type variable '{typeVar}' is ambiguous: it is declared by more than one of its bounds ({", ".intercalate traits}); bound order does not choose one"
   | .methodCallOnNonNamedType => "method call on non-named type"
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
   | .builtinWrongArgCount fnName expected =>
@@ -495,6 +498,7 @@ def CheckError.message : CheckError → String
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
+  | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/language/TRAITS.md TC-6)"
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
@@ -616,6 +620,7 @@ def CheckError.code : CheckError → String
   | .undeclaredFunction _ => "E0263"
   | .noMethodOnType _ _ => "E0264"
   | .noMethodOnTypeVar _ _ => "E0265"
+  | .ambiguousBoundMethod _ _ _ => "E0595"
   | .methodCallOnNonNamedType => "E0266"
   | .unknownFunctionRef _ => "E0267"
   | .builtinWrongArgCount _ _ => "E0268"

@@ -539,6 +539,10 @@ structure ImplBlock where
   methods : List FnDef
   isTrusted : Bool := false        -- trusted impl: all methods inherit trusted boundary
   span : Span := default
+  /-- The type arguments written on the impl's target (`impl<T> Name<T>`), `none` when the
+      target is written bare. Recorded so trait coherence (E0593) can judge them: they were
+      parsed and DROPPED, so `impl Name<i32>` silently meant every `Name<_>` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure TraitDef where
   name : String
@@ -558,6 +562,9 @@ structure ImplTraitBlock where
   capSet : CapSet := .empty        -- capabilities on the impl (used by Destroy in Phase 3)
   isTrusted : Bool := false        -- trusted impl Trait for Type: methods inherit trusted boundary
   span : Span := default
+  /-- The type arguments written on the impl's target (`for Vec<T>`), `none` when bare. See
+      `ImplBlock.targetArgs` (bug 186). -/
+  targetArgs : Option (List Ty) := none
 
 structure Module where
   name : String

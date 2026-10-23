@@ -946,9 +946,7 @@ def checkPeekCtx : PeekCtx CheckM where
   boundMethod n methodName := do
     let env ← getEnv
     let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-    return bounds.findSome? fun traitName =>
-      (env.traits.find? fun (td : TraitDef) => td.name == traitName).bind fun td =>
-        td.methods.find? fun (ms : FnSigDef) => ms.name == methodName
+    return (boundMethodUnique env.traits bounds methodName).map Prod.snd
   typeParams := do return (← getEnv).currentTypeParams
   resolve ty := try resolveType ty catch _ => pure .placeholder
   subst := substTy

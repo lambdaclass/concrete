@@ -1771,12 +1771,13 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let firstName ← expectIdent
   -- Check for turbofish on impl type: impl<T> Name<T> { ... }
   let next0 ← peek
+  -- `impl Name<T> { ... }`: the target's type arguments. Kept, not consumed: coherence
+  -- (E0593) refuses any that are not exactly the impl's own parameters (bug 186).
+  let mut firstArgs : Option (List Ty) := none
   if next0 == .lt then
-    -- Could be impl Name<T> { ... } type args
     advance
-    let _implTypeArgs ← parseTypeArgList
+    firstArgs := some (← parseTypeArgList)
     expect .gt
-    pure ()  -- we just consume them for now
   -- Check: is it "impl Trait for Type" or "impl Type"?
   let tk ← peek
   match tk with
@@ -1790,11 +1791,11 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
     -- for Vec<T>` — consume the target's type args (the impl's typeParams
     -- already name them).
     let tkTA ← peek
+    let mut targetArgs : Option (List Ty) := none
     if tkTA == .lt then
       advance
-      let _targetTypeArgs ← parseTypeArgList
+      targetArgs := some (← parseTypeArgList)
       expect .gt
-      pure ()
     let implCapSet ← parseWithCaps
     expect .lbrace
     let mut methods : List FnDef := []
@@ -1822,7 +1823,10 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp }
+    -- `impl Tr<..> for X` has no meaning (traits take no arguments here); refuse rather than drop.
+    if firstArgs.isSome then
+      throwParse "a trait in `impl Trait for Type` takes no type arguments"
+    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp, targetArgs }
   | _ =>
     -- Inherent impl: impl TypeName { ... }
     let typeName := firstName
@@ -1880,7 +1884,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp }
+    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp, targetArgs := firstArgs }
 
 partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan

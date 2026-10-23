@@ -8,6 +8,7 @@ import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
+import Concrete.Check.Coherence
 
 namespace Concrete
 
@@ -2044,18 +2045,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        -- Find the method in one of the bound traits
-        let mut foundSig : Option FnSigDef := none
-        let mut foundTrait : String := ""
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundTrait := traitName; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- The method's bound trait: exactly one, or a refusal (TC-6, bug 186). The first bound
+        -- that had the method used to win, so `T: A + B` resolved by declaration order.
+        let cands := boundMethodCandidates env.traits bounds methodName
+        if cands.length > 1 then
+          throwCheck (.ambiguousBoundMethod methodName n (cands.map (·.1.name))) (some e.getSpan)
+        let foundTrait : String := (cands.head?.map (·.1.name)).getD ""
+        let foundBuiltin : Option BuiltinTraitId := cands.head?.bind (·.1.builtinId)
+        match cands.head?.map Prod.snd with
         | none => throwCheck (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Bug 091: a call through a trait bound exercises the authority the TRAIT
@@ -4142,6 +4139,10 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     happened) and uses summary table for import resolution. -/
 def checkProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics Unit :=
+  -- Trait coherence FIRST (bug 186): every impl is unique, local and fully generic, and every
+  -- (type, method) names one method, before any method table below is built from them.
+  let coherence := Coherence.checkProgram (resolved.map (·.module)) summaryTable
+  if !coherence.isEmpty then .error coherence else
   -- Build sibling module summaries for inline modules (mod A {} mod B {}).
   -- Each module's summary is indexed by name for qualified :: access.
   let moduleSummaryList : List (String × FileSummary) := resolved.map fun rm =>
