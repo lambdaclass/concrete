@@ -1086,6 +1086,13 @@ borrow):
   scrutinee is re-evaluated at each iteration and the freeze covers that iteration's body. When the
   scrutinee is itself a reference binding (a parameter, a borrow-block binder, an outer arm binder),
   that binding's own source rule already covers it.
+  Since decision D3 (2026-10-23, bug 181) every binder through a borrowed scrutinee is a reference
+  (`&T` for a payload field, the scrutinee's reference for a whole-value binder), Copy payloads
+  included, so this freeze applies to every such binder: reassigning or mutably borrowing the root
+  while the binder lives is E0232 in every shape (`match`, `while let`, a guard, a nested pattern, a
+  whole-value binder, a pending `defer`; fixtures `error_181_root_reassigned_*.con`). The binding
+  mode is one function shared by Check and Elab (`Concrete/Semantics/BindingMode.lean`) and is
+  stored in Core as the binder's type, which monomorphization preserves.
 - **Call argument:** the borrows one call makes obey the exclusivity rule below (E0293), and
   REF-8's ancestry rule applies to a reborrow passed as an argument.
 

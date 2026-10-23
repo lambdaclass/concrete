@@ -1,6 +1,6 @@
 # Bug 181 — a payload binder through a borrowed scrutinee of generic type is `&T` to Check and `T` to Elab
 
-**Status:** OPEN
+**Status:** FIXED (branch `soundness-holes`, decision D3)
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
 [TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md), the binding-mode row).
 **Severity:** memory-unsafe wrong code in safe code. A generic function that matches through a
@@ -65,7 +65,37 @@ exit 0b: Elab gives the binder Check's type (`&T` through a reference scrutinee 
 is not Copy at check time, kept through Mono), or Check refuses a match through a reference whose
 payload type is a type parameter.
 
-## Containment while open
+## Fix
+
+Decision D3 (TIGHTENING_DECISIONS, Q3): every binder through a borrowed scrutinee is a reference
+(`&T` for a payload field, the scrutinee's own reference for a whole-value binder), Copy payloads
+included; a Copy value is read with `*value`. One function decides it,
+`Concrete/Semantics/BindingMode.lean` (`payloadBinderTy`, `wholeBinderTy`), and both Check and Elab
+call it, so the checker's binder and the Core binder are the same type by construction. The mode is
+stored in Core as the binder's type; the module states what substitution preserves (Mono maps
+`&T` to `&σ(T)` and never introduces or removes a reference head, and payload fields cannot be
+references, REF-3), so `binderIsBorrow` reads the same mode before and after specialization. Lower
+binds a borrowed payload binder to the payload's address in the scrutinee's storage (a zero-offset
+GEP keeps the binder's type when SSA cleanup folds it), and a whole-value binder to the scrutinee
+reference; the interpreter binds a reference path into the payload (`RefStep.field` now steps into
+enum payloads). Copy-ness no longer chooses anything.
+
+Because every such binder is now a reference, REF-8's freeze holds for all of them: reassigning or
+mutably borrowing the root while the binder lives is E0232, Copy roots included.
+
+Migration (`rule_impact.sh` over 2191 units against `wip/train3` 1df4cf48): the two fixtures D3
+measured (`patterns/match_ref_enum.con` `return *x;`, `patterns/match_ref_scalar.con` `*n + 1000`),
+and `error_091_norm_catchall_binder_through_ref.con`, which stays refused with E0302 instead of
+E0290 (its catch-all binder is now the reference, and destructuring it with a `let` would bind
+references). std and every example compile unchanged.
+
+Regression: the reproducer exits 42 natively and under `--interp` (`run_ok`);
+`regress_181_borrowed_binders.con` (generic at `Int` and at a struct, a guard, `while let`, a nested
+pattern, an early exit, a deferred read, a whole-value binder, an owned scrutinee; exit 42, the
+`--interp == binary` loop); `error_181_root_reassigned_{match,while_let,guard,nested,whole_binder,defer}.con`
+(E0232, `run_err`).
+
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `signals`) requires the
 binary to be killed by a signal; when the program exits 42, that leg fails until this document, the

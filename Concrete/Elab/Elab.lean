@@ -7,6 +7,7 @@ import Concrete.Proof.EvidenceBuild
 import Concrete.Proof.IdentityUseBytes
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Elab.Core
+import Concrete.Semantics.BindingMode
 import Concrete.Elab.TypeSpelling
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
@@ -1022,8 +1023,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               -- aliases expanded (the enum's own type parameters shadow them), as the
               -- enum's Core payload types are (bug 096's agreement checker compares the two)
               let payloadAliases := (← getEnv).typeAliases.filter fun (n, _) => !ed.typeParams.contains n
-              let bty := substTy typeMapping
-                (expandAliasDeep payloadAliases (payloadAliases.length + 64) sf.ty)
+              -- D3 (bug 181): the binder's type is `payloadBinderTy`, the SAME function Check
+              -- uses: `&T` through a reference scrutinee, the payload type otherwise. It is the
+              -- binding mode stored in Core (see Concrete/Semantics/BindingMode.lean).
+              let bty := payloadBinderTy scrTy (substTy typeMapping
+                (expandAliasDeep payloadAliases (payloadAliases.length + 64) sf.ty))
               -- Keep `_` in the binding list (positional field mapping) but do not
               -- bind it in scope — it is a wildcard, not a readable variable.
               -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
@@ -1053,12 +1057,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             armEvsRev := (.arm (Proof.evLitPattern cValEv.evidence)
                             (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
           | .varArm _ binding guard body =>
-            let coreBinding ← bindArmVar binding innerTyR
+            -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
+            let wholeTy := wholeBinderTy scrTy innerTyR
+            let coreBinding ← bindArmVar binding wholeTy
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
             armEvsRev := (.arm (if binding == "_" then .wildcard else .binder)
                             (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
           | .rangeArm _ lo hi incl guard body =>
@@ -1089,12 +1095,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             let cBody := cBodyEv.flatMap (·.core)
             cArms := cArms ++ [.litArm cVal cGuard cBody]
           | .varArm _ binding guard body =>
-            let coreBinding ← bindArmVar binding innerTyR
+            -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
+            let wholeTy := wholeBinderTy scrTy innerTyR
+            let coreBinding ← bindArmVar binding wholeTy
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
           | .mk _ en v _ guard body =>
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
@@ -1127,12 +1135,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let cBody := cBodyEv.flatMap (·.core)
           cArms := cArms ++ [.litArm cVal cGuard cBody]
         | .varArm _ binding guard body =>
-          let coreBinding ← bindArmVar binding innerTyR
+          -- D3: a variable arm over `&T` binds the reference (`wholeBinderTy`).
+          let wholeTy := wholeBinderTy scrTy innerTyR
+          let coreBinding ← bindArmVar binding wholeTy
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.varArm coreBinding innerTyR cGuard cBody]
+          cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
         | .mk _ en v _ guard body =>
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)

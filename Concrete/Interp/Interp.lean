@@ -1,4 +1,5 @@
 import Concrete.Elab.Core
+import Concrete.Semantics.BindingMode
 import Concrete.Semantics.IntArith
 import Concrete.Resolve.Shared
 import Concrete.Check.Layout
@@ -1330,6 +1331,11 @@ private partial def lookupAt (val : IVal) (steps : List RefStep) : Except String
       match fields.find? (fun (n, _) => n == fname) with
       | some (_, fv) => lookupAt fv rest
       | none => .error s!"interp: ref path field '{fname}' not found"
+    -- A payload field of an enum value: a borrowed match binder (D3) points here.
+    | .enum_ _ _ fields =>
+      match fields.find? (fun (n, _) => n == fname) with
+      | some (_, fv) => lookupAt fv rest
+      | none => .error s!"interp: ref path payload field '{fname}' not found"
     | _ => .error "interp: ref step .field on non-struct"
   | .index i :: rest =>
     match val with
@@ -1369,6 +1375,12 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
         let newFields := fields.map fun (n, v) =>
           if n == fname then (n, newFv) else (n, v)
         return .struct_ sname newFields
+    | .enum_ en vn fields =>
+      match fields.find? (fun (n, _) => n == fname) with
+      | none => .error s!"interp: ref update payload field '{fname}' not found"
+      | some (_, fv) => do
+        let newFv ← updateAt fv rest newVal
+        return .enum_ en vn (fields.map fun (n, v) => if n == fname then (n, newFv) else (n, v))
     | _ => .error "interp: ref step .field on non-struct (update)"
   | .index i :: rest =>
     match val with
@@ -1912,7 +1924,8 @@ private def bindParams (env : Env) (params : List (String × Ty)) (args : List I
   | _, [] => env
   | (name, _) :: ps, v :: vs => bindParams (envBind env name v) ps vs
 
-private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal)) : Env :=
+private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal))
+    (scrRef : Option RefPath := none) : Env :=
   -- POSITIONAL, matching Core/Lower semantics: Elab zips arm bindings with
   -- the variant's fields in declaration order, and (bug 045) binders are
   -- alpha-renamed (`v` → `v.b0`) so a by-name field lookup can no longer
@@ -1921,8 +1934,13 @@ private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields 
   match bindings, fields with
   | [], _ => env
   | _, [] => env
-  | (name, _) :: rest, (_, v) :: fRest =>
-    bindEnumFields (envBind env name v) rest fRest
+  | (name, bty) :: rest, (fname, v) :: fRest =>
+    -- D3 (bug 181): a borrowed binder (reference-typed in Core) names the payload field in the
+    -- scrutinee's storage, as Lower's address does; a by-value binder copies the value.
+    let bound := match scrRef with
+      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps ++ [.field fname] } else v
+      | none => v
+    bindEnumFields (envBind env name bound) rest fRest scrRef
 
 private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
   match scrutinee, lit with
@@ -2660,8 +2678,12 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- reference scrutinee once before matching (the E0715 fix); the interpreter
     -- must agree, or a var/guard arm binds the ref instead of the value (e.g.
     -- `match p { n if n > 5 => .. }` on `p : &Int` would compare a ref to an int).
+    -- A borrowed binder (D3) binds through the reference itself, so keep its path.
+    let scrRef : Option IVal := match sv with
+      | .ref p => some (.ref p)
+      | _ => none
     let sv ← autoDeref cx env sv
-    evalMatch cx env sv arms
+    evalMatch cx env sv arms scrRef
 
   | .arrayLit elems ty => do
     let (env, vals) ← evalCallArgs cx env elems
@@ -2872,8 +2894,8 @@ partial def evalFields (cx : Ctx) (env : Env) (fields : List (String × CExpr)) 
     let (env, vs) ← evalFields cx env rest
     return (env, (name, v) :: vs)
 
-partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
-    IM (Env × Flow) :=
+partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMatchArm)
+    (scrRef : Option IVal := none) : IM (Env × Flow) :=
   match arms with
   | [] => fail "interp: no matching arm in match expression"
   | arm :: rest =>
@@ -2903,17 +2925,18 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
       | .enum_ sEnum sVariant sFields =>
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
-          let armEnv := bindEnumFields env bindings sFields
+          let refPath := match scrRef with | some (.ref p) => some p | _ => none
+          let armEnv := bindEnumFields env bindings sFields refPath
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
             let (bodyEnv, flow) ← evalStmts cx gEnv body
             let restored := bodyEnv.drop (bodyEnv.length - outerLen)
             return (restored, flow)
           else
-            evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+            evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
         else
-          evalMatch cx env scrutinee rest
-      | _ => evalMatch cx env scrutinee rest
+          evalMatch cx env scrutinee rest scrRef
+      | _ => evalMatch cx env scrutinee rest scrRef
     | .litArm value guard body => do
       let (env, litVal) ← evalExprVal cx env value
       if matchLit scrutinee litVal then do
@@ -2924,19 +2947,23 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
       else
-        evalMatch cx env scrutinee rest
-    | .varArm binding _ guard body => do
+        evalMatch cx env scrutinee rest scrRef
+    | .varArm binding bindTy guard body => do
       let outerLen := env.length
-      let armEnv := if binding == "_" then env else envBind env binding scrutinee
+      -- D3: a variable arm over a reference binds the reference itself.
+      let bound := match scrRef with
+        | some r => if binderIsBorrow bindTy then r else scrutinee
+        | none => scrutinee
+      let armEnv := if binding == "_" then env else envBind env binding bound
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
         let (bodyEnv, flow) ← evalStmts cx gEnv body
         let restored := bodyEnv.drop (bodyEnv.length - outerLen)
         return (restored, flow)
       else
-        evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+        evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
     | .rangeArm lo hi inclusive guard body => do
       let (env, loVal) ← evalExprVal cx env lo
       let (env, hiVal) ← evalExprVal cx env hi
@@ -2951,9 +2978,9 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest
+          evalMatch cx (fallThrough gEnv outerLen) scrutinee rest scrRef
       else
-        evalMatch cx env scrutinee rest
+        evalMatch cx env scrutinee rest scrRef
 
 /-- Resolve a place expression to its root variable and the `RefStep` path
     reaching it, evaluating any array-index subexpressions. Mirrors the

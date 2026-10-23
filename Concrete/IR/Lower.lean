@@ -5,6 +5,7 @@ import Concrete.Check.Layout
 import Concrete.Resolve.Intrinsic
 import Concrete.Report.Diagnostic
 import Concrete.Backend.Symbols
+import Concrete.Semantics.BindingMode
 
 namespace Concrete
 
@@ -1208,10 +1209,20 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             if bname != "_" then
               let gepDst ← freshReg
               let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
-              emit (.gep gepDst (.reg payloadGep .i8) [.intConst (Int.ofNat foff) .int] .i8)
-              let loadDst ← freshReg
-              emit (.load loadDst (.reg gepDst bty) bty)
-              setVar bname (.reg loadDst bty)
+              -- The base operand carries the binder's type for a borrowed binder: SSA cleanup
+              -- folds a zero-offset GEP into its base operand, which must then still be typed
+              -- as the reference the binder is.
+              let baseTy := if binderIsBorrow bty then bty else .i8
+              emit (.gep gepDst (.reg payloadGep baseTy) [.intConst (Int.ofNat foff) .int] .i8)
+              -- D3 (bug 181): a borrowed binder (reference-typed in Core, Concrete/Semantics/
+              -- BindingMode.lean) is the payload field's ADDRESS in the scrutinee's storage; a
+              -- by-value binder is its value.
+              if binderIsBorrow bty then
+                setVar bname (.reg gepDst bty)
+              else
+                let loadDst ← freshReg
+                emit (.load loadDst (.reg gepDst bty) bty)
+                setVar bname (.reg loadDst bty)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1277,6 +1288,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- reference (`match &x { 0 => … }`), deref it once so scalar comparisons
       -- and variable bindings see the value, mirroring Check's auto-deref of the
       -- scrutinee type. (The enum branch above already loads through the pointer.)
+      -- A variable arm over a reference binds the reference itself (D3), so keep it.
+      let scrRef := scrVal
       let scrVal ← match scrutinee.ty with
         | .ref t | .refMut t => do
           let d ← freshReg "mderef."
@@ -1328,7 +1341,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding != "_" then setVar binding scrVal
+          if binding != "_" then setVar binding (if binderIsBorrow _bindTy then scrRef else scrVal)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>

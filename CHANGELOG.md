@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Binder Through A Reference Is A Reference (decision D3, bug 181, 2026-10-23)
+
+Every pattern binder that binds through a borrowed scrutinee (`match r`, `match &o`, `if let`,
+`while let`) now has reference type, Copy payloads included: `Option::Some { value } => *value`.
+Before, the mode depended on whether the payload was Copy, Check and Elab decided it separately, and
+a generic body specialized at `Int` passed the integer where a `&Int` was expected (SIGSEGV in safe
+code, bug 181). One function in `Concrete/Semantics/BindingMode.lean` now gives Check and Elab the
+binder's type; Core stores it and monomorphization preserves it; Lower binds the payload's address
+and the interpreter a reference path into the payload. Because every such binder is a reference, the
+root stays frozen while it lives (E0232), Copy roots included. Two fixtures migrated (`*x`, `*n`);
+std and the examples are unchanged.
+
 ### Reference Well-Formedness Has One Judgment (exit 2i G2, G13, G15, G16, 2026-10-23)
 
 REF-1 (no function returns a reference) and REF-2 (no function type returns one) are decided by one

@@ -3,6 +3,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Frontend.AST
 import Concrete.Semantics.IntArith
 import Concrete.Semantics.RefWellFormed
+import Concrete.Semantics.BindingMode
 import Concrete.Semantics.TermIR
 import Concrete.Report.TermTranslate
 import Concrete.Report.TermOfExpr

@@ -1,8 +1,9 @@
-// Pattern: matching an enum behind &E reads tag + payload through the reference.
+// Pattern: matching an enum behind &E reads tag + payload through the reference. The payload
+// binder is a reference (D3: through a reference every binder is `&T`), read with `*x`.
 // Expected: 1
 mod m {
     enum Copy E { A { x: i32 }, B }
-    fn get(e: &E) -> i32 { match e { E::A { x } => { return x; }, E::B => { return -1; } } }
+    fn get(e: &E) -> i32 { match e { E::A { x } => { return *x; }, E::B => { return -1; } } }
     fn main() -> Int {
         let a: E = E::A { x: 7 };
         let b: E = E::B;

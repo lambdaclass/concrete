@@ -8,6 +8,7 @@ import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
+import Concrete.Semantics.BindingMode
 
 namespace Concrete
 
@@ -1636,13 +1637,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                   throwCheck (.untraceablePlace s!"what the payload reference '{binding}' borrows"
                     "a reference stored in an enum payload is not traced; borrow a named place instead") (some e.getSpan)
                 | _ => pure ()
-              -- Matching THROUGH a reference must not move payloads out of the
-              -- borrow: a non-Copy payload binds as a borrowed view (&T — Copy,
-              -- freely droppable), a Copy payload binds by value. An OWNED
-              -- scrutinee binds payloads owned, as before.
-              let bindTy ← do
-                if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
-                else pure fieldTy
+              -- D3 (bug 181): through a reference EVERY payload binds as `&T`, Copy or not;
+              -- through an owned scrutinee it binds the value. One function decides it for
+              -- Check and Elab (`payloadBinderTy`, Concrete/Semantics/BindingMode.lean), so the
+              -- checker's binder is the Core binder, and Copy-ness (which specialization
+              -- changes) no longer picks the mode.
+              let bindTy := payloadBinderTy scrTy fieldTy
               if fromLet && binding != "_" then
                 match ← resolvedOr bindTy with
                 | .ref _ | .refMut _ =>
@@ -1669,15 +1669,17 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkGuard guard
             pure body
           | .varArm _ binding guard body => do
-            -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
-            -- reference (duplication, no provenance): refused (normalized place rule).
-            let isRefScrut := match scrTy with | .ref _ | .refMut _ => true | _ => false
-            if binding != "_" && isRefScrut && !(← isCopyType innerTyR) then
-              throwCheck (.nonCopyProjection (tyToString innerTyR)
-                "a reference (a catch-all match binder over a borrowed non-Copy enum); match its variants or bind `_`") (some e.getSpan)
+            -- D3: a catch-all binder over `&E` IS the reference (`wholeBinderTy`), never the
+            -- enum copied out of it, so it neither duplicates a non-Copy `E` nor loses
+            -- provenance: it borrows what the scrutinee borrows.
+            let isRefScrut := bindsThroughReference scrTy
+            let wholeTy := wholeBinderTy scrTy innerTyR
             if binding != "_" then
               guardShadowedSource binding (some e.getSpan)
-              addVar binding innerTyR
+              let scrutPre ← if isRefScrut then some <$> normRef scrutinee else pure none
+              addVar binding wholeTy
+              if isRefScrut then
+                recordRefProvenance binding wholeTy scrutinee (some e.getSpan) (pre := scrutPre)
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1795,14 +1797,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         | .varArm _ binding guard body => do
-          -- Value-pattern match auto-derefs the scrutinee (see innerTy above),
-          -- and the runtime loads the value through the reference — so a
-          -- variable arm over `&i32` binds the VALUE (i32), not `&i32`. Only a
-          -- Copy inner type binds by value: binding a non-Copy value out from
-          -- behind a reference would duplicate it, so those keep the ref type.
-          let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
-          let bindTy ← do
-            if isRefScrutinee && (← isCopyType innerTyR) then pure innerTyR else pure scrTy
+          -- D3: literal and range patterns compare the referenced value, but a variable arm
+          -- over `&T` binds the REFERENCE (`wholeBinderTy`), Copy or not; `*n` reads it.
+          let isRefScrutinee := bindsThroughReference scrTy
+          let bindTy := wholeBinderTy scrTy innerTyR
           let scrCopy ← isCopyType bindTy
           if binding != "_" then
             -- A named value pattern over a non-Copy scrutinee is a move into the
@@ -1811,15 +1809,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
             let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
-            -- binding a REFERENCE loaded out of the referent (`r: & &T` binds the inner `&T`)
-            -- is an untraced reference read out of storage (normalized place rule, E0238)
-            if isRefScrutinee then
-              match ← resolvedOr bindTy with
-              | .ref _ | .refMut _ =>
-                if bindTy != scrTy then
-                  throwCheck (.untraceablePlace s!"what '{binding}' borrows"
-                    "a reference loaded out of a referenced place is not traced; bind the outer reference instead") (some e.getSpan)
-              | _ => pure ()
+            -- D3: the binder is the scrutinee reference itself (never a reference loaded out of the
+            -- referent), so its provenance is the scrutinee's, recorded below.
             guardShadowedSource binding (some e.getSpan)
             addVar binding bindTy
             if isRefScrutinee then
