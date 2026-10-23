@@ -38,6 +38,12 @@ structure CoreCheckEnv where
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
+  /-- Every struct, enum and newtype the PROGRAM declares (all modules, all submodules), so a
+      value of a type declared in another module (`child::make()`) is still a declared nominal
+      type to the operator and cast rules (bug 210). `structDefs`/`enumDefs`/`newtypes` are the
+      current module's. -/
+  programTypeNames : List String := []
+  programNewtypes : List NewtypeDef := []
   vars : List (String × Ty)
   currentCapSet : CapSet
   currentRetTy : Ty
@@ -392,17 +398,25 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
 /-- Whether CoreCheck must leave a type's operator and cast rules to the instantiation: a type
     parameter (`typeVar`), or a `named` type that is not a declared struct, enum or newtype (a
     parameter Core still spells as a name). A declared nominal type is CONCRETE and is held to
-    TYPE-6 and the cast table here. The one predicate every operator and cast rule reads (bug 210:
-    the operator rules kept their own copy that read every `named` type as a parameter, so
-    `p + p` on a struct, `e * e` on an enum and `m + m` on a newtype were accepted). -/
+    TYPE-6 and the cast table here, whichever module declares it. The one predicate every operator
+    and cast rule reads (bug 210: the operator rules kept their own copy that read every `named`
+    type as a parameter, so `p + p` on a struct, `e * e` on an enum and `m + m` on a newtype were
+    accepted). -/
 private def isOpaqueOperandTy (env : CoreCheckEnv) (t : Ty) : Bool :=
   match t with
   | .typeVar _ => true
   | .named n =>
     !(env.structDefs.any (fun sd => sd.name == n)
       || env.enumDefs.any (fun ed => ed.name == n)
-      || env.newtypes.any (fun nt => nt.name == n))
+      || env.newtypes.any (fun nt => nt.name == n)
+      || env.programTypeNames.contains n)
   | _ => false
+
+/-- A newtype declaration by name: the current module's first, then the program's. -/
+private def findNewtype (env : CoreCheckEnv) (n : String) : Option NewtypeDef :=
+  match env.newtypes.find? fun nt => nt.name == n with
+  | some nt => some nt
+  | none => env.programNewtypes.find? fun nt => nt.name == n
 
 /-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
     built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
@@ -886,11 +900,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- and incorrect). The single-step rule is the precise match.
     let oneStepInner := fun (t : Ty) => match t with
       | .named n =>
-        match env.newtypes.find? fun nt => nt.name == n with
+        match findNewtype env n with
         | some nt => some nt.innerTy
         | none => none
       | .generic n args _ =>
-        match env.newtypes.find? fun nt => nt.name == n with
+        match findNewtype env n with
         | some nt =>
           let mapping := nt.typeParams.zip args
           some (Layout.ntSubstTy mapping nt.innerTy)
@@ -1414,6 +1428,9 @@ private partial def collectAllStructs (m : CModule) : List CStructDef :=
 private partial def collectAllEnums (m : CModule) : List CEnumDef :=
   m.enums ++ m.submodules.foldl (fun acc s => acc ++ collectAllEnums s) []
 
+private partial def collectAllNewtypes (m : CModule) : List NewtypeDef :=
+  m.newtypes ++ m.submodules.foldl (fun acc s => acc ++ collectAllNewtypes s) []
+
 /-- Every function and extern signature in a module TREE, keyed by the flattened
     name a caller actually emits (`mod sink { fn shout }` is called as
     `sink_shout` from its parent).
@@ -1462,7 +1479,7 @@ private def collectAllFnSigs (m : CModule)
   collectAllFnSigsAux "" m
 
 partial def ccCheckModule (m : CModule)
-    (allStructs : List CStructDef) (allEnums : List CEnumDef)
+    (allStructs : List CStructDef) (allEnums : List CEnumDef) (allNewtypes : List NewtypeDef)
     -- REQUIRED, with no default. A default of `[]` would mean "no signatures
     -- known", which this checker reads as "these calls require nothing" — the
     -- exact defect being fixed, left as a footgun for the next caller. Omitting
@@ -1485,6 +1502,8 @@ partial def ccCheckModule (m : CModule)
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
+    programTypeNames := allStructs.map (·.name) ++ allEnums.map (·.name) ++ allNewtypes.map (·.name)
+    programNewtypes := allNewtypes
     vars := []
     currentCapSet := .empty
     currentRetTy := .unit
@@ -1501,7 +1520,7 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let (subErrors, subEdges, subAttrs) := m.submodules.foldl (fun (accD, accE, accA) sub =>
-    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allFnSigs
+    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs
     (accD ++ Diagnostics.stampFile (subD.map fun d =>
        { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile,
      accE ++ subE, accA ++ subA)
@@ -1514,9 +1533,10 @@ partial def ccCheckModule (m : CModule)
 def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
   let allErrors := modules.foldl (fun acc m =>
-    acc ++ (ccCheckModule m allStructs allEnums allFnSigs).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
+    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -1527,8 +1547,9 @@ def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
 def coreTrustEdges (modules : List CModule) : List TrustEdge × List TrustFnAttr :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
-  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allFnSigs)
+  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs)
   (TrustEdge.canonical (results.foldl (fun acc r => acc ++ r.2.1) []),
    results.foldl (fun acc r => acc ++ r.2.2) [])
 

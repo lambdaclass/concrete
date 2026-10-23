@@ -41,14 +41,21 @@ rules kept the old copy.
 
 ## Fix
 
-One predicate, `isOpaqueOperandTy` in `CoreCheck.lean`: a `typeVar`, or a `named` type that is not
-a declared struct, enum or newtype. The arithmetic, wrapping/saturating and bitwise agreement
-rules and the cast rule all read it, so a declared nominal type is concrete in every operator rule.
-Regression legs in `run_tests.sh`: `error_210_struct_arith.con`, `error_210_enum_arith.con`,
-`error_210_newtype_arith.con` and `error_210_struct_minus_literal.con`, each `run_err ... (E0501)`.
+One predicate, `isOpaqueOperandTy` in `CoreCheck.lean`: a `typeVar`, or a `named` type that no
+module of the program declares as a struct, enum or newtype. The arithmetic, wrapping/saturating and
+bitwise agreement rules and the cast rule all read it, so a declared nominal type is concrete in
+every operator rule. The declared names are the whole program's (`programTypeNames`, collected over
+every module and submodule): the Codex review found that a value of a type declared in another
+module (`child::make() + child::make()`) still read as a parameter when only the current module's
+tables were consulted. The cast rule's newtype rebrand lookup reads the program's newtypes too
+(`findNewtype`), so a foreign newtype's `.0` unwrap stays admitted (TYPE-11, pending R-0500).
+Regression legs in `run_tests.sh`, each `run_err ... (E0501)`: `error_210_struct_arith.con`,
+`error_210_enum_arith.con`, `error_210_newtype_arith.con`, `error_210_struct_minus_literal.con`,
+`error_210_child_module_arith.con` and `error_210_child_module_newtype_arith.con`.
 
-A generic `fn add<T: Copy>(a: T, b: T) -> T { a + b }` instantiated at a struct still reaches
-`llvm-as`: the opaque parameter is accepted before Mono and nothing re-checks the instance (bug 211).
+A generic `fn add<T: Copy>(a: T, b: T) -> T { a + b }` instantiated at a struct still reached
+`llvm-as`: the opaque parameter is accepted before Mono and nothing re-checked the instance. That is
+a separate bug, filed with its own record.
 
 ## Structural cause
 

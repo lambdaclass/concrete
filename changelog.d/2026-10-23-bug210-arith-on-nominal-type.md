@@ -5,4 +5,4 @@ on a struct and `e * e` on an enum compiled and ran natively while `--interp` st
 sum ran under `--interp` while the binary failed in `llvm-as`. One predicate, `isOpaqueOperandTy`,
 now decides which types an operator or cast rule defers to the instantiation, and a declared
 struct, enum or newtype is refused with E0501. Found by the fuzz farm's mutation generator. Pinned by
-four `error_210_*.con` fixtures.
+six `error_210_*.con` fixtures (two declare the type in a child module).

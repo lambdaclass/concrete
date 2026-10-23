@@ -1,0 +1,13 @@
+// Bug 210 (Codex review): arithmetic on a struct declared in another module. CoreCheck knew only the
+// current module's declarations, so the child's `P` still read as a type parameter (llvm-as failed;
+// `--interp` stopped at run time). Expected: E0501.
+mod child {
+    pub struct Copy P { pub x: i32 }
+    pub fn make() -> P { return P { x: 1 }; }
+    pub fn take(p: P) -> i32 { return p.x; }
+}
+
+fn main() -> Int {
+    let q: i32 = child::take(child::make() + child::make());
+    return q as Int;
+}
