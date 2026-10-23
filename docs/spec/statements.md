@@ -9,7 +9,7 @@ evaluation order, `main`) migrates here in README §8, step 5.
 <a id="STMT-1"></a>
 ### STMT-1. Exit, abort and divergence are distinct behaviours
 
-**STMT-1@1.** Every execution has exactly one behaviour, a trace of external events that ends in exit with a status, abort at a defined trap, silent divergence or infinite external interaction, and no behaviour is observed as another, while stuck execution (a violated premise of a trusted operation) is a distinct state that safe code never reaches.
+**STMT-1@1.** Every execution that does not get stuck has exactly one behaviour, a trace of external events that ends in exit with a status, abort at a defined trap, silent divergence or infinite external interaction, and no behaviour is observed as another, while stuck execution (a violated premise of a trusted operation) is a distinct state that safe code never reaches.
 
 - Kind: guarantee
 - Uses: none

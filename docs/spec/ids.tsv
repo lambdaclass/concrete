@@ -75,7 +75,7 @@ TRUST-1@1	pending	25f2913134a0f33d1016bc063d1fcfb3
 TRUST-1/pointer-to-integer-cast	pending	-
 TRUST-1/no-pointer-cast	live	-
 TRUST-2@1	pending	a25dc11b2d0da5683fb86bd23d33904d
-STMT-1@1	pending	ec6802325a1b62bff5d8796b49ce3560
+STMT-1@1	pending	935436577a49962eb304f7129cb6e357
 STMT-2@1	pending	801e21487830f29db4e93b9b8684c4ca
 STMT-3@1	pending	60110fb570d3f77d136908e8bfb751fc
 ARITH-1@1	pending	434f6d27349c4e5ea5d9be3e91edd9c2
