@@ -573,15 +573,19 @@ branch `vp-r0492`, unlanded).**
     `CStmt.assign`, `CMatchArm.varArm` and `enumArm` bindings, and the borrow block's variable
     and reference.
   - `CFnDef.paramIds` records the parameters' identities.
-  - Elab fills every identity from the walk's table. A compiler temporary, a constant or a
-    function value has none.
+  - Elab fills every identity from the walk's table. The struct-destructure temporary has one,
+    because the walk mints it. An evaluation-order temporary (`ev.t<n>`), a constant or a function
+    value has none.
   - Migration follows the R-0002 technique. Coercions run both ways, and equality, hashing,
     ordering, `Repr` and `ToString` are the name's, so no consumer changes behaviour and no
     printed or hashed form of Core moves.
 - *Invariant made structural:* `ElabVerify` (`Concrete/Check/ElabVerify.lean`), which runs inside
   `Pipeline.elaborate`, refuses Core whose identities and names disagree. Its three rules:
   - B1: a binder identity is not already visible where it is introduced.
-  - U1: a reference with an identity names a visible binding and spells that binding's Core name.
+  - U1: a reference with an identity names a visible binding and spells that binding's Core name,
+    and no newer visible binder has that Core name.
+  - P0: a function Elab produced records one identity per parameter, and parameters are checked
+    by B1 like any binder.
   - U2: a reference without an identity does not spell the Core name of a visible source binding.
 
   Elab's renaming (the bug 045 / 087 class) is therefore checked against the walk on every
@@ -591,6 +595,9 @@ branch `vp-r0492`, unlanded).**
     hand-made U1, U2 and B1 forgeries are refused.
   - Mutation family 100: Elab drops a reference's identity.
   - `--emit-core` is byte-identical on the corpus against the pre-step-3 compiler.
+- *Closes:* bug 050's remaining gap. A fn-typed local spelled like a submodule function was
+  renamed to that function when used as a value. The import-rename pass now skips a reference
+  that carries an identity.
 - *Not in this slice:*
   - Interp, Lower, Mono, CoreCheck and `PExpr` extraction still key locals by the Core name. They
     move to the identity one at a time, and then the coercions go.

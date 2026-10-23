@@ -46,6 +46,12 @@ private def use (fn : String) (vis : List VB) (r : CLocal) : VM Unit := do
     | some v =>
       if v.name != r.name then
         flag s!"U1 in '{fn}': a reference spelled '{r.name}' carries the identity of the binding named '{v.name}'"
+      -- and the binding a NAME-keyed consumer would resolve the spelling to (the nearest visible
+      -- binder of that Core name) is this one: two visible binders of one Core name would make
+      -- the backends read the newer one (Codex review of step 3)
+      else if let some n := vis.find? (·.name == r.name) then
+        if n.id != some i then
+          flag s!"U1 in '{fn}': the reference to '{r.name}' names an outer binding that a newer binder of the same Core name hides"
     | none => flag s!"U1 in '{fn}': a reference to '{r.name}' carries an identity no visible binding has"
   | none =>
     if let some v := vis.find? (·.name == r.name) then
@@ -101,9 +107,16 @@ end
 /-- The ElabVerify findings for one function: parameters (with their identities), then the body. -/
 def elabVerifyFn (f : CFnDef) : List String :=
   let go : VM Unit := do
-    let params : List VB := (f.params.zip (f.paramIds.map some ++ List.replicate f.params.length none)).map
-      fun ((n, _), i) => { name := n, id := i }
-    vBlock f.name params.reverse f.body
+    -- A function Elab produced records one identity per parameter; a synthesized one records
+    -- none. Anything else is a malformed identity list (Codex review of step 3).
+    if !f.paramIds.isEmpty && f.paramIds.length != f.params.length then
+      flag s!"P0 in '{f.name}': {f.paramIds.length} parameter identities for {f.params.length} parameters"
+    let ids : List (Option LocalId) :=
+      if f.paramIds.length == f.params.length then f.paramIds.map some else f.params.map fun _ => none
+    let mut vis : List VB := []
+    for ((n, _), i) in f.params.zip ids do
+      vis ← introduce f.name vis { name := n, id := i }
+    vBlock f.name vis f.body
   (go.run []).2
 
 /-- ElabVerify over a module forest (every function, method and submodule). -/

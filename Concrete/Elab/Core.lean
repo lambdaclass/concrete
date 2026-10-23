@@ -82,7 +82,8 @@ end Callee
 
 /-- A local binder or local reference in Core (R-0492 step 3): its Core name (what every backend
     and printer spells) and, for a binding of the source program, the `LocalId` the local walk
-    minted for it. Elab fills `id`; a compiler temporary, a constant or a function value has none.
+    minted for it. Elab fills `id`. The struct-destructure temporary has one (the walk mints it);
+    an evaluation-order temporary (`ev.t<n>`), a constant or a function value has none.
 
     MIGRATION (the R-0002 technique): the Core constructors that named a local by a bare `String`
     now carry a `CLocal`, with coercions both ways so consumers keep compiling while they move to

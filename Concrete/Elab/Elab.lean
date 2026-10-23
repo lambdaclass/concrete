@@ -2455,14 +2455,13 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     -- Only rename function-typed idents (fn refs used as values), not local variables
     match ty with
     | .fn_ .. =>
-      -- KNOWN GAP (bug 050's family, tracked in its doc): this cannot tell a
-      -- global fn used as a value from a LOCAL of fn type, so a local whose name
-      -- collides with a submodule function is renamed to that function. Unlike
-      -- the call case above, Core carries no marker for it — `.ident` has only a
-      -- name and a type. Closing it needs the same treatment as the callee:
-      -- record at elaboration, where the scope is still known.
-      let name' := rmap.lookup name.name |>.getD name.name
-      .ident { name with name := name' } ty
+      -- Bug 050's remaining gap, closed by R-0492 step 3: a LOCAL of fn type carries its binding
+      -- identity, so it is never renamed to a same-spelled submodule function. Only a global
+      -- function used as a value (no identity) is.
+      if name.id.isSome then .ident name ty
+      else
+        let name' := rmap.lookup name.name |>.getD name.name
+        .ident { name with name := name' } ty
     | _ => .ident name ty
   | .binOp op l r ty => .binOp op (renameFnExpr rmap l) (renameFnExpr rmap r) ty
   | .unaryOp op e ty => .unaryOp op (renameFnExpr rmap e) ty
