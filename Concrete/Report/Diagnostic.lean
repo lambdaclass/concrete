@@ -257,8 +257,18 @@ def codeRuleTag : String → Option String
   | "E0217" | "E0233" => some "OWN-10@1"
   | "E0243" | "E0244" => some "OWN-11@1"
   | "E0206" | "E0279" | "E0282" => some "OWN-12@1"
-  | "E0570" | "E0584" => some "OWN-13@1"
+  | "E0570" | "E0584" | "E0272" | "E0273" => some "OWN-13@1"
   | "E0571" => some "OWN-14@1"
+  -- docs/spec/types.md
+  | "E0220" | "E0222" | "E0224" | "E0225" | "E0226" | "E0500" | "E0560" => some "TYPE-4@1"
+  | "E0223" | "E0504" | "E0505" | "E0508" | "E0540" | "E0541" => some "TYPE-5@1"
+  | "E0228" | "E0229" | "E0501" | "E0502" | "E0503" | "E0506" | "E0507" | "E0509" => some "TYPE-6@1"
+  | "E0250" | "E0251" | "E0252" | "E0253" | "E0254" | "E0260" | "E0261" | "E0416" | "E0550"
+  | "E0551" | "E0552" => some "TYPE-7@1"
+  | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
+  | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
+  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
+  | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"
   | _ => none

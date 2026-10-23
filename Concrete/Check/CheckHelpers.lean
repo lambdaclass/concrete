@@ -287,7 +287,7 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- (`T: Copy`). Core stages (Mono/Verify/CoreCheck) call `Layout.isCopyTyCore`,
 -- the same judgment with Core defs. There is now ONE Copy recursion, so the two
 -- cannot drift (they previously disagreed on typeVar/newtype).
--- spec: OWN-D1 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-D1, spec: TYPE-13 (docs/spec/ownership.md; this declaration enforces the rule)
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
   -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
@@ -416,6 +416,7 @@ def normalizeTyForCmp : Ty → Ty
   | .array t n => .array (normalizeTyForCmp t) n
   | t => t
 
+-- spec: TYPE-4 (docs/spec/types.md; this declaration enforces the rule)
 def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) : CheckM Unit := do
   if expected == actual then return ()
   -- Never type is compatible with anything (bottom type)
