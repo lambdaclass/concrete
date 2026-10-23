@@ -114,7 +114,7 @@ dependency root; do not treat the current mechanism as comprehensive.
 **Definition:** A property that the programmer explicitly asserts by using `trusted` or `extern fn`, and that the compiler accepts without verification.
 
 **What qualifies:**
-- `trusted fn` / `trusted impl` — programmer asserts the pointer-level implementation is correct
+- `trusted fn` (a function or a method) — programmer asserts the pointer-level implementation is correct
 - `trusted extern fn` — programmer asserts the foreign binding is pure and safe
 - `extern fn` (untrusted) — programmer asserts the foreign function's behavior matches its declared type
 - Any property of code inside a `trusted` boundary that depends on raw pointer correctness
