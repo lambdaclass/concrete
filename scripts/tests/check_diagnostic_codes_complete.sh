@@ -18,8 +18,11 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== every emittable E-code has a --report diagnostic-codes entry ==="
 missing=0
-for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean; do
-  codes="$(grep -oE '=> "E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
+# CheckError / CoreCheck / Elab map errors to codes (`=> "E…"`); the post-mono verifier builds its
+# diagnostics directly (`code := "E…"`), so both spellings are scanned (exit 2i G2: Verify.lean's
+# E0236 was outside this gate).
+for f in Concrete/Check/CheckError.lean Concrete/Check/CoreCheck.lean Concrete/Check/Verify.lean Concrete/Elab/Elab.lean; do
+  codes="$(grep -oE '(=> |code := )"E[0-9]{4}"' "$f" | grep -oE 'E[0-9]{4}' | sort -u)"
   [ -z "$codes" ] && { no "$f: extracted no codes (pattern drift?)"; continue; }
   while IFS= read -r c; do
     # `entryR` is an entry that also names the exit 2i rules the code enforces (§15.5)
