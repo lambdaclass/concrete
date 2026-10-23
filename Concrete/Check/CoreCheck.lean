@@ -193,7 +193,7 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .foreignFnValue fnName =>
     some s!"call '{fnName}' directly, or pass a Concrete function value whose body calls '{fnName}' directly"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
-  | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
+  | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — Heap<T> or a raw pointer (a reference cannot be a field)"
   | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
     some s!"declare 'with({implCaps})' on '{methodName}' in trait '{traitName}' (every generic caller must then hold it), or remove the effect from the impl"
   | .traitMethodSigMismatch _ _ _ _ => some "an impl method must have exactly the trait method's receiver, parameters and generics"
@@ -1148,8 +1148,7 @@ private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagn
     `heapArray`) breaks the cycle, as do primitives. `visited` guards against
     non-target cycles so the walk terminates. A struct whose fields reach itself
     this way has infinite size and would otherwise escape to LLVM as a recursive
-    struct type. Generic instantiations are not traversed here (their fields are
-    settled during monomorphization). -/
+    struct type, through generic instantiations with their arguments substituted (bug 205). -/
 private partial def tyReachesByValue (structs : List CStructDef) (enums : List CEnumDef)
     (target : String) (visited : List String) : Ty → Bool
   | .named n =>
@@ -1165,6 +1164,28 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
               tyReachesByValue structs enums target v fty
           | none => false)
   | .array elem _ => tyReachesByValue structs enums target visited elem
+  -- Bug 205: an instantiation is laid out inline too, so its fields are followed with the type
+  -- arguments substituted (`W<Node>` inside `Node` holds a `Node` by value). The visited key is
+  -- the instantiated type, so `B<Int>` and `B<Node>` are distinct. A walk deeper than the bound
+  -- fails CLOSED (reads as reaching `target`): an instantiation that keeps growing is refused as
+  -- its own declaration's target, so only by-value nesting deeper than 64 levels gets here, and
+  -- accepting it unchecked could hide a cycle (Codex review of bug 205).
+  | ty@(.generic n args _) =>
+    if n == target then true
+    else if visited.length > 64 then true
+    else
+      let key := tyToString ty
+      if visited.contains key then false
+      else
+        let v := key :: visited
+        (match structs.find? fun sd => sd.name == n with
+         | some sd => sd.fields.any fun (_, fty) =>
+             tyReachesByValue structs enums target v (Layout.substTyVars (sd.typeParams.zip args) fty)
+         | none => false)
+        || (match enums.find? fun ed => ed.name == n with
+            | some ed => ed.variants.any fun (_, vfs) => vfs.any fun (_, fty) =>
+                tyReachesByValue structs enums target v (Layout.substTyVars (ed.typeParams.zip args) fty)
+            | none => false)
   | _ => false
 
 -- spec: OWN-13, spec: OWN-14, spec: FFI-4, spec: TRAIT-8, spec: TRAIT-9, spec: TYPE-16 (docs/spec/ownership.md; this declaration enforces the rule)
