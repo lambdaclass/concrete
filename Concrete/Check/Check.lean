@@ -3697,7 +3697,11 @@ def declarationCollisions (m : Module) : Diagnostics :=
       ++ m.newtypes.map (fun d => (d.name, "a newtype", d.span))
       ++ m.typeAliases.map (fun d => (d.name, "a type alias", d.span))
       ++ m.traits.map (fun d => (d.name, "a trait", d.span))
-  let dupes := fun (decls : List (String × String × Span)) =>
+  -- Report the LATER declaration of a pair: in source order where the parser recorded spans
+  -- (constants and aliases carry none and keep declaration order).
+  let dupes := fun (decls0 : List (String × String × Span)) =>
+    let decls := (decls0.toArray.qsort (fun a b =>
+      a.2.2.line < b.2.2.line || (a.2.2.line == b.2.2.line && a.2.2.col < b.2.2.col))).toList
     let (_, errs) := decls.foldl (fun (seen, errs) (n, kind, sp) =>
       match seen.lookup n with
       | some (otherKind, otherSp) =>
@@ -3705,7 +3709,7 @@ def declarationCollisions (m : Module) : Diagnostics :=
         else
           let e := CheckError.declarationCollision n kind otherKind otherSp.line
           let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
-                                  span := some sp, hint := e.hint, code := e.code }
+                                  span := (if sp.line == 0 then none else some sp), hint := e.hint, code := e.code }
           (seen, errs ++ [d])
       | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
     errs

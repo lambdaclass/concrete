@@ -534,7 +534,8 @@ def CheckError.message : CheckError → String
   | .fieldAccessPrivate structName fieldName => s!"field '{fieldName}' of '{structName}' is private to its defining module"
   | .importBindingCollision name other => s!"import binds '{name}', which {other}"
   | .declarationCollision name kind otherKind otherLine =>
-    s!"{kind} named '{name}' is also declared in this module as {otherKind} (line {otherLine}); a module binds each name once"
+    let at := if otherLine == 0 then "" else s!" (line {otherLine})"
+    s!"{kind} named '{name}' is also declared in this module as {otherKind}{at}; a module binds each name once"
   | .discardNonCopy tyName => s!"`discard(...)` only acknowledges discarding a Copy value; '{tyName}' is a non-Copy resource"
   | .letUnderscoreRemoved => "`let _ = …;` is not supported — `_` is a pattern wildcard, not a discard"
   | .nonCopyProjection tyName placeDesc => s!"cannot move non-Copy value of type '{tyName}' out of {placeDesc} by value — the owner would still hold the same value (duplication)"
