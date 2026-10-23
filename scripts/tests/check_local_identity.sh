@@ -218,6 +218,26 @@ else
   no "R: bug 197: the let-else project failed: $(head -c 400 "$TMP/b197.log")"
 fi
 
+# Two '_' binders of one struct destructure are two bindings (Codex round 2): the linear field's
+# obligation must survive the Copy field's registration.
+cat > "$TMP/wd.con" <<'CON'
+mod m {
+    struct L { v: i32 }
+    struct S { a: L, b: i32 }
+    pub fn main() -> i32 {
+        let s: S = S { a: L { v: 1 }, b: 2 };
+        let S { a: _, b: _ } = s;
+        return 0;
+    }
+}
+CON
+WD="$("$BIN" "$TMP/wd.con" -o "$TMP/wd" 2>&1)" && WDRC=0 || WDRC=$?
+if [ "$WDRC" -ne 0 ] && grep -q "(E0208) linear variable '_' was never consumed" <<<"$WD"; then
+  ok "R: a destructure's two '_' binders keep two identities; the linear field's '_' is unconsumed (E0208)"
+else
+  no "R: double-wildcard destructure (rc=$WDRC): $(head -c 300 <<<"$WD")"
+fi
+
 echo ""
 echo "LOCAL-IDENTITY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
