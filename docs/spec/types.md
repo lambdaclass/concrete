@@ -744,12 +744,12 @@ fn main() -> Int {
 <a id="TYPE-16"></a>
 ### TYPE-16. A struct has a finite size
 
-**TYPE-16@1.** A struct does not contain itself by value, directly or through the fields of other structs and enums, so a recursive type goes through a `Heap`, a reference or a raw pointer.
+**TYPE-16@1.** A struct does not contain itself by value, directly or through the fields of other structs and enums or of their instantiations, so a recursive type goes through a `Heap` or a raw pointer.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0583 (core-check)
-- Status: enforced
+- Status: partial R-0499
 - Enforced by: Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: every type has a layout (R-0502)
@@ -757,11 +757,19 @@ fn main() -> Int {
 
 **Rationale.** A value is laid out inline, so a struct that holds itself by value has no finite
 size. CoreCheck refuses it before code generation, where it used to surface as an LLVM
-"recursive structure type" error.
+"recursive structure type" error. A reference cannot be a field (REF-3), so it does not break a
+cycle. The check does not look through a generic instantiation yet (bug 205, the pending
+example): `W<Node>` inside `Node` still reaches `llvm-as` natively, while `--interp` runs it.
 
 ```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
 struct Copy Node { v: Int, next: Node }
 fn main() -> Int { return 0; }
+```
+
+```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct pending=R-0499 now=fail:is_recursive now-interp=accept:42
+struct Copy W<T> { v: T }
+struct Copy Node { a: Int, w: W<Node> }
+fn main() -> Int { return 42; }
 ```
 
 ```con accept name=finite-struct exit=42

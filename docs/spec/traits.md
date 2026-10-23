@@ -5,8 +5,9 @@ a method name at most one method, and neither answer depends on the order in whi
 or imports are written. The compiler judges this once, over the whole program, before it builds
 any method table (`Concrete.Coherence.checkProgram`). TRAIT-1 to TRAIT-7 are what that judgment
 refuses. They were filed as bug 186 ([record](../bugs/186_trait_impl_selection_is_a_search.md)).
-TRAIT-8 to TRAIT-10 are the per-declaration checks that run before it: an impl names a declared
-trait, conforms to its trait's signatures, and every bound a caller instantiates is satisfied.
+TRAIT-8 to TRAIT-10 are the per-declaration checks Check and CoreCheck make after it: an impl
+names a declared trait, conforms to its trait's signatures, and every bound a caller instantiates
+is satisfied.
 
 An identity here is never a spelling. A trait is the compiler's builtin `Destroy` or a
 declaration (its defining module and name; traits are module-local, they cannot be imported). An
@@ -459,12 +460,12 @@ fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
 <a id="TRAIT-10"></a>
 ### TRAIT-10. A bound is satisfied by an impl
 
-**TRAIT-10@1.** A type argument given for a type parameter with a bound has an impl of every trait in the bound.
+**TRAIT-10@1.** A type argument given for a type parameter with a bound satisfies every trait in the bound: `Copy` by being Copy, `Destroy` by being destroyable (Copy, a type with a `Destroy` impl whose type arguments are destroyable, or an array of destroyable elements), and any other trait by an impl of it.
 
 - Kind: refusal
 - Uses: TRAIT-D1
 - Codes: E0241 (check)
-- Status: enforced
+- Status: partial R-0499
 - Enforced by: Concrete.checkTraitBounds
 - Semantics: none
 - Obligation: every bound call has a candidate after specialization (TRAIT-6)
@@ -472,13 +473,22 @@ fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
 
 **Rationale.** A bound is a promise the caller makes for the generic body: the body calls the
 bound's methods on values of the parameter, and specialization then needs exactly one impl
-(TRAIT-6). A missing impl is refused at the call that gives the type argument.
+(TRAIT-6). A missing impl is refused at the call that gives the type argument. A primitive type
+argument is not checked yet (bug 204, the pending example): the call reaches the backend, where
+the missing method fails natively in `llvm-as` and under `--interp` as an undefined function, and
+when the body calls no bound method the program runs.
 
 ```con reject name=bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
 fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+```
+
+```con reject name=primitive-bound-unsatisfied code=E0241 stage=check pair=bound-satisfied pending=R-0499 now=fail:use_of_undefined_value now-interp=fail:undefined_function
+trait Tr { fn m(&self) -> Int; }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+fn main() -> Int { let n: Int = 42; return call::<Int>(&n); }
 ```
 
 ```con accept name=bound-satisfied exit=42

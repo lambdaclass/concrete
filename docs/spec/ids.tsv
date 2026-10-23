@@ -339,7 +339,7 @@ TYPE-15/bare-generic-type	live	-
 CON-4/ghost-reads-ghost	pending	-
 OWN-5/bare-variant-drops-payload	live	-
 TRUST-4/capability-variable-named-unsafe	live	-
-TYPE-16@1	live	37db6151339f7817ebabf9ca5a2a760c
+TYPE-16@1	live	19977f9e18e06eea1eb4a0bde3330d03
 TYPE-16/struct-contains-itself	live	-
 TYPE-16/finite-struct	live	-
 TRAIT-8@1	live	6b8d8613adebde658da2cd5b6e309309
@@ -352,6 +352,8 @@ TRAIT-9/return-type-differs	live	-
 TRAIT-9/receiver-differs	live	-
 TRAIT-9/capabilities-exceed-trait	live	-
 TRAIT-9/conforming-impl	live	-
-TRAIT-10@1	live	c9504e963f049b2d6d4f7e99c299f912
+TRAIT-10@1	live	b611d670436c8f855c8fee9532b9aecf
 TRAIT-10/bound-unsatisfied	live	-
 TRAIT-10/bound-satisfied	live	-
+TYPE-16/through-instantiation	pending	-
+TRAIT-10/primitive-bound-unsatisfied	pending	-
