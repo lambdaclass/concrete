@@ -121,7 +121,11 @@ sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs 
   it as the `gh` package) is used by the nightly workflow's dispatch and report jobs, which run on
   these runners under `CONCRETE_SELF_HOSTED_CAMPAIGN`.
 - **Lean (elan) is not preinstalled.** `leanprover/lean-action` installs elan into `~/.elan` on
-  first use, and the `~/.elan` cache step restores the pinned toolchain. With one user per runner,
+  first use, and the toolchain stays there: the runner user's home persists between jobs. The
+  `~/.elan` cache step runs on GitHub-hosted runners only. On these runners it re-downloaded a
+  2.3 GB archive of toolchains the home already held, 2-4 minutes per job and about a third of all
+  runner time in a train (measured 2026-10-23). A toolchain bump is installed once per runner by
+  lean-action (and the 4.35 leg by its `elan toolchain install` step). With one user per runner,
   each runner has its own `~/.elan`, so concurrent jobs never race on one toolchain directory.
 - **Nix** is needed by exactly one job, `Multi-kernel evidence (Rocq + Isabelle)`, which runs
   `nix develop .#provers`. Install multi-user Nix (daemon) **before** configuring the runner, so
