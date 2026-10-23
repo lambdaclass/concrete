@@ -47,7 +47,7 @@ declaration; that change belongs to the types chapter.
 - Uses: OWN-D1
 - Codes: E0205 (check), E0230 (check)
 - Status: enforced
-- Enforced by: Concrete.consumeVar, Concrete.checkSharedAccess
+- Enforced by: Concrete.consumeVar, Concrete.checkSharedAccess, Concrete.checkStmt
 - Semantics: none
 - Obligation: no use after move in safe Core (R-0507)
 - Evidence: tested
@@ -80,14 +80,14 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn peek(r: &R) -> Int {
-    return r.v;
-}
-
 fn main() -> Int {
     let r: R = R { v: 21 };
     let a: Int = take(r);
-    return a + peek(&r);
+    let mut out: Int = 0;
+    borrow r as rr in Q {
+        out = rr.v;
+    }
+    return a + out;
 }
 ```
 
