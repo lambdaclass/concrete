@@ -824,8 +824,11 @@ def check_sites(spec, src_dir, lean_out):
                 if r is not True:
                     fail("S7", f"{e.id}: std declaration {n} has no `spec: {e.id}` comment" + ("" if r is False else " (declaration not found)")); bad += 1
                 continue
-            names.append((n, "any", e.id))
             cands = decls.get(n.split(".")[-1], [])
+            # the driver's root module (Main.lean) is not importable, so its declarations are checked
+            # textually only; every other name must also resolve in Lean
+            if not (("." not in n) and cands and all(p.endswith("Main.lean") for p, _, _, _ in cands)):
+                names.append((n, "any", e.id))
             if not any(re.search(r"spec: " + re.escape(e.id) + r"\b", t) for _, _, _, t in cands):
                 fail("S7", f"{e.id}: declaration {n} has no `spec: {e.id}` comment" + ("" if cands else " (declaration not found)")); bad += 1
         ev = e.fields.get("Evidence", "")
