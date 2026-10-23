@@ -1916,7 +1916,9 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     setVar name val
 
   | .return_ (some value) _retTy =>
-    let val ← lowerExpr value
+    -- The result is read BEFORE the deferred calls run, so an array result is copied first
+    -- (bug 190, Codex review: a defer writing the array changed the returned value).
+    let val ← snapshotArrayValue value (← lowerExpr value)
     emitAllDeferredCalls
     terminateBlock (.ret (some val))
 
@@ -1928,7 +1930,8 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let v ← lowerExpr e
     -- Only a trailing value expression (no `;`) is the block's value; a discarded
     -- statement still lowers (side effects) but does not set the block value (#42).
-    if iv then setVar "__last_expr" v else pure ()
+    -- A block's value is taken before the block's deferred calls run (bug 190).
+    if iv then setVar "__last_expr" (← snapshotArrayValue e v) else pure ()
 
   | .ifElse cond then_ else_ =>
     let condVal ← lowerExpr cond

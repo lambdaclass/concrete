@@ -52,13 +52,15 @@ VALUE.
 ## Fix
 
 `snapshotArrayValue value val`: when `value` has array type and is not a fresh value (an array
-literal or a call result), copy it into its own entry-block alloca and use that. Applied at the
-three by-value sites: an immutable `let` (a mutable one was already copied into its promoted
-alloca), a `match` scrutinee bound by an arm, and a by-value call argument.
+literal or a call result), copy it into its own entry-block alloca and use that. Applied at every
+by-value site: an immutable `let` (a mutable one was already copied into its promoted alloca), a
+`match` scrutinee bound by an arm, a by-value call argument, a `return` operand and a block's
+trailing value. The last two matter because the value is taken before the deferred calls run: a
+`defer` writing the array changed the returned value (Codex review, round 2).
 
 ## Regression
 
 `tests/programs/regress_190_array_value_copy.con`: `let`, a `match` binder, an evaluation-order
-temporary in an enum literal, a by-value argument aliased by a `&mut` argument, and assignment (a
-control); each copies, writes the source, reads the copy; exit 42 natively and under `--interp`
+temporary in an enum literal, a by-value argument aliased by a `&mut` argument, assignment (a
+control), and a returned array and a block's array value with a `defer` that writes it; each copies, writes the source, reads the copy; exit 42 natively and under `--interp`
 (`run_tests.sh`: `run_ok` and the `--interp == binary` loop). Before the fix the binary exits 1.

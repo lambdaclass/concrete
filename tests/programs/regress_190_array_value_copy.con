@@ -50,11 +50,36 @@ fn assign_copy() -> Int {
     return t[0];
 }
 
+fn overwrite(xs: &mut [Int; 1]) {
+    xs[0] = 9;
+}
+
+fn returned_before_defer() -> [Int; 1] {
+    let mut xs: [Int; 1] = [5];
+    defer overwrite(&mut xs);
+    return xs;
+}
+
+fn block_value_before_defer() -> Int {
+    let c: bool = true;
+    let ys: [Int; 1] = if c {
+        let mut xs: [Int; 1] = [5];
+        defer overwrite(&mut xs);
+        xs
+    } else {
+        [0]
+    };
+    return ys[0];
+}
+
 fn main() -> Int {
     if let_copy() != 5 { return 1; }
     if match_binder_copy() != 5 { return 2; }
     if literal_snapshot() != 5 { return 3; }
     if arg_copy() != 5 { return 4; }
     if assign_copy() != 5 { return 5; }
+    let r: [Int; 1] = returned_before_defer();
+    if r[0] != 5 { return 6; }
+    if block_value_before_defer() != 5 { return 7; }
     return 42;
 }
