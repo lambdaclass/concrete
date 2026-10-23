@@ -8164,6 +8164,11 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
+# the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
+run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"
+run_err "$TESTDIR/error_192_int_while_condition.con" "(E0223)"
+run_err "$TESTDIR/error_192_int_for_condition.con" "(E0223)"
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
 # (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
 run_ok "$TESTDIR/regress_109_float_literals.con" 42

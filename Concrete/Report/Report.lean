@@ -6269,7 +6269,7 @@ def diagnosticCodesReport : String :=
     entry "E0220" "check" "error" "type mismatch",
     entry "E0221" "check" "error" "dereference of non-reference type",
     entry "E0222" "check" "error" "while break/else type mismatch",
-    entry "E0223" "check" "error" "if condition not Bool",
+    entry "E0223" "check" "error" "condition of if / while / for not Bool",
     entry "E0224" "check" "error" "if branch type mismatch",
     entry "E0225" "check" "error" "match arm type mismatch",
     entry "E0226" "check" "error" "break value type mismatch",

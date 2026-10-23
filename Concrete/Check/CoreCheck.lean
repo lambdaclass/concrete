@@ -865,8 +865,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     ccCheckExpr allocExpr
   | .ifExpr cond then_ else_ ty =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
-      addCCError (.whileCondNotBool (toString (repr cond.ty)))
+    if cond.ty != .bool then  -- bug 192 (TYPE-5): no integer conditions
+      addCCError (.ifCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     inCoreBlock (for s in else_ do ccCheckStmt s)
     -- A value `if` binds each branch's value to its own type, like a `let`. An `if` typed
@@ -938,7 +938,9 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .ifElse cond then_ else_ =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
+    -- Bug 192 (TYPE-5): no integer conditions (the `isInteger` allowance was C-style truthiness
+    -- the language never had; the interpreter refused it at run time).
+    if cond.ty != .bool then
       addCCError (.ifCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     match else_ with
@@ -947,7 +949,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .while_ cond body _label step =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
+    if cond.ty != .bool then  -- bug 192 (TYPE-5): no integer conditions
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
     let env ← getEnv
     setEnv { env with inLoop := true }

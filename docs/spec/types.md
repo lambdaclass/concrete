@@ -192,12 +192,14 @@ fn main() -> Int {
 - Uses: none
 - Codes: E0223 (check), E0504 (core-check), E0505 (core-check), E0508 (core-check), E0540 (core-check), E0541 (core-check)
 - Status: enforced
-- Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+- Enforced by: Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 - Semantics: none
 - Obligation: progress and preservation for the Core type system (R-0507)
 - Evidence: tested
 
-**Rationale.** There is no truthiness: an integer is not a condition.
+**Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
+statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
+truthiness while `--interp` refused it. This entry's example found the bug.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> Int {

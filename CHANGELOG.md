@@ -10,6 +10,16 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### An Integer Is Not A Condition (bug 192, 2026-10-23)
+
+An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as
+the expression form already was. Before this fix the checker computed the statement condition's
+type and discarded it, and CoreCheck admitted any integer as a condition, so the binary ran the
+program with C truthiness while `--interp` stopped with a run-time error. The language
+specification's TYPE-5 example found it, because the specification's examples run on both
+consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
+rather than the `while` code. It is pinned by `error_192_int_{if,while,for}_condition.con`.
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never

@@ -2209,7 +2209,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -2418,7 +2418,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             throwCheck (.discardedPureValue (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    -- Bug 192 (TYPE-5): the condition is a `bool`; an integer is not a condition.
+    if condTy != .bool then
+      throwCheck (.condNotBool "if" (tyToString condTy)) (some cond.getSpan)
     -- Snapshot variable states before branches
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
@@ -2481,7 +2484,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
     setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    if condTy != .bool then
+      throwCheck (.condNotBool "while" (tyToString condTy)) (some cond.getSpan)
     let envC ← getEnv
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
@@ -2514,7 +2519,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
       let env0 ← getEnv
       setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-      let _condTy ← checkExpr cond
+      let condTy ← checkExpr cond
+      if condTy != .bool then
+        throwCheck (.condNotBool "for" (tyToString condTy)) (some cond.getSpan)
       let envC ← getEnv
       setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
       -- Body + step in loop scope, push label if present
