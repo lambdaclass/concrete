@@ -261,10 +261,22 @@ def floatLiteralString (x : Float) : String :=
 partial def lexNumberLoop (s : LexerState) (acc : Nat) : LexerState × TokenKind :=
   -- If acc is 0, check for hex/bin/oct prefix
   if acc == 0 then
+    -- Bug 220: a radix prefix needs at least one digit of its radix (grammar: `0x hex`); `0x`,
+    -- `0b` and `0o` alone used to lex as the literal 0.
+    let digitAfter (ok : Char → Bool) : Bool := match s.peekAt 1 with
+      | some c => ok c
+      | none => false
+    let isHex := fun (c : Char) => c.isDigit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
     match s.peek with
-    | some 'x' | some 'X' => lexHexLoop s.advance 0
-    | some 'b' | some 'B' => lexBinLoop s.advance 0
-    | some 'o' | some 'O' => lexOctLoop s.advance 0
+    | some 'x' | some 'X' =>
+      if digitAfter isHex then lexHexLoop s.advance 0
+      else (s.advance, .lexError "a `0x` literal needs at least one hexadecimal digit")
+    | some 'b' | some 'B' =>
+      if digitAfter (fun c => c == '0' || c == '1') then lexBinLoop s.advance 0
+      else (s.advance, .lexError "a `0b` literal needs at least one binary digit")
+    | some 'o' | some 'O' =>
+      if digitAfter (fun c => c >= '0' && c <= '7') then lexOctLoop s.advance 0
+      else (s.advance, .lexError "a `0o` literal needs at least one octal digit")
     | _ => lexDecLoop s acc
   else
     lexDecLoop s acc

@@ -1,0 +1,5 @@
+// Bug 220: `0b` followed by a non-binary digit lexed as 0 and then the digit. Expected: E0001.
+fn main() -> Int {
+    let x: Int = 0b2;
+    return x;
+}
