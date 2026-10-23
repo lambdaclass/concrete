@@ -198,7 +198,7 @@ def elaborate (resolved : ResolvedProgram) (summary : SummaryTable) : Except Dia
     | [] => .ok ⟨canon⟩
     | findings => .error (findings.map fun m =>
         { severity := .error, message := s!"internal: ElabVerify: {m} (R-0492)", pass := "elab",
-          span := none, hint := none })
+          span := none, hint := none, code := "E0422" })
 
 /-- Validate elaborated Core IR.  This is the only way to construct a `ValidatedCore`.
     Note: the post-Elab placeholder check (`verifyPostElab`) is **not** run here — it is
