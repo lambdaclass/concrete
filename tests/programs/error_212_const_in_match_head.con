@@ -1,0 +1,11 @@
+// Bug 212: the `match` form of error_212_const_in_if_head.con (a constant as the scrutinee).
+mod m {
+    const MODE: i32 = 2;
+
+    fn main() -> i32 {
+        match MODE {
+            2 => { return 16; },
+            _ => { return 0; },
+        }
+    }
+}

@@ -1,0 +1,19 @@
+// Bug 212: the parenthesized heads the diagnostic suggests parse and run, in every head form
+// (if, if-expression, while, match); binary and --interp agree on 42.
+mod m {
+    const LIMIT: i32 = 16;
+    const MODE: i32 = 2;
+
+    fn main() -> i32 {
+        let mut n: i32 = 20;
+        if (n > LIMIT) { n = LIMIT; }
+        let mut k: i32 = 0;
+        while (k < LIMIT) { k = k + 1; }
+        let extra: i32 = if (k == LIMIT) { 8 } else { 0 };
+        let m: i32 = match (MODE) {
+            2 => { 2 },
+            _ => { 0 },
+        };
+        return n + k + extra + m;
+    }
+}
