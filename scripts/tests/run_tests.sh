@@ -1457,6 +1457,45 @@ run_err "$TESTDIR/error_trait_bound_call_missing_cap.con"   "function 'Act::act'
 run_err "$TESTDIR/error_trait_impl_sig_mismatch.con"        "expected receiver"
 run_err "$TESTDIR/error_trait_method_generic.con"           "generic trait methods are not supported"
 run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
+# Bug 186: trait impl selection is a function (docs/spec/traits.md). Each refusal has its own
+# code: duplicate impl (E0590), overlapping impls (E0591), orphan impl (E0592), an impl target
+# that is not its type applied to the impl's own parameters (E0593: before, `impl Tr for
+# Box2<i32>` implemented Tr for every Box2 — silent wrong code), one method name from two impls
+# of a type (E0594), an ambiguous call through bounds (E0595). The positive control is one
+# program written in two orders: 42 natively and under --interp, both orders.
+run_err "$TESTDIR/error_186_duplicate_impl.con"          "(E0590)"
+run_err "$TESTDIR/error_186_duplicate_generic_impl.con"  "(E0590)"
+run_err "$TESTDIR/error_186_overlap_generic_impl.con"    "(E0591)"
+run_err "$TESTDIR/error_186_overlap_blanket_impl.con"    "(E0591)"
+run_err "$TESTDIR/error_186_orphan_impl.con"             "(E0592)"
+run_err "$TESTDIR/error_186_specialized_impl.con"        "(E0593)"
+run_err "$TESTDIR/error_186_method_clash.con"            "(E0594)"
+run_err "$TESTDIR/error_186_inherent_clash.con"          "(E0594)"
+run_err "$TESTDIR/error_186_ambiguous_bound_method.con"  "(E0595)"
+run_ok  "$TESTDIR/regress_186_coherent_impls.con" 42
+run_ok  "$TESTDIR/regress_186_coherent_impls_reversed.con" 42
+for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed; do
+    r186_i=$($COMPILER "$TESTDIR/$r186.con" --interp </dev/null 2>&1 | awk 'END{print}' || true)
+    if [ "$r186_i" = "42" ]; then
+        echo "  ok  bug 186: $r186 --interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 186: $r186 --interp gave '$r186_i', want 42 (the binary's exit)"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# The interpreter refuses each error fixture with the same first code as the native compile.
+for r186e in duplicate_impl:E0590 overlap_generic_impl:E0591 orphan_impl:E0592 specialized_impl:E0593 method_clash:E0594 ambiguous_bound_method:E0595; do
+    r186e_f="$TESTDIR/error_186_${r186e%%:*}.con"; r186e_c="${r186e#*:}"
+    r186e_i=$($COMPILER "$r186e_f" --interp </dev/null 2>&1 | grep -oE '\(E[0-9]{4}\)' | awk 'NR==1' || true)
+    if [ "$r186e_i" = "($r186e_c)" ]; then
+        echo "  ok  bug 186: error_186_${r186e%%:*} --interp refuses with $r186e_c"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 186: error_186_${r186e%%:*} --interp gave '$r186e_i', want ($r186e_c)"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Codex round 2: a NESTED module's Destroy impl is fenced too (its destructor is
 # `inner_Noisy_destroy`; the fence looked up `Noisy_destroy` and silently passed).
 run_err "$TESTDIR/error_091_nested_destroy_caps.con"        "(E0584)"
