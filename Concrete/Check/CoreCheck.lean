@@ -1114,13 +1114,16 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | .array elem _ => tyReachesByValue structs enums target visited elem
   -- Bug 205: an instantiation is laid out inline too, so its fields are followed with the type
   -- arguments substituted (`W<Node>` inside `Node` holds a `Node` by value). The visited key is
-  -- the instantiated type, so `B<Int>` and `B<Node>` are distinct; the depth bound stops an
-  -- instantiation that grows without reaching `target` (that type is refused as its own target).
+  -- the instantiated type, so `B<Int>` and `B<Node>` are distinct. A walk deeper than the bound
+  -- fails CLOSED (reads as reaching `target`): an instantiation that keeps growing is refused as
+  -- its own declaration's target, so only by-value nesting deeper than 64 levels gets here, and
+  -- accepting it unchecked could hide a cycle (Codex review of bug 205).
   | ty@(.generic n args _) =>
     if n == target then true
+    else if visited.length > 64 then true
     else
       let key := tyToString ty
-      if visited.contains key || visited.length > 64 then false
+      if visited.contains key then false
       else
         let v := key :: visited
         (match structs.find? fun sd => sd.name == n with
