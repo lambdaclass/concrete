@@ -6,7 +6,8 @@ PAT-5's `let ... else` example whose `else` block falls through), on `wip/spec-s
 **Severity:** a program the language refuses reached the backend. Natively it failed in `llvm-as`
 ("value doesn't match function result type", a `ret void` in a non-void function), so it failed
 closed but past every compiler check; `--interp` ran it and returned whatever the taken path
-produced, so the two consumers disagreed.
+produced, so the two consumers disagreed. It is recorded as silent: one consumer ran a program the
+language refuses, with no diagnostic.
 
 ## Reproducer
 
