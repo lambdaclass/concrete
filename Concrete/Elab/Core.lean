@@ -95,7 +95,12 @@ structure CLocal where
   id : Option LocalId := none
 
 namespace CLocal
-instance : Coe String CLocal := ⟨fun n => { name := n }⟩
+/-- A Core local from a bare name, with no identity (a compiler-synthesized local, or a test).
+    Deliberately NOT a coercion: with `Coe String CLocal`, a string-literal PATTERN on a binder
+    field (`| .letDecl "y" ..`) elaborated through it and matched only identity-less binders, so it
+    compiled and silently stopped matching Elab's Core (found in PipelineTest). Without the
+    coercion such a pattern is a type error. -/
+def ofName (n : String) : CLocal := { name := n }
 instance : Coe CLocal String := ⟨CLocal.name⟩
 instance : BEq CLocal := ⟨fun a b => a.name == b.name⟩
 instance : Hashable CLocal := ⟨fun a => hash a.name⟩
