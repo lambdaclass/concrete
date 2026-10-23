@@ -185,6 +185,9 @@ inductive CheckError where
   | typeMismatch (ctx : String) (expected : String) (actual : String)
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
+  -- Bug 196 (PAT-3): a match arm's pattern does not fit the scrutinee's type (a variant of another
+  -- enum, a literal or range over an enum, a variant over a non-enum, a literal of another type).
+  | patternDoesNotFit (pattern : String) (scrutineeTy : String)
   | ifCondNotBool (ty : String)
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
@@ -402,6 +405,7 @@ def CheckError.message : CheckError → String
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
+  | .patternDoesNotFit pat ty => s!"pattern {pat} does not fit a scrutinee of type '{ty}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
@@ -584,6 +588,7 @@ def CheckError.code : CheckError → String
   | .typeMismatch _ _ _ => "E0220"
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
+  | .patternDoesNotFit _ _ => "E0309"
   | .ifCondNotBool _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"
