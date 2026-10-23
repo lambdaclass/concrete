@@ -8363,6 +8363,17 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 213: arms after an unguarded binding / `_` arm were lowered into a predecessor-less block
+# (E0703 natively); binary and --interp must agree on 42.
+run_ok "$TESTDIR/regress_213_arm_after_binding_arm.con" 42
+r213_interp=$($COMPILER "$TESTDIR/regress_213_arm_after_binding_arm.con" --interp 2>&1 || true)
+if [ "$r213_interp" = "42" ]; then
+    echo "  ok  bug 213: arms after a catch-all are not lowered — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 213: interp gave '$r213_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 211: a generic operator instantiated at a struct or enum reached the backend; the post-Mono
 # operator check refuses it (E0501) and admits numeric instances (binary and --interp agree on 42).
 run_err "$TESTDIR/error_211_generic_add_struct.con" "(E0501)"

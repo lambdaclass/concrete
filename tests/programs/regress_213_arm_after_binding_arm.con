@@ -18,8 +18,9 @@ fn stmt(e0: E, k: i32) -> i32 {
 
 fn over_enum(e0: E) -> i32 {
     match e0 {
+        E::B { w } => { return w; },
         other => { return 7; },
-        E::A { v } => { return v + 100; }
+        _ => { match e0 { E::A { v } => { return v + 100; }, E::B { w } => { return w; } } }
     }
 }
 

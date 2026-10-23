@@ -126,6 +126,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 208: a fn-typed local spelled like an imported function was renamed to it when used as a
   # value (run_tests.sh also compares --interp with the binary).
   [208]="regress_208_fn_local_named_like_import.con"
+  # Bug 213: an arm after an unguarded catch-all arm (SSA verifier natively).
+  [213]="regress_213_arm_after_binding_arm.con"
   # Bug 211: generic arithmetic instantiated at a non-numeric type (E0501, post-mono).
   [211]="error_211_generic_add_struct.con error_211_generic_mul_enum.con error_211_generic_rhs_struct.con error_211_generic_mixed_width.con regress_211_generic_add_numeric.con"
   # Bug 210: arithmetic on a struct, enum or newtype operand (E0501).
