@@ -150,6 +150,43 @@ accepts "empty-cap user call discarded is allowed (add2(1,2);)" purecall
 emit discardlinear 'mod m { fn main() with(Std) -> Int { let s: String = int_to_string(5); discard(s); return 0; } }'
 rejects_code "discard() of a non-Copy value is rejected (String)" discardlinear "E0295"
 
+echo "=== a capability VARIABLE entails only itself (bug 188) ==="
+# Until bug 188 a caller holding ANY capability variable was treated as covering every
+# requirement, `Unsafe` included, so `fn f<cap C>(..) with(C)` could print, call
+# `with(Process)`, call an untrusted extern or dereference a raw pointer, and `main`
+# instantiated `C := {}` and ran it with no authority. Every witness below COMPILED and
+# RAN (exit 42) at ee1fff8e. Each row pins the specific refusal, not any rejection: a
+# reverted rule must turn its row red (mutation families capvar-entails-only-itself,
+# capvar-instantiated-unsafe, capparam-name-reserved).
+fixture(){ cp "$ROOT_DIR/tests/programs/$2.con" "$TMPDIR/$1.con"; }
+fixture cv_console  error_188_capvar_console
+rejects_code "with(C) body calls a Console builtin (C does not entail Console)" cv_console "E0520"
+fixture cv_process  error_188_capvar_process
+rejects_code "with(C) body calls a with(Process) binding" cv_process "E0520"
+fixture cv_extern   error_188_capvar_unsafe_call
+rejects_code "with(C) body calls an untrusted extern (C does not entail Unsafe)" cv_extern "E0520"
+fixture cv_rawop    error_188_capvar_unsafe_op
+rejects_code "with(C) body dereferences a raw pointer (E0521's predicate)" cv_rawop "E0521"
+fixture cv_cbunsafe error_188_capvar_unsafe_callback
+rejects_code "an Unsafe callback instantiates C := Unsafe; a pure caller is refused" cv_cbunsafe "E0240"
+fixture cv_named    error_188_capparam_named_unsafe
+rejects_code "a capability parameter spelled like a capability (<cap Unsafe>)" cv_named "E0121"
+# Legitimate capability polymorphism still compiles, and the binary agrees with --interp.
+fixture cv_ok       regress_188_capvar_polymorphism
+accepts "capability polymorphism: C entails C, forwarding, C beside a concrete cap, trusted body" cv_ok
+if [ -x "$TMPDIR/cv_ok.con.bin" ]; then
+  cv_n=0; "$TMPDIR/cv_ok.con.bin" >/dev/null 2>&1 || cv_n=$?
+  cv_i=$("$COMPILER" "$TMPDIR/cv_ok.con" --interp 2>&1 | awk 'NR<=1')
+  if [ "$cv_n" = 42 ] && [ "$cv_i" = 42 ]; then ok "capability polymorphism: binary 42 == --interp 42"
+  else no "capability polymorphism: binary '$cv_n', --interp '$cv_i' (want 42 / 42)"; fi
+else
+  no "capability polymorphism: no binary to run"
+fi
+# The same requirement through a function pointer (one rule for direct and indirect calls):
+# a pointer whose type requires Console is not callable under with(C) alone.
+emit cv_ptr 'mod m { fn run<cap C>(f: fn(i32) with(C) -> i32, g: fn(i32) with(Console) -> i32, x: i32) with(C) -> i32 { return f(g(x)); } fn main() -> Int { return 0; } }'
+rejects_code "with(C) body calls a fn(i32) with(Console) pointer" cv_ptr "E0240"
+
 echo
 echo "check_capability_judgment: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

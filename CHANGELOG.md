@@ -10,6 +10,23 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
+
+A function generic over a capability variable could perform any effect. `capsContain` treated a
+caller holding any capability variable as covering every requirement, `Unsafe` included, because
+the variable "is resolved at instantiation", but a generic body is checked once and nothing checks
+it again when it is instantiated. So `fn f<cap C>(..) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and a `main` declaring nothing ran it by
+instantiating `C := {}`. Now one entailment rule (`Capabilities.missingCaps`) serves direct calls,
+calls through function pointers, method calls, trait-bound calls and the raw-operation gate. A
+requirement is met by a concrete capability the caller declares, or by a capability variable of
+the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
+capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
+discharge. A capability parameter may not be spelled like a capability (E0121).
+`std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
+declare `trusted`. The fix is pinned by six witnesses, a positive control that agrees with
+`--interp`, `check_capability_judgment.sh` and three mutation families.
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never

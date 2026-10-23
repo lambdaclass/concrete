@@ -708,6 +708,21 @@ add "checked-arith-trap" "Concrete/Backend/EmitSSA.lean" "check_checked_arith.sh
 add "capability-requirement" "Concrete/Check/CoreCheck.lean" "check_capability_judgment.sh" yes \
   'if !capD.satisfied then' \
   'if false then'
+# Bug 188: a capability VARIABLE entailed every requirement. Three experiments, one per leg
+# of the fix, each killed by its own rows of check_capability_judgment.sh:
+#   * restore the blanket ("any caller variable covers everything") in the one rule;
+#   * restore Check's `Unsafe` filter on the INSTANTIATED set of a cap-polymorphic call,
+#     which CoreCheck cannot see (the Unsafe-callback row);
+#   * stop reserving capability spellings for capability parameters (the E0121 row).
+add "capvar-entails-only-itself" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
+  $'  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)' \
+  $'  if !callerVars.isEmpty then [] else\n  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)'
+add "capvar-instantiated-unsafe" "Concrete/Check/Check.lean" "check_capability_judgment.sh" yes \
+  $'          if !Capabilities.trustedDischarges env.currentFnTrusted cap then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)' \
+  $'          if cap != unsafeCapName then\n            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)'
+add "capparam-name-reserved" "Concrete/Semantics/Capabilities.lean" "check_capability_judgment.sh" yes \
+  $'  validCaps.contains name || name == stdCapMacroName || aliases.contains name' \
+  $'  false && (validCaps.contains name || name == stdCapMacroName || aliases.contains name)'
 add "walker-constructor" "Concrete/Check/CoreCheck.lean" "check_constructor_coverage.sh" no \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()' \
   '| .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | _ => pure ()'
