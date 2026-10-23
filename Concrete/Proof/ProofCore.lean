@@ -985,6 +985,15 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- are the result and the continuation is unreachable.
   | [.expr e false], _ =>
     if cExprDiverges e && cExprTailOk e then cExprToPExprImpl e else none
+  -- A `match` STATEMENT followed by more code: each arm falls through to that code, as an `if`
+  -- statement's branches do (`.ifElse ... :: rest` below). Its arms are extracted with the
+  -- continuation; one that returns ignores it.
+  | (.expr (.match_ scrutinee arms _) false) :: rest, k => do
+    if !cExprNoEscape scrutinee then none
+    let ps ← cExprToPExprImpl scrutinee
+    let pkRest ← cStmtsToPExprKImpl rest k
+    let parms ← cMatchArmsToPK pkRest arms
+    some (.match_ ps parms)
   | (.letDecl name _ _ val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
@@ -1206,6 +1215,39 @@ def cMatchArmsToP :
   | arm :: rest => do
     let parm ← cMatchArmToP arm
     let prest ← cMatchArmsToP rest
+    some (parm :: prest)
+
+/-- An arm of a `match` STATEMENT, whose body falls through to the code after the match: the
+    body is extracted with that continuation `k`, as an `if` statement's branches are. Refused when
+    the arm's pattern binds a name `k` reads (the binding would capture it), or when the body's
+    `let`s do (bug 101, `cBranchComposes`). Guards and range patterns are refused as in
+    `cMatchArmToP`. -/
+def cMatchArmToPK (k : Proof.PExpr) : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
+  | .enumArm enumName variant bindings none body => do
+    let names := bindings.map (·.1.name)
+    if names.any (pexprMentions · k) || !cBranchComposes body k then none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.enumPat enumName variant names, pbody)
+  | .litArm value none body => do
+    if !cBranchComposes body k then none
+    let pval ← cExprToPExprImpl value
+    let v ← match pval with
+      | .lit v => some v
+      | _ => none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.litPat v, pbody)
+  | .varArm binding _bindTy none body => do
+    if pexprMentions binding k || !cBranchComposes body k then none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.varPat binding, pbody)
+  | _ => none
+
+def cMatchArmsToPK (k : Proof.PExpr) :
+    List CMatchArm → Option (List (Proof.PMatchPat × Proof.PExpr))
+  | [] => some []
+  | arm :: rest => do
+    let parm ← cMatchArmToPK k arm
+    let prest ← cMatchArmsToPK k rest
     some (parm :: prest)
 
 /-- Helper: try flat-assign extraction over a while body.
