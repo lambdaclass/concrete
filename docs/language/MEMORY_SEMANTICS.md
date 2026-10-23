@@ -1094,8 +1094,10 @@ E0293 legs of `scripts/tests/check_callable_values.sh` (`neg_double_mut_borrow`,
   **not** enforced on `main` at `5b63cd87`: `match &o { Option::Some { value } => { let k: Int =
   consume(o); return take_ref(value) + k * 0; }, Option::None => { return consume(o); } }` compiled.
   On main `185d998c` (2026-10-23) that exact program is refused at the move (E0204, "cannot move
-  linear variable 'o': variable is borrowed"), as are its `if let` and heap-freeing forms; G17 is
-  closed (§15.7), with fixtures `error_g17_*.con`.
+  linear variable 'o': variable is borrowed"), as are its `if let` and heap-freeing forms; G17's
+  moving shapes are closed (§15.7), with fixtures `error_g17_*.con`. Its Copy case is reopened by
+  TIGHTENING_DECISIONS D3: once a binder through a reference is a reference, reassigning the root
+  while it lives must be refused too.
 
 #### Adjacent rules, not part of exit 2i
 
@@ -1340,7 +1342,8 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-6 | `error_2i_ref8_assign_under_shared.con` (new; `x = 1` under `let r = &x`) | reject E0302 REF-6@1 (likewise; E0232 REF-8@1 before) |
 | REF-5 | `regress_2i_ref5_heap_field_borrow.con` (new; `f(&h.v)`, then `free(h)`) | run 42 |
 | REF-8 | `error_2i_ref8_call_overlap.con` (new; `mix(&x, &mut x)`), `error_091_norm_cast_arg_overlap.con` | reject E0293 REF-8@1 |
-| REF-8 | `regress_2i_ref8_call_disjoint.con` (new; `mix(&x, &mut y)`, `two(&mut w.a, &mut w.b)`) | run 42 |
+| REF-8 | `regress_2i_ref8_call_disjoint.con` (new; `mix(&x, &mut y)`: borrows of distinct roots) | run 42 |
+| REF-8 | a same-root rejection fixture (`two(&mut w.a, &mut w.b)`, split out of `regress_2i_ref8_call_disjoint.con` by the Austral model, TIGHTENING_DECISIONS D2: loans are keyed by root) | reject E0293 |
 | REF-4 | `regress_2i_ref4_box_callback.con` (new; `Box<fn(&Int) -> Int>`) | run 42 |
 | REF-5 | `error_091_norm_if_projection.con` | reject E0238 REF-5@1 |
 | REF-5 | `regress_2i_ref5_bind_branch_first.con` (new; `let w = if c { a } else { b }; w.f`) | run 42 |

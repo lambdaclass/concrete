@@ -62,7 +62,8 @@ and every problem"):
   aggregate-only refusal. Function types will carry calling convention, capabilities and safety
   obligations later.
 
-G17 is closed: its shapes are refused on main and are now rejection fixtures. The rules are
+G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
+case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
 recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
 implemented yet.
 

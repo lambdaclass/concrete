@@ -370,11 +370,11 @@ This is the "raw-pointer generic leak": the bug 046 shape, and the ROADMAP linea
   functions with the same names take precedence" stays true of explicit calls, and a generated
   call binds the runtime helper by identity. **Now:** exit 0b repair; the class owner is R-0492.
 - **Bug 166.** The IR shows `declare i64 @take_pair(i64)` beside `call i64 %f(ptr %p)`. It is a
-  HOLE at the trusted boundary. **Now:** containment rule. Taking as a value an `extern fn` whose
-  signature contains a `#[repr(C)]` aggregate is refused, with a new FFI code allocated when the
-  rule is implemented. **Decided (D4, 2026-10-23):** this refusal now; the long-term design is a
-  calling convention carried in the function type (`extern "C" fn`), built with the first callback
-  workload.
+  HOLE at the trusted boundary. **Decided (D4, 2026-10-23, revised after review):** taking **any**
+  `extern fn` as a value is refused now, with a new FFI code allocated when the rule is
+  implemented (the first proposal refused only signatures with a `#[repr(C)]` aggregate and is
+  superseded). The long-term design is a function type that carries its calling convention,
+  capabilities and safety obligations (`extern "C" fn`), built with the first callback workload.
 
 #### T-ORDER. Evaluation order (bugs 136, 137, 183)
 
@@ -402,9 +402,12 @@ All three are HOLEs (silent wrong code). **Now:** exit 0b repairs. No source mig
   accepted on all three revisions and runs.
 - **Class.** SEMANTICS. An obligation's meaning depends on the sorts that contract validation does
   not check (KNOWN_HOLES H27).
-- **Rule.** A contract is type-checked as an expression of the function's parameter and result
-  types, with the existing codes: E0227 literal range, E0228 mixed width and E0220 mismatch. Exit
-  2i's E0305 already makes contracts binder- and statement-free.
+- **Rule** (as refined by the review, §4.5, which supersedes the first wording). A contract is
+  checked by its own pure, non-consuming specification judgment. Operand sorts must agree, so
+  `(x > 0) + 1` (a `bool` as an arithmetic operand) is refused (E0220). Arithmetic and literals are
+  **mathematical** (unbounded) unless the contract uses the explicit machine operations, so
+  `x < 9999999999` on an `i32` is well-typed and means the mathematical comparison: it is not an
+  E0227 literal-range error. Exit 2i's E0305 already makes contracts binder- and statement-free.
 - **Recommendation.** Decide now; implement later under R-0473, before V1a states claims with
   contracts.
 
