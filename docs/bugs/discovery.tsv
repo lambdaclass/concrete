@@ -68,3 +68,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	development	R-0492 step 3 (Codex review: ElabVerify flagged the import-rename pass renaming an identified local; bug 050's recorded remaining gap)	unrecorded	208	208
 2026-10-23	development	R-0492 step 2 mutation runs (families 55-57 gave no verdict, also on the slice-1 base)	unrecorded	207	-
 2026-10-23	development	Hetzner gate-host and checker-cause work (stale empty index.lock in the agent worktree after Codex reviews; reproduced with a polling watcher)	unrecorded	209	-
+2026-10-23	development	R-0492 step 4 Codex delta review (mutation 31 anchor followed the explicit .name; it targeted the proof-only wrapper and survived on main)	unrecorded	219	-
