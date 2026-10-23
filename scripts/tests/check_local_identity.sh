@@ -58,9 +58,10 @@ neg F6 'failed to synthesize|Inhabited' 'def forged : LocalId := default'
 echo ""
 echo "=== S: one minting site, no name-keyed lookup ==="
 # The minting functions are public (the walk is in another module), so this is an AUDIT of the API
-# boundary, not a type-level guarantee: every spelling of a call (qualified, dot notation on a
-# table, an open of the namespace) outside the two owning files is refused.
-MINT_RE='LocalTable\.(start|bind|recordUse|recordCollision)\b|\.(recordUse|recordCollision)\b|\.bind[[:space:]]+(\(\.(param|site)|key\b)|open[[:space:]]+(Concrete\.)?LocalTable'
+# boundary, not a type-level guarantee. Their names (mintStart/mintBinder/mintUse/mintCollision)
+# are unique in the tree, so every spelling of a call (qualified, dot notation, an open of the
+# namespace) outside the two owning files is found.
+MINT_RE='\bmint(Start|Binder|Use|Collision)\b|open[[:space:]]+(Concrete\.)?LocalTable'
 MINT_RAW="$(grep -rnE "$MINT_RE" --include='*.lean' Concrete Main.lean tests 2>&1)"; MRC=$?
 MINT="$(grep -v '^Concrete/Frontend/LocalId.lean:' <<<"$MINT_RAW" | grep -v '^Concrete/Resolve/Locals.lean:' | grep . || true)"
 if [ "$MRC" -gt 1 ]; then

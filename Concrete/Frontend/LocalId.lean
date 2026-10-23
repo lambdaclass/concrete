@@ -79,13 +79,13 @@ def unresolved : LocalTable := ⟨false, #[], [], [], [], []⟩
 instance : Inhabited LocalTable := ⟨unresolved⟩
 
 /-- MINTING (Resolve/Locals.lean only): an empty table for a function about to be walked. -/
-def start : LocalTable := ⟨true, #[], [], [], [], []⟩
+def mintStart : LocalTable := ⟨true, #[], [], [], [], []⟩
 
 /-- MINTING (Resolve/Locals.lean only): introduce a binding. A key seen before is the SAME source
     binder reached again: the parser copies an or-pattern arm's body once per alternative
     (`0 | 1 => { let a = …; }`), with the same positions, into mutually exclusive arms. It keeps
     its one identity. -/
-def bind (t : LocalTable) (key : BinderKey) (name : String) : LocalTable × LocalId :=
+def mintBinder (t : LocalTable) (key : BinderKey) (name : String) : LocalTable × LocalId :=
   match t.bindersByKey.lookup key with
   | some id => (t, id)
   | none =>
@@ -93,7 +93,7 @@ def bind (t : LocalTable) (key : BinderKey) (name : String) : LocalTable × Loca
     ({ t with binders := t.binders.push { id, name, key }, bindersByKey := (key, id) :: t.bindersByKey }, id)
 
 /-- MINTING (Resolve/Locals.lean only): record that the use of `name` at `at_` denotes `id`. -/
-def recordUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : LocalTable :=
+def mintUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : LocalTable :=
   match t.uses.lookup (at_, name) with
   | some prev =>
     if prev == id then t
@@ -101,7 +101,7 @@ def recordUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : 
   | none => { t with uses := ((at_, name), id) :: t.uses }
 
 /-- MINTING (Resolve/Locals.lean only): record a SCOPE-1 collision. -/
-def recordCollision (t : LocalTable) (c : ScopeCollision) : LocalTable :=
+def mintCollision (t : LocalTable) (c : ScopeCollision) : LocalTable :=
   { t with collisions := t.collisions ++ [c] }
 
 /-- The binding introduced at `key`. -/

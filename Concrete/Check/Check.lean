@@ -2938,7 +2938,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           throwCheck (.untraceablePlace s!"what the destructured reference '{b}' borrows"
             "a reference read out of a struct field is not traced; borrow a named place instead") (some stmt.getSpan)
         | _ => pure ()
-        addVar (← binderAt lsdSp b) bTy true (declSpan := some stmt.getSpan)
+        addVar (← binderRef (destructureKey lsdSp pb) b (some stmt.getSpan)) bTy true (declSpan := some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName pb.fieldName) (some stmt.getSpan)
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do

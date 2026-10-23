@@ -40,21 +40,28 @@ private def bindLocal (vis : List Visible) (key : BinderKey) (name : String) (sp
   -- checker registers it (a `_` parameter, a borrow reference, a destructured field) it is still
   -- a binding with an obligation, so it has an identity.
   if name == "_" then
-    let (t', _) := (← get).bind key name
+    let (t', _) := (← get).mintBinder key name
     set t'
     return vis
   if let some prev := vis.find? (·.name == name) then
-    modify fun t => t.recordCollision { name, kind, at_ := sp, earlier := prev.span }
-  let (t', id) := (← get).bind key name
+    modify fun t => t.mintCollision { name, kind, at_ := sp, earlier := prev.span }
+  let (t', id) := (← get).mintBinder key name
   set t'
   return { name, span := sp, id } :: vis
 
 /-- Record a use of `name` at `sp`, when `name` is a visible local there. -/
 private def useLocal (vis : List Visible) (sp : Span) (name : String) : LocalsM Unit := do
   if let some v := vis.find? (·.name == name) then
-    modify fun t => t.recordUse (SiteKey.ofSpan sp) name v.id
+    modify fun t => t.mintUse (SiteKey.ofSpan sp) name v.id
 
 private def siteKey (sp : Span) (name : String) : BinderKey := .site (SiteKey.ofSpan sp) name
+
+/-- The key of a struct-destructure binder: the statement's position, the FIELD and the spelling.
+    One statement binds several fields, possibly several `_`s (Codex review, round 2: keyed by
+    spelling alone, `S { a: _, b: _ }` gave both one identity, and the second registration
+    erased the first field's obligation). The checker computes the same key (`destructureKey`). -/
+def destructureKey (sp : Span) (b : PatBind) : BinderKey :=
+  .site (SiteKey.ofSpan sp) s!"{b.fieldName}={b.name}"
 
 mutual
 private partial def walkExpr (vis : List Visible) : Expr → LocalsM Unit
@@ -138,7 +145,7 @@ private partial def walkStmt (vis : List Visible) : Stmt → LocalsM (List Visib
   | .letStructDestructure sp _ bs val => do
     walkExpr vis val
     let mut v := vis
-    for b in bs do v ← bindLocal v (siteKey sp b.name) b.name sp "destructuring `let` binder"
+    for b in bs do v ← bindLocal v (destructureKey sp b) b.name sp "destructuring `let` binder"
     pure v
 end
 
@@ -149,7 +156,7 @@ def resolveFnLocals (f : FnDef) : LocalTable :=
     for (p, i) in f.params.zipIdx do
       vis ← bindLocal vis (.param i) p.name f.span "parameter"
     walkBlock vis f.body
-  (go.run LocalTable.start).2
+  (go.run LocalTable.mintStart).2
 
 /-- The local table of a parameter list with no body (a spec fn, an extern fn, a trait method
     declaration): only its parameters, so two of one name collide. -/
@@ -158,11 +165,11 @@ def resolveParamLocals (ps : List Param) (sp : Span) : LocalTable :=
     let mut vis : List Visible := []
     for (p, i) in ps.zipIdx do
       vis ← bindLocal vis (.param i) p.name sp "parameter"
-  (go.run LocalTable.start).2
+  (go.run LocalTable.mintStart).2
 
 /-- The local table of a module constant's initializer (no parameters, nothing visible). -/
 def resolveExprLocals (e : Expr) : LocalTable :=
-  ((walkExpr [] e).run LocalTable.start).2
+  ((walkExpr [] e).run LocalTable.mintStart).2
 
 /-- Attach a local table to every function and method of a module (and its submodules). -/
 partial def resolveModuleLocals (m : Module) : Module :=
