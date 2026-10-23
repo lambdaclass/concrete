@@ -8209,6 +8209,9 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 195: the else block of a let ... else fell through (the rest of the function was skipped).
+run_err "$TESTDIR/error_195_let_else_falls_through_unit.con" "(E0308)"
+run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
 # (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
 run_ok "$TESTDIR/regress_109_float_literals.con" 42
