@@ -489,7 +489,9 @@ cd "$ROOT_DIR"
 # build is invisible to the role that audits it.
 # 132 -> 134 with bug 088's literal-default-range and post-mono-literal-range families (both
 # killed by check_cast_matrix.sh's both-paths-reject rows).
-EXPECTED_FAMILIES=134
+# 134 -> 137 with bug 188's capvar-entails-only-itself, capvar-instantiated-unsafe and
+# capparam-name-reserved families (killed by check_capability_judgment.sh's bug 188 rows).
+EXPECTED_FAMILIES=137
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
