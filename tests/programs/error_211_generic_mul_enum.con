@@ -1,4 +1,4 @@
-// Bug 211: a generic `*` instantiated at an enum (the binary built; `--interp` stopped at run time).
+// Bug 211: a generic `*` instantiated at an enum (`--interp` stopped at run time).
 // Expected: E0501 (post-mono).
 enum Copy E { A {}, B {} }
 

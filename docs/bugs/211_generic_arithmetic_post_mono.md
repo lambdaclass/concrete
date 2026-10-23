@@ -4,7 +4,7 @@
 **Found:** 2026-10-23, in the post-R-0492 differential hunt, while reducing bug 210 (a probe of the
 same operator rule through a generic function).
 **Severity:** loud. `add<T: Copy>(a: T, b: T) -> T { a + b }` instantiated at a struct failed in
-`llvm-as` (`'%a' defined with type 'ptr' but expected 'i64'`); at an enum the binary was built;
+`llvm-as` (`'%a' defined with type 'ptr' but expected 'i64'`), and
 `--interp` stopped at run time with "unsupported binop on given value types".
 
 ## Reproducer
