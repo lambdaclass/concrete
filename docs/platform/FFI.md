@@ -245,6 +245,32 @@ An alias expands to its constituent capabilities at parse time — the rest of t
 
 Aliases are validated at definition time: all constituent names must be known capabilities. Unknown names produce a parse error.
 
+## Calling convention in function types (decided 2026-10-23, not implemented)
+
+**Now.** Taking as a value an `extern fn` whose signature contains a `#[repr(C)]` aggregate, as a
+parameter or as the result, is refused (decided 2026-10-23; not yet enforced, [bug
+166](../bugs/166_foreign_fn_value_abi.md)). A direct call of such an extern passes a small aggregate
+the way C does (in registers), while a call through a `fn(..)` value uses the Concrete convention (a
+pointer to the aggregate), so the value would call C with the wrong ABI. An extern whose parameters
+and result are integers, floats, `bool` or raw pointers passes them the same way under both
+conventions and stays usable as a value.
+
+**Long term** ([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
+the calling convention is part of the function type.
+
+- `fn(A) -> R` is a Concrete function type and `extern "C" fn(A) -> R` a C function type. They are
+  distinct types, and neither converts to the other implicitly.
+- An `extern fn` used as a value has type `extern "C" fn(..)`; a Concrete function never has it.
+- A call through an `extern "C" fn` value lowers with the C ABI, the same aggregate flattening as
+  a direct extern call, and requires what a direct call of the extern requires (`with(Unsafe)`,
+  unless it is declared `trusted extern`).
+- A Concrete function that C calls through a pointer is exported explicitly, as an adapter with the
+  C ABI (`#[export_name]`), not coerced to `extern "C" fn`.
+
+It is built when the first workload passes a callback to C or stores a foreign function value with
+an aggregate signature. The refusal above then becomes a type mismatch between the two function
+types, so code written under the containment needs no change. Owner: R-0283 / R-0287 (ABI checks).
+
 ## Future Refinement
 
 This doc should expand if the FFI surface grows substantially, for example:
