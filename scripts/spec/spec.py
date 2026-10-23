@@ -843,8 +843,8 @@ def gen_site(spec, out_dir):
     readme = open(os.path.join(spec.dir, "README.md"), encoding="utf-8").read()
     intro = readme.split("\n## 1.")[0].split("\n", 1)[1]
     open(os.path.join(out_dir, "_index.md"), "w").write(
-        '+++\ntitle = "Language Specification"\ndescription = "The one normative statement of the Concrete language: '
-        'every rule with a stable ID, checked against the compiler."\nsort_by = "weight"\n+++\n\n'
+        '+++\ntitle = "Language Specification"\ndescription = "The checked, readable statement of the Concrete language: '
+        'every rule with a stable ID, checked against the compiler, the interpreter and Lean."\nsort_by = "weight"\n+++\n\n'
         "<!-- GENERATED from docs/spec by scripts/spec/spec.py site -- do not edit -->\n"
         + rewrite_links(intro, "README.md") + "\n")
     n = 0

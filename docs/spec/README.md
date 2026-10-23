@@ -1,6 +1,6 @@
 # The Concrete Language Specification
 
-**Status:** normative. Started 2026-10-23 (branch `spec-single-source`).
+**Status:** the written language specification, started 2026-10-23. It is normative wherever Core's semantics in Lean does not yet define a rule (see "Authority" below).
 
 `docs/spec/` is the one written statement of the Concrete language. It has one chapter per
 area, and every rule and every definition in it has a stable, versioned ID. Other documents, the
