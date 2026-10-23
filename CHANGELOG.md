@@ -62,6 +62,22 @@ and every problem"):
   aggregate-only refusal. Function types will carry calling convention, capabilities and safety
   obligations later.
 
+A second set of decisions the same day ("the best long term solution for everything we discussed")
+adds:
+
+- two declared generic kinds (Copy and Any) and explicit, checked Copy;
+- trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
+  identity;
+- no mutable globals in source, with the compiler's own globals inventoried;
+- one file per module, with generated interface artifacts;
+- a module allowlist for trusted, foreign and raw code;
+- the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
+- disciplines for every pass and every gate.
+
+The doc's §5 orders the work: traits; then the binder, kinds, references, loans and foreign-value
+refusal; then the spec pilot; the trusted base; `read_owned`, contracts and casts; and generated
+interfaces.
+
 G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
 case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
 recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
