@@ -422,6 +422,7 @@ test	sink_matches	no	constructs	infallible	Unsafe	trusted-boundary	gated	(buf: *
 test	expect_sink	yes	constructs	infallible	Alloc,Console,Unsafe	hosted-effect	gated	(buf: *const u8, len: u64, expected: &String, message: String) with(Console,Alloc,Unsafe) -> bool	-
 test	str_eq	no	constructs	infallible	none	deterministic	gated	(a: &String, b: &String) -> bool	-
 test	assert_str_eq	yes	constructs	infallible	Alloc,Console	hosted-effect	gated	(a: &String, b: &String, message: String) with(Console,Alloc) -> bool	-
+test	scratch_path	yes	constructs	option	Alloc,Env	hosted-effect	gated	(name: String) with(Env,Alloc) -> Option<String>	-
 text	try_new	no	constructs	result	none	trusted-boundary	gated	(s: String) -> Result<AsciiText, String>	AsciiText
 text	copy_from_raw	yes	constructs	option	Alloc,Unsafe	trusted-boundary	gated	(ptr: *const u8, len: u64) with(Alloc,Unsafe) -> Option<Text>	Text
 text	from_string	yes	constructs	infallible	Alloc	trusted-boundary	gated	(s: &String) with(Alloc) -> Text	Text

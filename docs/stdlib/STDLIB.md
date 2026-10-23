@@ -475,6 +475,10 @@ Test assertion helpers:
 
 All assertions return `bool` and print the message on failure.
 
+`scratch_path(name: String) with(Env, Alloc) -> Option<String>` gives a test that writes files the
+path `name` in the run's private scratch directory (`CONCRETE_TEST_TMPDIR`, set by `concrete test`
+and `--test`), or None when no runner set it. A test never writes a fixed `/tmp` path (bug 191).
+
 ## Error and Result Design
 
 Stdlib APIs use a uniform error pattern:
