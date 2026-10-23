@@ -602,7 +602,7 @@ private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (St
   | .fieldAssign o _ v | .derefAssign o v => (refBindExpr env o ++ refBindExpr env v, env)
   | .arrayIndexAssign a i v => (refBindExpr env a ++ refBindExpr env i ++ refBindExpr env v, env)
   | .continue_ _ => ([], env)
-  | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref, refTy) :: env) body, env)
+  | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref.name, refTy) :: env) body, env)
 end
 
 /-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
