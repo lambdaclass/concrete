@@ -1479,9 +1479,10 @@ run_err "$TESTDIR/error_186_orphan_sibling.con"          "(E0592)"
 run_err "$TESTDIR/error_186_imported_alias_target.con"   "(E0593)"
 run_err "$TESTDIR/error_186_builtin_arity.con"           "(E0593)"
 run_ok  "$TESTDIR/regress_186_primitive_impl_spellings.con" 42
+run_ok  "$TESTDIR/regress_186_visible_targets.con" 42
 run_ok  "$TESTDIR/regress_186_coherent_impls.con" 42
 run_ok  "$TESTDIR/regress_186_coherent_impls_reversed.con" 42
-for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed regress_186_primitive_impl_spellings; do
+for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed regress_186_primitive_impl_spellings regress_186_visible_targets; do
     r186_i=$($COMPILER "$TESTDIR/$r186.con" --interp </dev/null 2>&1 | awk 'END{print}' || true)
     if [ "$r186_i" = "42" ]; then
         echo "  ok  bug 186: $r186 --interp == binary (42)"

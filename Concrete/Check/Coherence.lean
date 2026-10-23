@@ -154,17 +154,24 @@ inductive HeadRes where
   | prim (canonical : String) (arity : Nat)
   /-- A type alias, local or imported (TRAIT-4 refuses it). -/
   | alias
-  /-- No declaration visible here answers the name (TRAIT-D1 requires one; TRAIT-4 refuses). -/
+  /-- No single declaration visible here answers the name. The name is then its own type,
+      declared in no module: foreign everywhere (TRAIT-3), and compared with itself by spelling.
+      An inherent impl of such a name is how a module namespaces functions today. -/
   | unresolved
 
-/-- The module scope a target name is resolved in. `siblings` are the other submodules of the
-    same parent (path, module): a submodule sees their structs and enums without an import, as
-    Check and Elab inject them (`checkSubmodules`). -/
+/-- The module scope a target name is resolved in. `imports` is the module's import artifact,
+    built by the same `resolveImports` Check and Elab consume (explicit symbols under their local
+    names, the types their signatures reach, the always-visible builtin types), so a target means
+    here what it means to them. `siblings` are the other submodules of the same parent and
+    `children` the module's own submodules (path, module): their structs and enums are visible
+    without an import (`checkSubmodules` injects siblings). -/
 structure Scope where
   path : String
   module : Module
   summaryTable : List (String × FileSummary)
+  imports : ResolvedImports := {}
   siblings : List (String × Module) := []
+  children : List (String × Module) := []
 
 /-- Resolve the name at an impl site to the declaration it denotes, in the order the checker
     sees names: the module's own declarations and aliases; its imports, by the IMPORTED
@@ -183,23 +190,30 @@ def resolveHead (sc : Scope) (n : String) : HeadRes :=
   | some nt => .decl (newtypeDecl { nt with definedIn := sc.path } sc.path)
   | none =>
   if m.typeAliases.any (·.name == n) then .alias else
-  let imported : Option HeadRes := m.imports.findSome? fun imp =>
-    (imp.symbols.find? (·.effectiveName == n)).bind fun sym =>
-      (sc.summaryTable.lookup imp.moduleName).bind fun s =>
-        match declIn s sym.name imp.moduleName with
-        | some d => some (.decl d)
-        | none => if s.typeAliases.any (·.name == sym.name) then some .alias else none
+  -- Imported declarations keep the identity their defining summary stamped; `name` is the
+  -- importer's local spelling.
+  let imp := sc.imports
+  let imported : Option HeadRes :=
+    match imp.structs.find? (·.name == n) with
+    | some sd => some (.decl (structDecl sd sc.path))
+    | none =>
+    match imp.enums.find? (·.name == n) with
+    | some ed => some (.decl (enumDecl ed sc.path))
+    | none =>
+    match imp.newtypes.find? (·.name == n) with
+    | some nt => some (.decl (newtypeDecl nt sc.path))
+    | none => if imp.typeAliases.any (·.1 == n) then some .alias else none
   match imported with
   | some r => r
   | none =>
-  let sib := sc.siblings.filterMap fun (sp, sm) =>
+  let near := (sc.siblings ++ sc.children).filterMap fun (sp, sm) =>
     match sm.structs.find? (·.name == n) with
     | some sd => some (structDecl { sd with definedIn := sp, definitionName := sd.name } sp)
     | none => (sm.enums.find? (·.name == n)).map fun ed =>
         enumDecl { ed with definedIn := sp, definitionName := ed.name } sp
-  match sib with
+  match near with
   | [d] => .decl d
-  | _ :: _ :: _ => .unresolved   -- two siblings declare it: no single declaration
+  | _ :: _ :: _ => .unresolved   -- two nearby modules declare it: no single declaration
   | [] =>
   if n == "Option" then .decl { id := .builtin .option, arity := 1 } else
   if n == "Result" then .decl { id := .builtin .result, arity := 2 } else
@@ -306,15 +320,10 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     let isAlias := match res with
       | some .alias => true
       | _ => false
-    let isUnresolved := match res with
-      | some .unresolved => true
-      | _ => false
     if typeParams.contains typeName then
       some s!"{what} targets its own type parameter '{typeName}': a blanket impl would cover every type, and impl selection would no longer be decided by the type's identity"
     else if isAlias then
       some s!"{what} targets the type alias '{typeName}'; write the type it names"
-    else if isUnresolved then
-      some s!"{what} targets '{typeName}', which names no single type declaration visible in module '{sc.path}' (import it, or write the impl beside the type)"
     else if argNames != expected.map some then
       let shown := if args.isEmpty then typeName
         else s!"{typeName}<{", ".intercalate (args.map tyCanonical)}>"
@@ -356,14 +365,16 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     let typeLocal := match head with
       | some (.decl (.user dm _)) => dm == sc.path
       | _ => false
-    let unresolved := match head with
-      | some (.unresolved _ _) => true
+    -- An alias target is already refused (TRAIT-4); an unresolved name is foreign everywhere.
+    let isAlias := match res with
+      | some .alias => true
       | _ => false
-    if !traitLocal && !typeLocal && !unresolved && head.isSome then
+    if !traitLocal && !typeLocal && !isAlias && head.isSome then
       let where_ := match head with
         | some (.decl (.user dm _)) => s!"defined in module '{dm}'"
         | some (.decl (.builtin _)) => "a compiler type"
-        | _ => "a primitive type"
+        | some (.prim _) => "a primitive type"
+        | _ => "declared in no module visible here"
       ds := ds ++ [mkDiag "E0592"
         s!"orphan impl: {what} is in module '{sc.path}', which defines neither the trait '{tid.display}' nor the type '{ti.typeName}' ({where_}); an impl lives with its trait or with its type, so no two modules can both supply it"
         ti.span file
@@ -386,7 +397,11 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
     (m : Module) (siblings : List (String × Module) := []) : List (Scope × String) :=
   let file := if m.sourceFile.isEmpty then file else m.sourceFile
   let subs := m.submodules.map fun sub => (path ++ "." ++ sub.name, sub)
-  ({ path, module := m, summaryTable, siblings }, file) ::
+  -- The same import artifact Check builds; an import error is Check's to report.
+  let imports := match resolveImports m.imports summaryTable (fun _ => "") (fun _ _ => "") with
+    | .ok r => r
+    | .error _ => {}
+  ({ path, module := m, summaryTable, imports, siblings, children := subs }, file) ::
     subs.flatMap fun (sp, sub) =>
       allScopes summaryTable sp file sub (subs.filter fun (q, _) => q != sp)
 

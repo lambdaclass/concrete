@@ -1,0 +1,19 @@
+// Bug 186 (Codex round 2): an impl target means what it means to the checker. `Foo` reaches
+// `main` only through `make`'s signature (the import closure), and `Ns` is declared nowhere: an
+// inherent impl of it is a namespace. Both still compile; 40 + 2 = 42, natively and --interp.
+mod defs {
+    pub struct Foo { pub a: Int }
+    pub fn make() -> Foo { return Foo { a: 40 }; }
+}
+mod main {
+    import defs.{make};
+    trait Tr { fn answer(self) -> Int; }
+    impl Tr for Foo {
+        fn answer(self) -> Int {
+            let Foo { a } = self;
+            return a;
+        }
+    }
+    impl Ns { fn two() -> Int { return 2; } }
+    pub fn main() -> Int { return make().answer() + Ns::two(); }
+}
