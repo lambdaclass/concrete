@@ -405,7 +405,7 @@ def CheckError.message : CheckError → String
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
-  | .patternDoesNotFit pat ty => s!"pattern {pat} does not fit a scrutinee of type '{ty}'"
+  | .patternDoesNotFit pat ty => s!"{pat} does not fit a scrutinee of type '{ty}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"

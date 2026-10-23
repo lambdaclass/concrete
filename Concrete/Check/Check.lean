@@ -1621,7 +1621,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- Bug 196 (PAT-3): the arm names a variant of THIS enum. CoreCheck's wrong-enum check
             -- (E0531) runs after Elab, which met the foreign variant first; `get!` here panicked.
             if armEnum != "" && armEnum != enumName then
-              throwCheck (.patternDoesNotFit s!"{armEnum}::{armVariant}" (tyToString innerTyR)) (some e.getSpan)
+              throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
             let some ev := ed.variants.find? fun v => v.name == armVariant
               | throwCheck (.unknownVariant armVariant enumName) (some e.getSpan)
             -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
@@ -1852,7 +1852,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- Bug 196 (PAT-3): a variant pattern over a scrutinee that is not an enum (an unknown
           -- scrutinee type comes from an earlier error and is not reported again).
           if innerTyR != .placeholder then
-            throwCheck (.patternDoesNotFit s!"{armEnum}::{armVariant}" (tyToString innerTyR)) (some e.getSpan)
+            throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
