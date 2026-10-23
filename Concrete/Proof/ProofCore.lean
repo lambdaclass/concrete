@@ -1531,6 +1531,9 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .call _ _ args _ =>
     args.foldl (fun acc a => acc ++ identifyUnsupportedExpr a) []
   | .ifExpr cond thenBr elseBr _ =>
+    -- An `if` EXPRESSION's branch extracts with no continuation, so an assignment in it would be
+    -- lost; the extractor refuses it (`cStmtsAssign`), and this names why.
+    (if cStmtsAssign thenBr || cStmtsAssign elseBr then ["mutable assignment in an if expression's branch"] else []) ++
     identifyUnsupportedExpr cond ++
     thenBr.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) [] ++
     elseBr.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []

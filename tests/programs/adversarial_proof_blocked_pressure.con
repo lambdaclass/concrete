@@ -34,9 +34,11 @@ fn uses_field_assign(x: Int) -> Int {
 }
 
 fn uses_mut(x: Int) -> Int {
+    // A straight-line assignment extracts (the functional state model, 2026-10-23); one inside
+    // an `if` expression's branch does not, since its effect would be lost.
     let mut r: Int = x;
-    r = r + 1;
-    return r;
+    let y: Int = if x > 0 { r = r + 1; 1 } else { 0 };
+    return r + y;
 }
 
 fn uses_string() -> String {

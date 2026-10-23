@@ -1,10 +1,11 @@
 // Adversarial: require-proofs = true, but blocked_add is eligible and unextractable
-// because it uses mutable assignment. Policy layer must reject this with E0612.
+// because it assigns inside an `if` expression's branch (an assignment the model would lose).
+// Policy layer must reject this with E0612.
 
 fn blocked_add(a: Int, b: Int) -> Int {
     let mut x: Int = a;
-    x = x + b;
-    return x;
+    let y: Int = if b > 0 { x = x + b; 0 } else { 0 };
+    return x + y;
 }
 
 pub fn main() -> Int {
