@@ -125,6 +125,10 @@ division, remainder and bitwise operators; `Bytes` reads), with their exact refu
 small functional state model:
 
 - local `let` bindings become `letIn`
+- an assignment `x = e` outside a loop rebinds `x` for the code after it (`letIn x e rest`), and a
+  branch that assigns carries its own value of `x` into that code (2026-10-23)
+- a `match` statement followed by more code extracts with that code as each arm's continuation, as
+  an `if` statement does; an arm whose pattern binds a name that code reads is refused (2026-10-23)
 - loop-carried variable updates become environment rebinding
 - array assignment becomes `arraySet` plus rebinding of the array name
 - richer loop exits use `LoopStep::Cont` / `LoopStep::Break`
