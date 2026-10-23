@@ -125,6 +125,11 @@ def binderLineOf (t : LocalTable) (line : Nat) (name : String) : List Nat :=
         | .site (bl, _, _, _) _ => bl
     else none
 
+/-- Every use of `name` on `line` denotes the binder introduced on line `binder`, and there is one. -/
+def denotes (t : LocalTable) (line : Nat) (name : String) (binder : Nat) : Bool :=
+  let ls := binderLineOf t line name
+  !ls.isEmpty && ls.all (· == binder)
+
 def check (label : String) (ok : Bool) : IO Unit :=
   IO.println ((if ok then "  ok   " else "  FAIL ") ++ label)
 
@@ -142,31 +147,31 @@ def main : IO Unit := do
     check "T: the valid function records no collision and no conflict"
       (f.collisions.isEmpty && f.conflicts.isEmpty)
     check "T: 'v' read in the loop body denotes the outer 'let mut v' (line 3)"
-      (binderLineOf f 6 "v" == [3])
+      (denotes f 6 "v" 3)
     check "T: 'w' after the loop and the branch denotes the sibling 'let w' of line 10, not the loop's (6) or the branch's (9)"
-      (binderLineOf f 16 "w" == [10])
+      (denotes f 16 "w" 10)
     check "T: the branch's 'w' read denotes the branch's own 'let w' (line 9)"
-      (binderLineOf f 9 "w" == [9])
+      (denotes f 9 "w" 9)
     check "T: the parameter 'a' read denotes the parameter"
-      (binderLineOf f 3 "a" == [0])
+      (denotes f 3 "a" 0)
     check "T: the arm binder 'n' read denotes the arm binder (line 12)"
-      (binderLineOf f 12 "n" == [12])
+      (denotes f 12 "n" 12)
     check "T: the borrow block's 'rz' read denotes the block's reference (line 15) and 'z' its owner (line 14)"
-      (binderLineOf f 15 "rz" == [15] && binderLineOf f 15 "z" == [14])
+      (denotes f 15 "rz" 15 && denotes f 15 "z" 14)
     check "T: the assignment target 'v' (line 12) denotes the outer 'v'"
-      (binderLineOf f 12 "v" == [3])
+      (denotes f 12 "v" 3)
     check "T: 'x' after the branch denotes the outer 'let x' (line 19)"
-      (binderLineOf g 21 "x" == [19])
+      (denotes g 21 "x" 19)
     check "T: the shadowing 'let x' of line 20 records exactly one SCOPE-1 collision, against line 19"
       (g.collisions.length == 1 && (g.collisions.headD default).earlier.line == 19)
     check "T: inside the branch, 'x' denotes the branch's own binding (line 20)"
-      (binderLineOf g 20 "x" == [20])
+      (denotes g 20 "x" 20)
     check "T: the for header 'i' (line 27) is read in the header and body; the call through the fn-typed parameter 'f' denotes the parameter"
-      (binderLineOf h 27 "i" == [27] && binderLineOf h 27 "f" == [0])
+      (denotes h 27 "i" 27 && denotes h 27 "f" 0)
     check "T: the sibling 'let i' after the loop (line 28) is the one the let-else's else branch returns (line 29)"
-      (binderLineOf h 29 "i" == [28] && h.collisions.isEmpty)
+      (denotes h 29 "i" 28 && h.collisions.isEmpty)
     check "T: the let-else binder 'p' (line 29) is read by the struct literal (line 30) and the struct-destructure binders by the return (line 31)"
-      (binderLineOf h 30 "p" == [29] && binderLineOf h 31 "u" == [30] && binderLineOf h 31 "t" == [30])
+      (denotes h 30 "p" 29 && denotes h 31 "u" 30 && denotes h 31 "t" 30)
 
 #eval main
 LEAN
