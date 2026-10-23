@@ -495,8 +495,10 @@ private def condHeadHint (start stop : Nat) : ParseM (Option String) := do
       | _ => pure ()
   return none
 
-/-- Run the parse of a control-flow head (and the block after it); on a parse error, attach
-    `condHeadHint`'s explanation when it applies (bug 212). The accepted language is unchanged. -/
+/-- Run the parse of a control-flow head, up to (not consuming) the `{` that must follow it; on a
+    parse error there, attach `condHeadHint`'s explanation when it applies (bug 212). An error in
+    the block after a head that parsed is never hinted, even when the head holds a literal. The
+    accepted language is unchanged. -/
 private def withCondHeadHint (start : Nat) (act : ParseM α) : ParseM α := do
   try act catch e =>
     match ← condHeadHint start (← get).pos with
@@ -530,10 +532,11 @@ partial def parsePrimary : ParseM Expr := do
     let sp ← peekSpan
     advance
     let start := (← get).pos
-    let (cond, then_) ← withCondHeadHint start do
+    let cond ← withCondHeadHint start do
       let c ← parseExpr
-      let t ← parseExprBlock
-      pure (c, t)
+      if (← peek) != .lbrace then expect .lbrace
+      pure c
+    let then_ ← parseExprBlock
     expect .else_
     -- `else if ...` chains in value position: the trailing `if` is itself an
     -- if-expression that becomes the else block's value, so
@@ -677,11 +680,11 @@ partial def parsePrimary : ParseM Expr := do
     let sp ← peekSpan
     advance
     let start := (← get).pos
-    let (scrutinee, arms) ← withCondHeadHint start do
+    let scrutinee ← withCondHeadHint start do
       let sc ← parseExpr
       expect .lbrace
-      let a ← parseMatchArms
-      pure (sc, a)
+      pure sc
+    let arms ← parseMatchArms
     expect .rbrace
     return .match_ sp scrutinee arms
   | .lparen =>
@@ -1269,10 +1272,11 @@ partial def parseIfLet (sp : Span) : ParseM Stmt := do
   let bindings ← parseBindingList
   expect .assign
   let start := (← get).pos
-  let (scrutinee, thenBody) ← withCondHeadHint start do
+  let scrutinee ← withCondHeadHint start do
     let sc ← parseExpr
-    let b ← parseBlock
-    pure (sc, b)
+    if (← peek) != .lbrace then expect .lbrace
+    pure sc
+  let thenBody ← parseBlock
   let elseBody ← if (← peek) == .else_ then do
     advance
     parseBlock
@@ -1299,10 +1303,11 @@ partial def parseIfInExprBlock : ParseM Stmt := do
   if (← peek) == .«let» then
     return ← parseIfLet sp
   let start := (← get).pos
-  let (cond, thenBody) ← withCondHeadHint start do
+  let cond ← withCondHeadHint start do
     let c ← parseExpr
-    let b ← parseExprBlock
-    pure (c, b)
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
+  let thenBody ← parseExprBlock
   -- Value-form only if a branch actually ENDS with a value (a trailing
   -- expression, value match, or nested value if). A trailing `if c { a(); }
   -- else { b(); }` whose branches are all statements stays a statement `if` —
@@ -1339,10 +1344,11 @@ partial def parseIf : ParseM Stmt := do
   if (← peek) == .«let» then
     return ← parseIfLet sp
   let start := (← get).pos
-  let (cond, thenBody) ← withCondHeadHint start do
+  let cond ← withCondHeadHint start do
     let c ← parseExpr
-    let b ← parseBlock
-    pure (c, b)
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
+  let thenBody ← parseBlock
   let tk ← peek
   let elseBody ← if tk == .else_ then
     advance
@@ -1371,10 +1377,11 @@ partial def parseWhileLet (sp : Span) (lbl : Option String) : ParseM Stmt := do
   let bindings ← parseBindingList
   expect .assign
   let start := (← get).pos
-  let (scrutinee, body) ← withCondHeadHint start do
+  let scrutinee ← withCondHeadHint start do
     let sc ← parseExpr
-    let b ← parseBlock
-    pure (sc, b)
+    if (← peek) != .lbrace then expect .lbrace
+    pure sc
+  let body ← parseBlock
   let successArm := MatchArm.mk sp enumName variant bindings none body
   let breakArm := MatchArm.varArm sp "_" none [Stmt.break_ sp none none]
   let matchStmt := Stmt.expr sp (Expr.match_ sp scrutinee [successArm, breakArm]) false
@@ -1387,10 +1394,11 @@ partial def parseWhile (lbl : Option String) : ParseM Stmt := do
   if (← peek) == .«let» then
     return ← parseWhileLet sp lbl
   let start := (← get).pos
-  let (cond, body) ← withCondHeadHint start do
+  let cond ← withCondHeadHint start do
     let c ← parseExpr
-    let b ← parseBlock
-    pure (c, b)
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
+  let body ← parseBlock
   return .while_ sp cond body lbl
 
 partial def parseFor (lbl : Option String) : ParseM Stmt := do
@@ -1460,11 +1468,11 @@ partial def parseMatchStmt : ParseM Stmt := do
   let sp ← peekSpan
   advance  -- consume match_
   let start := (← get).pos
-  let (scrutinee, arms) ← withCondHeadHint start do
+  let scrutinee ← withCondHeadHint start do
     let sc ← parseExpr
     expect .lbrace
-    let a ← parseMatchArms
-    pure (sc, a)
+    pure sc
+  let arms ← parseMatchArms
   expect .rbrace
   return .expr sp (.match_ sp scrutinee arms) false
 

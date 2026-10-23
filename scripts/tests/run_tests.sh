@@ -1455,14 +1455,16 @@ run_err "$TESTDIR/error_212_const_in_while_head.con" "\`LIMIT {\` is read as the
 run_err "$TESTDIR/error_212_const_in_match_head.con" "\`MODE {\` is read as the start of a struct literal"
 # Negative control: a head that parsed as written is never blamed (the hint follows the parser's
 # actual struct-literal decision, not the token before the brace).
-r212n_out=$($COMPILER "$TESTDIR/error_212_no_hint_qualified_head.con" --emit-llvm 2>&1 >/dev/null || true)
-if grep -q '(E0001)' <<<"$r212n_out" && ! grep -q 'is read as the start of a struct literal' <<<"$r212n_out"; then
-    echo "  ok  bug 212: a correctly parsed head is not blamed (E0001 without the struct-literal hint)"
-    PASS=$((PASS + 1))
-else
-    echo "FAIL  bug 212: negative control: $(head -3 <<<"$r212n_out" | tr '\n' ' ')"
-    FAIL=$((FAIL + 1))
-fi
+for r212n in error_212_no_hint_qualified_head error_212_no_hint_literal_head; do
+    r212n_out=$($COMPILER "$TESTDIR/$r212n.con" --emit-llvm 2>&1 >/dev/null || true)
+    if grep -q '(E0001)' <<<"$r212n_out" && ! grep -q 'is read as the start of a struct literal' <<<"$r212n_out"; then
+        echo "  ok  bug 212: $r212n: a head that parsed is not blamed (E0001 without the hint)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 212: negative control $r212n: $(head -3 <<<"$r212n_out" | tr '\n' ' ')"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 214: a binding left unconsumed by two returns is refused once per return, and each E0208
 # names its own return (line 9 and line 10), so the two refusals differ.
 run_err "$TESTDIR/error_214_two_returns_leak.con" "is still unconsumed when this \`return\` leaves the function"
