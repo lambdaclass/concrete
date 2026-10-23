@@ -852,7 +852,10 @@ mutual
     assignment in it would rebind the name only inside the extracted body and its effect on the code
     after the expression would be lost: such a body is refused (Codex review of the 2026-10-23
     state-model extension, which admitted assignments outside loops). Conservative: any assignment
-    counts, even to a local declared inside the body. -/
+    counts, even to a local declared inside the body. It looks at the body's statements (and the
+    `if`/`match` expressions they hold directly); an `if` expression nested deeper, in an operand or
+    an argument, is guarded when the extractor reaches it, which it always does: every extracted
+    expression is extracted whole, a discarded statement value included. -/
 partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any cStmtAssigns
 
 partial def cStmtAssigns : CStmt → Bool
@@ -1017,7 +1020,13 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- or `match` STATEMENT's arm ends in a value, and control goes on to the code after it (Codex
   -- review of the 2026-10-23 extension: `match n { 0 => 1, _ => 2, } return 42;` modelled 1 or 2).
   -- The value is not evaluated: a trap in it makes the model's answer partial, as any trap does.
-  | [.expr e true], some kk => if cExprNoEscape e then some kk else none
+  -- It must still EXTRACT: extraction is what applies the guards to everything nested in it (an
+  -- `if` expression whose branch assigns is refused there), and skipping it let such an
+  -- assignment be dropped from the model (Codex review, round 2).
+  | [.expr e true], some kk => do
+    if !cExprNoEscape e then none
+    let _ ← cExprToPExprImpl e
+    some kk
   -- A discarded `match`/`if` whose every arm returns is the function's exit, so its arms' values
   -- are the result and the continuation is unreachable.
   | [.expr e false], _ =>

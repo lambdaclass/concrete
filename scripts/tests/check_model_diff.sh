@@ -201,12 +201,17 @@ echo ""
 echo "=== M: the functional state model outside loops — assignments and match statements ==="
 MF="tests/regressions/model_diff_state/repro.con"
 "$BIN" "$MF" --report model-diff > "$TMP/m" 2>&1
-"$BIN" "$MF" --report extraction > "$TMP/mx" 2>&1
+"$BIN" "$MF" --report extraction > "$TMP/mx" 2>&1; mxrc=$?
 grep -qE '^MISMATCH' "$TMP/m" && no "M: a mismatch: $(grep -m2 '^MISMATCH' "$TMP/m" | tr '\t' ' ' | tr '\n' '|')" \
   || ok "M: no mismatch on the state fixture"
-# an assignment inside an if EXPRESSION would be lost: the extractor refuses the function
-grep -A1 -E '^\s*main\.escapes' "$TMP/mx" | grep -q 'status: extracted' \
-  && no "M: escapes is extracted (its branch assignment would be lost)" || ok "M: escapes is not extracted"
+# an assignment inside an if EXPRESSION would be lost: the extractor refuses the function, and
+# the report must succeed and list escapes with a status that is not `extracted`
+for fn in escapes discarded; do
+esc_status="$(grep -A1 -E "^\\s*main\\.$fn" "$TMP/mx" | grep -oE 'status: .*' | head -1)"
+if [ "$mxrc" -eq 0 ] && [ -n "$esc_status" ] && [ "$esc_status" != "status: extracted" ]; then
+  ok "M: $fn is listed and not extracted ($esc_status)"
+else no "M: $fn: report exit $mxrc, ${esc_status:-no entry} (its branch assignment would be lost)"; fi
+done
 for fn in armvalue state; do
   r="$(grep -P "\tmain\.$fn\t" "$TMP/m")"
   if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "M: every input of $fn agrees ($(grep -c . <<<"$r"))"

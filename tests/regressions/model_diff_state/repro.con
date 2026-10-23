@@ -34,3 +34,13 @@ fn state(n: Int) -> Int {
 fn main() -> Int {
     return escapes(true) + armvalue(0) + state(0) - 141;
 }
+
+// the round-2 counterexample: an assigning if-expression inside a DISCARDED arm value
+fn discarded(n: Int, c: bool) -> Int {
+    let mut x: Int = 0;
+    match n {
+        0 => (if c { x = 5; 1 } else { 2 }) + 0,
+        _ => 0,
+    }
+    return x;
+}
