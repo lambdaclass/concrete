@@ -10,6 +10,15 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Match Arm Fits Its Scrutinee (bug 196, 2026-10-23)
+
+A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
+enum, a literal or range over an enum, a variant over a non-enum, a literal of another type, and a
+range over a scrutinee that is not an integer or `char`. Before this fix the checker left these to
+CoreCheck, which runs after Elab: a foreign variant made the checker panic, and a range over an enum
+failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
+chapter (PAT-3) found it. It is pinned by four `error_196_*.con` fixtures.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.

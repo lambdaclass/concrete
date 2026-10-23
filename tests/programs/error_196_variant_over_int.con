@@ -1,0 +1,10 @@
+// Bug 196: a variant pattern over an integer scrutinee. Expected: E0309.
+enum Copy E { A, B }
+
+fn main() -> Int {
+    let k: Int = 1;
+    match k {
+        E::A => { return 1; },
+        _ => { return 0; }
+    }
+}

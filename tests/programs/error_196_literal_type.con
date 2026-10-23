@@ -1,0 +1,8 @@
+// Bug 196: a literal pattern of another type than the scrutinee. Expected: E0309.
+fn main() -> Int {
+    let k: Int = 1;
+    match k {
+        true => { return 1; },
+        _ => { return 0; }
+    }
+}

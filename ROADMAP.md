@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 159 bug records.
+**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 160 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -120,14 +120,14 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| spec: exit 2i specification (MEMORY_SEMANTICS section 15) | 2026-10-21 | unrecorded | 3 | 2 | 1 | found bugs |
 | semantics: semantics probes N1-N4 and reference rules | 2026-10-21 | unrecorded | 5 | 4 | 1 | found bugs |
 | semantics: second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes) | 2026-10-21 | unrecorded | 4 | 3 | 1 | found bugs |
 | interp-coverage: interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary | 2026-10-21 | unrecorded | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
+| spec: language-specification examples, patterns chapter (docs/spec/patterns.md, both consumers) | 2026-10-23 | 20 programs | 1 | 1 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 19 attribution-only batches (reviews, follow-ons, CI, controls, development) found 29 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 19 attribution-only batches (reviews, follow-ons, CI, controls, development) found 29 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
