@@ -1,0 +1,30 @@
+// Bug 213: arms after an unguarded binding arm (or `_`) can never be selected; the binary failed SSA
+// verification (E0703, a use in the predecessor-less block they were lowered into) while `--interp`
+// ran the program. The fuzz farm's crash-5ff5654bc7eb / crash-7dec4da326b6 shape. Expected: 42.
+enum Copy E { A { v: i32 }, B { w: i32 } }
+
+fn pick(e0: E, k: i32) -> i32 {
+    let r: i32 = match k { 0 => 1, y => y + 30, _ => match e0 { E::A { v } => v, E::B { w } => w } };
+    return r;
+}
+
+fn stmt(e0: E, k: i32) -> i32 {
+    match k {
+        0 => { return 1; },
+        _ => { return 2; },
+        _ => { match e0 { E::A { v } => { return v; }, E::B { w } => { return w; } } }
+    }
+}
+
+fn over_enum(e0: E) -> i32 {
+    match e0 {
+        other => { return 7; },
+        E::A { v } => { return v + 100; }
+    }
+}
+
+fn main() -> Int {
+    let e0: E = E::A { v: 5 };
+    // 33 + 2 + 7 = 42
+    return (pick(e0, 3) + stmt(e0, 9) + over_enum(e0)) as Int;
+}
