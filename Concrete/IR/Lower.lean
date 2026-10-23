@@ -652,8 +652,8 @@ end
     array SVal is its storage) and already-promoted names; pointer-valued locals
     are promoted too, since `&mut p` is `p`'s slot (bugs 102, 126). `takes name` = "some branch takes
     `&name`"; callers compose it from cstmtsTakeAddrOf / cmatchArmTakesAddrOf. -/
-private def prePromoteAddrTaken (preVars : List (String × SVal))
-    (takes : String → Bool) : LowerM Unit := do
+private def prePromoteAddrTaken (preVars : List (LocalKey × SVal))
+    (takes : LocalKey → Bool) : LowerM Unit := do
   for (name, val) in preVars do
     match val.ty with
     | .array _ _ => pure ()
@@ -747,8 +747,8 @@ private def matchMergeRules : BranchMergeRules where
     * "Changed" detection and the void rule differ per site and are encoded
       in `rules`, NOT unified away (no behavior change — ROADMAP 1a). -/
 private def reconcileBranchVars (rules : BranchMergeRules)
-    (preVars : List (String × SVal))
-    (liveArms : List (List (String × SVal) × String)) : LowerM Unit := do
+    (preVars : List (LocalKey × SVal))
+    (liveArms : List (List (LocalKey × SVal) × String)) : LowerM Unit := do
   for (name, preVal) in preVars do
     -- A promoted variable is memory-backed and written through its alloca in
     -- the branches, so the alloca is the single source of truth —
@@ -1169,7 +1169,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- Snapshot vars before match so each arm starts from the same state
     let preMatchVars ← snapshotVars
     -- Collect (endVars, endLabel, terminated) for each arm for var merge (newest first)
-    let mut armEndSnapshots : List (List (String × SVal) × String × Bool) := []
+    let mut armEndSnapshots : List (List (LocalKey × SVal) × String × Bool) := []
 
     -- Bug 031: see prePromoteAddrTaken — the store must dominate every arm.
     -- Exclude names any arm REBINDS (enum payload binding / var arm): promotion
@@ -1876,7 +1876,7 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
     future guard/OR arms). -/
 partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : Ty)
     (mergeLabel : String) (nextCheck : String)
-    : LowerM (Option (SVal × String) × (List (String × SVal) × String × Bool)) := do
+    : LowerM (Option (SVal × String) × (List (LocalKey × SVal) × String × Bool)) := do
   -- A guard is tested after the pattern bindings are live: if it is false, fall
   -- through to the next arm's check; otherwise run the body.
   match guard with
