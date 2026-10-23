@@ -340,6 +340,10 @@ COMPILER=".lake/build/bin/concrete"
 TESTDIR="tests/programs"
 TMPDIR=$(mktemp -d)
 SUITE_TMPDIR="$TMPDIR"   # removed by on_exit; do not add another EXIT trap (it would replace on_exit)
+# The bounded runner (lib/bounded.sh) is sourced here, before any section uses it: bug 184's legs
+# run early, and a call before the old late `source` would have been "command not found".
+BOUNDED_PARENT="$SUITE_TMPDIR"
+source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 JOBDIR="$TMPDIR/jobs"
 mkdir -p "$JOBDIR"
 
@@ -1664,7 +1668,7 @@ r179_leg regress_179_concurrent_build 3 4 0 r179_build
 # Bug 184 (FIXED): `--interp` read ALL of standard input before `main` ran, so a program that
 # never reads stdin, fed by a pipe that stays open, waited for the writer to close it (the binary
 # returns at once). Standard input is now pulled when the program reads it. Each run's stdin is a
-# fifo whose writer prints the feed and then holds it open for 30 s, under `timeout 10`: a run
+# fifo whose writer prints the feed and then holds it open for 30 s, under a 10 s bound: a run
 # that waits for end of input times out (124) and fails. The writer is killed and reaped after
 # every run. regress_184_interp_stdin_unread never reads stdin (21); regress_184_interp_stdin_read
 # is the control that does: one read(0, buf, 2) of "AB" returns both bytes at once (131).
@@ -1674,7 +1678,10 @@ r184_run() {  # <feed> <command...>: run the command with stdin held open after 
     mkfifo "$fifo"
     { printf '%s' "$feed"; exec sleep 30; } > "$fifo" 2>/dev/null &
     w=$!
-    timeout 10 "$@" < "$fifo" || rc=$?
+    # bounded_run, not GNU `timeout` (absent on macOS runners). The retry budget is pinned to 10 s so
+    # first try + retry (20 s) ends before the writer releases the pipe (30 s): a run that waits for
+    # end of input still times out (124) instead of being rescued by a longer retry.
+    bounded_run -i "$fifo" -r 10 10 -- "$@" || rc=$?
     kill "$w" 2>/dev/null || true
     wait "$w" 2>/dev/null || true
     rm -f "$fifo"
@@ -12318,8 +12325,7 @@ fi
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
 # python3 it degrades to running without a watchdog rather than skipping the fixtures,
 # and says so once, so a hang on such a machine is at least explicable.
-BOUNDED_PARENT="$SUITE_TMPDIR"
-source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
+# (lib/bounded.sh is sourced once, right after SUITE_TMPDIR is set, so every section can use it.)
 
 echo "=== Project-level tests ==="
 for projdir in "$TESTDIR"/*/; do
