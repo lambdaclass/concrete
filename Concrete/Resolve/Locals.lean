@@ -22,11 +22,21 @@ The walk is the former `scope1*` walk of `Check.lean`, which computed visibility
 it now also produces the identities, so E0301 and binding identity cannot disagree.
 -/
 
-/-- One visible binding: spelling, where it was introduced, identity. -/
+/-- One visible binding: spelling, where it was introduced, identity, and its class. A SOURCE
+    binding can be named by a use and collides under SCOPE-1. A `_` binder (a parameter, a borrow
+    reference or a destructured field spelled `_`) can be named by nothing and collides with
+    nothing. A compiler TEMPORARY (the struct-destructure temp Elab introduces) can be named by
+    the uses Elab synthesizes and collides with nothing. Every class counts for `shadows`, which
+    is the fact Elab names Core binders by. -/
+private inductive VisClass where
+  | source | wild | temp
+  deriving BEq
+
 private structure Visible where
   name : String
   span : Span
   id : LocalId
+  cls : VisClass := .source
 
 private abbrev LocalsM := StateM LocalTable
 
@@ -39,19 +49,36 @@ private def bindLocal (vis : List Visible) (key : BinderKey) (name : String) (sp
   -- `_` binds nothing visible (no use can name it, and it collides with nothing), but where the
   -- checker registers it (a `_` parameter, a borrow reference, a destructured field) it is still
   -- a binding with an obligation, so it has an identity.
+  let shadows := vis.any (·.name == name)
   if name == "_" then
-    let (t', _) := (← get).mintBinder key name
+    let (t', id) := (← get).mintBinder key name shadows
     set t'
-    return vis
-  if let some prev := vis.find? (·.name == name) then
+    return { name, span := sp, id, cls := .wild } :: vis
+  if let some prev := vis.find? (fun v => v.name == name && v.cls == .source) then
     modify fun t => t.mintCollision { name, kind, at_ := sp, earlier := prev.span }
-  let (t', id) := (← get).mintBinder key name
+  let (t', id) := (← get).mintBinder key name shadows
   set t'
   return { name, span := sp, id } :: vis
 
+/-- A pattern binder spelled `_` (an enum arm field, a catch-all arm): it has an identity and
+    is visible to nothing, not even as a `_` (Elab binds no Core name for it). -/
+private def bindArmWild (vis : List Visible) (key : BinderKey) : LocalsM (List Visible) := do
+  let (t', _) := (← get).mintBinder key "_"
+  set t'
+  return vis
+
+/-- A compiler temporary named `name` at `sp` (not a source binding), used at the same
+    position by the statements the compiler synthesizes around it. -/
+private def bindTemp (vis : List Visible) (sp : Span) (name : String) : LocalsM (List Visible) := do
+  let shadows := vis.any (·.name == name)
+  let (t', id) := (← get).mintBinder (.site (SiteKey.ofSpan sp) name) name shadows
+  set t'
+  modify fun t => t.mintUse (SiteKey.ofSpan sp) name id
+  return { name, span := sp, id, cls := .temp } :: vis
+
 /-- Record a use of `name` at `sp`, when `name` is a visible local there. -/
 private def useLocal (vis : List Visible) (sp : Span) (name : String) : LocalsM Unit := do
-  if let some v := vis.find? (·.name == name) then
+  if let some v := vis.find? (fun v => v.name == name && v.cls != .wild) then
     modify fun t => t.mintUse (SiteKey.ofSpan sp) name v.id
 
 private def siteKey (sp : Span) (name : String) : BinderKey := .site (SiteKey.ofSpan sp) name
@@ -62,6 +89,11 @@ private def siteKey (sp : Span) (name : String) : BinderKey := .site (SiteKey.of
     erased the first field's obligation). The checker computes the same key (`destructureKey`). -/
 def destructureKey (sp : Span) (b : PatBind) : BinderKey :=
   .site (SiteKey.ofSpan sp) s!"{b.fieldName}={b.name}"
+
+/-- The temporary Elab moves a destructured struct into (`let S { a, b } = v` becomes
+    `let <temp> = v; let a = <temp>.a; …`). Named here, once, because the walk mints its
+    identity. -/
+def destructureTempName (structName : String) : String := "__destr_" ++ structName
 
 mutual
 private partial def walkExpr (vis : List Visible) : Expr → LocalsM Unit
@@ -88,11 +120,12 @@ private partial def walkArm (vis : List Visible) : MatchArm → LocalsM Unit
   | .mk sp _ _ bs g body => do
     let mut v := vis
     for b in bs do
-      v ← bindLocal v (siteKey sp b.name) b.name sp
+      if b.name == "_" then v ← bindArmWild v (siteKey sp b.name)
+      else v ← bindLocal v (siteKey sp b.name) b.name sp
         (if b.letBound then "destructuring `let` binder" else "pattern binder")
     g.forM (walkExpr v); walkBlock v body
   | .varArm sp b g body => do
-    let v ← bindLocal vis (siteKey sp b) b sp "pattern binder"
+    let v ← if b == "_" then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
     g.forM (walkExpr v); walkBlock v body
   | .litArm _ val g body => do
     walkExpr vis val; g.forM (walkExpr vis); walkBlock vis body
@@ -142,9 +175,9 @@ private partial def walkStmt (vis : List Visible) : Stmt → LocalsM (List Visib
     let mut v := vis
     for b in bs do v ← bindLocal v (siteKey sp b.name) b.name sp "destructuring `let` binder"
     pure v
-  | .letStructDestructure sp _ bs val => do
+  | .letStructDestructure sp structName bs val => do
     walkExpr vis val
-    let mut v := vis
+    let mut v ← bindTemp vis sp (destructureTempName structName)
     for b in bs do v ← bindLocal v (destructureKey sp b) b.name sp "destructuring `let` binder"
     pure v
 end
