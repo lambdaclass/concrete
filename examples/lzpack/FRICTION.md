@@ -1,7 +1,7 @@
 # lzpack — friction log (Phase 7, workload 9)
 
 `lzpack` is an LZSS + PackBits RLE compressor and decompressor in a CRC-checked container
-(`src/main.con`, about 600 lines). It has four commands: `c [-r]`, `d`, `t` (in-memory round trip
+(`src/main.con`, about 800 lines). It has four commands: `c [-r]`, `d`, `t` (in-memory round trip
 of both codecs) and `selftest` (vectors and eight corrupt-stream classifications). The format and
 the greedy hash-chain parse are fully specified in the source header, so
 `scripts/tests/check_lzpack_differential.sh` compares the compressed bytes with an independent
@@ -14,10 +14,10 @@ This log is input to the language-design negotiation in
 [TIGHTENING_DECISIONS.md](../../docs/language/TIGHTENING_DECISIONS.md). It records what the
 current language (origin/main `eb122a01`, with D1 – D4 and D6 implemented) did to this program,
 and, per item, where a proposal on the table would help and where it would hurt. Nothing here is
-a decision. Snippets marked "probe" come from the seven probe programs written on the workload's
-shapes (fixed-array hash chains, a ring buffer, a Huffman tree, trait codecs, function values,
-shift and cast edges, nested linear `Result` / `Option`); every probe also compared the binary
-with `--interp`, and they agreed on every program that compiled.
+a decision. Snippets marked "probe" come from nine probe programs written on the workload's shapes
+(fixed-array hash chains, a ring buffer, a Huffman tree, trait codecs, function values, shift and
+cast edges, nested linear `Result` / `Option`, borrow and defer forms); every probe that compiled
+was run natively and under `--interp`, and the two agreed on all of them.
 
 ## Compiler bugs found
 
@@ -26,9 +26,10 @@ with `--interp`, and they agreed on every program that compiled.
 | [212](../../docs/bugs/212_const_before_block_parses_as_struct_literal.md) | `if n > LIMIT { … }` with a module constant does not parse: an uppercase name before `{` in an `if` / `while` / `match` head is read as a struct literal. The error was `expected }, got =`, inside the block. Ten of lzpack's conditions and one value `if` hit it | diagnostic now names the reading and the parenthesized form; the case rule is written into the grammar and SYN-1; which heads parse is unchanged (a syntax question, item G1 below) |
 | [214](../../docs/bugs/214_two_returns_leak_same_diagnostic.md) | a buffer leaked on two `return`s gave two byte-identical E0208 refusals at its `let`, naming neither exit | each refusal now names its `return` (related span) |
 
-No miscompile and no binary / `--interp` disagreement was found: 904 KB of text, 300 KB of binary
-and 400 fuzzed corrupt streams produce byte-identical streams and identical diagnoses to the
-reference.
+No miscompile was found. Natively, 904 KB of text and 300 KB of binary compress to streams
+byte-identical to the reference's, and 400 fuzzed corrupt streams (a scratch run, not a committed
+gate) got the reference's diagnosis every time; the `@run` cases and the probes found no binary /
+`--interp` disagreement.
 
 ## What worked without friction
 
@@ -206,7 +207,7 @@ needed no kind annotation.
 
 ### E. Casts (T-CAST: `as` lossless only, decided, not yet implemented)
 
-lzpack has 31 casts in about 600 lines: 12 `u64 as u8`, 12 `u64 as Int` and 7 `u8 as u64`.
+lzpack has 31 casts in about 800 lines: 12 `u64 as u8`, 12 `u64 as Int` and 7 `u8 as u64`.
 Under lossless-only `as`, the 24 narrowing ones need named conversions.
 
 ```con pseudocode
