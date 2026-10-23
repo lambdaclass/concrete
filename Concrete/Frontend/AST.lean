@@ -460,6 +460,8 @@ structure ConstDef where
   value : Expr
   isPublic : Bool := false
   span : Span := default
+  /-- The local bindings of the initializer (a block or `match` may bind), R-0492. -/
+  locals : LocalTable := LocalTable.unresolved
 
 structure TypeAlias where
   name : String

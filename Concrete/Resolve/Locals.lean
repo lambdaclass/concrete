@@ -162,6 +162,7 @@ partial def resolveModuleLocals (m : Module) : Module :=
   let withLocals (f : FnDef) : FnDef := { f with locals := resolveFnLocals f }
   { m with
     functions := m.functions.map withLocals
+    constants := m.constants.map fun c => { c with locals := resolveExprLocals c.value }
     implBlocks := m.implBlocks.map fun ib => { ib with methods := ib.methods.map withLocals }
     traitImpls := m.traitImpls.map fun tb => { tb with methods := tb.methods.map withLocals }
     submodules := m.submodules.map resolveModuleLocals }

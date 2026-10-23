@@ -3167,7 +3167,7 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
-  ((resolveExprLocals c.value).collisions.map scope1Diagnostic)
+  (c.locals.collisions.map scope1Diagnostic)
     ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.value.getSpan] else [])
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
@@ -3178,6 +3178,10 @@ def scope1Diagnostics (f : FnDef) : List Diagnostic :=
 
 /-- A constant initializer as an expression of the constant's type, with no locals in scope. -/
 def checkConstInit (c : ConstDef) : CheckM Unit := do
+  -- R-0492: the initializer's own binding identities (it sees no function's locals)
+  if !c.locals.resolved then
+    throwCheckMsg s!"internal: constant '{c.name}' reached the checker without a local binder table (R-0492)" (some c.span)
+  modify fun env => { env with locals := c.locals, vars := [], borrowRefs := [] }
   let ty ← resolveType c.ty
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
