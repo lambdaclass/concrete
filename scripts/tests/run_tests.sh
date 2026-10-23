@@ -8213,9 +8213,12 @@ run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
 run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
 run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
-for b196 in other_enum_variant range_over_enum variant_over_int literal_type literal_over_type_param same_name_other_enum; do
-    run_err "$TESTDIR/error_196_${b196}.con" "(E0309)"
-done
+run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
+run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
+run_err "$TESTDIR/error_196_variant_over_int.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_type.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_over_type_param.con" "(E0309)"
+run_err "$TESTDIR/error_196_same_name_other_enum.con" "(E0309)"
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
 # (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
 run_ok "$TESTDIR/regress_109_float_literals.con" 42
