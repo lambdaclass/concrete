@@ -1,0 +1,42 @@
+// Bug 186 positive control: every impl here is unique, local (TC-3) and fully generic (TC-4),
+// and every (type, method) names one method (TC-5), so impl selection is a function of the
+// type. regress_186_coherent_impls_reversed.con is this program with its modules, imports and
+// impls written in the opposite order; both must give 42, natively and under --interp.
+mod shapes {
+    pub struct Copy Square { pub side: Int }
+    pub struct Copy Cell<T> { pub v: T }
+}
+mod owned {
+    pub struct Token { pub id: Int }
+    // Destroy is the compiler's trait: its impl lives with its type (TC-3).
+    impl Destroy for Token {
+        fn destroy(self) { let Token { id } = self; }
+    }
+    pub fn make(id: Int) -> Token { return Token { id: id }; }
+    pub fn id_of(t: &Token) -> Int { return t.id; }
+}
+mod main {
+    import owned.{Token, make, id_of};
+    import shapes.{Square, Cell};
+    // A local trait may be implemented for foreign types (TC-3) and for a primitive.
+    trait Area { fn area(&self) -> Int; }
+    trait Label { fn label(&self) -> Int; }
+    impl Area for Square { fn area(&self) -> Int { return self.side * self.side; } }
+    impl Label for Square { fn label(&self) -> Int { return 1; } }
+    impl Area for Int { fn area(&self) -> Int { return 2; } }
+    impl<T: Copy> Area for Cell<T> { fn area(&self) -> Int { return 3; } }
+    // Two bounds with DISTINCT method names: each call has exactly one candidate (TC-6).
+    fn both<T: Area + Label>(x: &T) -> Int { return x.area() + x.label(); }
+    fn one<T: Area>(x: &T) -> Int { return x.area(); }
+    pub fn main() -> Int {
+        let s: Square = Square { side: 5 };
+        let i: Int = 7;
+        let c: Cell<Int> = Cell::<Int> { v: 1 };
+        let d: Cell<bool> = Cell::<bool> { v: true };
+        let t: Token = make(4);
+        let k: Int = id_of(&t);
+        t.destroy();
+        // 26 + 2 + 3 + 3 + 4 + 4 = 42
+        return both::<Square>(&s) + one::<Int>(&i) + one::<Cell<Int>>(&c) + one::<Cell<bool>>(&d) + k + s.side - 1;
+    }
+}

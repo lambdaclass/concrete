@@ -1,0 +1,7 @@
+// Bug 186 / TC-6 (E0595): both bounds of T declare `m`. The first bound that had the method
+// used to win, so `T: A + B` and `T: B + A` called different traits. A qualified call
+// (`A::m(x)`) does not exist yet, so the call is refused.
+trait A { fn m(&self) -> Int; }
+trait B { fn m(&self) -> Int; }
+fn call<T: A + B>(x: &T) -> Int { return x.m(); }
+pub fn main() -> Int { return 0; }

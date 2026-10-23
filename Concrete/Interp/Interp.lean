@@ -2823,8 +2823,12 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
   match splitTraitParamCallee fnName, argVals with
   | some (_, m), recv :: _ =>
     let target ← autoDeref cx env recv
+    -- A primitive receiver dispatches on its type too (`impl Tr for Int`, bug 186): it used
+    -- to be "" here, so the interpreter refused a call native code made.
     let tn := match target with
       | .struct_ n _ | .enum_ n _ _ => n
+      | .int _ ty | .float _ ty => tyCanonical ty
+      | .bool _ => tyCanonical .bool
       | _ => ""
     if !tn.isEmpty && ((findFn cx.fns (ambiguousKey tn)).isSome
         || (findFn cx.fns (ambiguousKey (traitImplKey tn m))).isSome) then

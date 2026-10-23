@@ -1,0 +1,7 @@
+// Bug 186 / TC-1 (E0590): two generic impls equal up to the naming of their parameters are
+// the same impl twice.
+trait Tr { fn m(&self) -> Int; }
+struct Copy Box2<T> { v: T }
+impl<T: Copy> Tr for Box2<T> { fn m(&self) -> Int { return 1; } }
+impl<U: Copy> Tr for Box2<U> { fn m(&self) -> Int { return 2; } }
+pub fn main() -> Int { let b: Box2<Int> = Box2::<Int> { v: 0 }; return b.m(); }

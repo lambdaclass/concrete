@@ -1,0 +1,36 @@
+// Bug 186: regress_186_coherent_impls.con with its modules, imports and impls in the opposite
+// order. Coherence judges impls by identity, never by position, so this must also give 42.
+mod main {
+    import shapes.{Square, Cell};
+    import owned.{Token, make, id_of};
+    trait Label { fn label(&self) -> Int; }
+    trait Area { fn area(&self) -> Int; }
+    impl<T: Copy> Area for Cell<T> { fn area(&self) -> Int { return 3; } }
+    impl Area for Int { fn area(&self) -> Int { return 2; } }
+    impl Label for Square { fn label(&self) -> Int { return 1; } }
+    impl Area for Square { fn area(&self) -> Int { return self.side * self.side; } }
+    fn one<T: Area>(x: &T) -> Int { return x.area(); }
+    fn both<T: Label + Area>(x: &T) -> Int { return x.area() + x.label(); }
+    pub fn main() -> Int {
+        let s: Square = Square { side: 5 };
+        let i: Int = 7;
+        let c: Cell<Int> = Cell::<Int> { v: 1 };
+        let d: Cell<bool> = Cell::<bool> { v: true };
+        let t: Token = make(4);
+        let k: Int = id_of(&t);
+        t.destroy();
+        return both::<Square>(&s) + one::<Int>(&i) + one::<Cell<Int>>(&c) + one::<Cell<bool>>(&d) + k + s.side - 1;
+    }
+}
+mod owned {
+    pub fn id_of(t: &Token) -> Int { return t.id; }
+    pub fn make(id: Int) -> Token { return Token { id: id }; }
+    impl Destroy for Token {
+        fn destroy(self) { let Token { id } = self; }
+    }
+    pub struct Token { pub id: Int }
+}
+mod shapes {
+    pub struct Copy Cell<T> { pub v: T }
+    pub struct Copy Square { pub side: Int }
+}

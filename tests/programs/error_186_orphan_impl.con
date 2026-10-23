@@ -1,0 +1,12 @@
+// Bug 186 / TC-3 (E0592): a foreign trait (the compiler's Destroy) for a foreign type (defs's
+// Foo) in a third module. An impl lives with its trait or with its type, so no two modules can
+// both supply one.
+mod defs {
+    pub struct Foo { pub a: Int }
+    pub fn make() -> Foo { return Foo { a: 1 }; }
+}
+mod main {
+    import defs.{Foo, make};
+    impl Destroy for Foo { fn destroy(self) { let Foo { a } = self; } }
+    pub fn main() -> Int { let f: Foo = make(); f.destroy(); return 0; }
+}

@@ -1,0 +1,6 @@
+// Bug 186 / TC-5 (E0594): an inherent method and a trait method of one type share a name.
+trait Tr { fn m(&self) -> Int; }
+struct Copy Foo { a: Int }
+impl Foo { fn m(&self) -> Int { return 5; } }
+impl Tr for Foo { fn m(&self) -> Int { return 6; } }
+pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return f.m(); }

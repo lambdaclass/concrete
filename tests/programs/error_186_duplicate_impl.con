@@ -1,0 +1,8 @@
+// Bug 186 / TC-1 (E0590): one trait implemented twice for one type. Before, both impls
+// entered the method tables: llvm-as refused a redefined `Foo_m`, --interp refused at run time.
+trait Tr { fn m(&self) -> Int; }
+struct Copy Foo { a: Int }
+impl Tr for Foo { fn m(&self) -> Int { return 1; } }
+impl Tr for Foo { fn m(&self) -> Int { return 2; } }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
