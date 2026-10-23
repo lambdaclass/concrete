@@ -1,0 +1,8 @@
+// Bug 221 (Codex review): a type-argument list on a call through a function pointer was dropped.
+// Expected: E0322.
+fn inc(x: Int) -> Int { return x + 1; }
+
+fn main() -> Int {
+    let f: fn(Int) -> Int = inc;
+    return f::<Int>(41);
+}

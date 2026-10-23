@@ -1,0 +1,18 @@
+// Bug 221 (Codex review): a type-argument list on a method called through a trait bound was
+// dropped (trait methods take no type parameters of their own). Expected: E0322.
+trait Get {
+    fn get(&self) -> Int;
+}
+
+struct Copy S { v: Int }
+
+impl Get for S {
+    fn get(&self) -> Int { return self.v; }
+}
+
+fn read<T: Get>(x: &T) -> Int { return x.get::<Int>(); }
+
+fn main() -> Int {
+    let s: S = S { v: 42 };
+    return read::<S>(&s);
+}

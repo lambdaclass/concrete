@@ -8368,6 +8368,8 @@ run_err "$TESTDIR/error_221_extra_type_argument.con" "(E0322)"
 run_err "$TESTDIR/error_221_type_argument_to_plain_fn.con" "(E0322)"
 run_err "$TESTDIR/error_221_method_extra_type_argument.con" "(E0322)"
 run_err "$TESTDIR/error_221_short_type_argument_list.con" "(E0322)"
+run_err "$TESTDIR/error_221_fn_pointer_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_bound_method_type_argument.con" "(E0322)"
 run_ok "$TESTDIR/regress_221_exact_type_arguments.con" 42
 # Bug 220: `0x` / `0b` / `0o` with no digit lexed as 0; now a lexical error.
 run_err "$TESTDIR/error_220_empty_hex_literal.con" "(E0001)"

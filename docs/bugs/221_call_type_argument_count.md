@@ -31,10 +31,11 @@ variables. Only the builtins (`vec_new::<T>`, E0269) counted their type argument
 
 ## Fix
 
-A call to a function, and a method call, whose explicit type-argument list is not exactly as long
-as the callee's type parameters (a method's own, after the receiver's) is refused with E0322
-(TYPE-9, new code). An omitted list is still inferred. Pinned by four `error_221_*.con` fixtures
-(`run_err ... (E0322)`) and `regress_221_exact_type_arguments.con` (42: exact and omitted lists).
+A call to a function, a method call, a call through a function pointer and a method call through a
+trait bound whose explicit type-argument list is not exactly as long as the callee's type
+parameters (a method's own, after the receiver's; none for a function pointer or a trait method;
+the last two added after the Codex review) is refused with E0322 (TYPE-9, new code). An omitted
+list is still inferred. Pinned by six `error_221_*.con` fixtures (`run_err ... (E0322)`) and `regress_221_exact_type_arguments.con` (42: exact and omitted lists).
 Static method calls (`Type::f::<..>`) are not covered: their type-argument list may also carry the
 impl's arguments, and which reading is meant is not specified.
 

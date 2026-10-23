@@ -127,7 +127,7 @@ declare -A BUG_TEST_MAP=(
   # value (run_tests.sh also compares --interp with the binary).
   [208]="regress_208_fn_local_named_like_import.con"
   # Bug 221: a call's explicit type-argument list of the wrong length (E0322).
-  [221]="error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con regress_221_exact_type_arguments.con"
+  [221]="error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con"
   # Bug 220: a radix prefix with no digits (E0001).
   [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).

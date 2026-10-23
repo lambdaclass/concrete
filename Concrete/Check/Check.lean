@@ -1295,6 +1295,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let fnPtrVar ← lookupUse csp fnName
     match fnPtrVar.map (fun (p : LocalRef × VarInfo) => p.2.ty) with
     | some (.fn_ paramTys fnPtrCapSet fnPtrRetTy) =>
+      -- Bug 221 (Codex review): a function pointer has no type parameters.
+      if !typeArgs.isEmpty then
+        throwCheck (.callTypeArgCount s!"function pointer '{fnName}'" 0 typeArgs.length) (some e.getSpan)
       -- Calling through a function pointer exercises the authority its type
       -- declares: the caller must hold the fn type's capability set, exactly
       -- as for a direct call. Without this, a function with no `with(...)`
@@ -2193,6 +2196,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check if this is a type variable with trait bounds
       match innerTy with
       | .typeVar n =>
+        -- Bug 221 (Codex review): a trait method has no type parameters of its own.
+        if !typeArgs.isEmpty then
+          throwCheck (.callTypeArgCount s!"trait method '{methodName}'" 0 typeArgs.length) (some e.getSpan)
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
         -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
