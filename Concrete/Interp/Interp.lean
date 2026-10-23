@@ -849,9 +849,10 @@ def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
 def destroyImplKey (typeName : String) : String := "$impl$Destroy$" ++ typeName
 
 /-- Reserved key of a type's (non-Destroy) trait impl method `method`. A type has at most one
-    method of a given name, so (type, method) identifies the impl method. -/
-/-- The type is keyed by its canonical spelling, so an impl written `for bool` (or `i64`) and a
-    runtime `Bool` (`Int`) receiver meet on one key (bug 186). A user type's name is unchanged. -/
+    method of a given name (TRAIT-5, enforced by coherence since bug 186), so (type, method)
+    identifies the impl method. The type is keyed by its canonical spelling, so an impl written
+    `for bool` (or `i64`) and a runtime `Bool` (`Int`) receiver meet on one key; a user type's
+    name is unchanged. -/
 def traitImplKey (typeName method : String) : String :=
   "$impl$" ++ tyCanonical (tyFromName typeName) ++ "$" ++ method
 
