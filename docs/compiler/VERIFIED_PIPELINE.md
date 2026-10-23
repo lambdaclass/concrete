@@ -476,7 +476,9 @@ diagnostic-path bypass.
   - U1–U4: payload replacement;
   - D1–D4: `UnverifiedSSA` reaching `emit`, and a `CoreSubset` or `ElaboratedProgram` reaching Mono
     or the verify gates;
-  - S: no `open private` of these constructors and no `sorry` in `Pipeline.lean`;
+  - S: no `open private` of these constructors, and every declaration of `Pipeline.lean` in the
+    built environment rests only on `propext`, `Classical.choice` and `Quot.sound`. A sorry with
+    its warning silenced and an indented `axiom` are both refused (mutant-checked);
   - B: bug 180, the class instance this slice found.
 
   A public-constructor mutant turns F1–F3 and U1 red. The golden and snapshot gates show the
