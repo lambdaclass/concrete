@@ -155,6 +155,7 @@ def buildSummary (prog : ParsedProgram) : SummaryTable :=
   { entries := buildSummaryTable prog.modules }
 
 /-- Name-resolution pass: validates all identifiers and imports. -/
+-- spec: MOD-1, spec: MOD-2 (docs/spec/modules.md; names resolve once, before checking)
 def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics ResolvedProgram :=
   match resolveProgram prog.modules summary.entries with
   | .ok resolved => .ok { modules := resolved }
@@ -210,7 +211,7 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
   | .error ds => .error ds
 
 /-- Lower to SSA, verify, and clean up. -/
--- spec: PASS-9 (docs/spec/pipeline.md; this stage boundary)
+-- spec: PASS-9, spec: ARITH-3, spec: STMT-4, spec: MEM-6 (docs/spec/pipeline.md, docs/spec/arithmetic.md: every required runtime check is in the CFG)
 def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram :=
   match hl : mono.coreModules.mapM (fun m => lowerModule m mono.coreModules) with
   | .error ds => .error ds
@@ -327,7 +328,7 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
           postLower := postLower, postCleanup := postCleanup }
 
 /-- Emit LLVM IR from SSA modules. -/
--- spec: PASS-10 (docs/spec/pipeline.md; this stage boundary)
+-- spec: PASS-10, spec: ARITH-3, spec: ARITH-4, spec: ARITH-6, spec: FFI-5 (docs/spec/pipeline.md, docs/spec/arithmetic.md: checked operations lower through the abort helpers)
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter
 

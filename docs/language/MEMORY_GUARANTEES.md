@@ -1,5 +1,9 @@
 # Memory Guarantees
 
+The rules behind these claims are in [docs/spec/memory.md](../spec/memory.md),
+[ownership.md](../spec/ownership.md) and [references.md](../spec/references.md); this document
+keeps what is safe to claim publicly and where the claim stops.
+
 Status: active reference
 
 This document separates what the checker enforces today, what is safe to claim publicly, and what still needs closure. For the full operational semantics, see [MEMORY_SEMANTICS.md](MEMORY_SEMANTICS.md).

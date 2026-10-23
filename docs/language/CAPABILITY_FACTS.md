@@ -1,5 +1,7 @@
 # Capability facts — one source of truth
 
+The capability rule is TRUST-4 of [docs/spec/trusted.md](../spec/trusted.md); this document is a design record of the capability facts.
+
 ROADMAP old Phase 6.5 #4. Capabilities/effects are the second identity-defining
 semantic axis of Concrete (after integer arithmetic, #1). This note records
 where capability facts live so no stage re-derives them.

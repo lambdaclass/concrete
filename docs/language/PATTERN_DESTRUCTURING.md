@@ -3,7 +3,7 @@
 **Superseded as the normative text (2026-10-23).** This was the design proposal for destructuring
 `let` and `let ... else`. The rules are PAT-1, PAT-3 and PAT-5 of
 [docs/spec/patterns.md](../spec/patterns.md). The `else` block's divergence requirement below
-is not enforced yet (bug 194).
+is not enforced yet (bug 195).
 
 Status: IMPLEMENTED (originally a design document, Phase 3 item 62). Enum-variant destructuring (`let Type::Variant { a, b } = expr;`), `let...else` with a diverging else block, and struct destructuring (`let StructType { a, b } = expr;`) are all shipped: parsed in `Concrete/Frontend/Parser.lean` (`parseLet`), desugared to `match` / field-access lets in `Concrete/Frontend/AST.lean` (`desugarStmts`) before Check and Elab, exactly as section 5 specifies. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. The checker enforces that an arm/destructure binds all variant fields (core-check E0533). Section 11 (future extensions: `if let`, `while let`, `_` wildcards, nested patterns) remains unimplemented design.
 

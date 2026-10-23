@@ -195,9 +195,15 @@ def ElabError.code : ElabError → String
   | .importSpellingCollision _ _ _ _ => "E0299"
   | .mutReceiverThroughSharedRef _ => "E0237"
 
+-- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
+  -- E0420 is shared (a ghost read in runtime code, CON-4, and an unsupported `append()` argument),
+  -- so the ghost site tags its rule here and the code has no whole-code tag.
+  let ev := match e with
+    | .ghostInRuntime _ => [("rule", "CON-4@1"), ("spec", ruleSpecRef "CON-4@1")]
+    | _ => codeRuleEvidence e.code
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
-           evidence := codeRuleEvidence e.code }]
+           evidence := ev }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env

@@ -1,5 +1,9 @@
 # Memory Model (for ordinary users)
 
+This overview explains the rules of [docs/spec/memory.md](../spec/memory.md),
+[ownership.md](../spec/ownership.md) and [references.md](../spec/references.md); where it and the
+specification differ, the specification governs.
+
 Status: user-facing overview — ROADMAP old Phase 6 #33.
 
 This is the plain-language entry point to how Concrete manages memory: enough to

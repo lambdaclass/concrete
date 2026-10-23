@@ -1,5 +1,10 @@
 # Statement vs Trailing-Expression Model (design)
 
+**Superseded as the normative text (2026-10-23).** Evaluation order is STMT-4, exits in operands
+STMT-5, and value blocks STMT-8 of [docs/spec/statements.md](../spec/statements.md). This document
+is the design record of the statement / trailing-expression model and keeps the per-rule status
+tables of the evaluation-order decision.
+
 Status: IMPLEMENTED (core) 2026-06-20 — ROADMAP #36 / LANGUAGE_GAPS #12
 Date: 2026-06-20
 

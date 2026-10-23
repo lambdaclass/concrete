@@ -1,6 +1,10 @@
-# Memory and Reference Semantics
+# Memory and Reference Semantics (design record)
 
-Status: canonical reference — the single authority for Concrete's ownership, borrowing, and cleanup rules.
+**Superseded as the normative text (2026-10-23).** The rules are in the language specification:
+[memory.md](../spec/memory.md) (MEM-1 to MEM-6), [ownership.md](../spec/ownership.md) (OWN-D1 to
+OWN-15), [references.md](../spec/references.md) (REF-1 to REF-11) and
+[scope.md](../spec/scope.md). This document keeps the operational explanation, the edge cases and
+the status history (status: was the canonical reference for ownership, borrowing and cleanup).
 
 This document describes the memory and reference model that the checker (`Check.lean`) enforces for safe Concrete code. Where the checker and this document disagree, one of them must be corrected. Neither is silently authoritative over the other.
 

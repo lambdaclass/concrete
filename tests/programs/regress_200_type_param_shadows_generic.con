@@ -1,0 +1,18 @@
+// Bug 200 review: a type parameter shadows a generic declaration of the same name, and an
+// alias named like a builtin takes no arguments. Neither is a bare generic type (run 42).
+struct Copy B<T> { v: Int }
+struct Copy Box1<T> { v: Int }
+type Vec = Box1<Int>;
+
+fn id<B>(x: B) -> B {
+    return x;
+}
+
+fn get(b: Vec) -> Int {
+    return b.v;
+}
+
+fn main() -> Int {
+    let k: Int = id::<Int>(2);
+    return get(Box1::<Int> { v: 40 }) + k;
+}

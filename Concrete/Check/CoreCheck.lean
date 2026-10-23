@@ -480,7 +480,7 @@ private def structOfTy (ty : Ty) : StateM CoreCheckEnv (Option CStructDef) := do
 
 mutual
 
--- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7, spec: ARITH-5, spec: TRUST-4, spec: TRUST-5 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   match e with
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()
@@ -918,7 +918,7 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
 
--- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8, spec: STMT-6 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   match stmt with
   | .letDecl name _mutable ty value =>
@@ -1115,7 +1115,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | .array elem _ => tyReachesByValue structs enums target visited elem
   | _ => false
 
--- spec: OWN-13, spec: OWN-14 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-13, spec: OWN-14, spec: FFI-4 (docs/spec/ownership.md; this declaration enforces the rule)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
@@ -1406,7 +1406,7 @@ partial def ccCheckModule (m : CModule)
    finalEnv.trustEdges ++ subEdges, finalEnv.trustAttrs ++ subAttrs)
 
 /-- Validate all Core modules. Returns the first error or Ok. -/
--- spec: PASS-8 (docs/spec/pipeline.md; this stage boundary)
+-- spec: PASS-8, spec: FFI-3 (docs/spec/pipeline.md; this stage boundary)
 def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []

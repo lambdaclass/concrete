@@ -185,6 +185,13 @@ inductive CheckError where
   | typeMismatch (ctx : String) (expected : String) (actual : String)
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
+  -- Bug 194: the end of a function with a result type is reachable (a path with no `return`).
+  | missingReturn (fnName : String) (retTy : String)
+  -- Bug 195 (PAT-5): the `else` block of a `let ... else` can fall through.
+  | letElseFallsThrough
+  -- Bug 196 (PAT-3): a match arm's pattern does not fit the scrutinee's type (a variant of another
+  -- enum, a literal or range over an enum, a variant over a non-enum, a literal of another type).
+  | patternDoesNotFit (pattern : String) (scrutineeTy : String)
   | ifCondNotBool (ty : String)
   -- Bug 192: the condition of an `if` / `while` / `for` STATEMENT (TYPE-5; the expression form
   -- uses `ifCondNotBool`). Its type was computed and discarded, so an integer condition compiled.
@@ -409,6 +416,9 @@ def CheckError.message : CheckError → String
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
+  | .missingReturn fnName retTy => s!"function '{fnName}' returns '{retTy}', but the end of its body is reachable without a `return`"
+  | .letElseFallsThrough => "the `else` block of a `let ... else` must diverge (end in `return`, `break`, `continue` or a call that never returns), but it can fall through"
+  | .patternDoesNotFit pat ty => s!"{pat} does not fit a scrutinee of type '{ty}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
   | .condNotBool what ty => s!"{what} condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
@@ -596,6 +606,9 @@ def CheckError.code : CheckError → String
   | .typeMismatch _ _ _ => "E0220"
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
+  | .missingReturn _ _ => "E0307"
+  | .letElseFallsThrough => "E0308"
+  | .patternDoesNotFit _ _ => "E0309"
   | .ifCondNotBool _ => "E0223"
   | .condNotBool _ _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
@@ -697,7 +710,7 @@ def CheckError.rule : CheckError → Option String
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
-  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
+  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@2" else "TYPE-7@1")
   | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),

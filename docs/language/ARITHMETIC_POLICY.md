@@ -1,4 +1,11 @@
-# Arithmetic Policy
+# Arithmetic Policy (design record)
+
+**Superseded as the normative text (2026-10-23).** The rules are in
+[docs/spec/arithmetic.md](../spec/arithmetic.md): literals (ARITH-2), checked arithmetic, division
+and shifts (ARITH-3), wrapping and saturating operations (ARITH-4), conversions (ARITH-5),
+comparison semantics (ARITH-6) and floats (ARITH-1, pending); comparison typing is TYPE-6. This
+document keeps the profile mapping, report classification, proof boundaries, the cast decision's
+reasoning, staging and migration estimates.
 
 Status: stable policy reference (Phase 3 items 60-61)
 

@@ -60,8 +60,8 @@ class Example:
         self.entry, self.info, self.body, self.line, self.chapter = entry, info, body, line, chapter
         self.attrs, self.verdict, self.errors = {}, None, []
         words = info.split()
-        if len(words) < 2 or words[0] != "con" or words[1] not in ("accept", "reject"):
-            self.errors.append(f"info string '{info}' is not `con accept|reject ...`")
+        if len(words) < 2 or words[0] != "con" or words[1] not in ("accept", "reject", "abort"):
+            self.errors.append(f"info string '{info}' is not `con accept|reject|abort ...`")
             return
         self.verdict = words[1]
         for w in words[2:]:
@@ -73,11 +73,11 @@ class Example:
                 self.errors.append(f"repeated attribute '{k}'")
             self.attrs[k] = v
         allowed = {"name", "pending", "now", "now-interp", "project", "interp-exempt"} | (
-            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
+            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else {"trap"})
         for k in self.attrs:
             if k not in allowed:
                 self.errors.append(f"unknown attribute '{k}' for {self.verdict}")
-        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
+        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else {"trap"})
         for k in sorted(need - set(self.attrs)):
             self.errors.append(f"missing attribute '{k}'")
         n = self.attrs.get("name", "")
@@ -635,6 +635,14 @@ def matches_target(x, o):
     e = x.entry
     if x.verdict == "accept":
         return o[0] == "accept" and o[1] == int(x.attrs["exit"])
+    if x.verdict == "abort":
+        # a run-time trap: the binary is killed by SIGABRT (the abort helpers), the interpreter
+        # stops with a run-time error; a compile-time diagnostic is not an abort
+        # the interpreter's run-time error must name the expected trap (`trap=`), so an unrelated
+        # interpreter failure cannot pass for the trap
+        trap = x.attrs.get("trap", "").replace("_", " ")
+        return o[0] == "fail" and (o[1] == "signal 6" or (
+            o[1].startswith("interp:") and not ERR_RE.search(o[1]) and bool(trap) and trap in o[1]))
     if o[0] != "reject" or o[2] != x.attrs["stage"]:
         return False
     if x.attrs["code"] == "new":
@@ -933,7 +941,9 @@ def gen_site(spec, out_dir):
 
 def label(x):
     a = x.attrs
-    if x.verdict == "accept":
+    if x.verdict == "abort":
+        s = "Accepted, aborts at run time"
+    elif x.verdict == "accept":
         s = f"Accepted, exits {a.get('exit')}"
         if "interp-exempt" in a: s += f" (natively; interpreter exempt: {a['interp-exempt']})"
     else:
@@ -989,6 +999,23 @@ def main():
         with open(path, "a") as f:
             for k, st, h in new: f.write(f"{k}\t{st}\t{h}\n")
         print(f"registered {len(new)} new keys")
+    elif c == "bump":
+        # a changed sentence gets a new version: the chapter's tag moves to @n+1, the old version
+        # row becomes `superseded` (its only allowed transition) and the new row is appended
+        e = spec.by_id().get(a.arg)
+        if e is None: ap.error(f"no entry {a.arg}")
+        old, new = e.tag, f"{e.id}@{e.version + 1}"
+        cp = os.path.join(spec.dir, e.chapter + ".md")
+        txt = open(cp, encoding="utf-8").read()
+        assert txt.count(f"**{old}.**") == 1
+        open(cp, "w", encoding="utf-8").write(txt.replace(f"**{old}.**", f"**{new}.**"))
+        path = os.path.join(spec.dir, "ids.tsv")
+        lines = open(path, encoding="utf-8").read().split("\n")
+        lines = [("\t".join([old, "superseded", l.split("\t")[2]]) if l.split("\t")[0] == old else l) for l in lines]
+        spec2 = Spec(spec.dir)
+        lines = [l for l in lines if l.strip()] + [f"{new}\tlive\t{sentence_hash(spec2.by_id()[e.id])}"]
+        open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+        print(f"{old} -> {new}; update the compiler's tags for {e.id}")
     elif c == "restatements":
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":

@@ -203,7 +203,7 @@ def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit :
     (E0237); an owned root must be `mut` and unborrowed (E0233 / E0232) and not moved; an
     exclusive reference must not be in use by a newer reborrow (E0232); a place that does not
     normalize is refused (E0238). -/
--- spec: OWN-10 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-10, spec: REF-12 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -235,7 +235,7 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
     for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
     is live (E0232), and not into an owned root that a live reference borrows (E0232). (The
     binding-mutability rule for field writes is unchanged.) -/
--- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-8, spec: REF-12 (docs/spec/references.md; this declaration enforces the rule)
 def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
   let subject := "the assignment target"
   match n with
@@ -605,8 +605,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
--- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3 (docs/spec/ownership.md; this declaration enforces the rule)
--- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: TRAIT-6, spec: PAT-5 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -1593,6 +1593,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
     | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
   | .match_ _ scrutinee arms =>
+    -- Bug 195 (PAT-5): a `let ... else` reaches here as `match e { P => rest, _ => else }` (the
+    -- success arm's binders are `letBound`). Its `else` block must diverge: falling out of it
+    -- would continue after the whole statement with the pattern's bindings never made.
+    match arms with
+    | [.mk _ _ _ bs _ _, .varArm sp "_" none elseBody] =>
+      if !bs.isEmpty && bs.all (·.letBound) && !(blockEndUnreachable elseBody) then
+        throwCheck .letElseFallsThrough (some sp)
+    | _ => pure ()
     -- `match *r` reads the pointee BY VALUE: a non-Copy pointee is E0290 (its payloads
     -- would bind as owned values the owner still holds); `match r` matches through the
     -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
@@ -1628,13 +1636,27 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant patBinds guard body => do
-            -- Bind variant fields in scope (substitute generic type args)
-            let ev := (ed.variants.find? fun v => v.name == armVariant).get!
+          | .mk _ armEnum armVariant patBinds guard body => do
+            -- Bug 196 (PAT-3): the arm names a variant of THIS enum. CoreCheck's wrong-enum check
+            -- (E0531) runs after Elab, which met the foreign variant first; `get!` here panicked.
+            if armEnum != "" && armEnum != enumName then
+              throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
+            let some ev := ed.variants.find? fun v => v.name == armVariant
+              | throwCheck (.unknownVariant armVariant enumName) (some e.getSpan)
             -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
+            -- Bug 197 (OWN-5): `E::A` written without a field list ignores every field of `A`, which
+            -- (like `_`) may ignore only Copy fields. A non-Copy payload of an owned scrutinee was
+            -- dropped. CoreCheck's field count (E0533) skips an empty list, so nothing caught it.
+            let isRefScr0 := match scrTy with | .ref _ | .refMut _ => true | _ => false
+            if patBinds.isEmpty && !isRefScr0 then
+              let typeMapping0 := ed.typeParams.zip enumTypeArgs
+              for sf in ev.fields do
+                let fieldTy0 := substTy typeMapping0 sf.ty
+                if !(← isCopyType fieldTy0) then
+                  throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy0)) (some e.getSpan)
             -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
             let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
@@ -1680,9 +1702,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
             checkGuard guard
             pure body
-          | .litArm _ _val guard body => do
-            checkGuard guard
-            pure body
+          | .litArm _ _ _ _ => do
+            -- Bug 196 (PAT-3): a literal pattern over an enum scrutinee.
+            throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           | .varArm _ binding guard body => do
             -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
             -- reference (duplication, no provenance): refused (normalized place rule).
@@ -1700,13 +1722,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               throwCheck (.wildcardDiscardsNonCopy (tyToString innerTyR)) (some e.getSpan)
             checkGuard guard
             pure body
-          | .rangeArm _ lo hi _ guard body => do
-            -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
-            -- unhinted endpoint defaults to `Int` and is range-checked there).
-            let _ ← checkExpr lo (some innerTyR)
-            let _ ← checkExpr hi (some innerTyR)
-            checkGuard guard
-            pure body
+          | .rangeArm _ _ _ _ _ _ => do
+            -- Bug 196 (PAT-3): a range pattern over an enum scrutinee reached the SSA verifier
+            -- (an enum compared with an integer) while `--interp` ran it.
+            throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
           if exemptExitBranch body then
@@ -1806,7 +1825,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
-        | .litArm _ _val guard body => do
+        | .litArm _ val guard body => do
+          -- Bug 196 (PAT-3): a literal pattern has the scrutinee's type.
+          let litTy ← checkExpr val (some innerTyR)
+          -- (an unknown scrutinee type comes from an earlier error; do not cascade). A type
+          -- parameter is opaque: a generic body is checked once, and no bound says its
+          -- instantiations have literals, so a literal pattern over one is refused too.
+          let isTyVar := match innerTyR with | .typeVar _ => true | _ => false
+          if innerTyR != .placeholder && (isTyVar || litTy != innerTyR) then
+            throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
         | .varArm _ binding guard body => do
@@ -1844,13 +1871,20 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         | .rangeArm _ lo hi _ guard body => do
+          -- Bug 196 (PAT-3): a range pattern needs an integer (or `char`) scrutinee.
+          if innerTyR != .placeholder && !(isInteger innerTyR || innerTyR == .char) then
+            throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
           -- unhinted endpoint defaults to `Int` and is range-checked there).
           let _ ← checkExpr lo (some innerTyR)
           let _ ← checkExpr hi (some innerTyR)
           checkGuard guard
           pure body
-        | .mk _ _ _ _ guard body => do
+        | .mk _ armEnum armVariant _ guard body => do
+          -- Bug 196 (PAT-3): a variant pattern over a scrutinee that is not an enum (an unknown
+          -- scrutinee type comes from an earlier error and is not reported again).
+          if innerTyR != .placeholder then
+            throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
@@ -2220,7 +2254,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -3302,7 +3336,7 @@ def checkConstInit (c : ConstDef) : CheckM Unit := do
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
--- spec: REF-1 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-1, spec: STMT-9 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
@@ -3363,6 +3397,12 @@ def checkFn (f : FnDef) : CheckM Unit := do
     | _ => pure ()
   -- Check body
   checkStmts f.body retTy
+  -- Bug 194: a function with a result type returns on every path. Its end must be unreachable
+  -- (some statement on every path returns, aborts or loops forever: `blockEndUnreachable`, which
+  -- looks at every statement, not only the last); a reachable end has no
+  -- value to return, and reached the backend as `ret void` in a non-void function.
+  if retTy != .unit && retTy != .never && !(blockEndUnreachable f.body) then
+    throwCheck (.missingReturn f.name (tyToString retTy)) (some f.span)
   -- Check local bindings AND owned params for the consume obligation.
   let envAfter ← getEnv
   let localVars := envAfter.vars.filter fun (_, vi) =>
@@ -3624,7 +3664,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
--- spec: REF-3 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: STMT-7, spec: MOD-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
