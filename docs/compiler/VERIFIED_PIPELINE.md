@@ -565,6 +565,38 @@ branch `vp-r0492`, unlanded).**
   - Core, SSA and `PExpr` binders stay strings (R-0492 steps 3–4).
   - Contract expressions name parameters by spelling.
 
+**S5 slice contract 4 — Core binders carry `LocalId` and ElabVerify checks them (R-0492 step 3,
+2026-10-23; depends on contract 3, branch `vp-r0492-elab`).**
+- *Representation:*
+  - A Core local binder or reference is a `CLocal`, a Core name plus an optional `LocalId`, in
+    every position that named a local by a bare `String`: `CExpr.ident`, `CStmt.letDecl`,
+    `CStmt.assign`, `CMatchArm.varArm` and `enumArm` bindings, and the borrow block's variable
+    and reference.
+  - `CFnDef.paramIds` records the parameters' identities.
+  - Elab fills every identity from the walk's table. A compiler temporary, a constant or a
+    function value has none.
+  - Migration follows the R-0002 technique. Coercions run both ways, and equality, hashing,
+    ordering, `Repr` and `ToString` are the name's, so no consumer changes behaviour and no
+    printed or hashed form of Core moves.
+- *Invariant made structural:* `ElabVerify` (`Concrete/Check/ElabVerify.lean`), which runs inside
+  `Pipeline.elaborate`, refuses Core whose identities and names disagree. Its three rules:
+  - B1: a binder identity is not already visible where it is introduced.
+  - U1: a reference with an identity names a visible binding and spells that binding's Core name.
+  - U2: a reference without an identity does not spell the Core name of a visible source binding.
+
+  Elab's renaming (the bug 045 / 087 class) is therefore checked against the walk on every
+  compile, not only by tests.
+- *Gates:*
+  - `check_local_identity.sh` leg V: the real Core of a probe carries identities and passes, and
+    hand-made U1, U2 and B1 forgeries are refused.
+  - Mutation family 100: Elab drops a reference's identity.
+  - `--emit-core` is byte-identical on the corpus against the pre-step-3 compiler.
+- *Not in this slice:*
+  - Interp, Lower, Mono, CoreCheck and `PExpr` extraction still key locals by the Core name. They
+    move to the identity one at a time, and then the coercions go.
+  - `Callee.indirect` (a call through a fn-typed local) still names its local by a string.
+
+
 
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
 evaluation, folding and arithmetic-model generation, with emitted operations checked against the same

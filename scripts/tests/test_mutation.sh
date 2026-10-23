@@ -1328,11 +1328,19 @@ MUT_NEW+=("  let shadows := false && env.locals.shadowsAt id -- MUTATION: shadow
 MUT_DESC+=("Elab: a shadowing block-scoped binder keeps its spelling")
 gate_for_last "scripts/tests/check_local_identity.sh"
 
+# 100. R-0492 step 3: Elab drops the binding identity of a local reference (Core still spells the
+# right name). ElabVerify's U2 refuses every such program; check_local_identity.sh leg V reads it.
+MUT_FILE+=("Concrete/Elab/Elab.lean")
+MUT_OLD+=("      return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)")
+MUT_NEW+=("      return ElaboratedExprV2.mk (CExpr.ident { name := b.core.name } b.ty) (← binderRefEv b) -- MUTATION: identity dropped")
+MUT_DESC+=("Elab: a local reference loses its binding identity")
+gate_for_last "scripts/tests/check_local_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=99
+EXPECTED_MUTATIONS=100
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2
