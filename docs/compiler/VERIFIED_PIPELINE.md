@@ -615,15 +615,33 @@ backend per slice; depends on contract 4).**
   - `CLocal.key : LocalKey` is the binding's `LocalId`, or its Core name for a compiler
     temporary. `CFnDef.paramKeys` gives the parameters' keys.
   - `Callee.indirect` carries a `CLocal`, and ElabVerify checks it as a use.
-  - Each migrated backend switches the name coercion off for its own file
-    (`attribute [-instance] CLocal.coeName`), so any remaining read of a local by its spelling is a
-    compile error there.
+  - During the migration each backend switched the name coercion off for its own file
+    (`attribute [-instance] CLocal.coeName`). The last slice removed the coercion itself, and with
+    it `CLocal`'s `BEq`, `Hashable`, `Ord` and `LT` (all on the spelling) and `Callee`'s derived
+    `BEq`. A consumer now asks for `.key` (which binding) or `.name` (the spelling, for printing,
+    fingerprints, global-name disambiguation and the proof model); there is no implicit third way.
 - *Slices:*
   - 4a, the interpreter: the environment and borrow bases (`RefPath.base`, with `baseName` kept
     for display) are keyed by `LocalKey`.
   - 4b, Lower: the variable map, loop phis, break/continue snapshots, promoted allocas and `&mut`
     write-backs are keyed by `LocalKey`. ElabVerify also runs after Mono, because Lower reads
     post-Mono Core.
+  - 4c, Mono: no change was needed beyond switching the coercion off (it already copies
+    `paramIds` into specializations, contract 4).
+  - 4d, CoreCheck: the local environment is keyed by `LocalKey`, parameters bind by `paramKeys`,
+    `Callee.indirect` is looked up by key; diagnostics still print the spelling.
+  - 4e, `PExpr` extraction (ProofCore): the proof model's variables are spellings by design (a
+    theorem quantifies over the names it states), so every place a Core binding becomes a model
+    name is an explicit `.name`. One analysis was keyed by spelling and now keys by identity:
+    loop-boundedness matches the condition variable and the stepped variable by `CLocal.key`.
+    Two different bindings sharing a spelling can now only turn a "bounded" verdict into
+    "unbounded", the safe direction.
+  - Removal: the coercion and the spelling instances above are gone. The post-mono
+    reference-binding verifier (`Verify.lean`, REF-6@1) was the one further consumer whose
+    environment was keyed by spelling; it now keys by `LocalKey`.
+  - Gate: `check_local_identity.sh` F9 – F13 are compile-fail legs (a `CLocal` used as a `String`,
+    and `==`, `hash`, `compare` on `CLocal`, `==` on `Callee`); P9 is the control that the explicit
+    forms elaborate.
 - *Invariant made structural:* in a migrated backend, which binding a reference reads is the
   identity ElabVerify checked, not the spelling.
 - *Byte identity:*
@@ -634,8 +652,10 @@ backend per slice; depends on contract 4).**
     place (consecutive `for (let mut i …)` loops). Keyed by identity, the new binding is a new
     entry, so phis are created in a different order. The programs' behaviour is the same, and
     every gate passes: run_tests, examples, codegen differential and fuzz.
-- *Not yet:* Mono, CoreCheck and `PExpr` extraction (slices 4c – 4e), then the removal of
-  `CLocal.coeName`.
+- *Byte identity of 4c – 4e and the removal* (base: the 4b head): RESULTS_PLACEHOLDER
+- *Not in this step:* the reports, the proof soundness layer and Elab's own type-agreement walk
+  still read spellings, explicitly (`.name`). They print or compare model or global names, not
+  bindings.
 
 
 
