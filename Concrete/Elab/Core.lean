@@ -99,7 +99,7 @@ inductive Callee where
       `println` still reaches the helper (bug 165). The Core counterpart of
       `SCallee.foreign`; Lower emits it as the helper's reserved `_C$rt.` symbol. -/
   | runtime (helper : String)
-deriving BEq, Repr, Inhabited
+deriving Repr, Inhabited
 
 instance : Coe String Callee := ⟨Callee.direct⟩
 
