@@ -125,18 +125,30 @@ echo "=== S: no source opens the seals ==="
 HITS="$(grep -rnE 'open private .*(ValidatedCore|MonomorphizedProgram|SSAProgram|ElaboratedProgram|CoreSubset)' \
   --include='*.lean' Concrete Main.lean tests 2>/dev/null || true)"
 [ -z "$HITS" ] && ok "S: no 'open private' of a pipeline artifact constructor" || no "S: $HITS"
-# Comments are stripped (line comments, and doc/block comments by a small scanner), so a `sorry`
-# with a trailing comment on its line is still seen.
+# Comments are stripped (line comments, and nested doc/block comments) and string and char literal
+# contents are masked, by a small scanner, so a `sorry` with a trailing comment on its line is
+# still seen, a `"/-"` literal does not hide the code after it, and `"sorry"` is not a hit.
 CODE="$(python3 - "$P" <<'PY2'
-import sys
+import re, sys
 s = open(sys.argv[1]).read()
+CHAR = re.compile(r"'(\\.|[^\\'\n])'")
 out, i, depth = [], 0, 0
+mask = lambda t: ''.join('\n' if c == '\n' else ' ' for c in t)
 while i < len(s):
     if s.startswith('/-', i): depth += 1; i += 2; continue
     if depth and s.startswith('-/', i): depth -= 1; i += 2; continue
-    if depth: out.append('\n' if s[i] == '\n' else ' '); i += 1; continue
+    if depth: out.append(mask(s[i])); i += 1; continue
     if s.startswith('--', i):
         j = s.find('\n', i); i = len(s) if j < 0 else j; continue
+    if s[i] == '"':
+        j = i + 1
+        while j < len(s) and s[j] != '"':
+            j += 2 if s[j] == '\\' else 1
+        out.append('""' if j < len(s) else '"'); out.append(mask(s[i+1:j]).replace(' ', ''))
+        i = j + 1; continue
+    m = CHAR.match(s, i)
+    if m and (i == 0 or not (s[i-1].isalnum() or s[i-1] in "_'")):
+        out.append("' '"); i = m.end(); continue
     out.append(s[i]); i += 1
 print(''.join(out))
 PY2
