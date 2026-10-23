@@ -5,6 +5,7 @@ import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.BuiltinEnums
 import Concrete.Resolve.Resolve
+import Concrete.Resolve.Locals
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
@@ -3092,124 +3093,20 @@ end
 
 /-! ### SCOPE-1@1: one lexical name, one binding (exit 2i, MEMORY_SEMANTICS §15.4)
 
-A binder may not reuse the spelling of a local value binding VISIBLE at its declaration.
-Visibility is lexical (§15.1): a `let` is visible from its declaration to the end of its
-block, a parameter in the whole body, an arm / `if let` / `while let` binder in its arm, a
-`for` header binder in the header and the body, a borrow-block reference and region name in
-the block. Sibling scopes (two branches, two arms, consecutive blocks and loops) never see
-each other, and a declaration in a loop body is one binding however often it runs (SCOPE-2).
-Assignment introduces no binding.
+A binder may not reuse the spelling of a local value binding VISIBLE at its declaration. The
+visibility walk is `Resolve/Locals.lean` (R-0492): the same walk that mints each binding's
+`LocalId` records each collision, so E0301 and binding identity cannot disagree. Here the
+collisions are rendered; they report before the body is checked (before E0292 and E0238, which
+stay as defense in depth), every one in the function, each with the earlier binding as its
+related span. Elab's alpha-renaming (bug 087) stays mandatory (PRINCIPLES #12). -/
 
-The walk is its own explicit scope chain over the (desugared) body rather than the
-ownership environment: `TypeEnv.vars` keeps a loop body's locals after the loop (the linear
-checker needs their states), so it is not the visible set. It runs before the body is
-checked, so E0301 reports first (before E0292 and E0238, which stay as defense in depth; E0214
-/ E0215 are no longer emitted), and it reports every collision in the function, each with the earlier binding as
-its related span. Elab's alpha-renaming (bug 087) stays mandatory (PRINCIPLES #12). -/
-
-/-- One visible binder: its spelling and where it was introduced. -/
-structure ScopeBinder where
-  name : String
-  span : Span
-
-abbrev Scope1M := StateM (List Diagnostic)
-
-/-- Introduce `name` (a binder of form `kind`, at `sp`) into the visible chain `vis`
-    (innermost first), recording E0301 if a visible binding already has that spelling. `_` is
-    a wildcard, not a binding. The binder is introduced either way, so one collision is
-    reported once. -/
-def scope1Bind (vis : List ScopeBinder) (name : String) (sp : Span) (kind : String) :
-    Scope1M (List ScopeBinder) := do
-  if name == "_" || name.isEmpty then return vis
-  match vis.find? (·.name == name) with
-  | some prev =>
-    let e := CheckError.shadowsVisibleBinding name kind
-    modify (· ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
-                    hint := e.hint, code := e.code,
-                    related := [(prev.span, s!"the earlier binding of '{name}', still visible here")],
-                    evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }])
-  | none => pure ()
-  return { name, span := sp } :: vis
-
-mutual
-partial def scope1Expr (vis : List ScopeBinder) : Expr → Scope1M Unit
-  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => do
-    scope1Expr vis l; scope1Expr vis r
-  | .unaryOp _ _ x | .paren _ x | .fieldAccess _ x _ | .borrow _ x | .borrowMut _ x
-  | .deref _ x | .cast _ x _ => scope1Expr vis x
-  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args =>
-    args.forM (scope1Expr vis)
-  | .methodCall _ o _ _ args => do scope1Expr vis o; args.forM (scope1Expr vis)
-  | .structLit _ _ _ fs base => do
-    fs.forM (fun (_, e) => scope1Expr vis e); base.forM (scope1Expr vis)
-  | .enumLit _ _ _ _ fs => fs.forM (fun (_, e) => scope1Expr vis e)
-  | .match_ _ scr arms => do scope1Expr vis scr; arms.forM (scope1Arm vis)
-  | .ifExpr _ c t e => do scope1Expr vis c; scope1Block vis t; scope1Block vis e
-  | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _
-  | .ident _ _ | .fnRef _ _ => pure ()
-
-/-- An arm: its pattern binders are visible in its guard and body only. A destructuring
-    `let` reaches here after `desugarStmts` (its binders scope over the continuation, which
-    is the arm body), so it is checked with the same chain. -/
-partial def scope1Arm (vis : List ScopeBinder) : MatchArm → Scope1M Unit
-  | .mk sp _ _ bs g body => do
-    let mut v := vis
-    for b in bs do
-      v ← scope1Bind v b.name sp (if b.letBound then "destructuring `let` binder" else "pattern binder")
-    g.forM (scope1Expr v); scope1Block v body
-  | .varArm sp b g body => do
-    let v ← scope1Bind vis b sp "pattern binder"
-    g.forM (scope1Expr v); scope1Block v body
-  | .litArm _ val g body => do
-    scope1Expr vis val; g.forM (scope1Expr vis); scope1Block vis body
-  | .rangeArm _ lo hi _ g body => do
-    scope1Expr vis lo; scope1Expr vis hi; g.forM (scope1Expr vis); scope1Block vis body
-
-/-- A block: its declarations are visible to the statements after them, not after it. -/
-partial def scope1Block (vis : List ScopeBinder) (stmts : List Stmt) : Scope1M Unit := do
-  let mut v := vis
-  for s in stmts do
-    v ← scope1Stmt v s
-
-/-- One statement; returns the chain visible to the next statement of the same block. -/
-partial def scope1Stmt (vis : List ScopeBinder) : Stmt → Scope1M (List ScopeBinder)
-  | .letDecl sp n _ _ val _ => do
-    -- the initializer is checked before the binder exists: `let s = transform(s)` collides
-    scope1Expr vis val; scope1Bind vis n sp "`let`"
-  | .assign _ _ val => do scope1Expr vis val; pure vis
-  | .return_ _ v | .break_ _ v _ => do v.forM (scope1Expr vis); pure vis
-  | .expr _ e _ | .defer _ e | .assert_ _ e | .assume_ _ e => do scope1Expr vis e; pure vis
-  | .ifElse _ c t e => do
-    scope1Expr vis c; scope1Block vis t; e.forM (scope1Block vis); pure vis
-  | .while_ _ c body _ => do scope1Expr vis c; scope1Block vis body; pure vis
-  | .forLoop _ init c step body _ => do
-    -- the header binder is visible in the header and the body, not after the loop
-    let h ← match init with
-      | some i => scope1Stmt vis i
-      | none => pure vis
-    scope1Expr h c; scope1Block h body
-    match step with
-    | some st => discard <| scope1Stmt h st
-    | none => pure ()
-    pure vis
-  | .fieldAssign _ o _ v | .derefAssign _ o v => do scope1Expr vis o; scope1Expr vis v; pure vis
-  | .arrayIndexAssign _ a i v => do scope1Expr vis a; scope1Expr vis i; scope1Expr vis v; pure vis
-  | .continue_ _ _ => pure vis
-  | .borrowIn sp _ ref region _ body => do
-    let v1 ← scope1Bind vis ref sp "borrow-block reference"
-    let v2 ← scope1Bind v1 region sp "borrow-block region name"
-    scope1Block v2 body; pure vis
-  | .letDestructure sp _ _ bs val els => do
-    scope1Expr vis val; els.forM (scope1Block vis)
-    let mut v := vis
-    for b in bs do v ← scope1Bind v b.name sp "destructuring `let` binder"
-    pure v
-  | .letStructDestructure sp _ bs val => do
-    scope1Expr vis val
-    let mut v := vis
-    for b in bs do v ← scope1Bind v b.name sp "destructuring `let` binder"
-    pure v
-end
+/-- The E0301 diagnostic for one collision the local walk recorded. -/
+def scope1Diagnostic (c : ScopeCollision) : Diagnostic :=
+  let e := CheckError.shadowsVisibleBinding c.name c.kind
+  { severity := .error, message := e.message, pass := "check", span := some c.at_,
+    hint := e.hint, code := e.code,
+    related := [(c.earlier, s!"the earlier binding of '{c.name}', still visible here")],
+    evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
 
 /-! ### Constant initializers (exit 2i review)
 
@@ -3264,19 +3161,14 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
-  ((scope1Expr [] c.value).run []).2
+  ((resolveExprLocals c.value).collisions.map scope1Diagnostic)
     ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.value.getSpan] else [])
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
 -- spec: SCOPE-D1, spec: SCOPE-1, spec: SCOPE-2, spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 def scope1Diagnostics (f : FnDef) : List Diagnostic :=
-  let go : Scope1M Unit := do
-    let mut vis : List ScopeBinder := []
-    for p in f.params do
-      vis ← scope1Bind vis p.name f.span "parameter"
-    scope1Block vis f.body
-  (go.run []).2
+  f.locals.collisions.map scope1Diagnostic
 
 /-- A constant initializer as an expression of the constant's type, with no locals in scope. -/
 def checkConstInit (c : ConstDef) : CheckM Unit := do
@@ -3289,6 +3181,12 @@ def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
   -- keys on names can see it (exit 2i).
+  -- R-0492: the local walk ran on this body (Pipeline.resolve); a function that bypassed it has
+  -- no binding identities and no SCOPE-1 verdict, so it is refused rather than checked by name.
+  if !f.locals.resolved then
+    throwCheckMsg s!"internal: function '{f.name}' reached the checker without a local binder table (R-0492)" (some f.span)
+  if !f.locals.conflicts.isEmpty then
+    throwCheckMsg s!"internal: the local binder table of '{f.name}' is ambiguous: {"; ".intercalate f.locals.conflicts} (R-0492)" (some f.span)
   let scopeDs := scope1Diagnostics f
   if !scopeDs.isEmpty then throw scopeDs
   -- Validate #[test] constraints
@@ -3902,11 +3800,7 @@ def checkModule (m : Module) (summary : FileSummary)
   -- parameter lists with no body checkFn would walk: spec fns, extern fns, trait method
   -- declarations (review round 12)
   let paramDups (ps : List Param) (sp : Span) : List Diagnostic :=
-    let go : Scope1M Unit := do
-      let mut vis : List ScopeBinder := []
-      for p in ps do
-        vis ← scope1Bind vis p.name sp "parameter"
-    (go.run []).2
+    (resolveParamLocals ps sp).collisions.map scope1Diagnostic
   let exit2iSpecParamDs : List Diagnostic :=
     m.specFns.flatMap (fun sd => paramDups sd.params sd.span)
     ++ m.externFns.flatMap (fun ef => paramDups ef.params ef.span)

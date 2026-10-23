@@ -282,7 +282,7 @@ def traceTelemetry (inputPath : String) : IO UInt32 := do
   match Pipeline.resolve resolved summary with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok rp =>
-  let resolvedProg := Pipeline.desugar rp
+  let resolvedProg := rp
   timing := timing ++ [("resolve", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
   beats := beats ++ [("resolve", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.check resolvedProg summary with
@@ -338,7 +338,6 @@ def tracePipeline (inputPath : String) : IO UInt32 := do
   | .error ds => emit ok (some ("resolve", firstCode ds)) "null"; return 0
   | .ok resolvedProg =>
   let ok := "resolve" :: ok
-  let resolvedProg := Pipeline.desugar resolvedProg
   match Pipeline.check resolvedProg summary with
   | .error ds => emit ok (some ("check", firstCode ds)) "null"; return 0
   | .ok () =>

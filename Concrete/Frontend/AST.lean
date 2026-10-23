@@ -1,4 +1,5 @@
 import Concrete.Frontend.Token
+import Concrete.Frontend.LocalId
 import Concrete.Resolve.Intrinsic
 
 namespace Concrete
@@ -448,6 +449,10 @@ structure FnDef where
       Names", R-0286). The only way a Concrete-defined function gets an unmangled name. -/
   exportName : Option String := none
   span : Span := default
+  /-- The function's local bindings and what each use of a local name denotes (R-0492). Minted
+      by `Pipeline.resolve` (`Resolve/Locals.lean`) after desugaring; a function that has not
+      been through it carries `LocalTable.unresolved`, which the checker refuses. -/
+  locals : LocalTable := LocalTable.unresolved
 
 structure ConstDef where
   name : String
