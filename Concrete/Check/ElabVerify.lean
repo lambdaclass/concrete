@@ -109,7 +109,9 @@ def elabVerifyFn (f : CFnDef) : List String :=
   let go : VM Unit := do
     -- A function Elab produced records one identity per parameter; a synthesized one records
     -- none. Anything else is a malformed identity list (Codex review of step 3).
-    if !f.paramIds.isEmpty && f.paramIds.length != f.params.length then
+    -- An Elab-produced function (it carries its declaration span) records one identity per
+    -- parameter; a synthesized one (no span) records none (Codex review of step 3).
+    if (f.declSpan.isSome || !f.paramIds.isEmpty) && f.paramIds.length != f.params.length then
       flag s!"P0 in '{f.name}': {f.paramIds.length} parameter identities for {f.params.length} parameters"
     let ids : List (Option LocalId) :=
       if f.paramIds.length == f.params.length then f.paramIds.map some else f.params.map fun _ => none

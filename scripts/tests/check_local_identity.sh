@@ -73,6 +73,17 @@ elif ! grep -q '^Concrete/Resolve/Locals.lean:' <<<"$MINT_RAW"; then
 else
   ok "S: LocalTable minting is called only from Resolve/Locals.lean (qualified, dot and open forms)"
 fi
+# A string-literal pattern on a Core binder field (`| .letDecl "y" ..`, `.ident "r" _`) elaborates
+# through the String -> CLocal coercion and matches only a binder WITHOUT an identity: it compiles
+# and silently never matches Elab's Core (found in PipelineTest's binder-agreement test). AST
+# constructors take a span first, so a literal in first position is a Core pattern (the lexer's
+# TokenKind.ident patterns in Concrete/Frontend are excluded).
+LIT="$(grep -rnE '(^|[|(@])[[:space:]]*\.(ident|letDecl|assign|varArm|borrowIn) "' --include='*.lean' Concrete Main.lean | grep -v '^Concrete/Frontend/')"; LRC=$?
+if [ "$LRC" -le 1 ] && [ -z "$LIT" ]; then
+  ok "S: no string-literal pattern on a Core binder field"
+else
+  no "S: string-literal patterns on Core binder fields: $(head -n3 <<<"$LIT" | tr '\n' ' ')"
+fi
 HELP="$(grep -nE 'def lookupVarInfo|def lookupVarTy|def checkNoLiveShadow|def guardShadowedSource|nextVarUid' Concrete/Check/*.lean)"; HRC=$?
 [ "$HRC" -le 1 ] && [ -z "$HELP" ] && ok "S: the checker has no name-keyed binding lookup and no private uid counter" || no "S: $HELP"
 
