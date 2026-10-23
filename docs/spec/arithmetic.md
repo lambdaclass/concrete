@@ -95,7 +95,7 @@ fn main() -> Int {
 }
 ```
 
-```con abort name=unsigned-overflow
+```con abort name=unsigned-overflow trap=arithmetic_overflow
 fn main() -> Int {
     let a: u8 = 200;
     let b: u8 = 100;
@@ -104,7 +104,7 @@ fn main() -> Int {
 }
 ```
 
-```con abort name=divide-by-zero
+```con abort name=divide-by-zero trap=division_by_zero
 fn main() -> Int {
     let a: Int = 42;
     let z: Int = a - 42;
@@ -112,7 +112,7 @@ fn main() -> Int {
 }
 ```
 
-```con abort name=shift-count-too-large
+```con abort name=shift-count-too-large trap=shift_amount_out_of_range
 fn main() -> Int {
     let a: u8 = 1;
     let n: u8 = 8;
@@ -169,9 +169,11 @@ obligation-free, and each lossy conversion names what it does. The accepted conv
 to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider
 signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one
 of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and
-`f32` to `f64`. Today only integer to `bool` is refused (E0553, bugs 108 and 130); narrowing,
-sign changes and float to integer are still accepted and truncate, until the named operations
-land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
+`f32` to `f64`. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
+(integer, float and `char` to `bool`, and `bool` to `char`: E0553, bugs 108 and 130). Narrowing
+and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
+toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
+conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
 numeric conversions (TRUST-1 owns the pointer–integer case).
 
 ```con reject name=int-to-bool code=E0553 stage=core-check pair=widening

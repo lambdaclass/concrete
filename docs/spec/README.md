@@ -176,6 +176,7 @@ attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the
           | "pending=" TRACKING
           | "now=" OUTCOME               required if and only if pending
           | "now-interp=" OUTCOME        optional, only when pending
+          | "trap=" TEXT                  abort only, required: the interpreter's run-time error names it
           | "interp-exempt=" NAME        accept only; a reason slug, such as no-heap-in-interp
           | "project=" NAME              compile as a package of that name against this checkout's std
                                           (`concrete build`, CONCRETE_STD pinned); needs interp-exempt
@@ -197,7 +198,7 @@ example states, never only with the other legs.
   every exemption.
 - **abort**: the program compiles and traps at run time: the binary is killed by `SIGABRT` (the
   abort helpers of checked operations) and `--interp` stops with a run-time error, not a
-  diagnostic. It takes no `exit`, `code` or `stage`.
+  diagnostic that names the trap given by `trap=`. It takes no `exit`, `code` or `stage`.
 - **reject**: the first error reported by the native compile, and the first error reported
   by `--interp`, are each `error[<stage>]: (<code>)`, and no lower layer leaked (`llvm-as`,
   the system linker, a panic). In a preservation entry (a stage boundary), the code may belong

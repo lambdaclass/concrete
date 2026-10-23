@@ -73,11 +73,11 @@ class Example:
                 self.errors.append(f"repeated attribute '{k}'")
             self.attrs[k] = v
         allowed = {"name", "pending", "now", "now-interp", "project", "interp-exempt"} | (
-            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else set())
+            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else {"trap"})
         for k in self.attrs:
             if k not in allowed:
                 self.errors.append(f"unknown attribute '{k}' for {self.verdict}")
-        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else set())
+        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else {"trap"})
         for k in sorted(need - set(self.attrs)):
             self.errors.append(f"missing attribute '{k}'")
         n = self.attrs.get("name", "")
@@ -638,7 +638,11 @@ def matches_target(x, o):
     if x.verdict == "abort":
         # a run-time trap: the binary is killed by SIGABRT (the abort helpers), the interpreter
         # stops with a run-time error; a compile-time diagnostic is not an abort
-        return o[0] == "fail" and (o[1] == "signal 6" or (o[1].startswith("interp:") and not ERR_RE.search(o[1])))
+        # the interpreter's run-time error must name the expected trap (`trap=`), so an unrelated
+        # interpreter failure cannot pass for the trap
+        trap = x.attrs.get("trap", "").replace("_", " ")
+        return o[0] == "fail" and (o[1] == "signal 6" or (
+            o[1].startswith("interp:") and not ERR_RE.search(o[1]) and bool(trap) and trap in o[1]))
     if o[0] != "reject" or o[2] != x.attrs["stage"]:
         return False
     if x.attrs["code"] == "new":

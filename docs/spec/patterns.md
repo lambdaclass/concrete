@@ -140,13 +140,13 @@ fn main() -> Int {
 
 **Rationale.** A pattern describes the shape the scrutinee has. Every field is listed, so a field
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
-arm that can never be reached is a mistake. Two gaps fail closed at a later stage instead of at
-the checker: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
-reports `unknown variant`, a variant of another enum that shares a name with one of the
-scrutinee's is silently taken as that one, and a range arm over an enum reaches the SSA verifier
-natively while `--interp` runs it. These are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
+arm that can never be reached is a mistake. Gaps remain until bugs 196 and 197 land, and two of
+them are silent: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
+reports `unknown variant` (fails closed), a variant of another enum that shares a name with one of
+the scrutinee's is silently taken as that one (silent), and a range arm over an enum reaches the SSA verifier
+natively while `--interp` runs it (fails closed natively). These are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
 examples become enforced when it lands. A bare variant name over a variant with a non-Copy field
-silently dropped the payload (bug 197, fixed on `wip/bug197` with E0288).
+silently dropped the payload (silent; bug 197, fixed on `wip/bug197` with E0288).
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
