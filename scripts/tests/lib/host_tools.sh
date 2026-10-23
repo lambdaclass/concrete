@@ -6,11 +6,14 @@
 # CI). `run_ci_gates_local.sh` uses this table to report such a command as an explicit, NAMED skip
 # that blocks a full or closure verdict, instead of a misleading FAIL or a silent pass.
 #
-# One row per requirement: "<substring of the normalized command>|<tool on PATH>".
+# One row per requirement: "<substring of the normalized command>|<tool>". A tool is present when it
+# is on PATH, except where `host_tool_present` asks the same question the gate itself asks.
 HOST_TOOL_TABLE=(
   "EXAMPLE_VALGRIND=1 |valgrind"
   # The external checkers (con-leche, nanoda) build against elan-managed toolchains; the gate refuses
   # (exit 2) without $ELAN_HOME/bin/lake. CI installs elan; a nix-only host (concrete-ci-1) has none.
+  # Present means that lake exists, not that elan is on PATH: the gate host keeps elan in ~/.elan
+  # off its non-login ssh PATH, and asking PATH skipped a gate it could run (2026-10-23).
   "check_external_checker.sh|elan"
 )
 
@@ -23,13 +26,21 @@ host_tool_required() {
   done
 }
 
-# host_tool_missing <cmd>: prints the required tools absent from PATH (space-separated) and returns
+# host_tool_present <tool>: whether this host has <tool>, asked the way the gate that needs it asks.
+host_tool_present() {
+  case "$1" in
+    elan) [ -x "${ELAN_HOME:-$HOME/.elan}/bin/lake" ] ;;
+    *) command -v "$1" >/dev/null 2>&1 ;;
+  esac
+}
+
+# host_tool_missing <cmd>: prints the required tools this host lacks (space-separated) and returns
 # 0 when at least one is missing; returns 1 when the host can run <cmd>.
 host_tool_missing() {
   local tool missing=""
   while IFS= read -r tool; do
     [ -n "$tool" ] || continue
-    command -v "$tool" >/dev/null 2>&1 || missing="$missing${missing:+ }$tool"
+    host_tool_present "$tool" || missing="$missing${missing:+ }$tool"
   done < <(host_tool_required "$1")
   [ -n "$missing" ] || return 1
   printf '%s\n' "$missing"
