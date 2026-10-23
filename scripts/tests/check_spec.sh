@@ -184,6 +184,8 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("**REF-1@1.**", "**REF-1@2.**",
 # the Lean semantics leg: the model value of `add` is perturbed (TEST-ONLY hook of --report
 # model-diff), so the example must fail on the model alone (native and --interp still agree)
 CONCRETE_MODEL_DIFF_PERTURB=main.add control "N4m: the Lean model disagrees with the interpreter" S4 "the Lean model disagrees" -- run-examples --compiler "$CC" --work "$TMP/n4m" --only TYPE-9/right-arity
+# the same for an example whose only compared function is its entry point
+CONCRETE_MODEL_DIFF_PERTURB=main.main control "N4n: the Lean model of an entry point disagrees" S4 "the Lean model disagrees" -- run-examples --compiler "$CC" --work "$TMP/n4n" --only SYN-1/balanced-parenthesis
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=borrow-each-use exit=42", "name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N4e: a pending example that already holds" S4 "pending example already holds" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/borrow-each-use
 fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-0500 now=accept:41\nmod num", 1)' \

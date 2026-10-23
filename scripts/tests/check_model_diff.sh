@@ -13,7 +13,7 @@
 #      named, reasoned all-ERROR functions;
 #   V  every row's verdict is RE-DERIVED here from its model/runtime columns;
 #   N  the negative control: CONCRETE_MODEL_DIFF_PERTURB changes one function's MODEL value before the
-#      PRODUCTION comparator sees it, and every row of that function must read MISMATCH (and only its
+#      PRODUCTION comparator sees it (an entry point's too, since entry points are compared), and every row of that function must read MISMATCH (and only its
 #      rows). The corpus agrees everywhere, so V alone cannot show the comparator compares;
 #   B  scalar coverage: a nullary function is compared on the empty tuple, bool parameters on false
 #      and true (never an integer), and `b as bool` stays a bool on both sides;
@@ -99,7 +99,7 @@ UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | 
 # legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
 # at all; only the functions named here may be, each for a stated reason, and each must still be all
 # ERROR (so an entry cannot outlive its reason silently).
-ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer std.time.time_test_duration_from_millis "
+ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer std.time.time_test_duration_from_millis error_conventions.main project.main proven_oob.main "
 #   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
 #   cn.violation      is ratio(10, 0): the same trap, nullary;
 #   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
@@ -107,6 +107,13 @@ ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls
 #   calls.middle, calls.outer (proof_patterns/composition_deep_trust) call the `trusted fn leaf`, which
 #                     deliberately has no model: the model is stuck on every input by design;
 #   std.time.time_test_duration_from_millis  is a nullary std test whose callee has no model.
+# Entry points are compared too (an entry point whose only exclusion from proof is being `main`):
+#   error_conventions.main  matches on the Result its callee returns: the model is stuck there;
+#   project.main      calls functions imported from other files of the project, which the in-process
+#                     interpreter call does not resolve, so the runtime side traps (a harness gap, as
+#                     for scope.accumulate; `--interp` itself returns 18);
+#   proven_oob.main   (known_holes/proven_oob_index) indexes out of bounds on purpose: the runtime
+#                     traps and the model has no value.
 # Each entry must still be compared on nothing, so an entry cannot outlive its reason silently.
 ERR="$(grep -c '^ERROR' "$TMP/rows" || true)"
 NOVAL=""
@@ -125,7 +132,7 @@ for fn in $ALL_ERROR_OK; do
   { [ -z "$r" ] || grep -qE '^(agree|MISMATCH)' <<<"$r"; } && STALE="$STALE $fn"
 done
 [ -z "$NOVAL" ] && [ -z "$STALE" ] \
-  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the 6 named ones has a compared value" \
+  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the $(wc -w <<<"$ALL_ERROR_OK" | tr -d ' ') named ones has a compared value" \
   || no "C: functions compared on nothing:${NOVAL:- none}; stale all-ERROR entries:${STALE:- none}"
 MM="$(grep -c '^MISMATCH' "$TMP/rows" || true)"
 [ "$MM" -eq 0 ] && ok "C: no input where the model and the runtime produce different values" \
@@ -174,6 +181,18 @@ CONCRETE_MODEL_DIFF_PERTURB=main.flip "$BIN" "$BF" --report model-diff > "$TMP/n
 grep -qP '^MISMATCH\tmain\.flip\tunclaimed\t\(true\)\tmodel=true\truntime=false$' "$TMP/nb" \
   && ok "N: a perturbed bool result reads MISMATCH (flip(true): model=true runtime=false)" \
   || no "N: the perturbed bool row: $(grep -P 'flip\t' "$TMP/nb" | tr '\t' ' ' | tr '\n' '|')"
+
+# The entry point (compared since an entry point whose only exclusion from proof is being main
+# is extracted for this report): it agrees, and perturbing ITS model value reads MISMATCH.
+EF="tests/regressions/model_diff_entry_point/repro.con"
+"$BIN" "$EF" --report model-diff > "$TMP/ne" 2>&1
+grep -qP '^agree\tmain\.main\tunclaimed\t\(\)\tmodel=42\truntime=42$' "$TMP/ne" \
+  && ok "N: the entry point main() is 42 in the model and at runtime" \
+  || no "N: the entry point row: $(grep -P '\tmain\.main\t' "$TMP/ne" | tr '\t' ' ' | tr '\n' '|')"
+CONCRETE_MODEL_DIFF_PERTURB=main.main "$BIN" "$EF" --report model-diff > "$TMP/nep" 2>&1
+grep -qP '^MISMATCH\tmain\.main\tunclaimed\t\(\)\tmodel=43\truntime=42$' "$TMP/nep" \
+  && ok "N: a perturbed entry point reads MISMATCH (main(): model=43 runtime=42)" \
+  || no "N: the perturbed entry point row: $(grep -P '\tmain\.main\t' "$TMP/nep" | tr '\t' ' ' | tr '\n' '|')"
 
 echo ""
 echo "=== B: scalar coverage — nullary, bool and mixed signatures ==="

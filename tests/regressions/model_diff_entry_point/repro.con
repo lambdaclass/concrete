@@ -1,0 +1,14 @@
+// The entry point is compared against the model (it is excluded from proof only for being main):
+// a program whose behaviour is all in main, with a branch, a let and a call.
+fn half(n: Int) -> Int {
+    return n / 2;
+}
+
+fn main() -> Int {
+    let base: Int = 80;
+    let h: Int = half(base);
+    if h > 30 {
+        return h + 2;
+    }
+    return 0;
+}
