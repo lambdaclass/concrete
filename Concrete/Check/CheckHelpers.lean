@@ -1053,6 +1053,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     impl-block bounds enforced at method-call sites (so `impl<V: Copy>` methods
     are not callable on a non-Copy instantiation — closing the decorative-bound
     soundness gap). -/
+-- spec: TRAIT-10 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
     (context : String) : CheckM Unit := do
   let env ← getEnv

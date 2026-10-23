@@ -65,7 +65,7 @@ E0237	rule	mutable borrow (explicit or `&mut self` receiver) through a shared re
 E0238	rule	place or reference source that does not normalize to a traceable place
 E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
 E0240	rule	missing capability
-E0241	unmigrated:traits	trait bound not satisfied
+E0241	rule	trait bound not satisfied
 E0242	rule	cannot infer capability variable
 E0243	rule	proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)
 E0244	rule	right operand of && or || moves a value it may never run to move (bug 148)
@@ -190,15 +190,15 @@ E0575	rule	extern fn return not FFI-safe
 E0576	rule	repr(packed) and repr(align) conflict
 E0577	rule	repr(align) not power of two
 E0578	rule	reserved function name
-E0579	unmigrated:traits	builtin trait redeclared
-E0580	unmigrated:traits	unknown trait
-E0581	unmigrated:traits	missing trait method
-E0582	unmigrated:traits	trait method return type mismatch
-E0583	unmigrated:traits	recursive type has infinite size
+E0579	rule	builtin trait redeclared
+E0580	rule	unknown trait
+E0581	rule	missing trait method
+E0582	rule	trait method return type mismatch
+E0583	rule	recursive type has infinite size
 E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)
 E0585	rule	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
-E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
-E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
+E0586	rule	trait impl method requires capabilities beyond its trait method's declared set
+E0587	rule	trait impl method signature (receiver, parameters, generics) does not match its trait method
 E0590	rule	duplicate impl: a trait implemented twice for one type (TRAIT-1)
 E0591	rule	overlapping impls: two impls of one trait whose targets unify (TRAIT-2)
 E0592	rule	orphan impl: the module defines neither the trait nor the type (TRAIT-3)

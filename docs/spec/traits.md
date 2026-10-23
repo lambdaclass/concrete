@@ -3,8 +3,10 @@
 Impl selection is a function. For a type and a trait there is at most one impl, and for a type and
 a method name at most one method, and neither answer depends on the order in which impls, modules
 or imports are written. The compiler judges this once, over the whole program, before it builds
-any method table (`Concrete.Coherence.checkProgram`). The rules below are what that judgment
+any method table (`Concrete.Coherence.checkProgram`). TRAIT-1 to TRAIT-7 are what that judgment
 refuses. They were filed as bug 186 ([record](../bugs/186_trait_impl_selection_is_a_search.md)).
+TRAIT-8 to TRAIT-10 are the per-declaration checks that run before it: an impl names a declared
+trait, conforms to its trait's signatures, and every bound a caller instantiates is satisfied.
 
 An identity here is never a spelling. A trait is the compiler's builtin `Destroy` or a
 declaration (its defining module and name; traits are module-local, they cannot be imported). An
@@ -358,3 +360,131 @@ pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
 |---|---|---|---|
 | `tests/programs/regress_186_coherent_impls.con` | `run:42` | `coherent` | `binary,interp` |
 | `tests/programs/regress_186_coherent_impls_reversed.con` | `run:42` | `coherent` | `binary,interp` |
+
+<a id="TRAIT-8"></a>
+### TRAIT-8. An impl names a declared trait
+
+**TRAIT-8@1.** A trait impl names a trait the program declares or the builtin `Destroy`, and no program declares a trait of its own named `Destroy`.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0579 (core-check), E0580 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** `Destroy` is the one builtin trait; the compiler gives its impls their meaning
+(the destructor), so a user declaration of the same name would be a second trait that the
+destructor machinery takes for the builtin.
+
+```con reject name=unknown-trait code=E0580 stage=core-check pair=declared-trait
+struct Copy S { v: Int }
+impl Missing for S { fn m(&self) -> Int { return 1; } }
+fn main() -> Int { return 0; }
+```
+
+```con reject name=destroy-redeclared code=E0579 stage=core-check pair=declared-trait
+trait Destroy { fn destroy(&self); }
+fn main() -> Int { return 0; }
+```
+
+```con accept name=declared-trait exit=42
+trait Tr { fn m(&self) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&self) -> Int { return self.v; } }
+fn main() -> Int { let s: S = S { v: 42 }; return s.m(); }
+```
+
+<a id="TRAIT-9"></a>
+### TRAIT-9. An impl conforms to its trait
+
+**TRAIT-9@1.** A trait impl defines every method of its trait with the trait method's receiver, parameter types and return type (reading `Self` as the impl's type), declares no type or capability parameters the trait method does not, and requires no capability the trait method does not declare.
+
+- Kind: refusal
+- Uses: TRAIT-D1
+- Codes: E0581 (core-check), E0582 (core-check), E0586 (core-check), E0587 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: a call through a bound is checked against the trait's signature and runs the impl's body (R-0499)
+- Evidence: tested
+
+**Rationale.** Generic code that calls a method through a bound is checked against the trait's
+signature and then specialized to the impl's body without a second check, so any way an impl's
+signature exceeds its trait's would pass something the generic caller never agreed to (bug 091).
+Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
+none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self`, and its capability bound
+is OWN-13's (E0584).
+
+```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
+trait Tr { fn m(&self) -> Int; fn n(&self) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&self) -> Int { return 1; } }
+fn main() -> Int { return 0; }
+```
+
+```con reject name=return-type-differs code=E0582 stage=core-check pair=conforming-impl
+trait Tr { fn m(&self) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&self) -> bool { return true; } }
+fn main() -> Int { return 0; }
+```
+
+```con reject name=receiver-differs code=E0587 stage=core-check pair=conforming-impl
+trait Tr { fn m(&self, n: Int) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&mut self, n: Int) -> Int { return n; } }
+fn main() -> Int { return 0; }
+```
+
+```con reject name=capabilities-exceed-trait code=E0586 stage=core-check pair=conforming-impl
+trait Tr { fn m(&self) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&self) with(Console) -> Int { return self.v; } }
+fn main() -> Int { return 0; }
+```
+
+```con accept name=conforming-impl exit=42
+trait Tr { fn m(&self, n: Int) -> Int; fn me(&self) -> Self; }
+struct Copy S { v: Int }
+impl Tr for S {
+    fn m(&self, n: Int) -> Int { return self.v + n; }
+    fn me(&self) -> S { return S { v: self.v }; }
+}
+fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
+```
+
+<a id="TRAIT-10"></a>
+### TRAIT-10. A bound is satisfied by an impl
+
+**TRAIT-10@1.** A type argument given for a type parameter with a bound has an impl of every trait in the bound.
+
+- Kind: refusal
+- Uses: TRAIT-D1
+- Codes: E0241 (check)
+- Status: enforced
+- Enforced by: Concrete.checkTraitBounds
+- Semantics: none
+- Obligation: every bound call has a candidate after specialization (TRAIT-6)
+- Evidence: tested
+
+**Rationale.** A bound is a promise the caller makes for the generic body: the body calls the
+bound's methods on values of the parameter, and specialization then needs exactly one impl
+(TRAIT-6). A missing impl is refused at the call that gives the type argument.
+
+```con reject name=bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
+trait Tr { fn m(&self) -> Int; }
+struct Copy S { v: Int }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+```
+
+```con accept name=bound-satisfied exit=42
+trait Tr { fn m(&self) -> Int; }
+struct Copy S { v: Int }
+impl Tr for S { fn m(&self) -> Int { return self.v; } }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+```

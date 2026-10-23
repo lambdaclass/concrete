@@ -1115,7 +1115,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | .array elem _ => tyReachesByValue structs enums target visited elem
   | _ => false
 
--- spec: OWN-13, spec: OWN-14, spec: FFI-4 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-13, spec: OWN-14, spec: FFI-4, spec: TRAIT-8, spec: TRAIT-9, spec: TYPE-16 (docs/spec/ownership.md; this declaration enforces the rule)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do

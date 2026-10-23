@@ -131,6 +131,10 @@ def codeRuleTag : String → Option String
   | "E0593" => some "TRAIT-4@1"
   | "E0594" => some "TRAIT-5@1"
   | "E0595" => some "TRAIT-6@1"
+  | "E0579" | "E0580" => some "TRAIT-8@1"
+  | "E0581" | "E0582" | "E0586" | "E0587" => some "TRAIT-9@1"
+  | "E0241" => some "TRAIT-10@1"
+  | "E0583" => some "TYPE-16@1"
   | _ => none
 
 /-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`

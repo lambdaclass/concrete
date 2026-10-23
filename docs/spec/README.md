@@ -51,7 +51,7 @@ areas exist (§8).
 | `ffi.md` | `FFI-` | migrated: FFI-1 to FFI-5 (foreign function values, Layout authority, extern declarations, layout attributes, symbol names) |
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
-| `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-14 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds) |
+| `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-16 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds, generic arguments, finite size) |
 | `memory.md` | `MEM-` | migrated: MEM-1 to MEM-6 (two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
 | `trusted.md` | `TRUST-` | migrated: TRUST-1 to TRUST-6 (pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules); handle capabilities and callable-value capabilities still in their documents |
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
@@ -59,7 +59,7 @@ areas exist (§8).
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
-| `traits.md` | `TRAIT-` | pilot: TRAIT-D1, TRAIT-1 to TRAIT-7 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence) |
+| `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -392,7 +392,7 @@ Each step lands with the gate green. The steps run in this order:
 8. **modules.md** (`MOD-`, migrated 2026-10-23): modules, imports, visibility, name resolution and namespaces
    (SCOPE-4's open question). It replaces VISIBILITY_AND_MODULE_HYGIENE. D9 (one file per module,
    with generated interfaces) enters as pending.
-9. **traits.md** (`TRAIT-`): traits, impls, bounds and coherence (D7). The trait-coherence
+9. **traits.md** (`TRAIT-`, migrated 2026-10-23): traits, impls, bounds and coherence (D7). The trait-coherence
    branch may start this chapter at any point. It does not wait for its place in this order.
 10. **syntax.md** (`SYN-`, migrated 2026-10-23): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
     owners of the productions, and the chapter cites productions by name rather than copying

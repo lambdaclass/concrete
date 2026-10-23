@@ -3,7 +3,7 @@
 Every expression has one type, and there are no implicit conversions. This chapter covers
 callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of expressions and
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
-kinds of type parameters (TYPE-13, TYPE-14) and generic arguments (TYPE-15). Copy itself is defined in the ownership chapter
+kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
 The design records are [TYPE_ALIASES.md](../language/TYPE_ALIASES.md),
@@ -739,4 +739,32 @@ fn take(s: Sink<{}>) -> Int {
 fn main() -> Int {
     return 42;
 }
+```
+
+<a id="TYPE-16"></a>
+### TYPE-16. A struct has a finite size
+
+**TYPE-16@1.** A struct does not contain itself by value, directly or through the fields of other structs and enums, so a recursive type goes through a `Heap`, a reference or a raw pointer.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0583 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: every type has a layout (R-0502)
+- Evidence: tested
+
+**Rationale.** A value is laid out inline, so a struct that holds itself by value has no finite
+size. CoreCheck refuses it before code generation, where it used to surface as an LLVM
+"recursive structure type" error.
+
+```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
+struct Copy Node { v: Int, next: Node }
+fn main() -> Int { return 0; }
+```
+
+```con accept name=finite-struct exit=42
+struct Copy Node { v: Int, w: Int }
+fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
 ```
