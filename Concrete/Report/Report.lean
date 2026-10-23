@@ -37,13 +37,24 @@ private def collectFnNames (modules : List CModule) : List String :=
     parent) therefore contributes only its matched children. With the whole program as scope this
     is `mono` itself, up to module order (bug 180: the mono report runs Mono on the validated whole
     program and restricts the listing, instead of running Mono on the scope). -/
+/-- The first module named `n`, and the list without it. -/
+def takeNamesake (n : String) : List CModule → Option (CModule × List CModule)
+  | [] => none
+  | m :: ms => if m.name == n then some (m, ms)
+    else (takeNamesake n ms).map fun (t, rest) => (t, m :: rest)
+
 partial def restrictMonoToScope (scope mono : List CModule) : List CModule :=
-  scope.filterMap fun sm =>
-    match mono.find? (·.name == sm.name) with
-    | none => none
-    | some tm =>
-      some { tm with functions := if sm.functions.isEmpty then [] else tm.functions,
-                     submodules := restrictMonoToScope sm.submodules tm.submodules }
+  -- Match by OCCURRENCE, in order: a scope module takes the first not-yet-taken namesake, so two
+  -- sibling modules of one name map to their own counterparts (Mono keeps module order).
+  let step (acc : List CModule × List CModule) (sm : CModule) : List CModule × List CModule :=
+    let (out, rest) := acc
+    match takeNamesake sm.name rest with
+    | none => (out, rest)
+    | some (tm, rest') =>
+      let kept := { tm with functions := if sm.functions.isEmpty then [] else tm.functions,
+                            submodules := restrictMonoToScope sm.submodules tm.submodules }
+      (out ++ [kept], rest')
+  (scope.foldl step ([], mono)).1
 
 /-- Count generic functions across all modules including submodules. -/
 private partial def countGenericFns (m : CModule) : Nat :=

@@ -141,11 +141,19 @@ while i < len(s):
     if s.startswith('--', i):
         j = s.find('\n', i); i = len(s) if j < 0 else j; continue
     if s[i] == '"':
-        j = i + 1
-        while j < len(s) and s[j] != '"':
-            j += 2 if s[j] == '\\' else 1
-        out.append('""' if j < len(s) else '"'); out.append(mask(s[i+1:j]).replace(' ', ''))
-        i = j + 1; continue
+        # Literal text is masked; an interpolated string's `{…}` holes (`s!"…{e}…"`) are code
+        # and are kept, so `s!"{(sorry : Nat)}"` is still seen.
+        interp = i > 0 and s[i-1] == '!'
+        out.append('"'); j = i + 1; hole = 0
+        while j < len(s) and (hole or s[j] != '"'):
+            c = s[j]
+            if not hole and c == '\\': j += 2; continue
+            if interp and c == '{': hole += 1; out.append(' ' if hole == 1 else c); j += 1; continue
+            if interp and hole and c == '}':
+                hole -= 1; out.append(' ' if hole == 0 else c); j += 1; continue
+            out.append(c if hole else ('\n' if c == '\n' else ''))
+            j += 1
+        out.append('"'); i = j + 1; continue
     m = CHAR.match(s, i)
     if m and (i == 0 or not (s[i-1].isalnum() or s[i-1] in "_'")):
         out.append("' '"); i = m.end(); continue
