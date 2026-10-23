@@ -147,6 +147,9 @@ inductive ElabError where
   | importSpellingCollision (localName : String) (spelling : String) (target : String) (other : String)
   -- Bug 091 round 3 containment (Check's E0237 decides it first): never build `&mut &T`.
   | mutReceiverThroughSharedRef (method : String)
+  -- R-0492 internal invariant: every binder and function reaching Elab carries the resolver's
+  -- local binder table (bug 206: every diagnostic names a code).
+  | binderTableMissing (detail : String)
 
 def ElabError.message : ElabError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
@@ -170,6 +173,7 @@ def ElabError.message : ElabError → String
   | .inSubmodule subName innerError => s!"in submodule '{subName}': {innerError}"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .binderTableMissing detail => s!"internal: {detail}"
   | .mutReceiverThroughSharedRef method =>
     s!"cannot call `&mut self` method '{method}' through a shared reference"
   | .importSpellingCollision localName spelling target other =>
@@ -208,6 +212,7 @@ def ElabError.code : ElabError → String
   | .notPublicInModule _ _ => "E0419"
   | .importSpellingCollision _ _ _ _ => "E0299"
   | .mutReceiverThroughSharedRef _ => "E0237"
+  | .binderTableMissing _ => "E0422"
 
 -- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
@@ -219,9 +224,6 @@ def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
-
-def throwElabMsg (msg : String) (span : Option Span := none) : ElabM α :=
-  throw [{ severity := .error, message := msg, pass := "elab", span := span, hint := none }]
 
 /-- Bug 166 (D4, FFI.md "Foreign Function Values"): an `extern fn` is never a value. Decided here,
     at the one place a global function becomes a value, on the RESOLVER's identity of the name
@@ -470,7 +472,7 @@ private def openScope : ElabM Unit := do
 private def binderId (key : BinderKey) (name : String) (span : Option Span) : ElabM LocalId := do
   match (← getEnv).locals.binderAt? key with
   | some id => return id
-  | none => throwElabMsg s!"internal: the binder '{name}' has no identity in the local table (R-0492)" span
+  | none => throwElab (.binderTableMissing s!"the binder '{name}' has no identity in the local table (R-0492)") span
 
 /-- Register a binding: its frame position, Core name and type. -/
 private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM Unit := do
@@ -2334,7 +2336,7 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   -- would skip a teardown, and the whole class of defect is a frame that outlives its owner.
   -- R-0492 step 2: this function's binding identities; no binding of another function is bound.
   if !f.locals.resolved then
-    throwElabMsg s!"internal: function '{f.name}' reached elaboration without a local binder table (R-0492)" (some f.span)
+    throwElab (.binderTableMissing s!"function '{f.name}' reached elaboration without a local binder table (R-0492)") (some f.span)
   setEnv { env with bodyScope := {}, pendingFrame := false, locals := f.locals, bound := [] }
   let env ← getEnv
   -- Set up type params and return type
