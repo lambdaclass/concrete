@@ -3622,7 +3622,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
--- spec: REF-3, spec: STMT-7 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: STMT-7, spec: MOD-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports

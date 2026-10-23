@@ -92,6 +92,7 @@ def buildSummary (prog : ParsedProgram) : SummaryTable :=
   { entries := buildSummaryTable prog.modules }
 
 /-- Name-resolution pass: validates all identifiers and imports. -/
+-- spec: MOD-1, spec: MOD-2 (docs/spec/modules.md; names resolve once, before checking)
 def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics ResolvedProgram :=
   match resolveProgram prog.modules summary.entries with
   | .ok resolved => .ok { modules := resolved }

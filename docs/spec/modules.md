@@ -1,0 +1,147 @@
+# Modules and Names
+
+A program is a tree of modules (`mod name { ... }`, or one file per module in a package). Every
+declaration is private to its module unless it is declared `pub`, and another module reaches it
+only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
+one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2) and one binding
+per name in a module (MOD-3). Representation privacy (which fields and constructors another module
+may use) is TYPE-11, and trait coherence is the traits chapter.
+
+Two decisions are recorded without an entry yet. SCOPE-4, whether a local may reuse the name of a
+top-level function, an import alias or an intrinsic, is still open: today it may. TIGHTENING_DECISIONS
+D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
+generates and checks) is decided and scheduled late; it enters as an entry with its owner when that
+work starts. The design record is
+[VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md).
+
+## Rules
+
+<a id="MOD-1"></a>
+### MOD-1. Every name resolves to one declaration
+
+**MOD-1@1.** Every name a program uses resolves to exactly one declaration visible where it is used (a local binding, a declaration of the module, an import, a type parameter or a builtin), and a name that resolves to none, a type alias that names itself, and `Self` outside an `impl` are refused.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0100 (resolve), E0101 (resolve), E0102 (resolve), E0103 (resolve), E0104 (resolve), E0105 (resolve), E0106 (resolve), E0107 (resolve), E0108 (resolve), E0109 (resolve), E0112 (resolve), E0200 (check), E0201 (check), E0202 (check), E0263 (check), E0267 (check)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve
+- Semantics: none
+- Obligation: resolution by identity (`DefId`, `LocalId`), never by spelling (R-0492)
+- Evidence: tested
+
+**Rationale.** Resolution happens once, so every later pass works with what a name denotes rather
+than how it is spelled. Bugs 039 to 045 were names resolved more than once, differently; binders
+are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
+The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
+
+```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
+fn main() -> Int {
+    return missing + 1;
+}
+```
+
+```con accept name=declared-name exit=42
+fn main() -> Int {
+    let present: Int = 41;
+    return present + 1;
+}
+```
+
+<a id="MOD-2"></a>
+### MOD-2. Only `pub` declarations cross a module boundary
+
+**MOD-2@1.** A declaration is private to its module unless it is declared `pub`, and another module uses it only by importing it from a module that exists, where it is `pub`.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0110 (resolve), E0111 (resolve), E0284 (check), E0285 (check), E0418 (elab), E0419 (elab)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Private by default makes every public API intentional: a missing `pub` cannot
+export a helper by accident. `pub` on a type exports its name, not its representation (TYPE-11).
+There is one public level today; a package-internal `pub(pkg)` is designed for when packages
+depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
+
+```con reject name=import-private code=E0111 stage=resolve pair=import-public
+mod a {
+    fn hidden() -> Int {
+        return 1;
+    }
+}
+mod m {
+    import a.{hidden};
+    pub fn main() -> Int {
+        return hidden();
+    }
+}
+```
+
+```con accept name=import-public exit=42
+mod a {
+    pub fn shown() -> Int {
+        return 42;
+    }
+}
+mod m {
+    import a.{shown};
+    pub fn main() -> Int {
+        return shown();
+    }
+}
+```
+
+<a id="MOD-3"></a>
+### MOD-3. A module binds each name once
+
+**MOD-3@1.** A module binds each name at most once, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no declaration takes a name the compiler reserves.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0299 (check), E0120 (resolve), E0578 (core-check)
+- Status: enforced
+- Enforced by: Concrete.checkModule
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A name bound twice in a module made the meaning of a call depend on which binding a
+lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a clash.
+
+```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
+mod a {
+    pub fn f() -> Int {
+        return 40;
+    }
+}
+mod m {
+    import a.{f};
+    fn f() -> Int {
+        return 2;
+    }
+    pub fn main() -> Int {
+        return f();
+    }
+}
+```
+
+```con accept name=renamed-import exit=42
+mod a {
+    pub fn f() -> Int {
+        return 40;
+    }
+}
+mod m {
+    import a.{f as g};
+    fn f() -> Int {
+        return 2;
+    }
+    pub fn main() -> Int {
+        return g() + f();
+    }
+}
+```

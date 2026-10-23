@@ -1,5 +1,9 @@
 # Visibility and Module Hygiene
 
+The rules are MOD-1 to MOD-3 of [docs/spec/modules.md](../spec/modules.md) and TYPE-11 of
+[docs/spec/types.md](../spec/types.md); this document is the design record (visibility levels,
+module hygiene, the pre-package checklist).
+
 Status: stable reference (Phase 3, items 73 and 78)
 
 This document defines Concrete's visibility model and the module hygiene guarantees that must hold before stdlib freeze and package management. It covers the current state, the target rules, what the compiler must enforce, and how to validate that modules expose clean, stable interfaces.
