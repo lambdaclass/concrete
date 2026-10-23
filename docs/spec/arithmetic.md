@@ -81,7 +81,8 @@ fn main() -> Int {
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
 changes reports, never code generation. A right shift is arithmetic for a signed type and logical
-for an unsigned one. Constant folding may refuse an operation it proves always overflows (E0900),
+for an unsigned one. Integer division truncates toward zero (`-7 / 2` is `-3`), and a remainder
+has the sign of its dividend. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
@@ -90,7 +91,7 @@ fn main() -> Int {
     let a: u8 = 200;
     let s: u8 = a << 1;
     let q: Int = -7 / 2;
-    return (s as Int) - 105 + q;
+    return (s as Int) - 99 + q;
 }
 ```
 
