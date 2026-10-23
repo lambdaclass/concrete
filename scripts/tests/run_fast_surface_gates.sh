@@ -123,7 +123,7 @@ mutate_self_test() {
   local -a MUT=(
     "manifest fact|docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv|option${TAB}unwrap_or_else${TAB}"
     "diagnostic-code ledger|Concrete/Report/Report.lean|entry \"E0296\""
-    "value-flow constructor row|docs/language/VALUE_FLOW_SPEC.md|\`letDestructure\`"
+    "value-flow constructor row|docs/spec/ownership.md|\`letDestructure\`"
   )
   for m in "${MUT[@]}"; do
     local fam="${m%%|*}"; local rest="${m#*|}"; local file="${rest%%|*}"; local needle="${rest#*|}"

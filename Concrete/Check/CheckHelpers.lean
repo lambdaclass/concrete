@@ -287,6 +287,7 @@ def substTy (mapping : List (String × Ty)) (ty : Ty) : Ty :=
 -- (`T: Copy`). Core stages (Mono/Verify/CoreCheck) call `Layout.isCopyTyCore`,
 -- the same judgment with Core defs. There is now ONE Copy recursion, so the two
 -- cannot drift (they previously disagreed on typeVar/newtype).
+-- spec: OWN-D1 (docs/spec/ownership.md; this declaration enforces the rule)
 def isCopyType (ty : Ty) : CheckM Bool := do
   let env ← getEnv
   -- A type alias names its target (`type Num = i64; newtype N = Num;` is Copy): resolve the
@@ -463,7 +464,7 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
     entry to that loop — pass 1 to relax the loop-depth rule by one level
     (H14). Deeper outer values stay rejected: an enclosing loop could re-enter
     the broken loop and re-consume. -/
--- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-8, spec: OWN-1, spec: OWN-4, spec: OWN-12 (docs/spec/references.md; this declaration enforces the rule)
 def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
   let env ← getEnv
   match env.vars.lookup name with
@@ -515,6 +516,7 @@ def consumeVarIfExists (name : String) (span : Option Span := none) (breakDepthE
     `reserved` is allowed because the deferred destroy will run at scope exit.
     Each binding is looked up by IDENTITY (bug 093): a shadowed entry is
     checked as itself, not through the innermost binding sharing its name. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkScopeExit (entries : List (String × VarInfo)) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
   for (name, entry) in entries do
@@ -858,6 +860,7 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
     Enforced wherever a diverging branch is exempted from the consumption
     MERGE: the exemption is about agreement at the merge point, not about the
     exit itself. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkReturnPathConsumed (before after : List (String × VarInfo))
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do
@@ -895,6 +898,7 @@ def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
     when the block diverges (its textual end is unreachable). This is what the
     function-level `checkScopeExit` could not see for `if`/`else` branch locals and
     matched payload bindings, which are dropped at the branch/arm merge. -/
+-- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkBlockLocalsConsumed
     (before after : List (String × VarInfo))
     (diverges : Bool)

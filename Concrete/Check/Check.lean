@@ -11,7 +11,7 @@ import Concrete.Check.CheckHelpers
 
 namespace Concrete
 
-/-- Expression checking mode (docs/language/VALUE_FLOW_SPEC.md — the auto-consume
+/-- Expression checking mode (docs/spec/ownership.md OWN-15 — the auto-consume
     inversion, 2026-07-06). Consumption is decided HERE, in ONE place, not in
     every AST handler; a new syntax form that forgets to pick a mode gets
     `value` and fails closed (over-rejects) instead of silently leaking.
@@ -202,6 +202,7 @@ def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit :
     (E0237); an owned root must be `mut` and unborrowed (E0233 / E0232) and not moved; an
     exclusive reference must not be in use by a newer reborrow (E0232); a place that does not
     normalize is refused (E0238). -/
+-- spec: OWN-10 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -257,6 +258,7 @@ def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
 /-- The rules of `&place`, for every shared access to a normalized place: an owned root is not
     moved and not under a live `&mut` (E0231); through a reference binding, no newer exclusive
     reborrow of its storage is live (E0231); a place that does not normalize is E0238. -/
+-- spec: OWN-1 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : CheckM Unit := do
   match n with
   | .reject why => throwCheck (.untraceablePlace subject why) span
@@ -474,6 +476,7 @@ def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
 /-- Bug 147: a proof-only statement (`assert`, `assume`, `ghost let`) is erased before Core, so it
     may not move, consume or reserve a runtime binding: the obligation would be discharged by an
     operation that never runs. `before` is the environment when the statement started. -/
+-- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   for (n, vi) in env.vars do
@@ -490,6 +493,7 @@ def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Uni
 /-- Bug 148: the right operand of `&&`/`||` is conditional, so it may not change a non-Copy
     binding's ownership state (a move there may not run). `before` is the environment after the
     left operand was checked. -/
+-- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   for (n, vi) in env.vars do
@@ -600,6 +604,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -812,7 +817,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
         let ty ← checkExpr tExpr hint
-        -- value mode auto-consumes a trailing ident (VALUE_FLOW_SPEC)
+        -- value mode auto-consumes a trailing ident (docs/spec/ownership.md OWN-15)
         pure ty
       | some (.return_ _ v) =>
         match v with
@@ -2204,7 +2209,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -2965,6 +2970,7 @@ partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
     merge point: it cannot disagree with the other branch, and it contributes
     nothing to the merged state — `if c { consume(x); return 1; } else { … }
     use(x)` is sound. Only the fall-through branches must agree. -/
+-- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def mergeVarStates
     (before : List (String × VarInfo))
     (afterThen : List (String × VarInfo))
@@ -3003,6 +3009,7 @@ partial def mergeVarStates
 
 /-- For if-without-else: the then branch must not consume any linear var
     that existed before the if. -/
+-- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def checkNoBranchConsumption
     (before : List (String × VarInfo))
     (afterThen : List (String × VarInfo))

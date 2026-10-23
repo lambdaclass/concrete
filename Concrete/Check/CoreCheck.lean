@@ -281,7 +281,7 @@ private def addError (msg : String) (hint : Option String := none) (code : Strin
   setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := env.currentFnSpan, hint := hint, code := code, reason := reason, evidence := evidence }] }
 
 private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
-  addError e.message e.hint e.code e.reason e.evidence
+  addError e.message e.hint e.code e.reason (e.evidence ++ codeRuleEvidence e.code)
 
 private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
@@ -905,7 +905,7 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
 
 private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagnostic :=
   { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint,
-    code := e.code }
+    code := e.code, evidence := codeRuleEvidence e.code }
 
 /-- Does `ty` reach struct/enum `target` through by-VALUE field edges only?
     Named-struct, named-enum, and array-of-T edges are by-value and continue the
@@ -932,6 +932,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | .array elem _ => tyReachesByValue structs enums target visited elem
   | _ => false
 
+-- spec: OWN-13, spec: OWN-14 (docs/spec/ownership.md; this declaration enforces the rule)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do

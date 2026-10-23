@@ -1,9 +1,13 @@
-# Ownership Model: Copy, Linear, Destroy
+# Ownership Model: Copy, Linear, Destroy (design record)
 
-Status: implemented + gated. This is the canonical description of how Concrete
-decides whether a value may be duplicated, whether it may be dropped, and how it is
-consumed. It also records *why* the model is what it is, so the design fork behind it
-does not have to be re-derived.
+**Superseded as the normative text (2026-10-23).** The ownership rules are stated, with stable
+IDs and runnable examples, in [docs/spec/ownership.md](../spec/ownership.md): Copy (OWN-D1), use
+after move (OWN-1), consumption at every exit (OWN-2), branch agreement (OWN-3), loops (OWN-4),
+discards (OWN-5 to OWN-7), sub-place reads (OWN-8), overwrites (OWN-9), mutability (OWN-10),
+moves in code that may not run (OWN-11), `defer` (OWN-12), explicit destruction (OWN-13), Copy
+declarations (OWN-14) and value flow per constructor (OWN-15). Where this document and the spec
+differ, the spec governs. This document keeps the reasoning, in particular why the language is
+linear rather than affine, and the history of each rule.
 
 ## The one law
 

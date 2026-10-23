@@ -609,7 +609,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0203 (check), E0204 (check), E0231 (check), E0232 (check), E0293 (check), E0238 (check)
+- Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check), E0238 (check)
 - Status: partial R-0500
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.guardShadowedSource, Concrete.checkWriteAccess
 - Semantics: none

@@ -681,7 +681,7 @@ def CheckError.rule : CheckError → Option String
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
-  | _ => none
+  | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
     rendered as `next:` / `next_action`. Keyed by the rule tag so a site override gets the
