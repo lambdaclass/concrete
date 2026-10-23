@@ -1,13 +1,21 @@
-// Bug 218: a type and a value may share a spelling (separate namespaces), and the same name may be
-// declared in two different modules. Expected: 42.
-struct Copy val { n: Int }
+// Bug 218: a struct and a function may share a spelling (types and values are separate
+// namespaces), a method may share a free function's name, and two modules may each declare a
+// name. Expected: 42.
+struct Copy Pt { n: Int }
 
-fn val(v: val) -> Int { return v.n; }
+fn Pt(n: Int) -> Pt { return Pt { n: n }; }
+
+impl Pt {
+    fn get(&self) -> Int { return self.n; }
+}
+
+fn get(p: Pt) -> Int { return p.n; }
 
 mod other {
-    pub fn val() -> Int { return 2; }
+    pub fn get() -> Int { return 2; }
 }
 
 fn main() -> Int {
-    return val(val { n: 40 }) + other::val();
+    let p: Pt = Pt(20);
+    return p.get() + get(p) + other::get();
 }

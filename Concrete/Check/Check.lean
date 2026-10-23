@@ -3704,8 +3704,9 @@ def declarationCollisions (m : Module) : Diagnostics :=
         if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
         else
           let e := CheckError.declarationCollision n kind otherKind otherSp.line
-          (seen, errs ++ [{ severity := .error, message := e.message, pass := "check", span := some sp,
-                            hint := e.hint, code := e.code } : Diagnostic])
+          let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
+                                  span := some sp, hint := e.hint, code := e.code }
+          (seen, errs ++ [d])
       | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
     errs
   dupes values ++ dupes types
