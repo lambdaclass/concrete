@@ -55,7 +55,15 @@ Regression legs in `run_tests.sh`, each `run_err ... (E0501)`: `error_210_struct
 
 A generic `fn add<T: Copy>(a: T, b: T) -> T { a + b }` instantiated at a struct still reached
 `llvm-as`: the opaque parameter is accepted before Mono and nothing re-checked the instance. That is
-a separate bug, filed with its own record.
+bug 211 (`211_generic_arithmetic_post_mono.md`).
+
+**Residual (disclosed).** Core spells a type parameter and a declared nominal type the same way
+(`Ty.named "T"`), so the predicate decides by name. A `named` spelling of the current function's
+type parameter is opaque, which keeps a parameter spelled like some module's type admitted; the
+cost is the converse: inside `fn f<T: Copy>`, arithmetic on another module's struct that is also
+called `T` is not refused here (the Codex review's witness). Bug 211's post-Mono check sees the
+instance, and the name collision itself belongs to class 1 (R-0496: Core types are resolved, a
+parameter is a `typeVar`).
 
 ## Structural cause
 
