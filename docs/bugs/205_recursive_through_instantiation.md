@@ -31,8 +31,9 @@ instantiation out inline, so the cycle reached LLVM.
 
 An instantiation is followed through its declaration's fields with the type arguments
 substituted (`Layout.substTyVars`). The visited key is the instantiated type (`B<Int>` and
-`B<Node>` differ) and the walk is depth-bounded, since an instantiation that grows without
-reaching the target is refused as its own declaration's target. The E0583 hint no longer offers
+`B<Node>` differ). An instantiation that grows without reaching the target is refused as its
+own declaration's target, so the walk's depth bound (64) is reached only by deeper literal
+nesting, and it fails closed there. The E0583 hint no longer offers
 a reference, which cannot be a field (REF-3). Fixtures:
 `error_205_recursive_through_instantiation.con` (E0583) and
 `regress_205_instantiations_without_cycle.con` (nested instantiations, run 42), in `run_tests.sh`.
