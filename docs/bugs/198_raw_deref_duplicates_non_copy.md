@@ -61,7 +61,12 @@ function): 26 sites in std, all moving elements out of collection storage (`vec`
 
 ## Regression
 
-`error_rawdup_trusted_deref.con` (the reproducer, E0311, `run_err`) and the project fixture
-`tests/programs/regress_rawdup_read_owned/` (a heap cell moved out with `read_owned`, the slot
-refilled, both freed once; a Copy pointee read with `*p`; built and run by the project leg,
-exit 0). The std tests exercise every migrated site (`run_tests.sh --stdlib`).
+`error_rawdup_trusted_deref.con` (the reproducer, E0311, `run_err`) and `regress_198_read_owned.con` (a heap cell moved out
+with `read_owned`, the slot refilled, both freed once; a pointer spelled through an alias; a Copy
+pointee read with `*p`; exit 42, `--interp == binary`). The std tests exercise every migrated site (`run_tests.sh --stdlib`).
+
+Codex review, round 1: the pointee type is resolved through aliases before the load type is taken;
+the intrinsic has one spelling (an alias `_read_owned` would have been checked as the intrinsic and
+elaborated to a program function named `read_owned`); the interpreter reads a pointer that keeps a
+reference path (`&mut x as *mut T`); and `read_owned` counts as a raw operation in the trust and
+unsafe reports (`hasRawPtrOpsExpr`).

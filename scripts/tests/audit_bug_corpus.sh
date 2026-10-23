@@ -131,8 +131,10 @@ declare -A BUG_TEST_MAP=(
   [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con"
   # Bug 165: println/append desugared into spelled helper calls that bound to a same-named user fn.
   [165]="regress_165_generated_helper_call.con"
+  # Bug 199: a cast to a type alias panicked the backend.
+  [199]="regress_199_cast_to_alias.con"
   # Bug 198 (T-RAWDUP): *p by value of a non-Copy pointee through a raw pointer (E0311).
-  [198]="error_rawdup_trusted_deref.con"
+  [198]="error_rawdup_trusted_deref.con regress_198_read_owned.con"
   [182]="error_d2_borrow_literal.con error_d2_borrow_field_of_temporary.con error_d2_temporary_receiver.con error_d2_mut_borrow_string_literal.con error_d2_call_disjoint_fields.con error_d2_call_field_read.con error_d2_receiver_projection_read.con error_d2_branch_receiver.con error_d2_call_field_read_in_branch.con error_d2_explicit_mut_receiver_read.con regress_d2_roots_and_projections.con"
   [181]="regress_181_borrowed_binders.con error_181_root_reassigned_match.con error_181_root_reassigned_while_let.con error_181_root_reassigned_guard.con error_181_root_reassigned_nested.con error_181_root_reassigned_whole_binder.con error_181_root_reassigned_defer.con"
   # Bug 190: an array bound or passed by value aliased its source in the binary.

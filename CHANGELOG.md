@@ -10,6 +10,12 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Cast To A Type Alias Compiles (bug 199, 2026-10-23)
+
+`x as IP` with `type IP = *mut Int` crashed the compiler in the backend: Elab left the cast target
+unexpanded. It is now resolved through aliases like every other written type. Pinned by
+`regress_199_cast_to_alias.con`.
+
 ### Moving Out Of Raw Memory Is Explicit (T-RAWDUP, bug 198, 2026-10-23)
 
 `*p` read by value of a non-Copy pointee through a raw pointer is refused (E0311): it copied a linear

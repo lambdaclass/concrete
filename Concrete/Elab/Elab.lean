@@ -1256,8 +1256,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let cInner := cInnerEv.core
     -- The cast TARGET is the whole point of the expression: `x as i32` and `x as i64`
     -- are different programs, and before this the two were one gap.
-    let targetRef ← typeRefOf targetTy
-    return ElaboratedExprV2.mk (CExpr.cast cInner targetTy) (Proof.evCast targetRef cInnerEv.evidence)
+    -- Bug 199: the target is resolved through type aliases like every other written type; a cast
+    -- to an alias (`p as IP`) reached the backend as the unknown named type `IP` and panicked.
+    let targetTyR ← resolveTypeE targetTy
+    let targetRef ← typeRefOf targetTyR
+    return ElaboratedExprV2.mk (CExpr.cast cInner targetTyR) (Proof.evCast targetRef cInnerEv.evidence)
 
   | .fnRef _ fnName =>
     let env ← getEnv
@@ -1487,7 +1490,10 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
     let cArgEv ← elabExprEv arg
     let cArg := cArgEv.core
-    let pointee := match cArg.ty with | .ptrMut t | .ptrConst t => t | _ => .placeholder
+    -- The pointer type is resolved first, so a pointer spelled through an alias still yields
+    -- its pointee (Codex review).
+    let argTyR ← resolveTypeE cArg.ty
+    let pointee := match argTyR with | .ptrMut t | .ptrConst t => t | _ => .placeholder
     return ElaboratedExprV2.mk (CExpr.call "read_owned" [] [cArg] pointee)
       (Proof.evCall (CallableId.ofIntrinsic "read_owned") [])
   -- Intercept free(ptr)

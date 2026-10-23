@@ -2561,6 +2561,9 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- T-RAWDUP: move the value out of the raw slot (the call's result type is its type).
       | "read_owned", [.ptr blk off] => do
         return (env, .val (← readMem cx blk off (normTy cx callRetTy)))
+      -- A pointer cast from a reference keeps its reference path (`evalCast`): read the place.
+      | "read_owned", [.ref p] => do
+        return (env, .val (← lookupPath cx env p))
       | "read_owned", [_] => fail "interp: read_owned of a non-pointer value"
       | "alignof", [] => do
         match typeArgs with

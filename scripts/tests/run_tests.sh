@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow regress_198_read_owned regress_199_cast_to_alias; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -8171,6 +8171,9 @@ run_err "$TESTDIR/error_d1_defer_holds_loan_param.con" "(E0206)"
 run_err "$TESTDIR/error_d1_overlapping_mut_args.con" "(E0293)"
 # Bug 198 (T-RAWDUP): `*p` by value of a non-Copy pointee is refused; `read_owned(p)` moves.
 run_err "$TESTDIR/error_rawdup_trusted_deref.con" "(E0311)"
+run_ok "$TESTDIR/regress_198_read_owned.con" 42
+# Bug 199: a cast to a type alias crashed the backend.
+run_ok "$TESTDIR/regress_199_cast_to_alias.con" 42
 for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal branch_receiver; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
 done
@@ -12336,8 +12339,6 @@ fi
 #   regress_087_borrow_shadow_uaf/src/main.con  (bug 087 — an `if` body's
 #     `let r` shadowing a borrow-block ref must not outlive the `if`; pre-fix
 #     the later `r` read the inner, dropped String: a heap use-after-free)
-#   regress_rawdup_read_owned/src/main.con  (bug 198 — read_owned moves a non-Copy value out of
-#     raw memory once; the slot is refilled)
 #   regress_179_concurrent_build/src/main.con  (bug 179 — also built concurrently
 #     in the bug 102/105/175 block; pre-fix the builds shared src/main.con.ll)
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
