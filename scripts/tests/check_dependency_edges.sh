@@ -858,7 +858,9 @@ EXPECTED_TOTAL_ASSERTIONS=322
 # is made: proved 35 -> 42, root refusals 14 -> 16, scoped identities 72 -> 88, correspondence +3 -> +5
 # no-claim, non-current edges 14 -> 16, fixture population 28 -> 31 (124 pairs), split 114/174 -> 114/181.
 # No assertion added or removed (total stays 322).
-EXPECTED_ASSERTION_LABELS_SHA256="fdbb0d3c6844ffa8416f3f8e780cc8464bc54f108bfc0326b775024536b5312f"
+# Re-pinned 2026-10-23 (bug 189) for exactly one relabelled assertion, non-current edges 16 -> 17
+# (`Bytes::len` lost its block-conferred trust; explained where it is made). Total stays 322.
+EXPECTED_ASSERTION_LABELS_SHA256="8361ac1a47bb7ebcf5b3bc6bebb81b156433fb2af3f7778a4478f87edb54f5b2"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
