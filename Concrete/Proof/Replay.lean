@@ -198,6 +198,27 @@ structure CheckerIdentity where
 def CheckerIdentity.canonical (c : CheckerIdentity) : String :=
   s!"lean {c.version} commit {c.githash} platform {c.platform} build {c.buildDigest}"
 
+/-- Who checked, or WHY that could not be established.
+
+    An unidentified checker used to be a bare `none`, and every report said only "UNIDENTIFIED". On
+    2026-10-23 that cost hours: a gate host whose non-login PATH lacked `shasum` withheld every
+    receipt, and nothing in the output pointed at the missing tool. The cause is now part of the
+    value, produced where the failure happens, so every report and refusal can name it. It is never
+    a wildcard: `unidentified` mints nothing and is current against nothing, whatever its reason. -/
+inductive CheckerResolution where
+  | identified (checker : CheckerIdentity)
+  | unidentified (why : String)
+  deriving BEq, Repr
+
+def CheckerResolution.identity? : CheckerResolution → Option CheckerIdentity
+  | .identified c => some c
+  | .unidentified _ => none
+
+/-- The identity's canonical form, or `UNIDENTIFIED (<why>)`. -/
+def CheckerResolution.display : CheckerResolution → String
+  | .identified c => c.canonical
+  | .unidentified why => s!"UNIDENTIFIED ({why})"
+
 /-- The checker that produced a result, identified well enough to be re-examined later.
 
     A verdict with no environment is anonymous, and an anonymous verdict cannot be invalidated: when
@@ -232,11 +253,11 @@ structure ReplayEnvironment where
       binds less: anything outside the workspace. Lean core is pinned by `toolchain`; a proof
       reaching some other external library is not covered here. -/
   importDigests     : List (String × String)
-  /-- The checker that ran, as it reported itself; `none` when no identity could be established.
-      `none` mints nothing and compares current against nothing — it is never a wildcard. Defaulted
-      only so a hand-built environment fails for the reason it should (private constructors
-      downstream), not for a missing field. -/
-  checker           : Option CheckerIdentity := none
+  /-- The checker that ran, as it reported itself, or why no identity could be established.
+      `unidentified` mints nothing and compares current against nothing — it is never a wildcard.
+      Defaulted only so a hand-built environment fails for the reason it should (private
+      constructors downstream), not for a missing field. -/
+  checker           : CheckerResolution := .unidentified "no checker was asked who it is"
   deriving BEq, Repr
 
 /-- What a FRESH KERNEL RE-CHECK said about one theorem (R-0208 decision 1).
@@ -357,9 +378,9 @@ inductive ReplayEvidenceRefusal where
       location-dependence slice 4 removed. Replaying such an input is still legitimate and still
       reported; what it may not do is mint. -/
   | fallbackWorkspace (workspace : String)
-  /-- The run did not establish which checker produced its verdicts. A receipt binds the checker,
-      and binding an unknown one would let any later checker match it. -/
-  | checkerUnidentified
+  /-- The run did not establish which checker produced its verdicts, for the reason given. A
+      receipt binds the checker, and binding an unknown one would let any later checker match it. -/
+  | checkerUnidentified (why : String)
   /-- The theorem was found but not RE-CHECKED by the kernel in this run (decision 1): a lookup in
       an `.olean` is not a check. -/
   | notRechecked (theoremName : String) (verdict : RecheckVerdict)
@@ -370,7 +391,7 @@ def ReplayEvidenceRefusal.canonical : ReplayEvidenceRefusal → String
   | .notAccepted ..      => "not_accepted"
   | .underGeneralFailure => "under_general_failure"
   | .fallbackWorkspace _ => "fallback_workspace"
-  | .checkerUnidentified => "checker_unidentified"
+  | .checkerUnidentified _ => "checker_unidentified"
   | .notRechecked ..     => "not_rechecked"
 
 def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
@@ -383,9 +404,9 @@ def ReplayEvidenceRefusal.explain : ReplayEvidenceRefusal → String
   | .fallbackWorkspace w =>
       s!"the workspace '{w}' was resolved from the caller's directory rather than from the input, so "
       ++ "the verdict is not a property of the program alone and may not be minted into a receipt"
-  | .checkerUnidentified =>
-      "the run did not establish which checker executable and build produced its verdicts, so "
-      ++ "there is nothing a receipt could bind"
+  | .checkerUnidentified why =>
+      "the run did not establish which checker executable and build produced its verdicts "
+      ++ s!"({why}), so there is nothing a receipt could bind"
   | .notRechecked t v =>
       s!"'{t}' was found but not re-checked by the kernel in this run ({v.canonical}"
       ++ (match v with | .failed why => s!": {why}" | _ => "")
@@ -419,8 +440,9 @@ def SuccessfulReplay.of? (r : ReplayResult) (theoremName : String)
   if c.verdict != .accepted then throw (.notAccepted theoremName c.verdict)
   if !r.environment.workspaceFromInput then
     throw (.fallbackWorkspace r.environment.workspace)
-  let some checker := r.environment.checker
-    | throw .checkerUnidentified
+  let checker ← match r.environment.checker with
+    | .identified c => pure c
+    | .unidentified why => throw (.checkerUnidentified why)
   let rv := ((r.recheck.find? (·.1 == theoremName)).map (·.2)).getD .notRun
   if rv != .rechecked then throw (.notRechecked theoremName rv)
   return { theoremName := c.target.theoremName
@@ -587,43 +609,54 @@ def checkerImagesOf (exe : String) (images : List String)
     throw "two loaded images share a file name, so a name cannot identify one of them"
   return (hashed, native.filter isSystemImage)
 
-/-- SHA-256 of each file, in order, by the host's `shasum -a 256`, or `none`.
+/-- SHA-256 of each file, in order, by the host's `shasum -a 256`, or why not.
 
     An external tool on purpose. These are ~200 MB of native code, and `Sha256Fast` evaluated by
     the Lean interpreter — which is how every `#eval`-level caller of `replay` runs it — does not
     finish; even compiled it cost ~2.5 s per identity. `shasum` ships with macOS and with Perl on
     Linux runners; it joins `lsof` in the trust base of the identity, and a host without it has no
-    identity rather than a weaker one. -/
-def sha256Files (paths : List String) : IO (Option (List String)) := do
-  if paths.isEmpty then return some []
+    identity rather than a weaker one — and the reason names the tool, so that host can be fixed. -/
+def sha256Files (paths : List String) : IO (Except String (List String)) := do
+  if paths.isEmpty then return .ok []
   let out ← try
-      pure (some (← IO.Process.output { cmd := "shasum", args := #["-a", "256"] ++ paths.toArray }))
-    catch _ => pure none
-  let some o := out | return none
-  if o.exitCode != 0 then return none
+      pure (Except.ok (← IO.Process.output { cmd := "shasum", args := #["-a", "256"] ++ paths.toArray }))
+    catch e => pure (Except.error s!"shasum unavailable: {e}")
+  let o ← match out with
+    | .ok o => pure o
+    | .error why => return .error why
+  if o.exitCode != 0 then
+    let err := ((o.stderr.splitOn "\n").find? (!·.trimAscii.isEmpty)).getD ""
+    return .error s!"shasum unavailable: `shasum -a 256` exited {o.exitCode}{if err.isEmpty then "" else s!": {err.trimAscii}"}"
   let rows := (o.stdout.splitOn "\n").filter (!·.isEmpty)
   let isHex := fun (c : Char) => c.isDigit || ('a' ≤ c && c ≤ 'f')
   let digests := rows.map fun r => String.ofList (r.toList.take 64)
   if rows.length == paths.length && digests.all (fun d => d.length == 64 && d.all isHex) then
-    return some digests
-  return none
+    return .ok digests
+  return .error s!"shasum printed {rows.length} line(s) for {paths.length} image(s), not one SHA-256 each"
 
 /-- SHA-256 over the hashed images' digests (keyed by file name) and the named images' paths. -/
-def checkerBuildDigest (hashed named : List String) : IO (Option String) := do
-  let some digests ← sha256Files hashed | return none
+def checkerBuildDigest (hashed named : List String) : IO (Except String String) := do
+  let digests ← match ← sha256Files hashed with
+    | .ok d => pure d
+    | .error why => return .error why
   let nameOf := fun (p : String) => (System.FilePath.mk p).fileName.getD p
   let rows := (hashed.zip digests).map (fun (p, d) => s!"hash {nameOf p}:{d}") ++ named.map (s!"name {·}")
   let material := "\n".intercalate (rows.mergeSort (· ≤ ·))
-  return some (String.join ((Sha256Fast.hash material.toUTF8).toList.map byteToHex))
+  return .ok (String.join ((Sha256Fast.hash material.toUTF8).toList.map byteToHex))
 
-/-- The identity a run reported about itself, completed with the digest of the code it had loaded. -/
-def checkerIdentityOf (nonce transcript : String) : IO (Option CheckerIdentity) := do
-  let some (version, githash, platform, app) := parseCheckerLine nonce transcript | return none
+/-- The identity a run reported about itself, completed with the digest of the code it had loaded,
+    or the first reason it could not be. -/
+def checkerIdentityOf (nonce transcript : String) : IO CheckerResolution := do
+  let some (version, githash, platform, app) := parseCheckerLine nonce transcript
+    | let n := (taggedLines "CONCRETE-CHECKER-ID" nonce transcript).length
+      return .unidentified (if n == 0 then "the checker printed no identity line for this run"
+        else s!"the checker printed {n} identity lines for this run, not exactly one well-formed line")
   match checkerImagesOf app (taggedLines "CONCRETE-CHECKER-IMAGE" nonce transcript) with
-  | .error _ => return none
+  | .error why => return .unidentified why
   | .ok (hashed, named) =>
-    let some buildDigest ← checkerBuildDigest hashed named | return none
-    return some { version, githash, platform, buildDigest }
+    match ← checkerBuildDigest hashed named with
+    | .error why => return .unidentified why
+    | .ok buildDigest => return .identified { version, githash, platform, buildDigest }
 
 /-- WHICH AXIOMS ARE NATIVE EVALUATION, as Lean SOURCE: spliced at the head of `recheckProbe`, and
     compiled on its own, under every supported toolchain, by `check_kernel_recheck.sh`. One text, so
@@ -795,12 +828,24 @@ def runChecker (ws : System.FilePath) (source : String)
   let _ ← IO.Process.output { cmd := "rm", args := #["-rf", scratchDir] }
   return out
 
+/-- The identity a finished checker process reported. When it reported none AND exited non-zero,
+    the exit status and first stderr line join the reason: "no identity line" alone hides a checker
+    that never started (a missing `lean`, a broken toolchain). -/
+def checkerResolutionOf (nonce : String) (r : IO.Process.Output) : IO CheckerResolution := do
+  match ← checkerIdentityOf nonce (r.stdout ++ "\n" ++ r.stderr) with
+  | .unidentified why =>
+    if r.exitCode == 0 then return .unidentified why
+    let err := ((r.stderr.splitOn "\n").find? (!·.trimAscii.isEmpty)).getD ""
+    return .unidentified (s!"{why}; the checker process exited {r.exitCode}"
+      ++ (if err.isEmpty then "" else s!": {err.trimAscii}"))
+  | ok => return ok
+
 /-- Ask the checker that WOULD run in `ws` who it is, without replaying anything. -/
-def probeChecker (ws : System.FilePath) : IO (Option CheckerIdentity) := do
+def probeChecker (ws : System.FilePath) : IO CheckerResolution := do
   let nonce ← freshNonce
   match ← runChecker ws (checkerIdentityProbe nonce) with
-  | .error _ => return none
-  | .ok r => checkerIdentityOf nonce (r.stdout ++ "\n" ++ r.stderr)
+  | .error e => return .unidentified s!"the checker could not be run (`lake env lean` in {ws}): {e}"
+  | .ok r => checkerResolutionOf nonce r
 
 /-- The checker that WOULD run for this input: its workspace and its toolchain, without running it.
 
@@ -923,7 +968,7 @@ def replay (req : ReplayRequest) : IO (Except ReplayRefusal ReplayResult) := do
         | .unbound => .acceptedUnbound
         | .bound   => .accepted
     { target := t, verdict }
-  let checker ← checkerIdentityOf nonce transcript
+  let checker ← checkerResolutionOf nonce result
   let recheck := recheckVerdictsOf nonce transcript theorems
   return .ok { environment := { env with checker }, checks, exitCode := result.exitCode
              , generalFailure, transcript, recheck }

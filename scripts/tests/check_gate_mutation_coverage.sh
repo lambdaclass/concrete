@@ -1782,14 +1782,14 @@ add "receipt-decode-checks-schema-first" "Concrete/Proof/Receipt.lean" "check_re
 # NO IDENTITY MINTS NOTHING. Substituting an empty identity would let a run that could not say who
 # checked it mint a receipt that any equally anonymous checker later matches.
 add "mint-requires-checker-identity" "Concrete/Proof/Replay.lean" "check_checker_identity.sh" yes \
-  $'  let some checker := r.environment.checker\n    | throw .checkerUnidentified' \
-  $'  let checker := r.environment.checker.getD { version := "", githash := "", platform := "", buildDigest := "" }'
+  '    | .unidentified why => throw (.checkerUnidentified why)' \
+  '    | .unidentified _ => pure { version := "", githash := "", platform := "", buildDigest := "" }'
 
 # ...AND COMPARES CURRENT AGAINST NOTHING. The consumer must refuse rather than compare against a
 # defaulted identity: two unknown checkers are not the same checker.
 add "freshfacts-requires-checker-identity" "Concrete/Proof/Issue.lean" "check_checker_identity.sh" yes \
-  '  let some checker := checker | throw (.checkerUnidentified subject)' \
-  '  let checker := checker.getD { version := "", githash := "", platform := "", buildDigest := "" }'
+  '    | .unidentified why => throw (.checkerUnidentified subject why)' \
+  '    | .unidentified _ => pure { version := "", githash := "", platform := "", buildDigest := "" }'
 
 # THE KERNEL'S CODE MUST BE AMONG THE LOADED IMAGES. Without libleanshared the identity binds only
 # the launcher stub, which says almost nothing about which kernel ran.
