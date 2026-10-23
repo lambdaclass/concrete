@@ -7,7 +7,9 @@ appears only over a scrutinee of its type), on `wip/spec-single-source`
 **Severity:** the compiler panicked or a malformed program reached the backend. A variant of another
 enum (`F::X` over an `E` scrutinee) made the checker panic (`Option.get!`, "value is none") before
 elaboration reported `unknown variant`; a range pattern over an enum failed in the SSA verifier
-natively (E0715, an enum compared with an integer) while `--interp` ran the program.
+natively (E0715, an enum compared with an integer) while `--interp` ran the program. When the other
+enum shares the variant's name (`F::A` over an `E` that also has `A`), the arm was silently taken as
+`E::A`: wrong code with no diagnostic.
 
 ## Reproducer
 
@@ -47,7 +49,8 @@ type and passed, and the specialization decided). An unknown variant of the righ
 `get!` is gone. An unknown scrutinee type (from an earlier error) is not reported again. Fixtures:
 `error_196_other_enum_variant.con`, `error_196_range_over_enum.con`,
 `error_196_variant_over_int.con`, `error_196_literal_type.con` and
-`error_196_literal_over_type_param.con` (E0309, in `run_tests.sh`). A
+`error_196_literal_over_type_param.con` and `error_196_same_name_other_enum.con` (E0309, in
+`run_tests.sh`). A
 rule-impact scan over the 2,169 units of the train 4 corpus found no program whose outcome changed.
 
 ## Structural cause
