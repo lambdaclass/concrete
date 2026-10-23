@@ -1,5 +1,6 @@
 mod test {
     import std.io.{println};
+    import std.env.{get as env_get};
 
     /// Consume-and-ignore a Copy-payload fallible result. The blessed way for
     /// a test to say "this insert/pop result is intentionally unused" — a bare
@@ -204,5 +205,38 @@ mod test {
         }
         message.drop();
         return true;
+    }
+
+    /// The path of the scratch file `name` in this test run's private directory, or None when the
+    /// runner provided none.
+    ///
+    /// A test that touches the filesystem must never use a fixed shared path such as
+    /// `/tmp/name.txt` (bug 191): on a shared host another user owns that file, and two concurrent
+    /// runs read and truncate each other's copy. The test runner (`concrete test`, `--test`, and the
+    /// harnesses run_tests.sh / test_ssa.sh) sets CONCRETE_TEST_TMPDIR to a directory private
+    /// to the run. There is no fallback location: a test that gets None fails, so a missing
+    /// directory is reported instead of silently reintroducing a shared path.
+    pub fn scratch_path(name: String) with(Env, Alloc) -> Option<String> {
+        let var: String = "CONCRETE_TEST_TMPDIR";
+        let dir: Option<String> = env_get(&var);
+        var.drop();
+        match dir {
+            Option::Some { value } => {
+                let mut p: String = value;
+                if p.is_empty() {
+                    p.drop();
+                    name.drop();
+                    return Option::<String>::None;
+                }
+                p.push_char('/');
+                p.append(&name);
+                name.drop();
+                return Option::<String>::Some { value: p };
+            },
+            Option::None => {
+                name.drop();
+                return Option::<String>::None;
+            },
+        }
     }
 }

@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
+
+Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
+On a shared host the first user to run the suite owned those files, so for every other user `fopen`
+returned NULL: `file_write_read` and `file_read_basic` dereferenced it and segfaulted (rc 139), and
+`concrete test` failed. Concurrent runs by one user shared the files too. The test runner now owns
+the scratch location. `concrete test` and `--test` run the binary with `CONCRETE_TEST_TMPDIR` set to
+a directory inside the run's private directory, and `run_tests.sh` and `test_ssa.sh` set it per run
+and per job. std tests get paths from the new `std.test.scratch_path`, which has no fallback. The
+two programs check `fopen` and report an environment error by exit code (100/101/102). The
+`examples/*/bench.sh` scripts use `mktemp -d`. `check_gate_hygiene.sh` now refuses a `/tmp` string
+literal in any `.con` source, as it already did for gate scripts, and also scans the examples'
+scripts. Record: [bug 191](docs/bugs/191_test_scratch_at_fixed_tmp_paths.md).
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never

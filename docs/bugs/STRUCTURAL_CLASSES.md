@@ -49,7 +49,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124 (closed by SCOPE-1@1, exit 2i), 130, 134 (no type had a defined comparison), 136 (evaluation-order rule 6: Core cannot bind the base once), 140 (nor was a comparison non-consuming), 144 (heap interiors exempted from use-once by a disclosed exclusion), 145 (raw collection intrinsics outside rule (c)), 177 (CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's), 182 (REF-5: a borrowed call result is accepted) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
-| 16. Driver artifacts at paths no compile owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`); no roadmap stage yet |
+| 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
@@ -357,23 +357,31 @@ threaded along every reachable path, including guard failure.
 **Owner.** R-0499 (S8: use-once and conservation at reachable exits; its exit names 090), queue
 row 4.
 
-## 16. Driver artifacts at paths no compile owns
+## 16. Artifacts at paths no run owns
 
 **Bugs.** 179 (the intermediate LLVM file was `<input>.ll` or `<main>.ll`, so two concurrent
 compiles of one source removed or rewrote it under each other; test mode, `concrete run` and the
-reducer named their temporaries from the source path or a millisecond clock).
+reducer named their temporaries from the source path or a millisecond clock), 191 (test programs
+and std tests wrote fixed `/tmp` names; on a shared host the first user to run the suite owned
+them and `fopen` failed for every other user).
 
 **Design cause.** The driver derived the location of an intermediate from a shared input, the
 source path or the machine's clock, instead of from the compile that writes and reads it, so it
-implicitly assumed that it was the only process touching those paths.
+implicitly assumed that it was the only process touching those paths. Test code made the same
+assumption about a fixed name in a machine-wide directory, and also about being the only user.
 
 **Structural fix.** Every intermediate that a compile writes and later reads lives in a directory
 that compile creates for itself (`IO.FS.createTempDir` / `IO.FS.withTempDir`), named by
 `privateIntermediate`, and the directory is removed on every path unless it is kept on purpose for
-debugging.
+debugging. Every file a test writes lives in the scratch directory its runner provides
+(`CONCRETE_TEST_TMPDIR`: `concrete test` / `--test` set it inside the run's private directory, the
+suite harnesses per run or per job; std tests use `std.test.scratch_path`), with no fallback.
 
 **Owner.** The compile driver (`Main.lean`, `privateIntermediate`); the concurrent-compile legs in
-`run_tests.sh` (file and project mode) enforce it. No roadmap stage owns the driver yet.
+`run_tests.sh` (file and project mode) enforce it. For test scratch, the test runner
+(`Main.runTestBinary`, `run_tests.sh`, `test_ssa.sh`); `check_gate_hygiene.sh` refuses fixed `/tmp`
+paths in gate scripts (R-0546) and in every `.con` source (bug 191). No roadmap stage owns the
+driver yet.
 
 ## 17. Pass state in association lists and per-query recomputation
 

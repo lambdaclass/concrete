@@ -12,7 +12,10 @@ cd "$SCRIPT_DIR"
 
 CONCRETE_COMPILER="$(cd "$SCRIPT_DIR/../.." && pwd)/.lake/build/bin/concrete"
 RUNS=5
-TEST_FILE="/tmp/conhash_bench_10mb.bin"
+# A private file per run: a fixed /tmp name is owned by whoever ran first on a shared host (bug 191).
+BENCH_DIR="$(mktemp -d)"
+trap 'rm -rf "$BENCH_DIR"' EXIT
+TEST_FILE="$BENCH_DIR/conhash_bench_10mb.bin"
 TEST_SIZE=$((10 * 1024 * 1024))
 
 # ---- Step 1: Generate test file ----
@@ -106,5 +109,3 @@ if [ "$con_avg" != "N/A" ] && [ "$c_avg" -gt 0 ]; then
 fi
 echo "========================================="
 
-# ---- Cleanup ----
-rm -f "$TEST_FILE"

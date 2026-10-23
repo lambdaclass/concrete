@@ -211,6 +211,34 @@ def withPrivateDirKeptOnFailure (f : System.FilePath → IO (UInt32 × Bool)) : 
   return rc
 
 
+/-- The environment variable naming a test run's private scratch directory (bug 191). -/
+def testScratchEnvVar : String := "CONCRETE_TEST_TMPDIR"
+
+/-- Run a compiled test binary (`--test`, `concrete test`) and relay its output.
+
+    TEST SCRATCH IS PRIVATE TO THE RUN (bug 191). A test that touches the filesystem must never
+    use a fixed shared path: `/tmp/concrete_fs_test_roundtrip.txt` is owned by whichever user ran
+    the suite first on a shared host, and two concurrent runs read and truncate each other's file.
+    The binary runs with `CONCRETE_TEST_TMPDIR` set to `<dir>/scratch`, a directory inside the
+    run's private intermediate directory (bug 179), and test code builds its paths from it
+    (`std.test.scratch_path`). The working directory is unchanged, so a test still reads fixtures
+    relative to where it was started. Returns the binary's exit code. -/
+def runTestBinary (dir : System.FilePath) (outPath : String) : IO UInt32 := do
+  let scratch := dir / "scratch"
+  IO.FS.createDirAll scratch
+  let child ← IO.Process.spawn {
+    cmd := outPath
+    stdout := .piped
+    stderr := .piped
+    env := #[(testScratchEnvVar, some scratch.toString)]
+  }
+  let stdout ← child.stdout.readToEnd
+  let stderr ← child.stderr.readToEnd
+  let exitCode ← child.wait
+  IO.print stdout
+  if !stderr.isEmpty then IO.eprint stderr
+  return exitCode
+
 /-- Best-effort resident-set size in KB. Reads `/proc/self/statm` (Linux); returns
     `none` on any platform without it (e.g. macOS) — the telemetry field is
     platform-graceful, never a hard dependency. -/
@@ -545,16 +573,7 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
         IO.eprintln s!"LLVM IR left at: {llPath}"
         return (exitCode, true)
       -- Run the test binary (keep .ll and binary for debugging)
-      let child ← IO.Process.spawn {
-        cmd := outPath
-        stdout := .piped
-        stderr := .piped
-      }
-      let stdout ← child.stdout.readToEnd
-      let stderr ← child.stderr.readToEnd
-      let exitCode ← child.wait
-      IO.print stdout
-      if !stderr.isEmpty then IO.eprint stderr
+      let exitCode ← runTestBinary dir outPath
       if exitCode != 0 then
         IO.eprintln s!"Test binary exited with code {exitCode}"
         IO.eprintln s!"LLVM IR at: {llPath}"
@@ -3739,16 +3758,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
           nativeLinkFailureNote ctx
           IO.eprintln s!"LLVM IR left at: {llPath}"
           return (exitCode, true)
-        let child ← IO.Process.spawn {
-          cmd := outPath
-          stdout := .piped
-          stderr := .piped
-        }
-        let stdout ← child.stdout.readToEnd
-        let stderr ← child.stderr.readToEnd
-        let testExit ← child.wait
-        IO.print stdout
-        if !stderr.isEmpty then IO.eprint stderr
+        let testExit ← runTestBinary dir outPath
         if testExit != 0 then
           IO.eprintln s!"Test binary exited with code {testExit}"
           IO.eprintln s!"LLVM IR at: {llPath}"

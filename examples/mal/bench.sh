@@ -3,14 +3,17 @@
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
+# Private scratch per run: a fixed /tmp name is owned by whoever ran first on a shared host (bug 191).
+BENCH_TMP="$(mktemp -d)"
+trap 'rm -rf "$BENCH_TMP"' EXIT
 
 echo "Building..."
 cd "$ROOT"
-sed 's/fn bench_mode() -> bool { return false; }/fn bench_mode() -> bool { return true; }/' examples/mal/main.con > /tmp/mal_bench.con
-grep -q 'fn bench_mode() -> bool { return true; }' /tmp/mal_bench.con
-~/.elan/bin/lake env concrete /tmp/mal_bench.con --emit-llvm > /tmp/mal.ll 2>&1
-clang /tmp/mal.ll -o /tmp/mal_O2 -O2 -Wno-override-module 2>/dev/null
-clang -O2 "$DIR/bench_c_native.c" -o /tmp/bench_c 2>/dev/null
+sed 's/fn bench_mode() -> bool { return false; }/fn bench_mode() -> bool { return true; }/' examples/mal/main.con > "$BENCH_TMP/mal_bench.con"
+grep -q 'fn bench_mode() -> bool { return true; }' "$BENCH_TMP/mal_bench.con"
+~/.elan/bin/lake env concrete "$BENCH_TMP/mal_bench.con" --emit-llvm > "$BENCH_TMP/mal.ll" 2>&1
+clang "$BENCH_TMP/mal.ll" -o "$BENCH_TMP/mal_O2" -O2 -Wno-override-module 2>/dev/null
+clang -O2 "$DIR/bench_c_native.c" -o "$BENCH_TMP/bench_c" 2>/dev/null
 
 echo ""
 echo "================================================================"
@@ -22,7 +25,7 @@ echo "       compose-n(100)"
 echo ""
 
 echo "--- C native -O2 (baseline) ---"
-/tmp/bench_c
+"$BENCH_TMP/bench_c"
 echo ""
 
 echo "--- Python native ---"
@@ -35,5 +38,5 @@ echo ""
 
 echo "--- Concrete MAL -O2 ---"
 echo "(all benchmarks combined)"
-time /tmp/mal_O2
+time "$BENCH_TMP/mal_O2"
 echo ""

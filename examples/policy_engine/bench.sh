@@ -5,6 +5,9 @@ set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
+# Private scratch per run: a fixed /tmp name is owned by whoever ran first on a shared host (bug 191).
+BENCH_TMP="$(mktemp -d)"
+trap 'rm -rf "$BENCH_TMP"' EXIT
 ITERS=5
 
 # ---- Build ----
@@ -13,13 +16,13 @@ echo "=== Building ==="
 
 # C version
 echo "  C: compiling with -O2 ..."
-cc -O2 -o /tmp/policy_bench_c "$DIR/bench_c.c"
+cc -O2 -o "$BENCH_TMP/policy_bench_c" "$DIR/bench_c.c"
 
 # Concrete version: emit LLVM IR then compile with clang -O2
 echo "  Concrete: compiling via LLVM IR with -O2 ..."
 cd "$ROOT"
-~/.elan/bin/lake env concrete "$DIR/main.con" --emit-llvm > /tmp/policy_con.ll 2>&1
-clang /tmp/policy_con.ll -o /tmp/policy_bench_con -O2 -Wno-override-module 2>/dev/null
+~/.elan/bin/lake env concrete "$DIR/main.con" --emit-llvm > "$BENCH_TMP/policy_con.ll" 2>&1
+clang "$BENCH_TMP/policy_con.ll" -o "$BENCH_TMP/policy_bench_con" -O2 -Wno-override-module 2>/dev/null
 
 echo ""
 
@@ -54,5 +57,5 @@ echo "  Benchmark: RBAC Policy Engine — Concrete vs C"
 echo "================================================================"
 echo ""
 
-run_n "C -O2"       /tmp/policy_bench_c   "$ITERS"
-run_n "Concrete -O2" /tmp/policy_bench_con "$ITERS"
+run_n "C -O2"       "$BENCH_TMP/policy_bench_c"   "$ITERS"
+run_n "Concrete -O2" "$BENCH_TMP/policy_bench_con" "$ITERS"

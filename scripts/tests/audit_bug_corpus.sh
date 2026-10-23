@@ -104,6 +104,10 @@ declare -A BUG_TEST_MAP=(
   # Bug 184: --interp read all of stdin before main ran (waited for an open pipe to close);
   # both fixtures run under run_tests.sh's r184_leg with stdin held open.
   [184]="regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con"
+  # Bug 191: test programs and std tests wrote fixed /tmp paths (rc 139 for any other user on a
+  # shared host); both programs build their path from CONCRETE_TEST_TMPDIR and check fopen
+  # (run_tests.sh regress_191 legs), and check_gate_hygiene.sh refuses /tmp literals in .con sources.
+  [191]="file_write_read.con file_read_basic.con regress_191_test_scratch.con"
   # Bug 179: concurrent compiles of one source shared the intermediate <input>.ll / <main>.ll;
   # both fixtures are compiled concurrently by run_tests.sh (file mode and project mode).
   [179]="regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con"
