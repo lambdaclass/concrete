@@ -285,7 +285,7 @@ pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
 - Uses: none
 - Codes: E0595 (check)
 - Status: enforced
-- Enforced by: Concrete.boundMethodCandidates, Concrete.checkExpr
+- Enforced by: Concrete.boundMethodCandidates, Concrete.checkExprCore
 - Semantics: none
 - Obligation: none
 - Evidence: tested

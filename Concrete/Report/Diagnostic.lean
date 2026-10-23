@@ -235,6 +235,7 @@ def ruleSpecRef (rule : String) : String :=
     | "STMT" => "statements"
     | "ARITH" => "arithmetic"
     | "CON" => "contracts"
+    | "TRAIT" => "traits"
     | _ => "README"
   s!"docs/spec/{chapter}.md#{id}"
 
@@ -261,6 +262,13 @@ def codeRuleTag : String → Option String
   | "E0571" => some "OWN-14@1"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"
+  -- docs/spec/traits.md (trait coherence, bug 186)
+  | "E0590" => some "TRAIT-1@1"
+  | "E0591" => some "TRAIT-2@1"
+  | "E0592" => some "TRAIT-3@1"
+  | "E0593" => some "TRAIT-4@1"
+  | "E0594" => some "TRAIT-5@1"
+  | "E0595" => some "TRAIT-6@1"
   | _ => none
 
 /-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/

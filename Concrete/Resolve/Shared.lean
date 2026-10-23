@@ -10,6 +10,7 @@ namespace Concrete
     (E0595), and every other consumer takes the answer only when it is unique. Taking the
     first bound that has the method made `T: A + B` resolve by declaration order.
     Bounds are deduplicated by name, so `T: A + A` is one candidate. -/
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 def boundMethodCandidates (traits : List TraitDef) (bounds : List String) (method : String)
     : List (TraitDef × FnSigDef) :=
   bounds.eraseDups.filterMap fun traitName =>

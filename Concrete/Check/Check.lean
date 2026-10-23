@@ -606,6 +606,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | _ => return t
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>

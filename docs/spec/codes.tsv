@@ -184,6 +184,12 @@ E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restric
 E0585	unmigrated:ffi	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
 E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
 E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
+E0590	rule	duplicate impl: a trait implemented twice for one type (TRAIT-1)
+E0591	rule	overlapping impls: two impls of one trait whose targets unify (TRAIT-2)
+E0592	rule	orphan impl: the module defines neither the trait nor the type (TRAIT-3)
+E0593	rule	impl target is not its type applied to exactly the impl's own parameters (specialized, blanket, alias or arity; TRAIT-4)
+E0594	rule	one method name provided by two impls of the same type (TRAIT-5)
+E0595	rule	method call through type-parameter bounds is ambiguous: several bound traits declare it (TRAIT-6)
 E0600	tooling	post-elab: placeholder type survived elaboration
 E0601	tooling	post-mono: type variable survived monomorphization
 E0602	internal	lowering failure

@@ -178,6 +178,7 @@ structure Scope where
     declaration's identity (so `import m.{Foo as Bar}; impl Destroy for Bar` names `m`'s `Foo`);
     a sibling submodule's struct or enum; the compiler's `Option`/`Result`; the always-visible
     std types (`String`, `Vec`); then the primitives, by canonical type. -/
+-- spec: TRAIT-D1 (docs/spec/traits.md; this declaration enforces the rule)
 def resolveHead (sc : Scope) (n : String) : HeadRes :=
   let m := sc.module
   match m.structs.find? (·.name == n) with
@@ -253,6 +254,7 @@ partial def Term.occurs (n : String) : Term → Bool
   | .app _ as => as.any (Term.occurs n)
 
 /-- First-order unification (with occurs check). -/
+-- spec: TRAIT-2 (docs/spec/traits.md; this declaration enforces the rule)
 partial def unify (s : List (String × Term)) : List (Term × Term) → Option (List (String × Term))
   | [] => some s
   | (a, b) :: rest =>
@@ -281,16 +283,12 @@ partial def Term.canon (t : Term) : Term :=
       (.app h as', seen')
   (go [] t).1
 
-/-- The spec rule each coherence code enforces (docs/spec/traits.md). -/
-def ruleOf : String → String
-  | "E0590" => "TRAIT-1" | "E0591" => "TRAIT-2" | "E0592" => "TRAIT-3"
-  | "E0593" => "TRAIT-4" | "E0594" => "TRAIT-5" | _ => "TRAIT-6"
-
 def mkDiag (code msg : String) (span : Span) (file : String) (hint : Option String := none) : Diagnostic :=
-  let rule := ruleOf code
+  -- The rule and spec anchor come from the one code-to-rule table (`codeRuleTag`, Diagnostic.lean),
+  -- which check_spec.sh (S6) holds equal to docs/spec/traits.md's `Codes:` fields.
   { severity := .error, message := msg, pass := "check", span := some span, hint := hint,
     code := code, file := file,
-    evidence := [("rule", rule ++ "@1"), ("spec", "docs/spec/traits.md#" ++ rule)],
+    evidence := codeRuleEvidence code,
     nextAction := hint }
 
 /-- The head identity and arity of a resolved target (`none` head: a blanket target).
@@ -304,6 +302,7 @@ def headOf (path typeName : String) : Option HeadRes → Option Nat × Option Im
 
 /-- The judgment over one module: collect its impls (with identities) and its TRAIT-3/TRAIT-4
     refusals. Submodules are walked by the caller. -/
+-- spec: TRAIT-D1, spec: TRAIT-3, spec: TRAIT-4 (docs/spec/traits.md; this declaration enforces the rule)
 def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := Id.run do
   let m := sc.module
   let localTraits := m.traits.map (·.name)
@@ -407,6 +406,7 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
 
 /-- TRAIT-1 / TRAIT-2 / TRAIT-5 over every impl of the program. Pairs are judged by identity, so the
     verdict does not depend on the order impls or imports were written in. -/
+-- spec: TRAIT-1, spec: TRAIT-2, spec: TRAIT-5 (docs/spec/traits.md; this declaration enforces the rule)
 def pairwise (infos : List ImplInfo) : Diagnostics := Id.run do
   let mut ds : Diagnostics := []
   -- Indices of impls shadowed by an earlier conflicting one: excluded from TRAIT-5 so one
@@ -456,6 +456,7 @@ def pairwise (infos : List ImplInfo) : Diagnostics := Id.run do
 
 /-- The coherence judgment for a whole program. Empty means every impl is unique, local and
     fully generic, and every (type, method) pair names one method. -/
+-- spec: TRAIT-7 (docs/spec/traits.md; this declaration enforces the rule)
 def checkProgram (modules : List Module) (summaryTable : List (String × FileSummary)) : Diagnostics :=
   let scopes := modules.flatMap fun m => allScopes summaryTable m.name m.sourceFile m
   let per := scopes.map fun (sc, file) => moduleImpls sc file
