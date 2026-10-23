@@ -51,6 +51,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
 | 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
+| 18. Pipeline artifacts not bound to their payload | 180 (a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified) | R-0497 (S5 sealed, payload-bound artifacts; slice 1 landed with 180's fix) |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -414,3 +415,23 @@ append ratchet (`check_no_quadratic_append.sh`) keeps the commonest spelling fro
 **Owner.** R-0422 (one owned queue for measured compiler performance defects, with explicit
 complexity envelopes gated per class). ROADMAP #5's structured Lower/SSA builder should own block
 and merge accumulation; R-0504's SSA validator should keep the O(1) dominance query.
+
+## 18. Pipeline artifacts not bound to their payload
+
+**Bugs.** 180 (in a project, `--report mono`, `verify` and `traceability` built a `ValidatedCore`
+by `{ validCore with coreModules := … }` from the invoked file's modules, wrapped in synthetic empty
+parents and stripped of `std` and every other dependency, then ran Mono and lowering on it; the
+reports described a program nothing compiles, with no dependency specialization at all).
+
+**Design cause.** A pipeline artifact was a plain record. Its type said which pass had accepted it,
+but nothing tied that acceptance to the payload it carried, so any code could replace the payload
+and keep the type, and every consumer downstream read the new payload as certified.
+
+**Structural fix.** Sealed, certified artifacts (R-0497): each artifact from `ValidatedCore` on has
+a private constructor and carries, as an erased `Prop` field, the equation its producer established
+about its exact payload, and names the artifact it was produced from. A selection of a validated
+program is a separate type (`CoreSubset`) that no compiling pass accepts, and the debugging SSA view
+is `UnverifiedSSA`, which `emit` does not accept.
+
+**Owner.** R-0497 (S5, artifact half). `check_pipeline_artifacts.sh` refuses forgery, payload
+replacement and diagnostic bypass by elaboration.

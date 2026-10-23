@@ -3840,8 +3840,10 @@ def standaloneAssumptions (modules : List CModule)
     | .error _ => ("unidentified:program", "program")
 
 /-- Extract the proof-oriented fragment from validated Core.
-    This is the primary entry point for the proof pipeline. -/
-def extractProofCore (vc : ValidatedCore) (identity : Proof.ResolvedIdentity)
+    This is the primary entry point for the proof pipeline. It reads a `CoreSubset`: the whole
+    validated program (a `ValidatedCore` coerces to it) or modules drawn from one, such as a
+    project's user package. Never modules CoreCheck did not see. -/
+def extractProofCore (vc : CoreSubset) (identity : Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])
     (registry : ProofRegistry := [])
@@ -3924,7 +3926,7 @@ def ProofIdentityRefusal.explain : ProofIdentityRefusal → String
     `extractProofCore` rather than folded into it with a default: a caller that has an identity
     should not be able to accidentally proceed without one, and a caller that lacks one should have
     to say so. -/
-def extractProofCore? (vc : ValidatedCore)
+def extractProofCore? (vc : CoreSubset)
     (identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity)
     (assumptions : Assumptions.Table)
     (locMap : List (String × SourceLoc) := [])

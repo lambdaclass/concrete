@@ -275,6 +275,26 @@ may affect con-leche.
 - Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
   [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
 
+### Sealed, Certified Pipeline Artifacts (R-0497 slice 1, bug 180, 2026-10-23)
+
+Pipeline artifacts now carry proof of their own validity. `ValidatedCore`, `MonomorphizedProgram`
+and `SSAProgram` have private constructors. Each carries an erased `Prop` stating what its producer
+established about its exact payload: CoreCheck accepted these modules, Mono produced these modules
+from that source and the post-Mono verifier is clean on them, and the SSA verifier accepts these
+modules after cleanup. Forging one, or replacing its payload with `{ a with … }`, no longer
+compiles. The `ssa-unverified` debugging view is a separate `UnverifiedSSA` that `emit` refuses.
+Modules drawn from a validated program are a `CoreSubset`, which proof extraction reads and Mono
+does not. The emitted output is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
+payload-replacement and diagnostic-bypass cases by elaboration.
+
+Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and `traceability`
+replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
+dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
+specializations where the build emits 61, and the verify gates called that program clean. These
+reports now run their passes on the whole validated program and list the invoked file's part of
+the result (9 wordfreq specializations). The bug is pinned by
+`regress_180_report_scope`.
+
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
 The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
