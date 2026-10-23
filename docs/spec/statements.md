@@ -290,18 +290,19 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: new (check)
-- Status: pending R-0499
+- Codes: E0307 (check)
+- Status: enforced
+- Enforced by: Concrete.checkFn
 - Semantics: none
 - Obligation: every reachable exit returns a value of the result type (R-0499)
 - Evidence: tested
 
 **Rationale.** Function bodies have no trailing value expression (STMT-8), so a reachable end has
-no value to return. Nothing checked this: the backend failed in `llvm-as` (a `ret void` in a
-non-void function) while `--interp` ran the program (bug 194, fixed on `wip/bug194` with E0307,
-using a reachability analysis over every statement of a block).
+no value to return. Until bug 194 nothing checked this: the backend failed in `llvm-as` (a `ret
+void` in a non-void function) while `--interp` ran the program. Check now refuses it with E0307,
+using a reachability analysis over every statement of a block.
 
-```con reject name=one-branch-returns code=new stage=check pair=every-path-returns pending=R-0499 now=fail:doesn't_match_function_result_type now-interp=accept:42
+```con reject name=one-branch-returns code=E0307 stage=check pair=every-path-returns
 fn f(c: bool) -> Int {
     if c {
         return 1;

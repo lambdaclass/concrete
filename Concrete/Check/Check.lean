@@ -606,7 +606,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | _ => return t
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4 (docs/spec/ownership.md; this declaration enforces the rule)
--- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
+-- spec: TRAIT-6, spec: PAT-5 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -3336,7 +3336,7 @@ def checkConstInit (c : ConstDef) : CheckM Unit := do
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
--- spec: REF-1 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-1, spec: STMT-9 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that

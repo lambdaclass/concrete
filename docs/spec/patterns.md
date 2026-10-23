@@ -131,8 +131,8 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0304 (check), E0531 (core-check), E0532 (core-check), E0533 (core-check)
-- Status: partial R-0499
+- Codes: E0304 (check), E0309 (check), E0531 (core-check), E0532 (core-check), E0533 (core-check)
+- Status: enforced
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: a checked match never inspects a value its pattern does not describe (R-0507)
@@ -140,13 +140,11 @@ fn main() -> Int {
 
 **Rationale.** A pattern describes the shape the scrutinee has. Every field is listed, so a field
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
-arm that can never be reached is a mistake. Gaps remain until bugs 196 and 197 land, and two of
-them are silent: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
-reports `unknown variant` (fails closed), a variant of another enum that shares a name with one of
-the scrutinee's is silently taken as that one (silent), and a range arm over an enum reaches the SSA verifier
-natively while `--interp` runs it (fails closed natively). These are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
-examples become enforced when it lands. A bare variant name over a variant with a non-Copy field
-silently dropped the payload (silent; bug 197, fixed on `wip/bug197` with E0288).
+arm that can never be reached is a mistake. Before bug 196 a pattern that did not fit the scrutinee
+was not checked: a variant of another enum made the compiler panic, one sharing a name with the
+scrutinee's own was silently taken as it, and a range arm over an enum reached the SSA verifier.
+Check now refuses each with E0309. A bare variant name over a variant with a non-Copy field
+silently dropped the payload until bug 197; that refusal is OWN-5's (E0288).
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -173,7 +171,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=other-enum-variant code=new stage=check pair=arms-fit pending=R-0499 now=fail:Option.get!
+```con reject name=other-enum-variant code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 enum Copy F { X, Y }
 
@@ -186,7 +184,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=range-over-enum code=new stage=check pair=arms-fit pending=R-0499 now=reject:E0715:ssa-verify now-interp=accept:42
+```con reject name=range-over-enum code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 
 fn main() -> Int {
@@ -198,7 +196,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=same-name-other-enum code=new stage=check pair=arms-fit pending=R-0499 now=accept:42
+```con reject name=same-name-other-enum code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 enum Copy F { A, X }
 
@@ -207,19 +205,6 @@ fn main() -> Int {
     match e {
         F::A => { return 1; },
         _ => { return 42; }
-    }
-}
-```
-
-```con reject name=bare-variant-drops-payload code=new stage=check pair=arms-fit pending=R-0499 now=accept:1
-struct R { v: Int }
-enum E { A { r: R }, B }
-
-fn main() -> Int {
-    let e: E = E::A { r: R { v: 42 } };
-    match e {
-        E::A => { return 1; },
-        E::B => { return 0; }
     }
 }
 ```
@@ -300,20 +285,19 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0252 (check)
-- Status: partial R-0499
-- Enforced by: Concrete.checkStmt
+- Codes: E0252 (check), E0308 (check)
+- Status: enforced
+- Enforced by: Concrete.checkStmt, Concrete.checkExprCore
 - Semantics: none
 - Obligation: linear conservation (R-0507)
 - Evidence: tested
 
 **Rationale.** A struct always matches its own pattern; a multi-variant enum may not, so its
 pattern needs an `else`. Falling out of the `else` would continue with the bindings unbound. That
-divergence requirement has no enforcing site today: an `else` block that falls through skips the
-rest of the function, or, in a function with a result type, reaches the backend, which fails in
-`llvm-as` while `--interp` runs it. That is bug 195 (fixed on `wip/bug195` with E0308); a function
-whose end is reachable without a `return` in general is bug 194 (`wip/bug194`, E0307, a statements
-rule). Over a non-Copy enum the
+divergence requirement had no enforcing site until bug 195: an `else` block that fell through
+skipped the rest of the function, or reached the backend, which failed in `llvm-as` while
+`--interp` ran it. Check now refuses it with E0308. A function whose end is reachable without a
+`return` is STMT-9. Over a non-Copy enum the
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
 
@@ -327,7 +311,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=else-falls-through code=new stage=check pair=destructure-all pending=R-0499 now=fail:doesn't_match_function_result_type now-interp=accept:42
+```con reject name=else-falls-through code=E0308 stage=check pair=destructure-all
 fn main() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     let Option::Some { value } = o else {

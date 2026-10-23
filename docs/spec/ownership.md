@@ -319,7 +319,9 @@ owns a resource. A linear value is accounted for: it is consumed, passed on, ret
 with `destroy(x)`, or destructured exhaustively with its parts handed off. `destroy(x)` runs a
 linear value's destructor, and `discard(x)` acknowledges that a trivial Copy value is dropped.
 Over a non-Copy enum, a `let ... else`, `if let` or `while let` that has no arm for the other
-variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead.
+variants is a hidden `_` and is refused the same way. Write an exhaustive `match` instead. A
+variant pattern written without a field list ignores every field, so over an owned scrutinee it
+is refused when a field is not Copy (bug 197).
 
 ```con reject name=wildcard-drops-linear code=E0288 stage=check pair=account-for-it
 struct R { v: Int }
@@ -343,6 +345,19 @@ fn mk() -> R {
 fn main() -> Int {
     mk();
     return 0;
+}
+```
+
+```con reject name=bare-variant-drops-payload code=E0288 stage=check pair=account-for-it
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn main() -> Int {
+    let e: E = E::A { r: R { v: 42 } };
+    match e {
+        E::A => { return 1; },
+        E::B => { return 0; }
+    }
 }
 ```
 

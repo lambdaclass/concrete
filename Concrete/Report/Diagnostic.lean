@@ -113,12 +113,14 @@ def codeRuleTag : String → Option String
   | "E0278" => some "STMT-5@1"
   | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@1"
   | "E0310" => some "STMT-7@2"
+  | "E0307" => some "STMT-9@1"
   -- docs/spec/arithmetic.md
   | "E0227" => some "ARITH-2@1"
   | "E0553" => some "ARITH-5@1"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@2"
-  | "E0304" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"
+  | "E0304" | "E0309" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"
+  | "E0308" => some "PAT-5@2"
   | "E0300" => some "PAT-4@1"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"

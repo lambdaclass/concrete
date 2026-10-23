@@ -125,6 +125,9 @@ E0303	rule	a reference binding is assigned (references are never re-pointed; exi
 E0304	rule	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
 E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
 E0306	rule	a struct or enum literal gives a field more than once (bug 193)
+E0307	rule	the end of a function with a result type is reachable without a return (bug 194)
+E0308	rule	the else block of a let ... else can fall through (bug 195)
+E0309	rule	a match arm's pattern does not fit the scrutinee's type (bug 196)
 E0310	rule	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable
