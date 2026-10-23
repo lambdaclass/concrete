@@ -846,30 +846,37 @@ def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
   | (.expr e _) :: rest => if cExprDiverges e then [] else cStmtsLetsAtEnd declared rest
   | _ :: rest => cStmtsLetsAtEnd declared rest
 
-/-- May `branch` be composed with the continuation `k` (already extracted)? Only when none of the
-    branch's own `let`s that reach its end is mentioned by `k` — then nesting `k` inside them changes
-    nothing. A fresh local nothing after the branch names stays extractable. -/
 /-- Does a statement list assign a local anywhere, nested bodies included? A VALUE-position body (an
     `if` expression's branch, a `match` expression's arm) is extracted with no continuation, so an
     assignment in it would rebind the name only inside the extracted body and its effect on the code
     after the expression would be lost: such a body is refused (Codex review of the 2026-10-23
     state-model extension, which admitted assignments outside loops). Conservative: any assignment
     counts, even to a local declared inside the body. -/
-partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any fun
+mutual
+partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any cStmtAssigns
+
+partial def cStmtAssigns : CStmt → Bool
   | .assign .. | .arrayIndexAssign .. | .fieldAssign .. | .derefAssign .. => true
-  | .ifElse c t e => cExprAssigns c || cStmtsAssign t || (e.map cStmtsAssign).getD false
+  | .ifElse c t e => cExprAssigns c || cStmtsAssign t || (match e with | some b => cStmtsAssign b | none => false)
   | .while_ c b _ => cExprAssigns c || cStmtsAssign b
   | .borrowIn _ _ _ _ _ b => cStmtsAssign b
-  | .letDecl _ _ _ v | .expr v _ | .defer v => cExprAssigns v
-  | .return_ (some v) _ | .break_ (some v) _ => cExprAssigns v
+  | .letDecl _ _ _ v => cExprAssigns v
+  | .expr v _ => cExprAssigns v
+  | .defer v => cExprAssigns v
+  | .return_ (some v) _ => cExprAssigns v
+  | .break_ (some v) _ => cExprAssigns v
   | _ => false
-where
-  cExprAssigns : CExpr → Bool
-    | .ifExpr c t e _ => cExprAssigns c || cStmtsAssign t || cStmtsAssign e
-    | .match_ s arms _ => cExprAssigns s || arms.any fun
-      | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => cStmtsAssign b
-    | _ => false
 
+partial def cExprAssigns : CExpr → Bool
+  | .ifExpr c t e _ => cExprAssigns c || cStmtsAssign t || cStmtsAssign e
+  | .match_ s arms _ => cExprAssigns s || arms.any fun
+    | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => cStmtsAssign b
+  | _ => false
+end
+
+/-- May `branch` be composed with the continuation `k` (already extracted)? Only when none of the
+    branch's own `let`s that reach its end is mentioned by `k` — then nesting `k` inside them changes
+    nothing. A fresh local nothing after the branch names stays extractable. -/
 def cBranchComposes (branch : List CStmt) (k : Proof.PExpr) : Bool :=
   (cStmtsLetsAtEnd [] branch).all fun n => !pexprMentions n k
 
