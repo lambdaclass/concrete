@@ -1673,7 +1673,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
             checkGuard guard
             pure body
-          | .litArm _ val _ _ => do
+          | .litArm _ _ _ _ => do
             -- Bug 196 (PAT-3): a literal pattern over an enum scrutinee.
             throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           | .varArm _ binding guard body => do
