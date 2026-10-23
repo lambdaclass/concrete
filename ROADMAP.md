@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 159 bug records.
+**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 165 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -127,7 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 19 attribution-only batches (reviews, follow-ons, CI, controls, development) found 29 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 22 attribution-only batches (reviews, follow-ons, CI, controls, development) found 33 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
