@@ -55,4 +55,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	review	Codex audit of trait resolution (coherence), confirmed by probes on wip/train3 1df4cf48	unrecorded	186	186
 2026-10-23	development	verified-pipeline R-0497 slice 1 (sealing the pipeline artifacts refused a record update that replaced a certificate's payload)	unrecorded	180	180
 2026-10-23	spec	language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews)	116 programs	192,193	192,193
-2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	197	-
+2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	202	-

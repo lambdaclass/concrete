@@ -12455,7 +12455,7 @@ fi
 #     the later `r` read the inner, dropped String: a heap use-after-free)
 #   regress_179_concurrent_build/src/main.con  (bug 179 — also built concurrently
 #     in the bug 102/105/175 block; pre-fix the builds shared src/main.con.ll)
-#   regress_197_project_let_else/src/main.con  (bug 197 — a project's `let … else`
+#   regress_202_project_let_else/src/main.con  (bug 202 — a project's `let … else`
 #     reached Check undesugared and was refused; desugaring is part of resolve now)
 # The watchdog is lib/bounded.sh (python3, present in the devshell and on CI). Without
 # python3 it degrades to running without a watchdog rather than skipping the fixtures,

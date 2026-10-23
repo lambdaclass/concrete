@@ -13,8 +13,8 @@
 #   T   the walk's answers on a program with loops, branches, arms, a borrow block and sibling
 #       reuse of one spelling: every use denotes the lexically right binder, a valid program has
 #       no collision and no conflict, and a shadowing one records exactly its collision;
-#   R   the pipeline: Pipeline.resolve attaches a resolved table to every function (bug 197: a
-#       project's `let … else` used to reach Check undesugared), and the bug 176 / 197 programs
+#   R   the pipeline: Pipeline.resolve attaches a resolved table to every function (bug 202: a
+#       project's `let … else` used to reach Check undesugared), and the bug 176 / 202 programs
 #       behave.
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
@@ -185,7 +185,7 @@ else
 fi
 
 echo ""
-echo "=== R: the pipeline attaches the table; the bug 176 / 197 programs ==="
+echo "=== R: the pipeline attaches the table; the bug 176 / 202 programs ==="
 cat > "$TMP/pipe.lean" <<'LEAN'
 import Concrete
 open Concrete
@@ -209,13 +209,13 @@ else
 fi
 OUT="$("$BIN" tests/programs/regress_176_loop_shadow_restores_outer.con -o "$TMP/r176" 2>&1)" && "$TMP/r176"; RC=$?
 [ "$RC" -eq 42 ] && ok "R: bug 176's loop program compiles and exits 42" || no "R: bug 176's loop program: rc=$RC $OUT"
-P="$TMP/p197"; mkdir -p "$P/src"
+P="$TMP/p202"; mkdir -p "$P/src"
 printf '[package]\nname = "let_else"\nversion = "0.1.0"\n' > "$P/Concrete.toml"
 cp tests/programs/let_else.con "$P/src/main.con"
-if (cd "$P" && "$BIN" build -o "$P/out" >"$TMP/b197.log" 2>&1) && "$P/out" >/dev/null; then
-  ok "R: bug 197: a project's 'let … else' (tests/programs/let_else.con) builds and runs (exit 0)"
+if (cd "$P" && "$BIN" build -o "$P/out" >"$TMP/b202.log" 2>&1) && "$P/out" >/dev/null; then
+  ok "R: bug 202: a project's 'let … else' (tests/programs/let_else.con) builds and runs (exit 0)"
 else
-  no "R: bug 197: the let-else project failed: $(head -c 400 "$TMP/b197.log")"
+  no "R: bug 202: the let-else project failed: $(head -c 400 "$TMP/b202.log")"
 fi
 
 # Two '_' binders of one struct destructure are two bindings (Codex round 2): the linear field's

@@ -1,9 +1,9 @@
-// Bug 197 regression: a destructuring `let … else` in a PROJECT. Desugaring was a pipeline step
+// Bug 202 regression: a destructuring `let … else` in a PROJECT. Desugaring was a pipeline step
 // each caller had to remember; the project loader (and the debug bundle, reducer and Lean test
 // paths) skipped it, so this function reached Check undesugared and was refused ("a destructuring
 // `let` is not supported in a `for` header", then E0201 for `value`), while the same file
 // compiled as a standalone program. Desugaring is now part of Pipeline.resolve.
-mod regress_197_project_let_else {
+mod regress_202_project_let_else {
     enum Copy Result {
         Ok { value: i32 },
         Err { code: i32 },

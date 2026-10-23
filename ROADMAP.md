@@ -3280,7 +3280,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 contract 2 in [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md).** `LocalId` is minted by
 the one lexical walk (`Resolve/Locals.lean`), which runs inside `Pipeline.resolve`. The checker's
 environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Checks are in
-`check_local_identity.sh`, plus mutation family 98. The slice found bug 197: project builds
+`check_local_identity.sh`, plus mutation family 98. The slice found bug 202: project builds
 skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
 `VariantIdx`; contract expressions; `ElabVerify`.
 

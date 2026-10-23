@@ -495,7 +495,7 @@ diagnostic-path bypass.
   `Resolve/Locals.lean` (the former SCOPE-1 walk of `Check.lean`), records three things: the
   binder for each binding, the binding each use of a local name denotes (keyed by the use's
   position and spelling), and each SCOPE-1 collision. Desugaring moves inside `Pipeline.resolve`,
-  so no path reaches Check with a body that skipped it (bug 197).
+  so no path reaches Check with a body that skipped it (bug 202).
 - *Invariant made structural:*
   - The checker's environment is keyed by binding identity (`TypeEnv.vars : List (LocalRef × VarInfo)`;
     a `LocalRef` is a `LocalId` with its spelling for messages, and compares by identity).
@@ -517,7 +517,7 @@ diagnostic-path bypass.
     `let … else`, a struct destructure, a borrow block, a call through a fn-typed parameter,
     sibling reuse and one collision.
   - R: `Pipeline.resolve` attaches a resolved table to every function; bug 176's loop program
-    still runs; bug 197's project `let … else` builds; a destructure's two `_` binders keep two
+    still runs; bug 202's project `let … else` builds; a destructure's two `_` binders keep two
     identities (Codex round 2).
   - Mutation family 98 (a use denotes the outermost visible binding of its spelling) is killed by
     leg T.

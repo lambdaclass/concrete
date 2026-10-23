@@ -1,4 +1,4 @@
-# Bug 197 — project builds skipped desugaring, so a `let … else` was refused
+# Bug 202 — project builds skipped desugaring, so a `let … else` was refused
 
 **Status:** FIXED (branch `vp-r0492`)
 **Found:** 2026-10-23, while moving the checker's binding identities to Resolve (R-0492 slice 1):
@@ -47,7 +47,7 @@ exactly what a skipped stage now produces.
 
 ## Regression
 
-- `tests/programs/regress_197_project_let_else/`: the project loop in `run_tests.sh` builds and
+- `tests/programs/regress_202_project_let_else/`: the project loop in `run_tests.sh` builds and
   runs it (exit 0).
 - `check_local_identity.sh` leg R builds `let_else.con` as a project, and leg R checks that
   `Pipeline.resolve` attaches a resolved table to every function.

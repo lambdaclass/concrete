@@ -1707,7 +1707,7 @@ jobs:
       - name: "Pipeline artifacts (R-0497 slice 1 / bug 180 — sealed, certified ValidatedCore/Mono/SSA; forgery, mutation reuse and diagnostic bypass do not elaborate)"
         run: bash scripts/tests/check_pipeline_artifacts.sh
 
-      - name: "Local binder identity (R-0492 slice 1 / bug 197 — the checker's environment is keyed by LocalId minted by the one lexical walk; no lookup by spelling)"
+      - name: "Local binder identity (R-0492 slice 1 / bug 202 — the checker's environment is keyed by LocalId minted by the one lexical walk; no lookup by spelling)"
         run: bash scripts/tests/check_local_identity.sh
 
       - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"

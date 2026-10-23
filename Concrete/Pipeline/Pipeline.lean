@@ -158,7 +158,7 @@ def buildSummary (prog : ParsedProgram) : SummaryTable :=
 /-- What every resolved program goes through before Check and Elab see it: destructuring `let`s
     are desugared, then the local walk (`Resolve/Locals.lean`) attaches each function's local
     binder table. Part of resolution, not a separate step, so no path can reach Check with a
-    body it skipped. Bug 197: `desugar` was a step each caller had to remember; the project,
+    body it skipped. Bug 202: `desugar` was a step each caller had to remember; the project,
     debug-bundle, reducer and test paths did not, so a project's `let … else` reached Check
     undesugared and was refused. -/
 private def finishResolve (rm : ResolvedModule) : ResolvedModule :=

@@ -10,7 +10,7 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Local Binder Identity In The Checker (R-0492 slice 1, bug 197, 2026-10-23)
+### Local Binder Identity In The Checker (R-0492 slice 1, bug 202, 2026-10-23)
 
 The checker no longer decides by spelling which binding a name denotes.
 `Concrete/Resolve/Locals.lean` is the one lexical walk over each desugared function body (the
@@ -27,7 +27,7 @@ cannot answer for a later use of its spelling. That is structural class 2, the c
 guards E0292 (live shadow) and E0238's shadowed-source rule had become unreachable and are
 removed. A function or constant without a table is refused.
 
-Moving the walk into resolve found bug 197. Desugaring was a step each driver had to call, and the
+Moving the walk into resolve found bug 202. Desugaring was a step each driver had to call, and the
 project loader, debug bundle, reducer and Lean tests skipped it. A project's `let … else` was
 therefore refused while the same file compiled standalone. Desugaring is now part of
 `Pipeline.resolve`. `check_local_identity.sh` has compile-fail, minting-site, walk-answer and
