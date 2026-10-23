@@ -480,6 +480,7 @@ private def structOfTy (ty : Ty) : StateM CoreCheckEnv (Option CStructDef) := do
 
 mutual
 
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   match e with
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()
@@ -868,8 +869,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     ccCheckExpr allocExpr
   | .ifExpr cond then_ else_ ty =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
-      addCCError (.whileCondNotBool (toString (repr cond.ty)))
+    if cond.ty != .bool then  -- bug 192 (TYPE-5): no integer conditions
+      addCCError (.ifCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     inCoreBlock (for s in else_ do ccCheckStmt s)
     -- A value `if` binds each branch's value to its own type, like a `let`. An `if` typed
@@ -888,27 +889,36 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     let saved := (← getEnv).vars
     for (bname, bty) in bindings do
       addVar bname bty
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     for s in body do ccCheckStmt s
     let env ← getEnv
     setEnv { env with vars := saved }
   | .litArm value guard body =>
     ccCheckExpr value
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
   | .varArm binding bindTy guard body =>
     let saved := (← getEnv).vars
     addVar binding bindTy
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     for s in body do ccCheckStmt s
     let env ← getEnv
     setEnv { env with vars := saved }
   | .rangeArm lo hi _ guard body =>
     ccCheckExpr lo
     ccCheckExpr hi
-    match guard with | some g => ccCheckExpr g | none => pure ()
+    match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
+    | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
+    | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
 
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   match stmt with
   | .letDecl name _mutable ty value =>
@@ -940,7 +950,9 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .ifElse cond then_ else_ =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
+    -- Bug 192 (TYPE-5): no integer conditions (the `isInteger` allowance was C-style truthiness
+    -- the language never had; the interpreter refused it at run time).
+    if cond.ty != .bool then
       addCCError (.ifCondNotBool (toString (repr cond.ty)))
     inCoreBlock (for s in then_ do ccCheckStmt s)
     match else_ with
@@ -949,7 +961,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .while_ cond body _label step =>
     ccCheckExpr cond
-    if cond.ty != .bool && !isInteger cond.ty then
+    if cond.ty != .bool then  -- bug 192 (TYPE-5): no integer conditions
       addCCError (.whileCondNotBool (toString (repr cond.ty)))
     let env ← getEnv
     setEnv { env with inLoop := true }

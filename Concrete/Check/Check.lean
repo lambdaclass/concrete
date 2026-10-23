@@ -605,7 +605,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
--- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3 (docs/spec/ownership.md; this declaration enforces the rule)
 -- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
@@ -1466,6 +1466,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         match sd.fields.find? fun sf => sf.name == fn with
         | some _ => pure ()
         | none => throwCheck (.unknownFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
+        -- Bug 193 (TYPE-7): each field once (the checker reads the first, the backend the last).
+        if (fields.filter fun (f, _) => f == fn).length > 1 then
+          throwCheck (.duplicateFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
@@ -1583,6 +1586,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+          if (fields.filter fun (f, _) => f == fn).length > 1 then
+            throwCheck (.duplicateFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
@@ -2193,6 +2198,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     and moving a non-Copy value in it is E0300. A false guard falls through to
     the next arm, which is checked from the same pre-arm env and may move the
     same value — the guard's move would then be a second one at run time. -/
+-- spec: PAT-4 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def checkGuard (guard : Option Expr) : CheckM Unit := do
   match guard with
   | none => pure ()
@@ -2203,7 +2209,10 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     let live := before.vars.filterMap fun (_, vi) =>
       if !vi.isCopy && vi.state != .consumed then some vi.uid else none
     setEnv { before with guardUids := live ++ before.guardUids }
-    discard (checkExpr g (some .bool))
+    -- Bug 192 (TYPE-5): a guard is a condition; the `.bool` hint does not assert the type.
+    let gTy ← checkExpr g (some .bool)
+    if gTy != .bool then
+      throwCheck (.condNotBool "match guard" (tyToString gTy)) (some g.getSpan)
     let after0 ← getEnv
     setEnv { after0 with guardUids := before.guardUids }
     let after ← getEnv
@@ -2211,7 +2220,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -2420,7 +2429,10 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
             throwCheck (.discardedPureValue (tyToString eTy)) (some stmt.getSpan)
     pure ()
   | .ifElse _ cond thenBody elseBody =>
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    -- Bug 192 (TYPE-5): the condition is a `bool`; an integer is not a condition.
+    if condTy != .bool then
+      throwCheck (.condNotBool "if" (tyToString condTy)) (some cond.getSpan)
     -- Snapshot variable states before branches
     let envBefore ← getEnv
     -- Check then branch (flagging it if it exits the function, which relaxes
@@ -2483,7 +2495,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- move of an outer binding there is a move inside the loop (E0207).
     let env0 ← getEnv
     setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-    let _condTy ← checkExpr cond
+    let condTy ← checkExpr cond
+    if condTy != .bool then
+      throwCheck (.condNotBool "while" (tyToString condTy)) (some cond.getSpan)
     let envC ← getEnv
     setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
     -- Increment loop depth for the body, push label if present
@@ -2516,7 +2530,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Condition (bug 149: evaluated on every iteration, so checked at the loop's depth)
       let env0 ← getEnv
       setEnv { env0 with loopDepth := env0.loopDepth + 1, inFnExitingBranch := false, rebindingVar := none }
-      let _condTy ← checkExpr cond
+      let condTy ← checkExpr cond
+      if condTy != .bool then
+        throwCheck (.condNotBool "for" (tyToString condTy)) (some cond.getSpan)
       let envC ← getEnv
       setEnv { envC with loopDepth := env0.loopDepth, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
       -- Body + step in loop scope, push label if present

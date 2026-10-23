@@ -146,6 +146,10 @@ declare -A BUG_TEST_MAP=(
   # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
   # Also check_pipeline_artifacts.sh legs B, U and D.
   [180]="regress_180_report_scope/src/main.con"
+  # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
+  [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
+  # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).
+  [192]="error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"

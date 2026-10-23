@@ -6245,10 +6245,14 @@ open Json in
 def diagnosticCodesReport : String :=
   -- A code with a whole-code rule (`codeRuleTag`, docs/spec) names it, like `entryR` below.
   let entry (code pass severity description : String) : Val :=
-    match codeRuleTag code with
-    | some r => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
-                      ("description", .str description), ("rules", .str r)]
-    | none => .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    let rules := match codeRuleTag code with
+      | some r => r
+      | none => ", ".intercalate (codeSharedRules code)
+    if rules.isEmpty then
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity), ("description", .str description)]
+    else
+      .obj [("code", .str code), ("pass", .str pass), ("severity", .str severity),
+            ("description", .str description), ("rules", .str rules)]
   -- A code that enforces exit 2i rules names them with their versions (MEMORY_SEMANTICS §15.5
   -- item 1); `scripts/tests/check_rules_2i.sh` checks every manifest row's tag against this.
   let entryR (code pass severity description rules : String) : Val :=
@@ -6295,7 +6299,7 @@ def diagnosticCodesReport : String :=
     entry "E0220" "check" "error" "type mismatch",
     entry "E0221" "check" "error" "dereference of non-reference type",
     entry "E0222" "check" "error" "while break/else type mismatch",
-    entry "E0223" "check" "error" "if condition not Bool",
+    entry "E0223" "check" "error" "condition of if / while / for not Bool",
     entry "E0224" "check" "error" "if branch type mismatch",
     entry "E0225" "check" "error" "match arm type mismatch",
     entry "E0226" "check" "error" "break value type mismatch",
@@ -6380,6 +6384,7 @@ def diagnosticCodesReport : String :=
     entryR "E0236" "check" "error" "a function, function type or instantiation returns a reference (front end and post-mono)" "REF-1@1, REF-2@1, REF-4@1",
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
+    entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",

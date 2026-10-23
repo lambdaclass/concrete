@@ -121,6 +121,7 @@ inductive Ty where
     aliases are rejected earlier (Resolve, E0112), so realistic inputs are
     acyclic; if fuel is exhausted on pathologically deep nesting, expansion stops
     safely (leaving the type as-is) rather than looping. -/
+-- spec: TYPE-12 (docs/spec/types.md; this declaration enforces the rule)
 def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
   | 0, ty => ty
   | fuel + 1, ty =>
@@ -144,6 +145,7 @@ def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
     fully-expanded, alias-free target: `type B = A; type A = i32` makes `B`
     resolve straight to `i32`, and `type Arr = [E; 3]; type E = i32` makes `Arr`
     resolve to `[i32; 3]`. -/
+-- spec: TYPE-12 (docs/spec/types.md; this declaration enforces the rule)
 def closeAliasMap (m : List (String × Ty)) : List (String × Ty) :=
   m.map (fun (n, t) => (n, expandAliasDeep m (m.length + 64) t))
 

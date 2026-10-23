@@ -196,7 +196,8 @@ def ElabError.code : ElabError → String
   | .mutReceiverThroughSharedRef _ => "E0237"
 
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
-  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
+  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
+           evidence := codeRuleEvidence e.code }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env

@@ -55,6 +55,25 @@ same-named parameter, a variable beside a concrete capability) now compile. The 
 by nine witnesses, a positive control that agrees with `--interp`,
 `check_capability_judgment.sh` and five mutation families.
 
+### A Literal Gives Each Field Once (bug 193, 2026-10-23)
+
+A struct or enum literal that names a field twice is now refused with E0306. Before this fix the
+checker type-checked the first occurrence, the binary stored the last and `--interp` used the
+first, so `P { n: 1, n: 41 }` gave 41 natively and 1 in the interpreter. The specification's types
+chapter (TYPE-7, each field exactly once) led to it. It is pinned by
+`error_193_duplicate_{struct,variant}_field.con`.
+
+### An Integer Is Not A Condition (bug 192, 2026-10-23)
+
+An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as
+the expression form already was. Before this fix the checker computed the statement condition's
+type and discarded it, and CoreCheck admitted any integer as a condition, so the binary ran the
+program with C truthiness while `--interp` stopped with a run-time error. The language
+specification's TYPE-5 example found it, because the specification's examples run on both
+consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
+rather than the `while` code. A match guard had the same hole and is refused the same way. It is pinned by
+`error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`.
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never

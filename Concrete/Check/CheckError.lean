@@ -186,6 +186,9 @@ inductive CheckError where
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
   | ifCondNotBool (ty : String)
+  -- Bug 192: the condition of an `if` / `while` / `for` STATEMENT (TYPE-5; the expression form
+  -- uses `ifCondNotBool`). Its type was computed and discarded, so an integer condition compiled.
+  | condNotBool (what : String) (ty : String)
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
   | breakTypeMismatch (valTy : String) (prevTy : String)
@@ -226,6 +229,9 @@ inductive CheckError where
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
   | missingFieldInLiteral (fieldName : String) (containerDesc : String)
+  -- Bug 193 (TYPE-7): a struct or enum literal names a field twice. The checker read the first
+  -- occurrence and the backend stored the last, so the consumers disagreed.
+  | duplicateFieldInLiteral (fieldName : String) (containerDesc : String)
   | unknownFieldInLiteral (fieldName : String) (containerDesc : String)
   | fieldAccessNonStruct
   | unknownVariant (variant : String) (enumName : String)
@@ -404,6 +410,7 @@ def CheckError.message : CheckError → String
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
+  | .condNotBool what ty => s!"{what} condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
   | .breakTypeMismatch valTy prevTy => s!"break value type '{valTy}' does not match previous break type '{prevTy}'"
@@ -427,6 +434,7 @@ def CheckError.message : CheckError → String
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .missingFieldInLiteral fieldName containerDesc => s!"missing field '{fieldName}' in {containerDesc}"
+  | .duplicateFieldInLiteral fieldName containerDesc => s!"field '{fieldName}' is given more than once in {containerDesc}"
   | .unknownFieldInLiteral fieldName containerDesc => s!"unknown field '{fieldName}' in {containerDesc}"
   | .fieldAccessNonStruct => "field access on non-struct type"
   | .unknownVariant variant enumName => s!"unknown variant '{variant}' in enum '{enumName}'"
@@ -589,6 +597,7 @@ def CheckError.code : CheckError → String
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
   | .ifCondNotBool _ => "E0223"
+  | .condNotBool _ _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"
   | .breakTypeMismatch _ _ => "E0226"
@@ -612,6 +621,7 @@ def CheckError.code : CheckError → String
   | .unknownStructType _ => "E0250"
   | .structHasNoField _ _ => "E0251"
   | .missingFieldInLiteral _ _ => "E0252"
+  | .duplicateFieldInLiteral _ _ => "E0306"
   | .unknownFieldInLiteral _ _ => "E0253"
   | .fieldAccessNonStruct => "E0254"
   | .unknownVariant _ _ => "E0260"
@@ -686,6 +696,8 @@ def CheckError.rule : CheckError → Option String
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
   | .conflictingCallBorrows _ => some "REF-8@1"
+  -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
+  | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
   | e => codeRuleTag e.code
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
