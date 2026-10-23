@@ -215,4 +215,20 @@ def Except.addContext (ctx : String) : Except Diagnostics α → Except Diagnost
   | .ok a => .ok a
   | .error ds => .error (ds.map (·.addContext ctx))
 
+/-- The `spec` evidence of a rule-tagged diagnostic: the rule's anchor in the language
+    specification (`docs/spec/<chapter>.md#<ID>`), computed from its versioned tag (`REF-3@1`).
+    The chapter of each ID prefix is the inventory of docs/spec/README.md §1, and
+    `scripts/tests/check_rules_2i.sh` compares every tagged diagnostic's evidence with
+    `scripts/spec/spec.py anchors`. -/
+def ruleSpecRef (rule : String) : String :=
+  let id := (rule.splitOn "@").headD rule
+  let chapter := match (id.splitOn "-").headD "" with
+    | "REF" => "references"
+    | "SCOPE" => "scope"
+    | "PAT" => "patterns"
+    | "FFI" => "ffi"
+    | "PASS" => "pipeline"
+    | _ => "README"
+  s!"docs/spec/{chapter}.md#{id}"
+
 end Concrete

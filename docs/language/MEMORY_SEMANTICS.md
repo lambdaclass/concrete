@@ -600,7 +600,15 @@ discipline and its current enforcement.
 
 ---
 
-## 15. Second-class references and lexical binding (normative; exit 2i)
+## 15. Second-class references and lexical binding (design record; exit 2i)
+
+**Superseded as the normative text (2026-10-23).** The rules of this section are now stated, with
+stable IDs, runnable examples and the generated acceptance manifest, in the language specification:
+[docs/spec/references.md](../spec/references.md) (REF-D1, REF-D2, REF-1 – REF-11),
+[docs/spec/scope.md](../spec/scope.md) (SCOPE-D1, SCOPE-1 – SCOPE-3) and
+[docs/spec/patterns.md](../spec/patterns.md) (PAT-1, which was gap G4). Where this section and the
+spec differ, the spec governs. This section stays as the design record: the probes, the status
+history, the migration counts and the gap analysis (§15.7). Its text below is historical.
 
 **Status:** normative specification for ROADMAP exit 2i (owner R-0500, stage S4 of
 [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)), written 2026-10-21. This section is the

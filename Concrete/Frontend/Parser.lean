@@ -1110,6 +1110,7 @@ partial def parseStmt : ParseM Stmt := do
 
 /-- A pattern's field binders: `{ a, b }` (shorthand) or `{ value: inner, b }` (a renamed
     binder, exit 2i G4). Shared by `match`, `if let`, `while let` and destructuring `let`. -/
+-- spec: PAT-1 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseBindingList : ParseM (List PatBind) := do
   let mut bindings : List PatBind := []
   let mut tk ← peek

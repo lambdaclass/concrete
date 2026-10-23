@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Exit 2i acceptance gate: the reference and lexical-binding rules of
-# docs/language/MEMORY_SEMANTICS.md §15 (REF-1..REF-8, SCOPE-1..SCOPE-3, G4), driven by the
-# manifest tests/rules/exit_2i.tsv (§15.6) and its model sidecar tests/rules/exit_2i_model.tsv.
+# Exit 2i acceptance gate: the reference and lexical-binding rules of docs/spec/references.md,
+# docs/spec/scope.md and docs/spec/patterns.md (REF-1..REF-8, SCOPE-1..SCOPE-3, PAT-1, which was gap
+# G4), driven by the manifest tests/rules/exit_2i.tsv and its model sidecar
+# tests/rules/exit_2i_model.tsv. The manifest is GENERATED from the spec's conformance tables
+# (`scripts/spec/spec.py manifest exit_2i`, checked byte-equal by check_spec.sh S9), and the
+# code -> rules table below is read from the spec too, so this gate holds no copy of either.
 #
 # Manifest columns (tab-separated; `#` lines are comments):
-#   rule      REF-n / SCOPE-n / G4
+#   rule      REF-n / SCOPE-n / PAT-1
 #   fixture   a path under the repository root; a directory ending in `/` is a project fixture
 #   expected  reject:<code>:<RULE@version>   or   run:<exit status>
 #   pair      an identifier shared by a reject row and the run row of its rewritten program
@@ -15,7 +18,7 @@
 # For every REJECT row, in the human AND the JSON rendering (`--diagnostics-json`): the code,
 # the `rule` evidence with the exact rule and version, the `spec` evidence, a non-empty
 # `next` / `next_action`; for SCOPE-1 also a related span (the earlier binding); and the
-# `--report diagnostic-codes` ledger row of the code names that rule and version (§15.5 item 1).
+# `--report diagnostic-codes` ledger row of the code names that rule and version.
 # A diagnostic produced by or after monomorphization (pass `mono` / `post-mono`) is not in the
 # front-end JSON stream (`--diagnostics-json` stops before Mono), so such a row carries
 # `json-exempt:mono` / `json-exempt:post-mono` in its modes column: the gate then requires the
@@ -29,7 +32,7 @@
 # Structure (fails closed): every rejection rule (REF-1..REF-8, SCOPE-1) has a reject row and a
 # run row; every reject row has a pair whose run row exists; a SCOPE-2 / SCOPE-3 run row lists
 # `interp` or an `interp-exempt:<reason>`; every fixture exists; every ledger rule tag a row
-# expects is the one §15.5 records. Negative controls (section N) feed corrupted manifests and
+# expects is the one the spec records. Negative controls (section N) feed corrupted manifests and
 # wrong expectations through the same checks and require each to fail.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -40,7 +43,11 @@ CC="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
 MANIFEST="${RULES_2I_MANIFEST:-tests/rules/exit_2i.tsv}"
 SIDECAR="tests/rules/exit_2i_model.tsv"
-SPEC="docs/language/MEMORY_SEMANTICS.md §15"
+SPECPY="$ROOT_DIR/scripts/spec/spec.py"
+# rule ID -> the anchor the compiler's `spec` evidence must name (docs/spec/<chapter>.md#ID)
+declare -A ANCHOR=()
+while IFS=$'\t' read -r rid anc; do ANCHOR[$rid]="$anc"; done < <(python3 "$SPECPY" anchors)
+[ "${#ANCHOR[@]}" -gt 0 ] || { echo "FATAL: no spec anchors (spec.py anchors printed nothing)" >&2; exit 2; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -54,15 +61,11 @@ LEDGER="$("$CC" tests/programs/fib.con --report diagnostic-codes 2>/dev/null || 
 # write the ledger to a file once: the JSON helper reads it from there
 printf '%s' "$LEDGER" > "$TMP/ledger.json"
 
-# The normative code -> rules map of MEMORY_SEMANTICS §15.5, stated here independently of the
-# compiler's ledger: a manifest tag must be allowed for its code, and the ledger must say the same.
-declare -A SPEC_RULES=(
-  [E0203]="REF-8@1" [E0204]="REF-8@1" [E0231]="REF-8@1" [E0232]="REF-8@1" [E0293]="REF-8@1"
-  [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1" [E0305]="SCOPE-1@1"
-  [E0234]="REF-6@1" [E0302]="REF-6@1" [E0303]="REF-6@1"
-  [E0236]="REF-1@1, REF-2@1, REF-4@1" [E0239]="REF-3@1, REF-4@1"
-  [E0238]="REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1"
-)
+# The code -> rules map, read from the spec (each entry's `Codes:` field, `spec.py codes`), independently
+# of the compiler's ledger: a manifest tag must be allowed for its code, and the ledger must say the same.
+declare -A SPEC_RULES=()
+while IFS=$'\t' read -r code rules; do SPEC_RULES[$code]="$rules"; done < <(python3 "$SPECPY" codes)
+[ "${#SPEC_RULES[@]}" -ge 10 ] || { echo "FATAL: spec.py codes gave only ${#SPEC_RULES[@]} codes" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
 # Structure: returns 0 when the manifest is well formed (prints each defect).
@@ -81,9 +84,9 @@ validate_manifest() {
         code="$(cut -d: -f2 <<<"$expected")"; tag="$(cut -d: -f3 <<<"$expected")"
         # the row's rule column and its tag name one rule (a REF-7 row cannot count a REF-5 fixture)
         if [ "${tag%@*}" != "$rule" ]; then echo "    defect: row $fixture is filed under $rule but expects $tag"; bad=1; fi
-        # and the tag is one §15.5 assigns to the code
+        # and the tag is one the spec assigns to the code
         if ! grep -qE "(^|, )${tag}(,|$)" <<<"${SPEC_RULES[$code]:-}"; then
-          echo "    defect: row $fixture expects $tag from $code, which §15.5 does not assign to it"; bad=1; fi
+          echo "    defect: row $fixture expects $tag from $code, which the spec does not assign to it"; bad=1; fi
         if [ -z "$pair" ] || [ "$pair" = "-" ]; then echo "    defect: reject row $fixture has no pair"; bad=1
         elif ! awk -F'\t' -v p="$pair" '$1 !~ /^#/ && $4==p && $3 ~ /^run:/ {f=1} END {exit !f}' "$m"; then
           echo "    defect: reject row $fixture: pair '$pair' has no run row"; bad=1; fi ;;
@@ -119,12 +122,12 @@ validate_manifest() {
     runs=$(awk -F'\t' -v r="$r" '$1==r && $3 ~ /^run:/' "$m" | grep -c . || true)
     if [ "${runs:-0}" -eq 0 ]; then echo "    defect: semantic guarantee $r has no run row"; bad=1; fi
   done
-  # SCOPE-3 promises the extracted model too (§15.6): at least one run row with a model mode
+  # SCOPE-3 promises the extracted model too: at least one run row with a model mode
   if ! awk -F'\t' '$1=="SCOPE-3" && $3 ~ /^run:/ && $5 ~ /(^|,)model:[^,]+/ {f=1} END {exit !f}' "$m"; then
     echo "    defect: SCOPE-3 has no run row with a model:<id> mode"; bad=1; fi
-  # G4 (the renamed pattern binder) promises binary = --interp and a formatter round-trip
-  if ! awk -F'\t' '$1=="G4" && $3 ~ /^run:/ && $5 ~ /(^|,)binary(,|$)/ && $5 ~ /(^|,)interp(,|$)/ && $5 ~ /(^|,)fmt(,|$)/ {f=1} END {exit !f}' "$m"; then
-    echo "    defect: G4 has no run row with modes binary, interp and fmt"; bad=1; fi
+  # PAT-1 (the renamed pattern binder, gap G4) promises binary = --interp and a formatter round-trip
+  if ! awk -F'\t' '$1=="PAT-1" && $3 ~ /^run:/ && $5 ~ /(^|,)binary(,|$)/ && $5 ~ /(^|,)interp(,|$)/ && $5 ~ /(^|,)fmt(,|$)/ {f=1} END {exit !f}' "$m"; then
+    echo "    defect: PAT-1 has no run row with modes binary, interp and fmt"; bad=1; fi
   return $bad
 }
 
@@ -151,7 +154,8 @@ check_reject() {
   blk="$(awk -v c="($code)" 'index($0, c) && /error\[/ {on=1; print; next} on && /error\[/ {exit} on {print}' <<<"$out")"
   [ -z "$blk" ] && why="$why no ($code) diagnostic;"
   grep -qxF "  rule: $tag" <<<"$blk" || why="$why human rule tag is not $tag;"
-  grep -qxF "  spec: $SPEC" <<<"$blk" || why="$why human spec evidence missing;"
+  local spec="${ANCHOR[${tag%@*}]:-no-anchor-for-${tag%@*}}"
+  grep -qxF "  spec: $spec" <<<"$blk" || why="$why human spec evidence is not $spec;"
   grep -qE '^  next: .+' <<<"$blk" || why="$why human next: missing;"
   # the earlier binding is the related span of a collision (E0301); E0305 refuses a fresh binder
   if [ "$code" = "E0301" ]; then grep -qE '^  related \(' <<<"$blk" || why="$why human related span missing;"; fi
@@ -163,7 +167,7 @@ check_reject() {
     : # a project fixture: the JSON stream is single-file (`<file> --diagnostics-json`)
   else
     $TO "$CC" "$f" --diagnostics-json > "$TMP/j.json" 2>/dev/null
-    python3 - "$TMP/j.json" "$code" "$tag" "$SPEC" "$rule" <<'PY' || why="$why JSON rendering lacks code/rule/spec/next_action/related;"
+    python3 - "$TMP/j.json" "$code" "$tag" "$spec" "$rule" <<'PY' || why="$why JSON rendering lacks code/rule/spec/next_action/related;"
 import json, sys
 p, code, tag, spec, rule = sys.argv[1:]
 try:
@@ -270,7 +274,7 @@ elif validate_manifest "$MANIFEST"; then
 else no "$MANIFEST is malformed (defects above)"; fi
 
 echo ""
-echo "=== 1b. the ledger names exactly the rules §15.5 assigns to each code ==="
+echo "=== 1b. the ledger names exactly the rules the spec assigns to each code ==="
 for c in "${!SPEC_RULES[@]}"; do
   got="$(python3 - "$TMP/ledger.json" "$c" <<'PY'
 import json, sys
@@ -282,7 +286,7 @@ for r in d.get("codes", []):
 PY
 )"
   want="$(tr ',' '\n' <<<"${SPEC_RULES[$c]}" | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g')"
-  if [ "$got" = "$want" ]; then ok "$c: ledger rules = §15.5 ($want)"; else no "$c: ledger rules '$got', §15.5 says '$want'"; fi
+  if [ "$got" = "$want" ]; then ok "$c: ledger rules = spec ($want)"; else no "$c: ledger rules '$got', the spec says '$want'"; fi
 done
 
 echo ""
@@ -303,32 +307,32 @@ validate_manifest "$TMP/n3b.tsv" > /dev/null && no "N3b: a pair with no run row 
 awk -F'\t' 'BEGIN{OFS="\t"} $1=="SCOPE-2" && $3 ~ /^run:/ {$5="binary"} {print}' "$MANIFEST" > "$TMP/n4.tsv"
 validate_manifest "$TMP/n4.tsv" > /dev/null && no "N4: a SCOPE-2 run row without interp went unnoticed" || ok "N4: a semantic-guarantee run row without interp is refused"
 for bad in '-' 'interp' 'interp-exempt:x' 'binary,model:no-such-model' 'binary,typo'; do
-  { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:42\t-\t%s\n' "$bad"; } > "$TMP/n4b.tsv"
+  { cat "$MANIFEST"; printf 'PAT-1\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:42\t-\t%s\n' "$bad"; } > "$TMP/n4b.tsv"
   validate_manifest "$TMP/n4b.tsv" > /dev/null && no "N4b: run row modes '$bad' went unnoticed" || ok "N4b: run row modes '$bad' are refused (nothing or nothing real executes)"
 done
 { cat "$MANIFEST"; printf 'REF-7\ttests/programs/error_105_ref_valued_if_arg.con\treject:E0238:REF-5@1\tref7\t-\n'; } > "$TMP/n4c.tsv"
 validate_manifest "$TMP/n4c.tsv" > /dev/null && no "N4c: a REF-5 fixture filed as REF-7 went unnoticed" || ok "N4c: a row whose tag names another rule than its rule column is refused"
 { cat "$MANIFEST"; printf 'REF-5\ttests/programs/error_escape_return.con\treject:E0236:REF-5@1\tref5\t-\n'; } > "$TMP/n4d.tsv"
-validate_manifest "$TMP/n4d.tsv" > /dev/null && no "N4d: a tag §15.5 does not assign to the code went unnoticed" || ok "N4d: a tag §15.5 does not assign to the code is refused"
+validate_manifest "$TMP/n4d.tsv" > /dev/null && no "N4d: a tag the spec does not assign to the code went unnoticed" || ok "N4d: a tag the spec does not assign to the code is refused"
 # N4e: a malformed negative model assertion must fail the row, not read as "absent".
 printf '087-bad\ttests/programs/regress_2i_scope1_087_renamed.con\t![\n' > "$TMP/badside.tsv"
 SIDECAR_SAVE="$SIDECAR"; SIDECAR="$TMP/badside.tsv"
 check_run SCOPE-3 tests/programs/regress_2i_scope1_087_renamed.con 42 model:087-bad > /dev/null \
   && no "N4e: a malformed negative model pattern passed" || ok "N4e: a malformed negative model pattern fails the row"
 SIDECAR="$SIDECAR_SAVE"
-awk -F'\t' '$1!="G4"' "$MANIFEST" > "$TMP/n4g.tsv"
-validate_manifest "$TMP/n4g.tsv" > /dev/null && no "N4g: dropping G4's run row went unnoticed" || ok "N4g: G4 without its binary/interp/fmt run row is refused"
+awk -F'\t' '$1!="PAT-1"' "$MANIFEST" > "$TMP/n4g.tsv"
+validate_manifest "$TMP/n4g.tsv" > /dev/null && no "N4g: dropping PAT-1's run row went unnoticed" || ok "N4g: PAT-1 without its binary/interp/fmt run row is refused"
 # N4h: a pair whose only run row is commented out has no run row.
 awk -F'\t' 'BEGIN{OFS="\t"} $4=="scope1-same_block_let" && $3 ~ /^run:/ {$1="#" $1} {print}' "$MANIFEST" > "$TMP/n4h.tsv"
 validate_manifest "$TMP/n4h.tsv" > /dev/null && no "N4h: a commented-out run row still satisfied its pair" || ok "N4h: a pair whose only run row is commented out is refused"
 awk -F'\t' 'BEGIN{OFS="\t"} $1=="SCOPE-3" {gsub(/,?model:[^,]+/, "", $5)} {print}' "$MANIFEST" > "$TMP/n4i.tsv"
 validate_manifest "$TMP/n4i.tsv" > /dev/null && no "N4i: SCOPE-3 without its model mode went unnoticed" || ok "N4i: SCOPE-3 without a model-checked run row is refused"
 # N4f: a wrong final row with no trailing newline must still be executed (and fail).
-{ cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
+{ cat "$MANIFEST"; printf 'PAT-1\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:41\t-\tbinary'; } > "$TMP/n4f.tsv"
 n4f_fail=$FAIL; n4f_pass=$PASS
 run_manifest_rows "$TMP/n4f.tsv" > "$TMP/n4f.out" 2>&1
 FAIL=$n4f_fail; PASS=$n4f_pass
-grep -q "FAIL G4 run tests/programs/regress_2i_renamed_pattern_binder.con = 41" "$TMP/n4f.out" \
+grep -q "FAIL PAT-1 run tests/programs/regress_2i_renamed_pattern_binder.con = 41" "$TMP/n4f.out" \
   && ok "N4f: an unterminated final manifest row is still checked" || no "N4f: an unterminated final row was skipped"
 # N5-N8: execution. Wrong expectations on real fixtures must fail the row checks.
 check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@1 - > /dev/null \

@@ -109,6 +109,7 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
     root — explicit or an implicit receiver — sees it. A reference whose source does not
     normalize is refused (E0238). Provenance is one source per binding and is not joined
     across branches, so a reassignment may not RE-POINT a reference at different storage. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
     (reassign : Bool := false) (pre : Option Norm := none) : CheckM Unit := do
   match ← resolvedOr ty with
@@ -144,6 +145,7 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
 /-- Every binding introduction (let, match binder, destructuring) goes through this guard:
     provenance and reborrow ancestry are recorded BY NAME, so shadowing a name that a live
     reference records as its source or parent would silently re-point it (E0238). -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
   if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
       (vi.borrowedFrom == some name || vi.refParent == some name)) then
@@ -231,6 +233,7 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
     for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
     is live (E0232), and not into an owned root that a live reference borrows (E0232). (The
     binding-mutability rule for field writes is unchanged.) -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
   let subject := "the assignment target"
   match n with
@@ -281,6 +284,7 @@ def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : Check
     place (which branch's borrow is live is decided at run time), and the backend miscompiles
     one (bug 105: the binary segfaulted where --interp printed the value). The normalized place
     rule refuses it at its source, wherever it would flow (E0238). -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : CheckM Unit := do
   match ty with
   | .ref _ | .refMut _ =>
@@ -290,6 +294,7 @@ def refuseRefValuedBranch (what : String) (ty : Ty) (span : Option Span) : Check
 
 /-- A reference-typed call argument must normalize: an `if`/`match` (or any expression)
     yielding a reference the checker cannot trace would be an invisible alias (E0238). -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def checkRefArg (arg : Expr) (argTy0 : Ty) (span : Option Span) : CheckM Unit := do
   let argTy ← resolvedOr argTy0
   -- A reference argument is an ACCESS through its normalized place, checked like any other:
@@ -2199,6 +2204,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
+-- spec: REF-6, spec: REF-7 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -3247,6 +3253,7 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
 
 
 /-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
+-- spec: SCOPE-1 (docs/spec/scope.md; this declaration enforces the rule)
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
@@ -3255,6 +3262,7 @@ def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagno
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
+-- spec: SCOPE-D1, spec: SCOPE-1, spec: SCOPE-2, spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 def scope1Diagnostics (f : FnDef) : List Diagnostic :=
   let go : Scope1M Unit := do
     let mut vis : List ScopeBinder := []
@@ -3269,6 +3277,7 @@ def checkConstInit (c : ConstDef) : CheckM Unit := do
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
+-- spec: REF-1 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that
@@ -3590,6 +3599,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
+-- spec: REF-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports

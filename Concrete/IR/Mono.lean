@@ -457,6 +457,7 @@ private partial def monoParamBehindRef (n : String) : Ty → Bool
     refuses it at the call it can see (`refuseNestedRefInstantiation`); a generic caller passing
     its OWN opaque `T` on (`update::<T>(&mut x, ..)` inside `relay<T>`) is only concrete here,
     after substitution, so Mono re-asks the question at every specialization. -/
+-- spec: REF-4 (docs/spec/references.md; this declaration enforces the rule)
 private def refuseNestedRefSpecialization (fnDef : CFnDef) (typeArgs : List Ty) : MonoM Unit := do
   for (tp, arg) in fnDef.typeParams.zip typeArgs do
     if monoArgHoldsRef arg && fnDef.params.any (fun (_, t) => monoParamBehindRef tp t) then
@@ -464,7 +465,7 @@ private def refuseNestedRefSpecialization (fnDef : CFnDef) (typeArgs : List Ty) 
                message := s!"cannot trace what the reference instantiating '{tp}' of generic function '{fnDef.name}' borrows: '{tp}' := '{tyToStr arg}' occurs behind a reference in a parameter type, and the generic body was checked at an opaque '{tp}' (reached through another generic's type parameter)"
                hint := some "instantiate the generic with an owned value, or pass the reference down as a top-level argument; this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
                -- exit 2i §15.5: REF-4@1 (c), at the specialization
-               evidence := [("rule", "REF-4@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+               evidence := [("rule", "REF-4@1"), ("spec", ruleSpecRef "REF-4@1")]
                nextAction := some "instantiate the generic at a value type, or pass the reference directly as an argument" }]
 
 /-- Mono's Copy judgment: the shared one over Core structs/enums PLUS newtypes. A newtype is
@@ -1430,6 +1431,7 @@ private partial def monoTypesInProgram (modules : List CModule)
 -- Entry point
 -- ============================================================
 
+-- spec: PASS-1 (docs/spec/pipeline.md; this declaration enforces the rule)
 def monoProgram (modules : List CModule)
     -- Run on the function-specialized program BEFORE type specialization
     -- renames generic instances: a type argument the instance's fields do not
