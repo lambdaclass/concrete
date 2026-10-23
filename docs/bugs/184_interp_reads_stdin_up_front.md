@@ -20,21 +20,22 @@ fn main() -> Int { return 3; }
 time (sleep 8 | concrete p.con --interp)
 ```
 
-Train 3 printed `3` after 8 seconds; main (and the compiled binary) print it at once. On the OVH
-server: see the bisection below.
+Train 3 printed `3` after 8 seconds; main (and the compiled binary) print it at once.
 
 ## Bisection
 
-On the OVH server, `sleep 8 | timeout 20 concrete p.con --interp` with the program above:
+On the OVH server, `sleep 8 | { time concrete p.con --interp; }` with the program above (the
+time of the `concrete` process alone, not of the pipeline):
 
-| ref | sha | elapsed |
+| ref | sha | `--interp` elapsed |
 |---|---|---|
-| main | 7db43a33 | 0 s |
-| `wip/train2` | 2ee46f65 | 0 s |
-| e24e7287 (parent of 728a2a98) | e24e7287 | 0 s |
-| 728a2a98 | 728a2a98 | 8 s |
-| `wip/train1` | f92b8f32 | 8 s |
-| `wip/train3` | 949d79e9 | 8 s |
+| main | 7db43a33 | 22 ms |
+| `wip/train2` | 2ee46f65 | 28 ms |
+| parent of 728a2a98 | e24e7287 | 24 ms |
+| 728a2a98 | 728a2a98 | 8003 ms |
+| `wip/train1` | f92b8f32 | 8003 ms |
+| `wip/train3` | 949d79e9 | 8004 ms |
+| this fix | e6599672 | 26 ms |
 
 `git log -S readBinToEnd` names the same commit: 728a2a98 is the only one that adds a read of
 standard input to `interpProgram`.
