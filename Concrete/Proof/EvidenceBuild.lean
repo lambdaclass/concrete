@@ -36,13 +36,13 @@ def evBoolLit (b : Bool) : EvidenceExprV2 := .boolLit b
 def evStrLit (s : String) : EvidenceExprV2 := .strLit s
 def evCharLit (c : Char) : EvidenceExprV2 := .charLit c
 
-/-- A local reference, as a relative lexical position. Unplaceable names become a gap
-    rather than position 0, which would silently alias every unresolvable local to the
-    innermost binder. -/
 /-- A local binder reference at a known relative position (R-0492 step 2: Elab computes the
     position from the binding's identity, not by searching the frames for its spelling). -/
 def evBinderRefAt (framesOut idx : Nat) : EvidenceExprV2 := .binderRef framesOut idx
 
+/-- A local reference, as a relative lexical position. Unplaceable names become a gap
+    rather than position 0, which would silently alias every unresolvable local to the
+    innermost binder. -/
 def evBinderRef (scope : BodyScope) (name : String) : EvidenceExprV2 :=
   match scope.resolve? name with
   | some (out, idx) => .binderRef out idx

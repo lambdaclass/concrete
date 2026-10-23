@@ -121,8 +121,9 @@ private partial def walkArm (vis : List Visible) : MatchArm → LocalsM Unit
     let mut v := vis
     for b in bs do
       if b.name == "_" then v ← bindArmWild v (siteKey sp b.name)
-      else v ← bindLocal v (siteKey sp b.name) b.name sp
-        (if b.letBound then "destructuring `let` binder" else "pattern binder")
+      else
+        let kind := if b.letBound then "destructuring `let` binder" else "pattern binder"
+        v ← bindLocal v (siteKey sp b.name) b.name sp kind
     g.forM (walkExpr v); walkBlock v body
   | .varArm sp b g body => do
     let v ← if b == "_" then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
