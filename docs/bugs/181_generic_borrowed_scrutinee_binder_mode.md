@@ -89,6 +89,23 @@ and `error_091_norm_catchall_binder_through_ref.con`, which stays refused with E
 E0290 (its catch-all binder is now the reference, and destructuring it with a `let` would bind
 references). std and every example compile unchanged.
 
+Codex review, round 1. The interpreter's reference into a payload is now its own path step,
+`RefStep.payload variant field`, whose byte address `heapRefAddr` computes from the enum layout
+(payload offset after the tag, then the field's offset in its variant), so a heap-rooted payload
+reference compares by address as natively. The module's statement of what substitution preserves
+was too strong for whole-value binders (an owned scrutinee of type `T` can specialize to `&Int`);
+it now says that for those the mode is irrelevant (binding the reference and binding the value are
+the same value).
+
+Left for the decision record, not decided here: D3 names `match`, `if let` and `while let`. A
+destructuring `let` of an ENUM through a reference is desugared to a match arm and follows D3 (its
+binders are references, so the `let` is E0302); a destructuring `let` of a STRUCT through a
+reference still binds the fields by value, which the exit 2i manifest accepts explicitly
+(`regress_2i_ref6_struct_destructure_through_ref.con`, REF-6 run row). Whether D3 covers
+destructuring `let` is a scope question for TIGHTENING_DECISIONS (witness: `let P { n } = p;` with
+`p: &P`, accepted today; under D3 it would be E0302 with `p.n` as the rewrite; the corpus has that
+one fixture).
+
 Regression: the reproducer exits 42 natively and under `--interp` (`run_ok`);
 `regress_181_borrowed_binders.con` (generic at `Int` and at a struct, a guard, `while let`, a nested
 pattern, an early exit, a deferred read, a whole-value binder, an owned scrutinee; exit 42, the

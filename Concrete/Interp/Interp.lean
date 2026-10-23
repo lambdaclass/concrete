@@ -34,6 +34,10 @@ open Concrete
 inductive RefStep where
   | field (name : String)
   | index (i : Nat)
+  /-- A payload field of an enum value in variant `variant` (a borrowed match binder, D3). The
+      variant is part of the step: payload layout is per variant, and two variants may name a
+      field alike. -/
+  | payload (variant : String) (name : String)
   deriving Repr, Inhabited
 
 /-- A reference path roots at a variable name in the env at borrow
@@ -1137,6 +1141,7 @@ private def arithOut : IntArith.ArithResult → Except String IVal
 def refStepEq : RefStep → RefStep → Bool
   | .field a, .field b => a == b
   | .index a, .index b => a == b
+  | .payload v a, .payload w b => v == w && a == b
   | _, _ => false
 
 /-- Do two references name the same place? -/
@@ -1331,12 +1336,16 @@ private partial def lookupAt (val : IVal) (steps : List RefStep) : Except String
       match fields.find? (fun (n, _) => n == fname) with
       | some (_, fv) => lookupAt fv rest
       | none => .error s!"interp: ref path field '{fname}' not found"
-    -- A payload field of an enum value: a borrowed match binder (D3) points here.
-    | .enum_ _ _ fields =>
+    | _ => .error "interp: ref step .field on non-struct"
+  -- A payload field of an enum value: a borrowed match binder (D3) points here.
+  | .payload variant fname :: rest =>
+    match val with
+    | .enum_ _ v fields =>
+      if v != variant then .error s!"interp: ref path payload of variant '{variant}' on '{v}'" else
       match fields.find? (fun (n, _) => n == fname) with
       | some (_, fv) => lookupAt fv rest
       | none => .error s!"interp: ref path payload field '{fname}' not found"
-    | _ => .error "interp: ref step .field on non-struct"
+    | _ => .error "interp: ref step .payload on non-enum"
   | .index i :: rest =>
     match val with
     | .array elems _ _ =>
@@ -1375,13 +1384,17 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
         let newFields := fields.map fun (n, v) =>
           if n == fname then (n, newFv) else (n, v)
         return .struct_ sname newFields
+    | _ => .error "interp: ref step .field on non-struct (update)"
+  | .payload variant fname :: rest =>
+    match val with
     | .enum_ en vn fields =>
+      if vn != variant then .error s!"interp: ref update payload of variant '{variant}' on '{vn}'" else
       match fields.find? (fun (n, _) => n == fname) with
       | none => .error s!"interp: ref update payload field '{fname}' not found"
       | some (_, fv) => do
         let newFv ← updateAt fv rest newVal
         return .enum_ en vn (fields.map fun (n, v) => if n == fname then (n, newFv) else (n, v))
-    | _ => .error "interp: ref step .field on non-struct (update)"
+    | _ => .error "interp: ref step .payload on non-enum (update)"
   | .index i :: rest =>
     match val with
     | .array elems elemTy size =>
@@ -1443,6 +1456,18 @@ def heapRefAddr (cx : Ctx) (p : RefPath) : Option (Nat × Nat) := do
       let es ← (sizeOfTy cx et).toOption
       o := o + i * es
       ty := normTy cx et
+    -- An enum payload field (D3 borrowed binder): the payload offset after the tag, then the
+    -- field's offset within its variant, as Lower's GEPs compute them (Codex review).
+    | .payload v f, t@(.named n) | .payload v f, t@(.generic n _ _) =>
+      let typeArgs := match t with | .generic _ a _ => a | _ => []
+      let ed ← Layout.lookupEnum cx.layout n
+      if !layoutKnown cx t then none
+      let ed' := Layout.substEnumTypeArgs ed typeArgs
+      let (_, vfields) ← ed'.variants.find? (·.1 == v)
+      let idx ← vfields.findIdx? (·.1 == f)
+      let (_, fty) ← vfields[idx]?
+      o := o + Layout.enumPayloadOffset cx.layout ed typeArgs + Layout.variantFieldOffset cx.layout vfields idx
+      ty := normTy cx fty
     | _, _ => none
   return (blk, o)
 
@@ -1925,7 +1950,7 @@ private def bindParams (env : Env) (params : List (String × Ty)) (args : List I
   | (name, _) :: ps, v :: vs => bindParams (envBind env name v) ps vs
 
 private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal))
-    (scrRef : Option RefPath := none) : Env :=
+    (scrRef : Option RefPath := none) (variant : String := "") : Env :=
   -- POSITIONAL, matching Core/Lower semantics: Elab zips arm bindings with
   -- the variant's fields in declaration order, and (bug 045) binders are
   -- alpha-renamed (`v` → `v.b0`) so a by-name field lookup can no longer
@@ -1938,9 +1963,9 @@ private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields 
     -- D3 (bug 181): a borrowed binder (reference-typed in Core) names the payload field in the
     -- scrutinee's storage, as Lower's address does; a by-value binder copies the value.
     let bound := match scrRef with
-      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps ++ [.field fname] } else v
+      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps ++ [.payload variant fname] } else v
       | none => v
-    bindEnumFields (envBind env name bound) rest fRest scrRef
+    bindEnumFields (envBind env name bound) rest fRest scrRef variant
 
 private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
   match scrutinee, lit with
@@ -2926,7 +2951,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
           let refPath := match scrRef with | some (.ref p) => some p | _ => none
-          let armEnv := bindEnumFields env bindings sFields refPath
+          let armEnv := bindEnumFields env bindings sFields refPath variant
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
             let (bodyEnv, flow) ← evalStmts cx gEnv body
@@ -3416,6 +3441,7 @@ partial def IVal.toString : IVal → String
     let stepStr (s : RefStep) : String := match s with
       | .field n => "." ++ n
       | .index i => s!"[{i}]"
+      | .payload v n => s!"::{v}.{n}"
     let pfx := if p.isMut then "&mut " else "&"
     pfx ++ p.base ++ String.join (p.steps.map stepStr)
   | .fnPtr name _ => "fn " ++ name

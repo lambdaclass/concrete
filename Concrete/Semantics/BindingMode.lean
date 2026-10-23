@@ -14,12 +14,18 @@ an owned scrutinee binds the value (a whole-value binder over `&mut T` is that `
 value behind the reference is read with `*value`.
 
 The mode is STORED in Core as the binder's type (`CMatchArm.enumArm` bindings, `varArm`'s type):
-a reference-typed binder is a borrowed binder. What substitution preserves: Mono substitutes type
-variables only, so it maps `&T` to `&σ(T)` and a non-reference type to a non-reference type
-(a type variable never stands for the scrutinee's reference constructor, which is written in the
-scrutinee's type). And a payload field can never itself be a reference (REF-3), so "the binder's
-type is a reference" holds before Mono exactly when it holds after, and it means "borrowed binder"
-in both. Lower and the interpreter read the mode from the binder's type (`binderIsBorrow`); none
+a reference-typed binder is a borrowed binder. What substitution preserves:
+
+- A PAYLOAD binder: Mono substitutes type variables only, so it maps `&T` to `&σ(T)`; and a
+  payload field can never itself be a reference, not even through a type parameter (REF-3,
+  checked before specialization and re-checked after it by `verifyNoStoredRefs`), so a by-value
+  payload binder's type stays a non-reference. "The binder's type is a reference" therefore holds
+  before Mono exactly when it holds after, and it means "borrowed payload binder" in both.
+- A WHOLE-VALUE binder: its type is the scrutinee's own type (the reference over a reference, the
+  value otherwise). An owned scrutinee of type `T` can specialize to a reference (`T := &Int`), and
+  the binder's type with it; then binding "the scrutinee reference" and binding "the scrutinee
+  value" are the same value, so Lower and the interpreter bind the same thing whichever they read
+  the mode as. The mode is irrelevant there, which is why it may change under substitution. Lower and the interpreter read the mode from the binder's type (`binderIsBorrow`); none
 of them re-derives it from Copy-ness, which substitution DOES change.
 -/
 
