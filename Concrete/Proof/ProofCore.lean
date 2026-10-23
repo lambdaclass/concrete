@@ -1238,75 +1238,16 @@ def cAssignBodyToUpdates :
     | _ => none
 end
 
-/-- Non-partial wrapper for `cExprToPExprImpl`.  The literal
-    cases reduce by `rfl` so Phase 12 preservation theorems
-    (R-01, R-02) can close their antecedent against the REAL
-    extractor, not just a parallel helper.  All other cases
-    delegate to the partial-def implementation in the mutual
-    block above.
+/-- The public expression extractor: exactly `cExprToPExprImpl`, with no arm of its own (bug 219).
 
-    Why: `cExprToPExprImpl` is `partial def` (the mutual block
-    contains `mapM` calls Lean's structural-recursion checker
-    can't see decreasing through).  Lean's kernel treats partial
-    def as opaque — no equation lemmas, `rfl` cannot reduce.
-    This wrapper sits OUTSIDE the mutual block, so its literal
-    arms ARE reducible by definition.
-
-    The wrapper preserves the public API: every caller of
-    `cExprToPExpr` (Report.lean, the rest of ProofCore) gets
-    the same behavior as before.  Internal recursive calls
-    inside the mutual block use `cExprToPExprImpl` directly. -/
-def cExprToPExpr : CExpr → Option Proof.PExpr
-  | .intLit n _   => some (.lit (.int n))
-  | .boolLit b    => some (.lit (.bool b))
-  | .ident name _ => some (.var name.name)
-  | .binOp op lhs rhs _ => do
-    let pop ← binOpToPBinOp op (CExpr.ty lhs)
-    let pl ← cExprToPExpr lhs
-    let pr ← cExprToPExpr rhs
-    some (.binOp pop pl pr)
-  | .cast inner tgt => do
-    let pi ← cExprToPExpr inner
-    castToPExpr (CExpr.ty inner) tgt pi
-  | .fieldAccess obj field _ => do
-    let po ← cExprToPExpr obj
-    some (.fieldAccess po field)
-  | .arrayIndex arr idx _ => do
-    let pa ← cExprToPExpr arr
-    let pi ← cExprToPExpr idx
-    some (.arrayIndex pa pi)
-  | .call (.direct fn) _ args _ => do
-    let pargs ← cExprListToPExpr args
-    some (.call fn pargs)
-  -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
-  -- not need the callee's definition — it needs an identity for the thing being
-  -- applied, and inside this body the parameter name IS that identity, which the
-  -- theorem quantifies over. Refusing to extract these was too strong: it cost
-  -- std three real proofs (Option::map, Result::map, Result::map_err), whose
-  -- statements hold for ANY `f` precisely because `f` is opaque.
-  --
-  -- Extracting them as `.call` was ALSO wrong (bug 061): a parameter named `f`
-  -- and a definition named `f` became the SAME node, so the evaluator resolved a
-  -- parameter application through the GLOBAL function table — a soundness hazard
-  -- in the one place soundness claims are made. `.applyVar` keeps the identity
-  -- local, answerable only by `FnTable.callables` (R-0442).
-  | .call (.indirect binding) _ args _ => do
-    let pargs ← cExprListToPExpr args
-    some (.applyVar binding.name pargs)
-  | .structLit name _ fields _ => do
-    let pfields ← cFieldsToPExpr fields
-    some (.structLit name pfields)
-  | .enumLit ename variant _ fields _ => do
-    let pfields ← cFieldsToPExpr fields
-    some (.enumLit ename variant pfields)
-  | .arrayLit elems _ => do
-    let pelems ← cExprListToPExpr elems
-    some (.arrayLit pelems)
-  | .match_ scrutinee arms _ => do
-    let ps ← cExprToPExpr scrutinee
-    let parms ← cMatchArmsToP arms
-    some (.match_ ps parms)
-  | e             => cExprToPExprImpl e
+    It used to be a second copy of the extractor's arms, kept outside the mutual block so the
+    ProofSoundness theorems could reduce literal cases by `rfl` when `cExprToPExprImpl` was a
+    `partial def`. The mutual block is now an ordinary `def`, so its equations are available and the
+    theorems unfold it directly. A second copy was worse than unnecessary: mutation 31 restored bug
+    061 in the copy, which nothing executes, and survived. Every extraction rule now exists once,
+    in `cExprToPExprImpl`; `check_proofcore_callable_identity.sh` fails if this definition grows
+    an arm again. -/
+def cExprToPExpr (e : CExpr) : Option Proof.PExpr := cExprToPExprImpl e
 
 /-- A loop body's step expression: `cStmtsToStepExprK` with no enclosing continuation. -/
 def cStmtsToStepExpr (assigns : List (String × Proof.PExpr)) (body : List CStmt) :
