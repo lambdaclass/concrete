@@ -668,9 +668,9 @@ gate_for_last "scripts/tests/check_fnptr_values.sh"
 # parameter named `f` and a definition named `f` become the same node and the
 # evaluator resolves the parameter through the global function table.
 MUT_FILE+=("Concrete/Proof/ProofCore.lean")
-MUT_OLD+=("    some (.applyVar binding pargs)
+MUT_OLD+=("    some (.applyVar binding.name pargs)
   | .structLit name _ fields _ => do")
-MUT_NEW+=("    some (.call binding pargs) -- MUTATION: parameter application as a definition call
+MUT_NEW+=("    some (.call binding.name pargs) -- MUTATION: parameter application as a definition call
   | .structLit name _ fields _ => do")
 MUT_DESC+=("ProofCore: applied parameter extracts as a global call (bug 061)")
 gate_for_last "scripts/tests/check_proofcore_callable_identity.sh"
