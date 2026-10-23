@@ -108,8 +108,9 @@ def check (label : String) (ok : Bool) : IO Unit :=
 def main : IO Unit := do
   match Concrete.parse src with
   | .error _ => IO.println "  FAIL T: the probe program did not parse"
-  | .ok mods =>
-    let m := desugarModule (mods.headD default)
+  | .ok [] => IO.println "  FAIL T: the probe program has no module"
+  | .ok (m0 :: _) =>
+    let m := desugarModule m0
     let fns := m.functions.map resolveFnLocals
     let f := fns.headD LocalTable.unresolved
     let g := (fns.drop 1).headD LocalTable.unresolved
@@ -175,7 +176,7 @@ OUT="$("$BIN" tests/programs/regress_176_loop_shadow_restores_outer.con -o "$TMP
 P="$TMP/p197"; mkdir -p "$P/src"
 printf '[package]\nname = "let_else"\nversion = "0.1.0"\n' > "$P/Concrete.toml"
 cp tests/programs/let_else.con "$P/src/main.con"
-if (cd "$P" && "$BIN" build -o "$P/out" >"$TMP/b197.log" 2>&1) && "$P/out"; then
+if (cd "$P" && "$BIN" build -o "$P/out" >"$TMP/b197.log" 2>&1) && "$P/out" >/dev/null; then
   ok "R: bug 197: a project's \`let … else\` (tests/programs/let_else.con) builds and runs (exit 0)"
 else
   no "R: bug 197: the let-else project failed: $(head -c 400 "$TMP/b197.log")"
