@@ -3156,8 +3156,8 @@ end
 A binder may not reuse the spelling of a local value binding VISIBLE at its declaration. The
 visibility walk is `Resolve/Locals.lean` (R-0492): the same walk that mints each binding's
 `LocalId` records each collision, so E0301 and binding identity cannot disagree. Here the
-collisions are rendered; they report before the body is checked (before E0292 and E0238, which
-stay as defense in depth), every one in the function, each with the earlier binding as its
+collisions are rendered; they report before the body is checked, every one in the function,
+each with the earlier binding as its
 related span. Elab's alpha-renaming (bug 087) stays mandatory (PRINCIPLES #12). -/
 
 /-- The E0301 diagnostic for one collision the local walk recorded. -/

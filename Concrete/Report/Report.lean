@@ -6379,7 +6379,7 @@ def diagnosticCodesReport : String :=
     -- Check: conservation sweep + callable values (E0290–E0293, 2026-07-05/06)
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
-    entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding" "SCOPE-1@1",
+    entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding (no longer emitted: subsumed by E0301, R-0492)" "SCOPE-1@1",
     entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@1",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",

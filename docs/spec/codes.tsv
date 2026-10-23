@@ -111,7 +111,7 @@ E0288	rule	wildcard would discard a non-Copy value
 E0289	rule	let _ removed (wildcard is not a discard)
 E0290	rule	non-Copy sub-place read by value (would duplicate)
 E0291	rule	non-Copy overwrite would leak the old value
-E0292	rule	shadowing a still-live non-Copy binding
+E0292	rule	shadowing a still-live non-Copy binding (no longer emitted: subsumed by E0301, R-0492)
 E0293	rule	overlapping borrows of one place in a single call
 E0294	rule	pure value computed then discarded (dead computation)
 E0295	rule	discard() of a non-Copy value (use destroy or consume it)
