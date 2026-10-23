@@ -125,25 +125,38 @@ echo "=== S: no source opens the seals ==="
 HITS="$(grep -rnE 'open private .*(ValidatedCore|MonomorphizedProgram|SSAProgram|ElaboratedProgram|CoreSubset)' \
   --include='*.lean' Concrete Main.lean tests 2>/dev/null || true)"
 [ -z "$HITS" ] && ok "S: no 'open private' of a pipeline artifact constructor" || no "S: $HITS"
-# `sorry`/`admit` is judged by Lean, not by a text scan: elaborating Pipeline.lean reports
-# "declaration uses 'sorry'" for any declaration that reaches one, wherever it is spelled (inside an
-# interpolation hole, after a comment, through a macro). A text scan of comments and literals got
-# both directions wrong (Codex rounds 2-4).
-PL_OUT="$(lake env lean "$P" 2>&1)"; PL_RC=$?
-if [ "$PL_RC" -ne 0 ]; then
-  no "S: $P did not elaborate on its own (rc=$PL_RC): $(grep -m2 'error' <<<"$PL_OUT" | cut -c1-300)"
-elif grep -q "declaration uses 'sorry'" <<<"$PL_OUT"; then
-  no "S: $P uses sorry: $(grep "declaration uses 'sorry'" <<<"$PL_OUT" | tr '\n' ' ' | cut -c1-300)"
+# No declaration of Pipeline.lean may rest on anything but Lean's three standard axioms. This is
+# judged from the BUILT environment, not from text or warnings: every constant the module defines is
+# enumerated and its axiom closure collected, so `sorry` (sorryAx) is caught however it is spelled
+# or whatever `set_option warn.sorry` says, and so is a declared `axiom` at any indentation (its own
+# closure contains it) or a `native_decide` (Lean.ofReduceBool). Codex rounds 2-5 broke each
+# text-based form.
+cat > "$TMP/decls.lean" <<'LEAN'
+import Concrete
+open Lean Elab Command
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  let some idx := env.getModuleIdx? `Concrete.Pipeline.Pipeline
+    | throwError "PIPELINE-DECLS: module Concrete.Pipeline.Pipeline is not in the environment"
+  let std := [``propext, ``Classical.choice, ``Quot.sound]
+  let mut n := 0
+  let mut bad : Array (Name × Name) := #[]
+  for (c, _) in env.constants.map₁.toList do
+    if env.getModuleIdxFor? c == some idx then
+      n := n + 1
+      for a in (← collectAxioms c) do
+        unless std.contains a do bad := bad.push (c, a)
+  IO.println s!"PIPELINE-DECLS {n} NONSTANDARD {bad.size} {bad.toList}"
+LEAN
+DECL_OUT="$(lake env lean "$TMP/decls.lean" 2>&1)"; DECL_RC=$?
+DECL_N="$(sed -nE 's/^PIPELINE-DECLS ([0-9]+) NONSTANDARD ([0-9]+) .*/\1/p' <<<"$DECL_OUT")"
+DECL_BAD="$(sed -nE 's/^PIPELINE-DECLS ([0-9]+) NONSTANDARD ([0-9]+) .*/\2/p' <<<"$DECL_OUT")"
+if [ "$DECL_RC" -ne 0 ] || [ -z "$DECL_N" ] || [ "$DECL_N" -lt 20 ]; then
+  no "S: the declaration audit did not run over Pipeline.lean (rc=$DECL_RC, decls='$DECL_N'): $(grep -m2 -E 'error|PIPELINE' <<<"$DECL_OUT" | cut -c1-300)"
+elif [ "$DECL_BAD" != "0" ]; then
+  no "S: a Pipeline.lean declaration rests on a nonstandard axiom: $(grep PIPELINE-DECLS <<<"$DECL_OUT" | cut -c1-400)"
 else
-  ok "S: Lean reports no sorry in $P"
-fi
-# A new `axiom` declaration would let a certificate be proved from nothing. Declarations start at the
-# beginning of a line, after optional modifiers; the doc comments in this file never start a line
-# with the word.
-if grep -nE '^(private |protected |noncomputable |unsafe )*axiom[[:space:]]' "$P" >/dev/null; then
-  no "S: $P declares an axiom: $(grep -nE '^(private |protected |noncomputable |unsafe )*axiom[[:space:]]' "$P" | tr '\n' ' ')"
-else
-  ok "S: $P declares no axiom"
+  ok "S: all $DECL_N declarations of Pipeline.lean rest only on propext/Classical.choice/Quot.sound"
 fi
 # The record-update forgery this slice removed must not come back under another spelling.
 HITS="$(grep -rnE '\{ *[A-Za-z_]+ with (coreModules|ssaModules) *:=' --include='*.lean' Concrete Main.lean 2>/dev/null | grep -v "^$P:" || true)"
