@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (review round 15): a reference-typed `let` (ill-typed, no borrow) and its
+// Exit 2i REF-6@2 (review round 15): a reference-typed `let` (ill-typed, no borrow) and its
 // assignment in a constant initializer. Constant initializers are type-checked now: E0302, E0303.
 const X: i32 = if true {
     let mut r: &i32 = 42;

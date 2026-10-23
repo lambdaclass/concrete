@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1: a `let` of a type-parameter type inside a `ghost let` initializer, erased
+// Exit 2i REF-6@2: a `let` of a type-parameter type inside a `ghost let` initializer, erased
 // before monomorphization (exit 2i review). Rejected: E0302.
 fn probe<T: Copy>(x: T) -> Int {
     ghost let b: bool = if true { let y: T = x; true } else { true };

@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `let` copies a borrow-block reference through parentheses. Rejected: E0302.
+// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a `let` copies a borrow-block reference through parentheses. Rejected: E0302.
 fn read(r: &Int) -> Int {
     return *r;
 }

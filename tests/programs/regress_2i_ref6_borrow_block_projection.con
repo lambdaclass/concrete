@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a borrow block names the owner, and each use borrows a projection of the binder (`f(&rw.p)`); also the twin of the borrow-block copy rows. Run 42, binary = --interp.
+// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a borrow block names the owner, and each use borrows a projection of the binder (`f(&rw.p)`); also the twin of the borrow-block copy rows. Run 42, binary = --interp.
 struct P { n: Int }
 struct W { p: P, q: P }
 

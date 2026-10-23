@@ -1,7 +1,7 @@
 // Normalized place rule (Codex static review): every `*` normalizes, reads of Copy values
 // included — `**r` dereferences a reference the checker cannot trace. E0238.
 // Exit 2i: the caller reaches the shape through a borrow-block binder (a `let` may not bind a
-// reference, REF-6@1), so the fixture still pins its own rule.
+// reference, REF-6@2), so the fixture still pins its own rule.
 mod m {
     fn get(r: & &i32) -> i32 { return **r; }
     fn main() -> Int {

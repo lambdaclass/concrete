@@ -1342,7 +1342,8 @@ private partial def monoTypesInProgram (modules : List CModule)
         typeParams := []
         fields := rewrittenFields
         isPublic := sd.isPublic
-        isCopy := sd.isCopy
+        -- D6: declared Copy and every type argument Copy (no fixpoint, see `isCopyTyGeneric`).
+        isCopy := sd.isCopy && args.all (Layout.isCopyTyCore allStructs allEnums (typeVarIsCopy := false))
         isReprC := sd.isReprC
         isPacked := sd.isPacked
         reprAlign := sd.reprAlign } : CStructDef)
@@ -1358,54 +1359,17 @@ private partial def monoTypesInProgram (modules : List CModule)
       let substEd := Layout.substEnumTypeArgs ed args
       some { substEd with
         name := mangledName
+        -- D6: declared Copy and every type argument Copy.
+        isCopy := ed.isCopy && args.all (Layout.isCopyTyCore allStructs allEnums (typeVarIsCopy := false))
         typeParams := []
         variants := substEd.variants.map fun (vn, fields) =>
           (vn, fields.map fun (fn, ft) => (fn, rewriteTy mapping ft)) }
     | none => none
-  -- 5. Conditional Copy (Phase 7 #3): a specialized `struct Copy S<T>` /
-  -- `enum Copy E<T>` is Copy iff every substituted field/payload is Copy. Demote
-  -- non-qualifying specializations to linear (isCopy := false) instead of
-  -- erroring — iterate to a fixpoint so nested specializations
-  -- (`Pair_Box_String` over `Box_String`, `Maybe_Box_String` over `Box_String`)
-  -- settle. This keeps the machine-wide invariant "isCopy = true ⇒ all fields
-  -- Copy" that verifyCopyFieldsPostMono asserts. Structs and enums demote in ONE
-  -- fixpoint because either kind's Copy-ness can depend on the other's.
-  --
-  -- The ENUM half is consistency, not a behavior change users can observe: Check
-  -- already judges `Wrap<Tracked>` non-Copy before mono (it substitutes the
-  -- payload), so a program that duplicates a linear payload is rejected earlier.
-  -- What this prevents is a post-mono DISAGREEMENT — `verifyCopyFieldsPostMono`
-  -- resolves a struct field typed as an enum specialization through that
-  -- specialization's `isCopy`, and would otherwise read `true` for a payload
-  -- Check had already ruled linear.
-  -- Copy predicate: delegates to the one shared definition
-  -- (`Layout.isCopyTyCore`). Named refs resolve against BOTH the
-  -- specializations being demoted and the pre-existing hand-written structs.
-  -- Post-mono policy (`typeVarIsCopy := false`): any `.typeVar` here is treated
-  -- as not-Copy. This routing also picks up conditional Copy for generic
-  -- STRUCT instances, which the previous inline walker omitted.
-  let isCopyField (specStructs : List CStructDef) (specEnums : List CEnumDef) (ty : Ty) : Bool :=
-    Layout.isCopyTyCore (specStructs ++ allStructs) (specEnums ++ allEnums)
-      (typeVarIsCopy := false) ty
-  let rec demote (fuel : Nat) (structs : List CStructDef) (enums : List CEnumDef)
-      : List CStructDef × List CEnumDef :=
-    match fuel with
-    | 0 => (structs, enums)
-    | fuel+1 =>
-      let structs' := structs.map fun sd =>
-        if sd.isCopy && sd.typeParams.isEmpty
-           && !(sd.fields.all fun (_, fty) => isCopyField structs enums fty)
-        then { sd with isCopy := false } else sd
-      let enums' := enums.map fun ed =>
-        if ed.isCopy && ed.typeParams.isEmpty
-           && !(ed.variants.all fun (_, fields) =>
-                  fields.all fun (_, fty) => isCopyField structs enums fty)
-        then { ed with isCopy := false } else ed
-      if (structs'.zip structs).all (fun (a, b) => a.isCopy == b.isCopy)
-         && (enums'.zip enums).all (fun (a, b) => a.isCopy == b.isCopy)
-      then (structs', enums') else demote fuel structs' enums'
-  let (newStructs, newEnums) :=
-    demote (newStructs.length + newEnums.length + 1) newStructs newEnums
+  -- 5. Copy of a specialization (decision D6): declared Copy and every type argument Copy, set
+  -- above when each specialization is built. The former demotion fixpoint over specializations
+  -- (Phase 7 #3 conditional Copy) is gone: Copy-ness is a fact of the declaration, checked once by
+  -- CoreCheck with the parameters taken as Copy, so "isCopy ⇒ every field Copy", which
+  -- `verifyCopyFieldsPostMono` asserts, holds without iterating.
   -- 6. Rewrite all modules and add the new defs to the first module only.
   --
   -- Every type-bearing declaration is rewritten, not just function signatures

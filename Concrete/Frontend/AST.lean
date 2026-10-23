@@ -186,7 +186,7 @@ structure PatBind where
   field : Option String := none
   name : String
   -- Set by `desugarStmts` on the binders of a destructuring `let` (which becomes a match
-  -- arm): it is a `let` binder, so REF-6@1 (a) refuses it a reference type even though the
+  -- arm): it is a `let` binder, so REF-6@2 (a) refuses it a reference type even though the
   -- arm form would allow one (exit 2i).
   letBound : Bool := false
   deriving Repr, BEq, Inhabited
@@ -846,7 +846,7 @@ partial def desugarModule (m : Module) : Module :=
     constants := m.constants.map fun c => { c with value := desugarExpr c.value }
     -- Methods too (found by exit 2i's review): a `let ... else` / irrefutable enum destructure
     -- in an impl or trait-impl method was left undesugared, so Check skipped it and the binders
-    -- were undeclared (E0201) — and REF-6@1's destructuring-let check never saw it.
+    -- were undeclared (E0201) — and REF-6@2's destructuring-let check never saw it.
     implBlocks := m.implBlocks.map fun ib =>
       { ib with methods := ib.methods.map fun f => { f with body := desugarStmts f.body } }
     traitImpls := m.traitImpls.map fun tb =>

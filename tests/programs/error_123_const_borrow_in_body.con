@@ -1,7 +1,7 @@
 // Bug 123: a module constant has no storage; `&X` in a function body lowered to the address of
 // a local named X that does not exist (an uninitialized slot; exit 0 instead of 42). Refused
 // (E0238) until constants have storage. Exit 2i: the borrow is a call argument (a `let` may not
-// bind a reference, REF-6@1), which reaches the same refusal (REF-5@2: a constant is not a place).
+// bind a reference, REF-6@2), which reaches the same refusal (REF-5@2: a constant is not a place).
 const X: Int = 42;
 
 fn get(r: &Int) -> Int {

@@ -59,10 +59,10 @@ printf '%s' "$LEDGER" > "$TMP/ledger.json"
 declare -A SPEC_RULES=(
   [E0203]="REF-8@2" [E0204]="REF-8@2" [E0231]="REF-8@2" [E0232]="REF-8@2" [E0293]="REF-8@2"
   [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1" [E0305]="SCOPE-1@1"
-  [E0234]="REF-6@1" [E0302]="REF-6@1" [E0303]="REF-6@1"
+  [E0234]="REF-6@2" [E0302]="REF-6@2" [E0303]="REF-6@2"
   [E0236]="REF-1@2, REF-2@2, REF-4@1" [E0239]="REF-3@1, REF-4@1"
   [E0574]="REF-1@2" [E0575]="REF-1@2"
-  [E0238]="REF-4@1, REF-5@2, REF-6@1, REF-7@1, REF-8@2"
+  [E0238]="REF-4@1, REF-5@2, REF-6@2, REF-7@1, REF-8@2"
 )
 
 # ---------------------------------------------------------------------------
@@ -332,9 +332,9 @@ FAIL=$n4f_fail; PASS=$n4f_pass
 grep -q "FAIL G4 run tests/programs/regress_2i_renamed_pattern_binder.con = 41" "$TMP/n4f.out" \
   && ok "N4f: an unterminated final manifest row is still checked" || no "N4f: an unterminated final row was skipped"
 # N5-N8: execution. Wrong expectations on real fixtures must fail the row checks.
-check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@1 - > /dev/null \
+check_reject SCOPE-1 tests/programs/error_2i_scope1_block_let.con E0301 REF-6@2 - > /dev/null \
   && no "N5: a wrong rule tag was accepted" || ok "N5: a reject row expecting the wrong rule tag fails"
-check_reject REF-6 tests/programs/error_2i_scope1_block_let.con E0302 REF-6@1 - > /dev/null \
+check_reject REF-6 tests/programs/error_2i_scope1_block_let.con E0302 REF-6@2 - > /dev/null \
   && no "N6: a wrong code was accepted" || ok "N6: a reject row expecting the wrong code fails"
 check_reject SCOPE-1 tests/programs/regress_2i_scope1_block_let_renamed.con E0301 SCOPE-1@1 - > /dev/null \
   && no "N7: a program that compiles passed as a rejection" || ok "N7: an accepted twin cannot pass as its own rejection"

@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (review round 14): a constant initializer matches through a borrow and copies the
+// Exit 2i REF-6@2 (review round 14): a constant initializer matches through a borrow and copies the
 // reference-valued arm binder. A constant may not borrow at all: E0302 (constBorrows).
 struct P { n: i32 }
 const X: i32 = if true {

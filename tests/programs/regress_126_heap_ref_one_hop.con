@@ -99,7 +99,7 @@ fn nested_case() with(Alloc) -> Int {
 }
 
 // A `&h` held in a binding (not a call argument) is the same slot. Exit 2i: a `let` may not bind a
-// reference (REF-6@1), so the named reference is a borrow-block binder (bug 126's third form).
+// reference (REF-6@2), so the named reference is a borrow-block binder (bug 126's third form).
 fn binding_case() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 20, w: 0 });
     bump(&mut h);

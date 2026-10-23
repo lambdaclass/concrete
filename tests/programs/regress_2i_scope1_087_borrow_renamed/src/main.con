@@ -1,7 +1,7 @@
 // Exit 2i (MEMORY_SEMANTICS §15.6): the SCOPE-1@1 migration twin of
 // regress_087_borrow_shadow_uaf (bug 087). There an `if` body's `let r` shadowed the borrow-block
 // reference `r`; the shadow is now refused (E0301), and this is the same program with the inner
-// binder renamed and passed straight to the call (a `let` may not bind a reference, REF-6@1). The
+// binder renamed and passed straight to the call (a `let` may not bind a reference, REF-6@2). The
 // later `r` is the borrow of `base` after `s` was dropped and its buffer reused: exit 0 = the outer
 // `r` still reads "outer".
 mod main {

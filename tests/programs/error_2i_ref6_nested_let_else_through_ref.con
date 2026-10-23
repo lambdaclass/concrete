@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1: a nested destructuring `let ... else` through a borrowed scrutinee binds a
+// Exit 2i REF-6@2: a nested destructuring `let ... else` through a borrowed scrutinee binds a
 // reference by `let` (before exit 2i's review a nested destructure was never desugared: E0201).
 // Rejected: E0302.
 struct P { n: Int }

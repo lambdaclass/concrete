@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (review round 7): an `assert` calls a generic at `T := &Int` whose body binds its
+// Exit 2i REF-6@2 (review round 7): an `assert` calls a generic at `T := &Int` whose body binds its
 // `T` by `let`. Elab erases the assert, so Mono never builds that specialization and the post-mono
 // check never sees it; the instantiation inside erased code is refused at Check. E0302.
 fn probe<T: Copy>(x: T) -> bool {

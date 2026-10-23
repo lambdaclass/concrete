@@ -1,7 +1,7 @@
 // Normalized place rule (Codex static review): a value-pattern binder over `r: & &i64` binds the
 // inner `&i64` loaded out of the referent — an untraced reference. E0238.
 // Exit 2i: the caller reaches the shape through a borrow-block binder (a `let` may not bind a
-// reference, REF-6@1), so the fixture still pins its own rule.
+// reference, REF-6@2), so the fixture still pins its own rule.
 mod m {
     fn f(r: & &i64) -> i64 {
         let n: i64 = match r { x => { *x } };

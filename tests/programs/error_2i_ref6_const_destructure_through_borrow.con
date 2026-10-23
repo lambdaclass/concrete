@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (review round 13): a destructuring `let ... else` through a borrow inside a
+// Exit 2i REF-6@2 (review round 13): a destructuring `let ... else` through a borrow inside a
 // constant initializer binds a reference by `let`. Refused: E0302.
 struct P { n: i32 }
 const X: i32 = if true {

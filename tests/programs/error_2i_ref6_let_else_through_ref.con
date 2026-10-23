@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a destructuring `let ... else` through a borrowed
+// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a destructuring `let ... else` through a borrowed
 // scrutinee would bind a reference by `let` (here in an impl method, which desugarStmts did not
 // visit before exit 2i: the binder was undeclared, E0201). Rejected: E0302.
 struct P { n: Int }

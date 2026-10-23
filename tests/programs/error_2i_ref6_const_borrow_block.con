@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (review round 4): a borrow block inside a constant initializer binds a reference
+// Exit 2i REF-6@2 (review round 4): a borrow block inside a constant initializer binds a reference
 // (and its body re-points it). Refused: E0302.
 const X: i32 = if true {
     let a: i32 = 42;

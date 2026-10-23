@@ -129,7 +129,7 @@ def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option 
       | none => none
     let curPath := ((← getEnv).vars.lookup name).map (fun i => (i.borrowedPath, i.borrowedExact))
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
-      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@1")
+      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@2")
     let parent := match parent? with | some q => if q != name then some q else none | none => none
     -- the binding in scope under `name` only (binding identity, bug 094) — a shadowed entry of
     -- the same name keeps its own provenance
@@ -1701,7 +1701,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
-            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
+            -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@2 (a))
             let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
             let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
@@ -2307,7 +2307,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     -- exempts; a source `let` may not take that spelling (exit 2i review).
     if name.startsWith "__destr_" then
       throwCheck (.reservedName name) (some stmt.getSpan)
-    -- REF-6@1 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
+    -- REF-6@2 (a), exit 2i: no `let` binds a reference. A written (or aliased) reference type
     -- is refused before the initializer is checked; an inferred one right after.
     match ty with
     | some t =>
@@ -2335,7 +2335,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
     if (_isGhost || env.erasedDepth > 0) && tyMayHoldRefAt env.currentTypeParams finalTy then
       throwCheck (.ghostLetAtTypeParam name (tyToString finalTy)) (some stmt.getSpan)
-    -- Escape analysis (defense in depth under REF-6@1 (a)): a borrow ref into a new binding
+    -- Escape analysis (defense in depth under REF-6@2 (a)): a borrow ref into a new binding
     match value with
     | .ident _ vn =>
       if env.borrowRefs.contains vn then
@@ -2368,7 +2368,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | [] => pure ()
       recordRefProvenance name finalTy value (some stmt.getSpan) (pre := pre)
   | .assign _ name value =>
-    -- REF-6@1 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
+    -- REF-6@2 (b), exit 2i: no reference binding (a parameter, a borrow-block binder, an arm
     -- binder; a `let` never is one) is the target of an assignment, whatever the value.
     match ← lookupVarInfo name with
     | some info =>
@@ -3009,6 +3009,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let b := pb.name
       match ← lookupStructField structName pb.fieldName with
       | some fieldTy =>
+        -- REF-6 (a `let` may not hold a reference) with D3 (a binder through a reference is a
+        -- reference): destructuring a struct THROUGH a reference would bind references, so it is
+        -- refused (E0302), exactly as the enum form is. Read the field (`r.f`) or `match` instead.
+        if b != "_" && bindsThroughReference (← resolvedOr valTy) then
+          throwCheck (.letBindsReference b (tyToString (payloadBinderTy valTy (substTy mapping fieldTy)))) (some stmt.getSpan)
         let bTy ← resolvedOr (substTy mapping fieldTy)
         -- H16 for destructure binders too (bug 094).
         checkNoLiveShadow b (some stmt.getSpan)
@@ -3345,7 +3350,7 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
     code := e.code, evidence := ruleEvidence e.rule, nextAction := e.rule.bind ruleNextAction }
 
 
-/-- SCOPE-1@1 and REF-6@1 over one constant initializer. -/
+/-- SCOPE-1@1 and REF-6@2 over one constant initializer. -/
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
@@ -3865,7 +3870,7 @@ def checkModule (m : Module) (summary : FileSummary)
               code := CheckError.code (.refStoredInAggregate desc (tyToString ty)),
               evidence := ruleEvidence (some "REF-3@1"), nextAction := ruleNextAction "REF-3@1" }]
   | none =>
-  -- SCOPE-1@1 / REF-6@1 inside constant initializers, which checkFn never visits (exit 2i review)
+  -- SCOPE-1@1 / REF-6@2 inside constant initializers, which checkFn never visits (exit 2i review)
   match m.constants.flatMap (constInitDiagnostics typeAliasMap) with
   | d :: ds => .error (d :: ds)
   | [] =>

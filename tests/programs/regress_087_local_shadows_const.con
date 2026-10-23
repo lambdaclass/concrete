@@ -2,7 +2,7 @@
 // reuse a constant's name; constants are values, not local bindings). Elab once resolved the
 // constant before the locals, so `X` and `&X` read the constant or a stale local. Locals now
 // resolve before constants. Exit 2i: the second `let X` of the original became an assignment
-// (SCOPE-1@1), and `let r: &Int = &X` a borrow passed to a call (REF-6@1); `X + read(&X)` must
+// (SCOPE-1@1), and `let r: &Int = &X` a borrow passed to a call (REF-6@2); `X + read(&X)` must
 // read the local both times (2 + 2).
 const X: Int = 42;
 

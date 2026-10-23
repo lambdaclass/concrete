@@ -14,7 +14,7 @@ mod m {
         return f(if c { a } else { b });
     }
 
-    // Exit 2i: `let x: T = match ..` at `T = &P` binds a reference by `let` (REF-6@1, E0302 after
+    // Exit 2i: `let x: T = match ..` at `T = &P` binds a reference by `let` (REF-6@2, E0302 after
     // monomorphization), so the reference-valued match is passed straight to the call.
     fn pick<T: Copy>(c: bool, a: T, b: T, f: fn(T) -> Int) -> Int {
         return f(match c { true => a, false => b });

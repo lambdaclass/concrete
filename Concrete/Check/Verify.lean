@@ -539,7 +539,7 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
           else acc ++ [{ fnName := f.name
                          message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
   violationsToDiagnostics "post-mono" violations
-/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@1, MEMORY_SEMANTICS §15.3)
+/-! ### Post-mono reference-binding verifier (exit 2i, REF-6@2, MEMORY_SEMANTICS §15.3)
 
 Check refuses every `let` of reference type (E0302) and every assignment to a reference binding
 (E0303) it can see. A generic body is checked once at its opaque `T`, so `let y: T = x;` and
@@ -602,7 +602,7 @@ private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (St
   | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref, refTy) :: env) body, env)
 end
 
-/-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
+/-- REF-6@2 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
     type became a reference by instantiating a type parameter. Generic originals are skipped
     (their `T` is opaque; Check saw them). -/
 partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
@@ -617,7 +617,7 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
            span := fn.declSpan
            hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/language/MEMORY_SEMANTICS.md §15, REF-6)"
            code := code
-           evidence := [("rule", "REF-6@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+           evidence := [("rule", "REF-6@2"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
            nextAction := some "instantiate the generic at a value type, or restructure the generic so it passes its `T` argument on instead of binding or assigning it" } : Diagnostic)) ([] : Diagnostics)
     here ++ verifyNoRefBindingsPostMono m.submodules ++ verifyNoRefBindingsPostMono ms
 

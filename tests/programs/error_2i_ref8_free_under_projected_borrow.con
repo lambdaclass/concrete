@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a named projected borrow outlives `free` of its owner (bug 091's projected case). Rejected: E0302 (the shape is unwritable once REF-6 lands).
+// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a named projected borrow outlives `free` of its owner (bug 091's projected case). Rejected: E0302 (the shape is unwritable once REF-6 lands).
 struct B { v: Int }
 
 fn main() with(Std) -> Int {

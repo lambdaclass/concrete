@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1: a `let` in a constant initializer binds a borrow, and an assignment re-points it.
+// Exit 2i REF-6@2: a `let` in a constant initializer binds a borrow, and an assignment re-points it.
 // Constant initializers are not checked by checkFn, so a syntactic REF-6 walk runs over them (exit
 // 2i review); the constant is unused on purpose (Lower's constant-borrow refusal only sees used
 // constants). Rejected: E0302 and E0303.

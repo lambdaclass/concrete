@@ -107,7 +107,7 @@ structure TypeEnv where
   -- loop (a loop nested INSIDE the exiting branch iterates before the return,
   -- so it needs its own exiting branch).
   inFnExitingBranch : Bool := false
-  -- Exit 2i REF-6@1: > 0 while checking an expression Elab erases before monomorphization (a
+  -- Exit 2i REF-6@2: > 0 while checking an expression Elab erases before monomorphization (a
   -- `ghost let` initializer, an `assert` / `assume` condition). Post-mono re-checks runtime
   -- bindings at `T := &Int`; erased ones never reach it, so inside them a `let` or assignment
   -- whose type could become a reference by instantiation is refused here.
@@ -317,13 +317,13 @@ inductive CheckError where
   -- match/`if let`/`while let` binders, `for` header binders, borrow-block reference and
   -- region names). `kind` names the new binder's form.
   | shadowsVisibleBinding (name : String) (kind : String)
-  -- Exit 2i REF-6@1 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
+  -- Exit 2i REF-6@2 (a): no `let` (plain, `mut`, destructuring, `for` header) binds a
   -- reference, whether written, through an alias or inferred.
   | letBindsReference (name : String) (tyName : String)
-  -- Exit 2i REF-6@1 (b): no reference binding (parameter, borrow-block binder, arm binder)
+  -- Exit 2i REF-6@2 (b): no reference binding (parameter, borrow-block binder, arm binder)
   -- is the target of an assignment.
   | assignsReferenceBinding (name : String) (tyName : String)
-  -- REF-6@1 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
+  -- REF-6@2 (a) for a `ghost let` whose type mentions a type parameter: a ghost binding is
   -- erased before monomorphization, where a runtime `let` at `T := &Int` is re-checked, so it is
   -- refused here (exit 2i review).
   | ghostLetAtTypeParam (name : String) (tyName : String)
@@ -690,9 +690,9 @@ def CheckError.rule : CheckError → Option String
   | .contractBinds _ _ => some "SCOPE-1@1"
   | .borrowRefShadows _ | .borrowRegionShadows _ => some "SCOPE-1@1"
   | .shadowsLiveLinear _ => some "SCOPE-1@1"
-  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@1"
-  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@1"
-  | .referenceEscapesBorrowBlock _ => some "REF-6@1"
+  | .letBindsReference _ _ | .assignsReferenceBinding _ _ | .ghostLetAtTypeParam _ _ => some "REF-6@2"
+  | .erasedRefInstantiation _ _ _ | .constBorrows _ => some "REF-6@2"
+  | .referenceEscapesBorrowBlock _ => some "REF-6@2"
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"
   | .untraceablePlace _ _ => some "REF-5@2"
@@ -713,7 +713,7 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
   | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
   | "REF-5@2" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
-  | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
+  | "REF-6@2" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
   | "REF-8@2" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
   | _ => none

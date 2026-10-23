@@ -1011,11 +1011,20 @@ def ccCheckModuleDecls (m : CModule)
   for sd in m.structs do
     if sd.fields.any fun (_, fty) => tyReachesByValue allStructs allEnums sd.name [sd.name] fty then
       errors := errors ++ [mkDeclDiag (.recursiveType sd.name) sd.declSpan]
-  -- 2. Copy/Destroy conflict for enums
+  -- 2. Copy/Destroy conflict for enums, and (D6) the Copy payload check: a `Copy` enum's payloads
+  --    must be Copy with its type parameters taken as Copy, the same declaration check structs
+  --    have, so a declared-Copy instantiation never holds a linear payload.
   for ed in m.enums do
     if ed.isCopy then
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == ed.name then
         errors := errors ++ [mkDeclDiag (.copyDestroyConflict ed.name) ed.declSpan]
+      for (vname, fields) in ed.variants do
+        for (fname, fty) in fields do
+          let isTypeParam := match fty with
+            | .named n | .typeVar n => ed.typeParams.contains n
+            | _ => false
+          if !isTypeParam && !isCopyTy allStructs allEnums fty then
+            errors := errors ++ [mkDeclDiag (.copyFieldNotCopy s!"{ed.name}::{vname}" fname) ed.declSpan]
   -- 3. repr(C) validation
   for sd in m.structs do
     if sd.isReprC then

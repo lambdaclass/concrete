@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): a `ghost let` of a type-parameter type. A ghost
+// Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): a `ghost let` of a type-parameter type. A ghost
 // binding is erased before monomorphization, where a runtime `let y: T = x` at `T := &Int` is
 // re-checked, so it is refused at Check (exit 2i review). Rejected: E0302.
 fn inspect<T: Copy>(x: T) -> Int {

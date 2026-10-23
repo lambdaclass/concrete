@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Copy Is Declared, Not Derived From Fields (decision D6, 2026-10-23)
+
+A generic struct or enum declared `Copy` is Copy exactly when every type argument is Copy, decided
+from the declaration alone, as a derived `Copy` is; the declaration is checked once with its
+parameters taken as Copy (E0571, now for enum payloads too); a generic not declared `Copy` is never
+Copy. Mono's demotion fixpoint over specializations is removed: Copy-ness no longer depends on the
+type graph, so it is invariant under substitution. The builtin `Option` and `Result` are declared
+Copy the same way. Measured with `rule_impact.sh`: no corpus program changes. Also (D3 with REF-6,
+now REF-6@2): a destructuring `let` of a struct through a reference is refused (E0302) like the enum
+form; the one fixture that accepted it became a rejection with a field-read rewrite.
+
 ### A Cast To A Type Alias Compiles (bug 199, 2026-10-23)
 
 `x as IP` with `type IP = *mut Int` crashed the compiler in the backend: Elab left the cast target

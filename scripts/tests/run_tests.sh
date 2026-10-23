@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow regress_198_read_owned regress_199_cast_to_alias; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections regress_d1_mut_ref_reborrow regress_198_read_owned regress_199_cast_to_alias regress_d6_copy_generics; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -1793,7 +1793,7 @@ run_ok  "$TESTDIR/const_copy_then_borrow.con" "42" 0
 run_ok  "$TESTDIR/regress_087_local_shadows_const.con" "4" 0
 # A constant's initializer is lowered with the caller's locals hidden: no borrow of a constant
 # inside it (E0602 at Lower), and no capture of a local shadowing a constant it names.
-# Exit 2i: a borrow in a constant initializer is refused at Check (REF-6@1, E0302 constBorrows)
+# Exit 2i: a borrow in a constant initializer is refused at Check (REF-6@2, E0302 constBorrows)
 # before Elab's E0602, which stays as defense in depth.
 run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
@@ -1833,7 +1833,7 @@ for r127_case in "$TESTDIR/regress_127_struct_literal_source_order.con:42" \
     fi
 done
 # Bug 131: a reference parameter is never re-pointed (the re-pointing rule, with 104).
-# Exit 2i REF-6@1: a reference binding is never assigned (E0303), and a `let` never binds a
+# Exit 2i REF-6@2: a reference binding is never assigned (E0303), and a `let` never binds a
 # reference (E0302), so the 091/104/131 shapes that named a reference across statements are
 # refused at that `let` or assignment; the E0238/E0231/E0232/E0204 checks they used to reach stay
 # as defense in depth for borrow-block, arm and argument references (MEMORY_SEMANTICS §15.3).
@@ -8174,6 +8174,12 @@ run_err "$TESTDIR/error_rawdup_trusted_deref.con" "(E0311)"
 run_ok "$TESTDIR/regress_198_read_owned.con" 42
 # Bug 199: a cast to a type alias crashed the backend.
 run_ok "$TESTDIR/regress_199_cast_to_alias.con" 42
+# Decision D6 (explicit Copy): a declared-Copy generic is Copy exactly when every type argument is;
+# the declaration is checked once with its parameters taken as Copy.
+run_err "$TESTDIR/error_d6_copy_generic_field_not_copy.con" "(E0571)"
+run_err "$TESTDIR/error_d6_copy_enum_payload_not_copy.con" "(E0571)"
+run_err "$TESTDIR/error_d6_phantom_arg_not_copy.con" "(E0208)"
+run_ok "$TESTDIR/regress_d6_copy_generics.con" 42
 run_err "$TESTDIR/error_d2_borrow_literal.con" "(E0238)"
 run_err "$TESTDIR/error_d2_borrow_field_of_temporary.con" "(E0238)"
 run_err "$TESTDIR/error_d2_temporary_receiver.con" "(E0238)"
@@ -8302,7 +8308,7 @@ run_ok "$TESTDIR/regress_2i_scope2_consecutive_loops.con" 42
 run_ok "$TESTDIR/regress_2i_scope2_loop_body_let.con" 42
 run_ok "$TESTDIR/regress_2i_scope2_assign_rebind.con" 42
 run_ok "$TESTDIR/regress_2i_renamed_pattern_binder.con" 42
-# Exit 2i REF-6@1 (MEMORY_SEMANTICS §15.3): no `let` binds a reference (E0302), no reference
+# Exit 2i REF-6@2 (MEMORY_SEMANTICS §15.3): no `let` binds a reference (E0302), no reference
 # binding is assigned (E0303); after monomorphization too (a generic `T` instantiated to `&Int`).
 run_err "$TESTDIR/error_2i_ref6_let_shared_ref.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_let_inferred_alias.con" "(E0302)"
@@ -8331,7 +8337,8 @@ run_ok "$TESTDIR/regress_2i_ref6_method_let_else.con" 42
 run_err "$TESTDIR/error_2i_ref6_nested_let_else_through_ref.con" "(E0302)"
 run_ok "$TESTDIR/regress_2i_nested_let_destructure.con" 42
 run_err "$TESTDIR/error_2i_ref6_ghost_let_at_type_param.con" "(E0302)"
-run_ok "$TESTDIR/regress_2i_ref6_struct_destructure_through_ref.con" 42
+run_err "$TESTDIR/error_2i_ref6_struct_destructure_through_ref.con" "(E0302)"
+run_ok "$TESTDIR/regress_2i_ref6_struct_fields_through_ref.con" 42
 run_ok "$TESTDIR/regress_2i_scope2_borrow_after_loop.con" 42
 run_err "$TESTDIR/error_2i_ref6_erased_assert_let.con" "(E0302)"
 run_err "$TESTDIR/error_2i_ref6_erased_assert_assign.con" "(E0303)"

@@ -1,4 +1,4 @@
-// Exit 2i REF-6@1: an assignment between type-parameter bindings inside an `assume` condition,
+// Exit 2i REF-6@2: an assignment between type-parameter bindings inside an `assume` condition,
 // erased before monomorphization (exit 2i review). Rejected: E0303.
 fn probe<T: Copy>(x: T, y: T) -> Int {
     assume(if true { x = y; true } else { true });
