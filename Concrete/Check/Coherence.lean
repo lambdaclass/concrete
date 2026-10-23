@@ -5,6 +5,7 @@ import Concrete.Resolve.Intrinsic
 import Concrete.Resolve.TypeId
 import Concrete.Resolve.CallableId
 import Concrete.Resolve.Resolve
+import Concrete.Resolve.Shared
 
 /-! # Trait coherence (bug 186) — impl selection is a function, not a search
 
@@ -144,44 +145,74 @@ private def declIn (s : FileSummary) (n : String) (inModule : String) : Option T
     | some ed => some (enumDecl ed inModule)
     | none => (s.newtypes.find? (·.name == n)).map (newtypeDecl · inModule)
 
-/-- Primitive and compiler type names with no source declaration. -/
-private def primNames : List String :=
-  [ "Int", "Uint", "Bool", "Float64", "Float32", "Char",
-    "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "Heap", "HeapArray" ]
+/-- What a type name at an impl site resolves to. -/
+inductive HeadRes where
+  /-- A source declaration (struct, enum, newtype) or a compiler enum (`Option`, `Result`). -/
+  | decl (d : TypeDecl)
+  /-- A compiler type with no declaration, by its canonical spelling (`i64` and `Int` are one
+      type), and how many arguments it takes. -/
+  | prim (canonical : String) (arity : Nat)
+  /-- A type alias, local or imported (TRAIT-4 refuses it). -/
+  | alias
+  /-- No declaration visible here answers the name (TRAIT-D1 requires one; TRAIT-4 refuses). -/
+  | unresolved
 
-/-- The module scope a target name is resolved in. -/
+/-- The module scope a target name is resolved in. `siblings` are the other submodules of the
+    same parent (path, module): a submodule sees their structs and enums without an import, as
+    Check and Elab inject them (`checkSubmodules`). -/
 structure Scope where
   path : String
   module : Module
   summaryTable : List (String × FileSummary)
+  siblings : List (String × Module) := []
 
-/-- Resolve the name at an impl site to the declaration it denotes: the module's own
-    declarations, then its imports (by the IMPORTED declaration's identity, so `import
-    m.{Foo as Bar}; impl Destroy for Bar` names `m`'s `Foo`), then the always-visible std types
-    (`String`, `Vec`, …), then primitives. -/
-def resolveHead (sc : Scope) (n : String) : Option TypeDecl ⊕ ImplHead :=
+/-- Resolve the name at an impl site to the declaration it denotes, in the order the checker
+    sees names: the module's own declarations and aliases; its imports, by the IMPORTED
+    declaration's identity (so `import m.{Foo as Bar}; impl Destroy for Bar` names `m`'s `Foo`);
+    a sibling submodule's struct or enum; the compiler's `Option`/`Result`; the always-visible
+    std types (`String`, `Vec`); then the primitives, by canonical type. -/
+def resolveHead (sc : Scope) (n : String) : HeadRes :=
   let m := sc.module
   match m.structs.find? (·.name == n) with
-  | some sd => .inl (some (structDecl { sd with definedIn := sc.path, definitionName := sd.name } sc.path))
+  | some sd => .decl (structDecl { sd with definedIn := sc.path, definitionName := sd.name } sc.path)
   | none =>
   match m.enums.find? (·.name == n) with
-  | some ed => .inl (some (enumDecl { ed with definedIn := sc.path, definitionName := ed.name } sc.path))
+  | some ed => .decl (enumDecl { ed with definedIn := sc.path, definitionName := ed.name } sc.path)
   | none =>
   match m.newtypes.find? (·.name == n) with
-  | some nt => .inl (some (newtypeDecl { nt with definedIn := sc.path } sc.path))
+  | some nt => .decl (newtypeDecl { nt with definedIn := sc.path } sc.path)
   | none =>
-  let imported := m.imports.findSome? fun imp =>
+  if m.typeAliases.any (·.name == n) then .alias else
+  let imported : Option HeadRes := m.imports.findSome? fun imp =>
     (imp.symbols.find? (·.effectiveName == n)).bind fun sym =>
-      (sc.summaryTable.lookup imp.moduleName).bind fun s => declIn s sym.name imp.moduleName
+      (sc.summaryTable.lookup imp.moduleName).bind fun s =>
+        match declIn s sym.name imp.moduleName with
+        | some d => some (.decl d)
+        | none => if s.typeAliases.any (·.name == sym.name) then some .alias else none
   match imported with
-  | some d => .inl (some d)
+  | some r => r
   | none =>
-  if builtinTypeNames.contains n && !primNames.contains n then
-    match sc.summaryTable.findSome? fun (k, s) => declIn s n k with
-    | some d => .inl (some d)
-    | none => .inr (.prim n)
-  else if primNames.contains n then .inr (.prim n)
-  else .inr (.unresolved sc.path n)
+  let sib := sc.siblings.filterMap fun (sp, sm) =>
+    match sm.structs.find? (·.name == n) with
+    | some sd => some (structDecl { sd with definedIn := sp, definitionName := sd.name } sp)
+    | none => (sm.enums.find? (·.name == n)).map fun ed =>
+        enumDecl { ed with definedIn := sp, definitionName := ed.name } sp
+  match sib with
+  | [d] => .decl d
+  | _ :: _ :: _ => .unresolved   -- two siblings declare it: no single declaration
+  | [] =>
+  if n == "Option" then .decl { id := .builtin .option, arity := 1 } else
+  if n == "Result" then .decl { id := .builtin .result, arity := 2 } else
+  let std : Option TypeDecl :=
+    if builtinTypeNames.contains n then sc.summaryTable.findSome? fun (k, s) => declIn s n k
+    else none
+  match std with
+  | some d => .decl d
+  | none =>
+  match tyFromName n with
+  | .named _ =>
+    if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
+  | t => .prim (tyCanonical t) 0
 
 /-- `Ty` → `Term`, with the impl's own parameters as variables. Nested heads are compared by
     spelling; TRAIT-4 refuses every target whose arguments are not bare parameters, so a nested
@@ -248,6 +279,15 @@ def mkDiag (code msg : String) (span : Span) (file : String) (hint : Option Stri
     evidence := [("rule", rule ++ "@1"), ("spec", "docs/spec/traits.md#" ++ rule)],
     nextAction := hint }
 
+/-- The head identity and arity of a resolved target (`none` head: a blanket target).
+    An alias or an unresolved name keeps a spelling-keyed head so it is still compared with
+    itself; TRAIT-4 refuses it in any case. -/
+def headOf (path typeName : String) : Option HeadRes → Option Nat × Option ImplHead
+  | none => (none, none)
+  | some (.decl d) => (some d.arity, some (.decl d.id))
+  | some (.prim c a) => (some a, some (.prim c))
+  | some .alias | some .unresolved => (none, some (.unresolved path typeName))
+
 /-- The judgment over one module: collect its impls (with identities) and its TRAIT-3/TRAIT-4
     refusals. Submodules are walked by the caller. -/
 def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := Id.run do
@@ -257,27 +297,34 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
   let mut ds : Diagnostics := []
   -- Shape (TRAIT-4): the target is the head applied to exactly `expected`.
   let shapeCheck := fun (what typeName : String) (typeParams expected : List String)
-      (targetArgs : Option (List Ty)) (decl : Option TypeDecl) =>
+      (targetArgs : Option (List Ty)) (res : Option HeadRes) (arity : Option Nat) =>
     let args := targetArgs.getD []
     let argNames := args.map fun
       | .named n => some n
       | .typeVar n => some n
       | _ => none
-    let isAlias := m.typeAliases.any (·.name == typeName)
+    let isAlias := match res with
+      | some .alias => true
+      | _ => false
+    let isUnresolved := match res with
+      | some .unresolved => true
+      | _ => false
     if typeParams.contains typeName then
       some s!"{what} targets its own type parameter '{typeName}': a blanket impl would cover every type, and impl selection would no longer be decided by the type's identity"
     else if isAlias then
       some s!"{what} targets the type alias '{typeName}'; write the type it names"
+    else if isUnresolved then
+      some s!"{what} targets '{typeName}', which names no single type declaration visible in module '{sc.path}' (import it, or write the impl beside the type)"
     else if argNames != expected.map some then
       let shown := if args.isEmpty then typeName
         else s!"{typeName}<{", ".intercalate (args.map tyCanonical)}>"
       let want := if expected.isEmpty then typeName
         else s!"{typeName}<{", ".intercalate expected}>"
       some s!"{what} targets '{shown}', but an impl's target must be its type applied to exactly the impl's own parameters, in order ('{want}'): a specialized impl would be taken for every instantiation of '{typeName}'"
-    else match decl with
-      | some d =>
-        if d.arity != expected.length then
-          some s!"{what} gives '{typeName}' {expected.length} argument(s), but its declaration takes {d.arity}"
+    else match arity with
+      | some a =>
+        if a != expected.length then
+          some s!"{what} gives '{typeName}' {expected.length} argument(s), but the type takes {a}"
         else none
       | none => none
   for ti in m.traitImpls do
@@ -289,12 +336,9 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     | none => pure ()
     | some tid =>
     let what := s!"impl {ti.traitName} for {ti.typeName}"
-    let (decl, head) : Option TypeDecl × Option ImplHead :=
-      if ti.typeParams.contains ti.typeName then (none, none)
-      else match resolveHead sc ti.typeName with
-        | .inl (some d) => (some d, some (.decl d.id))
-        | .inl none => (none, some (.unresolved sc.path ti.typeName))
-        | .inr h => (none, some h)
+    let res : Option HeadRes :=
+      if ti.typeParams.contains ti.typeName then none else some (resolveHead sc ti.typeName)
+    let (arity, head) := headOf sc.path ti.typeName res
     let target : Term :=
       if ti.typeParams.contains ti.typeName then .var ti.typeName
       else .app ((head.map (·.key)).getD ti.typeName)
@@ -302,7 +346,7 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
     infos := infos ++ [{ owner := .trait tid, head, target, typeName := ti.typeName,
                          module := sc.path, span := ti.span, file,
                          methods := ti.methods.map (·.name) }]
-    if let some why := shapeCheck what ti.typeName ti.typeParams ti.typeParams ti.targetArgs decl then
+    if let some why := shapeCheck what ti.typeName ti.typeParams ti.typeParams ti.targetArgs res arity then
       ds := ds ++ [mkDiag "E0593" why ti.span file
         (some "write `impl<T, ..> Trait for Type<T, ..>` with the type's own parameters (docs/spec/traits.md TRAIT-4)")]
     -- TRAIT-3: instance locality.
@@ -326,26 +370,25 @@ def moduleImpls (sc : Scope) (file : String) : List ImplInfo × Diagnostics := I
         (some "move the impl into the module that defines the type (or the trait) (docs/spec/traits.md TRAIT-3)")]
   for ib in m.implBlocks do
     let what := s!"impl {ib.typeName}"
-    let (decl, head) : Option TypeDecl × Option ImplHead :=
-      if ib.typeParams.contains ib.typeName then (none, none)
-      else match resolveHead sc ib.typeName with
-        | .inl (some d) => (some d, some (.decl d.id))
-        | .inl none => (none, some (.unresolved sc.path ib.typeName))
-        | .inr h => (none, some h)
+    let res : Option HeadRes :=
+      if ib.typeParams.contains ib.typeName then none else some (resolveHead sc ib.typeName)
+    let (arity, head) := headOf sc.path ib.typeName res
     infos := infos ++ [{ owner := .inherent, head, target := .app ((head.map (·.key)).getD ib.typeName) [],
                          typeName := ib.typeName, module := sc.path, span := ib.span, file,
                          methods := ib.methods.map (·.name) }]
-    if let some why := shapeCheck what ib.typeName ib.typeParams (ib.typeParams ++ ib.capParams) ib.targetArgs decl then
+    if let some why := shapeCheck what ib.typeName ib.typeParams (ib.typeParams ++ ib.capParams) ib.targetArgs res arity then
       ds := ds ++ [mkDiag "E0593" why ib.span file
         (some "write `impl<T, ..> Type<T, ..>` with the type's own parameters (docs/spec/traits.md TRAIT-4)")]
   return (infos, ds)
 
 /-- Every module of the program, with its definition path and source file. -/
 partial def allScopes (summaryTable : List (String × FileSummary)) (path : String) (file : String)
-    (m : Module) : List (Scope × String) :=
+    (m : Module) (siblings : List (String × Module) := []) : List (Scope × String) :=
   let file := if m.sourceFile.isEmpty then file else m.sourceFile
-  ({ path, module := m, summaryTable }, file) ::
-    m.submodules.flatMap fun sub => allScopes summaryTable (path ++ "." ++ sub.name) file sub
+  let subs := m.submodules.map fun sub => (path ++ "." ++ sub.name, sub)
+  ({ path, module := m, summaryTable, siblings }, file) ::
+    subs.flatMap fun (sp, sub) =>
+      allScopes summaryTable sp file sub (subs.filter fun (q, _) => q != sp)
 
 /-- TRAIT-1 / TRAIT-2 / TRAIT-5 over every impl of the program. Pairs are judged by identity, so the
     verdict does not depend on the order impls or imports were written in. -/

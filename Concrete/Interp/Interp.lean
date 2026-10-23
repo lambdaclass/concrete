@@ -850,7 +850,10 @@ def destroyImplKey (typeName : String) : String := "$impl$Destroy$" ++ typeName
 
 /-- Reserved key of a type's (non-Destroy) trait impl method `method`. A type has at most one
     method of a given name, so (type, method) identifies the impl method. -/
-def traitImplKey (typeName method : String) : String := "$impl$" ++ typeName ++ "$" ++ method
+/-- The type is keyed by its canonical spelling, so an impl written `for bool` (or `i64`) and a
+    runtime `Bool` (`Int`) receiver meet on one key (bug 186). A user type's name is unchanged. -/
+def traitImplKey (typeName method : String) : String :=
+  "$impl$" ++ tyCanonical (tyFromName typeName) ++ "$" ++ method
 
 partial def collectTraitImpls : List CModule → List CTraitImpl
   | [] => []

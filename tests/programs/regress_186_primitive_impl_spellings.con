@@ -1,0 +1,12 @@
+// Bug 186: an impl for a primitive is keyed by the primitive's type, not its spelling. `bool`
+// and `i64` are `Bool` and `Int`; the interpreter registered the impl under the written
+// spelling and looked it up under the canonical one, so it refused what the binary ran.
+trait Tr { fn m(&self) -> Int; }
+impl Tr for bool { fn m(&self) -> Int { return 40; } }
+impl Tr for i64 { fn m(&self) -> Int { return 2; } }
+fn call<T: Tr>(x: &T) -> Int { return x.m(); }
+pub fn main() -> Int {
+    let b: bool = true;
+    let n: Int = 0;
+    return call::<bool>(&b) + call::<Int>(&n);
+}
