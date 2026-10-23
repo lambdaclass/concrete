@@ -1,6 +1,6 @@
 // Bug 216 (OPEN, needs a language decision): a write into a field, a nested array element or a
 // heap cell of a binding not declared `mut` is accepted, while `&mut` of the same place is refused
-// (E0233) and a direct array element write is refused (E0217, bug 030). Both backends return 42.
+// (E0233) and a direct array element write is refused (E0217, bug 030). Both backends return 41.
 struct Copy P { x: i32, y: i32 }
 struct Copy Q { a: [i32; 2] }
 
