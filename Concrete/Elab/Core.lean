@@ -41,13 +41,9 @@ namespace CLocal
     compiled and silently stopped matching Elab's Core (found in PipelineTest). Without the
     coercion such a pattern is a type error. -/
 def ofName (n : String) : CLocal := { name := n }
-instance : BEq CLocal := ⟨fun a b => a.name == b.name⟩
-instance : Hashable CLocal := ⟨fun a => hash a.name⟩
-instance : Ord CLocal := ⟨fun a b => compare a.name b.name⟩
 instance : Repr CLocal := ⟨fun a p => reprPrec a.name p⟩
 instance : ToString CLocal := ⟨CLocal.name⟩
 instance : Inhabited CLocal := ⟨{ name := "" }⟩
-instance : LT CLocal := ⟨fun a b => a.name < b.name⟩
 /-- What a backend keys a local by (R-0492 step 4): the binding's identity when it has one (a
     source binding), its Core name otherwise (a compiler temporary). ElabVerify guarantees that
     every reference has the same key as the binder it denotes (U1, U2), so keying an environment
