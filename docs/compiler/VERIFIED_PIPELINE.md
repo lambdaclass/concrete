@@ -476,13 +476,22 @@ diagnostic-path bypass.
     disagree.
   - A function without a table, or with an ambiguous one, is refused rather than checked by name.
 - *Gates:* `check_local_identity.sh`:
-  - compile-fail controls: `LocalId` and `LocalTable` cannot be constructed outside their
-    module, and the environment cannot be searched by spelling;
-  - a source leg: the minting functions are called only from `Resolve/Locals.lean`;
-  - the bug 176 reproducers;
-  - a mutant control: with `closeBlockScope` disabled, so loop and branch bindings leak into the
-    environment as they did before bug 176's fix, the type-confusion and mutability reproducers
-    still type and assign through the outer binding. The leak no longer reaches a use.
+  - F: compile-fail controls. `LocalId` and `LocalTable` cannot be constructed or updated outside
+    their module, and `TypeEnv.vars` cannot be searched by a spelling.
+  - S: the minting functions are called only from `Resolve/Locals.lean`, and the checker keeps no
+    name-keyed lookup helper and no private uid counter.
+  - T: twelve walk answers on a probe program with loops, branches, an arm, a borrow block,
+    sibling reuse and one collision.
+  - R: `Pipeline.resolve` attaches a resolved table to every function; bug 176's loop program
+    still runs; bug 197's project `let … else` builds.
+  - Mutation family 98 (a use denotes the outermost visible binding of its spelling) is killed by
+    leg T.
+  - *Why no program-level discriminator:* with SCOPE-1 enforced and loop scopes closed (bug 176),
+    the newest binding of a spelling in the environment is always the visible one. A by-name
+    lookup therefore gives the same answer on every accepted program. This slice removes the
+    checker's dependence on those two rules for identity; it does not change what is accepted.
+  - The name-keyed guards E0292 (live shadow) and E0238's shadowed-source rule could only fire on
+    a binding from a closed scope, so they are removed.
 - *Not in this slice:*
   - Elab still alpha-renames by its own scopes; it consumes `LocalId`s in a later slice, retiring
     that second walk.
