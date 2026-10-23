@@ -1304,8 +1304,7 @@ run_ok "$TESTDIR/file_read_basic.con" 12
 # user to run the suite owned them, fopen returned NULL for everyone else and file_write_read
 # segfaulted (rc 139). Scratch now comes from CONCRETE_TEST_TMPDIR, set by the runner. An
 # environment error is an exit code, never a crash: unset -> 100, a directory that does not exist
-# (the open for writing fails) -> 101. And `--test` provides its own directory, overriding a
-# caller's value that points nowhere, so std's fs tests still pass.
+# (the open for writing fails) -> 101.
 r191_bin="$TMPDIR/r191_fwr"
 if $COMPILER "$TESTDIR/file_write_read.con" -o "$r191_bin" >/dev/null 2>&1; then
     r191_unset=0; env -u CONCRETE_TEST_TMPDIR "$r191_bin" >/dev/null 2>&1 || r191_unset=$?
@@ -1321,14 +1320,16 @@ else
     echo "FAIL  regress_191: file_write_read.con did not compile"
     FAIL=$((FAIL + 1))
 fi
-r191_out=$(CONCRETE_TEST_TMPDIR="$TMPDIR/r191_absent" $COMPILER std/src/lib.con --test --module std.fs 2>&1) \
+# The runner provides the directory: with the caller's variable set to a sentinel, the test binary
+# must see a different, writable directory (regress_191_test_scratch: 1 unset, 2 inherited the
+# sentinel, 3 not writable). Before the fix it inherited the sentinel.
+r191_out=$(CONCRETE_TEST_TMPDIR=/nonexistent/r191_sentinel $COMPILER "$TESTDIR/regress_191_test_scratch.con" --test 2>&1) \
     && r191_rc=0 || r191_rc=$?
-if [ "$r191_rc" = "0" ] && grep -q "^PASS: .*test_write_read_roundtrip" <<<"$r191_out" \
-        && ! grep -q "^FAIL:" <<<"$r191_out"; then
-    echo "  ok  regress_191 --test overrides the caller's CONCRETE_TEST_TMPDIR (std.fs scratch tests pass)"
+if [ "$r191_rc" = "0" ] && grep -q "^PASS: .*test_runner_scratch" <<<"$r191_out"; then
+    echo "  ok  regress_191_test_scratch: --test overrides the caller's CONCRETE_TEST_TMPDIR with a writable private directory"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_191 --test with a caller CONCRETE_TEST_TMPDIR pointing nowhere: rc $r191_rc $(grep "^FAIL" <<<"$r191_out" | awk 'NR<=3' | tr '\n' ' ')"
+    echo "FAIL  regress_191_test_scratch --test with the caller's CONCRETE_TEST_TMPDIR at a sentinel: rc $r191_rc $(awk 'NR<=3' <<<"$r191_out" | tr '\n' ' ')"
     FAIL=$((FAIL + 1))
 fi
 

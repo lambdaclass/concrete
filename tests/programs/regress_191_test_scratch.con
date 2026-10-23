@@ -1,0 +1,95 @@
+// Bug 191: `--test` / `concrete test` give the test binary its own scratch directory.
+//
+// run_tests.sh runs this with the CALLER's CONCRETE_TEST_TMPDIR set to the sentinel
+// /nonexistent/r191_sentinel. The test passes only if the variable the binary sees is set, is not
+// the sentinel (the runner overrode it), and names a directory the test can create a file in.
+// Before the fix the runner set nothing: the binary inherited the sentinel and the test fails.
+mod regress_191_test_scratch {
+    trusted extern fn getenv(name: *mut u8) with(Env) -> *const u8;
+    trusted extern fn strlen(s: *const u8) with() -> u64;
+    trusted extern fn fopen(name: *mut u8, mode: *mut u8) with(File) -> *const u8;
+    trusted extern fn fclose(file: *const u8) with(File) -> i32;
+    trusted extern fn malloc(size: u64) with(Alloc) -> *mut u8;
+    trusted extern fn free(ptr: *mut u8) with(Alloc);
+
+    trusted fn cstr(s: &String) with(Alloc) -> *mut u8 {
+        let len: Int = string_length(s);
+        let buf: *mut u8 = malloc((len + 1) as u64);
+        let mut i: Int = 0;
+        while i < len {
+            let dst: *mut u8 = buf + (i as u64);
+            *dst = string_char_at(s, i) as u8;
+            i = i + 1;
+        }
+        let nul: *mut u8 = buf + (len as u64);
+        *nul = 0;
+        return buf;
+    }
+
+    // Whether the NUL-terminated `p` (of length n) spells `s`.
+    trusted fn cstr_eq(p: *const u8, n: u64, s: &String) -> bool {
+        let len: Int = string_length(s);
+        if n != (len as u64) {
+            return false;
+        }
+        let mut i: Int = 0;
+        while i < len {
+            let c: *const u8 = p + (i as u64);
+            if *c != (string_char_at(s, i) as u8) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    #[test]
+    trusted fn test_runner_scratch() with(Env, File, Alloc) -> i32 {
+        let var: String = "CONCRETE_TEST_TMPDIR";
+        let var_buf: *mut u8 = cstr(&var);
+        drop_string(var);
+        let dir: *const u8 = getenv(var_buf);
+        free(var_buf);
+        if dir == (0 as *const u8) {
+            return 1;
+        }
+        let n: u64 = strlen(dir);
+        let sentinel: String = "/nonexistent/r191_sentinel";
+        let inherited: bool = cstr_eq(dir, n, &sentinel);
+        drop_string(sentinel);
+        if inherited {
+            return 2;
+        }
+        // "<dir>/r191.txt"
+        let name: String = "/r191.txt";
+        let name_len: Int = string_length(&name);
+        let path: *mut u8 = malloc(n + (name_len as u64) + 1);
+        let mut i: u64 = 0;
+        while i < n {
+            let src: *const u8 = dir + i;
+            let dst: *mut u8 = path + i;
+            *dst = *src;
+            i = i + 1;
+        }
+        let mut j: Int = 0;
+        while j < name_len {
+            let dst: *mut u8 = path + n + (j as u64);
+            *dst = string_char_at(&name, j) as u8;
+            j = j + 1;
+        }
+        drop_string(name);
+        let nul: *mut u8 = path + n + (name_len as u64);
+        *nul = 0;
+        let mode: String = "w";
+        let mode_buf: *mut u8 = cstr(&mode);
+        drop_string(mode);
+        let fp: *const u8 = fopen(path, mode_buf);
+        free(mode_buf);
+        free(path);
+        if fp == (0 as *const u8) {
+            return 3;
+        }
+        fclose(fp);
+        return 0;
+    }
+}

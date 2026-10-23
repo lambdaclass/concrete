@@ -76,8 +76,11 @@ The test runner owns the scratch location, and test code asks for it.
 ## Containment
 
 - `check_gate_hygiene.sh` gains a leg over every tracked `.con` source (about 2000): a `/tmp/...`
-  string literal outside a comment is refused unless it is listed in `CON_TMP_OK` with the reason
-  nothing touches the filesystem through it. The one entry is `std/src/path.con`'s `"/tmp/x"`, a
+  string literal outside a comment (one that starts with `/tmp/` or has it after a separator, so
+  `build//tmp/x` is a relative path) is refused unless that whole literal is listed in `CON_TMP_OK`
+  with the reason nothing touches the filesystem through it. The scan tokenizes each file as the
+  lexer does (char literals, loop labels, strings spanning lines, `//` comments), and a scanner
+  failure fails the gate. The one entry is `std/src/path.con`'s `"/tmp/x"`, a
   `PathBuf` display test that never opens the path. An entry whose literal is gone fails the gate.
   Two controls: a program with a `/tmp` literal is flagged, and comments, a doc example, a trailing
   comment and non-`/tmp` paths are not. The pre-fix `std/src/fs.con` gives 8 hits.
@@ -85,9 +88,11 @@ The test runner owns the scratch location, and test code asks for it.
   `examples/mal/bench.sh` gives 9 hits).
 - `run_tests.sh` bug 191 legs: `file_write_read.con` exits 100 with the variable unset and 101
   with it pointing at a directory that does not exist (an environment error is reported by its
-  exit code, never as a crash); and `concrete std/src/lib.con --test --module std.fs` passes with
-  the caller's `CONCRETE_TEST_TMPDIR` pointing at a missing directory, so the runner, not the
-  caller, provides the scratch directory.
+  exit code, never as a crash); and `regress_191_test_scratch.con` run with `--test` while the
+  caller's `CONCRETE_TEST_TMPDIR` is the sentinel `/nonexistent/r191_sentinel`: its test passes
+  only if the variable it sees is set, differs from the sentinel and names a directory it can create
+  a file in, so the runner, not the caller, provides the scratch directory. Before the fix the
+  binary inherited the sentinel and the test fails.
 - On OVH as user `agent`, with dev's files still in `/tmp`, the three failing gates pass (see the
   branch report for counts).
 
