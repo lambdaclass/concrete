@@ -988,14 +988,17 @@ closes a soundness hole or removes a case from the semantics the verified pipeli
 style-only rules wait for a workload) and answered the four open questions of
 [TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) with "do the best long term
 solution for this problem and every problem". **Adopted:** every `&mut` argument is an implicit
-reborrow and an unused `&mut` may lapse (D1, G9 / B1 / B2; R-0496 with exit 2i); only places are
-borrowable, a string literal being a static place, so a borrow of any other literal, call result
-or aggregate is refused (D2, REF-5, G12; closes bug 182; 1 corpus site migrates); every binder
-through a scrutinee of reference type is a reference, Copy or not (D3; closes bug 181; 2 fixtures
-migrate); a foreign function value whose signature has a `#[repr(C)]` aggregate is refused now
-(bug 166), and function types will carry their calling convention (`extern "C" fn`) when the first
-callback workload needs it (D4, [FFI.md](docs/platform/FFI.md)). G17 is closed (refused on main,
-pinned by fixtures). The ordered implementation plan is TIGHTENING_DECISIONS §5; exit 2i owns D1 –
+reborrow and an unused `&mut` may lapse, as an exclusive scoped loan that suspends its parent (D1,
+G9 / B1 / B2; R-0496 with exit 2i); the Austral model, "ok do the austral model with `&s.f`
+sugar": only a variable (or a string literal, a static root) is borrowed, a reference to a part is
+a projection through a reference, `&s.f` is front-end sugar, and loans are keyed by root, so a
+borrow of a temporary is refused and disjoint field borrows wait for a workload (D2, REF-5, G12;
+closes bug 182; 2 std sites and 1 train3 fixture migrate); every binder through a scrutinee of
+reference type is a reference, Copy or not, carried explicitly through Core (D3; closes bug 181; 2
+fixtures migrate; G17's Copy case reopens under it); every foreign function value is refused now
+(bug 166), and function types will carry calling convention, capabilities and safety obligations
+when the first callback workload needs them (D4, [FFI.md](docs/platform/FFI.md)). G17's moving
+shapes are closed (refused on main, pinned by fixtures). The ordered implementation plan is TIGHTENING_DECISIONS §5; exit 2i owns D1 –
 D3's checker rules and exit 0b the bug repairs.
 
 **Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment

@@ -49,11 +49,13 @@ spill), the shape of bugs 102 and 126.
 ## Structural owner
 
 The rule decided on 2026-10-23
-([TIGHTENING_DECISIONS D2](../language/TIGHTENING_DECISIONS.md#d2-only-places-are-borrowable-q2-ref-5-g12)):
-only places are borrowable, a string literal being a static place; every other non-place operand
-is E0238 (REF-5@1), enforced under exit 2i (R-0500). There are no temporaries to give places to, so
-the semantics needs no temporary materialization. Measured migration: one corpus site
-(`std/src/map.con`, `m.remove(&2)`); both reproducers here become rejection fixtures.
+([TIGHTENING_DECISIONS D2](../language/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)):
+the Austral model: only a variable (or a string literal, a static root) is borrowed, a reference
+to a part is a projection through a reference, `&s.f` is front-end sugar, and loans are keyed by
+root; every other operand is E0238 (REF-5), enforced under exit 2i (R-0500). A temporary is never a
+root, so the semantics needs no temporary materialization. Measured migration for the operand rule:
+one corpus site (`std/src/map.con`, `m.remove(&2)`); both reproducers here become rejection
+fixtures.
 
 ## Containment while open
 

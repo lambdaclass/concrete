@@ -52,12 +52,15 @@ The user decided the four questions the same day ("do the best long term solutio
 and every problem"):
 
 - **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
-- **D2:** only places are borrowable, with string literals as static places. This closes bug 182,
-  and one corpus site migrates.
+- **D2:** first "only places are borrowable", then replaced by the Austral model ("ok do the austral
+  model with `&s.f` sugar"). Only a variable or a string literal is borrowed, and a reference to a
+  part is a projection through a reference. `&s.f` is front-end sugar, and loans are keyed by root.
+  This closes bug 182; 2 std sites and 1 train3 fixture migrate.
 - **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
   fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
-- **D4:** foreign function values with `#[repr(C)]` aggregate signatures are refused now (bug 166).
-  Function types will carry their calling convention later.
+- **D4:** every foreign function value is refused now (bug 166), revised after review from an
+  aggregate-only refusal. Function types will carry calling convention, capabilities and safety
+  obligations later.
 
 G17 is closed: its shapes are refused on main and are now rejection fixtures. The rules are
 recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not

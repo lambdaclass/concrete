@@ -70,7 +70,7 @@ changes. It measures what a rule breaks before the rule lands.
 | T-G2 | post-mono reference check weaker than the front end's (G2 remainder) | HOLE (review, 2026-10-23) | front end refuses `T := *const &Int` in a return (E0236 on train3, no code on main); a transitive generic reaches `id::<*const &Int>` and passes | structural signature well-formedness plus the reference-storage restrictions, checked as generic constraints before specialization; the post-mono check is defense in depth (E0236) | now (exit 2i) |
 | T-G9 | `&mut` argument modes (G9, B1, B2) | SEMANTICS | a parameter `&mut` is reborrowed at each call; a borrow-block `&mut` is consumed by its first call (E0205 on the second); both may lapse unused | **decided (D1):** every `&mut` argument is an implicit reborrow; an unused `&mut` may lapse | implement with R-0496 (Core reborrow form); 0 corpus sites break |
 | T-G10 | owner reads under a shared borrow block (G10, B7) | STYLE | refused (E0203) | none: keep the freeze | deferred: a workload that needs owner reads under a named shared borrow (R-0499) |
-| T-REF5 | borrow of a temporary: literal, call result, aggregate literal (G12) | HOLE (bug 182) | accepted. `&alloc(..)` segfaults and `&int_to_string(..)` leaks (bug 182). `&42`, `&mk()` and `&P{..}` of Copy type give 42 in both consumers | **decided (D2):** only places are borrowable; a string literal is a static place; everything else is E0238 (REF-5@1) | now (exit 2i, closes bug 182); migration: 1 corpus site (`std/src/map.con:712`) |
+| T-REF5 | borrow of a temporary: literal, call result, aggregate literal (G12) | HOLE (bug 182) | accepted. `&alloc(..)` segfaults and `&int_to_string(..)` leaks (bug 182). `&42`, `&mk()` and `&P{..}` of Copy type give 42 in both consumers | **decided (D2, Austral model):** only a variable is borrowed (a string literal is a static root); references to parts are projections through a reference; `&s.f` is sugar; loans keyed by root | now (exit 2i, closes bug 182); migration: 2 std sites (`map.con:712`, `cli.con:77`) and 1 train3 fixture |
 | T-G13 | trait method declaration returning a reference (G13) | HOLE (well-formedness; REF-1 is normative) | accepted; every implementation is refused | the uniform signature well-formedness check on trait method declarations (E0236) | now (exit 2i) |
 | T-G15 | `extern fn` with `*const &T` in its signature (G15) | SEMANTICS | result and parameter forms accepted; reading the inner reference is E0238 | E0575 looks through raw-pointer pointees, in parameters and results; 0 corpus sites | now (exit 2i, with R-0285) |
 | T-G16 | reference-returning function type via an alias or a field (G16) | HOLE (well-formedness; REF-2 is normative) | accepted | the same signature well-formedness after alias expansion and in field declarations (E0236); a callback type whose parameters borrow stays legal; 0 corpus sites | now (exit 2i) |
@@ -183,7 +183,7 @@ are not candidates here. Two other items are settled and are not repeated in the
   `String` has capacity 0 and owns no heap. The corpus borrows string literals at 77 sites, an
   integer literal at 2 (one in an already-refused fixture) and a call result at 2 (bug 182's
   reproducers), with no aggregate-literal borrows; this is the operand scan of
-  [D2](#d2-only-places-are-borrowable-q2-ref-5-g12), which supersedes an earlier, cruder textual
+  [D2](#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23), which supersedes an earlier, cruder textual
   count of 79 / 1 / 0.
 - **Class.** HOLE: a leak of a linear value and a miscompile, both in safe code.
 - **Rule options.**
@@ -202,9 +202,11 @@ are not candidates here. Two other items are settled and are not repeated in the
   receiver, the operand of `*` (`*(&42)`), a field or index base, or a `match` / `if let` /
   `while let` scrutinee (`match &mk() { .. }`). For a scrutinee the statement is the whole `match`,
   so arm binders through it stay inside the temporary's lifetime. Place MIR (R-0501) gives the anonymous local a place.
-- **Decided (D2, 2026-10-23):** variant A with string literals as static places, not C: only
-  places are borrowable. The options above are kept as the record of what was weighed; 1 corpus
-  site migrates. It closes bug 182.
+- **Decided (D2, 2026-10-23):** first "only places are borrowable" (variant A with string
+  literals as static places), then replaced the same day by the Austral model: only a variable is
+  borrowed, a reference to a part is a projection through a reference, `&s.f` is front-end sugar,
+  and loans are keyed by root. The options above are kept as the record of what was weighed. It
+  closes bug 182.
 
 #### T-G13. Trait method declaration returning a reference
 
@@ -429,39 +431,139 @@ operation.
 **Homes.** MEMORY_SEMANTICS §15.7 G9 and MUT_REF_SEMANTICS §2 – §3 record the decision; R-0496
 (Core reborrow form) implements it with the checker change in exit 2i. **Migration:** none.
 
-### D2. Only places are borrowable (Q2, REF-5, G12)
+### D2. The Austral model: borrow a variable, then project (Q2, REF-5, G12; revised 2026-10-23)
 
-**Rule.** A borrow `&e` / `&mut e` is accepted only when `e` is a canonical place (MEMORY_SEMANTICS
-§15.1). A string literal is a place: it denotes static, read-only storage, so `&"text"` borrows that
-storage, and `&mut "text"` is refused. Everything else is E0238 (REF-5@1): an integer, float, `bool`
-or `char` literal, a call or method-call result, an aggregate or array literal, an operator
-expression and a constant. The rewrite is an explicit `let`. There are no hidden anonymous locals
-and no temporary materialization in the formal semantics.
+**Decision.** The user first chose "only places are borrowable" and then, the same day, replaced it:
+**"ok do the austral model with `&s.f` sugar"**. The earlier "places" rule (recursive places by
+provenance) is superseded and kept below only as the record of what was weighed.
 
-**Rationale.** The alternatives each add a case: variant B destroys temporaries implicitly, which
-the 2026-10-21 stance excludes, and variant C keeps call- or statement-scoped anonymous locals,
-which the semantics would have to define (lifetime, place, which operand positions). Under D2 every
-reference has a named or static root, which is INV-REF's premise. Bug 182 (a `Heap` temporary
-miscompiled, a linear temporary leaked) is unwritable under it.
+**Core rule.** The core language has exactly two operations that form a reference:
 
-**Migration (measured).** A scan of every borrow operand in `std`, `examples` and `tests`, comments
-excluded (`&e` where `e` is not a binding followed by field, index or `.0` projections, a
-dereference of one, or a parenthesized place):
+1. **borrowing a variable**: `&x`, `&mut x`. A string literal counts as a static, immutable
+   variable-like root: `&"text"` is a borrow of that root, and `&mut "text"` is refused;
+2. **projecting through a reference**: a field `f`, an array element `[i]` (bounds-checked, as
+   every index is, ARITHMETIC_POLICY §1), a newtype `.0`, and any sequence of these.
 
-| operand | sites | disposition |
+Nothing else forms a reference: not a literal other than a string literal, a call or method-call
+result, an aggregate or array literal, an operator expression or a constant. A temporary is never
+a root, so bug 182 stays closed. A reference value is therefore always **a root slot plus a
+sequence of projections**. That one shape serves the checker, the interpreter, the extracted model
+and the verified pipeline. Concrete has no `->` (removed 2026-07-14); projecting through a
+reference `r` is written `&r.f` / `&r[i]`, and reading a field through it `r.f`, which
+auto-dereferences one layer.
+
+**Surface sugar.** `&s.f`, `&mut s.f`, `&a[i]` and `&s.inner.x` stay legal as pure syntax. Before any
+checking, the front end rewrites them to "borrow the root variable, then project" (`&s.f` is the
+projection `f` of `&s`). They add no semantic case and no typing or loan rule of their own.
+
+**Loans are keyed by root variable only.** A loan on `&s.f` is a loan on `s`. This matches the
+whole-owner freezing a borrow block already does (G10, E0203). Disjoint field borrows of one root in
+one call (`upd(&mut s.a, &s.b)`, `add(&mut s.a, s.b)`) are therefore refused, where today they are
+accepted (both return 42 on main `185d998c` and train3 `949d79e9`). Field-precise loans are
+**deferred**, and their pull condition is a real workload that needs two simultaneous borrows of
+different fields of one owner (or a field borrow beside a sibling read) and cannot be restructured
+with a `let` or a borrow block.
+
+**Rationale.**
+
+- "What can be borrowed" becomes trivial: a name. There are no recursive place or provenance rules,
+  and no field-of-temporary loophole (`&mk().f`).
+- One projection rule serves both borrowed variables and reference parameters: `&s.f` and `&r.f`
+  are the same projection, applied to `&s` and to `r`.
+- The loan checker needs no path-overlap analysis (today's `borrowPathOf` / `pathsOverlap` keys
+  shrink to the root).
+- The uniform reference shape (root slot plus projections) is the pointer shape a CompCert-style
+  block-and-offset memory model uses.
+- Whole-owner freezing already makes a field-precise borrow add no power inside borrow blocks and
+  arm binders, so the change loses only the one-call disjoint form above.
+- Austral (Fernando Borretti) uses the same core model; see the verification below.
+
+**Checked against the Austral specification** (<https://austral-lang.org/spec/spec.html>, read
+2026-10-23; the page has no numbered sections, so sections are cited by heading):
+
+- *Statements → Borrow Statement*: "If `X` is a variable of a linear type `T` …". The borrowed
+  operand is a variable, and "the variable `X` cannot be used in `B`, i.e. while it is borrowed":
+  the whole variable is frozen. `borrow! X as X' in R` is the read-write form.
+- *Expressions → Borrow Expressions*: "If `x` is a variable of a linear type `T`", `&x` (read-only)
+  and `&!x` (read-write) are anonymous borrows. "Borrow expressions cannot escape the statement
+  where they appear"; binding one with `let` is rejected.
+- *Expressions → Path Expression*: a path is a head followed by elements: a slot accessor `.s`, a
+  pointer slot accessor `->s` and an array index `[i]` (with `i` of type `Index`). "A path that
+  starts in a reference is a reference": `x->y->z` with `x : &[T, R]` has type `&[U, R]`. Its stated
+  purpose includes "transforming references to records and arrays into references to their
+  contents". "All paths must end in a path in the `Free` universe."
+- *Linearity Checking*, rules 2.5 and 7: "A borrow statement does not count as using the
+  variable", and "a borrowed variable cannot appear in the body of the statement that borrows it".
+
+Corrections to the model as first stated: Austral has **no `&s.f` sugar**. Its borrow forms take a
+variable only, and a reference to a field is obtained only by a path that starts in a reference, so
+the sugar is Concrete's own front-end rewrite. Austral spells the projection `->`, which Concrete
+does not have. The specification does not say whether a path's array index is bounds-checked;
+Concrete's bounds check comes from its own rule. Austral also restricts paths to end in the `Free`
+universe (no linear value is read out through a path); Concrete's equivalent is the H11 rule that a
+non-Copy value is not projected out of a place by value.
+
+**Caveats kept from the review.**
+
+- A string literal's whole representation, the `String` descriptor as well as its bytes, is static
+  and immutable. Borrowing it never permits moving out of it, destroying it, or obtaining mutable
+  access (no operation turns the `&String` into an owned or mutable `String`).
+- A raw-pointer dereference is not one of the two operations. In trusted or `Unsafe` code, `&*p`
+  forms a reference only under its own validity premise (the pointer is aligned, live and
+  initialized for its type), which that code's author discharges.
+
+**Migration (measured).**
+
+| change | sites | where |
 |---|---|---|
-| string literal | 77 | unchanged: a static place |
-| integer literal | 2 | `std/src/map.con:712` (`m.remove(&2)`, a std test) needs a `let`; `tests/programs/error_092_const_ref_array.con` is already refused (E0239) |
-| call result | 2 | the two bug 182 reproducers, which become D2's rejection fixtures |
-| call, aggregate or array literal elsewhere | 0 | |
+| a non-variable operand is refused (temporaries are never roots) | 1 corpus site, plus 2 reproducers | `std/src/map.con:712` (`m.remove(&2)`) needs a `let`; bug 182's two reproducers become rejection fixtures; `error_092_const_ref_array.con` is already refused |
+| field of a temporary (`&mk().f`) | 0 | |
+| loans keyed by root: a projection borrow plus another use of its root in one call | 1 std site, plus 1 train3 fixture | `std/src/cli.con:77` (`self.offs.push(self.names.len())`: the `&mut` receiver loan on `self` overlaps the read of `self.names`; write `let n = self.names.len();` first); train3's `regress_2i_ref8_call_disjoint.con` (`two(&mut w.a, &mut w.b)`) |
+| string literals | 77 | unchanged |
 
-So **one** corpus site needs an explicit `let`. The 13 parenthesized operands the scan also
-reported (`&mut (*p).a`, `&mut (p as &mut P).v`) are places. The inline gate programs (256 heredoc
-programs) have no non-place borrow. The implementing branch confirms the count with
-`scripts/tools/rule_impact.sh`.
+The counts come from scans of every borrow operand, every call's argument list and every
+method-call receiver in `std`, `examples` and `tests`, plus 256 inline gate programs. Arm binders
+through a projection (`match &s.f`) followed by a write to another field of `s` were not scanned
+precisely. The implementing branch confirms all of it with `scripts/tools/rule_impact.sh` before
+it lands.
 
-**Homes.** MEMORY_SEMANTICS §15.3 REF-5 (the string-literal place, the closed list of refusals)
-and §15.7 G12; enforcement in exit 2i; bug 182 closes with it.
+**Homes.** MEMORY_SEMANTICS §15.1 (the root and projection shape, the string-literal root), §15.3
+REF-5 (the two forming operations and the sugar) and REF-8 (loans keyed by root), §15.7 G12 and G10;
+enforcement in exit 2i; bug 182 closes with it.
+
+**Superseded first version (places), kept as the record.**
+
+> **Rule.** A borrow `&e` / `&mut e` is accepted only when `e` is a canonical place (MEMORY_SEMANTICS
+> §15.1). A string literal is a place: it denotes static, read-only storage, so `&"text"` borrows that
+> storage, and `&mut "text"` is refused. Everything else is E0238 (REF-5@1): an integer, float, `bool`
+> or `char` literal, a call or method-call result, an aggregate or array literal, an operator
+> expression and a constant. The rewrite is an explicit `let`. There are no hidden anonymous locals
+> and no temporary materialization in the formal semantics.
+>
+> **Rationale.** The alternatives each add a case: variant B destroys temporaries implicitly, which
+> the 2026-10-21 stance excludes, and variant C keeps call- or statement-scoped anonymous locals,
+> which the semantics would have to define (lifetime, place, which operand positions). Under D2 every
+> reference has a named or static root, which is INV-REF's premise. Bug 182 (a `Heap` temporary
+> miscompiled, a linear temporary leaked) is unwritable under it.
+>
+> **Migration (measured).** A scan of every borrow operand in `std`, `examples` and `tests`, comments
+> excluded (`&e` where `e` is not a binding followed by field, index or `.0` projections, a
+> dereference of one, or a parenthesized place):
+>
+> | operand | sites | disposition |
+> |---|---|---|
+> | string literal | 77 | unchanged: a static place |
+> | integer literal | 2 | `std/src/map.con:712` (`m.remove(&2)`, a std test) needs a `let`; `tests/programs/error_092_const_ref_array.con` is already refused (E0239) |
+> | call result | 2 | the two bug 182 reproducers, which become D2's rejection fixtures |
+> | call, aggregate or array literal elsewhere | 0 | |
+>
+> So **one** corpus site needs an explicit `let`. The 13 parenthesized operands the scan also
+> reported (`&mut (*p).a`, `&mut (p as &mut P).v`) are places. The inline gate programs (256 heredoc
+> programs) have no non-place borrow. The implementing branch confirms the count with
+> `scripts/tools/rule_impact.sh`.
+>
+> **Homes.** MEMORY_SEMANTICS §15.3 REF-5 (the string-literal place, the closed list of refusals)
+> and §15.7 G12; enforcement in exit 2i; bug 182 closes with it.
 
 ### D3. A binder through a reference is a reference (Q3)
 
@@ -575,14 +677,11 @@ and a borrow block's write-back, where its representation has one, happens at it
 (4) control transfers. The fall-through end of a block follows the same steps. An abort (a trap,
 `abort()`, OOM) runs none of them: no deferred call, no loan ending (see the arithmetic note below).
 
-**D2, places.** A string literal's whole representation, the `String` descriptor as well as its
-bytes, is static and immutable. Borrowing it never permits moving out of it, destroying it, or
-obtaining mutable access to it (`&mut "x"` is refused, and no operation turns a `&String` to a
-literal into an owned or mutable `String`). Places are defined **recursively by provenance**: a
-binding is a place, a projection of a place is a place, and a projection of a temporary is not
-(`mk().f` and `(P { n: 1 }).n` are not places, so `&mk().f` is refused like `&mk()`). A dereference
-of a raw pointer is a place only in trusted or `Unsafe` code, under its own validity premise (the
-pointer is aligned, live and initialized for its type), which that code's author discharges.
+**D2, places.** Superseded by the Austral model (D2 above), which keeps the two caveats that
+still apply: a string literal's whole representation is static and immutable and cannot be moved
+out of, destroyed or made mutable, and a raw-pointer dereference needs its own trusted validity
+premise. The recursive, provenance-based place definition is no longer needed: only variables are
+borrowed, and everything else is a projection through a reference.
 
 **D3, binding mode.** The binding mode of every binder is carried explicitly through Core and
 through specialization, not recomputed from the instantiated type. Reading a Copy payload with
@@ -641,9 +740,14 @@ soundness-holes agent implements these; this record is where the two coordinate.
      order;
    - bug 166: D4's refusal of every foreign function value (2 fixtures migrate);
    - bug 165: generated calls carry the runtime callee.
-2. **D2, only places are borrowable** (REF-5@1, E0238; closes bug 182 and G12): the string-literal
-   place, the refusal of every other non-place operand, the one `let` in `std/src/map.con`, and
-   bug 182's reproducers as rejection fixtures.
+2. **D2, the Austral model** (REF-5, E0238; closes bug 182 and G12):
+   - the front end rewrites `&s.f` / `&a[i]` sugar to "borrow the root, then project" before
+     checking;
+   - only a variable or a string literal is borrowed, and every other operand is refused;
+   - loans are keyed by root (E0293 and the freeze rules lose their path keys);
+   - migrate `std/src/map.con:712`, `std/src/cli.con:77` and train3's
+     `regress_2i_ref8_call_disjoint.con`;
+   - bug 182's reproducers become rejection fixtures.
 3. **D3, binders through a reference are references** (closes bug 181): Check, Elab and Mono agree
    on `&T`, carried explicitly in Core; the two `patterns/match_ref_*` fixtures migrate; bug 181's
    reproducer becomes a run fixture (42, binary = `--interp`); the G17 Copy-case shapes of §4

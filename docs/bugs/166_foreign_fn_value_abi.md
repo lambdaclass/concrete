@@ -48,8 +48,9 @@ contract: the C boundary's ABI is decided at one call form and not at the other)
 
 R-0283 / R-0287 (ABI checks for the C boundary). Decided 2026-10-23
 ([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
-the containment under exit 0b refuses taking as a value an `extern fn` whose signature contains a
-`#[repr(C)]` aggregate; the long-term design makes the calling convention part of the function type
+the containment under exit 0b refuses taking **any** `extern fn` as a value (revised after review:
+a scalar-only exemption would rest on an accidental ABI match; 2 fixtures migrate); the long-term
+design makes calling convention, capabilities and safety obligations part of the function type
 (`extern "C" fn(..)`, [FFI.md](../platform/FFI.md#calling-convention-in-function-types-decided-2026-10-23-not-implemented)),
 built with the first callback workload.
 

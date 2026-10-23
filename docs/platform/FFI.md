@@ -247,19 +247,21 @@ Aliases are validated at definition time: all constituent names must be known ca
 
 ## Calling convention in function types (decided 2026-10-23, not implemented)
 
-**Now.** Taking as a value an `extern fn` whose signature contains a `#[repr(C)]` aggregate, as a
-parameter or as the result, is refused (decided 2026-10-23; not yet enforced, [bug
-166](../bugs/166_foreign_fn_value_abi.md)). A direct call of such an extern passes a small aggregate
-the way C does (in registers), while a call through a `fn(..)` value uses the Concrete convention (a
-pointer to the aggregate), so the value would call C with the wrong ABI. An extern whose parameters
-and result are integers, floats, `bool` or raw pointers passes them the same way under both
-conventions and stays usable as a value.
+**Now.** Taking **any** `extern fn` as a value is refused; direct calls are unchanged (decided
+2026-10-23, revised after review; not yet enforced, [bug 166](../bugs/166_foreign_fn_value_abi.md)).
+A direct call of an extern with a small aggregate passes it the way C does (in registers), while a
+call through a `fn(..)` value uses the Concrete convention (a pointer to the aggregate), so the
+value would call C with the wrong ABI. Scalar-only externs happen to pass alike under both
+conventions, but exempting them would keep a second rule that rests on that coincidence; the
+rewrite is a Concrete wrapper that calls the extern directly.
 
 **Long term** ([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
 the calling convention is part of the function type.
 
 - `fn(A) -> R` is a Concrete function type and `extern "C" fn(A) -> R` a C function type. They are
-  distinct types, and neither converts to the other implicitly.
+  distinct types, and neither converts to the other implicitly. A function type carries its
+  calling convention, its required capabilities and its safety obligations (whether a call needs
+  `Unsafe`).
 - An `extern fn` used as a value has type `extern "C" fn(..)`; a Concrete function never has it.
 - A call through an `extern "C" fn` value lowers with the C ABI, the same aggregate flattening as
   a direct extern call, and requires what a direct call of the extern requires (`with(Unsafe)`,
@@ -267,9 +269,9 @@ the calling convention is part of the function type.
 - A Concrete function that C calls through a pointer is exported explicitly, as an adapter with the
   C ABI (`#[export_name]`), not coerced to `extern "C" fn`.
 
-It is built when the first workload passes a callback to C or stores a foreign function value with
-an aggregate signature. The refusal above then becomes a type mismatch between the two function
-types, so code written under the containment needs no change. Owner: R-0283 / R-0287 (ABI checks).
+It is built when the first workload passes a callback to C or stores a foreign function value. The
+refusal above is then lifted for `extern "C" fn` values and a mismatch becomes a type error between
+the two function types, so code written under the containment needs no change. Owner: R-0283 / R-0287 (ABI checks).
 
 ## Future Refinement
 

@@ -658,10 +658,14 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   `&*h` is accepted and moves the heap, so a later use of `h` fails (E0213 in the probe, an
   `if` without `else` that freed it); on `land2-fix` the borrow itself is E0230, because the
   dereference consumes `h` before the shared-access check sees the consumed root. The **root** of a canonical
-  place is its binding. **Static place (decided 2026-10-23, TIGHTENING_DECISIONS D2):** a string
-  literal is also a canonical place, with no projections; its root is static, read-only storage
-  that exists for the whole run, not a binding. It can be borrowed shared (`&"text"`), never
-  exclusively, and nothing moves, frees or writes it.
+  place is its binding. **Decided 2026-10-23, the Austral model ([TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)),
+  not yet enforced:** a reference is a **root plus a sequence of projections**. The root is a
+  variable, or a string literal, which is a static, immutable variable-like root (its `String`
+  descriptor and bytes are static storage; it can be borrowed shared, never exclusively, and is
+  never moved out of, destroyed or written). The projections are field, index (bounds-checked) and
+  `.0`, applied through a reference. `&s.f` and `&a[i]` are front-end sugar for "borrow the root,
+  then project"; nothing else forms a reference, so a temporary is never a root. A raw-pointer
+  dereference forms a reference only in trusted or `Unsafe` code, under its own validity premise.
 - A **reference binding** is a local whose type is a reference type. Since the 2026-10-21 decision it
   is a parameter, a borrow-block binder, or a `match`-arm, `if let` or `while let` pattern binder that
   binds through a scrutinee of reference type; a `let` binder never is (REF-6). An arm-scoped
@@ -882,12 +886,15 @@ source of a reference:
   (`&42`), a call result (`&mk()`), an aggregate literal, an operator expression (`&(40 + 2)`),
   an owned temporary as a `&mut self` receiver (`make().bump()`), and a module constant (`&C`;
   constants are values, REF-3): bind the value to a `let` first. INV-REF's root argument needs
-  every reference to have a binding root. **Decided 2026-10-23** ([TIGHTENING_DECISIONS
-  D2](TIGHTENING_DECISIONS.md#d2-only-places-are-borrowable-q2-ref-5-g12)): only places are
-  borrowable, with no anonymous temporaries in the semantics; the one exception is a **string
-  literal, which is a place** (static, read-only storage, so `&"text"` is accepted and
-  `&mut "text"` refused). Not yet enforced for literals, call results and aggregate literals (gap
-  G12; [bug 182](../bugs/182_borrowed_call_result_temporary.md));
+  every reference to have a binding root. **Decided 2026-10-23, the Austral model**
+  ([TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): the core has exactly two
+  reference-forming operations, borrowing a **variable** (`&x`, `&mut x`; a string literal is a
+  static, immutable variable-like root, so `&"text"` is accepted and `&mut "text"` refused) and
+  **projecting through a reference** (field, bounds-checked index, `.0`, nested). `&s.f`,
+  `&mut s.f`, `&a[i]` and `&s.inner.x` are sugar the front end rewrites to "borrow `s`, then
+  project" before checking; they have no typing or loan rule of their own. Every other operand is
+  refused, with no anonymous temporaries in the semantics. Not yet enforced for literals, call
+  results and aggregate literals (gap G12; [bug 182](../bugs/182_borrowed_call_result_temporary.md));
 - a call whose result is a reference (REF-1 makes this unwritable for user functions; the rule
   covers intrinsics);
 - a read of a reference out of storage: a field, element, heap cell or referenced place whose type
@@ -1049,7 +1056,12 @@ single call makes (each `&p` / `&mut p` argument, an implicit `&self` / `&mut se
 on `land2-fix`, reference arguments by their normalized place) may not overlap when at least one
 is exclusive. Two borrows overlap when they have the same root and one projection path is a prefix
 of the other (`x` and `x.f`; distinct fields are disjoint; every index is the step `[]`, so two
-indexings of one array overlap). The diagnostic is E0293 (`conflictingCallBorrows`), from
+indexings of one array overlap). **Decided 2026-10-23, not yet enforced** (the Austral model,
+[TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): loans are keyed by **root variable only**, so any two
+borrows of one root in one call overlap when one is exclusive, and so do a projection's `&mut`
+loan and a read of a sibling field (`upd(&mut s.a, &s.b)`, `add(&mut s.a, s.b)`,
+`self.offs.push(self.names.len())`). Field-precise loans are deferred until a workload needs them
+(see G10). The diagnostic is E0293 (`conflictingCallBorrows`), from
 `checkCallBorrowConflicts` over `borrowPathOf` / `pathsOverlap` in
 `Concrete/Check/CheckHelpers.lean`, called from the call, method-call and static-method-call cases
 of `checkExpr` (**main**; `land2-fix` computes the keys from the normalized place, through
@@ -1392,7 +1404,7 @@ manifest row:
 | gap | what is missing | proposed owner |
 |---|---|---|
 | G1 | REF-3: a constant of bare reference type is accepted on `main`; its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), fixed on `land2-fix`: the declaration is E0239 and every borrow rooted at a module constant is E0238 | exit 0b (batch 2 landing) |
-| G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates |
+| G2 | REF-1, REF-2, REF-4(a): the front-end rejections carry no code; E0236 is absent from the diagnostic-codes ledger, because the completeness gate scans `CheckError.lean` and `CoreCheck.lean` but not `Verify.lean`; post-mono `tyExposesRef` is weaker than `tyContainsRef` | R-0500: attach E0236 at `checkFn`, `resolveType` and the instantiation checks, extend the completeness gate to `Verify.lean`, align the two predicates **Revised 2026-10-23** (TIGHTENING_DECISIONS T-G2, after review): not one predicate everywhere (a stored `fn(&T) -> Int` stores no reference) but structural signature well-formedness plus the reference-storage restrictions, checked as generic constraints before specialization, with the post-mono check as defense in depth; reclassified as a hole, as are G13 and G16 (REF-1 and REF-2 are normative and these spellings escape their check; a callback type whose parameters borrow stays legal) |
 | G3 | SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
 | G4 | the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
 | G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 rejects the free and the field write under a projected borrow with E0204 and E0232, fixtures `error_091_norm_free_under_projected_borrow.con` and `error_091_norm_field_write_under_projected_borrow.con`), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
@@ -1400,13 +1412,13 @@ manifest row:
 | G7 | no manifest or gate exists for these rules (`tests/rules/exit_2i.tsv`, `scripts/tests/check_rules_2i.sh`); E0215 has no fixture; REF-4(c) has no fixture for a plain `r: &T` parameter | R-0500, with R-0513 for the inventory |
 | G8 | S1 generator coverage and minima for the feature keys of §15.6 | R-0491 (generators), R-0513 and exit 2e (minima) |
 | G9 | **decided 2026-10-23** ([TIGHTENING_DECISIONS D1](TIGHTENING_DECISIONS.md#d1-mut-arguments-one-mode-q1-g9-design-examples-b1-and-b2)): every `&mut` argument is an implicit reborrow, whatever binding it comes from (B1), and an unused exclusive reference may lapse (B2). Not yet enforced: a borrow-block `&mut` is still consumed when passed to a call (MUT_REF_SEMANTICS §3), while a parameter `&mut` is reborrowed. The `let`-bound half is refused by REF-6 (a) | R-0496 (the Core reborrow form) with the checker change under exit 2i (R-0500); OWNERSHIP_MODEL, MUT_REF_SEMANTICS and VALUE_MODEL follow the decision |
-| G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule. Under the 2026-10-21 stance B7 is a relaxation and waits for a workload that needs owner reads under a named shared borrow |
-| G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted (only `&(40 + 2)`, temporary `&mut self` receivers and a borrow rooted at a module constant are refused); the interpreter now runs these forms too. A `Heap` call result borrowed is miscompiled and a linear one leaks ([bug 182](../bugs/182_borrowed_call_result_temporary.md)). **Decided 2026-10-23** (TIGHTENING_DECISIONS D2): only places are borrowable, string literals being static places; 1 corpus site migrates (`std/src/map.con`) | R-0500 (exit 2i): E0238 for every non-place operand except a string literal |
+| G10 | a borrow block freezes its owner against reads (`borrow x as r in R { out = x; }` is E0203), while the design model lets shared borrows and owner reads coexist (B7) | an R-0500 decision; until it is made the model must not be cited as describing the current rule. Under the 2026-10-21 stance B7 is a relaxation and waits for a workload that needs owner reads under a named shared borrow The 2026-10-23 Austral model (TIGHTENING_DECISIONS D2) extends the same stance to one call: loans are keyed by root, so disjoint field borrows of one owner are refused too; field-precise loans wait for a real workload that needs two simultaneous borrows of different fields of one owner |
+| G12 | REF-5: borrowing a literal, call result or aggregate literal is accepted (only `&(40 + 2)`, temporary `&mut self` receivers and a borrow rooted at a module constant are refused); the interpreter now runs these forms too. A `Heap` call result borrowed is miscompiled and a linear one leaks ([bug 182](../bugs/182_borrowed_call_result_temporary.md)). **Decided 2026-10-23** (TIGHTENING_DECISIONS D2, the Austral model): only a variable (or a string literal, a static root) is borrowed; a reference to a part is a projection; `&s.f` is front-end sugar; loans are keyed by root. Migration: `std/src/map.con:712`, `std/src/cli.con:77`, train3's `regress_2i_ref8_call_disjoint.con` | R-0500 (exit 2i): E0238 for every other operand; E0293 keyed by root |
 | G13 | REF-1: a trait method declaration may declare a reference return type | R-0500: check trait signatures in Check (E0236) |
 | G14 | REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; closed by subtraction when REF-6@1 lands (no `let` can receive the copy and no binding can be assigned it), so E0234 needs no cast-aware extension (R-0500) |
 | G15 | REF-1: an `extern fn` may return a raw pointer to a reference type (`*const &Int`); the FFI-safety check (E0575) rejects only a direct reference | R-0500 with the FFI owner (R-0285): extend the FFI predicate to pointees, or record the exception |
 | G16 | REF-2: a reference-returning function type is accepted as a type alias target and as a struct or enum field type (no value of it can be made) | R-0500: validate function types after alias expansion and in declarations |
 | G11 | ROADMAP exit 2i's deliverable read "none stored in an aggregate"; "strictly second-class" also covers REF-6 (design example G8) | closed 2026-10-21: exit 2i's text now names where references may exist, REF-6 and the constants rule |
-| G17 | **closed 2026-10-23, not reproduced.** The shape was recorded as compiling on `main` (`match &o { Option::Some { value } => { consume(o); … take_ref(value) … } }`); on main `185d998c` it and its `if let` and heap-freeing forms are refused at the move (E0204, "variable is borrowed"). Fixtures `error_g17_match_borrow_root_moved_in_arm.con`, `error_g17_if_let_borrow_root_moved.con`, `error_g17_match_borrow_heap_freed_in_arm.con` (run_tests.sh). Reference-parameter scrutinees cannot move their root | none (the fixtures join `tests/rules/exit_2i.tsv` with exit 2i) |
+| G17 | **moving shapes closed 2026-10-23, not reproduced.** The shape was recorded as compiling on `main` (`match &o { Option::Some { value } => { consume(o); … take_ref(value) … } }`); on main `185d998c` it and its `if let` and heap-freeing forms are refused at the move (E0204, "variable is borrowed"). Fixtures `error_g17_match_borrow_root_moved_in_arm.con`, `error_g17_if_let_borrow_root_moved.con`, `error_g17_match_borrow_heap_freed_in_arm.con` (run_tests.sh). **Copy case reopened by D3:** with a Copy payload the binder is a copy today, so reassigning the root in the arm is accepted (42); under D3 the binder is a loan on the root, so the reassignment (also with a guard, through a `&mut` parent, under a pending `defer` and in a `while let` with an early exit) must be refused (TIGHTENING_DECISIONS §4, G17) | exit 2i with D3 (R-0500): the Copy-case shapes become rejection fixtures |
 | G18 | REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
 | G19 | reference questions the 2026-10-21 decision leaves open besides G9 and G10: no pass may exploit `&mut` exclusivity (for example LLVM `noalias`) before an aliasing model covering raw pointers exists (design example B4); a Core reborrow form that makes the implicit call-argument reborrows explicit after elaboration, with surface syntax waiting for a workload (B5) | B4: a policy sentence owned by [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md) and R-0505; B5: R-0496 (Core) with R-0500 |
