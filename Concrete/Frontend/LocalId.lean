@@ -43,6 +43,10 @@ structure LocalBinder where
   id : LocalId
   name : String
   key : BinderKey
+  /-- A binding of the same spelling (a source binding, a `_` binder, a compiler temporary) was
+      visible where this one was introduced. Elab gives such a binder a fresh Core name, as it
+      always has; the walk now supplies the fact instead of Elab's own scope (R-0492 step 2). -/
+  shadows : Bool := false
   deriving Repr
 
 /-- A binder that reuses the spelling of a binding still visible at it (SCOPE-1@1, E0301): the
@@ -85,12 +89,14 @@ def mintStart : LocalTable := ⟨true, #[], [], [], [], []⟩
     binder reached again: the parser copies an or-pattern arm's body once per alternative
     (`0 | 1 => { let a = …; }`), with the same positions, into mutually exclusive arms. It keeps
     its one identity. -/
-def mintBinder (t : LocalTable) (key : BinderKey) (name : String) : LocalTable × LocalId :=
+def mintBinder (t : LocalTable) (key : BinderKey) (name : String) (shadows : Bool := false) :
+    LocalTable × LocalId :=
   match t.bindersByKey.lookup key with
   | some id => (t, id)
   | none =>
     let id : LocalId := ⟨t.binders.size⟩
-    ({ t with binders := t.binders.push { id, name, key }, bindersByKey := (key, id) :: t.bindersByKey }, id)
+    ({ t with binders := t.binders.push { id, name, key, shadows },
+              bindersByKey := (key, id) :: t.bindersByKey }, id)
 
 /-- MINTING (Resolve/Locals.lean only): record that the use of `name` at `at_` denotes `id`. -/
 def mintUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : LocalTable :=
@@ -111,6 +117,10 @@ def binderAt? (t : LocalTable) (key : BinderKey) : Option LocalId :=
 /-- The binding the use of `name` at `sp` denotes, or `none` when `name` there is not a local. -/
 def useAt? (t : LocalTable) (sp : Span) (name : String) : Option LocalId :=
   t.uses.lookup (SiteKey.ofSpan sp, name)
+
+/-- Whether a same-spelled binding was visible where `id` was introduced. -/
+def shadowsAt (t : LocalTable) (id : LocalId) : Bool :=
+  (t.binders[id.idx]?.map (·.shadows)).getD false
 
 /-- The spelling of a binding, for messages. -/
 def nameOf (t : LocalTable) (id : LocalId) : String :=

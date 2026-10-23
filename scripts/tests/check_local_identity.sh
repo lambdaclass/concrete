@@ -239,5 +239,48 @@ else
 fi
 
 echo ""
+echo "=== E: Elab resolves locals through the walk's table (R-0492 step 2) ==="
+ELAB=Concrete/Elab/Elab.lean
+EHITS="$(grep -nE '^  (vars|renames|ghostVars) :|bodyScope\.resolve\?|Proof\.evBinderRef [a-z(]' "$ELAB")"; ERC=$?
+[ "$ERC" -le 1 ] && [ -z "$EHITS" ] && ok "E: Elab keeps no name-keyed scope (vars / renames / ghostVars) and resolves no binder by spelling" \
+  || no "E: $EHITS"
+# Core names are the walk's decisions, and they are the names the old name-keyed Elab chose
+# (Codex review of step 2: exact, not a pattern). The profile below was produced by the pre-step-2
+# compiler (wip/vp-r0492 1c4ffc65) and by this one, identically: a let keeps its spelling; the
+# second struct-destructure temporary shadows the first (.b0); the third, inside a borrow block
+# whose REGION is spelled like the temporary, shadows the visible temporaries but not the region
+# (.b1); the arm binder takes the next fresh number (.b2); a ghost let of a constant's spelling
+# does not capture the runtime read of the constant.
+cat > "$TMP/core.con" <<'CON'
+mod m {
+    struct P { u: i32, t: i32 }
+    enum E { A { p: i32 }, B {} }
+    const K: i32 = 7;
+    fn f(e: E) -> i32 {
+        let keep: i32 = 1;
+        let P { u, t } = P { u: keep, t: 2 };
+        let P { u: u2, t: t2 } = P { u: u, t: t };
+        let mut z: i32 = 0;
+        borrow mut z as rz in __destr_P { let P { u: u3, t: _ } = P { u: *rz, t: 1 }; *rz = u3; }
+        ghost let K: i32 = 3;
+        assert(K == 3);
+        match e {
+            E::A { p } => { return p + u2 + t2 + z + K; },
+            E::B {} => { return 0; },
+        }
+    }
+    pub fn main() -> i32 { return f(E::B {}); }
+}
+CON
+CORE="$("$BIN" "$TMP/core.con" --emit-core 2>&1)" && CRC=0 || CRC=$?
+PROFILE="$(grep -oE '(keep|__destr_P|p|u3|K|rz|z)(\.b[0-9]+)?\b' <<<"$CORE" | sort | uniq -c | awk '{printf "%s %s ", $1, $2}')"
+WANT="1 K 4 __destr_P 3 __destr_P.b0 3 __destr_P.b1 2 keep 1 p 2 p.b2 3 rz 2 u3 3 z "
+if [ "$CRC" -eq 0 ] && [ "$PROFILE" = "$WANT" ]; then
+  ok "E: Core names match the pre-step-2 compiler exactly (let spelling, three destructure temporaries, region not counted, fresh arm binder, ghost does not capture a constant)"
+else
+  no "E: Core name profile (rc=$CRC): got '$PROFILE' want '$WANT'"
+fi
+
+echo ""
 echo "LOCAL-IDENTITY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
