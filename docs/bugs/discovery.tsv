@@ -69,4 +69,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	development	R-0492 step 2 mutation runs (families 55-57 gave no verdict, also on the slice-1 base)	unrecorded	207	-
 2026-10-23	review	Codex review of bug 215 (a nested-module constant escaped the new check; Resolve never walks nested submodules)	unrecorded	217	-
 2026-10-23	development	Hetzner gate-host and checker-cause work (stale empty index.lock in the agent worktree after Codex reviews; reproduced with a polling watcher)	unrecorded	209	-
-2026-10-23	fuzz	fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus hand probes after R-0492 steps 1-3	13 programs	210,211,213,215,216,218,220	210,215,218,220
+2026-10-23	fuzz	fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus hand probes after R-0492 steps 1-3	13 programs	210,211,213,215,216,218,220,221	210,215,218,220,221

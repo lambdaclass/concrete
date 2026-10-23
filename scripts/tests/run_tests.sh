@@ -8363,6 +8363,12 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 221: a call's explicit type-argument list of the wrong length was zipped (extras dropped).
+run_err "$TESTDIR/error_221_extra_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_type_argument_to_plain_fn.con" "(E0322)"
+run_err "$TESTDIR/error_221_method_extra_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_short_type_argument_list.con" "(E0322)"
+run_ok "$TESTDIR/regress_221_exact_type_arguments.con" 42
 # Bug 220: `0x` / `0b` / `0o` with no digit lexed as 0; now a lexical error.
 run_err "$TESTDIR/error_220_empty_hex_literal.con" "(E0001)"
 run_err "$TESTDIR/error_220_empty_binary_literal.con" "(E0001)"

@@ -513,7 +513,7 @@ def CheckError.message : CheckError → String
     else s!"{fnName}() takes exactly {expected} arguments"
   | .builtinWrongTypeArgCount fnName desc => s!"{fnName} requires exactly {desc}"
   | .callTypeArgCount callee expected got =>
-    s!"{callee} takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} were given"
+    s!"{callee} takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
   | .builtinWrongFirstArg fnName expectedDesc actualTy => s!"{fnName}() requires {expectedDesc}, got {actualTy}"
   | .builtinBadKeyType fnName ty => s!"{fnName}() key type must be Int or String, got {ty}"
   | .destroyRequiresNamed ty => s!"destroy() requires a named type, got {ty}"
