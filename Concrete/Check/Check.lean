@@ -93,7 +93,7 @@ def receiverNorm (obj : Expr) (objTy : Ty) : CheckM Norm := do
 
 /-- E0293: the auto-borrowed receiver counts as a borrow of its NORMALIZED place. -/
 def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
-    CheckM (List ((String × List String) × Bool)) := do
+    CheckM (List ((LocalRef × List String) × Bool)) := do
   match selfKind with
   | some .ref | some .refMut =>
     match ← receiverNorm obj objTy with
@@ -111,52 +111,47 @@ def receiverBorrowParts (selfKind : Option SelfKind) (obj : Expr) (objTy : Ty) :
     normalize is refused (E0238). Provenance is one source per binding and is not joined
     across branches, so a reassignment may not RE-POINT a reference at different storage. -/
 -- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
-def recordRefProvenance (name : String) (ty : Ty) (value : Expr) (span : Option Span)
+def recordRefProvenance (r : LocalRef) (ty : Ty) (value : Expr) (span : Option Span)
     (reassign : Bool := false) (pre : Option Norm := none) : CheckM Unit := do
+  let name := r.name
   match ← resolvedOr ty with
   | .ref _ | .refMut _ =>
     let subject := s!"what reference '{name}' borrows"
     -- `pre`: the source normalized BEFORE `name` was (re)bound, so `let r = r` and a match
     -- binder that shadows its scrutinee read the OLD binding, not the new one.
     let n ← match pre with | some n => pure n | none => normRef value
-    let (src?, parent?, path, exact) : Option String × Option String × List String × Bool ←
+    let (src?, parent?, path, exact) : Option LocalRef × Option LocalRef × List String × Bool ←
       match n with
       | .place p => pure (p.root, p.viaRef, p.steps, p.exact)
       | .temp => pure (none, none, [], false)
       | .reject why => throwCheck (.untraceablePlace subject why) span
-    let current := ((← getEnv).vars.lookup name).bind (·.borrowedFrom)
-    let newSrc : Option String := match src? with
-      | some s => if s != name then some s else current
+    let current := ((← getEnv).vars.lookup r).bind (·.borrowedFrom)
+    let newSrc : Option LocalRef := match src? with
+      | some s => if s != r then some s else current
       | none => none
-    let curPath := ((← getEnv).vars.lookup name).map (fun i => (i.borrowedPath, i.borrowedExact))
+    let curPath := ((← getEnv).vars.lookup r).map (fun i => (i.borrowedPath, i.borrowedExact))
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
       throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@1")
-    let parent := match parent? with | some q => if q != name then some q else none | none => none
-    -- the binding in scope under `name` only (binding identity, bug 094) — a shadowed entry of
-    -- the same name keeps its own provenance
-    let uid? := ((← getEnv).vars.lookup name).map (·.uid)
+    let parent := match parent? with | some q => if q != r then some q else none | none => none
+    -- this binding only (binding identity, bug 094; R-0492)
     modify fun env =>
-      { env with vars := env.vars.map fun (n, info) =>
-          if n == name && some info.uid == uid? then
-            (n, { info with borrowedFrom := newSrc, refParent := parent,
+      { env with vars := env.vars.map fun (k, info) =>
+          if k == r then
+            (k, { info with borrowedFrom := newSrc, refParent := parent,
                             borrowedPath := path, borrowedExact := exact })
-          else (n, info) }
+          else (k, info) }
   | _ => pure ()
 
-/-- Every binding introduction (let, match binder, destructuring) goes through this guard:
-    provenance and reborrow ancestry are recorded BY NAME, so shadowing a name that a live
-    reference records as its source or parent would silently re-point it (E0238). -/
--- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
-def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
-  if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
-      (vi.borrowedFrom == some name || vi.refParent == some name)) then
-    throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
-      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@1")
+/- `guardShadowedSource` (E0238, REF-8@1) refused a binder whose SPELLING a live reference
+   recorded as its source or parent, because provenance was recorded by name and the new binding
+   would have re-pointed it. Provenance is recorded by binding identity now (R-0492), and SCOPE-1
+   (E0301) refuses a binder that reuses a visible spelling, so a new binding cannot capture an
+   old reference's source; the guard is gone. -/
 
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
-def refAncestors (r : String) : CheckM (List String) := do
+def refAncestors (r : LocalRef) : CheckM (List LocalRef) := do
   let env ← getEnv
-  let mut out : List String := []
+  let mut out : List LocalRef := []
   let mut cur := r
   for _ in env.vars do
     match (env.vars.lookup cur).bind (·.refParent) with
@@ -168,7 +163,7 @@ def refAncestors (r : String) : CheckM (List String) := do
     (`r` itself, or its recorded source). Using `r` while one of them is live aliases it: a
     reborrow `s = &mut *r` (child), a copy `t = r` (sibling), or another borrow of the source.
     Ancestors do not count — using a reborrow while its parent is merely held is valid. -/
-def liveAliasesOf (r : String) (info : VarInfo) (onlyExclusive : Bool) : CheckM (List String) := do
+def liveAliasesOf (r : LocalRef) (info : VarInfo) (onlyExclusive : Bool) : CheckM (List LocalRef) := do
   let roots := r :: info.borrowedFrom.toList
   let anc ← refAncestors r
   let env ← getEnv
@@ -179,23 +174,23 @@ def liveAliasesOf (r : String) (info : VarInfo) (onlyExclusive : Bool) : CheckM 
 
 /-- Using an exclusive reference binding `r` (`&mut T`) while another live reference shares its
     storage is the aliasing E0232 forbids for an owned binding. -/
-def checkExclusiveRefUse (r : String) (span : Option Span) : CheckM Unit := do
-  match ← lookupVarInfo r with
+def checkExclusiveRefUse (r : LocalRef) (span : Option Span) : CheckM Unit := do
+  match ← lookupLocal r with
   | some info =>
     match info.ty with
     | .refMut _ =>
       if !(← liveAliasesOf r info false).isEmpty then
-        throwCheck (.cannotMutBorrowAlreadyBorrowed r) span
+        throwCheck (.cannotMutBorrowAlreadyBorrowed r.name) span
     | _ => pure ()
   | none => pure ()
 
 /-- A shared access through a reference binding `r` while a live exclusive alias of its storage
     (`let s = &mut *r`) exists is E0231. -/
-def checkLiveExclusiveReborrow (r : String) (span : Option Span) : CheckM Unit := do
-  match ← lookupVarInfo r with
+def checkLiveExclusiveReborrow (r : LocalRef) (span : Option Span) : CheckM Unit := do
+  match ← lookupLocal r with
   | some info =>
     if !(← liveAliasesOf r info true).isEmpty then
-      throwCheck (.cannotBorrowMutablyBorrowed r) span
+      throwCheck (.cannotBorrowMutablyBorrowed r.name) span
   | none => pure ()
 
 /-- The rules of `&mut place`, for EVERY mutable access to a normalized place — explicit
@@ -220,16 +215,16 @@ def checkMutAccess (n : Norm) (subject : String) (span : Option Span) : CheckM U
       match p.root with
       | none => pure ()
       | some root =>
-        match ← lookupVarInfo root with
+        match ← lookupLocal root with
         | none => pure ()
         | some info =>
           if !info.isCopy && info.state == .consumed then
-            throwCheck (.cannotBorrowMoved root) span
+            throwCheck (.cannotBorrowMoved root.name) span
           let activeRefs := activeBorrowRefs (← getEnv) root
           if info.borrowCount > 0 || activeRefs.any (fun r => match r.ty with | .ref _ | .refMut _ => true | _ => false) then
-            throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+            throwCheck (.cannotMutBorrowAlreadyBorrowed root.name) span
           if !info.mutable then
-            throwCheck (.cannotMutBorrowImmutable root) span
+            throwCheck (.cannotMutBorrowImmutable root.name) span
 
 /-- A WRITE into a normalized place (`w.f = v`, `*r = v`, `a[i] = v`) is a mutable access
     for aliasing: never through `&` (E0237), not while an alias of the reference it goes through
@@ -253,7 +248,7 @@ def checkWriteAccess (n : Norm) (span : Option Span) : CheckM Unit := do
       match p.root with
       | some root =>
         if !(activeBorrowRefs (← getEnv) root).isEmpty then
-          throwCheck (.cannotMutBorrowAlreadyBorrowed root) span
+          throwCheck (.cannotMutBorrowAlreadyBorrowed root.name) span
       | none => pure ()
 
 /-- The rules of `&place`, for every shared access to a normalized place: an owned root is not
@@ -269,13 +264,13 @@ def checkSharedAccess (n : Norm) (subject : String) (span : Option Span) : Check
     | .owned =>
       match p.root with
       | some root =>
-        match ← lookupVarInfo root with
+        match ← lookupLocal root with
         | some info =>
           if !info.isCopy && info.state == .consumed then
-            throwCheck (.cannotBorrowMoved root) span
+            throwCheck (.cannotBorrowMoved root.name) span
           let activeRefs := activeBorrowRefs (← getEnv) root
           if activeRefs.any (fun r => match r.ty with | .refMut _ => true | _ => false) then
-            throwCheck (.cannotBorrowMutablyBorrowed root) span
+            throwCheck (.cannotBorrowMutablyBorrowed root.name) span
         | none => pure ()
       | none => pure ()
     | _ =>
@@ -323,8 +318,9 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
   match selfKind with
   | some .refMut =>
     match objTy, obj with
-    | .refMut _, .ident _ varName =>
-      if (← getEnv).borrowRefs.contains varName then consumeVarIfExists varName span
+    | .refMut _, .ident vsp varName =>
+      if let some r ← localAt? vsp varName then
+        if (← getEnv).borrowRefs.contains r then consumeVarIfExists r span
     | _, _ => pure ()
   | some .value =>
     let refusedRef := throwCheck (.nonCopyProjection (tyToString innerTy)
@@ -355,8 +351,8 @@ partial def constBorrowRoot : Expr → CheckM (Option String)
   | .paren _ e => constBorrowRoot e
   | .fieldAccess _ b _ => constBorrowRoot b
   | .arrayIndex _ b _ => constBorrowRoot b
-  | .ident _ n => do
-    if (← lookupVarInfo n).isSome then return none
+  | .ident sp n => do
+    if (← localAt? sp n).isSome then return none
     if ((← getEnv).constants.lookup n).isSome then return some n
     return none
   | _ => return none
@@ -480,7 +476,8 @@ def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
 -- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (n, vi) in env.vars do
+  for (nR, vi) in env.vars do
+    let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
       -- Any change of a runtime binding's ownership state, in either direction (a move, a
@@ -497,7 +494,8 @@ def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Uni
 -- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (n, vi) in env.vars do
+  for (nR, vi) in env.vars do
+    let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
       let changed := old.state != vi.state && !(old.state == .unconsumed && vi.state == .used)
@@ -514,7 +512,8 @@ def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option
     `ghost let` binding has no runtime obligation. -/
 def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (name, info) in env.vars do
+  for (r, info) in env.vars do
+    let name := r.name
     if info.isCopy || info.isGhost then continue
     match info.ty with
     | .ref _ | .refMut _ => continue
@@ -533,7 +532,8 @@ def restoreAfterLoop (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   -- A binding consumed before the loop and given a new value inside it is live after an
   -- iteration and consumed after none: its state after the loop is undecided (Codex review).
-  for (n, vi) in env.vars do
+  for (nR, vi) in env.vars do
+    let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
       if !vi.isCopy && old.state == .consumed && vi.state != .consumed && vi.state != .reserved then
@@ -557,14 +557,14 @@ partial def typeParamsAsVars (ps : List String) : Ty → Ty
   | t => t
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
-def deferScopeEntry : CheckM (List Nat × List Nat) := do
+def deferScopeEntry : CheckM (List LocalId × List LocalId) := do
   let env ← getEnv
   return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
           env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none)
 
 /-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
     trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
-def deferScopeExit (entry : List Nat × List Nat) : CheckM Unit := do
+def deferScopeExit (entry : List LocalId × List LocalId) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
@@ -632,16 +632,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
   | .boolLit _ _ => return .bool
   | .strLit _ _ => return .string
   | .charLit _ _ => return .char
-  | .ident _ name =>
+  | .ident isp name =>
     -- A local shadows a module constant of the same name (Elab resolves in the same order).
+    -- R-0492: which binding `name` denotes here is the local walk's answer, not a search of the
+    -- environment for the spelling.
     let env ← getEnv
-    match ← lookupVarInfo name with
-    | some info =>
+    match ← lookupUse isp name with
+    | some (r, info) =>
       -- Any use of a reference binding while a live EXCLUSIVE alias of its storage that is not
       -- its own ancestor exists (`r` under `let s = &mut *r`) aliases that alias (E0231) — the
       -- normalized place rule's "parent use during reborrow", for reads as well as calls.
       match info.ty with
-      | .ref _ | .refMut _ => checkLiveExclusiveReborrow name (some e.getSpan)
+      | .ref _ | .refMut _ => checkLiveExclusiveReborrow r (some e.getSpan)
       | _ => pure ()
       if mode == .value then
         -- AUTO-CONSUME (the inversion): in value position, the ident read IS
@@ -650,9 +652,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- then consumeVar handles every non-Copy state (use-after-move
         -- E0205, reserved, the loop rule). `breakConsumeExempt` is the H14
         -- one-level loop-depth exemption, set only around a `break value;`.
-        useVar name (some e.getSpan)
+        useVar r (some e.getSpan)
         let env ← getEnv
-        consumeVarIfExists name (some e.getSpan)
+        consumeVarIfExists r (some e.getSpan)
           (breakDepthExempt := if env.breakConsumeExempt then 1 else 0)
       else
         -- place/callArg: reading, not consuming. Still reject a read of an
@@ -661,7 +663,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- secondary span: where the value was moved (Phase 4 #11).
           throwCheck (.variableUsedAfterMove name) (some e.getSpan)
             (related := info.movedAt.toList.map (fun sp => (sp, s!"'{name}' moved here")))
-        useVar name (some e.getSpan)
+        useVar r (some e.getSpan)
       return info.ty
     | none =>
       match env.constants.lookup name with
@@ -682,8 +684,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     match op with
     | .eq | .neq | .lt | .gt | .leq | .geq =>
       for side in [lhs, rhs] do
-        if let .ident _ n := stripParens side then
-          if let some info := ← lookupVarInfo n then
+        if let .ident nsp n := stripParens side then
+          if let some (_, info) := ← lookupUse nsp n then
             let pt ← resolveType info.ty
             match ← comparisonRefusal? pt with
             | some why => throwCheck (.comparisonNotDefined (binOpSymbol op) (tyToString pt) why) (some e.getSpan)
@@ -870,7 +872,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let ifTy := if thenTy == .never then elseTy else thenTy
     refuseRefValuedBranch "an `if` expression" ifTy (some e.getSpan)
     return ifTy
-  | .call _sp fnName typeArgs args =>
+  | .call csp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
     checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
@@ -1189,12 +1191,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           throwCheck (.vecFreeDropsElements (tyToString et)) (some e.getSpan)
       | _ => pure ()
       match vecArg with
-      | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+      | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
       | _ => pure ()
       return .unit
     -- Check if this is a function pointer call (variable with fn_ type)
-    let fnPtrVarTy ← lookupVarTy fnName
-    match fnPtrVarTy with
+    -- a call through a fn-typed local: the callee spelling at this call is a use (R-0492)
+    let fnPtrVar ← lookupUse csp fnName
+    match fnPtrVar.map (·.2.ty) with
     | some (.fn_ paramTys fnPtrCapSet fnPtrRetTy) =>
       -- Calling through a function pointer exercises the authority its type
       -- declares: the caller must hold the fn type's capability set, exactly
@@ -1217,10 +1220,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
         | _ => pure ()
       -- Function pointers are Copy, no need to consume
-      useVar fnName (some e.getSpan)
+      if let some (r, _) := fnPtrVar then useVar r (some e.getSpan)
       return fnPtrRetTy
     | _ =>
     match ← lookupFn fnName with
@@ -1369,15 +1372,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- since they are scoped linear views into an alloca.
         -- Function parameter &mut T refs are reborrowable and not consumed.
         match stripParens arg with
-        | .ident _ varName =>
+        | .ident vsp varName =>
+          match ← localAt? vsp varName with
+          | none => pure ()
+          | some r =>
           match pTy with
           | .ref _ => pure ()  -- shared reference: Copy, no consume needed
           | .refMut _ =>
             let env ← getEnv
-            if env.borrowRefs.contains varName then
-              consumeVarIfExists varName (some e.getSpan)
+            if env.borrowRefs.contains r then
+              consumeVarIfExists r (some e.getSpan)
             else pure ()
-          | _ => consumeVarIfExists varName (some e.getSpan)
+          | _ => consumeVarIfExists r (some e.getSpan)
         | _ => pure ()
       return retTy
     | none =>
@@ -1511,19 +1517,19 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- Through a REFERENCE (`w: &W`) the owner is elsewhere and nothing is consumed:
           -- a by-value `w.0` would duplicate a non-Copy payload (bug 091 round 3).
           let viaRef ← match stripParens obj with
-            | .ident _ varName => do
-              match ← lookupVarInfo varName with
+            | .ident vsp varName => do
+              match ← lookupUse vsp varName with
               -- Bug 144 (Codex round 4): a heap shell is not the newtype's owner either: `h.0` on
               -- a `Heap<W>` read the payload out of the cell and consumed `h` without freeing it.
-              | some info => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ => true | _ => false)
+              | some (_, info) => pure (match info.ty with | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ => true | _ => false)
               | none => pure false
             | _ => pure baseThroughRef
           match stripParens obj with
-          | .ident _ varName =>
+          | .ident vsp varName =>
             if viaRef then
               if mode != .place && !(← isCopyType innerFieldTy) then
                 throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}' through a reference or heap shell") (some e.getSpan)
-            else consumeVarIfExists varName (some e.getSpan)
+            else consumeUseIfLocal vsp varName (some e.getSpan)
           | _ =>
             if mode != .place && !(← isCopyType innerFieldTy) then
               throwCheck (.nonCopyProjection (tyToString innerFieldTy) s!"newtype field '.0' of '{structName}'") (some e.getSpan)
@@ -1618,7 +1624,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant patBinds guard body => do
+          | .mk armSp _armEnum armVariant patBinds guard body => do
             -- Bind variant fields in scope (substitute generic type args)
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
@@ -1653,16 +1659,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 | .ref _ | .refMut _ =>
                   throwCheck (.letBindsReference binding (tyToString bindTy)) (some e.getSpan)
                 | _ => pure ()
-              -- An arm binder may shadow a live binding: it is arm-scoped, so
-              -- the outer binding is visible again (with its own obligation)
-              -- after the match; state updates key on uid (bug 094).
+              -- An arm binder is arm-scoped and has its own identity (R-0492).
               if binding != "_" then
-                guardShadowedSource binding (some e.getSpan)
-                addVar binding bindTy
+                let br ← binderAt armSp binding
+                addVar br bindTy
                 -- A payload bound THROUGH a reference borrows the scrutinee's storage: same
                 -- conflict key and ancestry as the scrutinee reference (normalized place rule).
                 if isRefScrutinee then
-                  recordRefProvenance binding bindTy scrutinee (some e.getSpan) (pre := scrutPre)
+                  recordRefProvenance br bindTy scrutinee (some e.getSpan) (pre := scrutPre)
               -- Linear: a `_` payload field may ignore ONLY a Copy field (or a
               -- borrowed view). A non-Copy OWNED field must be bound and consumed
               -- exactly once (destructure it, don't drop it).
@@ -1673,7 +1677,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | .litArm _ _val guard body => do
             checkGuard guard
             pure body
-          | .varArm _ binding guard body => do
+          | .varArm varSp binding guard body => do
             -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
             -- reference (duplication, no provenance): refused (normalized place rule).
             let isRefScrut := match scrTy with | .ref _ | .refMut _ => true | _ => false
@@ -1681,8 +1685,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               throwCheck (.nonCopyProjection (tyToString innerTyR)
                 "a reference (a catch-all match binder over a borrowed non-Copy enum); match its variants or bind `_`") (some e.getSpan)
             if binding != "_" then
-              guardShadowedSource binding (some e.getSpan)
-              addVar binding innerTyR
+              addVar (← binderAt varSp binding) innerTyR
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1750,7 +1753,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             | none => firstArmVars := some envAfterArm.vars
             | some firstVars =>
               -- Check agreement on pre-existing variables
-              for (name, infoBefore) in envBefore.vars do
+              for (nameR, infoBefore) in envBefore.vars do
+                let name := nameR.name
                 if infoBefore.isCopy then continue
                 let state1 := match lookupByUid firstVars infoBefore.uid with
                   | some info => info.state
@@ -1786,7 +1790,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     else
       -- Value-pattern match (integer/bool literals, variable bindings)
       match scrutinee with
-      | .ident _ varName => useVar varName (some e.getSpan)
+      | .ident vsp varName => do if let some r ← localAt? vsp varName then useVar r (some e.getSpan)
       | _ => pure ()
       let envBefore ← getEnv
       let mut matchResultTy : Ty := .unit
@@ -1886,7 +1890,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | none => firstArmVars := some envAfterArm.vars
           | some firstVars =>
             -- Check agreement on pre-existing variables
-            for (name, infoBefore) in envBefore.vars do
+            for (nameR, infoBefore) in envBefore.vars do
+              let name := nameR.name
               if infoBefore.isCopy then continue
               let state1 := match lookupByUid firstVars infoBefore.uid with
                 | some info => info.state
@@ -1967,7 +1972,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         throwCheck (.nonCopyProjection (tyToString innerTy)
           "a heap dereference used as a place (`*h` moves the value out and frees the cell); write `h.f` to read or assign a field, or bind `let v = *h;` first") (some e.getSpan)
       match stripParens inner with
-      | .ident _ varName => consumeVar varName (some e.getSpan)
+      | .ident vsp varName => do
+        match ← localAt? vsp varName with
+        | some r => consumeVar r (some e.getSpan)
+        | none => throwCheck (.undeclaredVariable varName) (some e.getSpan)
       | _ =>
         throwCheck (.nonCopyProjection (tyToString innerTy)
           "a heap shell that is not a bare owned binding (`*` loads and frees it); destructure its owner first") (some e.getSpan)
@@ -2101,7 +2109,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkRefArg arg argTy (some e.getSpan)
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match stripParens arg with
-            | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+            | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
             | _ => pure ()
           if foundBuiltin == some .destroy && methodName == destroyMethodName then
             consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
@@ -2142,7 +2150,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
         | _ => pure ()
       -- A concrete call of a type's Destroy impl is the same public destruction as the
       -- bound call: it consumes (bug 091 round 3).
@@ -2174,7 +2182,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
         | _ => pure ()
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
@@ -2848,7 +2856,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let targetDepth := match lbl with
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
-    for (name, info) in (← getEnv).vars do
+    for (nameR, info) in (← getEnv).vars do
+      let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
       if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
@@ -2867,7 +2876,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let targetDepth := match lbl with
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
-    for (name, info) in env.vars do
+    for (nameR, info) in env.vars do
+      let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
       if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
