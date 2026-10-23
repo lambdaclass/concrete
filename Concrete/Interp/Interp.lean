@@ -1410,7 +1410,7 @@ partial def lookupPath (cx : Ctx) (env : Env) (p : RefPath) : IM IVal := do
   | none =>
   let view := envViewAtFrame env p.frame
   match envGet view p.base with
-  | none => fail s!"interp: ref path base '{p.base}' not in env"
+  | none => fail s!"interp: ref path base '{p.baseName}' not in env"
   | some v => liftE (lookupAt v p.steps)
 
 private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal) : Except String IVal :=
@@ -1472,7 +1472,7 @@ partial def updatePath (cx : Ctx) (env : Env) (p : RefPath) (newVal : IVal) : IM
   let skip := if env.length >= p.frame then env.length - p.frame else 0
   let view := envViewAtFrame env p.frame
   match envGet view p.base with
-  | none => fail s!"interp: ref path base '{p.base}' not in env (update)"
+  | none => fail s!"interp: ref path base '{p.baseName}' not in env (update)"
   | some baseVal => do
     let newBase ← liftE (updateAt baseVal p.steps newVal)
     return envSetSkipping env skip p.base newBase
