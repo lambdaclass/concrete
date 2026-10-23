@@ -40,14 +40,14 @@ mod heap {
             if self.len == 1 {
                 self.len = 0;
                 let only_ptr: *mut T = self.data;
-                return Option::<T>::Some { value: *only_ptr };
+                return Option::<T>::Some { value: read_owned(only_ptr) };
             }
             // Swap first and last
             let root_ptr: *mut T = self.data;
-            let first: T = *root_ptr;
+            let first: T = read_owned(root_ptr);
             self.len = self.len - 1;
             let last_ptr: *mut T = self.data + self.len;
-            *root_ptr = *last_ptr;
+            *root_ptr = read_owned(last_ptr);
             self.sift_down(0);
             return Option::<T>::Some { value: first };
         }
@@ -63,8 +63,8 @@ mod heap {
                 let p_ptr: *mut T = self.data + parent;
                 if cmp(i_ptr as &T, p_ptr as &T) {
                     // Swap
-                    let tmp: T = *i_ptr;
-                    *i_ptr = *p_ptr;
+                    let tmp: T = read_owned(i_ptr);
+                    *i_ptr = read_owned(p_ptr);
                     *p_ptr = tmp;
                     i = parent;
                 } else {
@@ -103,8 +103,8 @@ mod heap {
                 // Swap
                 let i_ptr: *mut T = self.data + i;
                 let b_ptr: *mut T = self.data + best;
-                let tmp: T = *i_ptr;
-                *i_ptr = *b_ptr;
+                let tmp: T = read_owned(i_ptr);
+                *i_ptr = read_owned(b_ptr);
                 *b_ptr = tmp;
                 i = best;
             }

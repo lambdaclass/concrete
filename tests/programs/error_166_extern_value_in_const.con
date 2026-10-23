@@ -1,0 +1,13 @@
+// Bug 166 (D4), Codex review: an extern fn taken as a value in a constant initializer is refused
+// (E0588) like one in a function body.
+trusted extern fn labs(x: Int) with() -> Int;
+
+const F: fn(Int) -> Int = labs;
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    return apply(F, -42);
+}

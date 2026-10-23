@@ -1,0 +1,16 @@
+// D6: a declared-Copy generic is Copy exactly when every type ARGUMENT is Copy, decided from the
+// declaration, never from the instantiated fields. `P<T>` holds no `T`, so its fields are Copy at any
+// instantiation, but `P<Tok>` (Tok linear) is not Copy: `take`'s parameter is a linear value it
+// must consume (E0208). It was Copy (field-derived) and accepted.
+struct Tok { n: Int }
+
+struct Copy P<T> { n: Int }
+
+fn take(p: P<Tok>) -> Int {
+    return p.n;
+}
+
+fn main() -> Int {
+    let p: P<Tok> = P::<Tok> { n: 21 };
+    return take(p) + take(p);
+}

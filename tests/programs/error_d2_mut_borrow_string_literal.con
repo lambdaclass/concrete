@@ -1,0 +1,9 @@
+// D2: a string literal is a static, IMMUTABLE root: `&"text"` borrows it, `&mut "text"` is
+// refused. E0238 (REF-5).
+fn touch(s: &mut String) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    return touch(&mut "text");
+}

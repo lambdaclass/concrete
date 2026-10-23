@@ -1,0 +1,19 @@
+// D1 (decision Q1, 2026-10-23): every `&mut` argument is an implicit reborrow, borrow-block binders
+// included. This program was `error_mut_ref_branch_disagree.con`, refused when a borrow-block binder was
+// consumed by the call it was passed to; it now runs. Exit 11.
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let cond: Bool = true;
+    borrow mut n as r in R {
+        if cond {
+            increment(r);
+        } else {
+            *r = *r - 5;
+        }
+    }
+    return n;
+}

@@ -78,6 +78,152 @@ therefore refused while the same file compiled standalone. Desugaring is now par
 `Pipeline.resolve`. `check_local_identity.sh` has compile-fail, minting-site, walk-answer and
 pipeline legs, and mutation family 98 (outermost binding wins) is killed by it.
 
+### The Tightening Batch Is In The Spec, With A Gate And Eighteen Mutation Families (landing train 6, 2026-10-23)
+
+The batch's rules are now checked entries of `docs/spec`: REF-9 (binder mode), REF-10 (implicit
+`&mut` reborrow), REF-11 (loans keyed by root, version 2 stating the reborrow exception), FFI-1
+(no foreign function value), PASS-2 (binder modes carried in Core, version 2), and new entries
+FFI-3 (no reference crosses the C boundary, E0574 / E0575, folded into the specification
+chapter's FFI-3 on extern declarations), TRUST-7 (`read_owned`, E0311) and the ghost-read rule,
+which is CON-4 (E0420) in the contracts chapter. The branch had numbered the last two TRUST-4 and
+CON-2, which the specification chapters landing in the same train already use. The pending examples they close now hold on both consumers. D6 option (a)
+changes the definition of Copy, so OWN-D1 and its users move to version 2 and TYPE-14's pending
+bound-based version is retired for the declared form. `check_tightening_rules.sh` (CI language
+gates) runs every reproducer of the batch on both consumers, and the mutation inventory grows from
+141 to 159 families, one per slice, each killed by that gate.
+
+### Copy Is Declared, Not Derived From Fields (decision D6, 2026-10-23)
+
+A generic struct or enum declared `Copy` is Copy exactly when every type argument is Copy, decided
+from the declaration alone, as a derived `Copy` is; the declaration is checked once with its
+parameters taken as Copy (E0571, now for enum payloads too); a generic not declared `Copy` is never
+Copy. Mono's demotion fixpoint over specializations is removed: Copy-ness no longer depends on the
+type graph, so it is invariant under substitution. The builtin `Option` and `Result` are declared
+Copy the same way. Measured with `rule_impact.sh`: no corpus program changes. Also (D3 with REF-6):
+a destructuring `let` of a struct through a reference is refused (E0302) like the enum
+form; the one fixture that accepted it became a rejection with a field-read rewrite.
+
+### A Cast To A Type Alias Compiles (bug 199, 2026-10-23)
+
+`x as IP` with `type IP = *mut Int` crashed the compiler in the backend: Elab left the cast target
+unexpanded. It is now resolved through aliases like every other written type. Pinned by
+`regress_199_cast_to_alias.con`.
+
+### Moving Out Of Raw Memory Is Explicit (T-RAWDUP, bug 198, 2026-10-23)
+
+`*p` read by value of a non-Copy pointee through a raw pointer is refused (E0311): it copied a linear
+value the slot still owned, so a trusted helper could free one heap cell twice. The new intrinsic
+`read_owned(p)` states the transfer and leaves the slot logically uninitialized until a value is
+stored back; it needs trusted or `Unsafe` code. Place uses, Copy pointees and stores through `*p`
+are unchanged. 26 std sites (collection pops, removals, rehash and drain paths) migrated.
+
+### One Argument Mode For `&mut` (decision D1, 2026-10-23)
+
+Passing a `&mut` binding to a call is an implicit reborrow whatever made the binding: a parameter,
+a borrow-block binder or an arm binder. `inc(r); inc(r);` inside a borrow block, refused before
+(E0205: the first call consumed `r`), now runs. One checker function decides the mode for every
+call form, and a `&mut self` receiver is the same reborrow. Exclusivity still holds: two exclusive
+arguments of one call reborrowing one reference are E0293, and a deferred call holds its `&mut`
+loan until it runs (`defer inc(r); inc(r);` is E0206). MUT_REF_SEMANTICS §2 – §4 rewritten.
+
+### References Have A Variable Root: The Austral Model (decision D2, bug 182, 2026-10-23)
+
+A reference is formed only by borrowing a variable, or a string literal as a static immutable root,
+and by projecting through a reference; `&s.f` is that, spelled as sugar. A temporary is never a root,
+so `&alloc(..)` (which segfaulted) and `&int_to_string(..)` (which leaked) are refused, as are a
+literal, a field of a temporary and a temporary method receiver (E0238, REF-5@1). Loans are keyed by
+the root variable: one call may not take a mutable loan on a root and also borrow or read it in
+another argument, disjoint fields included (E0293, REF-8@1); a reborrow of a `&mut` parameter beside
+a read through it stays legal. Two std sites and three fixtures migrated, measured with
+`rule_impact.sh`. Bug 182 and gap G12 are closed.
+
+### A Binder Through A Reference Is A Reference (decision D3, bug 181, 2026-10-23)
+
+Every pattern binder that binds through a borrowed scrutinee (`match r`, `match &o`, `if let`,
+`while let`) now has reference type, Copy payloads included: `Option::Some { value } => *value`.
+Before, the mode depended on whether the payload was Copy, Check and Elab decided it separately, and
+a generic body specialized at `Int` passed the integer where a `&Int` was expected (SIGSEGV in safe
+code, bug 181). One function in `Concrete/Semantics/BindingMode.lean` now gives Check and Elab the
+binder's type; Core stores it and monomorphization preserves it; Lower binds the payload's address
+and the interpreter a reference path into the payload. Because every such binder is a reference, the
+root stays frozen while it lives (E0232), Copy roots included. Two fixtures migrated (`*x`, `*n`);
+std and the examples are unchanged.
+
+### Reference Well-Formedness Has One Judgment (exit 2i G2, G13, G15, G16, 2026-10-23)
+
+REF-1 (no function returns a reference) and REF-2 (no function type returns one) are decided by one
+judgment, `Concrete/Semantics/RefWellFormed.lean`, shared by Check, CoreCheck's FFI rule and the
+post-mono verifier. Four spellings escaped it: a trait method declaration returning `&Int` (G13), an
+`extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 under the new spec rule FFI-3), a
+reference-returning function type behind a type alias or in a field (G16), and a generic reached at
+`*const &Int` only through another generic's type parameter, which the post-mono check's weaker
+predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. The
+sentences of REF-1 and REF-2 are unchanged; their pending spec examples now hold. Each spelling has a
+reject example or conformance row with its rewrite; extern signatures are now expanded
+through type aliases; 0 corpus programs were affected.
+
+### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)
+
+`let t = xs;`, a `match` arm binding an array, and an array passed by value no longer share the
+source's storage in the binary. Lower represents an array value by its storage's address, and
+those three sites passed the address on, so a later write to `xs` changed `t` (`--interp` copied).
+One helper, `snapshotArrayValue`, now copies at each by-value site. Found by the Codex review of
+the bug 136/137 fix; pinned by `regress_190_array_value_copy.con`.
+
+### Literals Evaluate In Source Order, A Functional-Update Base Once (bugs 136 and 137, 2026-10-23)
+
+`E::V { b: f(), a: g() }` now runs `f()` before `g()`, and `P { b: f(), ..mk() }` runs `f()` and
+then `mk()` exactly once, as evaluation-order rules 4 and 6 say, natively and under `--interp`. Elab
+walked an enum variant's declared fields, and filled each field omitted from a functional update
+with its own copy of the base expression. Both literals are now built with evaluation-order
+temporaries (`letInExpr`: a single-binder `match`, which is `let` in every consumer, until Core has
+an expression-level `let` under R-0496); a literal whose order is already the rule's, and a
+variable base, keep their Core form. Pinned by `regress_136_137_literal_eval_order.con` and both
+reproducers.
+
+### A Dereference Assignment Evaluates Its Right-Hand Side First (bug 183, 2026-10-23)
+
+`*(&mut a[i()]) = j()` now runs `j()` before `i()` in the binary, as evaluation-order rule 7 and
+the interpreter say. `Lower` lowered the destination of a dereference assignment first, unlike the
+indexed and field assignment forms. Pinned by `regress_183_deref_assign_rhs_first.con` (three
+shapes, binary equal to `--interp`) and the reproducer.
+
+### A Monomorphized Instance Keeps Its Definition's Authority (bug 185, 2026-10-23)
+
+Raw pointers compare only in trusted code or a function declaring `with(Unsafe)` (bug 140). Through
+a safe `Copy`-bounded generic, `same::<*const Int>(p, q)` compiled in safe code: Mono built each
+instance from a hand-picked field list that left out `isTrusted`, so the post-mono re-check could
+not tell an instance's authority and accepted every pointer comparison. Instances now carry
+`isTrusted` (and `trustedImplOrigin`) with their body and capabilities, and the re-check applies
+Check's predicate to them, so a safe generic at a raw pointer is E0229 while std's trusted generics
+and generics declaring `Unsafe` compile as before. Pinned by `error_185_generic_rawptr_eq_safe.con`
+and `regress_185_generic_rawptr_eq_authority.con`.
+
+### An `extern fn` Is Never A Value (bug 166, 2026-10-23)
+
+Taking an `extern fn` as a value is refused (E0588). The C calling convention and the extern's
+authority are decided at a direct call; a function type carries neither, so a call through a value
+passed a small `#[repr(C)]` struct by address (C read it as the field) and ran under the function
+type's capabilities. A Concrete function whose body calls the extern is the supported value. The
+rule is normative in FFI.md "Foreign Function Values"; the long-term form, a C function type
+`extern "C" fn(..)`, is decided and waits for a callback workload (TIGHTENING_DECISIONS D4). One
+corpus program migrated (bug 129's imported-extern value test now passes a wrapper). Pinned by four
+E0588 fixtures, the reproducer and a wrapper control.
+
+### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
+
+`println`, `print` and the variadic `append` reach the runtime helpers whatever the module
+defines. Elab desugared them into calls spelled `print_int`, `print_string`, `string_append` and
+so on, and every later pass bound a call by its spelling, so a module that defined its own
+`fn print_int` had it called by each `println` (the reproducer aborted). Core now has a third
+callee form, `Callee.runtime`, built by those desugarings. CoreCheck charges the helper's
+intrinsic capability, Lower emits the helper's reserved `_C$rt.` symbol, the interpreter
+dispatches to its builtin, and none of them resolves the spelling. The call collector is one
+walk with views by callee form (the direct and indirect walks were two copies), so a runtime
+call adds no call-graph edge to a same-named definition and still explains which intrinsic
+supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
+`regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.

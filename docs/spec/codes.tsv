@@ -112,7 +112,7 @@ E0289	rule	let _ removed (wildcard is not a discard)
 E0290	rule	non-Copy sub-place read by value (would duplicate)
 E0291	rule	non-Copy overwrite would leak the old value
 E0292	rule	shadowing a still-live non-Copy binding (no longer emitted: subsumed by E0301, R-0492)
-E0293	rule	overlapping borrows of one place in a single call
+E0293	rule	overlapping borrows of one root in a single call
 E0294	rule	pure value computed then discarded (dead computation)
 E0295	rule	discard() of a non-Copy value (use destroy or consume it)
 E0296	rule	newtype constructed outside its defining module (construction rights, 0b)
@@ -130,6 +130,7 @@ E0307	rule	the end of a function with a result type is reachable without a retur
 E0308	rule	the else block of a let ... else can fall through (bug 195)
 E0309	rule	a match arm's pattern does not fit the scrutinee's type (bug 196)
 E0310	rule	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
+E0311	rule	`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable
 E0402	internal	undeclared function
@@ -185,8 +186,8 @@ E0570	rule	Copy/Destroy conflict
 E0571	rule	Copy struct has non-Copy field
 E0572	rule	repr(C) struct has generics
 E0573	rule	repr(C) field not FFI-safe
-E0574	rule	extern fn parameter not FFI-safe
-E0575	rule	extern fn return not FFI-safe
+E0574	rule	extern fn parameter not FFI-safe (a type containing a reference is FFI-3)
+E0575	rule	extern fn return not FFI-safe (a type containing a reference is FFI-3)
 E0576	rule	repr(packed) and repr(align) conflict
 E0577	rule	repr(align) not power of two
 E0578	rule	reserved function name
@@ -199,6 +200,7 @@ E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restric
 E0585	rule	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
 E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
 E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
+E0588	rule	extern fn taken as a value (bug 166)
 E0590	rule	duplicate impl: a trait implemented twice for one type (TRAIT-1)
 E0591	rule	overlapping impls: two impls of one trait whose targets unify (TRAIT-2)
 E0592	rule	orphan impl: the module defines neither the trait nor the type (TRAIT-3)

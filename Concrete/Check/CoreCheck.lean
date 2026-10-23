@@ -5,6 +5,7 @@ import Concrete.Resolve.Shared
 import Concrete.Check.Layout
 import Concrete.Resolve.Intrinsic
 import Concrete.Semantics.TrustEdges
+import Concrete.Semantics.RefWellFormed
 
 namespace Concrete
 
@@ -50,6 +51,9 @@ structure CoreCheckEnv where
       site can emit the right trust edge. Tree-wide, like `fnSigs`. -/
   trustedNames : List String := []
   externNames : List String := []
+  /-- The current function's `foreignCalls`: the spellings its module's resolver binds to a
+      foreign declaration (bug 166 asks it whether a function VALUE is foreign). -/
+  currentForeign : List (String × String) := []
   /-- The function and module currently being checked, and the edges collected so far.
       Edges are a BYPRODUCT OF CHECKING, emitted at the very sites that gate raw
       operations, so a report over them cannot disagree with the gate about where
@@ -111,6 +115,8 @@ inductive CoreCheckError where
   | reprCFieldNotFFISafe (structName fieldName fieldTy : String)
   | externFnParamNotFFISafe (fnName paramName paramTy : String)
   | externFnReturnNotFFISafe (fnName retTy : String)
+  /-- Bug 166: an `extern fn` taken as a value (D4). -/
+  | foreignFnValue (fnName : String)
   | reprPackedAndAlignConflict (structName : String)
   | reprAlignNotPowerOfTwo (structName : String) (n : Nat)
   | reprAlignExceedsNatural (structName : String) (n : Nat) (natural : Nat)
@@ -161,6 +167,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .reprCFieldNotFFISafe structName fieldName fieldTy => s!"#[repr(C)] struct '{structName}' has non-FFI-safe field '{fieldName}' of type {fieldTy}"
   | .externFnParamNotFFISafe fnName paramName paramTy => s!"extern fn '{fnName}' has non-FFI-safe parameter '{paramName}' of type {paramTy}"
   | .externFnReturnNotFFISafe fnName retTy => s!"extern fn '{fnName}' has non-FFI-safe return type {retTy}"
+  | .foreignFnValue fnName => s!"extern fn '{fnName}' cannot be taken as a value: a call through a function value would use the Concrete calling convention and the function type's capabilities, not the C function's"
   | .reprPackedAndAlignConflict structName => s!"struct '{structName}' cannot have both #[repr(packed)] and #[repr(align(...))]"
   | .reprAlignNotPowerOfTwo structName n => s!"#[repr(align({n}))] on struct '{structName}' must be a power of two"
   | .reprAlignExceedsNatural structName n natural => s!"#[repr(align({n}))] on struct '{structName}' exceeds its natural alignment ({natural}) — over-aligned structs are not yet supported in codegen (bug 037)"
@@ -183,6 +190,8 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .breakOutsideLoop => some "break can only be used inside while or for loops"
   | .continueOutsideLoop => some "continue can only be used inside while or for loops"
   | .copyDestroyConflict _ => some "remove the Destroy impl or remove #[copy]"
+  | .foreignFnValue fnName =>
+    some s!"call '{fnName}' directly, or pass a Concrete function value whose body calls '{fnName}' directly"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
   | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
   | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
@@ -252,6 +261,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .reprCFieldNotFFISafe _ _ _ => "E0573"
   | .externFnParamNotFFISafe _ _ _ => "E0574"
   | .externFnReturnNotFFISafe _ _ => "E0575"
+  | .foreignFnValue _ => "E0588"
   | .reprPackedAndAlignConflict _ => "E0576"
   | .reprAlignNotPowerOfTwo _ _ => "E0577"
   | .reprAlignExceedsNatural _ _ _ => "E0585"
@@ -478,6 +488,25 @@ private def structOfTy (ty : Ty) : StateM CoreCheckEnv (Option CStructDef) := do
 -- Expression validation
 -- ============================================================
 
+/-- Bug 166 (FFI.md "Foreign Function Values", decision D4): a foreign function is never a
+    value. The C calling convention and the extern's own authority (`with(Unsafe)` unless
+    `trusted extern`, its declared effects) are decided at a DIRECT call; a function type
+    (`fn(A) -> R`) carries neither, so a call through a value used the Concrete ABI (a
+    `#[repr(C)]` aggregate reached C as its address) and the function type's capabilities.
+    Taking an `extern fn` as a value is refused (E0588) whatever its signature; the long-term
+    form is a C function type (`extern "C" fn(..)`). `name` is foreign when this function's
+    resolver binds it to a foreign declaration (`foreignCalls`, own or imported `extern fn`,
+    never a runtime helper), the binding emission uses for the direct call. -/
+private def checkForeignFnValue (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
+  let env ← getEnv
+  let foreign := match env.currentForeign.lookup name with
+    | some d => !d.startsWith "_C$rt." && (resolveIntrinsic name).isNone
+    | none => false
+  if !foreign then return
+  match ty with
+  | .fn_ _ _ _ => addCCError (.foreignFnValue name)
+  | _ => pure ()
+
 mutual
 
 -- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7, spec: ARITH-5, spec: TRUST-4, spec: TRUST-5 (docs/spec/types.md; this declaration enforces the rule)
@@ -501,7 +530,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         | _, _ => false
       if !typesCompatible varTy ty && !isLenient varTy && !isLenient ty && !isRefCompat then
         addCCError (.typeMismatchVariable name (toString (repr varTy)) (toString (repr ty)))
-    | none => pure ()  -- may be a parameter or external
+    -- Not a local: a global function taken as a value (`let f = take_pair;`) when fn-typed.
+    | none => checkForeignFnValue name ty
 
   | .binOp op lhs rhs ty =>
     ccCheckExpr lhs
@@ -588,11 +618,33 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     for arg in args do
       ccCheckExpr arg
 
+  -- A compiler-generated call to a runtime helper (`println`'s `print_int`, bug 165). Its
+  -- authority is the helper's intrinsic capability, never a program definition of the same
+  -- spelling: the call cannot reach one.
+  | .call (.runtime helper) _typeArgs args _ty =>
+    let env ← getEnv
+    -- T-RAWDUP (bug 198): `read_owned` is a raw-memory move like `*p`: a trust edge, and trusted
+    -- or `Unsafe` code only.
+    if helper == "read_owned" then
+      addTrustEdge .containsRawOp "read_owned"
+      if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
+        addCCError (.missingCapability "read_owned" "Unsafe" "")
+    match lookupBuiltinCap helper with
+    | some calleeCaps =>
+      let helperD := Capabilities.decideCall env.currentCapSet calleeCaps
+      unless helperD.satisfied do
+        addCCError (.insufficientCapabilities helper (capSetToString helperD.required) (capSetToString helperD.callerHas))
+    | none => pure ()
+    for arg in args do
+      ccCheckExpr arg
+
   | .call (.direct fn) _typeArgs args _ty =>
     -- TRUST EDGES, emitted on the same visit as the capability decision below. A callee
     -- that is both (an `extern` declared `trusted`) yields both facts, because they are
     -- different questions: one is "audited", the other is "leaves the language".
     let envE ← getEnv
+    -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
+    -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
     if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
     if envE.externNames.contains fn then addTrustEdge .callsFFI fn
     -- Check capability discipline
@@ -859,7 +911,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addTrustEdge .containsRawOp "unsafe_cast"
       if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "unsafe_cast" "Unsafe" "")
-  | .fnRef _ _ => pure ()
+  | .fnRef name ty => checkForeignFnValue name ty
   | .allocCall inner allocExpr _ =>
     -- Verify caller has Alloc capability
     let env ← getEnv
@@ -1116,6 +1168,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | _ => false
 
 -- spec: OWN-13, spec: OWN-14, spec: FFI-4 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: FFI-3 (docs/spec/ffi.md; E0574 / E0575 for a type containing a reference)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
@@ -1128,8 +1181,9 @@ def ccCheckModuleDecls (m : CModule)
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == sd.name then
         errors := errors ++ [mkDeclDiag (.copyDestroyConflict sd.name) sd.declSpan]
       for (fname, fty) in sd.fields do
-        -- Skip Copy check for fields whose type is a type parameter of this struct.
-        -- After monomorphization, concrete types will be checked.
+        -- A field whose type is a type parameter of this struct is Copy: the declaration is
+        -- checked once with its parameters taken as Copy, and an instantiation is Copy only when
+        -- every argument is (D6, OWN-14@2); nothing is re-checked after monomorphization.
         let isTypeParam := match fty with
           | .named n => sd.typeParams.contains n
           | _ => false
@@ -1143,11 +1197,20 @@ def ccCheckModuleDecls (m : CModule)
   for sd in m.structs do
     if sd.fields.any fun (_, fty) => tyReachesByValue allStructs allEnums sd.name [sd.name] fty then
       errors := errors ++ [mkDeclDiag (.recursiveType sd.name) sd.declSpan]
-  -- 2. Copy/Destroy conflict for enums
+  -- 2. Copy/Destroy conflict for enums, and (D6) the Copy payload check: a `Copy` enum's payloads
+  --    must be Copy with its type parameters taken as Copy, the same declaration check structs
+  --    have, so a declared-Copy instantiation never holds a linear payload.
   for ed in m.enums do
     if ed.isCopy then
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == ed.name then
         errors := errors ++ [mkDeclDiag (.copyDestroyConflict ed.name) ed.declSpan]
+      for (vname, fields) in ed.variants do
+        for (fname, fty) in fields do
+          let isTypeParam := match fty with
+            | .named n | .typeVar n => ed.typeParams.contains n
+            | _ => false
+          if !isTypeParam && !isCopyTy allStructs allEnums fty then
+            errors := errors ++ [mkDeclDiag (.copyFieldNotCopy s!"{ed.name}::{vname}" fname) ed.declSpan]
   -- 3. repr(C) validation
   for sd in m.structs do
     if sd.isReprC then
@@ -1178,11 +1241,22 @@ def ccCheckModuleDecls (m : CModule)
     | none => ()
   -- 5. Extern fn FFI safety
   for (efName, efParams, efRetTy, _) in m.externFns do
+    -- G15 (exit 2i, R-0285): a raw pointer is FFI-safe, but not one whose pointee holds a
+    -- reference (`*const &Int`): C would receive or hand back the address of a reference slot.
+    -- The pointee is looked through with the shared REF-1 judgment.
+    -- A pointee reference is an FFI-3 violation at the C boundary, so its diagnostic carries the
+    -- rule evidence (rule, spec anchor in docs/spec, rewrite).
+    let refRule (d : Diagnostic) : Diagnostic :=
+      { d with evidence := [("rule", "FFI-3@1"), ("spec", ruleSpecRef "FFI-3@1")]
+               nextAction := some "pass or return a raw pointer to a value type (`*const T` where `T` contains no reference), or an owned value" }
+    -- The REF-1 evidence is attached whenever the type holds a reference, whichever FFI branch
+    -- refuses it (a bare `&Int` fails `isFFISafe` first; Codex review).
+    let withRule (ty : Ty) (d : Diagnostic) : Diagnostic := if tyContainsRef ty then refRule d else d
     for (pName, pTy) in efParams do
-      if !Layout.isFFISafe lctx pTy then
-        errors := errors ++ [mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy))]
-    if !Layout.isFFISafe lctx efRetTy && efRetTy != .unit then
-      errors := errors ++ [mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy))]
+      if !Layout.isFFISafe lctx pTy || tyContainsRef pTy then
+        errors := errors ++ [withRule pTy (mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy)))]
+    if (!Layout.isFFISafe lctx efRetTy && efRetTy != .unit) || tyContainsRef efRetTy then
+      errors := errors ++ [withRule efRetTy (mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy)))]
   -- 6. Builtin trait redeclaration — name collision check at validation boundary
   --    (user-defined traits have builtinId = none; the name check detects collisions)
   for td in m.traitDefs do
@@ -1290,6 +1364,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
     inLoop := false
     inTrusted := f.isTrusted
     currentFnSpan := f.declSpan
+    currentForeign := f.foreignCalls
   }
   -- The CALLER-OBLIGATION axis, kept distinct from provenance: `with(Unsafe)` says the
   -- caller must uphold an invariant the language cannot establish. It is NOT a claim

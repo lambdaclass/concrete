@@ -1,0 +1,9 @@
+// Bug 199: a cast to a type alias (`&mut n as IP` with `type IP = *mut Int`) reached the backend as
+// the unknown named type `IP` and the compiler panicked (EmitSSA.tyToLLVMTy). Elab now resolves the
+// cast target through aliases. Exit 42, binary = --interp.
+type IP = *mut Int;
+trusted fn main() -> Int {
+    let mut n: Int = 42;
+    let p: *mut Int = &mut n as IP;
+    return *p;
+}

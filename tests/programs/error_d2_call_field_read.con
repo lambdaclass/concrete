@@ -1,0 +1,13 @@
+// D2: while one call borrows a root mutably (`&mut s.a`), no other argument may read that root
+// (`s.b`): one loan per root. E0293 (REF-8).
+struct Copy S { a: Int, b: Int }
+
+fn add(a: &mut Int, b: Int) {
+    *a = *a + b;
+}
+
+fn main() -> Int {
+    let mut s: S = S { a: 40, b: 2 };
+    add(&mut s.a, s.b);
+    return s.a;
+}

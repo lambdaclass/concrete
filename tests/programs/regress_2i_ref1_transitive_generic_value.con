@@ -1,0 +1,22 @@
+// Exit 2i REF-1@1, G2 rewrite of error_2i_ref1_transitive_generic.con: the same transitive
+// instantiation at a raw pointer to a VALUE (`*const Int`), which is a legal return type. Exit 42.
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+fn relay<U>(x: U, k: fn(U) -> Int) -> Int {
+    return k(id::<U>(x));
+}
+
+trusted fn first(p: *const Int) -> Int {
+    return 42;
+}
+
+trusted fn go(p: *const Int) -> Int {
+    return relay::<*const Int>(p, first);
+}
+
+trusted fn main() -> Int {
+    let x: Int = 1;
+    return go(&x as *const Int);
+}

@@ -1,0 +1,19 @@
+// Bug 166 (D4), control: the supported way to pass a foreign function is a Concrete function whose
+// body calls it directly; the direct call carries the C convention. Exit 42.
+#[repr(C)]
+struct Copy Pair { v: Int }
+
+trusted extern fn labs(x: Int) with() -> Int;
+
+fn via_labs(x: Int) -> Int {
+    return labs(x);
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    let g: fn(Int) -> Int = via_labs;
+    return apply(via_labs, -20) + g(-22);
+}

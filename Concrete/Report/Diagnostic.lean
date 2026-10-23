@@ -69,20 +69,20 @@ def ruleSpecRef (rule : String) : String :=
     share (E0236, E0238, E0239) is tagged at its sites instead (`CheckError.rule`). -/
 def codeRuleTag : String → Option String
   -- docs/spec/ownership.md
-  | "E0205" | "E0230" => some "OWN-1@1"
-  | "E0208" | "E0210" | "E0211" => some "OWN-2@1"
-  | "E0209" | "E0212" | "E0213" => some "OWN-3@1"
-  | "E0207" => some "OWN-4@1"
-  | "E0287" | "E0288" | "E0289" | "E0295" => some "OWN-5@1"
+  | "E0205" | "E0230" => some "OWN-1@2"
+  | "E0208" | "E0210" | "E0211" => some "OWN-2@2"
+  | "E0209" | "E0212" | "E0213" => some "OWN-3@2"
+  | "E0207" => some "OWN-4@2"
+  | "E0287" | "E0288" | "E0289" | "E0295" => some "OWN-5@2"
   | "E0286" => some "OWN-6@1"
-  | "E0294" => some "OWN-7@1"
-  | "E0290" => some "OWN-8@1"
-  | "E0219" | "E0291" => some "OWN-9@1"
+  | "E0294" => some "OWN-7@2"
+  | "E0290" => some "OWN-8@2"
+  | "E0219" | "E0291" => some "OWN-9@2"
   | "E0217" | "E0233" => some "OWN-10@1"
   | "E0243" | "E0244" => some "OWN-11@1"
   | "E0206" | "E0279" | "E0282" => some "OWN-12@1"
-  | "E0570" | "E0584" | "E0272" | "E0273" => some "OWN-13@1"
-  | "E0571" => some "OWN-14@1"
+  | "E0570" | "E0584" | "E0272" | "E0273" => some "OWN-13@2"
+  | "E0571" => some "OWN-14@2"
   -- docs/spec/types.md
   | "E0220" | "E0222" | "E0224" | "E0225" | "E0226" | "E0500" | "E0560" => some "TYPE-4@1"
   | "E0223" | "E0504" | "E0505" | "E0508" | "E0540" | "E0541" => some "TYPE-5@1"
@@ -109,6 +109,8 @@ def codeRuleTag : String → Option String
   | "E0116" | "E0117" | "E0574" | "E0575" => some "FFI-3@1"
   | "E0572" | "E0573" | "E0576" | "E0577" | "E0585" => some "FFI-4@1"
   | "E0118" | "E0119" => some "FFI-5@1"
+  | "E0588" => some "FFI-1@1"
+  | "E0311" => some "TRUST-7@1"
   -- docs/spec/statements.md
   | "E0278" => some "STMT-5@1"
   | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@1"
@@ -121,7 +123,7 @@ def codeRuleTag : String → Option String
   | "E0530" | "E0534" => some "PAT-2@2"
   | "E0304" | "E0309" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"
   | "E0308" => some "PAT-5@2"
-  | "E0300" => some "PAT-4@1"
+  | "E0300" => some "PAT-4@2"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"
   -- docs/spec/traits.md (trait coherence, bug 186)

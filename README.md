@@ -50,7 +50,8 @@ mod hello {
         let complete: bool = written == message.len();
         message.drop();
 
-        let closed: bool = out.close().is_ok();
+        let closing: Result<u64, IoError> = out.close();
+        let closed: bool = closing.is_ok();
         if complete && closed { return 0; }
         return 1;
     }

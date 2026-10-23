@@ -1,0 +1,11 @@
+// Bug 166: the same refusal for a let-bound function value and a #[repr(C)] result (E0588).
+#[repr(C)]
+struct Copy Pair { v: Int }
+
+trusted extern fn make_pair(v: Int) with() -> Pair;
+
+fn main() -> Int {
+    let f: fn(Int) -> Pair = make_pair;
+    let p: Pair = f(7);
+    return p.v;
+}

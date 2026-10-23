@@ -493,12 +493,6 @@ open_bug_reproducers() {
   done <<'TABLE'
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
-136|bug136_functional_update_base_reevaluated/repro.con|runs-exit|87
-137|bug137_enum_literal_field_order/repro.con|runs-exit|65
-165|bug165_generated_helper_call_binds_by_spelling/repro.con|signals|
-181|bug181_generic_borrowed_scrutinee_binder_mode/repro.con|signals|
-182|bug182_borrowed_call_result_temporary/repro.con|signals|
-183|bug183_deref_assign_destination_first/repro.con|runs-exit|12
 TABLE
 }
 if [ -z "$ONLY" ]; then

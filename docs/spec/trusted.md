@@ -5,8 +5,8 @@ function may exercise, visible in its signature. **`trusted`** contains pointer-
 techniques behind a safe API. **`Unsafe`** is the capability for crossing a foreign or raw-memory
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers raw pointers (TRUST-1, TRUST-3), undefined
-behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5) and the trusted-module marker
-(TRUST-6, pending). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
+behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
+(TRUST-6, pending) and moving a value out of raw memory (TRUST-7). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
 specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
 migrate. The design records are [SAFETY.md](../language/SAFETY.md),
@@ -232,4 +232,68 @@ mod m {
     }
 }
 ```
+
+<a id="TRUST-7"></a>
+### TRUST-7. Moving a value out of raw memory is explicit
+
+**TRUST-7@1.** In trusted or `Unsafe` code, `*p` through a raw pointer `p` reads by value only a Copy pointee, and a non-Copy value is moved out of raw memory only by `read_owned(p)`.
+
+- Kind: refusal
+- Uses: OWN-D1
+- Codes: E0311 (check)
+- Status: enforced
+- Enforced by: Concrete.checkExprCore
+- Semantics: none
+- Obligation: the slot's ownership transfer is a named premise of `read_owned` (TRUST-2, R-0506)
+- Evidence: tested
+
+**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS T-RAWDUP; bug 198). `trusted` does not
+relax linearity. A by-value `*p` of a non-Copy pointee copied a value the slot still owned, so a
+trusted helper could free one heap cell twice. `read_owned(p)` states the transfer; afterwards the
+slot is logically uninitialized until a value is stored back, a premise the trusted code's author
+discharges (TRUST-2), which no checker tracks yet. Place uses
+(`(*p).f`, `&*p`), Copy pointees and stores through `*p` are unchanged.
+
+```con reject name=raw-deref-moves-linear code=E0311 stage=check pair=read-owned-moves
+struct Copy B { v: Int }
+
+trusted fn dup<K>(x: &mut K) -> K {
+    let p: *mut K = x as *mut K;
+    return *p;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 42 });
+    let h2: Heap<B> = dup::<Heap<B>>(&mut h);
+    free(h2);
+    free(h);
+    return 0;
+}
+```
+
+```con accept name=read-owned-moves exit=42
+struct Copy B { v: Int }
+
+trusted fn take_and_replace(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
+    let p: *mut Heap<B> = slot as *mut Heap<B>;
+    let old: Heap<B> = read_owned(p);
+    *p = fresh;
+    return old;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 40 });
+    let old: Heap<B> = take_and_replace(&mut h, alloc(B { v: 2 }));
+    let a: B = free(old);
+    let b: B = free(h);
+    return a.v + b.v;
+}
+```
+
+**Conformance fixtures.**
+
+| fixture | expected | pair | modes |
+|---|---|---|---|
+| `tests/programs/error_rawdup_trusted_deref.con` | `reject:E0311:TRUST-7@1` | `trust7` | `-` |
+| `tests/programs/regress_198_read_owned.con` | `run:42` | `trust7` | `binary,interp` |
 

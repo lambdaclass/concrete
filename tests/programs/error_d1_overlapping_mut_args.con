@@ -1,0 +1,15 @@
+// D1: two exclusive arguments of one call reborrowing the same reference overlap (E0293).
+fn two(a: &mut Int, b: &mut Int) {
+    *a = 1;
+    *b = 2;
+}
+
+fn f(r: &mut Int) {
+    two(r, r);
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    f(&mut x);
+    return x;
+}

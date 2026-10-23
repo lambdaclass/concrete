@@ -1,0 +1,8 @@
+// D6 (explicit Copy): a generic struct declared `Copy` is checked once, with its parameters taken as
+// Copy; a field that is never Copy (`String`) is refused at the declaration (E0571). It was accepted,
+// and each instantiation was demoted to linear by Mono's fixpoint.
+struct Copy S<T> { a: T, s: String }
+
+fn main() -> Int {
+    return 0;
+}

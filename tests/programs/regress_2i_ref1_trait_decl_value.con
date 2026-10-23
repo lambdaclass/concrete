@@ -1,0 +1,18 @@
+// Exit 2i REF-1@1, G13 rewrite of error_2i_ref1_trait_decl_returns_ref.con: the trait method
+// returns a value (a copy-out) instead of a reference. Exit 42.
+trait Get {
+    fn get(&self) -> Int;
+}
+
+struct Copy Cell { v: Int }
+
+impl Get for Cell {
+    fn get(&self) -> Int {
+        return self.v;
+    }
+}
+
+fn main() -> Int {
+    let c: Cell = Cell { v: 42 };
+    return c.get();
+}

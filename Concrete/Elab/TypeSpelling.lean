@@ -86,6 +86,7 @@ partial def expr (r : CoreRename) : CExpr → CExpr
     let callee' := match callee with
       | .direct n => Callee.direct (r.fnName n)
       | .indirect b => Callee.indirect b
+      | .runtime h => Callee.runtime h
     .call callee' (targs.map r.ty) (args.map (expr r)) (r.ty t)
   | .structLit n targs fs t =>
     .structLit (r.tyName n) (targs.map r.ty) (fs.map fun (f, e) => (f, expr r e)) (r.ty t)

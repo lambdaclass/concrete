@@ -84,7 +84,7 @@ echo "=== callArg is CONFINED to call/method/static-call argument checking ==="
 # against parameter types. A new use must be a conscious decision (update the
 # pin + the spec), never a convenience escape — that would recreate the
 # forgot-to-consume bug class (H13/H14).
-CALLARG_PIN=18
+CALLARG_PIN=20
 CALLARG_ACTUAL="$(grep -c '\.callArg' Concrete/Check/Check.lean)"
 if [ "$CALLARG_ACTUAL" -eq "$CALLARG_PIN" ]; then
   ok "callArg use-site count matches the pin ($CALLARG_PIN)"

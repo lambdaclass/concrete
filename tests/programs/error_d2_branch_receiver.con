@@ -1,0 +1,18 @@
+// D2 (Codex review): an `if` result is a temporary too, so its implicit `&self` receiver borrow is
+// refused like `mk().get()`. E0238 (REF-5).
+struct Copy P { f: Int }
+
+impl P {
+    fn get(&self) -> Int {
+        return self.f;
+    }
+}
+
+fn mk() -> P {
+    return P { f: 42 };
+}
+
+fn main() -> Int {
+    let flag: bool = true;
+    return (if flag { mk() } else { mk() }).get();
+}

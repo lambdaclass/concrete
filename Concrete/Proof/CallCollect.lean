@@ -12,62 +12,69 @@ namespace Concrete
 
 -- Call collection
 
+-- Every callee of every call in a body, in walk order: THE one walk. The views below select
+-- by the callee's form, so they cannot disagree about which expressions are visited.
 mutual
-partial def collectCallsExpr (e : CExpr) : List String :=
+partial def collectCalleesExpr (e : CExpr) : List Callee :=
   match e with
-  -- Only a direct callee names a definition. An indirect callee is a fn-typed
-  -- binding, so its statically-known target set is empty — which is also why
-  -- it contributes no dependency edge. Extraction keeps it as `PExpr.applyVar`
-  -- rather than refusing the body (which cost three real std proofs); the
-  -- identity is the binding, not a global name.
   | .call callee _ args _ =>
-    callee.directName?.toList ++ args.foldl (fun acc a => acc ++ collectCallsExpr a) []
-  | .binOp _ l r _ => collectCallsExpr l ++ collectCallsExpr r
-  | .unaryOp _ e _ => collectCallsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCallsExpr v) []
-  | .fieldAccess obj _ _ => collectCallsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCallsExpr v) []
-  | .match_ scrut arms _ => collectCallsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectCallsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectCallsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectCallsExpr e) []
-  | .arrayIndex arr idx _ => collectCallsExpr arr ++ collectCallsExpr idx
-  | .cast inner _ => collectCallsExpr inner
-  | .allocCall inner alloc _ => collectCallsExpr inner ++ collectCallsExpr alloc
+    callee :: args.foldl (fun acc a => acc ++ collectCalleesExpr a) []
+  | .binOp _ l r _ => collectCalleesExpr l ++ collectCalleesExpr r
+  | .unaryOp _ e _ => collectCalleesExpr e
+  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCalleesExpr v) []
+  | .fieldAccess obj _ _ => collectCalleesExpr obj
+  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCalleesExpr v) []
+  | .match_ scrut arms _ => collectCalleesExpr scrut ++ arms.foldl (fun acc a => acc ++ collectCalleesArm a) []
+  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectCalleesExpr inner
+  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectCalleesExpr e) []
+  | .arrayIndex arr idx _ => collectCalleesExpr arr ++ collectCalleesExpr idx
+  | .cast inner _ => collectCalleesExpr inner
+  | .allocCall inner alloc _ => collectCalleesExpr inner ++ collectCalleesExpr alloc
   | .ifExpr cond th el _ =>
-    collectCallsExpr cond ++ collectCallsStmts th ++ collectCallsStmts el
+    collectCalleesExpr cond ++ collectCalleesStmts th ++ collectCalleesStmts el
   | _ => []
 
-partial def collectCallsArm (arm : CMatchArm) : List String :=
+partial def collectCalleesArm (arm : CMatchArm) : List Callee :=
   match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .litArm v guard body => collectCallsExpr v ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .varArm _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
-  | .rangeArm lo hi _ guard body => collectCallsExpr lo ++ collectCallsExpr hi ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
+  | .enumArm _ _ _ guard body => (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
+  | .litArm v guard body => collectCalleesExpr v ++ (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
+  | .varArm _ _ guard body => (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
+  | .rangeArm lo hi _ guard body => collectCalleesExpr lo ++ collectCalleesExpr hi ++ (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
 
-partial def collectCallsStmt (s : CStmt) : List String :=
+partial def collectCalleesStmt (s : CStmt) : List Callee :=
   match s with
-  | .letDecl _ _ _ v => collectCallsExpr v
-  | .assign _ v => collectCallsExpr v
-  | .return_ (some v) _ => collectCallsExpr v
+  | .letDecl _ _ _ v => collectCalleesExpr v
+  | .assign _ v => collectCalleesExpr v
+  | .return_ (some v) _ => collectCalleesExpr v
   | .return_ none _ => []
-  | .expr e _ => collectCallsExpr e
+  | .expr e _ => collectCalleesExpr e
   | .ifElse c t el =>
-    collectCallsExpr c ++ collectCallsStmts t ++
-    match el with | some stmts => collectCallsStmts stmts | none => []
+    collectCalleesExpr c ++ collectCalleesStmts t ++
+    match el with | some stmts => collectCalleesStmts stmts | none => []
   | .while_ c body _ step =>
-    collectCallsExpr c ++ collectCallsStmts body ++ collectCallsStmts step
-  | .fieldAssign obj _ v => collectCallsExpr obj ++ collectCallsExpr v
-  | .derefAssign t v => collectCallsExpr t ++ collectCallsExpr v
+    collectCalleesExpr c ++ collectCalleesStmts body ++ collectCalleesStmts step
+  | .fieldAssign obj _ v => collectCalleesExpr obj ++ collectCalleesExpr v
+  | .derefAssign t v => collectCalleesExpr t ++ collectCalleesExpr v
   | .arrayIndexAssign arr idx v =>
-    collectCallsExpr arr ++ collectCallsExpr idx ++ collectCallsExpr v
-  | .break_ (some v) _ => collectCallsExpr v
+    collectCalleesExpr arr ++ collectCalleesExpr idx ++ collectCalleesExpr v
+  | .break_ (some v) _ => collectCalleesExpr v
   | .break_ none _ | .continue_ _ => []
-  | .defer body => collectCallsExpr body
-  | .borrowIn _ _ _ _ _ body => collectCallsStmts body
+  | .defer body => collectCalleesExpr body
+  | .borrowIn _ _ _ _ _ body => collectCalleesStmts body
 
-partial def collectCallsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectCallsStmt s) []
+partial def collectCalleesStmts (ss : List CStmt) : List Callee :=
+  ss.foldl (fun acc s => acc ++ collectCalleesStmt s) []
 end
+
+/-- Direct callees. Only a direct callee names a definition. An indirect callee is a fn-typed
+    binding, so its statically-known target set is empty — which is also why it contributes no
+    dependency edge. Extraction keeps it as `PExpr.applyVar` rather than refusing the body
+    (which cost three real std proofs); the identity is the binding, not a global name. A
+    compiler-generated runtime-helper call (`Callee.runtime`, bug 165) names no program
+    definition either, so it is no edge: resolving its spelling would find a module's own
+    `fn print_int`, which the call never reaches. -/
+def collectCallsExpr (e : CExpr) : List String := (collectCalleesExpr e).filterMap (·.directName?)
+def collectCallsStmts (ss : List CStmt) : List String := (collectCalleesStmts ss).filterMap (·.directName?)
 
 /-! ### Indirect calls
 
@@ -77,58 +84,16 @@ indirect call is exactly where its "which foreign bindings can this reach" answe
 UNKNOWN rather than empty — so it collects the binding names here, from the same walk
 shape as `collectCalls*` so the two cannot disagree about which expressions are visited.
 -/
-mutual
-partial def collectIndirectCallsExpr (e : CExpr) : List String :=
-  match e with
-  | .call callee _ args _ =>
-    (if callee.isIndirect then [callee.spelling] else []) ++
-      args.foldl (fun acc a => acc ++ collectIndirectCallsExpr a) []
-  | .binOp _ l r _ => collectIndirectCallsExpr l ++ collectIndirectCallsExpr r
-  | .unaryOp _ e _ => collectIndirectCallsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
-  | .fieldAccess obj _ _ => collectIndirectCallsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectIndirectCallsExpr v) []
-  | .match_ scrut arms _ => collectIndirectCallsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectIndirectCallsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectIndirectCallsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectIndirectCallsExpr e) []
-  | .arrayIndex arr idx _ => collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx
-  | .cast inner _ => collectIndirectCallsExpr inner
-  | .allocCall inner alloc _ => collectIndirectCallsExpr inner ++ collectIndirectCallsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectIndirectCallsExpr cond ++ collectIndirectCallsStmts th ++ collectIndirectCallsStmts el
-  | _ => []
+def collectIndirectCallsExpr (e : CExpr) : List String :=
+  (collectCalleesExpr e).filterMap fun | .indirect b => some b | _ => none
+def collectIndirectCallsStmts (ss : List CStmt) : List String :=
+  (collectCalleesStmts ss).filterMap fun | .indirect b => some b | _ => none
 
-partial def collectIndirectCallsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .litArm v guard body => collectIndirectCallsExpr v ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .varArm _ _ guard body => (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-  | .rangeArm lo hi _ guard body => collectIndirectCallsExpr lo ++ collectIndirectCallsExpr hi ++ (guard.map collectIndirectCallsExpr).getD [] ++ collectIndirectCallsStmts body
-
-partial def collectIndirectCallsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectIndirectCallsExpr v
-  | .assign _ v => collectIndirectCallsExpr v
-  | .return_ (some v) _ => collectIndirectCallsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectIndirectCallsExpr e
-  | .ifElse c t el =>
-    collectIndirectCallsExpr c ++ collectIndirectCallsStmts t ++
-    match el with | some stmts => collectIndirectCallsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectIndirectCallsExpr c ++ collectIndirectCallsStmts body ++ collectIndirectCallsStmts step
-  | .fieldAssign obj _ v => collectIndirectCallsExpr obj ++ collectIndirectCallsExpr v
-  | .derefAssign t v => collectIndirectCallsExpr t ++ collectIndirectCallsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectIndirectCallsExpr arr ++ collectIndirectCallsExpr idx ++ collectIndirectCallsExpr v
-  | .break_ (some v) _ => collectIndirectCallsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectIndirectCallsExpr body
-  | .borrowIn _ _ _ _ _ body => collectIndirectCallsStmts body
-
-partial def collectIndirectCallsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectIndirectCallsStmt s) []
-end
+/-- The runtime helpers a body calls through compiler-generated calls (`println`'s
+    `print_int`, bug 165): the helper names, for reports that explain which intrinsic supplies
+    a capability. Never resolved against program definitions. -/
+def collectRuntimeCallsStmts (ss : List CStmt) : List String :=
+  (collectCalleesStmts ss).filterMap fun | .runtime h => some h | _ => none
 
 /-! ### Function values
 
@@ -217,7 +182,7 @@ mutual
 partial def hasIndirectCallExpr (e : CExpr) : Bool :=
   match e with
   | .call callee _ args _ =>
-    callee.directName?.isNone || args.any hasIndirectCallExpr
+    callee.isIndirect || args.any hasIndirectCallExpr
   | .binOp _ l r _ => hasIndirectCallExpr l || hasIndirectCallExpr r
   | .unaryOp _ e _ => hasIndirectCallExpr e
   | .structLit _ _ fields _ => fields.any (fun (_, v) => hasIndirectCallExpr v)
