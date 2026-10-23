@@ -29,8 +29,10 @@ the 61 functions the binary contains. Every project example behaved the same way
 
 ## Expected
 
-A report that runs a compiling pass describes the whole program, not a fragment of it. For wordfreq,
-`--report mono` lists the specializations the build emits; `--report verify` checks them.
+A report that runs a compiling pass runs it on the program CoreCheck certified, and lists the
+invoked file's part of the result. For wordfreq, `--report mono` lists the specializations its own
+module instantiates (std's `OrderedMap`, `Vec`, `Option` instances among them), and
+`--report verify` checks the whole program the build compiles.
 
 ## Cause
 
@@ -59,9 +61,15 @@ The three reports run Mono, lowering and the verify gates on `fullValidCore.sour
 `ValidatedCore` CoreCheck produced for the whole loaded program; the listing still iterates the
 invoked file's modules. "Whole loaded program" is not exactly the build's input: the report path
 loads the project with dependency test functions kept, and `concrete build` strips them
-(`loadProject … (stripTestFns := true)`). `--report mono` therefore reports the whole program's counts (for wordfreq 908
-functions before mono, 1239 after, 325 specializations, a superset of the 61 the build emits). Standalone files are unchanged: there the whole program and the scoped modules were already
-the same value.
+(`loadProject … (stripTestFns := true)`). `--report mono` lists the invoked file's part of the
+whole-program result (`Report.restrictMonoToScope`): each scope module's namesake in Mono's output,
+with the specializations Mono placed there. Mono places an instance in the module that requests
+it, so this is what the file instantiates, including instances of dependency generics, and it does
+not move when an unrelated dependency changes. For wordfreq it lists 9 specializations, each one
+the build emits (before: 0). Listing the whole program instead would have made five example
+snapshots change with every `std` edit. Standalone files are unchanged: there the scope is the
+whole program, and the restriction is the identity. `check_snapshots.sh` passes with no snapshot
+changed.
 
 The slice's type change is what makes the defect unrepresentable: the record update that caused
 it no longer compiles anywhere outside `Pipeline.lean` (see below). The type change does not by
@@ -102,7 +110,7 @@ source), which proof extraction reads and no compiling pass accepts.
 - `tests/programs/regress_180_report_scope/` — a project whose `main` calls `std.math.max` at
   `u16`; `run_tests.sh` requires `--report mono` to list `max<u16> -> …` (before the fix it listed
   no specialization).
-- `check_pipeline_artifacts.sh` leg B: wordfreq's project `--report mono` lists every
-  specialization `concrete build --emit-llvm` emits (before: 0 of 61); legs U1 – U4 refuse the
+- `check_pipeline_artifacts.sh` leg B: wordfreq's project `--report mono` lists at least one
+  specialization, and each one is a function `concrete build --emit-llvm` emits (before: none listed); legs U1 – U4 refuse the
   record update by elaboration, and D2 – D3 refuse a `CoreSubset` where Mono or the verify gates
   need a certificate.

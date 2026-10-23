@@ -26,7 +26,8 @@ Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and
 replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
 dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
 specializations where the build emits 61, and the verify gates called that program clean. These
-reports now run on the whole validated program. The bug is pinned by
+reports now run their passes on the whole validated program and list the invoked file's part of
+the result (9 wordfreq specializations). The bug is pinned by
 `regress_180_report_scope`.
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
