@@ -1,0 +1,6 @@
+// Bug 203: a print() argument of an unsupported type was refused with no diagnostic code
+// (Check built it from a bare message). It is E0421 (TYPE-10), like append()'s.
+fn main() with(Std) -> Int {
+    print(1.5);
+    return 0;
+}

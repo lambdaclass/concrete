@@ -273,6 +273,8 @@ inductive CheckError where
   | builtinWrongArgCount (fnName : String) (expected : Nat)
   | builtinWrongTypeArgCount (fnName : String) (desc : String)
   | builtinWrongFirstArg (fnName : String) (expectedDesc : String) (actualTy : String)
+  -- Bug 203: an `append()` / print-family argument of a type the builtin does not format.
+  | builtinArgUnsupported (fnName : String) (actualTy : String)
   | builtinBadKeyType (fnName : String) (ty : String)
   | destroyRequiresNamed (ty : String)
   | typeDoesNotImplDestroy (typeName : String)
@@ -481,6 +483,7 @@ def CheckError.message : CheckError → String
     s!"method '{method}' on type variable '{typeVar}' is ambiguous: it is declared by more than one of its bounds ({", ".intercalate traits}); bound order does not choose one"
   | .methodCallOnNonNamedType => "method call on non-named type"
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
+  | .builtinArgUnsupported fnName actualTy => s!"{fnName}() argument has unsupported type '{actualTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
   | .builtinWrongArgCount fnName expected =>
     if expected == 0 then s!"{fnName}() takes no arguments"
     else if expected == 1 then s!"{fnName}() takes exactly 1 argument"
@@ -677,6 +680,7 @@ def CheckError.code : CheckError → String
   | .builtinWrongArgCount _ _ => "E0268"
   | .builtinWrongTypeArgCount _ _ => "E0269"
   | .builtinWrongFirstArg _ _ _ => "E0270"
+  | .builtinArgUnsupported _ _ => "E0421"
   | .builtinBadKeyType _ _ => "E0271"
   | .destroyRequiresNamed _ => "E0272"
   | .typeDoesNotImplDestroy _ => "E0273"

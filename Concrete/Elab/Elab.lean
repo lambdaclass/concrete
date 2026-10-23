@@ -203,11 +203,9 @@ def ElabError.code : ElabError → String
 
 -- spec: CON-4 (docs/spec/contracts.md; this declaration enforces the rule)
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
-  -- E0420 is shared (a ghost read in runtime code, CON-4, and an unsupported `append()` argument),
-  -- so the ghost site tags its rule here and the code has no whole-code tag.
-  let ev := match e with
-    | .ghostInRuntime _ => [("rule", "CON-4@1"), ("spec", ruleSpecRef "CON-4@1")]
-    | _ => codeRuleEvidence e.code
+  -- Every Elab code names one rule (bug 203 gave the `append()` refusal its own code, so E0420
+  -- is CON-4's alone and carries a whole-code tag).
+  let ev := codeRuleEvidence e.code
   throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code,
            evidence := ev }]
 
@@ -1930,7 +1928,9 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
                      , pass := "elab"
                      , span := some sp
                      , hint := some "pass primitive values or string references; complex values must be formatted first"
-                     , code := "E0420" }]
+                     -- Bug 203: its own code. It shared E0420 with a ghost read at run time, so
+                     -- the code did not identify the rule (TYPE-10 here, CON-4 there).
+                     , code := "E0421" }]
           stmts := stmts ++ [call]
         return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
       | _ =>

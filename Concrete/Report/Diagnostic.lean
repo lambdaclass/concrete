@@ -91,7 +91,7 @@ def codeRuleTag : String → Option String
   | "E0551" | "E0552" => some "TYPE-7@1"
   | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
   | "E0262" | "E0264" | "E0265" | "E0266" | "E0522" => some "TYPE-9@1"
-  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
+  | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" | "E0421" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
   | "E0113" | "E0114" | "E0115" => some "TYPE-15@1"
   -- docs/spec/references.md
@@ -133,13 +133,14 @@ def codeRuleTag : String → Option String
   | "E0593" => some "TRAIT-4@1"
   | "E0594" => some "TRAIT-5@1"
   | "E0595" => some "TRAIT-6@1"
+  -- docs/spec/contracts.md (one rule since bug 203 moved the append() refusal to E0421)
+  | "E0420" => some "CON-4@1"
   | _ => none
 
 /-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`
     for it): its sites tag each diagnostic (`CheckError.rule`), and the ledger lists them all. -/
 def codeSharedRules : String → List String
   | "E0252" => ["PAT-5@2", "TYPE-7@1"]
-  | "E0420" => ["CON-4@1"]
   | _ => []
 
 /-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/
