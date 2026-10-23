@@ -95,7 +95,7 @@ Violations are compile errors — there is no way to bypass FFI safety without m
 
 - `extern fn` calls require the `Unsafe` capability
 - `trusted extern fn` calls require no capability (the compiler author vouches for safety)
-- Regular `fn` declared inside a `trusted impl` block inherits the trusted boundary
+- A method is trusted only when it declares `trusted fn` itself; an impl block confers no trust (`trusted impl` is refused, bug 189)
 
 ## Struct Layout Rules
 

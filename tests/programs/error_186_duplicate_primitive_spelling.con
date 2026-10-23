@@ -1,0 +1,5 @@
+// Bug 186 / TRAIT-1 (E0590): `Int` and `i64` are one type, so these are one impl twice.
+trait Tr { fn m(&self) -> Int; }
+impl Tr for Int { fn m(&self) -> Int { return 1; } }
+impl Tr for i64 { fn m(&self) -> Int { return 2; } }
+pub fn main() -> Int { return 0; }

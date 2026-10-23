@@ -22,7 +22,7 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
-STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "link"}
+STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "ssa-verify", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation"}
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
@@ -605,7 +605,7 @@ def outcome_native(cc, src, workdir, project=None):
         return ("fail", f"compiler {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0:
         if LEAK_RE.search(out):
-            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0))
+            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0) + " :: " + out)
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
     if rc is None:
@@ -619,7 +619,7 @@ def outcome_interp(cc, src):
     if rc is None or rc < 0:
         return ("fail", f"interpreter {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0 and LEAK_RE.search(out):
-        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0))
+        return ("fail", "leaked past the interpreter: " + LEAK_RE.search(out).group(0) + " :: " + out)
     if rc == 0:
         last = [l for l in stdout.split("\n") if l.strip()]
         v = last[-1].strip() if last else ""

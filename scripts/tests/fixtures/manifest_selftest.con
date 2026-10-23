@@ -19,10 +19,10 @@ mod selftest {
     // 4. plain extern fn
     pub extern fn plain_hook(n: i32) with() -> i32;
 
-    // 5. trusted classification from the ENCLOSING impl
+    // 5. trusted classification from the METHOD's own `trusted` (an impl block confers none, bug 189)
     pub struct Thing { n: u64 }
-    trusted impl Thing {
-        pub fn inside_trusted(&self) -> u64 {
+    impl Thing {
+        pub trusted fn inside_trusted(&self) -> u64 {
             return self.n;
         }
     }

@@ -1506,6 +1506,53 @@ run_err "$TESTDIR/error_trait_bound_call_missing_cap.con"   "function 'Act::act'
 run_err "$TESTDIR/error_trait_impl_sig_mismatch.con"        "expected receiver"
 run_err "$TESTDIR/error_trait_method_generic.con"           "generic trait methods are not supported"
 run_ok  "$TESTDIR/trait_impl_caps_declared.con" "3" 7
+# Bug 186: trait impl selection is a function (docs/spec/traits.md). Each refusal has its own
+# code: duplicate impl (E0590), overlapping impls (E0591), orphan impl (E0592), an impl target
+# that is not its type applied to the impl's own parameters (E0593: before, `impl Tr for
+# Box2<i32>` implemented Tr for every Box2 — silent wrong code), one method name from two impls
+# of a type (E0594), an ambiguous call through bounds (E0595). The positive control is one
+# program written in two orders: 42 natively and under --interp, both orders.
+run_err "$TESTDIR/error_186_duplicate_impl.con"          "(E0590)"
+run_err "$TESTDIR/error_186_duplicate_generic_impl.con"  "(E0590)"
+run_err "$TESTDIR/error_186_overlap_generic_impl.con"    "(E0591)"
+run_err "$TESTDIR/error_186_overlap_blanket_impl.con"    "(E0591)"
+run_err "$TESTDIR/error_186_orphan_impl.con"             "(E0592)"
+run_err "$TESTDIR/error_186_specialized_impl.con"        "(E0593)"
+run_err "$TESTDIR/error_186_method_clash.con"            "(E0594)"
+run_err "$TESTDIR/error_186_inherent_clash.con"          "(E0594)"
+run_err "$TESTDIR/error_186_ambiguous_bound_method.con"  "(E0595)"
+# Codex round 1: `Int`/`i64` are one head (E0590); a sibling submodule's type is foreign to
+# the module beside it (E0592); an imported alias and bare `Option` are refused targets (E0593).
+run_err "$TESTDIR/error_186_duplicate_primitive_spelling.con" "(E0590)"
+run_err "$TESTDIR/error_186_orphan_sibling.con"          "(E0592)"
+run_err "$TESTDIR/error_186_imported_alias_target.con"   "(E0593)"
+run_err "$TESTDIR/error_186_builtin_arity.con"           "(E0593)"
+run_ok  "$TESTDIR/regress_186_primitive_impl_spellings.con" 42
+run_ok  "$TESTDIR/regress_186_visible_targets.con" 42
+run_ok  "$TESTDIR/regress_186_coherent_impls.con" 42
+run_ok  "$TESTDIR/regress_186_coherent_impls_reversed.con" 42
+for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed regress_186_primitive_impl_spellings regress_186_visible_targets; do
+    r186_i=$($COMPILER "$TESTDIR/$r186.con" --interp </dev/null 2>&1 | awk 'END{print}' || true)
+    if [ "$r186_i" = "42" ]; then
+        echo "  ok  bug 186: $r186 --interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 186: $r186 --interp gave '$r186_i', want 42 (the binary's exit)"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# The interpreter refuses each error fixture with the same first code as the native compile.
+for r186e in duplicate_impl:E0590 overlap_generic_impl:E0591 orphan_impl:E0592 specialized_impl:E0593 method_clash:E0594 ambiguous_bound_method:E0595; do
+    r186e_f="$TESTDIR/error_186_${r186e%%:*}.con"; r186e_c="${r186e#*:}"
+    r186e_i=$($COMPILER "$r186e_f" --interp </dev/null 2>&1 | grep -oE '\(E[0-9]{4}\)' | awk 'NR==1' || true)
+    if [ "$r186e_i" = "($r186e_c)" ]; then
+        echo "  ok  bug 186: error_186_${r186e%%:*} --interp refuses with $r186e_c"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 186: error_186_${r186e%%:*} --interp gave '$r186e_i', want ($r186e_c)"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Codex round 2: a NESTED module's Destroy impl is fenced too (its destructor is
 # `inner_Noisy_destroy`; the fence looked up `Noisy_destroy` and silently passed).
 run_err "$TESTDIR/error_091_nested_destroy_caps.con"        "(E0584)"
@@ -1657,7 +1704,8 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge; do
+# Bug 188: legitimate capability polymorphism (positive control), binary exit 42.
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_188_capvar_polymorphism; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -2454,6 +2502,8 @@ run_err "$TESTDIR/error_int_to_ptr_no_unsafe.con" "requires capability"
 # Trusted boundary tests
 run_ok "$TESTDIR/trusted_fn_ptr_deref.con" 0
 run_ok "$TESTDIR/trusted_impl_basic.con" 0
+# Bug 189: `trusted impl` is refused — a block never confers trust; each method declares it.
+run_err "$TESTDIR/error_189_trusted_impl_refused.con" "'trusted impl' is not allowed"
 run_ok "$TESTDIR/trusted_ptr_assign.con" 0
 run_ok "$TESTDIR/trusted_ptr_cast.con" 0
 run_ok  "$TESTDIR/trusted_absorbs_extern_unsafe.con" 0   # R-0484 R2: trusted absorbs extern Unsafe
@@ -2561,6 +2611,21 @@ run_ok "$TESTDIR/test_trusted_impl_method.con" 42
 run_ok "$TESTDIR/test_trusted_extern_call.con" 42
 run_err "$TESTDIR/error_cap_superset_missing.con" "requires File, Network but caller has"
 run_err "$TESTDIR/error_cap_poly_insufficient.con" "requires capability"
+# Bug 188: a capability VARIABLE entailed every requirement, so a `with(C)` body could
+# print, call `with(Process)`, call an untrusted extern or dereference a raw pointer, and
+# a caller instantiating `C := {}` ran it with no authority. A variable now entails only
+# itself; a callback's `Unsafe` is decided on the instantiated set; a capability parameter
+# may not be spelled like a capability (E0121).
+run_err "$TESTDIR/error_188_capvar_console.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_process.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_call.con"      "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_op.con"        "(E0521)"
+run_err "$TESTDIR/error_188_capvar_unsafe_callback.con"  "(E0240)"
+run_err "$TESTDIR/error_188_capparam_named_unsafe.con"   "(E0121)"
+run_err "$TESTDIR/error_188_capvar_method_unsafe_callback.con" "(E0240)"
+run_err "$TESTDIR/error_188_capvar_impl_receiver.con"    "(E0520)"
+run_err "$TESTDIR/error_188_bodyless_capparam.con"       "bodiless declaration cannot take capability parameters"
+run_ok  "$TESTDIR/regress_188_capvar_polymorphism.con" 42
 run_err "$TESTDIR/error_trusted_not_viral.con" "requires capability"
 run_err "$TESTDIR/error_extern_needs_unsafe.con" "requires Unsafe"
 run_err "$TESTDIR/error_extern_undeclared.con" "E0116"   # R-0484 R3: an extern must declare its effects
@@ -3025,10 +3090,8 @@ echo "=== Report output tests ==="
 # The heading reads "trusted methods in impl X", not "trusted impl X". Since per-method
 # `trusted` exists (2026-09-25), `trustedImplOrigin` is set from the FUNCTION's flag, so a
 # method may be audited inside a block that is NOT — and the old wording asserted
-# something about the block that need not be true. This fixture happens to use a whole
-# `trusted impl`, where the old text was accurate; the new text is accurate in both cases
-# and cannot overclaim. The impl-level fact is still available in the source and in
-# `--report trust-edges`.
+# something about the block that need not be true. Since bug 189 there is no block-level
+# trust at all: this fixture's method declares `trusted fn` itself.
 check_report_multi "$TESTDIR/trusted_report_check.con" unsafe \
     "trusted_report_check.con --report unsafe shows trusted boundaries" \
     "trusted_report_check.con --report unsafe missing trusted boundaries" \
@@ -3144,6 +3207,14 @@ check_report "$TESTDIR/report_mono_check.con" mono \
     "Specializations:" \
     "report_mono_check.con --report mono shows Specializations" \
     "report_mono_check.con --report mono missing Specializations"
+
+# --- bug 180: a project's --report mono describes the program the build compiles ---
+# Mono runs on the whole validated program, not the invoked file's modules re-run without std,
+# so the std generic's u16 instance is listed (before the fix: "Specializations: 0").
+check_report "$TESTDIR/regress_180_report_scope/src/main.con" mono \
+    "max<u16> -> " \
+    "regress_180_report_scope --report mono lists the std generic's u16 instance" \
+    "regress_180_report_scope --report mono lost the dependency's specialization (bug 180)"
 
 # -- Integration test: all report modes on one file --
 # Gate: if the file doesn't compile at all, skip all 14 assertions
@@ -8219,6 +8290,15 @@ run_err "$TESTDIR/error_196_variant_over_int.con" "(E0309)"
 run_err "$TESTDIR/error_196_literal_type.con" "(E0309)"
 run_err "$TESTDIR/error_196_literal_over_type_param.con" "(E0309)"
 run_err "$TESTDIR/error_196_same_name_other_enum.con" "(E0309)"
+# Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
+# the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
+run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"
+run_err "$TESTDIR/error_192_int_while_condition.con" "(E0223)"
+run_err "$TESTDIR/error_192_int_for_condition.con" "(E0223)"
+run_err "$TESTDIR/error_192_int_match_guard.con" "(E0223)"
+# Bug 193 (silent): a literal gave a field twice; the binary stored the last, --interp the first.
+run_err "$TESTDIR/error_193_duplicate_struct_field.con" "(E0306)"
+run_err "$TESTDIR/error_193_duplicate_variant_field.con" "(E0306)"
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
 # (an inexact f32 was invalid IR; an f64 lost digits past the sixth decimal).
 run_ok "$TESTDIR/regress_109_float_literals.con" 42

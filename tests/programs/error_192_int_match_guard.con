@@ -1,0 +1,10 @@
+// Bug 192: a match guard is a condition, so an integer guard is refused (TYPE-5). The guard's
+// `bool` hint was not checked as its type, and CoreCheck did not check guards. Expected: E0223.
+fn main() -> Int {
+    let n: Int = 1;
+    let k: Int = 3;
+    match k {
+        3 if n => { return 42; },
+        _ => { return 0; }
+    }
+}

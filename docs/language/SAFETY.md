@@ -25,7 +25,7 @@ Concrete's safety model is organized around a three-way split:
 | Mechanism | What it covers | Visibility | Example |
 |-----------|---------------|------------|---------|
 | **Capabilities** | Semantic effects visible to callers | In function signatures | `with(File, Alloc)` |
-| **`trusted`** | Containment of pointer-level implementation unsafety behind safe APIs | At declaration site only; callers see a safe signature | `trusted impl Vec<T> { ... }` |
+| **`trusted`** | Containment of pointer-level implementation unsafety behind safe APIs | At declaration site only; callers see a safe signature | `impl Vec<T> { pub trusted fn push(..) { ... } }` |
 | **`with(Unsafe)`** | The memory-safety obligation of crossing a foreign boundary (FFI, transmute) | In function signatures; a `trusted` body absorbs it (R-0484) | `extern fn read(...) with(Console)` requires `with(Unsafe, Console)` outside trusted code |
 
 This split applies uniformly across compiler builtins, stdlib internals, and user code. No layer is silently exempt.
@@ -64,11 +64,11 @@ except `Unsafe`. This is not a macro system; it is a fixed capability-set alias.
 
 ### Trusted Boundaries
 
-`trusted fn`, `trusted impl`, and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs:
+`trusted fn` and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. A method is trusted when it declares `trusted fn` itself:
 
 ```
-trusted impl Vec<T> {
-    pub fn push(self: &mut Vec<T>, value: T) with(Alloc, Unsafe) { ... }
+impl Vec<T> {
+    pub trusted fn push(&mut self, value: T) with(Alloc) { ... }
 }
 ```
 
@@ -88,11 +88,13 @@ trusted impl Vec<T> {
 - `trusted extern fn` is a separate, narrower mechanism: a binding safe for every argument its types permit, with no undeclared effects (e.g., `sqrt`). Its declared effects still bind every caller
 
 **Syntactic surfaces** (intentionally narrow):
-- `trusted fn` — standalone function
-- `trusted impl` — all methods in the impl block
+- `trusted fn` — a function or a method, each declaring it itself
 - `trusted extern fn` — audited foreign binding
 
-The stdlib demonstrates this pattern throughout: `trusted impl Vec<T>`, `trusted impl HashMap<K, V>`, `trusted impl TextFile`, `trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
+There is no block-level trust: `trusted impl` is refused (bug 189), because a marker on a block
+would confer trust on methods that never declared it. The stdlib demonstrates the pattern
+throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I/O methods,
+`trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
 ### Unsafe-marked modules and global state (decided 2026-10-23, not implemented)
 
@@ -253,7 +255,7 @@ Capabilities ─── what authority code may use (compile-time, signature-visi
 
 Trusted ──────── containment of pointer-level unsafety behind safe APIs
      │
-     ├── trusted fn / trusted impl / trusted extern fn
+     ├── trusted fn (functions and methods) / trusted extern fn
      ├── callers still see the declared capabilities; only trusted extern fn avoids with(Unsafe)
      ├── --report unsafe shows trust boundaries
      └── wrapper patterns documented in docs/platform/FFI.md

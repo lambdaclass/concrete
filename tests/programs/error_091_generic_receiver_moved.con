@@ -4,8 +4,8 @@
 // receiver: this compiled and destroyed the one Tracked value TWICE (printed 2).
 mod m {
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        pub fn destroy(&self) {
+    impl Destroy for Tracked {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

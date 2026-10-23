@@ -87,7 +87,7 @@ The point is not only speed or control. The point is to keep low-level power whi
   </div>
   <div class="feature-card">
     <h3>Explicit Trust</h3>
-    <p>Capabilities, <code>Unsafe</code>, <code>trusted fn</code>, <code>trusted impl</code>, and <code>trusted extern fn</code> are explicit surfaces, not hidden implementation accidents.</p>
+    <p>Capabilities, <code>Unsafe</code>, <code>trusted fn</code> and <code>trusted extern fn</code> are explicit surfaces, not hidden implementation accidents.</p>
   </div>
   <div class="feature-card">
     <h3>Small Semantic Surface</h3>

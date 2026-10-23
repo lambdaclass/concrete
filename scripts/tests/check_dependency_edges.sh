@@ -858,7 +858,9 @@ EXPECTED_TOTAL_ASSERTIONS=322
 # is made: proved 35 -> 42, root refusals 14 -> 16, scoped identities 72 -> 88, correspondence +3 -> +5
 # no-claim, non-current edges 14 -> 16, fixture population 28 -> 31 (124 pairs), split 114/174 -> 114/181.
 # No assertion added or removed (total stays 322).
-EXPECTED_ASSERTION_LABELS_SHA256="fdbb0d3c6844ffa8416f3f8e780cc8464bc54f108bfc0326b775024536b5312f"
+# Re-pinned 2026-10-23 (bug 189) for exactly one relabelled assertion, non-current edges 16 -> 17
+# (`Bytes::len` lost its block-conferred trust; explained where it is made). Total stays 322.
+EXPECTED_ASSERTION_LABELS_SHA256="8361ac1a47bb7ebcf5b3bc6bebb81b156433fb2af3f7778a4478f87edb54f5b2"
 reconcile_assertion_total() {
   local total=$((PASS + FAIL))
   if [ "$total" -ne "$EXPECTED_TOTAL_ASSERTIONS" ]; then
@@ -4218,10 +4220,13 @@ done
 # unclassified edges, to `parse_byte` and `check_length`.
 # 14 -> 16 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): `png_chunks.is_png_sig -> png_sig_ok`
 # and `toml_parser.err_result -> mk_error_val`, each unclassified because its subject makes no claim.
-if [ "$NONCUR" = "16" ]; then
-  ok "the corpus contains exactly 16 non-current edges (16 unclassified, 0 missing) — the check above is non-vacuous"
+# 16 -> 17 on 2026-10-23 (bug 189: a block no longer confers trust): `Bytes::len` was trusted
+# only through its `trusted impl` and is now ordinary code, so `png_chunks.is_png_sig`'s edge to
+# it is `unclassified` instead of `trusted` (its edge to the still-trusted `get_unchecked` stays).
+if [ "$NONCUR" = "17" ]; then
+  ok "the corpus contains exactly 17 non-current edges (17 unclassified, 0 missing) — the check above is non-vacuous"
 else
-  no "non-current edge count moved to $NONCUR (was 16, all unclassified) — if the hand-back classified more, update this and say so"
+  no "non-current edge count moved to $NONCUR (was 17, all unclassified) — if the hand-back classified more, update this and say so"
 fi
 
 DR="$(cc examples/proof_patterns/composition/src/main.con subject-facts | grep 'shadow depRoot:' || true)"

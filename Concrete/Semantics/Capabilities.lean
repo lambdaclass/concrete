@@ -33,31 +33,64 @@ Leaf module: imports only the AST (for `CapSet`) and `Intrinsic` (for
 namespace Concrete
 namespace Capabilities
 
-/-- Does `caller`'s authority cover everything `callee` requires? A caller that
-    is a capability *variable* is assumed to satisfy any requirement (it is
-    resolved at instantiation), matching the polymorphic-callback contract.
+/-- CAPABILITY ENTAILMENT (bug 188) — the one rule for "does the caller's authority
+    cover this requirement?". A required capability is entailed by:
+      * a CONCRETE capability the caller declares (`with(Console)` entails `Console`), or
+      * a capability VARIABLE the caller declares only when the variable's declared bound
+        entails it. A capability parameter (`cap C`) declares no bound, so it is
+        "some set chosen by the instantiator" and entails exactly ITSELF: `with(C)`
+        entails a requirement `C`, and nothing else — not `Console`, not `Process`,
+        and in particular not `Unsafe`.
+    A required variable the caller does not itself declare fails closed. A callee's OWN
+    capability parameters are not requirements of this kind: they are instantiated at the
+    call site, where Check infers them (`resolveCaps`, fail-closed on an uninferable one)
+    and decides the instantiated set with this same rule (see `instantiatedRequirement`).
+
+    Until bug 188 a caller holding ANY capability variable was treated as covering every
+    requirement ("resolved at instantiation"), so `fn f<cap C>(..) with(C)` could call a
+    `with(Process)` function, an untrusted `extern`, or dereference a raw pointer, and a
+    caller instantiating `C := {}` ran it with no authority at all. Nothing at the
+    instantiation re-checked the body: a generic body is checked once, here.
+
+    Direct calls, calls through a function pointer, method calls and the raw-operation
+    gate all read this one rule (`missingCaps` is its per-capability view). A capability
+    parameter can never be spelled like a real capability (Resolve, E0121), so matching a
+    requirement against a caller's variable by name cannot launder `Unsafe`. -/
+def missingCaps (caller callee : CapSet) : List String :=
+  let (callerCaps, callerVars) := caller.normalize
+  let (calleeCaps, calleeVars) := callee.normalize
+  -- A required name is entailed by a concrete capability of the same name, or by a
+  -- capability variable of the same name (a variable entails exactly itself). Inside a
+  -- fn-pointer TYPE a variable is still spelled as a concrete name (`fn() with(C)`),
+  -- so both sides are matched by name; E0121 keeps the two namespaces disjoint.
+  (calleeCaps ++ calleeVars).eraseDups.filter fun c => !(callerCaps.contains c || callerVars.contains c)
+
+/-- Does `caller`'s authority cover everything `callee` requires? The boolean view of
+    the one entailment rule (`missingCaps`): satisfied iff nothing is missing. A union is
+    flattened first (`normalize`), so `Alloc ∪ Unsafe` covers `Alloc, Unsafe`.
     (Moved here from `Resolve/Shared`; it is the capability superset primitive.) -/
 def capsContain (caller callee : CapSet) : Bool :=
-  match callee with
-  | .empty => true
-  | .concrete calleeCaps =>
-    -- Normalize the CALLER before testing membership. A union must be flattened
-    -- first: `Alloc ∪ Unsafe` covers a callee requiring `Alloc, Unsafe`, but the
-    -- earlier per-branch form asked whether EITHER side covered the whole
-    -- requirement and answered no — an under-approximation of a set union.
-    --
-    -- That also made this disagree with `missingCaps`, which has always
-    -- normalized, so `decideCall` could report `satisfied := false` alongside
-    -- `missing := []` and render "requires Alloc, Unsafe but caller has
-    -- Alloc + Unsafe". One cap set, two readings, which is precisely what this
-    -- module exists to prevent.
-    let (callerCaps, callerVars) := caller.normalize
-    -- A capability VARIABLE in the caller is assumed to satisfy any requirement
-    -- (it is resolved at instantiation), matching the polymorphic-callback
-    -- contract — the same allowance the `.var` case made before.
-    !callerVars.isEmpty || calleeCaps.all fun c => callerCaps.contains c
-  | .var _ => true  -- capability variable, can't check statically here
-  | .union a b => capsContain caller a && capsContain caller b
+  (missingCaps caller callee).isEmpty
+
+/-- What a DIRECT call to a callee declaring `declared` requires of its caller BEFORE the
+    callee's own capability parameters are instantiated: the declared concrete
+    capabilities. Every `.var` in a declared callee set is one of the callee's own
+    capability parameters (the parser turns exactly the names in `capParams` into `.var`,
+    and an impl's parameters into its methods' `.var`s), and those are instantiated per
+    call site, where Check infers them and decides the instantiated set with
+    `missingCaps` — failing closed when one cannot be inferred. CoreCheck, which sees
+    the call without the inferred binding, checks this part; it never treats an
+    uninstantiated variable as satisfied by the CALLER's variables (bug 188). -/
+def instantiatedRequirement (declared : CapSet) : CapSet :=
+  let (names, _ownParams) := declared.normalize
+  if names.isEmpty then .empty else .concrete names
+
+/-- A capability parameter may not be spelled like a capability: `fn f<cap Unsafe>(..)
+    with(Unsafe)` would make a variable whose name-match entails the real `Unsafe`
+    (bug 188). The reserved spellings are every built-in capability, the `Std` macro and
+    the module's capability aliases. -/
+def capParamNameReserved (aliases : List String) (name : String) : Bool :=
+  validCaps.contains name || name == stdCapMacroName || aliases.contains name
 
 /-- Does this cap set LITERALLY declare capability `cap`? Membership of the
     concrete caps (a capability *variable* is not a literal declaration). This is
@@ -76,11 +109,22 @@ def capSetHasUnsafe (cs : CapSet) : Bool :=
 
 /-- Does the current context have AUTHORITY to perform an `Unsafe` operation
     (raw-pointer deref/assign, pointer arithmetic, unsafe cast)? True inside a
-    `trusted` function, or when the capability set covers `Unsafe` (including a
-    capability variable, via `capsContain`). This is the one predicate behind
-    CoreCheck's raw-pointer/unsafe-cast gates. -/
+    `trusted` function, or when the capability set covers `Unsafe` by the one entailment
+    rule (`capsContain`) — a capability VARIABLE does not (bug 188). This is the one
+    predicate behind CoreCheck's raw-pointer/unsafe-cast gates. -/
 def capsAllowUnsafeOp (inTrusted : Bool) (cs : CapSet) : Bool :=
   inTrusted || capsContain cs (.concrete [unsafeCapName])
+
+/-- Does a `trusted` body discharge the missing requirement `cap`? Only `Unsafe`, and
+    only in a trusted body: vouching that it meets a callee's memory-safety precondition
+    is what `trusted` means; every other capability still binds. The per-capability view
+    of CoreCheck's call-site discharge, shared by Check's call paths (direct
+    cap-polymorphic calls, method calls, calls through a trait bound) so the three
+    decide `Unsafe` the same way CoreCheck does (bug 188: Check used to leave a
+    cap-polymorphic call's instantiated `Unsafe` to CoreCheck, which cannot see the
+    instantiation). -/
+def trustedDischarges (inTrusted : Bool) (cap : String) : Bool :=
+  inTrusted && cap == unsafeCapName
 
 /-- WHAT `trusted` DOES WITH AN EXTERN CALL (R-0484, 2026-10-01 — reversed).
 
@@ -136,35 +180,10 @@ def externFnRequiredCaps (isTrusted : Bool) (declared : CapSet) : CapSet :=
     let base : CapSet := .concrete ((names ++ [unsafeCapName]).mergeSort (· < ·) |>.eraseDups)
     vars.foldl (fun acc v => .union acc (.var v)) base
 
-/-- The concrete capabilities a `callee` requires that a `caller` does NOT hold
-    (in its concrete caps or as a capability variable). This is the specific
-    "what is missing" behind the per-capability E0240 diagnostic; it was
-    open-coded identically at every direct-call site (Check + CheckHelpers). It
-    considers only the required set's CONCRETE caps — a required capability
-    variable is not a per-cap miss (its satisfaction is the polymorphic-callback
-    contract, decided by `capsContain`). -/
-def missingCaps (caller callee : CapSet) : List String :=
-  let (callerCaps, callerVars) := caller.normalize
-  let (calleeCaps, _calleeVars) := callee.normalize
-  calleeCaps.filter fun c => !(callerCaps.contains c || callerVars.contains c)
-
-/-- Like `missingCaps`, but a required capability VARIABLE also counts as a
-    requirement the caller must hold. This is the anti-smuggling rule for calls
-    THROUGH a function pointer (Phase 6.5 CapabilityJudgment, slice 3): a caller
-    with no authority must not invoke `f : fn() with(C)` merely because `C` is a
-    variable — that would smuggle authority past the caller's own header. A
-    *direct* call treats a callee variable as satisfied (`missingCaps` / the
-    polymorphic-callback contract); an *indirect* call through the pointer type
-    does not. (ROADMAP Phase 5 #24a red-team.) -/
-def missingCapsThroughPtr (caller callee : CapSet) : List String :=
-  let (callerCaps, callerVars) := caller.normalize
-  let (calleeCaps, calleeVars) := callee.normalize
-  (calleeCaps ++ calleeVars).filter fun c => !(callerCaps.contains c || callerVars.contains c)
-
 /-- The one direct-call capability DECISION (Phase 6.5 CapabilityJudgment, slice
     1): whether `caller`'s authority covers a call requiring `callee`, and — when
-    it does not — which concrete caps are missing. `satisfied` is authoritative
-    (`capsContain`, honoring unions and polymorphic variables); `missing` is the
+    it does not — which caps are missing. `satisfied` and `missing` are two views of
+    the one entailment rule (`missingCaps`), so they cannot disagree; `missing` is the
     per-cap detail for diagnostics. Check (per-cap E0240) and CoreCheck (whole-set
     E0520) build their diagnostics from THIS record, and reports read it — so they
     cannot disagree on satisfaction or on which caps are missing. -/

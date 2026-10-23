@@ -34,7 +34,7 @@ contracts, not by broad helper piles or hidden runtime assumptions.
 For low-level internals, the split is now:
 
 - semantic effects remain visible in public signatures (`with(Alloc)`, `with(File)`, etc.)
-- pointer-level implementation unsafety is contained by `trusted fn` / `trusted impl`
+- pointer-level implementation unsafety is contained by `trusted fn`, declared per function and method
 - foreign boundaries (`extern fn`) remain under `with(Unsafe)` even inside trusted code
 
 See [SAFETY.md](../language/SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../../research/language/trusted-boundary.md) for the exploratory design notes. For active design work on checked access, slice views, and validated wrapper types, see [../research/language/checked-indexing-and-slice-views.md](../../research/language/checked-indexing-and-slice-views.md) and [../research/language/opaque-validated-types.md](../../research/language/opaque-validated-types.md).
