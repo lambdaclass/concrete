@@ -19,7 +19,7 @@ Every claim of "exactly once" here holds on every path that does not abort (STMT
 <a id="OWN-D1"></a>
 ### OWN-D1. Copy
 
-**OWN-D1@1.** A type is Copy when it is a primitive, a shared reference, a raw pointer, a function pointer, an array of a Copy type, or an instantiation of a struct or enum declared `Copy` whose fields are all Copy after substitution, and every other type is linear.
+**OWN-D1@1.** A type is Copy when it is a primitive, a shared reference, a raw pointer, a function pointer, an array of a Copy type, a newtype over a Copy type, a type parameter bounded by `Copy`, or an instantiation of a struct or enum declared `Copy` whose fields are all Copy after substitution, and every other type is linear.
 
 - Kind: definition
 - Uses: none
@@ -243,7 +243,7 @@ fn main() -> Int {
 <a id="OWN-4"></a>
 ### OWN-4. A loop body does not consume an outer value
 
-**OWN-4@1.** A loop body does not consume a linear value declared outside the loop, except on a path that leaves the function or the loop before another iteration can run.
+**OWN-4@1.** A loop body does not consume a linear value declared outside the loop, except on a path that leaves the function or the loop before another iteration can run, or in an assignment that consumes a `mut` binding and gives it a new value in the same statement (`acc = f(acc)`).
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -391,7 +391,7 @@ fn main() -> Int {
 
 **Rationale.** `Result` and `Option` exist to make the caller consider failure or absence.
 Dropping one on the floor throws that away, even when the payload is Copy. The value is used by
-matching it, propagating it or binding it (OWN-2 then requires the binding to be consumed). A
+matching it, propagating it or binding it (OWN-2 then requires a linear binding to be consumed). A
 trailing value expression with no `;` is the block's value, not a discard. User enums are not
 must-use.
 
@@ -430,7 +430,7 @@ fn main() -> Int {
 <a id="OWN-7"></a>
 ### OWN-7. A pure value is not computed and thrown away
 
-**OWN-7@1.** A statement expression does not discard a pure, trap-free Copy value, that is, one built only from literals, variable and field reads, and arithmetic, comparison, logical, bitwise and shift operators over them.
+**OWN-7@1.** A statement expression does not discard a pure, trap-free, non-Unit Copy value, that is, one built only from literals, variable and field reads, and arithmetic, comparison, logical, bitwise and shift operators over them.
 
 - Kind: refusal
 - Uses: OWN-D1
@@ -626,7 +626,7 @@ fn main() -> Int {
 <a id="OWN-11"></a>
 ### OWN-11. A move happens only where its code always runs
 
-**OWN-11@1.** Nothing is moved by code that may not run when its effect is relied on: a proof-only statement (`assert`, `assume` or `ghost let`) and the right operand of `&&` or `||` move no value.
+**OWN-11@1.** Nothing is moved by code that may not run when its effect is relied on: a proof-only statement (`assert`, `assume` or `ghost let`) changes the ownership state of no runtime binding, and the right operand of `&&` or `||` moves no value.
 
 - Kind: refusal
 - Uses: none
@@ -640,7 +640,8 @@ fn main() -> Int {
 **Rationale.** Proof-only code is erased before Core, so a move there would happen in the
 checker's model and not in the binary (bug 147). The right operand of `&&` or `||` runs only
 sometimes, so a move there would happen on only some paths (bug 148). A guard of a match arm is
-read-only for the same reason; that rule (E0300) belongs to the patterns chapter.
+read-only for the same reason; that rule (E0300) belongs to the patterns chapter. Ghost bindings exist only
+in proof code, so proof code may consume them.
 
 ```con reject name=move-in-short-circuit code=E0244 stage=check pair=move-before-condition
 struct R { v: Int }
@@ -905,7 +906,7 @@ fn main() -> Int {
 | `methodCall` | the receiver is a place, auto-borrowed for `&self` / `&mut self`; by-value `self` **moves** an ident receiver and **refuses** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
 | `staticMethodCall` | ident arguments **move**; the result is owned | conservation |
 | `fnRef` | creates a Copy function-pointer value | — |
-| heap-shell `.fieldAccess` (was `arrowAccess`) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a node is taken apart with `let n = *h;` and a pattern | projection |
+| heap-shell `.fieldAccess` (the removed `->` form) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a heap store through `fieldAssign` refuses a non-Copy overwrite (**E0219**); a node is taken apart with `let n = *h;` and a pattern | projection |
 | `allocCall` | the inner call or allocator is evaluated; creates an owned `Heap<T>` | discard |
 | `whileExpr` | a loop as an expression; `break value;` **moves** the value out as the loop's result (H14) | conservation (H14 rows) |
 | `ifExpr` | branch values **move**; branches must agree on consumption (OWN-3) | conservation |
@@ -923,7 +924,7 @@ fn main() -> Int {
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `letDecl` | **moves** an ident right-hand side (H9); shadowing a still-live linear binding is **refused** (**E0292**, H16); `let _` is removed (**E0289**) | conservation + discard |
+| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1; E0292 for a still-live linear binding remains as a backstop); `let _` is removed (**E0289**) | conservation + discard |
 | `assign` | the old value must already be consumed (otherwise **E0219**, OWN-9); an ident right-hand side **moves** (H13) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linear value (OWN-2) | conservation + scope |
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free(...)` is itself the consumption when its pointee is Copy (a non-Copy pointee would be dropped: **E0287**, bug 144) | discard |
@@ -939,7 +940,6 @@ fn main() -> Int {
 | `assert_` | proof-only, erased before Core; must not consume (OWN-11) | — |
 | `assume_` | proof-only, erased before Core; must not consume (OWN-11) | — |
 | `borrowIn` | a borrow block: the source is frozen for the block; the reference is scoped and may not escape (REF-6, REF-8) | conservation (escape rows) |
-| `arrowAssign` | heap-interior store: a trusted boundary, interiors untracked (see `arrowAccess`) | disclosed exclusion |
 | `letDestructure` | enum destructure or let-else: **consumes** the source; bindings **own** payloads; a let-else over a non-Copy enum is **refused** (**E0288**: the no-match path would discard it) | conservation + discard |
 | `letStructDestructure` | a whole-owner **move**: the source is consumed, all fields must be bound (a partial pattern is **E0252**), and each binding is owned (it must be consumed) | conservation |
 
@@ -957,7 +957,6 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `paren` | transparent: propagates the surrounding mode | transparent | transparent |
 | `structLit` `enumLit` `arrayLit` | fields and elements are checked in value mode (moved in); `..base` is checked as a place | same | n/a |
 | `fieldAccess` `arrayIndex` | a Copy read copies; a non-Copy read is refused (E0290); the base is checked as a place | same as value | sub-place; no flow |
-| `arrowAccess` | a heap-interior read (OWN-8 applies) | same | sub-place |
 | `match_` `ifExpr` `whileExpr` | scrutinee and arm values in value mode; branch environments merged | n/a | n/a |
 | `borrow` `borrowMut` | the inner expression is checked as a place; the result `&T` is Copy and `&mut T` exclusive | same | n/a |
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |

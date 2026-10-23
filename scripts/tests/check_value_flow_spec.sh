@@ -49,8 +49,9 @@ check_inductive() {
   if [ -z "$names" ]; then no "$ind: extracted no constructors (parser drift?)"; return; fi
   local missing=0
   while IFS= read -r c; do
-    # a row mentions the constructor as `name` (backtick-quoted)
-    if ! grep -q "\`$c\`" "$SPEC"; then
+    # the constructor is named (backtick-quoted) in the FIRST cell of a row of its own table
+    # ("#### Value flow: <inductive>"), not anywhere in the chapter's prose
+    if ! awk -v t="#### Value flow: $ind" '$0==t{g=1;next} g && /^#/{g=0} g && /^\| /{split($0,c,"|"); print c[2]}' "$SPEC" | grep -q "\`$c\`"; then
       no "$ind.$c has no row in docs/spec/ownership.md (OWN-15) — declare its value flow before landing"
       missing=1
     fi
@@ -71,7 +72,7 @@ MODES_SECTION="$(awk '/^#### Expression modes/{grab=1} grab && /^#{2,3} |^<a id=
 [ -n "$MODES_SECTION" ] || no "the Expression-modes table (#### Expression modes in $SPEC) is missing"
 missing=0
 while IFS= read -r c; do
-  if ! grep -q "\`$c\`" <<<"$MODES_SECTION"; then
+  if ! awk '/^\| /{split($0,c,"|"); print c[2]}' <<<"$MODES_SECTION" | grep -q "\`$c\`"; then
     no "Expr.$c has no row in the Expression-modes table (which UseMode does what?)"
     missing=1
   fi

@@ -100,7 +100,7 @@ PASS-10@1	live	b21c7bf61909444c9faf7bb8f25ea5dd
 PASS-10/no-entry-point	live	-
 PASS-10/entry-point	live	-
 PASS-11@1	pending	58ed63e49c3dacec0f7c7303848333ff
-OWN-D1@1	live	017a01b153e533e2e29bf284f1c414ae
+OWN-D1@1	live	1260b86051f3b827bf04cef29102e084
 OWN-1@1	live	f784a44c1d4339420c196b8f6df86acf
 OWN-1/use-after-move	live	-
 OWN-1/borrow-after-move	live	-
@@ -112,7 +112,7 @@ OWN-2/consumed-on-every-exit	live	-
 OWN-3@1	live	6cf32496d37ecc82dc8d4782deb5c67f
 OWN-3/one-branch-consumes	live	-
 OWN-3/both-branches-consume	live	-
-OWN-4@1	live	014441e35ca6082135bb31d11df8ba9a
+OWN-4@1	live	948984c43554ea3e68198828bae73709
 OWN-4/consume-outer-in-loop	live	-
 OWN-4/consume-after-loop	live	-
 OWN-5@1	live	eef3e7c02a422a96063a399a48607f4e
@@ -123,7 +123,7 @@ OWN-5/account-for-it	live	-
 OWN-6@1	live	be78e56fd9426f50f9babdf1fd5929a8
 OWN-6/ignored-option	live	-
 OWN-6/handled-option	live	-
-OWN-7@1	live	13830839f5551d6d6ca28ed027a273e9
+OWN-7@1	live	4b62c4ee37480fd60212f5a8bdf9f51a
 OWN-7/dead-computation	live	-
 OWN-7/used-computation	live	-
 OWN-8@1	live	566204a13a8dd6353b557f63ed6aa963
@@ -137,7 +137,7 @@ OWN-10@1	live	8a5a4c6fda7ece0629660979801e2f8c
 OWN-10/assign-immutable	live	-
 OWN-10/mut-borrow-immutable	live	-
 OWN-10/assign-mut	live	-
-OWN-11@1	live	932eb1dc9387b7d83b7d705543735c7f
+OWN-11@1	live	0fc1256410e34daa0095ce7f39f35c32
 OWN-11/move-in-short-circuit	live	-
 OWN-11/move-before-condition	live	-
 OWN-12@1	live	f35690fc9d34f91985693f79c58f71df
