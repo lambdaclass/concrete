@@ -54,7 +54,12 @@ A coherence judgment, `Concrete/Check/Coherence.lean`, runs over the whole progr
 of `checkProgram`, before any method table is built. It identifies each trait (`TraitId`: the
 builtin `Destroy`, or the defining module and name), each impl target (`ImplHead`: the
 `TypeId` its name resolves to at the impl site, through import aliases), and each method
-(`MethodKey`: owner, target and name). It refuses, each with its own code and spec rule
+(`MethodKey`: owner, target and name). A target name is resolved as the checker resolves it:
+the module's own declarations and aliases, the `resolveImports` artifact Check consumes (explicit
+symbols and the types their signatures reach), a sibling submodule's struct or enum, the
+compiler's `Option`/`Result`, the always-visible std types, then the primitives by canonical type
+(`i64` and `Int` are one type). A name none of these answers is its own type, declared in no
+module. It refuses, each with its own code and spec rule
 ([docs/spec/traits.md](../spec/traits.md)):
 
 - E0590, TRAIT-1: two impls of one trait whose targets are equal up to parameter naming.
@@ -71,11 +76,17 @@ the method. The one lookup is `boundMethodCandidates` (`Concrete/Resolve/Shared.
 Elab and both peek contexts use it, and none takes the first match any more. Qualified call
 syntax (`A::m(x)`) does not exist, so the call is refused rather than asked to qualify.
 
+The parser now spells an impl's head canonically (`impl Tr for bool` is `Bool`, `i64` is
+`Int`). Every pass keys an impl's methods by that spelling, and Elab names the method
+definitions by the canonical type, so `impl Tr for bool` reached Check and the interpreter as
+`bool_m` beside a definition `Bool_m`: a direct call `b.m()` was E0264 and `--interp` could not
+dispatch it.
+
 The interpreter's `T$m` dispatch read only struct and enum receivers, so a trait impl for a
 primitive (`impl Area for Int`, a positive control here) ran natively and was refused by
 `--interp` ("undefined function `T$area`"). It now dispatches on the primitive's type as well.
 
-`rule_impact.sh` (candidate b0d2ff35 against base 1df4cf48, 2158 units: every file and project
+`rule_impact.sh` (candidates b0d2ff35 and 8f370e0d against base 1df4cf48, 2158 units: every file and project
 under `tests/` and `examples/`, std, and every inline gate program) found no unit whose outcome
 changed. No corpus or std site needed migrating.
 
@@ -92,6 +103,10 @@ changed. No corpus or std site needed migrating.
   for an imported type and for `Int`, a conditional generic impl used at two instantiations,
   two bounds with distinct methods, and a `Destroy` impl beside its type. Both exit 42 natively
   and print 42 under `--interp`.
+- `error_186_duplicate_primitive_spelling.con` (E0590), `error_186_orphan_sibling.con`
+  (E0592), `error_186_imported_alias_target.con` and `error_186_builtin_arity.con` (E0593),
+  `regress_186_primitive_impl_spellings.con` and `regress_186_visible_targets.con` (42 on both
+  consumers), from the Codex reviews of this fix.
 - The examples of [docs/spec/traits.md](../spec/traits.md): every reject example refused with
   its code by both consumers, and every accept example 42 on both.
 
