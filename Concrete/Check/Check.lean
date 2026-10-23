@@ -189,6 +189,7 @@ def refuseDeferHeldRef (r : String) (info : VarInfo) (span : Option Span) : Chec
     the call. An owned binding passed where a value is expected is moved, as before. Every call form
     uses this one function (free, method, static, function-pointer calls), so the mode cannot
     differ by binding or by call form again. -/
+-- spec: REF-10 (docs/spec/references.md; this declaration enforces the rule)
 def consumeCallArgIdent (varName : String) (pTy : Ty) (span : Option Span) : CheckM Unit := do
   match ← lookupVarInfo varName with
   | none => pure ()
@@ -403,6 +404,7 @@ def refuseConstBorrow (subject : String) (e : Expr) (span : Option Span) : Check
     expression), and any projection of one (`&mk().f`), is never a root: E0238 (REF-5). `&mut` of a
     string literal is refused too (the static root is immutable). The normalized place rule already
     classifies every operand (`Norm.temp`), so this is one test on its verdict. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 def refuseTemporaryBorrow (isMut : Bool) (subject : String) (e : Expr) (span : Option Span) : CheckM Unit := do
   let isStrLit := match stripParens e with | .strLit .. => true | _ => false
   if isStrLit && !isMut then return
@@ -678,6 +680,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3 (docs/spec/ownership.md; this declaration enforces the rule)
 -- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
+-- spec: TRUST-4 (docs/spec/trusted.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -3728,7 +3731,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
--- spec: REF-3 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: REF-1, spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports

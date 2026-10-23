@@ -102,7 +102,7 @@ E0289	rule	let _ removed (wildcard is not a discard)
 E0290	rule	non-Copy sub-place read by value (would duplicate)
 E0291	rule	non-Copy overwrite would leak the old value
 E0292	rule	shadowing a still-live non-Copy binding
-E0293	rule	overlapping borrows of one place in a single call
+E0293	rule	overlapping borrows of one root in a single call
 E0294	rule	pure value computed then discarded (dead computation)
 E0295	rule	discard() of a non-Copy value (use destroy or consume it)
 E0296	rule	newtype constructed outside its defining module (construction rights, 0b)
@@ -117,6 +117,7 @@ E0304	rule	a labeled pattern field list does not match the variant or struct (un
 E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
 E0306	rule	a struct or enum literal gives a field more than once (bug 193)
 E0310	unmigrated:statements	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
+E0311	rule	`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable
 E0402	internal	undeclared function
@@ -137,6 +138,7 @@ E0416	rule	empty array literal
 E0417	internal	submodule elaboration error
 E0418	unmigrated:modules	unknown module
 E0419	unmigrated:modules	symbol not public in module
+E0420	rule	ghost value read in runtime code, or an unsupported append() argument
 E0500	rule	variable type mismatch
 E0501	rule	arithmetic on non-numeric type
 E0502	rule	binary operand type mismatch
@@ -171,8 +173,8 @@ E0570	rule	Copy/Destroy conflict
 E0571	rule	Copy struct has non-Copy field
 E0572	unmigrated:ffi	repr(C) struct has generics
 E0573	unmigrated:ffi	repr(C) field not FFI-safe
-E0574	unmigrated:ffi	extern fn parameter not FFI-safe
-E0575	unmigrated:ffi	extern fn return not FFI-safe
+E0574	rule	extern fn parameter not FFI-safe (a pointee holding a reference is REF-1)
+E0575	rule	extern fn return not FFI-safe (a pointee holding a reference is REF-1)
 E0576	unmigrated:ffi	repr(packed) and repr(align) conflict
 E0577	unmigrated:ffi	repr(align) not power of two
 E0578	unmigrated:modules	reserved function name
@@ -185,6 +187,7 @@ E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restric
 E0585	unmigrated:ffi	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
 E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
 E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
+E0588	rule	extern fn taken as a value (bug 166)
 E0590	rule	duplicate impl: a trait implemented twice for one type (TRAIT-1)
 E0591	rule	overlapping impls: two impls of one trait whose targets unify (TRAIT-2)
 E0592	rule	orphan impl: the module defines neither the trait nor the type (TRAIT-3)

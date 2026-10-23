@@ -64,19 +64,20 @@ because REF-3 forbids reference fields. For a binding, the outer reference is lo
 
 - Kind: refusal
 - Uses: REF-D1
-- Codes: E0236 (check, post-mono)
-- Status: partial R-0500
-- Enforced by: Concrete.checkFn, Concrete.verifyNoReturnedRefs
+- Codes: E0236 (check, post-mono), E0574 (core-check), E0575 (core-check)
+- Status: enforced
+- Enforced by: Concrete.checkFn, Concrete.verifyNoReturnedRefs, Concrete.checkModule, Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: INV-REF (R-0500; V1, R-0507)
 - Evidence: tested
 
 **Rationale.** A returned reference would outlive the frame that made it. The escape for
-low-level code is a raw pointer to the referent, returned from trusted code. Gap G13 is open: a
-trait method *declaration* that returns a reference is still accepted. No unsound program
-results, because every implementation is a definition and is refused, but the rule covers
-declarations too. Gap G15 (an extern returning a raw pointer to a reference) belongs to FFI
-well-formedness.
+low-level code is a raw pointer to the referent, returned from trusted code. A trait method
+*declaration* is checked like a definition (gap G13, closed 2026-10-23). An `extern fn` whose
+parameter or result holds a reference, directly or behind a raw pointer, is refused at the C
+boundary with E0574 or E0575 (gap G15, closed 2026-10-23). A generic reached at a
+reference-returning instantiation only through another generic is refused after
+monomorphization by the same judgment (gap G2).
 
 ```con reject name=return-param code=E0236 stage=check pair=return-value
 fn id(x: &Int) -> &Int {
@@ -100,7 +101,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=trait-declaration code=E0236 stage=check pair=return-value pending=R-0500 now=accept:42
+```con reject name=trait-declaration code=E0236 stage=check pair=return-value
 trait Get {
     fn get(&self) -> &Int;
 }
@@ -119,6 +120,14 @@ fn main() -> Int {
 | `tests/programs/error_2i_ref1_return_option.con` | `reject:E0236:REF-1@1` | `ref1` | `-` |
 | `tests/programs/error_2i_ref1_return_fnptr_ref_param.con` | `reject:E0236:REF-1@1` | `ref1` | `-` |
 | `tests/programs/regress_2i_ref1_return_value.con` | `run:42` | `ref1` | `binary,interp` |
+| `tests/programs/error_2i_ref1_trait_decl_returns_ref.con` | `reject:E0236:REF-1@1` | `ref1g13` | `-` |
+| `tests/programs/regress_2i_ref1_trait_decl_value.con` | `run:42` | `ref1g13` | `binary,interp` |
+| `tests/programs/error_2i_ref1_extern_ptr_to_ref.con` | `reject:E0575:REF-1@1` | `ref1g15` | `-` |
+| `tests/programs/error_2i_ref1_extern_alias_ptr_to_ref.con` | `reject:E0575:REF-1@1` | `ref1g15` | `-` |
+| `tests/programs/error_2i_ref1_extern_param_ptr_to_ref.con` | `reject:E0574:REF-1@1` | `ref1g15` | `-` |
+| `tests/programs/regress_2i_ref1_extern_ptr_to_value.con` | `run:42` | `ref1g15` | `binary,interp` |
+| `tests/programs/error_2i_ref1_transitive_generic.con` | `reject:E0236:REF-1@1` | `ref1g2` | `json-exempt:post-mono` |
+| `tests/programs/regress_2i_ref1_transitive_generic_value.con` | `run:42` | `ref1g2` | `binary,interp` |
 
 <a id="REF-2"></a>
 ### REF-2. No function type returns a reference
@@ -128,17 +137,17 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: REF-D1
 - Codes: E0236 (check)
-- Status: partial R-0500
-- Enforced by: Concrete.resolveType
+- Status: enforced
+- Enforced by: Concrete.resolveType, Concrete.checkModule
 - Semantics: none
 - Obligation: INV-REF (R-0500)
 - Evidence: tested
 
 **Rationale.** A callback that could return a reference could hand a borrowed element back
-out of a scoped accessor such as `with_value`. Parameters of reference type are allowed. Gap
-G16 is open: the type is still accepted when it is spelled through a type alias or as a field
-type. No value of such a type can be made in safe code, because every function that could
-inhabit it is refused by REF-1.
+out of a scoped accessor such as `with_value`. Parameters of reference type are allowed. The
+type is refused wherever it is written, also through a type alias, as a field type and in a
+trait method signature (gap G16, closed 2026-10-23), although no value of it could be made in
+safe code, because every function that could inhabit it is refused by REF-1.
 
 ```con reject name=param-fn-type code=E0236 stage=check pair=callback-takes-ref
 fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
@@ -165,7 +174,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=through-alias code=E0236 stage=check pair=callback-takes-ref pending=R-0500 now=accept:0
+```con reject name=through-alias code=E0236 stage=check pair=callback-takes-ref
 type Cb = fn(&Int) -> &Int;
 
 fn apply(x: &Int, f: Cb) -> Int {
@@ -183,6 +192,11 @@ fn main() -> Int {
 |---|---|---|---|
 | `tests/programs/error_2i_ref2_fn_type_returns_ref.con` | `reject:E0236:REF-2@1` | `ref2` | `-` |
 | `tests/programs/regress_2i_ref2_callback_takes_ref.con` | `run:42` | `ref2` | `binary,interp` |
+| `tests/programs/error_2i_ref2_alias_fn_type_returns_ref.con` | `reject:E0236:REF-2@1` | `ref2g16` | `-` |
+| `tests/programs/error_2i_ref2_unused_alias_fn_type_returns_ref.con` | `reject:E0236:REF-2@1` | `ref2g16` | `-` |
+| `tests/programs/error_2i_ref2_field_fn_type_returns_ref.con` | `reject:E0236:REF-2@1` | `ref2g16` | `-` |
+| `tests/programs/regress_2i_ref2_callback_field.con` | `run:42` | `ref2g16` | `binary,interp` |
+| `tests/programs/regress_2i_ref2_trait_generic_shadows_alias.con` | `run:42` | `ref2g16` | `binary,interp` |
 
 <a id="REF-3"></a>
 ### REF-3. No reference is stored
@@ -312,8 +326,8 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0238 (check)
-- Status: partial R-0500
-- Enforced by: Concrete.normPlace, Concrete.refuseRefValuedBranch, Concrete.checkRefArg, Concrete.recordRefProvenance
+- Status: enforced
+- Enforced by: Concrete.normPlace, Concrete.refuseRefValuedBranch, Concrete.checkRefArg, Concrete.recordRefProvenance, Concrete.refuseTemporaryBorrow
 - Semantics: none
 - Obligation: INV-REF (R-0500): every reference has a binding root
 - Evidence: tested
@@ -329,9 +343,9 @@ rewritten to "borrow the root variable, then project", and they add no semantic 
 typing or loan rule of their own. A string literal is a static, immutable root, its `String`
 descriptor included: `&"text"` is allowed, and `&mut "text"`, moving out of a literal and
 destroying one are not. A raw-pointer dereference is neither of the two operations: in trusted
-or `Unsafe` code, `&*p` forms a reference only under that code's validity premise (TRUST-3). Borrowing a temporary is gap G12 (bug 182: a borrowed call result
-miscompiled or leaked). Its examples are pending until R-0500 enforces it. Loans are keyed by
-the root (REF-11).
+or `Unsafe` code, `&*p` forms a reference only under that code's validity premise (TRUST-3). Borrowing a temporary was gap G12 (bug 182: a borrowed call result
+miscompiled or leaked), closed 2026-10-23 at every reference-forming site, explicit borrows and
+implicit `&self` receivers alike. Loans are keyed by the root (REF-11).
 
 ```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
 fn read(r: &Int) -> Int {
@@ -369,7 +383,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=borrow-int-literal code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42
+```con reject name=borrow-int-literal code=E0238 stage=check pair=borrow-let-first
 fn read(r: &Int) -> Int {
     return *r;
 }
@@ -379,7 +393,7 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=borrow-call-result code=E0238 stage=check pair=borrow-let-first pending=R-0500 now=accept:42
+```con reject name=borrow-call-result code=E0238 stage=check pair=borrow-let-first
 fn mk() -> Int {
     return 42;
 }
@@ -425,6 +439,14 @@ fn main() -> Int {
 | `tests/programs/regress_2i_ref5_bind_branch_first.con` | `run:42` | `ref5-branch` | `binary,interp` |
 | `tests/programs/regress_2i_ref5_heap_field_borrow.con` | `run:42` | `ref5-heap` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
 | `tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con` | `reject:E0238:REF-5@1` | `ref5` | `-` |
+| `tests/programs/error_d2_borrow_literal.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/programs/error_d2_borrow_field_of_temporary.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/programs/error_d2_temporary_receiver.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/programs/error_d2_mut_borrow_string_literal.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/programs/error_d2_branch_receiver.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/regressions/bug182_borrowed_call_result_temporary/repro.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con` | `reject:E0238:REF-5@1` | `ref5d2` | `-` |
+| `tests/programs/regress_d2_roots_and_projections.con` | `run:42` | `ref5d2` | `binary,interp` |
 
 <a id="REF-6"></a>
 ### REF-6. Reference bindings are never introduced by `let` and never assigned
@@ -529,7 +551,8 @@ fn main() -> Int {
 | `tests/programs/error_2i_ref6_nested_let_else_through_ref.con` | `reject:E0302:REF-6@1` | `ref6-let-else` | `-` |
 | `tests/programs/regress_2i_nested_let_destructure.con` | `run:42` | `ref6-let-else` | `binary,interp` |
 | `tests/programs/error_2i_ref6_ghost_let_at_type_param.con` | `reject:E0302:REF-6@1` | `ref6-generic` | `-` |
-| `tests/programs/regress_2i_ref6_struct_destructure_through_ref.con` | `run:42` | `-` | `binary,interp` |
+| `tests/programs/error_2i_ref6_struct_destructure_through_ref.con` | `reject:E0302:REF-6@1` | `ref6-destructure` | `-` |
+| `tests/programs/regress_2i_ref6_struct_fields_through_ref.con` | `run:42` | `ref6-destructure` | `binary,interp` |
 | `tests/programs/error_2i_ref6_erased_assert_let.con` | `reject:E0302:REF-6@1` | `ref6-generic` | `-` |
 | `tests/programs/error_2i_ref6_erased_assert_assign.con` | `reject:E0303:REF-6@1` | `ref6-generic` | `-` |
 | `tests/programs/error_2i_ref6_ghost_initializer_let.con` | `reject:E0302:REF-6@1` | `ref6-generic` | `-` |
@@ -610,7 +633,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check), E0238 (check)
-- Status: partial R-0500
+- Status: enforced
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.guardShadowedSource, Concrete.checkWriteAccess
 - Semantics: none
 - Obligation: INV-REF (R-0500): the root is the same live binding while the reference lives
@@ -619,10 +642,9 @@ fn main() -> Int {
 **Rationale.** REF-6 fixes which binding a reference comes from. This rule keeps that binding
 alive and unchanged for as long as the reference can be used. A parameter's source lives in a
 caller frame, where the caller's call borrow protects it. Two borrows conflict when at least
-one is exclusive. Today they also need overlapping projection paths. REF-11 changes the key to
-the root alone. When REF-9 makes every arm binder through a reference a reference, a Copy
-payload binder becomes a loan too. Writing its root inside the arm is then refused (the G17
-Copy case, pending).
+one is exclusive. Since REF-11 the key is the root alone. Because REF-9 makes every arm binder
+through a reference a reference, a Copy payload binder is a loan too, and writing its root
+inside the arm is refused (the G17 Copy case, closed 2026-10-23).
 
 ```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
 struct B { v: Int }
@@ -673,7 +695,7 @@ fn main() with(Std) -> Int {
 }
 ```
 
-```con reject name=copy-binder-root-written code=new stage=check pair=free-after-block pending=R-0500 now=accept:42
+```con reject name=copy-binder-root-written code=E0232 stage=check pair=free-after-block
 struct Copy P { n: Int }
 
 fn main() -> Int {
@@ -701,28 +723,37 @@ fn main() -> Int {
 | `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref8-call` | `binary,interp` |
 | `tests/programs/regress_2i_ref8_match_borrow_scrutinee.con` | `run:42` | `-` | `binary,interp` |
+| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/regress_181_borrowed_binders.con` | `run:42` | `ref8-arm` | `binary,interp` |
 
 <a id="REF-9"></a>
 ### REF-9. A binder through a reference is a reference
 
-**REF-9@1.** Every pattern binder that binds through a scrutinee of reference type has reference type, `&T` for a payload or whole value of type `T`, whether or not `T` is Copy.
+**REF-9@2.** Every pattern binder that binds through a scrutinee of reference type has reference type, `&T` for a payload of type `T` and the scrutinee's own reference type for a whole-value binder, whether or not `T` is Copy.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0500
+- Status: enforced
+- Enforced by: Concrete.payloadBinderTy, Concrete.wholeBinderTy
 - Semantics: none
 - Obligation: binder modes are fixed before specialization (PASS-2)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D3). Today the binding mode depends on
-whether the payload is Copy, and monomorphization can change that property. Check and Elab
-already disagree about it (bug 181: a segfault in safe code at `T := Int`). With one mode that
-substitution cannot change, the class of bugs is gone. A Copy payload is read with `*value`.
+**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D3), enforced the same day. The binding
+mode used to depend on whether the payload is Copy, and monomorphization can change that
+property. Check and Elab disagreed about it (bug 181: a segfault in safe code at `T := Int`). With
+one mode that substitution cannot change, the class of bugs is gone. A whole-value binder (`n`
+in `match r { n => .. }`) is the scrutinee reference itself, so over `&mut T` it is `&mut T`
+(version 2; version 1 said `&T` for it too). A Copy payload is read with `*value`.
 Literal and range patterns still compare the referenced value. The binder is a loan on the
 scrutinee's root for its arm (REF-8).
 
-```con accept name=copy-payload-is-ref exit=42 pending=R-0500 now=reject:E0221:check
+```con accept name=copy-payload-is-ref exit=42
 fn main() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     match &o {
@@ -740,18 +771,21 @@ fn main() -> Int {
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0496
+- Status: enforced
+- Enforced by: Concrete.consumeCallArgIdent
 - Semantics: none
 - Obligation: the reborrow is explicit in Core (R-0496)
 - Evidence: tested
 
 **Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D1). It leaves the formal semantics
-one argument-passing mode for `&mut T` instead of two. Today a borrow-block binder is consumed
-by the call and a parameter is reborrowed. This only relaxes the borrow-block case, so no
-program breaks. An exclusive reference that is never used may go unused, because it owns
+one argument-passing mode for `&mut T` instead of two. A borrow-block binder used to be consumed
+by the call while a parameter was reborrowed. Enforced 2026-10-23, every call form through one
+checker function; it only relaxed the borrow-block case, so no program broke. A deferred call
+keeps the loan of a `&mut` it was given until it runs (OWN-12). The reborrow is implicit in
+the call and not yet a Core form. An exclusive reference that is never used may go unused, because it owns
 nothing. Overlapping exclusive arguments in one call stay refused (REF-8).
 
-```con accept name=reborrow-in-borrow-block exit=42 pending=R-0496 now=reject:E0205:check
+```con accept name=reborrow-in-borrow-block exit=42
 fn inc(r: &mut Int) {
     *r = *r + 21;
 }
@@ -774,7 +808,8 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0293 (check)
-- Status: pending R-0500
+- Status: enforced
+- Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
 - Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
 - Evidence: tested
@@ -784,13 +819,13 @@ fn main() -> Int {
 checker needs no path-overlap analysis. The measured migration: one std site
 (`std/src/cli.con:77`, where a `&mut self` receiver overlaps a read of `self.names`; bind the read
 with `let` first) and this conformance fixture. Both `upd(&mut s.a, &s.b)` and
-`add(&mut s.a, s.b)` are refused once it lands. Field-precise loans are
-deferred until a workload needs two simultaneous borrows of different fields of one owner and
-cannot be restructured with a `let` or a borrow block. Until this lands, the conformance row
-`regress_2i_ref8_call_disjoint.con` (run, 42) records today's field-disjoint acceptance under
-REF-8. It turns into this rule's rejection fixture when the rule lands.
+`add(&mut s.a, s.b)` are refused (enforced 2026-10-23; the field-disjoint shape of
+`regress_2i_ref8_call_disjoint.con` became `error_d2_call_disjoint_fields.con`). Field-precise
+loans are deferred until a workload needs two simultaneous borrows of different fields of one
+owner and cannot be restructured with a `let` or a borrow block. A conflict between two borrows
+of one place, or of a place and a projection of it, is REF-8's.
 
-```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence pending=R-0500 now=accept:2
+```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
 struct Copy W { a: Int, b: Int }
 
 fn two(a: &mut Int, b: &mut Int) {
@@ -819,3 +854,14 @@ fn main() -> Int {
     return w.a + w.b;
 }
 ```
+
+**Conformance fixtures.**
+
+| fixture | expected | pair | modes |
+|---|---|---|---|
+| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@1` | `ref11` | `-` |
+| `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |

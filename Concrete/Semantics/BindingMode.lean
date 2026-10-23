@@ -38,12 +38,14 @@ def bindsThroughReference : Ty → Bool
 
 /-- The type of a binder for a payload field of type `fieldTy`, under a scrutinee of type
     `scrutTy` (D3). -/
+-- spec: REF-9, spec: PASS-2 (docs/spec/references.md, pipeline.md; this declaration enforces the rule)
 def payloadBinderTy (scrutTy fieldTy : Ty) : Ty :=
   if bindsThroughReference scrutTy then .ref fieldTy else fieldTy
 
 /-- The type of a whole-value binder (`n => ...`, a catch-all arm) over a scrutinee of type
     `scrutTy` whose referent type is `innerTy` (D3): the scrutinee's own reference type (`&T`
     over `&T`, `&mut T` over `&mut T`: the binder IS the reference), the value otherwise. -/
+-- spec: REF-9, spec: PASS-2 (docs/spec/references.md, pipeline.md; this declaration enforces the rule)
 def wholeBinderTy (scrutTy innerTy : Ty) : Ty :=
   match scrutTy with
   | .ref _ => .ref innerTy

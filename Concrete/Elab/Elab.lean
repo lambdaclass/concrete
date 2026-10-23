@@ -215,7 +215,8 @@ private def setEnv (env : ElabEnv) : ElabM Unit := set env
     missed constant initializers and was fooled by an expired local). A compiler-intrinsic
     spelling (`resolveIntrinsic`) is not a foreign function even when declared `extern`.
     CoreCheck re-checks `.fnRef` as defense in depth. -/
-private def refuseForeignFnValue (env : ElabEnv) (name : String) (span : Option Span) : ElabM Unit := do
+-- spec: FFI-1 (docs/spec/ffi.md; this declaration enforces the rule)
+def refuseForeignFnValue (env : ElabEnv) (name : String) (span : Option Span) : ElabM Unit := do
   match env.resolveCallee name with
   | some id =>
     if id.ns == .extern && (resolveIntrinsic name).isNone then
@@ -641,6 +642,7 @@ private def expandFieldAliases (typeParams : List String) (ty : Ty) : ElabM Ty :
 
 mutual
 
+-- spec: CON-2 (docs/spec/contracts.md; this declaration enforces the rule)
 partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedExprV2 := do
   match e with
   | .intLit _ v =>

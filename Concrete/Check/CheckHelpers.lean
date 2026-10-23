@@ -1437,6 +1437,7 @@ def NPlace.key (p : NPlace) : Option (String × List String) :=
     included (`upd(&mut s.a, &s.b)` is refused). This matches the whole-owner freezing a borrow
     block and an arm binder already do. Field-precise loans are deferred until a workload needs
     two simultaneous borrows of different fields of one owner. -/
+-- spec: REF-11 (docs/spec/references.md; this declaration enforces the rule)
 def pathsOverlap (a b : String × List String) : Bool :=
   a.1 == b.1
 
@@ -1452,7 +1453,10 @@ def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (s
   for (path, isMut) in parts do
     for (prevPath, prevMut) in seen do
       if pathsOverlap path prevPath && (isMut || prevMut) then
-        throwCheck (.conflictingCallBorrows path.1) span
+        -- REF-8 when one path is a prefix of the other (they overlap as places); REF-11 when
+        -- they are disjoint projections that conflict only through their shared root.
+        let nested := path.2.isPrefixOf prevPath.2 || prevPath.2.isPrefixOf path.2
+        throwCheck (.conflictingCallBorrows path.1 !nested) span
     seen := (path, isMut) :: seen
 
 mutual
@@ -1535,6 +1539,7 @@ def mutLoanRoot? (operand : Expr) (explicitBorrow : Bool) : CheckM (Option Strin
     reference binding (`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the
     root: it re-lends the reference the caller already holds, so reading through that reference in
     another argument is not a second loan (D1: every `&mut` argument is an implicit reborrow). -/
+-- spec: REF-11 (docs/spec/references.md; this declaration enforces the rule)
 def checkCallRootReads (mutRoots : List String) (operands : List Expr) (span : Option Span) : CheckM Unit := do
   if mutRoots.isEmpty then return
   let mut counts : List (String × Nat) := []
@@ -1550,7 +1555,7 @@ def checkCallRootReads (mutRoots : List String) (operands : List Expr) (span : O
         | some k => (r, k + 1) :: counts.filter (·.1 != r)
         | none => (r, 1) :: counts
   match counts.find? (fun (_, k) => k ≥ 2) with
-  | some (r, _) => throwCheck (.conflictingCallBorrows r) span
+  | some (r, _) => throwCheck (.conflictingCallBorrows r true) span
   | none => pure ()
 
 /-- The borrows a call makes, as NORMALIZED places (E0293): a `&e` / `&mut e` argument

@@ -706,8 +706,8 @@ add "corecheck-unsafe-op" "Concrete/Check/CoreCheck.lean" "check_corecheck_bound
   'addCCError (.missingCapability "*raw_ptr" "Unsafe" "")' \
   'pure ()'
 add "copy-predicate" "Concrete/Check/Layout.lean" "check_copy_judgment.sh" yes \
-  '| some (isC, _, _) => isC' \
-  '| some (_, _, _) => true'
+  $'    | some (isC, _, _) => isC\n    | none => match lookupNewtype name with' \
+  $'    | some (_, _, _) => true\n    | none => match lookupNewtype name with'
 add "checked-arith-trap" "Concrete/Backend/EmitSSA.lean" "check_checked_arith.sh" yes \
   $'      let mnem := if ssaIsSignedInt operandTy then "sadd" else "uadd"\n      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])' \
   $'      let _mnem := if ssaIsSignedInt operandTy then "sadd" else "uadd"\n      emitStructured s (.binOp dst .add iTy lOp rOp)'

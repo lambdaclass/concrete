@@ -137,12 +137,12 @@ def substEnumTypeArgs (ed : CEnumDef) (typeArgs : List Ty) : CEnumDef :=
 
     * `lookupAgg name` → `(isCopy, typeParams, fieldTys)` for a struct or enum:
       the declared-Copy flag plus every field/payload type (a generic aggregate
-      is Copy iff declared Copy AND every field is Copy after substituting the
-      instantiation's args).
+      is Copy iff declared Copy AND every type argument is Copy, decision D6).
     * `lookupNewtype name` → the wrapped inner type (front-end only; Core has no
       newtypes, so it passes `fun _ => none`).
     * `typeVarIsCopy name` → is an unresolved type variable Copy — bounds-based in
       Check (`T: Copy`), a fixed per-stage policy in the Core stages. -/
+-- spec: OWN-D1, spec: TYPE-14 (docs/spec/ownership.md, types.md; this declaration enforces the rule)
 partial def isCopyTyGeneric
     (lookupAgg : String → Option (Bool × List String × List Ty))
     (lookupNewtype : String → Option Ty)

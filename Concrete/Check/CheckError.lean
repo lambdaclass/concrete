@@ -356,7 +356,9 @@ inductive CheckError where
   -- `f(&x, &mut x)` alias the same object with exclusivity in one activation.
   -- This is what keeps a scoped callback's context from reaching the borrowed
   -- container (`m.with_value_mut(&k, &mut m, f)` rejects here).
-  | conflictingCallBorrows (name : String)
+  -- `byRoot`: the two borrows name different places of one root, which conflict only because
+  -- loans are keyed by root (REF-11, D2); otherwise they borrow one place (REF-8).
+  | conflictingCallBorrows (name : String) (byRoot : Bool)
   -- Slice 5 (CapabilityJudgment): a locally-provable PURE, trap-free, non-Unit
   -- value produced by a statement expression (`expr;`) is silently discarded. The
   -- value is Copy (a non-Copy discard is E0287) and non-fallible (E0286), the
@@ -512,7 +514,7 @@ def CheckError.message : CheckError → String
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
-  | .conflictingCallBorrows name => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
+  | .conflictingCallBorrows name _ => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -524,7 +526,7 @@ def CheckError.hint : CheckError → Option String
   | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/language/VALUE_MODEL.md)"
   | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
   | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `fn main() -> Int`"
-  | .conflictingCallBorrows _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
+  | .conflictingCallBorrows _ _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
@@ -674,7 +676,7 @@ def CheckError.code : CheckError → String
   | .nonCopyProjection _ _ => "E0290"
   | .cannotOverwriteLinearPlace _ _ => "E0291"
   | .shadowsLiveLinear _ => "E0292"
-  | .conflictingCallBorrows _ => "E0293"
+  | .conflictingCallBorrows _ _ => "E0293"
   | .discardedPureValue _ => "E0294"
   | .discardNonCopy _ => "E0295"
   | .newtypeConstructPrivate _ => "E0296"
@@ -711,7 +713,7 @@ def CheckError.rule : CheckError → Option String
   | .temporaryNotBorrowable _ => some "REF-5@1"
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
-  | .conflictingCallBorrows _ => some "REF-8@1"
+  | .conflictingCallBorrows _ byRoot => some (if byRoot then "REF-11@1" else "REF-8@1")
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
   | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@1" else "TYPE-7@1")
   | e => codeRuleTag e.code
@@ -731,6 +733,7 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
   | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
   | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | "REF-11@1" => some "make the two borrows in separate calls, or read the other field into a `let` before the call"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/

@@ -1168,6 +1168,7 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
   | _ => false
 
 -- spec: OWN-13, spec: OWN-14 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: REF-1 (docs/spec/references.md; E0574 / E0575 for a pointee holding a reference)
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
@@ -1243,9 +1244,9 @@ def ccCheckModuleDecls (m : CModule)
     -- reference (`*const &Int`): C would receive or hand back the address of a reference slot.
     -- The pointee is looked through with the shared REF-1 judgment.
     -- A pointee reference is a REF-1 violation at the C boundary, so its diagnostic carries the
-    -- rule evidence of MEMORY_SEMANTICS §15.5 (rule, spec, rewrite).
+    -- rule evidence (rule, spec anchor in docs/spec, rewrite).
     let refRule (d : Diagnostic) : Diagnostic :=
-      { d with evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+      { d with evidence := [("rule", "REF-1@1"), ("spec", ruleSpecRef "REF-1@1")]
                nextAction := some "pass or return a raw pointer to a value type (`*const T` where `T` contains no reference), or an owned value" }
     -- The REF-1 evidence is attached whenever the type holds a reference, whichever FFI branch
     -- refuses it (a bare `&Int` fails `isFFISafe` first; Codex review).

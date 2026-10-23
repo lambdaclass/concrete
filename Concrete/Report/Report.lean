@@ -6370,7 +6370,7 @@ def diagnosticCodesReport : String :=
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
     entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding" "SCOPE-1@1",
-    entryR "E0293" "check" "error" "overlapping borrows of one place in a single call" "REF-8@1",
+    entryR "E0293" "check" "error" "overlapping borrows of one root in a single call" "REF-8@1, REF-11@1",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     entry "E0296" "check" "error" "newtype constructed outside its defining module (construction rights, 0b)",
@@ -6464,7 +6464,7 @@ def diagnosticCodesReport : String :=
     entry "E0585" "core-check" "error" "repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)",
     entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
     entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
-    entry "E0588" "core-check" "error" "extern fn taken as a value (bug 166)",
+    entry "E0588" "elab" "error" "extern fn taken as a value (bug 166)",
     -- Check: trait coherence (bug 186; docs/spec/traits.md TRAIT-1 … TRAIT-6)
     entry "E0590" "check" "error" "duplicate impl: a trait implemented twice for one type (TRAIT-1)",
     entry "E0591" "check" "error" "overlapping impls: two impls of one trait whose targets unify (TRAIT-2)",

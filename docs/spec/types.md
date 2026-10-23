@@ -579,7 +579,7 @@ mod m {
 <a id="TYPE-13"></a>
 ### TYPE-13. A bare type parameter is linear-capable
 
-**TYPE-13@1.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
+**TYPE-13@2.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
 
 - Kind: guarantee
 - Uses: OWN-D1
@@ -620,29 +620,32 @@ fn main() -> Int {
 <a id="TYPE-14"></a>
 ### TYPE-14. Copy is declared, never derived
 
-**TYPE-14@1.** A struct or enum is Copy only when it is declared `Copy` and every field is Copy under the declared bounds of its type parameters, so whether an instantiation is Copy never depends on its type arguments.
+**TYPE-14@2.** Whether an instantiation of a struct or enum is Copy is decided from its declaration alone, so it is Copy exactly when the struct or enum is declared `Copy` and every type argument is Copy.
 
-- Kind: refusal
+- Kind: guarantee
 - Uses: OWN-D1
-- Codes: E0571 (core-check)
-- Status: pending R-0510
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.isCopyTyGeneric
 - Semantics: none
-- Obligation: Copy is a fact of the declaration (R-0510 removes Mono's conditional-Copy fixpoint)
+- Obligation: Copy is a fact of the declaration, invariant under substitution (R-0510)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D6). Today a generic declared `Copy` is
-Copy only at instantiations whose arguments are Copy (OWN-D1), which Mono computes as a fixpoint
-over the type graph. Under this rule a declaration like `struct Copy Box<T> { v: T }` with a bare
-`T` is refused, and `struct Copy Box<T: Copy> { v: T }` is the way to write it. When it lands,
-OWN-D1 gets a new version, and E0571's rule tag moves from OWN-14 to this entry (OWN-14 is then
-subsumed and retired).
+**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D6, option (a)) and enforced the same
+day. Copy used to be derived from an instantiation's fields, which Mono computed as a fixpoint
+over the type graph; the fixpoint is gone. A generic declared `Copy` behaves like a derived
+`Copy`: `struct Copy Bx<T> { v: T }` is accepted, its declaration checked once with `T` taken
+as Copy (OWN-14), and `Bx<Int>` is Copy while `Bx<String>` is linear. A parameter no field
+mentions still counts. A generic not declared `Copy` is never Copy. Version 1 (pending, never
+enforced) required a `T: Copy` bound instead and was retired by the option (a) decision.
 
-```con reject name=copy-over-bare-parameter code=E0571 stage=core-check pair=copy-over-copy-parameter pending=R-0510 now=accept:42
+```con accept name=copy-over-bare-parameter-at-copy exit=42
 struct Copy Bx<T> { v: T }
 
 fn main() -> Int {
-    let b: Bx<Int> = Bx::<Int> { v: 42 };
-    return b.v;
+    let b: Bx<Int> = Bx::<Int> { v: 21 };
+    let c: Bx<Int> = b;
+    return b.v + c.v;
 }
 ```
 

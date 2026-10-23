@@ -53,10 +53,10 @@ areas exist (§8).
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
 | `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-14 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds) |
 | `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
-| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
+| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-4 (pointer operations, no undefined behaviour in safe code, references from raw pointers, moving out of raw memory) |
 | `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
 | `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
-| `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
+| `contracts.md` | `CON-` | stub: CON-1 and CON-2 (partial correctness, ghost values stay in ghost code) |
 | `traits.md` | `TRAIT-` | pilot: TRAIT-D1, TRAIT-1 to TRAIT-7 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
@@ -361,7 +361,7 @@ Each step lands with the gate green. The steps run in this order:
 2. **types.md** (`TYPE-`, migrated 2026-10-23): type formation, aliases, generics and const generics, newtypes,
    construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,
    VALIDATED_WRAPPERS and the type sections of VALUE_MODEL. D5 (a bare `T` is Any) enters as
-   enforced. D6 (Copy is explicit) enters as pending.
+   enforced. D6 (Copy is explicit) entered as pending and was enforced on 2026-10-23 (option (a), TYPE-14@2).
 3. **patterns.md** (`PAT-`, migrated 2026-10-23): exhaustiveness, nested and destructuring
    patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING and
    PATTERN_ERGONOMICS; NESTED_PATTERNS and TUPLES stay the records of their deferred decisions.
@@ -378,7 +378,7 @@ Each step lands with the gate green. The steps run in this order:
 6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,
-   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP, D8 (global state) and D10
+   HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP (enforced early, TRUST-4), D8 (global state) and D10
    (the `trusted mod` marker) enter as pending.
 7. **contracts.md** (`CON-`): `requires`, `ensures`, invariants, ghost code, the specification
    judgment. It replaces the language half of CONTRACTS_GUIDE. T-H27 enters as pending.

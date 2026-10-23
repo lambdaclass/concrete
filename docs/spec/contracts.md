@@ -22,3 +22,37 @@ migrates here from CONTRACTS_GUIDE in README §8, step 7.
 **Rationale.** Partial correctness is what a proof about a terminating execution can establish
 without a termination argument. Termination is a separate, explicit claim, so a proof never
 implies termination by accident. Divergence remains one of the three outcomes (STMT-1).
+
+<a id="CON-2"></a>
+### CON-2. Ghost values stay in ghost code
+
+**CON-2@1.** A ghost binding is read only by contracts, assertions and other ghost code, never by code that runs.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0420 (elab)
+- Status: enforced
+- Enforced by: Concrete.elabExprEv
+- Semantics: none
+- Obligation: ghost code is erased before Core without changing any runtime value (R-0473)
+- Evidence: tested
+
+**Rationale.** Ghost bindings are proof-only and are erased before code generation, so a runtime
+read of one would read nothing. The code was in the compiler before this chapter; it entered the
+ledger when the codes-completeness gate began to scan Elab (2026-10-23).
+
+```con reject name=ghost-read-at-runtime code=E0420 stage=elab pair=ghost-in-assert
+fn main() -> Int {
+    ghost let g: Int = 42;
+    return g;
+}
+```
+
+```con accept name=ghost-in-assert exit=42
+fn main() -> Int {
+    ghost let g: Int = 42;
+    assert(g == 42);
+    return 42;
+}
+```
+

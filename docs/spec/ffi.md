@@ -13,8 +13,9 @@ from [FFI.md](../platform/FFI.md), SAFETY and TWO_AXIS_SAFETY.
 
 - Kind: refusal
 - Uses: none
-- Codes: new (check)
-- Status: pending bug-166
+- Codes: E0588 (elab, core-check)
+- Status: enforced
+- Enforced by: Concrete.refuseForeignFnValue
 - Semantics: none
 - Obligation: none
 - Evidence: tested
@@ -25,9 +26,11 @@ function type use different calling conventions. A foreign function used as a Co
 the rule does not rest on that coincidence. The rewrite is a Concrete wrapper that calls the
 extern directly and is passed instead. The long-term design puts the calling convention in the
 function type (`extern "C" fn(A) -> R`, distinct from `fn(A) -> R`). It lifts this refusal when
-the first workload passes a callback to C.
+the first workload passes a callback to C. Enforced 2026-10-23 where a global function becomes a
+value, on the resolver's identity of the name, so an import alias, a constant initializer and a
+shadowing local are all decided right; CoreCheck re-checks it.
 
-```con reject name=extern-as-value code=new stage=check pair=wrapper-as-value pending=bug-166 now=accept:5
+```con reject name=extern-as-value code=E0588 stage=elab pair=wrapper-as-value
 mod c {
     pub trusted extern fn abs(x: i32) with() -> i32;
 }

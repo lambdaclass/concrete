@@ -210,7 +210,7 @@ fn main() -> Int {
 <a id="PAT-4"></a>
 ### PAT-4. A guard is read-only
 
-**PAT-4@1.** A match guard is a `bool` condition evaluated after its arm's pattern matched and before the arm commits, and it moves no non-Copy value, neither an outer binding nor one of its arm's binders.
+**PAT-4@2.** A match guard is a `bool` condition evaluated after its arm's pattern matched and before the arm commits, and it moves no non-Copy value, neither an outer binding nor one of its arm's binders.
 
 - Kind: refusal
 - Uses: OWN-D1

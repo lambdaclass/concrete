@@ -62,7 +62,8 @@ fn main() -> Int {
 - Kind: preservation
 - Uses: none
 - Codes: none
-- Status: pending R-0496
+- Status: enforced
+- Enforced by: Concrete.payloadBinderTy, Concrete.wholeBinderTy
 - Semantics: none
 - Obligation: CoreCheck re-checks the carried mode after Mono (R-0496, R-0510)
 - Evidence: tested
@@ -71,9 +72,11 @@ fn main() -> Int {
 gave it `T`, and after specialization at `T := Int` the binary dereferenced the payload as an
 address. The decision was made in one place and recomputed in another, and nothing compared
 the two. REF-9 removes the Copy dependence from the rule. This entry requires the mode to be
-data in Core rather than recomputed.
+data in Core rather than recomputed: since 2026-10-23 a binder's Core type is its mode (a
+reference type is a borrowed binder), decided once from the scrutinee's type, and Lower and the
+interpreter read it from there. The re-check after Mono is the open obligation.
 
-```con accept name=binder-mode-survives-mono exit=42 pending=R-0496 now=fail:signal_11 now-interp=fail:deref_of_non-ref_value
+```con accept name=binder-mode-survives-mono exit=42
 fn get<T>(o: &Option<T>, k: fn(&T) -> Int) -> Int {
     match o {
         Option::Some { value } => { return k(value); },
