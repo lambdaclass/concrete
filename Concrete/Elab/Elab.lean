@@ -39,7 +39,8 @@ No linearity checking, no borrow checking, no capability validation.
     outermost first, and index in that frame), which is what evidence binder references are
     computed from. -/
 structure BoundLocal where
-  core : String
+  -- the Core binder: its Core name and the walk's identity (R-0492 step 3)
+  core : CLocal
   ty : Ty
   ghost : Bool := false
   pos : Option (Nat × Nat) := none
@@ -473,20 +474,21 @@ private def binderId (key : BinderKey) (name : String) (span : Option Span) : El
   | none => throwElabMsg s!"internal: the binder '{name}' has no identity in the local table (R-0492)" span
 
 /-- Register a binding: its frame position, Core name and type. -/
-private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM Unit := do
+private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM CLocal := do
   let pos ← addBinder name
-  modify fun env => { env with bound := (id, { core, ty, pos := some pos }) :: env.bound }
+  let c : CLocal := { name := core, id := some id }
+  modify fun env => { env with bound := (id, { core := c, ty, pos := some pos }) :: env.bound }
+  return c
 
 /-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core name (`value` →
     `value.b7`) and return it. `_` stays `_` and binds nothing. -/
-private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM String := do
-  if binding == "_" then return binding
+private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM CLocal := do
+  if binding == "_" then return { name := binding }
   let id ← binderId key binding span
   let env ← getEnv
   let fresh := s!"{binding}.b{env.freshBinder}"
   setEnv { env with freshBinder := env.freshBinder + 1 }
   registerBound id binding fresh ty
-  return fresh
 
 /-- Evaluation-order temporaries (bugs 136, 137). Core has no expression-level `let` yet (R-0496
     owns one); `match value { t => body }` with a single unguarded binder arm is exactly
@@ -532,14 +534,13 @@ private def withSourceOrder (inits : List (String × CExpr))
     A non-shadowing binder keeps its spelling: Core names of programs that never shadow do not
     churn. -/
 -- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
-private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM String := do
+private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM CLocal := do
   let id ← binderId key name span
   let env ← getEnv
   let shadows := env.locals.shadowsAt id
   let core := if shadows then s!"{name}.b{env.freshBinder}" else name
   setEnv { env with freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
   registerBound id name core ty
-  return core
 
 /-- The evidence reference for a use of a binding: its frame position, made relative to the
     current frame stack. A binding with no position (a ghost) is a gap. -/
@@ -605,7 +606,7 @@ private def restoreScope (saved : ElabEnv) : ElabM Unit := do
     reported as a ghost leak. -/
 private def addGhostVar (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM Unit := do
   let id ← binderId key name span
-  modify fun env => { env with bound := (id, { core := name, ty, ghost := true }) :: env.bound }
+  modify fun env => { env with bound := (id, { core := { name, id := some id }, ty, ghost := true }) :: env.bound }
 
 
 
