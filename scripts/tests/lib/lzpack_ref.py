@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Reference implementation of the lzpack container (examples/lzpack).
 
-Written from the format specification in the header comment of
-examples/lzpack/src/main.con, not from its code, so check_lzpack_differential.sh
+Written from the format and parse specification in the header comment of
+examples/lzpack/src/main.con (container, hash, chain walk, insertion and RLE split
+rules), not from its code, so check_lzpack_differential.sh
 can compare the compressed bytes of the Concrete binary with an independent
 encoder, and feed this encoder's streams to the Concrete decoder.
 

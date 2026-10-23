@@ -7,17 +7,29 @@
 //
 // Container (12-byte header, little-endian):
 //   "LZP" method('1' = LZSS, '2' = RLE) | original length u32 | CRC32 of original u32
+//   (an input of 4 GiB or more is refused: its length does not fit the header).
 // LZSS payload: a flag byte, then up to 8 items, flag bit k (LSB first) set
 //   for a match: two bytes b0 b1, distance = 1 + (b0 | (b1 >> 4) << 8)
 //   (1..4096), length = (b1 & 15) + 3 (3..18); clear for one literal byte.
-//   Matches are found greedily through a 3-byte hash chain (32 candidates,
-//   the most recent first, a longer match strictly wins).
+//   A match encodes distance - 1 in b0 and the high nibble of b1.
+// LZSS parse (greedy, deterministic): at position i with at least 3 bytes left,
+//   hash h = ((d[i] << 8) ^ (d[i+1] << 4) ^ d[i+2]) & 4095 selects a chain of
+//   earlier positions, most recent first (head[h] and prev[p] hold p + 1; 0 ends
+//   it). Walk at most 32 candidates, stop at one more than 4096 back, and keep
+//   the first longest match (a longer one strictly wins; stop early at
+//   min(18, bytes left)). A match of 3 or more is emitted, else a literal.
+//   Every position the item covers is then inserted into its chain, in order,
+//   if at least 3 bytes remain from it.
 // RLE payload (PackBits): control c < 128 -> c+1 literal bytes follow;
 //   c >= 128 -> one byte follows, repeated c - 125 times (3..130).
-// The format and the greedy parse are deterministic, so
+// RLE parse: at position i, r = the run of bytes equal to d[i] (at most 130).
+//   If r >= 3, flush the pending literals and emit the run; otherwise d[i]
+//   joins the pending literals, which are flushed when they reach 128.
+// The format and both parses are deterministic, so
 // scripts/tests/check_lzpack_differential.sh compares the compressed bytes
-// with an independent Python implementation of the same specification.
-// Exit codes (13t): 0 ok, 1 bad input (unreadable, corrupt stream), 2 usage.
+// with an independent Python implementation of this specification.
+// Exit codes (13t): 0 ok, 1 bad input (unreadable, too large, corrupt stream),
+// 2 usage.
 mod lzpack {
     import std.bytes.{Bytes};
     import std.vec.{Vec};
@@ -677,6 +689,10 @@ mod lzpack {
             Option::None => { return fail("lzpack: cannot read input"); },
             Option::Some { value } => { value },
         };
+        if data.len() > 4294967295 {
+            data.drop();
+            return fail("lzpack: input of 4 GiB or more does not fit the header");
+        }
         let mut st: Stats = new_stats();
         let packed: Bytes = compress(&data, method, &mut st);
         let mut line: String = String::new();
@@ -738,6 +754,10 @@ mod lzpack {
             Option::None => { return fail("lzpack: cannot read input"); },
             Option::Some { value } => { value },
         };
+        if data.len() > 4294967295 {
+            data.drop();
+            return fail("lzpack: input of 4 GiB or more does not fit the header");
+        }
         let ok: bool = report(inp, &data);
         data.drop();
         if ok { return 0; }

@@ -215,11 +215,15 @@ out.push((((off >> 8) << 4) | (m.len - MIN_MATCH)) as u8);     // in range only 
 line.append_int(packed.len() as Int);                          // u64 -> Int for printing
 ```
 
-*Helps:* the second line is exactly the bug a lossless rule catches. If a match length of 19
-slipped through, `as u8` would silently write a corrupt stream, and only the differential gate
-would notice. *Hurts:* the masked form is provably in range and still needs the named operation,
-and printing a `u64` counter (never near 2^63) needs one too. Mixed-width arithmetic is refused,
-so the 7 widening casts (`d.get_unchecked(i) as u64`) are noise the lossless rule keeps.
+*Helps:* the second line packs two fields into one byte and is in range only because the encoder
+keeps distance ≤ 4096. A distance of 4097 makes `(off >> 8) << 4` equal 256, and `as u8`
+silently writes a corrupt stream that only the differential gate would notice; a checked
+conversion would trap there. It would not catch the other field: a length of 19 gives `len - 3 =
+16`, which still fits a `u8` and silently sets the distance nibble, so the format's invariants
+need their own check (a contract or an assertion) either way. *Hurts:* the masked form is provably
+in range and still needs the named operation, and printing a `u64` counter (never near 2^63)
+needs one too. Mixed-width arithmetic is refused, so the 7 widening casts
+(`d.get_unchecked(i) as u64`) are noise the lossless rule keeps.
 
 ### F. Arithmetic (T-ARITH: settled, checked `+ - *`)
 

@@ -35,6 +35,10 @@ structure ParserState where
   -- threaded state (not a `mut` local) precisely because `ExceptT` rolls `mut`
   -- locals back on a throw but leaves the base `StateM` state intact.
   errors : Diagnostics := []
+  -- Bug 212: the token position of every `{` the parser took as the start of a struct or enum
+  -- literal's field list, with the literal's name. Read only to explain a failed control-flow head
+  -- (`withCondHeadHint`); it never steers the parse.
+  structLitBraces : List (Nat × String) := []
   deriving Inhabited
 
 abbrev ParseM := ExceptT Diagnostics (StateM ParserState)
@@ -461,40 +465,41 @@ private def demoteTrailingValue (stmts : List Stmt) : List Stmt :=
   | some (.expr sp e true) => stmts.dropLast ++ [.expr sp e false]
   | _ => stmts
 
+/-- Bug 212: record that the `{` at the current position starts a struct or enum literal named
+    `name`. -/
+private def noteStructLitBrace (name : String) : ParseM Unit :=
+  modify fun s => { s with structLitBraces := (s.pos, name) :: s.structLitBraces }
+
 /-- Bug 212. In the head of an `if`, `while` or `match` (and `if let` / `while let`), an
     uppercase name followed by `{` is read as a struct literal, so `if n > LIMIT { … }` with a
     module constant `LIMIT` does not parse. That reading is the grammar's (`ident_tail` admits
     `'{' field_values '}'` after any IDENT; the parser decides by the name's case), and which
     programs the head accepts is a syntax decision this does not take. This only explains the
-    failure: it finds the first `{` of the head at bracket depth 0 (tokens from `start`) and, when
-    an uppercase name precedes it, returns a hint naming that name. -/
-private def condHeadHint (start : Nat) : ParseM (Option String) := do
+    failure: it finds the head's first `{` at bracket depth 0 (tokens from `start` up to the
+    error position `stop`) and returns a hint when the parser actually took that `{` as the start
+    of a literal (`structLitBraces`), so a head that parsed as written is never blamed. -/
+private def condHeadHint (start stop : Nat) : ParseM (Option String) := do
   let s ← get
   let mut depth : Int := 0
-  let mut prev : Option TokenKind := none
-  for i in [start:s.tokens.size] do
+  for i in [start:min (stop + 1) s.tokens.size] do
     if h : i < s.tokens.size then
-      let k := s.tokens[i].kind
-      match k with
+      match s.tokens[i].kind with
       | .lparen | .lbracket => depth := depth + 1
       | .rparen | .rbracket => depth := depth - 1
       | .lbrace =>
         if depth == 0 then
-          match prev with
-          | some (.ident n) =>
-            if n.length > 0 && (n.toList.head!).isUpper then
-              return some s!"in an `if`, `while` or `match` head, `{n} {"{"}` is read as the start of a struct literal, not as the end of the condition; if `{n}` is a constant, parenthesize the condition, e.g. `if (x < {n}) {"{"} … {"}"}`"
-            else return none
-          | _ => return none
+          match s.structLitBraces.lookup i with
+          | some n =>
+            return some s!"in an `if`, `while` or `match` head, `{n} {"{"}` is read as the start of a struct literal, not as the end of the condition; if `{n}` is a constant, parenthesize the condition, e.g. `if (x < {n}) {"{"} … {"}"}`"
+          | none => return none
       | _ => pure ()
-      prev := some k
   return none
 
 /-- Run the parse of a control-flow head (and the block after it); on a parse error, attach
     `condHeadHint`'s explanation when it applies (bug 212). The accepted language is unchanged. -/
 private def withCondHeadHint (start : Nat) (act : ParseM α) : ParseM α := do
   try act catch e =>
-    match ← condHeadHint start with
+    match ← condHeadHint start (← get).pos with
     | none => throw e
     | some h =>
       throw (e.map fun d =>
@@ -583,6 +588,7 @@ partial def parsePrimary : ParseM Expr := do
               expect .rparen
               return .staticMethodCall sp name nextName [] args
             else if next2 == .lbrace then
+              noteStructLitBrace s!"{name}::{nextName}"
               expect .lbrace
               let (fields, _) ← parseStructLitFields
               expect .rbrace
@@ -658,6 +664,7 @@ partial def parsePrimary : ParseM Expr := do
     else if next2 == .lbrace then
       -- Could be struct literal: Name[::<Type>] { field: val, ... }
       if name.length > 0 && (name.toList.head!).isUpper then
+        noteStructLitBrace name
         advance
         let (fields, base) ← parseStructLitFields
         expect .rbrace

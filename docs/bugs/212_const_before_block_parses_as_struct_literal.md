@@ -52,10 +52,13 @@ the first workload that compared against a constant in a head hit it.
 
 ## Fix
 
-- The parser keeps its reading. `withCondHeadHint` wraps the head and the first block of every head
-  form (statement `if`, value `if`, `if let`, `while`, `while let`, statement and value `match`). On
-  a parse error it finds the head's first `{` at bracket depth 0 and, when an uppercase name
-  precedes it, attaches the hint above. The accepted language is unchanged.
+- The parser keeps its reading. It records the position of every `{` it takes as the start of a
+  struct or enum literal (`ParserState.structLitBraces`; it never steers the parse).
+  `withCondHeadHint` wraps the head and the first block of every head form (statement `if`, value
+  `if`, `if let`, `while`, `while let`, statement and value `match`). On a parse error it finds
+  the head's first `{` at bracket depth 0, up to the error position, and attaches the hint only
+  when the parser took that `{` as a literal, so a head that parsed as written
+  (`if n > limits::LIMIT { … }`) is never blamed. The accepted language is unchanged.
 - The case rule is written down: a comment at `ident_tail` in `grammar/concrete.ebnf`, and a
   paragraph with a rejected / accepted example pair in `docs/spec/syntax.md` SYN-1
   (`SYN-1/head-constant-struct-literal`, `SYN-1/head-constant-parenthesized`).
@@ -78,5 +81,7 @@ spelling) is input to the language-design negotiation and is recorded in
 ## Regression
 
 `error_212_const_in_if_head.con`, `error_212_const_in_while_head.con` and
-`error_212_const_in_match_head.con` (`run_tests.sh`, E0001 with the hint text), and
-`regress_212_parenthesized_const_head.con` (`run_tests.sh`, 42, and `--interp` agreement).
+`error_212_const_in_match_head.con` (`run_tests.sh`, E0001 with the hint text);
+`error_212_no_hint_qualified_head.con`, the negative control (E0001 without the hint, for a head
+that parsed as written); and `regress_212_parenthesized_const_head.con` (`run_tests.sh`, 42, and
+`--interp` agreement).

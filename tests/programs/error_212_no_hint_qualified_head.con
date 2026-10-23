@@ -1,0 +1,10 @@
+// Bug 212 negative control: the head `n > limits::LIMIT` parses as written (a qualified name is
+// never a struct literal), so the parse error inside the block (`let = 1;`) must NOT carry the
+// struct-literal hint, although an uppercase name stands right before the head's `{`.
+mod m {
+    fn main() -> i32 {
+        let n: i32 = 1;
+        if n > limits::LIMIT { let = 1; }
+        return n;
+    }
+}
