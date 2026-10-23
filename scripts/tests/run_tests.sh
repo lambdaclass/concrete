@@ -8209,6 +8209,9 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 197: a variant pattern without a field list dropped a non-Copy payload.
+run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
+run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
 for b196 in other_enum_variant range_over_enum variant_over_int literal_type literal_over_type_param same_name_other_enum; do
     run_err "$TESTDIR/error_196_${b196}.con" "(E0309)"

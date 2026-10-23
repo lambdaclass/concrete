@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Variant Pattern Without Fields Ignores Only Copy Payloads (bug 197, 2026-10-23)
+
+A `match` arm written as a bare variant name (`E::A =>`) over an owned value whose variant carries
+a non-Copy field is now refused with E0288, as `E::A { _ }` already was. Before this fix the payload
+silently vanished: the discard rule was attached to `_` binders and CoreCheck's field count skips
+an empty list. Through a reference, and for Copy fields, a bare variant name stays legal. It is
+pinned by `error_197_variant_pattern_drops_payload.con` and `regress_197_variant_pattern_ignores_copy.con`.
+
 ### A Match Arm Fits Its Scrutinee (bug 196, 2026-10-23)
 
 A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
