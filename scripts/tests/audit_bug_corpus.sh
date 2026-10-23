@@ -114,6 +114,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
+  # Bug 197: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
+  # Also check_local_identity.sh leg R.
+  [197]="regress_197_project_let_else/src/main.con"
   # Bugs 134 and 140: the comparison rule (E0229): aggregates, linear operands, references,
   # unbounded and aggregate-instantiated generics, raw pointers in safe code; positive control.
   [134]="error_134_enum_eq.con error_134_struct_eq.con"

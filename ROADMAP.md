@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 159 bug records.
+**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 160 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -127,7 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 19 attribution-only batches (reviews, follow-ons, CI, controls, development) found 29 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 10 counting batches recorded. 20 attribution-only batches (reviews, follow-ons, CI, controls, development) found 30 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -3276,7 +3276,15 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Resolved identities — the identity half of S5; R-0497 owns immutable, payload-bound artifacts — stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned; starts now.**
+**Status (2026-10-23): slice 1 landed on branch `vp-r0492`; the slice contract is S5 slice
+contract 2 in [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md).** `LocalId` is minted by
+the one lexical walk (`Resolve/Locals.lean`), which runs inside `Pipeline.resolve`. The checker's
+environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Checks are in
+`check_local_identity.sh`, plus mutation family 98. The slice found bug 197: project builds
+skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
+`VariantIdx`; contract expressions; `ElabVerify`.
+
+(Before: Status (2026-10-18): planned; starts now.)
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration

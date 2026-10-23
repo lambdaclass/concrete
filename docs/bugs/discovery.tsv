@@ -51,3 +51,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-
 2026-10-23	semantics	language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3	47 programs	181,182	181,182
 2026-10-23	development	landing train 3 pre-push hook run as a second user on the OVH server (fixed /tmp test paths owned by dev)	unrecorded	191	-
+2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	197	-

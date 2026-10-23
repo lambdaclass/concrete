@@ -1,0 +1,26 @@
+// Bug 197 regression: a destructuring `let … else` in a PROJECT. Desugaring was a pipeline step
+// each caller had to remember; the project loader (and the debug bundle, reducer and Lean test
+// paths) skipped it, so this function reached Check undesugared and was refused ("a destructuring
+// `let` is not supported in a `for` header", then E0201 for `value`), while the same file
+// compiled as a standalone program. Desugaring is now part of Pipeline.resolve.
+mod regress_197_project_let_else {
+    enum Copy Result {
+        Ok { value: i32 },
+        Err { code: i32 },
+    }
+
+    fn try_unwrap(r: Result) -> i32 {
+        let Result::Ok { value } = r else {
+            return -1;
+        };
+        return value;
+    }
+
+    pub fn main() -> i32 {
+        let ok: Result = Result::Ok { value: 42 };
+        if try_unwrap(ok) != 42 { return 1; }
+        let err: Result = Result::Err { code: 5 };
+        if try_unwrap(err) != -1 { return 2; }
+        return 0;
+    }
+}
