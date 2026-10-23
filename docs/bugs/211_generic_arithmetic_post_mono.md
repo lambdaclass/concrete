@@ -39,7 +39,11 @@ non-numeric type went to the backend unchecked.
 an arithmetic operator takes two operands of one numeric type (or, in trusted or `Unsafe` code, a
 raw pointer and an integer), and a wrapping, saturating, bitwise or shift operator two of one integer
 type. Both operands are checked and their agreement too: CoreCheck defers the agreement when either
-side is a parameter (`a: Int` plus `b: T`, the Codex review's witness). A violation
+side is a parameter (`a: Int` plus `b: T`, the Codex review's witness). A numeric literal operand
+is exempt from the agreement: in a generic body it keeps the type Elab gave it, and std's
+`digit_to_int<T>` (`(value as T) - 48`) is `Uint - Int` at `T = Uint`; the literal takes the other
+operand's type when emitted, and `verifyLiteralRanges` checks that it fits (found by the full suite:
+every project build importing std failed before the exemption). A violation
 is E0501 at stage `post-mono` (TYPE-6's code list now says `E0501 (core-check, post-mono)`).
 Regression legs in `run_tests.sh`: `error_211_generic_add_struct.con`,
 `error_211_generic_mul_enum.con`, `error_211_generic_rhs_struct.con` and

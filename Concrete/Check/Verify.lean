@@ -430,17 +430,24 @@ private def operatorTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) : O
     let isPtr : Ty → Bool := fun t => match t with | .ptrMut _ | .ptrConst _ => true | _ => false
     let lt := lhs.ty
     let rt := rhs.ty
+    -- A numeric literal operand is flexible: in a generic body it keeps the type Elab gave it
+    -- (`(v as T) - 48` in std's `digit_to_int` is `Uint - Int` at `T = Uint`) and takes the
+    -- other operand's type when emitted; `verifyLiteralRanges` checks that it fits.
+    let isLit : CExpr → Bool := fun e => match e with
+      | .intLit .. | .floatLit .. | .unaryOp .neg (.intLit ..) _ | .unaryOp .neg (.floatLit ..) _ => true
+      | _ => false
+    let agree : Ty → Ty → Bool := fun a b => isLit lhs || isLit rhs || binOpOperandsAgree a b
     -- Both operands, and their agreement: CoreCheck defers the agreement too when EITHER side
     -- is a type parameter (`a: Int` plus `b: T` at a struct; Codex review).
     let ok? : Option Bool := match op with
       | .add | .sub | .mul | .div | .mod =>
         some (free lt || free rt
           || (isPtr lt && isInteger rt && unsafeOk)
-          || (isNumeric lt && binOpOperandsAgree lt rt))
+          || (isNumeric lt && isNumeric rt && agree lt rt))
       | .wrappingAdd | .wrappingSub | .wrappingMul
       | .saturatingAdd | .saturatingSub | .saturatingMul
       | .bitand | .bitor | .bitxor | .shl | .shr =>
-        some (free lt || free rt || (isInteger lt && binOpOperandsAgree lt rt))
+        some (free lt || free rt || (isInteger lt && isInteger rt && agree lt rt))
       | _ => none
     match ok? with
     | some false =>
