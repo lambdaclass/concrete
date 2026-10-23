@@ -1,0 +1,12 @@
+// Bug 166, control: a foreign function whose signature has no #[repr(C)] aggregate has one ABI
+// and stays usable as a value (E0588 refuses only the #[repr(C)] case). Exit 42.
+trusted extern fn labs(x: Int) with() -> Int;
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    let g: fn(Int) -> Int = labs;
+    return apply(labs, -20) + g(-22);
+}

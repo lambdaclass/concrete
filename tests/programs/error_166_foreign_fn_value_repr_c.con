@@ -1,0 +1,15 @@
+// Bug 166: a foreign function taken as a value was called with the Concrete ABI, so a small
+// #[repr(C)] struct reached C as its address. Taking such an extern fn as a value is refused
+// (E0588); a direct call stays legal. The adapter alternative is deferred (Q4).
+#[repr(C)]
+struct Copy Pair { v: Int }
+
+trusted extern fn take_pair(p: Pair) with() -> Int;
+
+fn apply(f: fn(Pair) -> Int, p: Pair) -> Int {
+    return f(p);
+}
+
+fn main() -> Int {
+    return apply(take_pair, Pair { v: 7 });
+}

@@ -129,6 +129,8 @@ declare -A BUG_TEST_MAP=(
   [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con"
   # Bug 165: println/append desugared into spelled helper calls that bound to a same-named user fn.
   [165]="regress_165_generated_helper_call.con"
+  # Bug 166: an extern fn with a repr(C) aggregate taken as a value is refused (E0588).
+  [166]="error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con regress_166_foreign_fn_value_scalar.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
   [130]="error_130_int_as_bool_int.con"
   [090]="error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con"
@@ -158,7 +160,6 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
-  [166]="OPEN -- a foreign function taken as a value is called with the Concrete ABI: a small #[repr(C)] struct argument travels as a pointer through the fn value while C takes it in a register (silent wrong code at the C boundary); reproducer tests/regressions/bug166_foreign_fn_value_abi/repro.con (check-only), found by the Codex review of the symbol-name work 2026-10-22; pinned by run_tests.sh codegen section (bug 166 pin: the IR shows call i64 %f(ptr %p) beside declare i64 @take_pair(i64))"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"
   [006]="string literal collision -- fixed in EmitSSA, covered by cross-module tests"
   [009]="const decls not lowered -- fixed in Lower.lean, no standalone repro needed"

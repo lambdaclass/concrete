@@ -6425,6 +6425,7 @@ def diagnosticCodesReport : String :=
     entry "E0585" "core-check" "error" "repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)",
     entry "E0586" "core-check" "error" "trait impl method requires capabilities beyond its trait method's declared set",
     entry "E0587" "core-check" "error" "trait impl method signature (receiver, parameters, generics) does not match its trait method",
+    entry "E0588" "core-check" "error" "extern fn with a #[repr(C)] aggregate taken as a value (bug 166)",
     -- Verify/lower (E0600–E0602)
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",

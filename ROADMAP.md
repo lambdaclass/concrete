@@ -100,20 +100,19 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 12** (5 silent, 1 loud, 6 filed before the discovery record) of 153 bug records.
+**Open bugs: 10** (3 silent, 1 loud, 6 filed before the discovery record) of 153 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 2 | 054, 077, 114, 122, 165 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 4 | 1 | 054, 077, 114, 122 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 2 | 2 | 136, 137 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
-| 14. Trusted `std` and FFI code with no checked contract | 1 | 1 | 166 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
-| exit 0b | 5 | 5 | 122, 136, 137, 165, 166 |
+| exit 0b | 3 | 3 | 122, 136, 137 |
 | exit 2c | 1 | 0 | 114 |
 | no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
 

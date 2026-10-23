@@ -141,6 +141,21 @@ function by its bare name must export it with `#[export_name]`.
 memory-safety defect in safe code. Mangling and the namespace: R-0285 / R-0283 (the foreign
 boundary), with R-0510 for generated symbols; the export attribute: R-0286.
 
+## Foreign Function Values (normative, decided 2026-10-23)
+
+The C calling convention is decided at a direct call of a foreign function: a `#[repr(C)]`
+aggregate is flattened into registers the way C declares it. A function type (`fn(P) -> R`)
+carries no calling convention, so a call through a function value always uses the Concrete one.
+Taking as a value an `extern fn` whose signature has a `#[repr(C)]` struct among its parameters or
+as its result is therefore refused (E0588, bug 166). A foreign function without such an aggregate
+has one ABI and may be used as a value. To pass such a function, pass a Concrete function whose
+body calls it directly.
+
+Design note, not adopted: a calling convention carried in the function type (`extern "C" fn(P) ->
+R`), with a mismatch refused, would let a foreign function be a value and would also type C
+callbacks. It waits for a workload that passes such a function to C or stores one
+([TIGHTENING_DECISIONS](../language/TIGHTENING_DECISIONS.md) Q4).
+
 ## FFI-Safe Types
 
 FFI-safe types currently include:

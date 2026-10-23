@@ -7767,22 +7767,12 @@ if filter_match "$TESTDIR/regress_129_user_fn_named_malloc.con"; then
         FAIL=$((FAIL + 1))
     fi
 fi
-# Bug 166 pin (OPEN): a foreign function taken as a value is called with the Concrete ABI.
-# The reproducer's call through `f` passes the struct's address although C takes it in a
-# register. When this leg fails, the call changed: update docs/bugs/166, the corpus entry and
-# this leg together.
-b166_ll="$TMPDIR/bug166_foreign_fn_value_abi.ll"
-if filter_match "tests/regressions/bug166_foreign_fn_value_abi/repro.con"; then
-    if $COMPILER "tests/regressions/bug166_foreign_fn_value_abi/repro.con" --emit-llvm > "$b166_ll" 2>/dev/null \
-       && grep -qE '^declare i64 @take_pair\(i64\)' "$b166_ll" \
-       && grep -qE 'call i64 %f\(ptr %p\)' "$b166_ll"; then
-        echo "  ok  bug 166 pin: the call through a foreign fn value still uses the Concrete ABI (OPEN)"
-        PASS=$((PASS + 1))
-    else
-        echo "FAIL  bug 166 pin: the reproducer's IR changed -- fixed? update docs/bugs/166, the corpus entry and this leg"
-        FAIL=$((FAIL + 1))
-    fi
-fi
+# Bug 166 (contained): a foreign fn value with a #[repr(C)] aggregate was called with the
+# Concrete ABI; taking one as a value is refused (E0588). The reproducer is refused too.
+run_err "$TESTDIR/error_166_foreign_fn_value_repr_c.con"     "(E0588)"
+run_err "$TESTDIR/error_166_foreign_fn_value_repr_c_let.con" "(E0588)"
+run_err "tests/regressions/bug166_foreign_fn_value_abi/repro.con" "(E0588)"
+run_ok  "$TESTDIR/regress_166_foreign_fn_value_scalar.con" 42
 # #[export_name]: a C caller reaches the Concrete function by its exported name (rc 42).
 xp_ll="$TMPDIR/ffi_export_name.ll"
 xp_bin="$TMPDIR/ffi_export_name"

@@ -47,6 +47,9 @@ structure CoreCheckEnv where
       site can emit the right trust edge. Tree-wide, like `fnSigs`. -/
   trustedNames : List String := []
   externNames : List String := []
+  /-- The current function's `foreignCalls`: the spellings its module's resolver binds to a
+      foreign declaration (bug 166 asks it whether a function VALUE is foreign). -/
+  currentForeign : List (String × String) := []
   /-- The function and module currently being checked, and the edges collected so far.
       Edges are a BYPRODUCT OF CHECKING, emitted at the very sites that gate raw
       operations, so a report over them cannot disagree with the gate about where
@@ -105,6 +108,8 @@ inductive CoreCheckError where
   | reprCFieldNotFFISafe (structName fieldName fieldTy : String)
   | externFnParamNotFFISafe (fnName paramName paramTy : String)
   | externFnReturnNotFFISafe (fnName retTy : String)
+  /-- Bug 166: an `extern fn` whose signature has a `#[repr(C)]` aggregate, taken as a value. -/
+  | foreignFnValueReprC (fnName tyName : String)
   | reprPackedAndAlignConflict (structName : String)
   | reprAlignNotPowerOfTwo (structName : String) (n : Nat)
   | reprAlignExceedsNatural (structName : String) (n : Nat) (natural : Nat)
@@ -154,6 +159,7 @@ def CoreCheckError.message : CoreCheckError → String
   | .reprCFieldNotFFISafe structName fieldName fieldTy => s!"#[repr(C)] struct '{structName}' has non-FFI-safe field '{fieldName}' of type {fieldTy}"
   | .externFnParamNotFFISafe fnName paramName paramTy => s!"extern fn '{fnName}' has non-FFI-safe parameter '{paramName}' of type {paramTy}"
   | .externFnReturnNotFFISafe fnName retTy => s!"extern fn '{fnName}' has non-FFI-safe return type {retTy}"
+  | .foreignFnValueReprC fnName tyName => s!"extern fn '{fnName}' cannot be taken as a value: its signature passes the #[repr(C)] struct '{tyName}', which a call through a function value would pass with the Concrete ABI rather than C's"
   | .reprPackedAndAlignConflict structName => s!"struct '{structName}' cannot have both #[repr(packed)] and #[repr(align(...))]"
   | .reprAlignNotPowerOfTwo structName n => s!"#[repr(align({n}))] on struct '{structName}' must be a power of two"
   | .reprAlignExceedsNatural structName n natural => s!"#[repr(align({n}))] on struct '{structName}' exceeds its natural alignment ({natural}) — over-aligned structs are not yet supported in codegen (bug 037)"
@@ -176,6 +182,8 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .breakOutsideLoop => some "break can only be used inside while or for loops"
   | .continueOutsideLoop => some "continue can only be used inside while or for loops"
   | .copyDestroyConflict _ => some "remove the Destroy impl or remove #[copy]"
+  | .foreignFnValueReprC fnName _ =>
+    some s!"call '{fnName}' directly, or pass a Concrete function value whose body calls '{fnName}' directly"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
   | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
   | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
@@ -244,6 +252,7 @@ def CoreCheckError.code : CoreCheckError → String
   | .reprCFieldNotFFISafe _ _ _ => "E0573"
   | .externFnParamNotFFISafe _ _ _ => "E0574"
   | .externFnReturnNotFFISafe _ _ => "E0575"
+  | .foreignFnValueReprC _ _ => "E0588"
   | .reprPackedAndAlignConflict _ => "E0576"
   | .reprAlignNotPowerOfTwo _ _ => "E0577"
   | .reprAlignExceedsNatural _ _ _ => "E0585"
@@ -376,6 +385,31 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
 -- Expression validation
 -- ============================================================
 
+/-- Bug 166 (containment; FFI.md "Foreign Function Values"): the C calling convention is decided
+    only at a DIRECT call of a foreign function, which flattens a `#[repr(C)]` aggregate into
+    registers. A function TYPE carries no convention, so a call through a value uses the
+    Concrete one and C would receive the aggregate's address. Taking such a foreign function as
+    a value is refused (E0588). `name` is foreign when this function's resolver binds it to a
+    foreign declaration (`foreignCalls`, own or imported `extern fn`, never a runtime helper),
+    the same binding emission uses. A generated adapter or a convention in the function type is
+    deferred (TIGHTENING_DECISIONS Q4). -/
+private def checkForeignFnValue (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
+  let env ← getEnv
+  let foreign := match env.currentForeign.lookup name with
+    | some d => !d.startsWith "_C$rt."
+    | none => false
+  if !foreign then return
+  match ty with
+  | .fn_ ps _ ret =>
+    let reprC := (ps ++ [ret]).findSome? fun t => match t with
+      | .named n =>
+        if (env.structDefs.find? fun sd => sd.name == n).any (·.isReprC) then some n else none
+      | _ => none
+    match reprC with
+    | some n => addCCError (.foreignFnValueReprC name n)
+    | none => pure ()
+  | _ => pure ()
+
 mutual
 
 partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
@@ -398,7 +432,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         | _, _ => false
       if !typesCompatible varTy ty && !isLenient varTy && !isLenient ty && !isRefCompat then
         addCCError (.typeMismatchVariable name (toString (repr varTy)) (toString (repr ty)))
-    | none => pure ()  -- may be a parameter or external
+    -- Not a local: a global function taken as a value (`let f = take_pair;`) when fn-typed.
+    | none => checkForeignFnValue name ty
 
   | .binOp op lhs rhs ty =>
     ccCheckExpr lhs
@@ -730,7 +765,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       addTrustEdge .containsRawOp "unsafe_cast"
       if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
         addCCError (.missingCapability "unsafe_cast" "Unsafe" "")
-  | .fnRef _ _ => pure ()
+  | .fnRef name ty => checkForeignFnValue name ty
   | .allocCall inner allocExpr _ =>
     -- Verify caller has Alloc capability
     let env ← getEnv
@@ -1120,6 +1155,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
     inLoop := false
     inTrusted := f.isTrusted
     currentFnSpan := f.declSpan
+    currentForeign := f.foreignCalls
   }
   -- The CALLER-OBLIGATION axis, kept distinct from provenance: `with(Unsafe)` says the
   -- caller must uphold an invariant the language cannot establish. It is NOT a claim
