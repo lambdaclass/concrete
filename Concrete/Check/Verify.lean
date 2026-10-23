@@ -430,17 +430,21 @@ private def operatorTypeHook (fnName : String) (unsafeOk : Bool) (e : CExpr) : O
     let isPtr : Ty → Bool := fun t => match t with | .ptrMut _ | .ptrConst _ => true | _ => false
     let lt := lhs.ty
     let rt := rhs.ty
+    -- Both operands, and their agreement: CoreCheck defers the agreement too when EITHER side
+    -- is a type parameter (`a: Int` plus `b: T` at a struct; Codex review).
     let ok? : Option Bool := match op with
       | .add | .sub | .mul | .div | .mod =>
-        some (free lt || isNumeric lt || (isPtr lt && isInteger rt && unsafeOk))
+        some (free lt || free rt
+          || (isPtr lt && isInteger rt && unsafeOk)
+          || (isNumeric lt && binOpOperandsAgree lt rt))
       | .wrappingAdd | .wrappingSub | .wrappingMul
       | .saturatingAdd | .saturatingSub | .saturatingMul
       | .bitand | .bitor | .bitxor | .shl | .shr =>
-        some (free lt || isInteger lt)
+        some (free lt || free rt || (isInteger lt && binOpOperandsAgree lt rt))
       | _ => none
     match ok? with
     | some false =>
-      some [{ fnName, message := s!"operator is not defined on '{tyToStr lt}' after monomorphization: arithmetic takes two operands of one numeric type (bitwise, shift, wrapping and saturating operators take integers), and pointer arithmetic needs trusted or `Unsafe` code" }]
+      some [{ fnName, message := s!"operator is not defined on '{tyToStr lt}' and '{tyToStr rt}' after monomorphization: arithmetic takes two operands of one numeric type (bitwise, shift, wrapping and saturating operators two of one integer type), and pointer arithmetic needs trusted or `Unsafe` code" }]
     | _ => none
   | _ => none
 

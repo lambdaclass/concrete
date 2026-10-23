@@ -127,7 +127,7 @@ declare -A BUG_TEST_MAP=(
   # value (run_tests.sh also compares --interp with the binary).
   [208]="regress_208_fn_local_named_like_import.con"
   # Bug 211: generic arithmetic instantiated at a non-numeric type (E0501, post-mono).
-  [211]="error_211_generic_add_struct.con error_211_generic_mul_enum.con regress_211_generic_add_numeric.con"
+  [211]="error_211_generic_add_struct.con error_211_generic_mul_enum.con error_211_generic_rhs_struct.con error_211_generic_mixed_width.con regress_211_generic_add_numeric.con"
   # Bug 210: arithmetic on a struct, enum or newtype operand (E0501).
   [210]="error_210_struct_arith.con error_210_enum_arith.con error_210_newtype_arith.con error_210_struct_minus_literal.con error_210_child_module_arith.con error_210_child_module_newtype_arith.con"
   # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).

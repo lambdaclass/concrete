@@ -36,11 +36,14 @@ non-numeric type went to the backend unchecked.
 ## Fix
 
 `verifyOperatorTypes` in `Verify.lean`, part of `verifyPostMono`: in every monomorphized function,
-an arithmetic operator takes a numeric left operand (or, in trusted or `Unsafe` code, a raw pointer
-and an integer), and a wrapping, saturating, bitwise or shift operator takes an integer. A violation
+an arithmetic operator takes two operands of one numeric type (or, in trusted or `Unsafe` code, a
+raw pointer and an integer), and a wrapping, saturating, bitwise or shift operator two of one integer
+type. Both operands are checked and their agreement too: CoreCheck defers the agreement when either
+side is a parameter (`a: Int` plus `b: T`, the Codex review's witness). A violation
 is E0501 at stage `post-mono` (TYPE-6's code list now says `E0501 (core-check, post-mono)`).
-Regression legs in `run_tests.sh`: `error_211_generic_add_struct.con` and
-`error_211_generic_mul_enum.con` (`run_err ... (E0501)`), and `regress_211_generic_add_numeric.con`
+Regression legs in `run_tests.sh`: `error_211_generic_add_struct.con`,
+`error_211_generic_mul_enum.con`, `error_211_generic_rhs_struct.con` and
+`error_211_generic_mixed_width.con` (`run_err ... (E0501)`), and `regress_211_generic_add_numeric.con`
 (42 natively and under `--interp`: numeric instances are admitted).
 
 ## Structural cause

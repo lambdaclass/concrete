@@ -8367,6 +8367,8 @@ run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
 # operator check refuses it (E0501) and admits numeric instances (binary and --interp agree on 42).
 run_err "$TESTDIR/error_211_generic_add_struct.con" "(E0501)"
 run_err "$TESTDIR/error_211_generic_mul_enum.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_rhs_struct.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_mixed_width.con" "(E0501)"
 run_ok "$TESTDIR/regress_211_generic_add_numeric.con" 42
 r211_interp=$($COMPILER "$TESTDIR/regress_211_generic_add_numeric.con" --interp 2>&1 || true)
 if [ "$r211_interp" = "42" ]; then
