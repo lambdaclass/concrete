@@ -566,10 +566,10 @@ private partial def refBindExpr (env : List (String × Ty)) : CExpr → List (St
 
 private partial def refBindArm (env : List (String × Ty)) : CMatchArm → List (String × String)
   | .enumArm _ _ bs g body =>
-    let env' := bs.reverse ++ env
+    let env' := (CLocal.names bs).reverse ++ env
     (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
   | .varArm b t g body =>
-    let env' := (b, t) :: env
+    let env' := (b.name, t) :: env
     (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
   | .litArm v g body => refBindExpr env v ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
   | .rangeArm lo hi _ g body =>
@@ -587,11 +587,11 @@ private partial def refBindStmt (env : List (String × Ty)) : CStmt → List (St
     -- `__destr_*` is Elab's struct-destructuring temporary (a `let S { .. } = s` through `&S`
     -- binds it to the reference); it is not a source `let`, whose binders Check already saw.
     (refBindExpr env v ++
-      (if isRefTyPM ty && !n.startsWith "__destr_" then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
-     (n, ty) :: env)
+      (if isRefTyPM ty && !n.name.startsWith "__destr_" then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
+     (n.name, ty) :: env)
   | .assign n v =>
     (refBindExpr env v ++
-      (match env.lookup n with
+      (match env.lookup n.name with
        | some t => if isRefTyPM t then [("E0303", s!"a reference binding is never assigned (after monomorphization): '{n}' has type '{tyToStr t}'")] else []
        | none => []), env)
   | .return_ v _ | .break_ v _ => ((v.map (refBindExpr env)).getD [], env)

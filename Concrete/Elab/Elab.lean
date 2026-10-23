@@ -1056,7 +1056,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               | .error _ => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
             recordVariantUse ed armVariant
             let typeMapping := ed.typeParams.zip enumTypeArgs
-            let mut typedBindings : List (String × Ty) := []
+            let mut typedBindings : List (CLocal × Ty) := []
             for (binding, sf) in bindings.zip ev.fields do
               -- aliases expanded (the enum's own type parameters shadow them), as the
               -- enum's Core payload types are (bug 096's agreement checker compares the two)
@@ -2456,8 +2456,8 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
       -- the call case above, Core carries no marker for it — `.ident` has only a
       -- name and a type. Closing it needs the same treatment as the callee:
       -- record at elaboration, where the scope is still known.
-      let name' := rmap.lookup name |>.getD name
-      .ident name' ty
+      let name' := rmap.lookup name.name |>.getD name.name
+      .ident { name with name := name' } ty
     | _ => .ident name ty
   | .binOp op l r ty => .binOp op (renameFnExpr rmap l) (renameFnExpr rmap r) ty
   | .unaryOp op e ty => .unaryOp op (renameFnExpr rmap e) ty
@@ -3853,7 +3853,7 @@ partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAg
             (ft, bt, s!"the binding of field '{fname}' of '{en}::{v}'", ed.typeParams)
         | none => []
       | none => []
-    let c' := { c with locals := bs.map (·.1) ++ c.locals }
+    let c' := { c with locals := bs.map (·.1.name) ++ c.locals }
     payload ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
   | .varArm n bt g b =>
     -- a catch-all binder holds the scrutinee itself

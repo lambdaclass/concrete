@@ -559,7 +559,7 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
     -- A pure state read: `lookupVar` would emit a load of a promoted local (a dead instruction
     -- that renumbered every later temporary, golden ssa/cap_basic).
     let st ← getState
-    let isLocal := (st.vars.lookup name).isSome || st.promotedAllocas.any fun (n, _, _) => n == name
+    let isLocal := (st.vars.lookup name.name).isSome || st.promotedAllocas.any fun (n, _, _) => n == name.name
     if !isLocal && (st.constants.any fun (n, _, _) => n == name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
@@ -1029,7 +1029,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emitEntryAlloca (.alloca slot innerTy)
           emit (.store curVal (.reg slot innerTy))
           aVals := aVals ++ [.reg slot (.refMut innerTy)]
-          mutBorrows := mutBorrows ++ [(varName, slot, innerTy)]
+          mutBorrows := mutBorrows ++ [(varName.name, slot, innerTy)]
       | _ =>
         -- All other borrow/place args (incl. `&mut o.f`, `&mut a[i]`,
         -- `&mut a[i].f`) lower through `borrowMut`/`placeAddr`, which GEPs into a

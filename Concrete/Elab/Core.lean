@@ -103,6 +103,8 @@ instance : Repr CLocal := ⟨fun a p => reprPrec a.name p⟩
 instance : ToString CLocal := ⟨CLocal.name⟩
 instance : Inhabited CLocal := ⟨{ name := "" }⟩
 instance : LT CLocal := ⟨fun a b => a.name < b.name⟩
+/-- The names of a binder list, for a consumer still keyed by spelling (migration helper). -/
+def names {α : Type} (bs : List (CLocal × α)) : List (String × α) := bs.map fun (b, x) => (b.name, x)
 end CLocal
 
 mutual
