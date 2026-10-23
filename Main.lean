@@ -236,43 +236,53 @@ def traceTelemetry (inputPath : String) : IO UInt32 := do
   -- Run the pipeline stage by stage so each pass can be timed. Timing is a debug
   -- aid, not a perf claim; the gate pins schema + monotonic sanity, not magnitudes.
   let mut timing : List (String × Nat) := []
+  let mut beats : List (String × Nat) := []
   let mut t ← IO.monoMsNow
+  let mut hb ← IO.getNumHeartbeats
   match Pipeline.parse source with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok parsed =>
   let astNodes := Pipeline.astModuleNodes parsed.modules
   timing := timing ++ [("parse", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("parse", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match ← Pipeline.resolveFiles baseDir parsed inputPath resolveAllModules with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok (resolved, _) =>
   let summary := Pipeline.buildSummary resolved
   timing := timing ++ [("resolve-files", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("resolve-files", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.resolve resolved summary with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok rp =>
   let resolvedProg := Pipeline.desugar rp
   timing := timing ++ [("resolve", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("resolve", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.check resolvedProg summary with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok () =>
   timing := timing ++ [("check", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("check", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.elaborate resolvedProg summary with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok elabProg =>
   timing := timing ++ [("elaborate", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("elaborate", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.coreCheck elabProg with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok validCore =>
   timing := timing ++ [("coreCheck", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("coreCheck", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.monomorphize validCore with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok mono =>
   timing := timing ++ [("monomorphize", (← IO.monoMsNow) - t)]; t ← IO.monoMsNow
+  beats := beats ++ [("monomorphize", (← IO.getNumHeartbeats) - hb)]; hb ← IO.getNumHeartbeats
   match Pipeline.lower mono with
   | .error ds => IO.eprintln (renderDiagnostics ds (sourceMap := srcMap)); return 1
   | .ok ssa =>
   timing := timing ++ [("lower", (← IO.monoMsNow) - t)]
-  IO.println (Pipeline.telemetryJson git astNodes validCore mono ssa 0 timing rss)
+  beats := beats ++ [("lower", (← IO.getNumHeartbeats) - hb)]
+  IO.println (Pipeline.telemetryJson git astNodes validCore mono ssa 0 timing rss beats)
   return 0
 
 /-- Phase 6C #3: per-stage pipeline trace as JSON. Runs the pipeline stage by

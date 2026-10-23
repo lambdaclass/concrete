@@ -1113,6 +1113,9 @@ jobs:
       - name: "Compiler complexity guard (Phase 6C #2 — no super-linear pass on scaling corpus)"
         run: bash scripts/tests/check_compiler_complexity.sh
 
+      - name: "Match lowering scaling (bug 178 — lower stage near-linear in match arms, by heartbeats and instructions)"
+        run: bash scripts/tests/check_ssa_lowering_scaling.sh
+
       - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
         run: bash scripts/tests/check_trace_pipeline.sh
 

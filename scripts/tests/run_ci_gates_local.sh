@@ -178,7 +178,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   (-5 +1). 255 + 13 - 4 = 264.
 # 264 -> 265: train 3 adds check_rules_2i.sh (exit 2i acceptance manifest tests/rules/exit_2i.tsv:
 #   REF-1..REF-8, SCOPE-1..SCOPE-3 and G4, with negative controls), from train 1b.
-EXPECTED_GATE_COMMANDS=265
+# 265 -> 266: check_ssa_lowering_scaling.sh (bug 178: match lowering scales <= n^1.3 in arms).
+EXPECTED_GATE_COMMANDS=266
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of
