@@ -9,6 +9,7 @@ import Concrete.Check.Check
 import Concrete.Elab.Core
 import Concrete.Elab.Elab
 import Concrete.Elab.CoreCanonicalize
+import Concrete.Check.ElabVerify
 import Concrete.Check.CoreCheck
 import Concrete.IR.Mono
 import Concrete.IR.SSA
@@ -189,7 +190,15 @@ def check (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnos
 def elaborate (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnostics ElaboratedProgram :=
   match elabProgram resolved.modules summary.entries with
   | .error ds => .error ds
-  | .ok coreModules => .ok ⟨canonicalizeProgram coreModules⟩
+  | .ok coreModules =>
+    let canon := canonicalizeProgram coreModules
+    -- R-0492 step 3: the Core Elab produced must carry consistent binding identities
+    -- (ElabVerify). A finding is an internal compiler error, never a user diagnostic.
+    match elabVerifyModules canon with
+    | [] => .ok ⟨canon⟩
+    | findings => .error (findings.map fun m =>
+        { severity := .error, message := s!"internal: ElabVerify: {m} (R-0492)", pass := "elab",
+          span := none, hint := none, code := "E0422" })
 
 /-- Validate elaborated Core IR.  This is the only way to construct a `ValidatedCore`.
     Note: the post-Elab placeholder check (`verifyPostElab`) is **not** run here — it is

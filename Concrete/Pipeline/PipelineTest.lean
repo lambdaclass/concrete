@@ -387,36 +387,43 @@ def testCoreCheckBinderAgreement : IO UInt32 := do
     IO.eprintln (renderDiagnostics ds)
     return 1
   | .ok (_, _, validCore) =>
-    let wide : CExpr := .ident "a" .i32
+    let wide : CExpr := .ident (CLocal.ofName "a") .i32
     -- (label, rewrite, a fragment the E0510/E0560 message must contain)
     let cases : List (String × (CStmt → CStmt) × String × String) := [
+      -- Binder names are matched by GUARD, never by a string-literal pattern: a Core binder is a
+      -- `CLocal` (R-0492 step 3), and a literal pattern there only matches a binder WITHOUT an
+      -- identity, so after Elab began filling identities every rewrite below silently stopped
+      -- applying (check_local_identity.sh leg S refuses the literal form).
       ("let", fun
-        | .letDecl "y" m ty _ => .letDecl "y" m ty wide
+        | s@(.letDecl b m ty _) => if b.name == "y" then .letDecl b m ty wide else s
         | s => s, "E0510", "let 'y'"),
       ("assign", fun
-        | .assign "y" _ => .assign "y" wide
+        | s@(.assign b _) => if b.name == "y" then .assign b wide else s
         | s => s, "E0510", "assignment to 'y'"),
       ("call argument", fun
-        | .letDecl "t" m ty (.call c tas [_] rt) => .letDecl "t" m ty (.call c tas [wide] rt)
+        | s@(.letDecl b m ty (.call c tas [_] rt)) =>
+            if b.name == "t" then .letDecl b m ty (.call c tas [wide] rt) else s
         | s => s, "E0510", "argument 1 ('x')"),
       ("struct field", fun
-        | .letDecl "p" m ty (.structLit n tas [(fname, _)] st) =>
-            .letDecl "p" m ty (.structLit n tas [(fname, wide)] st)
+        | s@(.letDecl b m ty (.structLit n tas [(fname, _)] st)) =>
+            if b.name == "p" then .letDecl b m ty (.structLit n tas [(fname, wide)] st) else s
         | s => s, "E0510", "field 'v'"),
       ("return", fun
-        | .return_ (some (.ident "r" _)) rt => .return_ (some wide) rt
+        | s@(.return_ (some (.ident r _)) rt) => if r.name == "r" then .return_ (some wide) rt else s
         | s => s, "E0560", "expected u8, got i32"),
       ("if-expression branch value", fun
-        | .letDecl "w" m ty (.ifExpr c t e it) =>
-            .letDecl "w" m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it)
+        | s@(.letDecl b m ty (.ifExpr c t e it)) =>
+            if b.name == "w" then .letDecl b m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it) else s
         | s => s, "E0510", "the value of an if branch"),
       ("array element", fun
-        | .letDecl "arr" m ty (.arrayLit [e0, _] at_) => .letDecl "arr" m ty (.arrayLit [e0, wide] at_)
+        | s@(.letDecl b m ty (.arrayLit [e0, _] at_)) =>
+            if b.name == "arr" then .letDecl b m ty (.arrayLit [e0, wide] at_) else s
         | s => s, "E0510", "array element 1"),
       -- a capability-free fn binder holding a `with(Console)` function would let a call
       -- through it skip the requirement
       ("fn value capabilities", fun
-        | .letDecl "f" m ty _ => .letDecl "f" m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int))
+        | s@(.letDecl b m ty _) =>
+            if b.name == "f" then .letDecl b m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int)) else s
         | s => s, "E0510", "let 'f'")]
     let mut failed := 0
     for (label, rw, code, frag) in cases do

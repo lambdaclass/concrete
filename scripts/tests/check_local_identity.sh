@@ -54,6 +54,14 @@ neg F3 "$PRIV" 'def forged : LocalTable := ⟨true, #[], [], [], [], []⟩'
 neg F4 "$PRIV" 'def forged (t : LocalTable) : LocalTable := { t with uses := [] }'
 neg F5 "$MISMATCH" 'def byName (env : TypeEnv) : Option VarInfo := env.vars.lookup "x"'
 neg F6 'failed to synthesize|Inhabited' 'def forged : LocalId := default'
+# A string-literal pattern on a Core binder field (`| .letDecl "y" ..`) used to elaborate through a
+# String -> CLocal coercion and match only a binder WITHOUT an identity, so it compiled and silently
+# stopped matching Elab's Core (PipelineTest's binder-agreement test). The coercion is gone; such a
+# pattern is now a type error, in every form (nested, let-pattern, arm binding).
+neg F7 "$MISMATCH" 'def byLit : CStmt → Bool
+  | .letDecl "y" _ _ _ => true
+  | _ => false'
+neg F8 "$MISMATCH" 'def byLit (e : CExpr) : Bool := if let .ident "x" _ := e then true else false'
 
 echo ""
 echo "=== S: one minting site, no name-keyed lookup ==="
@@ -279,6 +287,83 @@ if [ "$CRC" -eq 0 ] && [ "$PROFILE" = "$WANT" ]; then
   ok "E: Core names match the pre-step-2 compiler exactly (let spelling, three destructure temporaries, region not counted, fresh arm binder, ghost does not capture a constant)"
 else
   no "E: Core name profile (rc=$CRC): got '$PROFILE' want '$WANT'"
+fi
+
+echo ""
+echo "=== V: Core carries binding identities and ElabVerify checks them (R-0492 step 3) ==="
+cat > "$TMP/ev.lean" <<'LEAN'
+import Concrete
+open Concrete
+
+def src : String := "mod m {
+    pub fn f(a: i32) -> i32 {
+        let x: i32 = a;
+        let mut y: i32 = x;
+        y = y + 1;
+        return y;
+    }
+}"
+
+def check (label : String) (ok : Bool) : IO Unit :=
+  IO.println ((if ok then "  ok   " else "  FAIL ") ++ label)
+
+/-- The elaborated Core of `f`, through the real pipeline. -/
+def coreOf : Option CFnDef :=
+  match Pipeline.parse src with
+  | .error _ => none
+  | .ok p =>
+    let s := Pipeline.buildSummary p
+    match Pipeline.resolve p s with
+    | .error _ => none
+    | .ok r =>
+      match Pipeline.elaborate r s with
+      | .error _ => none
+      | .ok e => (e.coreModules.flatMap (·.functions)).head?
+
+/-- Rewrite every reference to `n` in a statement list (and nothing else). -/
+partial def mapRefsE (g : CLocal → CLocal) : CExpr → CExpr
+  | .ident r t => .ident (g r) t
+  | .binOp o l r t => .binOp o (mapRefsE g l) (mapRefsE g r) t
+  | e => e
+def mapRefs (g : CLocal → CLocal) : List CStmt → List CStmt :=
+  List.map fun
+    | .letDecl b m t v => .letDecl b m t (mapRefsE g v)
+    | .assign r v => .assign (g r) (mapRefsE g v)
+    | .return_ (some v) t => .return_ (some (mapRefsE g v)) t
+    | s => s
+
+def main : IO Unit := do
+  match coreOf with
+  | none => IO.println "  FAIL V: the probe program did not elaborate"
+  | some f =>
+    let binders := f.body.filterMap fun | .letDecl b _ _ _ => some b | _ => none
+    check "V: the let binders carry identities, and so do the parameters"
+      (binders.length == 2 && binders.all (·.id.isSome) && f.paramIds.length == 1)
+    check "V: the elaborated function passes ElabVerify"
+      (elabVerifyFn f).isEmpty
+    -- U1: a use spelled differently from the binding its identity names
+    let renamed := { f with body := mapRefs (fun r => if r.name == "x" then { r with name := "y" } else r) f.body }
+    check "V: a use whose Core name disagrees with its identity is U1"
+      ((elabVerifyFn renamed).any (·.startsWith "U1"))
+    -- U2: a use of a visible source binding with its identity dropped
+    let dropped := { f with body := mapRefs (fun r => if r.name == "x" then { name := r.name } else r) f.body }
+    check "V: a use of a source binding without its identity is U2"
+      ((elabVerifyFn dropped).any (·.startsWith "U2"))
+    -- B1: a second binder with an identity already visible
+    let dup := match f.body with
+      | (s1@(.letDecl b m t v)) :: rest => s1 :: .letDecl b m t v :: rest
+      | other => other
+    check "V: re-introducing a visible identity is B1"
+      ((elabVerifyFn { f with body := dup }).any (·.startsWith "B1"))
+
+#eval main
+LEAN
+VOUT="$(lake env lean "$TMP/ev.lean" 2>&1)"; VRC=$?
+VOK="$(grep -c '^  ok   V:' <<<"$VOUT" || true)"; VFL="$(grep -c '^  FAIL' <<<"$VOUT" || true)"
+if [ "$VRC" -eq 0 ] && [ "$VOK" -eq 5 ] && [ "$VFL" -eq 0 ]; then
+  ok "V: Core carries identities, ElabVerify passes the real Core and refuses U1, U2 and B1 forgeries"
+else
+  no "V: ElabVerify probe ($VOK of 5 ok, rc=$VRC): $(grep -E 'FAIL|error' <<<"$VOUT" | head -n4 | tr '\n' ' ' | cut -c1-500)"
 fi
 
 echo ""

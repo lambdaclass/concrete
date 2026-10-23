@@ -6436,7 +6436,7 @@ def diagnosticCodesReport : String :=
     entry "E0419" "elab" "error" "symbol not public in module",
     entry "E0421" "check" "error" "append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)",
     entry "E0420" "elab" "error" "ghost value used in runtime code",
-    entry "E0422" "elab" "error" "internal: a binder or function reached elaboration without its local binder table (R-0492; train 8 merge of bug 206 with R-0492 step 2)",
+    entry "E0422" "elab" "error" "internal: a binding-identity invariant failed at elaboration: a binder or function reached elaboration without its local binder table, or ElabVerify found Core whose binding identities and names disagree (R-0492 steps 2 and 3)",
     -- Core-check: type consistency (E0500–E0509)
     entry "E0500" "core-check" "error" "variable type mismatch",
     entry "E0501" "core-check" "error" "arithmetic on non-numeric type",

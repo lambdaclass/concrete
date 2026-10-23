@@ -78,7 +78,7 @@ partial def expr (r : CoreRename) : CExpr → CExpr
     -- A function VALUE is `.ident` with a function type; a local of function type is too,
     -- and keeps its name (bugs 050, 096 - 098).
     match t with
-    | .fn_ .. => .ident (if r.locals.contains n then n else r.fnName n) (r.ty t)
+    | .fn_ .. => .ident (if n.id.isSome || r.locals.contains n.name then n else { n with name := r.fnName n.name }) (r.ty t)
     | _ => .ident n (r.ty t)
   | .binOp op l rh t => .binOp op (expr r l) (expr r rh) (r.ty t)
   | .unaryOp op e t => .unaryOp op (expr r e) (r.ty t)

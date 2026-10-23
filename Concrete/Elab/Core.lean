@@ -80,6 +80,39 @@ def directName? : Callee → Option String
 
 end Callee
 
+/-- A local binder or local reference in Core (R-0492 step 3): its Core name (what every backend
+    and printer spells) and, for a binding of the source program, the `LocalId` the local walk
+    minted for it. Elab fills `id`. The struct-destructure temporary has one (the walk mints it);
+    an evaluation-order temporary (`ev.t<n>`), a constant or a function value has none.
+
+    MIGRATION (the R-0002 technique): the Core constructors that named a local by a bare `String`
+    now carry a `CLocal`, with coercions both ways so consumers keep compiling while they move to
+    the identity one at a time. Equality, hashing, ordering, `Repr` and `ToString` are the NAME's,
+    so no consumer changes behaviour, and no printed or hashed form of Core moves. The identity
+    is consulted only by consumers that ask for it (`ElabVerify`, which checks it). -/
+structure CLocal where
+  name : String
+  id : Option LocalId := none
+
+namespace CLocal
+/-- A Core local from a bare name, with no identity (a compiler-synthesized local, or a test).
+    Deliberately NOT a coercion: with `Coe String CLocal`, a string-literal PATTERN on a binder
+    field (`| .letDecl "y" ..`) elaborated through it and matched only identity-less binders, so it
+    compiled and silently stopped matching Elab's Core (found in PipelineTest). Without the
+    coercion such a pattern is a type error. -/
+def ofName (n : String) : CLocal := { name := n }
+instance : Coe CLocal String := ⟨CLocal.name⟩
+instance : BEq CLocal := ⟨fun a b => a.name == b.name⟩
+instance : Hashable CLocal := ⟨fun a => hash a.name⟩
+instance : Ord CLocal := ⟨fun a b => compare a.name b.name⟩
+instance : Repr CLocal := ⟨fun a p => reprPrec a.name p⟩
+instance : ToString CLocal := ⟨CLocal.name⟩
+instance : Inhabited CLocal := ⟨{ name := "" }⟩
+instance : LT CLocal := ⟨fun a b => a.name < b.name⟩
+/-- The names of a binder list, for a consumer still keyed by spelling (migration helper). -/
+def names {α : Type} (bs : List (CLocal × α)) : List (String × α) := bs.map fun (b, x) => (b.name, x)
+end CLocal
+
 mutual
 inductive CExpr where
   | intLit (val : Int) (ty : Ty)
@@ -87,7 +120,7 @@ inductive CExpr where
   | boolLit (val : Bool)
   | strLit (val : String)
   | charLit (val : Char)
-  | ident (name : String) (ty : Ty)
+  | ident (name : CLocal) (ty : Ty)
   | binOp (op : BinOp) (lhs rhs : CExpr) (ty : Ty)
   | unaryOp (op : UnaryOp) (operand : CExpr) (ty : Ty)
   | call (callee : Callee) (typeArgs : List Ty) (args : List CExpr) (ty : Ty)
@@ -109,14 +142,14 @@ inductive CExpr where
 -- `guard` is an optional condition tested after the pattern matches; false falls
 -- through to the next arm. (See AST.MatchArm.)
 inductive CMatchArm where
-  | enumArm (enumName variant : String) (bindings : List (String × Ty)) (guard : Option CExpr) (body : List CStmt)
+  | enumArm (enumName variant : String) (bindings : List (CLocal × Ty)) (guard : Option CExpr) (body : List CStmt)
   | litArm (value : CExpr) (guard : Option CExpr) (body : List CStmt)
-  | varArm (binding : String) (bindTy : Ty) (guard : Option CExpr) (body : List CStmt)
+  | varArm (binding : CLocal) (bindTy : Ty) (guard : Option CExpr) (body : List CStmt)
   | rangeArm (lo : CExpr) (hi : CExpr) (inclusive : Bool) (guard : Option CExpr) (body : List CStmt)
 
 inductive CStmt where
-  | letDecl (name : String) (mutable : Bool) (ty : Ty) (value : CExpr)
-  | assign (name : String) (value : CExpr)
+  | letDecl (name : CLocal) (mutable : Bool) (ty : Ty) (value : CExpr)
+  | assign (name : CLocal) (value : CExpr)
   | return_ (value : Option CExpr) (retTy : Ty)
   -- `isValue`: trailing value expression of a value-bearing block/arm (no `;`)
   -- vs a discarded statement (`;`). Carried from `AST.Stmt.expr`. Phase 5 #42.
@@ -130,7 +163,7 @@ inductive CStmt where
   | break_ (value : Option CExpr) (label : Option String)
   | continue_ (label : Option String)
   | defer (body : CExpr)
-  | borrowIn (var : String) (ref : String) (region : String)
+  | borrowIn (var : CLocal) (ref : CLocal) (region : String)
              (isMut : Bool) (refTy : Ty) (body : List CStmt)
 end
 
@@ -155,6 +188,10 @@ structure CFnDef where
       identities (`CallableId`, qualified names) are the declaration's; the Core name is
       only the symbol. Submodule prefixing (`prefixModuleFnNames`) prefixes both. -/
   declName : Option String := none
+  /-- The parameters' binding identities, in order (R-0492 step 3), as Elab bound them. Empty for
+      a function Elab did not produce (a synthesized helper). `ElabVerify` seeds its scope with
+      them. -/
+  paramIds : List LocalId := []
   capSet : CapSet := .empty
   -- Source location of the function declaration, carried across the AST→Core
   -- boundary so Core-level diagnostics, the compiler ledger, and audit/obligation
