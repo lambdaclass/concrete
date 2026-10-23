@@ -74,7 +74,7 @@ changes. It measures what a rule breaks before the rule lands.
 | T-G13 | trait method declaration returning a reference (G13) | HOLE (well-formedness; REF-1 is normative) | accepted; every implementation is refused | the uniform signature well-formedness check on trait method declarations (E0236) | now (exit 2i) |
 | T-G15 | `extern fn` with `*const &T` in its signature (G15) | SEMANTICS | result and parameter forms accepted; reading the inner reference is E0238 | E0575 looks through raw-pointer pointees, in parameters and results; 0 corpus sites | now (exit 2i, with R-0285) |
 | T-G16 | reference-returning function type via an alias or a field (G16) | HOLE (well-formedness; REF-2 is normative) | accepted | the same signature well-formedness after alias expansion and in field declarations (E0236); a callback type whose parameters borrow stays legal; 0 corpus sites | now (exit 2i) |
-| T-G17 | arm binder through `match &o` after its root moves (G17) | HOLE (not reproduced) | three variants refused, E0204 (train3: E0204, E0208) | none new | **closed 2026-10-23:** three rejection fixtures `error_g17_*.con`; §15.7 row and exit 0b clause corrected |
+| T-G17 | arm binder through `match &o` after its root moves (G17) | HOLE | moving shapes refused, E0204 (train3: E0204, E0208); Copy payload: reassigning the root in the arm is accepted (42) | moving shapes: none new; Copy case: refused under D3 (the binder is a loan on the root) | moving shapes **closed 2026-10-23** (fixtures `error_g17_*.con`); Copy case **reopened**, fixed with D3 |
 | T-BIND | Copy-keyed binding mode through a borrowed scrutinee | HOLE + SEMANTICS (bug 181) | non-Copy payload binds `&P`, Copy payload binds `P`. A generic payload is `&T` to Check and `T` to Elab: segfault at `T := Int` (bug 181) | **decided (D3):** every binder through a reference scrutinee is a reference (`&T`), Copy or not | now (exit 2i, closes bug 181); migration: 2 fixtures, 0 std or example sites |
 | T-G19 | `noalias` / exclusivity exploitation; Core reborrow form (G19, B4, B5) | SEMANTICS | no `noalias` emitted | policy: no pass exploits `&mut` exclusivity before an aliasing model covering raw pointers exists | decide now (adopt sentence), implement later (R-0505, R-0496) |
 | T-ARITH | checked arithmetic | settled | `+ - *` trap (exit 134; interp error); `/ %` by zero trap; shift count checked; `i8 100 << 1` is -56 by rule | none | nothing to tighten |
@@ -255,7 +255,8 @@ are not candidates here. Two other items are settled and are not repeated in the
   on main, plus E0208 on train1 and train3. The heap variant writes its inner match with a renamed
   binder, so it parses only on train1 and train3. With a Copy payload the arm binder is a copy
   (T-BIND), so reassigning the root in the arm is safe and accepted (42).
-- **Closed (2026-10-23).** The three shapes are rejection fixtures (`tests/programs/error_g17_*.con`,
+- **Moving shapes closed (2026-10-23); the Copy case is reopened by D3** (see §4, G17). The three
+  moving shapes are rejection fixtures (`tests/programs/error_g17_*.con`,
   wired in `run_tests.sh`; the heap form calls a releasing function instead of an inner match, so
   it parses on main), and they join `tests/rules/exit_2i.tsv` when that manifest lands. The §15.7
   row and the ROADMAP 0b clause are corrected. Reference-parameter
