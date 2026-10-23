@@ -674,6 +674,42 @@ partial def armNonTerminating : MatchArm → Bool
   | .rangeArm _ _ _ _ _ body => blockNonTerminating body
 end
 
+-- Bugs 194 / 195: the END of a block is unreachable — some statement of it, at any position,
+-- never completes: it returns, breaks, continues, `abort()`s, loops forever, or is a construct
+-- whose every branch never completes (an `if` with both branches, a `match` with every arm, a
+-- borrow block, a `let` whose initializer never completes). Unlike `blockDiverges` (which looks only
+-- at the LAST statement, for the linearity exemptions), a diverging statement anywhere makes the
+-- rest of the block dead, so `{ return 1; let x: Int = 0; }` cannot reach its end. User functions
+-- cannot declare `-> !`, so the only call that never returns is the `abort` intrinsic.
+mutual
+partial def blockEndUnreachable : List Stmt → Bool
+  | [] => false
+  | s :: rest => stmtNeverCompletes s || blockEndUnreachable rest
+partial def stmtNeverCompletes : Stmt → Bool
+  | .return_ _ _ => true
+  | .break_ _ _ _ => true
+  | .continue_ _ _ => true
+  | .while_ _ cond body lbl => isLitTrueExpr cond && !blockHasBreak body lbl
+  | .forLoop _ _ cond step body lbl => isLitTrueExpr cond && !blockHasBreak (body ++ step.toList) lbl
+  | .ifElse _ c t (some e) => exprNeverCompletes c || (blockEndUnreachable t && blockEndUnreachable e)
+  | .ifElse _ c _ none => exprNeverCompletes c
+  | .borrowIn _ _ _ _ _ body => blockEndUnreachable body
+  | .letDecl _ _ _ _ v _ => exprNeverCompletes v
+  | .expr _ e _ => exprNeverCompletes e
+  | _ => false
+partial def exprNeverCompletes : Expr → Bool
+  | .paren _ inner => exprNeverCompletes inner
+  | .call _ fnName _ _ => resolveIntrinsic fnName == some .abort
+  | .match_ _ scr arms => exprNeverCompletes scr || (!arms.isEmpty && arms.all armNeverCompletes)
+  | .ifExpr _ c t e => exprNeverCompletes c || (blockEndUnreachable t && blockEndUnreachable e)
+  | _ => false
+partial def armNeverCompletes : MatchArm → Bool
+  | .mk _ _ _ _ _ body => blockEndUnreachable body
+  | .litArm _ _ _ body => blockEndUnreachable body
+  | .varArm _ _ _ body => blockEndUnreachable body
+  | .rangeArm _ _ _ _ _ body => blockEndUnreachable body
+end
+
 -- Rule (d), the operand-escape rule (bug 142; EVALUATION2 D3/D15): a `return`, `break` or
 -- `continue` may not occur inside a call argument (receivers included), a struct, enum or
 -- array literal element, a functional-update base, or an operator operand (binary, unary,

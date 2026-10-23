@@ -32,9 +32,16 @@ missing value. CoreCheck has no such check either, so Lower emitted `ret void`.
 ## Fix
 
 `checkFn` refuses a function whose result type is not `Unit` or `!` when its body can reach its
-end (`blockDiverges` and `blockNonTerminating` both false), with the new code E0307. Fixtures:
+end, with the new code E0307. Reachability is the new `blockEndUnreachable` (CheckHelpers), which
+looks at every statement of a block, not only the last: a `return`, `break`, `continue`,
+`abort()`, an infinite loop, or an `if`, `match` or borrow block every branch of which never
+completes, anywhere in the block, makes its end unreachable. It is syntactic, so it is
+conservative: a call to a function that never returns is recognized only for the `abort`
+intrinsic (user functions cannot declare `-> !`). Fixtures:
 `error_194_missing_return_plain.con`, `error_194_missing_return_if.con` and
-`error_194_missing_return_method.con` (E0307, in `run_tests.sh`). A falling-through
+`error_194_missing_return_method.con` (E0307, in `run_tests.sh`), and the accepted
+`regress_194_unreachable_end_forms.con` (a `return` before the last statement, a `return` inside a
+borrow block). A falling-through
 `let ... else` is refused earlier and more precisely by bug 195's rule (E0308, the `else` block
 must diverge), so it has no fixture here. A rule-impact scan (`scripts/tools/rule_impact.sh`, 2,169 units of the train 4
 corpus) found no program newly refused.

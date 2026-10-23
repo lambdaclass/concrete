@@ -3346,9 +3346,10 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- Check body
   checkStmts f.body retTy
   -- Bug 194: a function with a result type returns on every path. Its end must be unreachable
-  -- (every path returns, breaks out, continues, aborts or loops forever); a reachable end has no
+  -- (some statement on every path returns, aborts or loops forever: `blockEndUnreachable`, which
+  -- looks at every statement, not only the last); a reachable end has no
   -- value to return, and reached the backend as `ret void` in a non-void function.
-  if retTy != .unit && retTy != .never && !(blockDiverges f.body) && !(blockNonTerminating f.body) then
+  if retTy != .unit && retTy != .never && !(blockEndUnreachable f.body) then
     throwCheck (.missingReturn f.name (tyToString retTy)) (some f.span)
   -- Check local bindings AND owned params for the consume obligation.
   let envAfter ← getEnv
