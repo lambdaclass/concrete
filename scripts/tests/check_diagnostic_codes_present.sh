@@ -27,7 +27,9 @@ field_has_no_default() {  # $1 = path to Diagnostic.lean
     | grep -E '^\s+code\s+:' | grep -vq ':='
 }
 no_message_only_helper() {  # $1 = source root
-  ! grep -rqE 'def throwCheckMsg|def throwMsg' "$1"
+  # Any pass's message-only throw helper (throwCheckMsg, throwElabMsg, throwMsg, ...): train 8
+  # found an Elab one (R-0492 step 2) that only the build caught, because this matched two names.
+  ! grep -rqE 'def throw[A-Za-z]*Msg\b' "$1"
 }
 echo "=== A. a diagnostic cannot be built without a code ==="
 field_has_no_default Concrete/Report/Diagnostic.lean \
@@ -91,6 +93,8 @@ PY
 if field_has_no_default "$TMP/D.lean"; then no "control A1: a restored default was not detected"; else ok "control A1: a restored default is detected"; fi
 mkdir -p "$TMP/src"; printf 'def throwCheckMsg (msg : String) : Nat := 0\n' > "$TMP/src/X.lean"
 if no_message_only_helper "$TMP/src"; then no "control A2: a message-only helper was not detected"; else ok "control A2: a message-only helper is detected"; fi
+printf 'def throwElabMsg (msg : String) : Nat := 0\n' > "$TMP/src/X.lean"
+if no_message_only_helper "$TMP/src"; then no "control A2b: another pass's message-only helper (throwElabMsg) was not detected"; else ok "control A2b: another pass's message-only helper is detected"; fi
 printf 'def d := { severity := .error, message := "m", pass := "check", span := none, hint := none, code := "" }\n' > "$TMP/src/X.lean"
 [ -n "$(bad_code_literals "$TMP/src")" ] && ok "control B1: an empty code literal is detected" || no "control B1: an empty code literal was not detected"
 printf 'def d := { message := "m {x}", severity := .error, pass := "check", span := none, hint := none, code := "E12" }\n' > "$TMP/src/X.lean"
