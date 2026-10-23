@@ -62,7 +62,9 @@ rule changes in one place.
 
 **Review.** Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 5 rounds, the first over the whole diff and each later round over the delta since the
-previous one. Answer each finding with a fix or a stated reason.
+previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
+`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
+worktree's `index.lock` and can leave it behind (bug 209).
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.

@@ -49,7 +49,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 13. Documented rules with no enforcing site | 073, 075, 091 (impl conformance), 092, 108 (`<int> as bool` admitted with no meaning), 111, 113, 115, 123, 124 (closed by SCOPE-1@1, exit 2i), 130, 134 (no type had a defined comparison), 136 (evaluation-order rule 6: Core cannot bind the base once), 140 (nor was a comparison non-consuming), 144 (heap interiors exempted from use-once by a disclosed exclusion), 145 (raw collection intrinsics outside rule (c)), 177 (CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's), 182 (REF-5: a borrowed call result is accepted), 192 (an `if` / `while` / `for` statement condition: Check discarded its type, CoreCheck admitted integers), 200 (a generic type named without its argument list: arity checked only where a list was written), 196 (pattern shape left to CoreCheck, after Elab crashed or lowered the arm), 195 (`let ... else` divergence: desugared away before any checker), 194 (a function returns a value on every path: no site; the backend verifier noticed), 205 (finite size judged on declarations and assumed for generic instantiations), 204 (a bound on a primitive type argument: `checkTraitBounds` skipped every unnamed shape), 198 (`trusted` does not relax linearity, unenforced at `*p`) | R-0498 (S3, exit 2l); R-0499 (S8: every rule has an enforcing site) |
 | 14. Trusted `std` and FFI code with no checked contract | 043, 046, 047, 048, 072, 166 (a foreign fn value called with the Concrete ABI), 189 (`trusted impl` made every method trusted without declaring it) | R-0509 (S16 trusted base); R-0283/R-0287 (ABI checks) for the C boundary |
 | 15. Ownership state not modeled along control-flow paths | 090, 115, 142 (a value moved into a construct an exit left incomplete), 143 (a pending deferred call was not part of the state), 147 (an erased statement counted as a move), 148 (a short-circuit operand treated as sequential), 149 (loop conditions, nested returns and labelled exits), 197 (a variant pattern with no field list ignored a non-Copy payload) | R-0499 (S8 use-once and conservation at reachable exits, row 4) |
-| 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
+| 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host), 209 (a read-only review's git left the caller's `index.lock` behind) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
 | 18. Pipeline artifacts not bound to their payload | 180 (a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified) | R-0497 (S5 sealed, payload-bound artifacts; slice 1 landed with 180's fix) |
 
@@ -368,7 +368,8 @@ row 4.
 compiles of one source removed or rewrote it under each other; test mode, `concrete run` and the
 reducer named their temporaries from the source path or a millisecond clock), 191 (test programs
 and std tests wrote fixed `/tmp` names; on a shared host the first user to run the suite owned
-them and `fopen` failed for every other user).
+them and `fopen` failed for every other user), 209 (a read-only Codex review's `git status` took the
+caller's `index.lock` and, stopped mid-refresh, left it behind).
 
 **Design cause.** The driver derived the location of an intermediate from a shared input, the
 source path or the machine's clock, instead of from the compile that writes and reads it, so it
@@ -385,8 +386,9 @@ suite harnesses per run or per job; std tests use `std.test.scratch_path`), with
 **Owner.** The compile driver (`Main.lean`, `privateIntermediate`); the concurrent-compile legs in
 `run_tests.sh` (file and project mode) enforce it. For test scratch, the test runner
 (`Main.runTestBinary`, `run_tests.sh`, `test_ssa.sh`); `check_gate_hygiene.sh` refuses fixed `/tmp`
-paths in gate scripts (R-0546) and in every `.con` source (bug 191). No roadmap stage owns the
-driver yet.
+paths in gate scripts (R-0546) and in every `.con` source (bug 191). For review runs, the review
+entry point (`scripts/review/review.sh`, `GIT_OPTIONAL_LOCKS=0`; enforced by
+`check_review_tool.sh`, bug 209). No roadmap stage owns the driver yet.
 
 ## 17. Pass state in association lists and per-query recomputation
 

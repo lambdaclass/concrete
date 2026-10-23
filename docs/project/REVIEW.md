@@ -85,6 +85,9 @@ findings: wrong behaviour, logic errors, regressions, unhandled cases, tests tha
 do not check what they claim, and docs that contradict the code. It runs
 `codex exec --sandbox read-only` from the repository root, with the piece on
 stdin, so the reviewer can open other files for context but cannot change them.
+It runs with `GIT_OPTIONAL_LOCKS=0`: the sandbox does not stop git from taking the
+worktree's `index.lock` for an index refresh, and a reviewer command stopped
+mid-refresh left that lock behind (bug 209).
 
 The reply must end with a line that is exactly `VERDICT: clean` or
 `VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
