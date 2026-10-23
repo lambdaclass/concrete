@@ -35,7 +35,10 @@ mod ordered_set {
 
     impl<K> OrderedSet<K> {
         /// In-order fold over set members (ascending order).
-        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
+        /// `trusted`: it walks the inner map's key buffer by raw pointer (bounded by
+        /// `len`). Until bug 188 the capability variable `C` authorized those raw
+        /// operations; a variable entails only itself, so the audit is now explicit.
+        pub trusted fn fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             // delegate through the inner map, ignoring the u8 payload
             let mut acc: A = init;
             let mut i: u64 = 0;
@@ -47,8 +50,9 @@ mod ordered_set {
             return acc;
         }
 
-        /// In-order visit over set members (ascending order).
-        pub fn for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
+        /// In-order visit over set members (ascending order). `trusted` for the same
+        /// raw key-buffer walk as `fold` (bug 188).
+        pub trusted fn for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.inner.len() {
                 let kp: *mut K = self.inner.keys_ptr() + i;
