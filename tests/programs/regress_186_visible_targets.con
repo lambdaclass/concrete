@@ -1,11 +1,13 @@
 // Bug 186 (Codex round 2): an impl target means what it means to the checker. `Foo` reaches
-// `main` only through `make`'s signature (the import closure), and `Ns` is declared nowhere: an
-// inherent impl of it is a namespace. Both still compile; 40 + 2 = 42, natively and --interp.
+// `main` only through `make`'s signature (the import closure). `Ns` is declared nowhere `main`
+// can see (a child module's type is not visible in its parent): an inherent impl of it is a
+// namespace. All of these still compile; 40 + 2 = 42, natively and --interp.
 mod defs {
     pub struct Foo { pub a: Int }
     pub fn make() -> Foo { return Foo { a: 40 }; }
 }
 mod main {
+    mod child { pub struct Ns<T> { pub value: T } }
     import defs.{make};
     trait Tr { fn answer(self) -> Int; }
     impl Tr for Foo {

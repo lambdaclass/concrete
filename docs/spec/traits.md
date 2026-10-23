@@ -37,7 +37,7 @@ call instead of asking for qualification; adding the syntax is a follow-up (READ
 
 **Rationale.** A name is resolved the way the checker resolves it: the module's own
 declarations and aliases, its import artifact (explicit symbols and the types their signatures
-reach), a sibling or child submodule's struct or enum, the compiler's
+reach), a sibling submodule's struct or enum, the compiler's
 `Option` and `Result`, the always-visible std types, then the primitives, where `i64` and `Int`
 are one type. A name that none of these answers is its own type, declared in no module: an
 inherent impl of it is a namespace for functions, and a trait impl of it is foreign everywhere

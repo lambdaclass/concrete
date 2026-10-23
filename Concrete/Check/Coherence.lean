@@ -162,16 +162,16 @@ inductive HeadRes where
 /-- The module scope a target name is resolved in. `imports` is the module's import artifact,
     built by the same `resolveImports` Check and Elab consume (explicit symbols under their local
     names, the types their signatures reach, the always-visible builtin types), so a target means
-    here what it means to them. `siblings` are the other submodules of the same parent and
-    `children` the module's own submodules (path, module): their structs and enums are visible
-    without an import (`checkSubmodules` injects siblings). -/
+    here what it means to them. `siblings` are the other submodules of the same parent (path,
+    module): their structs and enums are visible without an import, as `checkSubmodules` injects
+    them. A module's own child submodules are NOT visible this way (Check does not inject them),
+    so a child's type named in the parent is an unresolved name there. -/
 structure Scope where
   path : String
   module : Module
   summaryTable : List (String × FileSummary)
   imports : ResolvedImports := {}
   siblings : List (String × Module) := []
-  children : List (String × Module) := []
 
 /-- Resolve the name at an impl site to the declaration it denotes, in the order the checker
     sees names: the module's own declarations and aliases; its imports, by the IMPORTED
@@ -206,14 +206,14 @@ def resolveHead (sc : Scope) (n : String) : HeadRes :=
   match imported with
   | some r => r
   | none =>
-  let near := (sc.siblings ++ sc.children).filterMap fun (sp, sm) =>
+  let near := sc.siblings.filterMap fun (sp, sm) =>
     match sm.structs.find? (·.name == n) with
     | some sd => some (structDecl { sd with definedIn := sp, definitionName := sd.name } sp)
     | none => (sm.enums.find? (·.name == n)).map fun ed =>
         enumDecl { ed with definedIn := sp, definitionName := ed.name } sp
   match near with
   | [d] => .decl d
-  | _ :: _ :: _ => .unresolved   -- two nearby modules declare it: no single declaration
+  | _ :: _ :: _ => .unresolved   -- two siblings declare it: no single declaration
   | [] =>
   if n == "Option" then .decl { id := .builtin .option, arity := 1 } else
   if n == "Result" then .decl { id := .builtin .result, arity := 2 } else
@@ -401,7 +401,7 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
   let imports := match resolveImports m.imports summaryTable (fun _ => "") (fun _ _ => "") with
     | .ok r => r
     | .error _ => {}
-  ({ path, module := m, summaryTable, imports, siblings, children := subs }, file) ::
+  ({ path, module := m, summaryTable, imports, siblings }, file) ::
     subs.flatMap fun (sp, sub) =>
       allScopes summaryTable sp file sub (subs.filter fun (q, _) => q != sp)
 
