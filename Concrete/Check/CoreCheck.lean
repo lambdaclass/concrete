@@ -1044,17 +1044,16 @@ def ccCheckModuleDecls (m : CModule)
     -- A pointee reference is a REF-1 violation at the C boundary, so its diagnostic carries the
     -- rule evidence of MEMORY_SEMANTICS §15.5 (rule, spec, rewrite).
     let refRule (d : Diagnostic) : Diagnostic :=
-      { d with evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+      { d with evidence := [("rule", "REF-1@2"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
                nextAction := some "pass or return a raw pointer to a value type (`*const T` where `T` contains no reference), or an owned value" }
+    -- The REF-1 evidence is attached whenever the type holds a reference, whichever FFI branch
+    -- refuses it (a bare `&Int` fails `isFFISafe` first; Codex review).
+    let withRule (ty : Ty) (d : Diagnostic) : Diagnostic := if tyContainsRef ty then refRule d else d
     for (pName, pTy) in efParams do
-      if !Layout.isFFISafe lctx pTy then
-        errors := errors ++ [mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy))]
-      else if tyContainsRef pTy then
-        errors := errors ++ [refRule (mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy)))]
-    if !Layout.isFFISafe lctx efRetTy && efRetTy != .unit then
-      errors := errors ++ [mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy))]
-    else if tyContainsRef efRetTy then
-      errors := errors ++ [refRule (mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy)))]
+      if !Layout.isFFISafe lctx pTy || tyContainsRef pTy then
+        errors := errors ++ [withRule pTy (mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy)))]
+    if (!Layout.isFFISafe lctx efRetTy && efRetTy != .unit) || tyContainsRef efRetTy then
+      errors := errors ++ [withRule efRetTy (mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy)))]
   -- 6. Builtin trait redeclaration — name collision check at validation boundary
   --    (user-defined traits have builtinId = none; the name check detects collisions)
   for td in m.traitDefs do

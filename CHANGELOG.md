@@ -18,8 +18,10 @@ post-mono verifier. Four spellings escaped it: a trait method declaration return
 `extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 with REF-1 evidence), a
 reference-returning function type behind a type alias or in a field (G16), and a generic reached at
 `*const &Int` only through another generic's type parameter, which the post-mono check's weaker
-predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. Each has
-an `exit_2i.tsv` row (227 rule checks pass); 0 corpus programs were affected.
+predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. The
+tightening moves the rules to REF-1@2 and REF-2@2 (§15.5 versioning). Each spelling has a reject row
+and a rewritten run row in `exit_2i.tsv` (233 rule checks pass); extern signatures are now expanded
+through type aliases; 0 corpus programs were affected.
 
 ### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)
 

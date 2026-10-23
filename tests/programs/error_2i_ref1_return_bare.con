@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1 (MEMORY_SEMANTICS §15.3): a function returns a reference parameter. Rejected: E0236 at the front end.
+// Exit 2i REF-1@2 (MEMORY_SEMANTICS §15.3): a function returns a reference parameter. Rejected: E0236 at the front end.
 fn id(x: &Int) -> &Int {
     return x;
 }

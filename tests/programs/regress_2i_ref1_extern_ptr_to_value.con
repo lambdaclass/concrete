@@ -1,0 +1,9 @@
+// Exit 2i REF-1@1, G15 rewrite of error_2i_ref1_extern_ptr_to_ref.con and
+// error_2i_ref1_extern_param_ptr_to_ref.con: the extern passes and returns a raw pointer to a value
+// type, which is FFI-safe. Declared, not called. Exit 42.
+trusted extern fn f() with() -> *const Int;
+trusted extern fn keep(p: *const Int) with();
+
+fn main() -> Int {
+    return 42;
+}

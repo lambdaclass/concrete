@@ -1,0 +1,7 @@
+// Exit 2i REF-2@1, G16: a type alias naming a reference-returning function type is refused even
+// when nothing uses it (it is a written type). E0236.
+type Bad = fn(&Int) -> &Int;
+
+fn main() -> Int {
+    return 0;
+}

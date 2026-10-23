@@ -3011,8 +3011,11 @@ partial def elabModule (m : Module) (summary : FileSummary)
       isPacked := sd.isPacked, reprAlign := sd.reprAlign,
       declSpan := some sd.span : CStructDef }
   -- Build extern fns
+  -- Extern signatures are expanded through the module's type aliases like every other declared
+  -- type (G15 review: `type R = &Int; extern fn f() -> *const R;` reached CoreCheck's FFI rule
+  -- unexpanded, so neither FFI safety nor the reference judgment saw `&Int`).
   let cExterns := m.externFns.map fun ef =>
-    (ef.name, ef.params.map fun p => (p.name, p.ty), ef.retTy, ef.isTrusted)
+    (ef.name, ef.params.map fun p => (p.name, nominalTy [] p.ty), nominalTy [] ef.retTy, ef.isTrusted)
   let cExternCaps := m.externFns.map fun ef => (ef.name, ef.capSet.getD .empty)
   -- Build constants
   let constResults := m.constants.map fun c =>

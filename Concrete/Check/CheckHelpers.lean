@@ -174,7 +174,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
         -- An alias is checked after expansion like the type it names (G16): `type Cb = fn(&Int)
         -- -> &Int;` is the same ill-formed function type as the spelled-out one.
         if tyHasRefReturningFnType resolved then
-          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@1")
+          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@2")
         return resolved
       | none => return ty
   | .ref inner =>
@@ -209,7 +209,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then
-      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@1")
+      throwCheck (.returnsReference s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)." "REF-2@2")
     return .fn_ params' capSet retTy'
   | _ => return ty
 

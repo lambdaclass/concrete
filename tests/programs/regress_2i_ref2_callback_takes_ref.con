@@ -1,4 +1,4 @@
-// Exit 2i REF-2@1 (MEMORY_SEMANTICS §15.3): a callback may take a reference parameter (`apply(&x, g)` with `g: fn(&Int) -> Int`). Run 42, binary = --interp.
+// Exit 2i REF-2@2 (MEMORY_SEMANTICS §15.3): a callback may take a reference parameter (`apply(&x, g)` with `g: fn(&Int) -> Int`). Run 42, binary = --interp.
 fn apply(x: &Int, f: fn(&Int) -> Int) -> Int {
     return f(x);
 }

@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1, gap G13 (MEMORY_SEMANTICS §15.3): a trait method DECLARATION may not return a
+// Exit 2i REF-1@2, gap G13 (MEMORY_SEMANTICS §15.3): a trait method DECLARATION may not return a
 // reference; every implementation of it would be refused, so the declaration is refused. E0236.
 trait Get {
     fn get(&self) -> &Int;

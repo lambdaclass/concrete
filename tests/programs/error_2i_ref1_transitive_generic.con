@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1, gap G2: a generic instantiated at `*const &Int` only transitively (through a
+// Exit 2i REF-1@2, gap G2: a generic instantiated at `*const &Int` only transitively (through a
 // generic caller's own type parameter) returns a raw pointer to a reference after
 // specialization. The post-mono verifier applies the front end's REF-1 judgment (`tyContainsRef`,
 // shared) and refuses it. E0236, pass post-mono.

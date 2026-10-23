@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1 (MEMORY_SEMANTICS §15.3): the rewrite: return the value (a copy-out), not a reference. Run 42, binary = --interp.
+// Exit 2i REF-1@2 (MEMORY_SEMANTICS §15.3): the rewrite: return the value (a copy-out), not a reference. Run 42, binary = --interp.
 fn get(x: &Int) -> Int {
     return *x;
 }

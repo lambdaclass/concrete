@@ -3306,7 +3306,7 @@ def checkFn (f : FnDef) : CheckM Unit := do
   -- value, an owned view, a scoped callback (with_value/with_at), or a raw
   -- pointer (*const/*mut) for low-level/unsafe access.
   if tyContainsRef retTy then
-    throwCheck (.returnsReference s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" "REF-1@1") (some f.span)
+    throwCheck (.returnsReference s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" "REF-1@2") (some f.span)
   modify fun env => { env with currentRetTy := retTy }
   -- Add params to env. H17 (ruled 2026-07-05): params are OWNED LOCALS — the
   -- caller moved the value in, so the callee holds its obligation and must
@@ -3738,17 +3738,24 @@ def checkModule (m : Module) (summary : FileSummary)
   let expand (ty : Ty) : Ty := expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty
   let wfViolations : List (String × Ty × Span × String) :=
     (refFields.filterMap fun (desc, ty, sp) =>
-      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@1") else none)
+      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@2") else none)
+    -- A type alias is a written type even when nothing uses it (Codex review).
+    ++ (m.typeAliases.filterMap fun ta =>
+      if tyHasRefReturningFnType (expand ta.targetTy)
+      then some (s!"type alias '{ta.name}'", ta.targetTy, ta.span, "REF-2@2") else none)
     ++ (m.traits.flatMap fun td => td.methods.filterMap fun sig =>
-      let rt := expand (substTy (td.typeParams.map fun n => (n, Ty.typeVar n)) sig.retTy)
+      -- The trait's own type parameters shadow module aliases of the same name, in the result
+      -- and in the parameters alike (Codex review).
+      let own (t : Ty) : Ty := expand (substTy (td.typeParams.map fun n => (n, Ty.typeVar n)) t)
+      let rt := own sig.retTy
       if tyContainsRef rt || tyHasRefReturningFnType rt then
-        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@1")
+        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@2")
       else
-        let bad := sig.params.find? fun p => tyHasRefReturningFnType (expand p.ty)
-        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@1"))
+        let bad := sig.params.find? fun p => tyHasRefReturningFnType (own p.ty)
+        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@2"))
   match wfViolations.head? with
   | some (desc, ty, sp, rule) =>
-    let msg := if rule == "REF-1@1"
+    let msg := if rule == "REF-1@2"
       then s!"{desc} may not return a reference ('{tyToString ty}'); references are second-class and cannot be returned (VALUE_MODEL.md)"
       else s!"{desc}: '{tyToString ty}' contains a function type that returns a reference; a function type may not return a reference (REF-2, VALUE_MODEL.md)"
     .error [{ severity := .error, message := CheckError.message (.returnsReference msg rule),

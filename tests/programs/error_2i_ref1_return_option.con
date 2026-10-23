@@ -1,4 +1,4 @@
-// Exit 2i REF-1@1 (MEMORY_SEMANTICS §15.3): a function returns a reference inside an Option. Rejected: E0236.
+// Exit 2i REF-1@2 (MEMORY_SEMANTICS §15.3): a function returns a reference inside an Option. Rejected: E0236.
 fn wrap(x: &Int) -> Option<&Int> {
     return Option::Some { value: x };
 }

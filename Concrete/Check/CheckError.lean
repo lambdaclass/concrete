@@ -332,7 +332,7 @@ inductive CheckError where
   | erasedRefInstantiation (what : String) (param : String) (tyName : String)
   -- REF-1/REF-2/REF-4(a) at the front end (exit 2i, closes the front-end half of G2): a
   -- function, function type or reference instantiation would return a reference. The
-  -- message is the site's; `rule` is the rule it enforces (`REF-1@1`, `REF-2@1`, `REF-4@1`).
+  -- message is the site's; `rule` is the rule it enforces (`REF-1@2`, `REF-2@2`, `REF-4@1`).
   | returnsReference (msg : String) (rule : String)
   -- #18 container-not-in-context enforcement: within ONE call's arguments
   -- (including the auto-borrowed method receiver), a variable may be borrowed
@@ -692,8 +692,8 @@ def CheckError.rule : CheckError → Option String
 def ruleNextAction (rule : String) : Option String :=
   match rule with
   | "SCOPE-1@1" => some "give the new binding its own name; for a pattern field write `Variant { value: inner }`; to replace the value of a `mut` binding, assign instead (`value = ...`)"
-  | "REF-1@1" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
-  | "REF-2@1" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
+  | "REF-1@2" => some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code"
+  | "REF-2@2" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
   | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
   | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
   | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"

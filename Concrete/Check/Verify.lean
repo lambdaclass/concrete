@@ -315,7 +315,7 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
                    span := fn.declSpan
                    hint := some "see docs/language/VALUE_MODEL.md — references are second-class"
                    code := "E0236"
-                   evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+                   evidence := [("rule", "REF-1@2"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
                    nextAction := some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code" } : Diagnostic)]
       else acc) ([] : Diagnostics)
     here ++ verifyNoReturnedRefs m.submodules ++ verifyNoReturnedRefs ms
