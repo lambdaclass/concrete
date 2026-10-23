@@ -116,6 +116,7 @@ def codeRuleTag : String → Option String
     for it): its sites tag each diagnostic (`CheckError.rule`), and the ledger lists them all. -/
 def codeSharedRules : String → List String
   | "E0252" => ["PAT-5@2", "TYPE-7@1"]
+  | "E0420" => ["CON-4@1"]
   | _ => []
 
 /-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/

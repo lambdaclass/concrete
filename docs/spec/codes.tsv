@@ -146,7 +146,7 @@ E0416	rule	empty array literal
 E0417	internal	submodule elaboration error
 E0418	unmigrated:modules	unknown module
 E0419	unmigrated:modules	symbol not public in module
-E0420	unmigrated:contracts	ghost value used in runtime code (also an unsupported append() argument type)
+E0420	rule	ghost value used in runtime code (also an unsupported append() argument type)
 E0500	rule	variable type mismatch
 E0501	rule	arithmetic on non-numeric type
 E0502	rule	binary operand type mismatch

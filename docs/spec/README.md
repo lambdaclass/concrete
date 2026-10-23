@@ -56,7 +56,7 @@ areas exist (§8).
 | `trusted.md` | `TRUST-` | migrated: TRUST-1 to TRUST-6 (pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules); handle capabilities and callable-value capabilities still in their documents |
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
-| `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
+| `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -384,7 +384,7 @@ Each step lands with the gate green. The steps run in this order:
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,
    HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP, D8 (global state) and D10
    (the `trusted mod` marker) enter as pending.
-7. **contracts.md** (`CON-`): `requires`, `ensures`, invariants, ghost code, the specification
+7. **contracts.md** (`CON-`, migrated 2026-10-23): `requires`, `ensures`, invariants, ghost code, the specification
    judgment. It replaces the language half of CONTRACTS_GUIDE. T-H27 enters as pending.
 8. **modules.md** (`MOD-`): modules, imports, visibility, name resolution and namespaces
    (SCOPE-4's open question). It replaces VISIBILITY_AND_MODULE_HYGIENE. D9 (one file per module,

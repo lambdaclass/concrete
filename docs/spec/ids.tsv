@@ -278,3 +278,11 @@ TRUST-5/trusted-absorbs-unsafe	live	-
 TRUST-6@1	pending	14c3ecb1d6866dc7575b974baafc9804
 TRUST-6/trusted-outside-marked-module	pending	-
 TRUST-6/trusted-in-marked-module	live	-
+CON-2@1	live	27df6306e7139b4f78651ffcc2771572
+CON-2/contracts-are-erased	live	-
+CON-3@1	pending	5686b322b15b6dd0859ed58d745a18c6
+CON-3/ill-typed-contract	pending	-
+CON-3/well-typed-contract	live	-
+CON-4@1	live	35824775c82612ad4fe63dbe0402ebbd
+CON-4/ghost-read-at-runtime	live	-
+CON-4/ghost-in-contract	live	-
