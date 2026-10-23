@@ -846,13 +846,13 @@ def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
   | (.expr e _) :: rest => if cExprDiverges e then [] else cStmtsLetsAtEnd declared rest
   | _ :: rest => cStmtsLetsAtEnd declared rest
 
+mutual
 /-- Does a statement list assign a local anywhere, nested bodies included? A VALUE-position body (an
     `if` expression's branch, a `match` expression's arm) is extracted with no continuation, so an
     assignment in it would rebind the name only inside the extracted body and its effect on the code
     after the expression would be lost: such a body is refused (Codex review of the 2026-10-23
     state-model extension, which admitted assignments outside loops). Conservative: any assignment
     counts, even to a local declared inside the body. -/
-mutual
 partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any cStmtAssigns
 
 partial def cStmtAssigns : CStmt → Bool
