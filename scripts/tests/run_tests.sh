@@ -1607,7 +1607,8 @@ run_err "$TESTDIR/error_115_vec_set_non_copy.con"           "(E0291)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge; do
+# Bug 188: legitimate capability polymorphism (positive control), binary exit 42.
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_188_capvar_polymorphism; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -2511,6 +2512,18 @@ run_ok "$TESTDIR/test_trusted_impl_method.con" 42
 run_ok "$TESTDIR/test_trusted_extern_call.con" 42
 run_err "$TESTDIR/error_cap_superset_missing.con" "requires File, Network but caller has"
 run_err "$TESTDIR/error_cap_poly_insufficient.con" "requires capability"
+# Bug 188: a capability VARIABLE entailed every requirement, so a `with(C)` body could
+# print, call `with(Process)`, call an untrusted extern or dereference a raw pointer, and
+# a caller instantiating `C := {}` ran it with no authority. A variable now entails only
+# itself; a callback's `Unsafe` is decided on the instantiated set; a capability parameter
+# may not be spelled like a capability (E0121).
+run_err "$TESTDIR/error_188_capvar_console.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_process.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_call.con"      "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_op.con"        "(E0521)"
+run_err "$TESTDIR/error_188_capvar_unsafe_callback.con"  "(E0240)"
+run_err "$TESTDIR/error_188_capparam_named_unsafe.con"   "(E0121)"
+run_ok  "$TESTDIR/regress_188_capvar_polymorphism.con" 42
 run_err "$TESTDIR/error_trusted_not_viral.con" "requires capability"
 run_err "$TESTDIR/error_extern_needs_unsafe.con" "requires Unsafe"
 run_err "$TESTDIR/error_extern_undeclared.con" "E0116"   # R-0484 R3: an extern must declare its effects
