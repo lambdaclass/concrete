@@ -2,7 +2,7 @@
 // writes the impl's bare name); it is not a bare generic type. Runs 42.
 trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: Int }
-impl Tr for Box2<Int> { fn m(&self) -> Int { return self.v; } }
+impl<T> Tr for Box2<T> { fn m(&self) -> Int { return self.v; } }
 impl<T> Box2<T> { fn get(&self) -> Int { return self.v; } }
 
 fn main() -> Int {
