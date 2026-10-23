@@ -1,0 +1,14 @@
+// Bug 195: the else block of a let ... else falls through (in a Unit function the rest of the
+// function was skipped). Expected: E0308 (PAT-5).
+fn check(o: Option<Int>, out: &mut Int) {
+    let Option::Some { value } = o else {
+        *out = 1;
+    };
+    *out = value;
+}
+
+fn main() -> Int {
+    let mut out: Int = 0;
+    check(Option::None, &mut out);
+    return out;
+}
