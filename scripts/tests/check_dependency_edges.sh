@@ -4218,10 +4218,13 @@ done
 # unclassified edges, to `parse_byte` and `check_length`.
 # 14 -> 16 on 2026-10-21 (workload proofs: `examples/toml`, `examples/hexdump` and `examples/png_chunks` gained their first proof links and JOIN the `#[proof_by]` population): `png_chunks.is_png_sig -> png_sig_ok`
 # and `toml_parser.err_result -> mk_error_val`, each unclassified because its subject makes no claim.
-if [ "$NONCUR" = "16" ]; then
-  ok "the corpus contains exactly 16 non-current edges (16 unclassified, 0 missing) — the check above is non-vacuous"
+# 16 -> 17 on 2026-10-23 (bug 189: a block no longer confers trust): `Bytes::len` was trusted
+# only through its `trusted impl` and is now ordinary code, so `png_chunks.is_png_sig`'s edge to
+# it is `unclassified` instead of `trusted` (its edge to the still-trusted `get_unchecked` stays).
+if [ "$NONCUR" = "17" ]; then
+  ok "the corpus contains exactly 17 non-current edges (17 unclassified, 0 missing) — the check above is non-vacuous"
 else
-  no "non-current edge count moved to $NONCUR (was 16, all unclassified) — if the hand-back classified more, update this and say so"
+  no "non-current edge count moved to $NONCUR (was 17, all unclassified) — if the hand-back classified more, update this and say so"
 fi
 
 DR="$(cc examples/proof_patterns/composition/src/main.con subject-facts | grep 'shadow depRoot:' || true)"
