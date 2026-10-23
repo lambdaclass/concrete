@@ -110,9 +110,9 @@ snippet=' 3 |     let s = "error[check]: not a header";'
 [ -z "$(codeless_error_lines <<<"$snippet")" ] && ok "a source snippet that spells a header is not read as one" || no "a source snippet was read as a header"
 snippet2=' 3 | let s = "a.con: error[check]: missing";'
 [ -z "$(codeless_error_lines <<<"$snippet2")" ] && ok "a source snippet quoting a path and header is not read as one" || no "a source snippet quoting a path and header was read as one"
-spaced='/tmp/my project/a.con:1:1: error[check]: missing code'
+spaced='build dir/my project/a.con:1:1: error[check]: missing code'
 [ -n "$(codeless_error_lines <<<"$spaced")" ] && ok "control C3: a code-less header after a path with spaces is flagged" || no "control C3: a path with spaces hid a code-less header"
-spacedok='/tmp/my project/a.con:1:1: error[check]: (E0201) coded'
+spacedok='build dir/my project/a.con:1:1: error[check]: (E0201) coded'
 [ -z "$(codeless_error_lines <<<"$spacedok")" ] && ok "a coded header after a path with spaces passes" || no "a coded header after a path with spaces was flagged"
 grep -q 'codeless_error_lines' scripts/tests/run_tests.sh \
   && ok "run_tests.sh applies the check to run_err output" || no "run_tests.sh does not apply the check"
