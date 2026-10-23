@@ -107,7 +107,7 @@ partial def expr (r : CoreRename) : CExpr → CExpr
 partial def arm (r : CoreRename) : CMatchArm → CMatchArm
   | .enumArm en v binds g body =>
     -- the arm's binders are in scope in its guard and body
-    let r' := r.bind (binds.map (·.1))
+    let r' := r.bind (binds.map (·.1.name))
     .enumArm (r.tyName en) v (binds.map fun (n, t) => (n, r.ty t)) (g.map (expr r')) (stmts r' body)
   | .litArm v g body => .litArm (expr r v) (g.map (expr r)) (stmts r body)
   | .varArm b t g body =>
