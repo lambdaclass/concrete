@@ -540,7 +540,7 @@ private def addGhostVar (name : String) : ElabM Unit := do
 /-- Elab's view of the environment for the shared argument-type peek
     (`Resolve.PeekType`, single-sourced with Check — bug 099). -/
 private def elabPeekCtx : PeekCtx ElabM where
-  var name := lookupVar name
+  var _ name := lookupVar name
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFnSig name
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name

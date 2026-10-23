@@ -76,15 +76,13 @@ All "may this disappear?" checks key on **`isCopy`** (never on "owns a resource"
   raw parts (`fn destroy(self) { let File { fd } = self; }`). `&mut T` params
   are BORROWS — exclusive (non-Copy, can't be duplicated) but carrying no
   consume obligation; `&T` params are Copy.
-- **Shadowing a still-live linear binding is rejected (H16, E0292):**
-  `let f = mk(); let f = mk();` would silently drop the first value (scope exit
-  resolves names). `let s = transform(s);` stays legal — the RHS consumed the
-  old value before the new binding lands.
-  A struct destructure binder follows the same rule (bug 094). A match-arm
-  binder is arm-scoped and may shadow a live binding: the outer binding is
-  visible, and still owed, after the match. Ownership state (consume, use,
-  reassign, `defer`, borrow freeze) is tracked per binding identity, never per
-  name, so consuming the arm binder never consumes the binding it shadows.
+- **No binder reuses a visible name (SCOPE-1, E0301):** `let f = mk(); let f = mk();`
+  is refused whatever the first binding's state, and so is `let s = transform(s);`
+  and a match-arm, destructure or `for` binder spelled like a visible binding.
+  (E0292, the older still-live-linear rule H16, is subsumed and no longer emitted.)
+  Ownership state (consume, use, reassign, `defer`, borrow freeze) is tracked
+  per binding identity (`LocalId`, R-0492), never per name, so two sibling
+  bindings of one spelling never share state.
 - **Match guards are read-only (E0300, bug 090):** a guard runs before its arm
   commits, and a false guard falls through to the next arm. Moving a non-Copy value
   in a guard (`1 if take(h) == 0 => …, _ => take(h)`) — an outer binding or the

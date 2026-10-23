@@ -164,8 +164,7 @@ partial def tyParamOccursIn (name : String) : Ty → Bool
   | _ => false
 
 def getEnv : CheckM TypeEnv := get
-def setEnv (env : TypeEnv) : CheckM Unit :=
-  modify fun cur => { env with nextVarUid := max cur.nextVarUid env.nextVarUid }
+def setEnv (env : TypeEnv) : CheckM Unit := set env
 
 /-- Resolve type aliases. -/
 -- spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
@@ -309,50 +308,70 @@ def isCopyType (ty : Ty) : CheckM Bool := do
     (fun name => (((env.currentTypeBounds.find? fun b => b.1 == name).map Prod.snd).getD []).contains "Copy")
     ty
 
-def lookupVarInfo (name : String) : CheckM (Option VarInfo) := do
-  let env ← getEnv
-  return env.vars.lookup name
+/-! ### Local bindings (R-0492)
 
-def lookupVarTy (name : String) : CheckM (Option Ty) := do
-  match ← lookupVarInfo name with
-  | some info => return some info.ty
+The checker never decides by spelling which binding a name denotes. A USE of a local name at a
+source position is resolved through the function's local table (`localAt?`), which the lexical
+walk in `Resolve/Locals.lean` filled; a BINDER takes its identity from the same table
+(`binderRef`). The environment is keyed by that identity, so a binding left in it after its
+scope closed cannot answer for a later use of the same spelling. -/
+
+/-- The binding the local name `name` at `sp` denotes, or `none` when `name` there is not a local
+    (a function, a constant). -/
+def localAt? (sp : Span) (name : String) : CheckM (Option LocalRef) := do
+  return ((← getEnv).locals.useAt? sp name).map fun id => { id, name }
+
+/-- The binding introduced at `key` (a parameter index, or a binder position and spelling).
+    Every binder the checker registers was minted by the local walk; one it did not mint is an
+    internal error, not a fresh binding. -/
+def binderRef (key : BinderKey) (name : String) (span : Option Span := none) : CheckM LocalRef := do
+  match (← getEnv).locals.binderAt? key with
+  | some id => return { id, name }
+  | none => throwCheckMsg s!"internal: the binder '{name}' has no identity in the local table (R-0492)" span
+
+/-- The binding introduced by the construct at `sp` spelled `name`. -/
+def binderAt (sp : Span) (name : String) : CheckM LocalRef :=
+  binderRef (.site (SiteKey.ofSpan sp) name) name (some sp)
+
+def lookupLocal (r : LocalRef) : CheckM (Option VarInfo) := do
+  return (← getEnv).vars.lookup r
+
+/-- The binding a use of `name` at `sp` denotes, with its current state. -/
+def lookupUse (sp : Span) (name : String) : CheckM (Option (LocalRef × VarInfo)) := do
+  match ← localAt? sp name with
+  | some r => return (← lookupLocal r).map (r, ·)
   | none => return none
 
-def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option Span := none) : CheckM Unit := do
+def addVar (r : LocalRef) (ty : Ty) (mutable : Bool := true) (declSpan : Option Span := none) : CheckM Unit := do
   -- Bug 092: no binding (let, parameter, match binder) may hold a reference
   -- inside an aggregate — nothing would keep the reference's source frozen.
   if tyHoldsRefInAggregate ty then
-    throwCheck (.refStoredInAggregate s!"binding '{name}'" (tyToString ty)) declSpan
+    throwCheck (.refStoredInAggregate s!"binding '{r.name}'" (tyToString ty)) declSpan
   let copy ← isCopyType ty
   let env ← getEnv
   let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan,
-                          uid := env.nextVarUid }
-  setEnv { env with vars := (name, info) :: env.vars, nextVarUid := env.nextVarUid + 1 }
+                          uid := r.id }
+  setEnv { env with vars := (r, info) :: env.vars.filter (fun (k, _) => k != r) }
 
-/-- H16 (E0292): binding `name` must not shadow a still-live non-Copy binding —
-    the shadowed value would become unreachable and silently dropped. Applies to
-    `let` and (bug 094) to struct-destructure binders, which stay in scope for
-    the rest of the block. Match-arm binders are arm-scoped and may shadow. -/
-def checkNoLiveShadow (name : String) (span : Option Span := none) : CheckM Unit := do
-  match (← getEnv).vars.lookup name with
-  | some prev =>
-    if !prev.isCopy && prev.state != .consumed && prev.state != .reserved then
-      throwCheck (.shadowsLiveLinear name) span
-  | none => pure ()
+/- H16 (E0292, `.shadowsLiveLinear`) used to search the environment for a live binding of the
+   new binder's spelling. SCOPE-1@1 (E0301), computed by the local walk, refuses every binder that
+   reuses a visible spelling before the body is checked, and a spelling that is not visible names
+   a different binding (R-0492), so that search could only find a binding whose scope had closed:
+   a false refusal of the bug-176 kind. The constructor stays as a definition only. -/
 
 /-- The entry for binding `uid` (bugs 093/094: identity, not name). -/
-def lookupByUid (vars : List (String × VarInfo)) (uid : Nat) : Option VarInfo :=
+def lookupByUid (vars : List (LocalRef × VarInfo)) (uid : LocalId) : Option VarInfo :=
   (vars.find? fun (_, vi) => vi.uid == uid).map Prod.snd
 
 /-- Is binding `uid` present in `vars`? -/
-def hasUid (vars : List (String × VarInfo)) (uid : Nat) : Bool :=
+def hasUid (vars : List (LocalRef × VarInfo)) (uid : LocalId) : Bool :=
   vars.any fun (_, vi) => vi.uid == uid
 
-def activeBorrowRefs (env : TypeEnv) (varName : String) : List VarInfo :=
+def activeBorrowRefs (env : TypeEnv) (var : LocalRef) : List VarInfo :=
   env.vars.foldl (fun acc (_, info) =>
     match info.borrowedFrom with
-    | some sourceName =>
-      if sourceName == varName && info.state != .consumed then info :: acc else acc
+    | some source =>
+      if source == var && info.state != .consumed then info :: acc else acc
     | none => acc) []
 
 partial def tyContainsTypeVar : Ty → Bool
@@ -440,9 +459,10 @@ def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) 
 -- ============================================================
 
 /-- Mark a linear variable as used (read/borrowed but not moved). -/
-def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
+def useVar (r : LocalRef) (span : Option Span := none) : CheckM Unit := do
+  let name := r.name
   let env ← getEnv
-  match env.vars.lookup name with
+  match env.vars.lookup r with
   | none => pure ()  -- not found (might be a constant or function)
   | some info =>
     if info.state == .frozen then
@@ -466,16 +486,17 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
     (H14). Deeper outer values stay rejected: an enclosing loop could re-enter
     the broken loop and re-consume. -/
 -- spec: REF-8, spec: OWN-1, spec: OWN-4, spec: OWN-12 (docs/spec/references.md; this declaration enforces the rule)
-def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
+def consumeVar (r : LocalRef) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
+  let name := r.name
   let env ← getEnv
-  match env.vars.lookup name with
+  match env.vars.lookup r with
   | none => throwCheck (.undeclaredVariable name) span
   | some info =>
     if info.isCopy then return ()  -- Copy types are never consumed
     -- Bug 090: a match guard may not move a binding that was live at its start.
     if env.guardUids.contains info.uid then
       throwCheck (.guardMovesLinear name) span
-    let activeRefs := activeBorrowRefs env name
+    let activeRefs := activeBorrowRefs env r
     if activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
       throwCheck (.cannotMoveLinearBorrowed name) span
     -- Defer rule (a) (bug 143): a pending deferred call borrows this binding.
@@ -496,7 +517,7 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
       -- (`while … { if bad { s.drop(); return 1; } }`): the return-path rule
       -- then guarantees everything live is consumed, and no iteration follows.
       if info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
-          && env.rebindingVar != some name then
+          && env.rebindingVar != some r then
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
       -- Mark ONLY the binding the name resolves to (the innermost), by
@@ -508,19 +529,26 @@ def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : 
       setEnv { env with vars := vars' }
 
 /-- Consume a variable if it exists. Skips function names (not in var scope). -/
-def consumeVarIfExists (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
-  match ← lookupVarInfo name with
-  | some _ => consumeVar name span breakDepthExempt
-  | none => pure ()  -- function reference, not a variable
+def consumeVarIfExists (r : LocalRef) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
+  match ← lookupLocal r with
+  | some _ => consumeVar r span breakDepthExempt
+  | none => pure ()
+
+/-- Consume the binding the use of `name` at `sp` denotes, if it is a local (not a function). -/
+def consumeUseIfLocal (sp : Span) (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
+  match ← localAt? sp name with
+  | some r => consumeVarIfExists r span breakDepthExempt
+  | none => pure ()
 
 /-- Check that every binding in `entries` is consumed at scope exit.
     `reserved` is allowed because the deferred destroy will run at scope exit.
     Each binding is looked up by IDENTITY (bug 093): a shadowed entry is
     checked as itself, not through the innermost binding sharing its name. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
-def checkScopeExit (entries : List (String × VarInfo)) (span : Option Span := none) : CheckM Unit := do
+def checkScopeExit (entries : List (LocalRef × VarInfo)) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
-  for (name, entry) in entries do
+  for (r, entry) in entries do
+    let name := r.name
     match lookupByUid env.vars entry.uid with
     | some info =>
       if !info.isCopy && info.state != .consumed && info.state != .reserved then
@@ -898,9 +926,10 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
     MERGE: the exemption is about agreement at the merge point, not about the
     exit itself. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
-def checkReturnPathConsumed (before after : List (String × VarInfo))
+def checkReturnPathConsumed (before after : List (LocalRef × VarInfo))
     (span : Option Span := none) : CheckM Unit := do
-  for (name, infoBefore) in before do
+  for (nameR, infoBefore) in before do
+    let name := nameR.name
     if infoBefore.isCopy then continue
     -- References are BORROWS: letting one go out of scope on a return path is
     -- not a leak (&mut is non-Copy only for aliasing exclusivity).
@@ -925,10 +954,10 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     there happens on a path where a later arm can move the same value again.
     The guard is an expression: it adds no bindings, so the two lists hold the
     same entries in the same order and are compared position by position. -/
-def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
+def guardMovedName? (before after : List (LocalRef × VarInfo)) : Option String :=
   (before.zip after).findSome? fun ((n, vb), (_, va)) =>
     if !vb.isCopy && vb.state != .consumed && vb.state != .reserved
-        && (va.state == .consumed || va.state == .reserved) then some n else none
+        && (va.state == .consumed || va.state == .reserved) then some n.name else none
 
 /-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
     `after`, absent from `before` — must be consumed before the block exits. Skipped
@@ -937,11 +966,12 @@ def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
     matched payload bindings, which are dropped at the branch/arm merge. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkBlockLocalsConsumed
-    (before after : List (String × VarInfo))
+    (before after : List (LocalRef × VarInfo))
     (diverges : Bool)
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
-  for (name, info) in after do
+  for (nameR, info) in after do
+    let name := nameR.name
     -- Pre-existing, not block-local. By IDENTITY (bug 093): a block-local that
     -- shadows an outer name (`let r = …` over a consumed outer `r`, a match
     -- binder `value` over an outer `value`) is a different binding and must
@@ -959,7 +989,7 @@ def checkBlockLocalsConsumed
     block left them in (a consume inside the block is not undone). Every block
     construct closes through here: `if`/`else` branches (statement and value),
     loop bodies, `for` headers and borrow blocks. -/
-def closeBlockScope (outer : List (String × VarInfo)) : CheckM Unit := do
+def closeBlockScope (outer : List (LocalRef × VarInfo)) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
 
@@ -984,7 +1014,7 @@ def inBlockScope {α : Type} (body : List Stmt) (span : Option Span) (k : CheckM
 /-- Check's view of the environment for the shared argument-type peek
     (`Resolve.PeekType`, single-sourced with Elab — bug 099). -/
 def checkPeekCtx : PeekCtx CheckM where
-  var name := do return ((← getEnv).vars.lookup name).map (·.ty)
+  var sp name := do return ((← lookupUse sp name).map (·.2.ty))
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFn name
   fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
@@ -1318,12 +1348,12 @@ def Reach.throughRef : Reach → Bool
     `binding` is set when the place IS a bare binding; `viaRef` names the innermost
     reference binding dereferenced to reach it; `heapLoad` marks `*h` of an owned heap. -/
 structure NPlace where
-  root : Option String
+  root : Option LocalRef
   steps : List String := []
   exact : Bool := true
   reach : Reach := .owned
-  binding : Option String := none
-  viaRef : Option String := none
+  binding : Option LocalRef := none
+  viaRef : Option LocalRef := none
   heapLoad : Bool := false
   deriving Inhabited
 
@@ -1353,15 +1383,31 @@ def peekResolved (e : Expr) : CheckM Ty := do
 
 def resolvedOr (t : Ty) : CheckM Ty := tryCatch (resolveType t) (fun _ => pure t)
 
+/-- The place a reference-, pointer- or heap-typed local `r` (with state `info`) points to. -/
+def normRefLocal (r : LocalRef) (info : VarInfo) : Norm :=
+  let n := r.name
+  let src := info.borrowedFrom.getD r
+  -- the recorded source PATH makes `*r` key exactly like the place it borrows
+  let (steps, exact) := if info.borrowedFrom.isSome then (info.borrowedPath, info.borrowedExact) else ([], true)
+  match info.ty with
+  | .ref _ =>
+    .place { root := some src, steps := steps, exact := exact, viaRef := some r,
+             reach := .shared s!"'{n}' is a `&` reference" }
+  | .refMut _ =>
+    .place { root := some src, steps := steps, exact := exact, viaRef := some r, reach := .exclusive }
+  | .ptrMut _ | .ptrConst _ => .place { root := some r, reach := .raw }
+  | .heap _ | .heapArray _ => .place { root := some r, heapLoad := true }
+  | _ => .reject s!"'{n}' is not a reference"
+
 mutual
 /-- The storage the place expression `e` names. -/
 -- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def normPlace (e : Expr) : CheckM Norm := do
   match e with
   | .paren _ inner => normPlace inner
-  | .ident _ n =>
-    match ← lookupVarInfo n with
-    | some _ => return .place { root := some n, binding := some n }
+  | .ident sp n =>
+    match ← lookupUse sp n with
+    | some (r, _) => return .place { root := some r, binding := some r }
     | none =>
       if ((← getEnv).constants.lookup n).isSome then return .temp
       return .reject s!"'{n}' is not a local binding"
@@ -1381,12 +1427,12 @@ partial def normPlace (e : Expr) : CheckM Norm := do
     shell implicitly, exactly as `*` does, so `r.p` normalizes as `(*r).p`. -/
 partial def normProjBase (base : Expr) : CheckM Norm := do
   match unparenExpr base with
-  | .ident _ n =>
-    match ← lookupVarInfo n with
-    | some info =>
+  | .ident sp n =>
+    match ← lookupUse sp n with
+    | some (r, info) =>
       match info.ty with
       | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ | .heapArray _ =>
-        normRef (.ident default n)
+        return normRefLocal r info
       | _ => normPlace base
     | none => normPlace base
   | b =>
@@ -1407,21 +1453,9 @@ partial def normRef (e : Expr) : CheckM Norm := do
   | .paren _ inner => normRef inner
   | .borrow _ inner => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
   | .borrowMut _ inner => return (← normPlace inner).reachedThrough .exclusive
-  | .ident _ n =>
-    match ← lookupVarInfo n with
-    | some info =>
-      let src := info.borrowedFrom.getD n
-      -- the recorded source PATH makes `*r` key exactly like the place it borrows
-      let (steps, exact) := if info.borrowedFrom.isSome then (info.borrowedPath, info.borrowedExact) else ([], true)
-      match info.ty with
-      | .ref _ =>
-        return .place { root := some src, steps := steps, exact := exact, viaRef := some n,
-                        reach := .shared s!"'{n}' is a `&` reference" }
-      | .refMut _ =>
-        return .place { root := some src, steps := steps, exact := exact, viaRef := some n, reach := .exclusive }
-      | .ptrMut _ | .ptrConst _ => return .place { root := some n, reach := .raw }
-      | .heap _ | .heapArray _ => return .place { root := some n, heapLoad := true }
-      | _ => return .reject s!"'{n}' is not a reference"
+  | .ident sp n =>
+    match ← lookupUse sp n with
+    | some (r, info) => return normRefLocal r info
     | none => return .reject s!"'{n}' is not a local binding"
   | .cast _ inner ty0 =>
     let ty ← resolvedOr ty0
@@ -1468,13 +1502,13 @@ end
 /-- The conflict key of a normalized place: root + projection path (whole root when the
     path through a dereference is not exact). `none` for storage outside this function's
     bindings and for temporaries. -/
-def NPlace.key (p : NPlace) : Option (String × List String) :=
+def NPlace.key (p : NPlace) : Option (LocalRef × List String) :=
   p.root.map fun r => (r, if p.exact then p.steps else [])
 
 /-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
     Disjoint fields (`w.a` vs `w.b`) do NOT overlap — precise, no over-reject;
     `w` vs `w.f` DO (the whole overlaps the part). -/
-def pathsOverlap (a b : String × List String) : Bool :=
+def pathsOverlap (a b : LocalRef × List String) : Bool :=
   a.1 == b.1 && (a.2.isPrefixOf b.2 || b.2.isPrefixOf a.2)
 
 /-- #18 container-not-in-context: within one call's arguments (plus the
@@ -1484,29 +1518,29 @@ def pathsOverlap (a b : String × List String) : Bool :=
     whose binding is a ref/&mut with a tracked `borrowedFrom` root counts as
     a borrow of that root. Shared+shared overlap is fine. -/
 -- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
-def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (span : Option Span) : CheckM Unit := do
-  let mut seen : List ((String × List String) × Bool) := []
+def checkCallBorrowConflicts (parts : List ((LocalRef × List String) × Bool)) (span : Option Span) : CheckM Unit := do
+  let mut seen : List ((LocalRef × List String) × Bool) := []
   for (path, isMut) in parts do
     for (prevPath, prevMut) in seen do
       if pathsOverlap path prevPath && (isMut || prevMut) then
-        throwCheck (.conflictingCallBorrows path.1) span
+        throwCheck (.conflictingCallBorrows path.1.name) span
     seen := (path, isMut) :: seen
 
 /-- The borrows a call makes, as NORMALIZED places (E0293): a `&e` / `&mut e` argument
     borrows `e`'s place, a reference binding argument borrows its source. Every spelling of
     one place (`(&p)`, `&*(&*r)`, `&(*r).p`) yields the same key. -/
-def argBorrowParts (args : List Expr) : CheckM (List ((String × List String) × Bool)) := do
-  let mut out : List ((String × List String) × Bool) := []
+def argBorrowParts (args : List Expr) : CheckM (List ((LocalRef × List String) × Bool)) := do
+  let mut out : List ((LocalRef × List String) × Bool) := []
   for a in args do
     let part? : Option (Norm × Bool) ← match unparenExpr a with
       | .borrow _ inner => do pure (some (← normPlace inner, false))
       | .borrowMut _ inner => do pure (some (← normPlace inner, true))
-      | .ident _ n => do
-        match ← lookupVarInfo n with
-        | some info =>
+      | .ident sp n => do
+        match ← lookupUse sp n with
+        | some (r, info) =>
           match info.ty with
-          | .ref _ => pure (some (← normRef (.ident default n), false))
-          | .refMut _ => pure (some (← normRef (.ident default n), true))
+          | .ref _ => pure (some (normRefLocal r info, false))
+          | .refMut _ => pure (some (normRefLocal r info, true))
           | _ => pure none
         | none => pure none
       -- a cast to a reference borrows what its operand points to (`f(r as &mut P)`)

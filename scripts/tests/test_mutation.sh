@@ -416,10 +416,10 @@ MUT_DESC+=("Check: disable use-after-move")
 # 10. Check: disable loop-depth linearity check (enforcement lives in CheckHelpers)
 MUT_FILE+=("Concrete/Check/CheckHelpers.lean")
 MUT_OLD+=("      if info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
-          && env.rebindingVar != some name then
+          && env.rebindingVar != some r then
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_NEW+=("      if false && (info.loopDepth + breakDepthExempt < env.loopDepth && !env.inFnExitingBranch
-          && env.rebindingVar != some name) then -- MUTATION: loop-depth disabled
+          && env.rebindingVar != some r) then -- MUTATION: loop-depth disabled
         throwCheck (.cannotConsumeLinearInLoop name) span")
 MUT_DESC+=("Check: disable loop-depth linearity")
 
@@ -1313,11 +1313,20 @@ MUT_NEW+=("    let c := ((aliases.filter (fun _ => false)).lookup written).getD 
 MUT_DESC+=("capability explanations: a callee called through an import alias is not resolved")
 gate_for_last "scripts/tests/check_capability_explanations.sh"
 
+# 98. R-0492: the local walk resolves a use to the OUTERMOST visible binding of its spelling
+# instead of the innermost. check_local_identity.sh's walk legs (branch-local `w`, the shadowing
+# `x` of g) read the wrong binder.
+MUT_FILE+=("Concrete/Resolve/Locals.lean")
+MUT_OLD+=("  if let some v := vis.find? (·.name == name) then")
+MUT_NEW+=("  if let some v := vis.reverse.find? (·.name == name) then -- MUTATION: outermost binding wins")
+MUT_DESC+=("local identity: a use denotes the outermost visible binding of its spelling")
+gate_for_last "scripts/tests/check_local_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=97
+EXPECTED_MUTATIONS=98
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

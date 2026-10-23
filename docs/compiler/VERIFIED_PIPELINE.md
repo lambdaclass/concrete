@@ -487,6 +487,53 @@ diagnostic-path bypass.
   stage types beyond SSA as their IRs land; a mutation family in `test_mutation.sh` (it moves the
   pinned inventory count, so it waits for a landing train).
 
+**S5 slice contract 2 — local binder identity in the checker (R-0492 slice 1, 2026-10-23).**
+- *Representation:* `LocalId` (`Concrete/Frontend/LocalId.lean`, private constructor) names one
+  local value binding of one function. Bindings are parameters, `let`s, pattern binders, `for`
+  header binders, and borrow-block references and region names. Each function carries a
+  `LocalTable` (`FnDef.locals`) produced by `Pipeline.resolve` after desugaring. One lexical walk,
+  `Resolve/Locals.lean` (the former SCOPE-1 walk of `Check.lean`), records three things: the
+  binder for each binding, the binding each use of a local name denotes (keyed by the use's
+  position and spelling), and each SCOPE-1 collision. Desugaring moves inside `Pipeline.resolve`,
+  so no path reaches Check with a body that skipped it (bug 202).
+- *Invariant made structural:*
+  - The checker's environment is keyed by binding identity (`TypeEnv.vars : List (LocalRef × VarInfo)`;
+    a `LocalRef` is a `LocalId` with its spelling for messages, and compares by identity).
+  - A use of a local name finds its binding through the table, never by searching the
+    environment for the spelling.
+  - The references a binding keeps to other bindings are `LocalId`s: `borrowedFrom`,
+    `refParent`, borrow-block refs, and the roots of normalized places.
+  - A binding that stays in the environment after its scope closed can no longer answer for a
+    later use of its spelling (class 2: bugs 040, 041, 045, 087, 093, 094, 107, 124, 176).
+  - E0301 is rendered from the same walk, so the shadowing rule and binding identity cannot
+    disagree.
+  - A function without a table, or with an ambiguous one, is refused rather than checked by name.
+- *Gates:* `check_local_identity.sh`:
+  - F: compile-fail controls. `LocalId` and `LocalTable` cannot be constructed or updated outside
+    their module, and `TypeEnv.vars` cannot be searched by a spelling.
+  - S: the minting functions are called only from `Resolve/Locals.lean`, and the checker keeps no
+    name-keyed lookup helper and no private uid counter.
+  - T: fifteen walk answers on a probe program with loops, a `for` header, branches, an arm,
+    `let … else`, a struct destructure, a borrow block, a call through a fn-typed parameter,
+    sibling reuse and one collision.
+  - R: `Pipeline.resolve` attaches a resolved table to every function; bug 176's loop program
+    still runs; bug 202's project `let … else` builds; a destructure's two `_` binders keep two
+    identities (Codex round 2).
+  - Mutation family 98 (a use denotes the outermost visible binding of its spelling) is killed by
+    leg T.
+  - *Why no program-level discriminator:* with SCOPE-1 enforced and loop scopes closed (bug 176),
+    the newest binding of a spelling in the environment is always the visible one. A by-name
+    lookup therefore gives the same answer on every accepted program. This slice removes the
+    checker's dependence on those two rules for identity; it does not change what is accepted.
+  - The name-keyed guards E0292 (live shadow) and E0238's shadowed-source rule could only fire on
+    a binding from a closed scope, so they are removed.
+- *Not in this slice:*
+  - Elab still alpha-renames by its own scopes; it consumes `LocalId`s in a later slice, retiring
+    that second walk.
+  - Contract expressions (`requires`, `ensures`, invariants) still name parameters by spelling.
+  - Resolve's pre-desugar E0100 walk is a separate visibility computation.
+  - Core, SSA and `PExpr` keep their string binders (R-0492 steps 2–4).
+
 **S6 Typed operations (R-0493).** **Immediate row-2 checkpoint:** make `IntArith` the arithmetic authority for the existing pipeline's
 evaluation, folding and arithmetic-model generation, with emitted operations checked against the same
 specified semantics. `check_single_arithmetic.sh` and differential controls cover every supported width
