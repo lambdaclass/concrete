@@ -2345,6 +2345,9 @@ run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discrimin
 run_err "$TESTDIR/error_unknown_attribute.con"   "unknown attribute"
 run_err "$TESTDIR/error_type_arg_count_extra.con"   "E0113"   # bug 073: extra type argument
 run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing type argument
+# Bug 200 (silent): a generic type named without its argument list compiled.
+run_err "$TESTDIR/error_200_bare_generic_type.con" "(E0113)"
+run_ok "$TESTDIR/regress_200_generic_type_with_arguments.con" 42
 run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
 # R-0484: structs with capability parameters (`struct Sink<cap C>`). Positives build and use
 # them; negatives are the authority escapes they must refuse, and the kind/count checks.

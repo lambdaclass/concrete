@@ -1,0 +1,10 @@
+// Bug 200 control: the same program with the argument list compiles and returns 42.
+struct Copy Box1<T> { v: Int }
+
+fn get(b: Box1<Int>) -> Int {
+    return b.v;
+}
+
+fn main() -> Int {
+    return get(Box1::<Int> { v: 42 });
+}

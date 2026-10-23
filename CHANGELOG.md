@@ -47,6 +47,13 @@ with one of the scrutinee's variants, was silently taken as that variant; and a 
 failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
 chapter (PAT-3) found it. It is pinned by six `error_196_*.con` fixtures.
 
+### A Generic Type Is Named With Its Arguments (bug 200, 2026-10-23)
+
+A generic type written without its argument list (`Box1` for a `struct Box1<T>`) is now refused with
+E0113, as a list of the wrong length already was (bug 073). Before this fix the program compiled and
+ran with the parameter never bound. It is pinned by `error_200_bare_generic_type.con` and
+`regress_200_generic_type_with_arguments.con`.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
