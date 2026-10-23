@@ -596,6 +596,10 @@ fixed_tmp_scan() {
 }
 mapfile -t TMPSCAN < <(find "$ROOT_DIR/scripts/tests" "$ROOT_DIR/scripts/tests/lib" "$ROOT_DIR/scripts/ci" \
   -maxdepth 1 -type f -name '*.sh' ! -name 'check_gate_hygiene.sh' 2>/dev/null | LC_ALL=C sort -u)
+# The examples' scripts (benchmarks, demos) run on the same shared hosts (bug 191: four bench.sh
+# wrote fixed /tmp names).
+mapfile -t -O "${#TMPSCAN[@]}" TMPSCAN < <(cd "$ROOT_DIR" && git ls-files 'examples/*.sh' 2>/dev/null \
+  | sed "s|^|$ROOT_DIR/|" | LC_ALL=C sort -u)
 TMPHITS=""
 while IFS= read -r h; do
   [ -n "$h" ] || continue
@@ -642,19 +646,22 @@ echo "=== no test program or std test uses a fixed shared /tmp path (bug 191) ==
 declare -A CON_TMP_OK=(
   ["std/src/path.con:/tmp/x"]="PathBuf display test: the path is parsed and printed, never opened"
 )
-# Prints "path:line:/tmp/name" for each `/tmp/...` inside a string literal on a non-comment line of
-# a .con source (paths relative to the repo root).
+# Prints "path:line:/tmp/name" for each `/tmp/...` inside a string literal of a .con source (paths
+# relative to the repo root). Each file is tokenized whole, as the lexer does, left to right: a char
+# literal (one character or one escape, so a `'outer` loop label is a lone apostrophe and hides
+# nothing), a string literal (which may span lines), or a `//` comment to the end of its line (the
+# only comment form). A `//` or an apostrophe inside a string belongs to the string.
 con_fixed_tmp_scan() {
-  perl -ne '
-    # Left to right: a char literal, a string literal, or `//` (the rest of the line is a comment).
-    # A `//` inside a string is consumed by the string branch, so it does not end the scan.
-    while (m{(\x27(?:[^\x27\\]|\\.)*\x27)|"((?:[^"\\]|\\.)*)"|(//)}g) {
-      last if defined $3;
-      next unless defined $2;
-      my $lit = $2;
-      while ($lit =~ m{(?<![\w.-])(/tmp/[A-Za-z0-9_./-]*)}g) { print "$ARGV:$.:$1\n"; }
-    }
-    close ARGV if eof;' "$@"
+  perl -0777 -ne '
+    my $src = $_;
+    while ($src =~ m{\x27(?:\\.|[^\x27\\\n])\x27|"((?:[^"\\]|\\.)*)"|//[^\n]*|\x27}gs) {
+      next unless defined $1;
+      my ($lit, $at) = ($1, $-[1]);
+      while ($lit =~ m{(?<![\w.-])(/tmp/[A-Za-z0-9_./-]*)}g) {
+        my $line = 1 + (substr($src, 0, $at + $-[1]) =~ tr/\n//);
+        print "$ARGV:$line:$1\n";
+      }
+    }' "$@"
 }
 mapfile -t CONSCAN < <(cd "$ROOT_DIR" && git ls-files '*.con' 2>/dev/null | LC_ALL=C sort)
 CONHITS=""
@@ -683,6 +690,12 @@ cat > "$CTMP/fixed.con" <<'CONEOF'
 fn main() with(Std) -> Int {
     let path: String = "/tmp/shared_name.txt";
     drop_string(path);
+    'outer: while true { let q: String = "/tmp/after_label.txt"; drop_string(q); break 'outer; }
+    let c: char = '"';
+    let r: String = "/tmp/after_quote_char.txt";
+    let m: String = "/tmp/multi
+line.txt";
+    drop_string(r); drop_string(m);
     return 0;
 }
 CONEOF
@@ -697,9 +710,9 @@ fn main() with(Std) -> Int {
     return 0;
 }
 CONEOF
-[ "$(con_fixed_tmp_scan "$CTMP/fixed.con" | wc -l | tr -d ' ')" = "1" ] \
-  && ok "CONTROL: the .con fixed-/tmp scan flags a /tmp string literal" \
-  || no "CONTROL: the .con fixed-/tmp scan is inert: $(con_fixed_tmp_scan "$CTMP/fixed.con" | tr '\n' ' ')"
+[ "$( (cd "$CTMP" && con_fixed_tmp_scan fixed.con) | tr '\n' ' ')" = "fixed.con:2:/tmp/shared_name.txt fixed.con:4:/tmp/after_label.txt fixed.con:6:/tmp/after_quote_char.txt fixed.con:7:/tmp/multi " ] \
+  && ok "CONTROL: the .con fixed-/tmp scan flags /tmp literals (plain, after a loop label, after a '\"' char, spanning lines) at their lines" \
+  || no "CONTROL: the .con fixed-/tmp scan missed or misplaced a hit: $(con_fixed_tmp_scan "$CTMP/fixed.con" | tr '\n' ' ')"
 [ -z "$(con_fixed_tmp_scan "$CTMP/clean.con")" ] \
   && ok "CONTROL: the .con fixed-/tmp scan ignores comments, doc examples and non-/tmp paths" \
   || no "CONTROL: the .con fixed-/tmp scan flags non-shared text: $(con_fixed_tmp_scan "$CTMP/clean.con" | tr '\n' ' ')"

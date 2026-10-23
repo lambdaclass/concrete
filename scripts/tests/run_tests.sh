@@ -1300,6 +1300,37 @@ run_ok "$TESTDIR/option_mixed_payloads.con" 44
 # Phase 11: File I/O builtins
 run_ok "$TESTDIR/file_write_read.con" 5
 run_ok "$TESTDIR/file_read_basic.con" 12
+# Bug 191 (FIXED): test programs and std tests wrote fixed /tmp paths; on a shared host the first
+# user to run the suite owned them, fopen returned NULL for everyone else and file_write_read
+# segfaulted (rc 139). Scratch now comes from CONCRETE_TEST_TMPDIR, set by the runner. An
+# environment error is an exit code, never a crash: unset -> 100, a directory that does not exist
+# (the open for writing fails) -> 101. And `--test` provides its own directory, overriding a
+# caller's value that points nowhere, so std's fs tests still pass.
+r191_bin="$TMPDIR/r191_fwr"
+if $COMPILER "$TESTDIR/file_write_read.con" -o "$r191_bin" >/dev/null 2>&1; then
+    r191_unset=0; env -u CONCRETE_TEST_TMPDIR "$r191_bin" >/dev/null 2>&1 || r191_unset=$?
+    r191_absent=0; CONCRETE_TEST_TMPDIR="$TMPDIR/r191_absent" "$r191_bin" >/dev/null 2>&1 || r191_absent=$?
+    if [ "$r191_unset" = "100" ] && [ "$r191_absent" = "101" ]; then
+        echo "  ok  regress_191 file_write_read: unset scratch -> 100, missing directory -> 101 (no crash)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  regress_191 file_write_read: unset gave $r191_unset (want 100), missing directory gave $r191_absent (want 101)"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "FAIL  regress_191: file_write_read.con did not compile"
+    FAIL=$((FAIL + 1))
+fi
+r191_out=$(CONCRETE_TEST_TMPDIR="$TMPDIR/r191_absent" $COMPILER std/src/lib.con --test --module std.fs 2>&1) \
+    && r191_rc=0 || r191_rc=$?
+if [ "$r191_rc" = "0" ] && grep -q "^PASS: .*test_write_read_roundtrip" <<<"$r191_out" \
+        && ! grep -q "^FAIL:" <<<"$r191_out"; then
+    echo "  ok  regress_191 --test overrides the caller's CONCRETE_TEST_TMPDIR (std.fs scratch tests pass)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_191 --test with a caller CONCRETE_TEST_TMPDIR pointing nowhere: rc $r191_rc $(grep "^FAIL" <<<"$r191_out" | awk 'NR<=3' | tr '\n' ' ')"
+    FAIL=$((FAIL + 1))
+fi
 
 # Phase 10: Monomorphized trait dispatch
 run_ok "$TESTDIR/trait_dispatch_basic.con" 30
