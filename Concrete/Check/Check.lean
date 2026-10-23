@@ -1628,6 +1628,16 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
+            -- Bug 197 (OWN-5): `E::A` written without a field list ignores every field of `A`, which
+            -- (like `_`) may ignore only Copy fields. A non-Copy payload of an owned scrutinee was
+            -- dropped. CoreCheck's field count (E0533) skips an empty list, so nothing caught it.
+            let isRefScr0 := match scrTy with | .ref _ | .refMut _ => true | _ => false
+            if patBinds.isEmpty && !isRefScr0 then
+              let typeMapping0 := ed.typeParams.zip enumTypeArgs
+              for sf in ev.fields do
+                let fieldTy0 := substTy typeMapping0 sf.ty
+                if !(← isCopyType fieldTy0) then
+                  throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy0)) (some e.getSpan)
             -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
             let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs

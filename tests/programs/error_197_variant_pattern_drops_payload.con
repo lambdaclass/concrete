@@ -1,0 +1,12 @@
+// Bug 197: a variant pattern without a field list ignored a non-Copy payload (it was dropped).
+// Expected: E0288 (OWN-5: only a Copy value may be ignored).
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn main() -> Int {
+    let e: E = E::A { r: R { v: 42 } };
+    match e {
+        E::A => { return 1; },
+        E::B => { return 0; }
+    }
+}

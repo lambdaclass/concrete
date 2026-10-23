@@ -1,0 +1,28 @@
+// Bug 197: a variant pattern without a field list may ignore Copy fields; through a reference it
+// ignores borrowed fields. Expected: 42.
+enum Copy C { A { n: Int }, B }
+struct R { v: Int }
+enum E { A { r: R }, B }
+
+fn peek(e: &E) -> Int {
+    match e {
+        E::A => { return 40; },
+        E::B => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    let c: C = C::A { n: 7 };
+    let mut out: Int = 0;
+    match c {
+        C::A => { out = 2; },
+        C::B => {}
+    }
+    let e: E = E::A { r: R { v: 1 } };
+    out = out + peek(&e);
+    match e {
+        E::A { r } => { let R { v } = r; out = out + v * 0; },
+        E::B => {}
+    }
+    return out;
+}
