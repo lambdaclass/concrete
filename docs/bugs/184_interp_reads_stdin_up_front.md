@@ -81,8 +81,9 @@ from, never a value supplied up front.
   (`unsafeIO` behind an `implemented_by` opaque). That hides an effect behind a pure type, which
   the Lean compiler may in principle reorder, duplicate, delete or hoist. The argument that it
   does not, recorded at `hostStdinPull`: the result is always consumed; the call goes through a
-  closure taken from the run's state, never one static term; each node carries the input offset
-  it reads at, so no two pulls have equal arguments and none is a closed term;
+  closure taken from the run's state, never one static term; each node carries the number of pulls
+  before it (a read at end of input counts), so no two pulls have equal arguments and none is a
+  closed term;
   `@[never_extract, noinline]` forbids extraction and inlining; and the run threads its state
   linearly, so each node is pulled at most once. An effectful interpreter monad would remove the
   argument, at the price of making the pure model-diff harness (`Interp.evalClosed`) effectful;

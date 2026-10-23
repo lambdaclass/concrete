@@ -444,22 +444,23 @@ def interpFrontend (inputPath : String) : IO (Option ValidatedCore) := do
     delete or hoist (`unsafeBaseIO`'s contract). What keeps it observationally correct:
     - the interpreter consumes the pull's result (deleting the call is impossible), and calls
       it through a closure taken from the run's state, so no two calls are one static term;
-    - every node carries `pos`, the offset it reads at, so no two pulls of a run have equal
-      arguments, and none is a closed term (nothing to CSE or hoist to initialization);
+    - every node carries `seq`, the number of pulls before it (end of input included), so no
+      two pulls of a run have equal arguments, and none is a closed term (nothing to CSE or
+      hoist to initialization);
     - `@[never_extract, noinline]` forbids extracting or inlining the impure call;
     - the run threads its state linearly (`IM` is `ExceptT` over `StateM`: a caught failure
       keeps the state, nothing restores an earlier one), so each node is pulled at most once.
     Making the interpreter monad effectful would remove the argument altogether; it would also
     make `Interp.evalClosed` (the pure model-diff harness) effectful, so it is not done here. -/
 @[never_extract, noinline]
-private unsafe def hostStdinPullImpl (h : IO.FS.Stream) (pos : Nat) (n : Nat) :
+private unsafe def hostStdinPullImpl (h : IO.FS.Stream) (seq : Nat) (n : Nat) :
     Except String (ByteArray × Interp.StdinSource) :=
   match unsafeIO (h.read (min n 65536).toUSize) with
-  | .ok b => .ok (b, .lazy (hostStdinPullImpl h (pos + b.size)))
+  | .ok b => .ok (b, .lazy (hostStdinPullImpl h (seq + 1)))
   | .error e => .error (toString e)
 
 @[implemented_by hostStdinPullImpl]
-private opaque hostStdinPull (h : IO.FS.Stream) (pos : Nat) (n : Nat) :
+private opaque hostStdinPull (h : IO.FS.Stream) (seq : Nat) (n : Nat) :
     Except String (ByteArray × Interp.StdinSource)
 
 /-- Interpret a program via the source-level interpreter (no codegen), with `args` as its
