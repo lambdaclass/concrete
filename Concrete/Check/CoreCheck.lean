@@ -44,6 +44,9 @@ structure CoreCheckEnv where
       current module's. -/
   programTypeNames : List String := []
   programNewtypes : List NewtypeDef := []
+  /-- The current function's type parameters: a `named` spelling of one is a parameter even when
+      some module declares a type of that name. -/
+  currentTypeParams : List String := []
   vars : List (String × Ty)
   currentCapSet : CapSet
   currentRetTy : Ty
@@ -406,7 +409,8 @@ private def isOpaqueOperandTy (env : CoreCheckEnv) (t : Ty) : Bool :=
   match t with
   | .typeVar _ => true
   | .named n =>
-    !(env.structDefs.any (fun sd => sd.name == n)
+    env.currentTypeParams.contains n
+    || !(env.structDefs.any (fun sd => sd.name == n)
       || env.enumDefs.any (fun ed => ed.name == n)
       || env.newtypes.any (fun nt => nt.name == n)
       || env.programTypeNames.contains n)
@@ -1397,6 +1401,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   setEnv { env with
     currentFnName' := f.name
+    currentTypeParams := f.typeParams
     vars := f.params
     -- The DECLARED set, deliberately: the header is what callers rely on. A trusted
     -- body's discharge of a callee's `Unsafe` (extern calls included since R-0484)
