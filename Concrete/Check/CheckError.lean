@@ -229,6 +229,9 @@ inductive CheckError where
   | unknownStructType (name : String)
   | structHasNoField (structName : String) (fieldName : String)
   | missingFieldInLiteral (fieldName : String) (containerDesc : String)
+  -- Bug 193 (TYPE-7): a struct or enum literal names a field twice. The checker read the first
+  -- occurrence and the backend stored the last, so the consumers disagreed.
+  | duplicateFieldInLiteral (fieldName : String) (containerDesc : String)
   | unknownFieldInLiteral (fieldName : String) (containerDesc : String)
   | fieldAccessNonStruct
   | unknownVariant (variant : String) (enumName : String)
@@ -430,6 +433,7 @@ def CheckError.message : CheckError → String
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
   | .missingFieldInLiteral fieldName containerDesc => s!"missing field '{fieldName}' in {containerDesc}"
+  | .duplicateFieldInLiteral fieldName containerDesc => s!"field '{fieldName}' is given more than once in {containerDesc}"
   | .unknownFieldInLiteral fieldName containerDesc => s!"unknown field '{fieldName}' in {containerDesc}"
   | .fieldAccessNonStruct => "field access on non-struct type"
   | .unknownVariant variant enumName => s!"unknown variant '{variant}' in enum '{enumName}'"
@@ -613,6 +617,7 @@ def CheckError.code : CheckError → String
   | .unknownStructType _ => "E0250"
   | .structHasNoField _ _ => "E0251"
   | .missingFieldInLiteral _ _ => "E0252"
+  | .duplicateFieldInLiteral _ _ => "E0306"
   | .unknownFieldInLiteral _ _ => "E0253"
   | .fieldAccessNonStruct => "E0254"
   | .unknownVariant _ _ => "E0260"

@@ -274,7 +274,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check)
+- Codes: E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0306 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
 - Semantics: none
@@ -283,7 +283,9 @@ fn main() -> Int {
 
 **Rationale.** A missing field would leave part of a value uninitialized, and a field given
 twice would make the literal ambiguous. A destructuring `let` binds every field (`field: _`
-ignores a Copy one, OWN-5). An empty array literal has no element type to infer.
+ignores a Copy one, OWN-5). An empty array literal has no element type to infer. A field given
+twice used to be accepted, with the checker reading the first occurrence and the binary storing
+the last (bug 193).
 
 ```con reject name=missing-field code=E0252 stage=check pair=every-field
 struct Copy P { a: Int, b: Int }
@@ -300,6 +302,15 @@ struct Copy P { a: Int, b: Int }
 fn main() -> Int {
     let p: P = P { a: 42, b: 0, c: 1 };
     return p.a;
+}
+```
+
+```con reject name=duplicate-field code=E0306 stage=check pair=every-field
+struct Copy P { a: Int, b: Int }
+
+fn main() -> Int {
+    let p: P = P { a: 1, b: 2, a: 40 };
+    return p.a + p.b;
 }
 ```
 

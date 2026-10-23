@@ -1460,6 +1460,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         match sd.fields.find? fun sf => sf.name == fn with
         | some _ => pure ()
         | none => throwCheck (.unknownFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
+        -- Bug 193 (TYPE-7): each field once (the checker reads the first, the backend the last).
+        if (fields.filter fun (f, _) => f == fn).length > 1 then
+          throwCheck (.duplicateFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
       return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
@@ -1577,6 +1580,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+          if (fields.filter fun (f, _) => f == fn).length > 1 then
+            throwCheck (.duplicateFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)

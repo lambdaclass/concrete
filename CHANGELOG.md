@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Literal Gives Each Field Once (bug 193, 2026-10-23)
+
+A struct or enum literal that names a field twice is now refused with E0306. Before this fix the
+checker type-checked the first occurrence, the binary stored the last and `--interp` used the
+first, so `P { n: 1, n: 41 }` gave 41 natively and 1 in the interpreter. The specification's types
+chapter (TYPE-7, each field exactly once) led to it. It is pinned by
+`error_193_duplicate_{struct,variant}_field.con`.
+
 ### An Integer Is Not A Condition (bug 192, 2026-10-23)
 
 An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as

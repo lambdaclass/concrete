@@ -50,9 +50,10 @@ E0232	rule	cannot mutably borrow: already borrowed
 E0233	rule	cannot mutably borrow immutable variable
 E0234	rule	reference escapes borrow block
 E0235	rule	cannot mutably borrow: already immutably borrowed
-E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
+E0236	rule	a function, function type or instantiation returns a reference (front end and post-mono)
 E0237	unmigrated:references	mutable borrow (explicit or `&mut self` receiver) through a shared reference
 E0238	rule	place or reference source that does not normalize to a traceable place
+E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
 E0240	unmigrated:trusted	missing capability
 E0241	unmigrated:trusted	trait bound not satisfied
 E0242	unmigrated:trusted	cannot infer capability variable
@@ -107,14 +108,14 @@ E0295	rule	discard() of a non-Copy value (use destroy or consume it)
 E0296	rule	newtype constructed outside its defining module (construction rights, 0b)
 E0297	rule	struct literal touches a field private to its defining module (0b)
 E0298	rule	read/write of a struct field private to its defining module (0b)
+E0299	unmigrated:modules	a module binds one name twice (import vs local definition, or two imports)
 E0300	unmigrated:patterns	a match guard moves a non-Copy value (guards are read-only; bug 090)
 E0301	rule	a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)
 E0302	rule	a `let` binding holds a reference (references are scoped; exit 2i)
 E0303	rule	a reference binding is assigned (references are never re-pointed; exit 2i)
-E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
-E0236	rule	a function, function type or instantiation returns a reference (front end and post-mono)
 E0304	unmigrated:patterns	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
-E0299	unmigrated:modules	a module binds one name twice (import vs local definition, or two imports)
+E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
+E0306	rule	a struct or enum literal gives a field more than once (bug 193)
 E0310	unmigrated:statements	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable

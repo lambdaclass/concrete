@@ -187,3 +187,4 @@ TYPE-13/bare-and-copy-parameters	live	-
 TYPE-14@1	pending	2df007e2bc813c44f1b14f27ac0cdde1
 TYPE-14/copy-over-bare-parameter	pending	-
 TYPE-14/copy-over-copy-parameter	live	-
+TYPE-7/duplicate-field	live	-

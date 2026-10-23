@@ -130,6 +130,8 @@ declare -A BUG_TEST_MAP=(
   [148]="error_148_and_operand_consumes.con error_148_or_operand_consumes.con regress_148_short_circuit_reads.con"
   # Bug 149: exit paths account for owned values (E0207/E0208/E0210/E0211).
   [149]="error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con"
+  # Bug 193: a struct or enum literal giving a field twice (E0306, TYPE-7).
+  [193]="error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con"
   # Bug 192: an integer condition of an if / while / for statement (E0223, TYPE-5).
   [192]="error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con"
   # Bug 130: `x as bool` with an Int x (the bug 108 refusal, E0553).
