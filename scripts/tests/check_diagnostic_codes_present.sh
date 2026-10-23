@@ -46,7 +46,7 @@ bad_code_literals() {  # $1 = source root; prints offending sites
 import glob, re, sys
 
 def blocks(s):
-    """Every `{ ... }` span, matched while skipping string literals and comments."""
+    """Every { ... } span, matched while skipping string literals and comments."""
     stack, out, i, n = [], [], 0, len(s)
     while i < n:
         c = s[i]
