@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Moving Out Of Raw Memory Is Explicit (T-RAWDUP, bug 198, 2026-10-23)
+
+`*p` read by value of a non-Copy pointee through a raw pointer is refused (E0311): it copied a linear
+value the slot still owned, so a trusted helper could free one heap cell twice. The new intrinsic
+`read_owned(p)` states the transfer and leaves the slot logically uninitialized until a value is
+stored back; it needs trusted or `Unsafe` code. Place uses, Copy pointees and stores through `*p`
+are unchanged. 26 std sites (collection pops, removals, rehash and drain paths) migrated.
+
 ### One Argument Mode For `&mut` (decision D1, 2026-10-23)
 
 Passing a `&mut` binding to a call is an implicit reborrow whatever made the binding: a parameter,

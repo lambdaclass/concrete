@@ -980,6 +980,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       if args.length != 0 then throwCheckMsg s!"{fnName} takes no value arguments"
       if typeArgs.length != 1 then throwCheckMsg s!"{fnName} requires exactly 1 type argument: {fnName}::<T>()"
       return .uint
+    -- T-RAWDUP: `read_owned(p)` moves the value out of the raw slot `p` points to (`*mut T` or
+    -- `*const T`), leaving it logically uninitialized. Raw memory, so trusted or `Unsafe` code only.
+    if intrinsic == some .readOwned then
+      if args.length != 1 then throwCheckMsg s!"read_owned takes exactly 1 argument (a raw pointer)"
+      let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
+      let argTy ← checkExpr arg none .callArg
+      let env ← getEnv
+      if !Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet then
+        throwCheck (.missingCapability "read_owned" "Unsafe" env.currentFnName) (some e.getSpan)
+      match ← resolvedOr argTy with
+      | .ptrMut t | .ptrConst t => return t
+      | t => throwCheckMsg s!"read_owned takes a raw pointer (`*mut T` / `*const T`), got '{tyToString t}'"
     -- Intercept unwrap(x) for newtype unwrapping (only if not a user-defined function)
     if intrinsic == some .unwrap && args.length == 1 then
         let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
@@ -2006,9 +2018,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     match innerTy with
     | .ref t => refusedDeref t; return t
     | .refMut t => refusedDeref t; return t
-    | .ptrMut t =>
-      return t
-    | .ptrConst t =>
+    | .ptrMut t | .ptrConst t =>
+      -- T-RAWDUP (MEMORY_SEMANTICS §11, SAFETY: `trusted` does not relax linearity): `*p` read BY
+      -- VALUE of a non-Copy pointee duplicated the value the slot still holds (bug 046's shape: a
+      -- double free). Moving a value out of raw memory is spelled `std.mem.read_owned(p)`, which
+      -- states the transfer and leaves the slot logically uninitialized. Copy pointees, place uses
+      -- (`(*p).f`, `&*p`) and stores through `*p` are unchanged.
+      if mode != .place && !(← isCopyType t) then
+        throwCheck (.rawDerefMovesNonCopy (tyToString t)) (some e.getSpan)
       return t
     | .heap t =>
       -- *heap_ptr: loads value from heap, frees memory, consumes the Heap<T>

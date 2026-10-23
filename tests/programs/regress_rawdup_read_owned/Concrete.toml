@@ -1,0 +1,3 @@
+[package]
+name = "regress_rawdup_read_owned"
+version = "0.1.0"

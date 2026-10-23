@@ -2270,7 +2270,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     let result ← liftE <| evalUnaryOp op v
     return (env, .val result)
 
-  | .call callee typeArgs args _ => do
+  | .call callee typeArgs args callRetTy => do
     let (env, argVals) ← evalCallArgs cx env args
     -- The call form says which kind this is (bug 050), so the interpreter no
     -- longer guesses by probing the environment for every callee name. An
@@ -2558,6 +2558,10 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match typeArgs with
         | [t] => return (env, .val (.int (← liftE (sizeOfTy cx t)) .uint))
         | _ => fail "interp: sizeof without one type argument"
+      -- T-RAWDUP: move the value out of the raw slot (the call's result type is its type).
+      | "read_owned", [.ptr blk off] => do
+        return (env, .val (← readMem cx blk off (normTy cx callRetTy)))
+      | "read_owned", [_] => fail "interp: read_owned of a non-pointer value"
       | "alignof", [] => do
         match typeArgs with
         | [t] => return (env, .val (.int (← liftE (alignOfTy cx t)) .uint))

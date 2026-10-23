@@ -216,6 +216,8 @@ inductive CheckError where
   -- D2 (the Austral model, bug 182): only a variable, or a string literal (a static root), is
   -- borrowed; a temporary is never a reference's root.
   | temporaryNotBorrowable (subject : String)
+  -- T-RAWDUP: `*p` by value of a non-Copy pointee through a raw pointer.
+  | rawDerefMovesNonCopy (ty : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -424,6 +426,7 @@ def CheckError.message : CheckError → String
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
   | .untraceablePlace subject why => s!"cannot trace {subject}: {why}"
+  | .rawDerefMovesNonCopy ty => s!"cannot move a non-Copy '{ty}' out of raw memory with `*p`: the slot would still hold it, so the value would be owned twice (T-RAWDUP)"
   | .temporaryNotBorrowable subject => s!"cannot borrow {subject}: only a variable or a string literal can be borrowed, and a reference into it is formed by projecting through that borrow; a temporary (a call result, a literal, an aggregate, an operator expression) is never a reference's root (REF-5)"
   | .mutReceiverThroughSharedRef subject desc => s!"cannot mutably borrow {subject} through a shared reference ({desc})"
   -- Slice 4
@@ -517,6 +520,7 @@ def CheckError.hint : CheckError → Option String
   | .destroyRequiresNamed _ => some "only struct and enum types can be destroyed"
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
+  | .rawDerefMovesNonCopy _ => some "write `read_owned(p)` (a compiler intrinsic): it moves the value out and leaves the slot logically uninitialized; read a field with `(*p).f` or borrow with `&*p` instead"
   | .temporaryNotBorrowable _ => some "bind the value to a `let` and borrow the variable (`let v = mk(); f(&v)`)"
   | .untraceablePlace _ _ => some "use a named place (a binding, its fields, or `*` of a named reference); this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
   | .mutReceiverThroughSharedRef _ _ => some "take `&mut T` instead of `&T` (or `&mut self` instead of `&self`) where the value is mutated"
@@ -610,6 +614,7 @@ def CheckError.code : CheckError → String
   | .mutReceiverThroughSharedRef _ _ => "E0237"
   | .untraceablePlace _ _ => "E0238"
   | .temporaryNotBorrowable _ => "E0238"
+  | .rawDerefMovesNonCopy _ => "E0311"
   -- Slice 4: Capability (E0240–E0249)
   | .missingCapability _ _ _ => "E0240"
   | .traitBoundNotSatisfied _ _ _ => "E0241"

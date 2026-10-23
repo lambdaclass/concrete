@@ -6351,6 +6351,7 @@ def diagnosticCodesReport : String :=
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
+    entry "E0311" "check" "error" "`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

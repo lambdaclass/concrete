@@ -48,7 +48,7 @@ mod deque {
             self.len = self.len - 1;
             let tail: u64 = (self.head + self.len) & (self.cap - 1);
             let target: *mut T = self.ptr + tail;
-            return Option::<T>::Some { value: *target };
+            return Option::<T>::Some { value: read_owned(target) };
         }
 
         pub fn pop_front(&mut self) -> Option<T> {
@@ -56,7 +56,7 @@ mod deque {
                 return Option::<T>::None;
             }
             let target: *mut T = self.ptr + self.head;
-            let value: T = *target;
+            let value: T = read_owned(target);
             self.head = (self.head + 1) & (self.cap - 1);
             self.len = self.len - 1;
             return Option::<T>::Some { value: value };
@@ -86,7 +86,7 @@ mod deque {
                 let src_idx: u64 = (self.head + i) & (self.cap - 1);
                 let src: *mut T = self.ptr + src_idx;
                 let dst: *mut T = new_ptr + i;
-                *dst = *src;
+                *dst = read_owned(src);
                 i = i + 1;
             }
 

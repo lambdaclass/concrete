@@ -49,6 +49,9 @@ inductive IntrinsicId where
   -- Size queries (compile-time)
   | sizeof | alignof
 
+  -- T-RAWDUP: move a value out of an initialized raw slot (`std.mem.read_owned`)
+  | readOwned
+
   -- Type operations
   | unwrap  -- newtype unwrapping
 
@@ -123,6 +126,7 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   -- Size queries
   | "sizeof"  | "_sizeof" => some .sizeof
   | "alignof" => some .alignof
+  | "read_owned" | "_read_owned" => some .readOwned
 
   -- Type operations
   | "unwrap" => some .unwrap
@@ -189,6 +193,7 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .abort => "abort"
   | .sizeof => "sizeof"
   | .alignof => "alignof"
+  | .readOwned => "read_owned"
   | .unwrap => "unwrap"
   | .wrappingAdd => "wrapping_add"
   | .wrappingSub => "wrapping_sub"

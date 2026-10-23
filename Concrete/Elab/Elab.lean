@@ -1482,6 +1482,14 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     -- relaxed, carry `cArgEv.evidence` here before it becomes a live collision.
     return ElaboratedExprV2.mk (CExpr.call "alloc" [] [cArg] (.heap cArg.ty))
       (Proof.evCall (CallableId.ofIntrinsic "alloc") [])
+  -- T-RAWDUP: `read_owned(p)` moves the value out of the raw slot (a load, stated as a transfer).
+  if intrinsic == some .readOwned then
+    let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
+    let cArgEv ← elabExprEv arg
+    let cArg := cArgEv.core
+    let pointee := match cArg.ty with | .ptrMut t | .ptrConst t => t | _ => .placeholder
+    return ElaboratedExprV2.mk (CExpr.call "read_owned" [] [cArg] pointee)
+      (Proof.evCall (CallableId.ofIntrinsic "read_owned") [])
   -- Intercept free(ptr)
   if intrinsic == some .free then
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0

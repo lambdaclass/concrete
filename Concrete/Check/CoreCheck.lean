@@ -531,6 +531,12 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- that is both (an `extern` declared `trusted`) yields both facts, because they are
     -- different questions: one is "audited", the other is "leaves the language".
     let envE ← getEnv
+    -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
+    -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
+    if resolveIntrinsic fn == some .readOwned && (envE.fnSigs.find? (·.1 == fn)).isNone then
+      addTrustEdge .containsRawOp "read_owned"
+      if !Capabilities.capsAllowUnsafeOp envE.inTrusted envE.currentCapSet then
+        addCCError (.missingCapability "read_owned" "Unsafe" "")
     if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
     if envE.externNames.contains fn then addTrustEdge .callsFFI fn
     -- Check capability discipline

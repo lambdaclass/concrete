@@ -962,6 +962,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       let argTy := match _typeArgs with | t :: _ => t | [] => Ty.int
       let ctx ← getLayoutCtx
       return .intConst (Int.ofNat (Layout.tyAlign ctx argTy)) .uint
+    -- T-RAWDUP: `read_owned(p)` moves the value out of the slot: the load `*p` is, stated as a
+    -- transfer (the checker refuses the bare `*p` for a non-Copy pointee).
+    if intrinsic == some .readOwned then
+      match args.head? with
+      | some arg =>
+        let pv ← lowerExpr arg
+        let dst ← freshReg
+        emit (.load dst pv ty)
+        return .reg dst ty
+      | none => return .unit
     -- Handle alloc(val) → malloc + store
     if intrinsic == some .alloc then
       match args.head? with

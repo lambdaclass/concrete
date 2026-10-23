@@ -37,7 +37,7 @@ mod vec {
             }
             self.len = self.len - 1;
             let target_ptr: *mut T = self.ptr + self.len;
-            return Option::<T>::Some { value: *target_ptr };
+            return Option::<T>::Some { value: read_owned(target_ptr) };
         }
 
         /// Remove and return the element at `at` in O(1) by moving the LAST
@@ -50,11 +50,11 @@ mod vec {
                 return Option::<T>::None;
             }
             let target_ptr: *mut T = self.ptr + at;
-            let out: T = *target_ptr;
+            let out: T = read_owned(target_ptr);
             self.len = self.len - 1;
             if at < self.len {
                 let last_ptr: *mut T = self.ptr + self.len;
-                *target_ptr = *last_ptr;
+                *target_ptr = read_owned(last_ptr);
             }
             return Option::<T>::Some { value: out };
         }
@@ -118,7 +118,7 @@ mod vec {
             // is needed (same class as array-index bounds checks).
             discard(self.len - (at + 1));
             let target_ptr: *mut T = self.ptr + at;
-            let old: T = *target_ptr;
+            let old: T = read_owned(target_ptr);
             *target_ptr = value;
             return old;
         }
