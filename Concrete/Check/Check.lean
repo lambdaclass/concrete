@@ -1617,8 +1617,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- CoreCheck validates exhaustiveness, duplicates, field counts, wrong-enum
         -- Linearity across arms: snapshot env, check each arm, ensure all agree
         let envBefore ← getEnv
-        let mut firstArmVars : Option (List (String × VarInfo)) := none
-        let mut divergingArmVars : Option (List (String × VarInfo)) := none
+        let mut firstArmVars : Option (List (LocalRef × VarInfo)) := none
+        let mut divergingArmVars : Option (List (LocalRef × VarInfo)) := none
         let mut matchResultTy : Ty := .unit
         let mut firstArmDone := false
         for arm in arms do
@@ -1795,8 +1795,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       let envBefore ← getEnv
       let mut matchResultTy : Ty := .unit
       let mut firstArmDone := false
-      let mut firstArmVars : Option (List (String × VarInfo)) := none
-      let mut divergingArmVars : Option (List (String × VarInfo)) := none
+      let mut firstArmVars : Option (List (LocalRef × VarInfo)) := none
+      let mut divergingArmVars : Option (List (LocalRef × VarInfo)) := none
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
@@ -2983,9 +2983,9 @@ partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
     use(x)` is sound. Only the fall-through branches must agree. -/
 -- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def mergeVarStates
-    (before : List (String × VarInfo))
-    (afterThen : List (String × VarInfo))
-    (afterElse : List (String × VarInfo))
+    (before : List (LocalRef × VarInfo))
+    (afterThen : List (LocalRef × VarInfo))
+    (afterElse : List (LocalRef × VarInfo))
     (thenDiverges : Bool := false)
     (elseDiverges : Bool := false)
     (span : Option Span := none) : CheckM Unit := do
@@ -3022,8 +3022,8 @@ partial def mergeVarStates
     that existed before the if. -/
 -- spec: OWN-3 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def checkNoBranchConsumption
-    (before : List (String × VarInfo))
-    (afterThen : List (String × VarInfo))
+    (before : List (LocalRef × VarInfo))
+    (afterThen : List (LocalRef × VarInfo))
     (ctx : String)
     (span : Option Span := none) : CheckM Unit := do
   for (name, infoBefore) in before do

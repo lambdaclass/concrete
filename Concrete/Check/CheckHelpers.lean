@@ -889,9 +889,10 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
     MERGE: the exemption is about agreement at the merge point, not about the
     exit itself. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
-def checkReturnPathConsumed (before after : List (String × VarInfo))
+def checkReturnPathConsumed (before after : List (LocalRef × VarInfo))
     (span : Option Span := none) : CheckM Unit := do
-  for (name, infoBefore) in before do
+  for (nameR, infoBefore) in before do
+    let name := nameR.name
     if infoBefore.isCopy then continue
     -- References are BORROWS: letting one go out of scope on a return path is
     -- not a leak (&mut is non-Copy only for aliasing exclusivity).
@@ -916,10 +917,10 @@ def checkReturnPathConsumed (before after : List (String × VarInfo))
     there happens on a path where a later arm can move the same value again.
     The guard is an expression: it adds no bindings, so the two lists hold the
     same entries in the same order and are compared position by position. -/
-def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
+def guardMovedName? (before after : List (LocalRef × VarInfo)) : Option String :=
   (before.zip after).findSome? fun ((n, vb), (_, va)) =>
     if !vb.isCopy && vb.state != .consumed && vb.state != .reserved
-        && (va.state == .consumed || va.state == .reserved) then some n else none
+        && (va.state == .consumed || va.state == .reserved) then some n.name else none
 
 /-- KNOWN_HOLES H9: a non-Copy (linear) value DECLARED inside a block — present in
     `after`, absent from `before` — must be consumed before the block exits. Skipped
@@ -928,11 +929,12 @@ def guardMovedName? (before after : List (String × VarInfo)) : Option String :=
     matched payload bindings, which are dropped at the branch/arm merge. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkBlockLocalsConsumed
-    (before after : List (String × VarInfo))
+    (before after : List (LocalRef × VarInfo))
     (diverges : Bool)
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
-  for (name, info) in after do
+  for (nameR, info) in after do
+    let name := nameR.name
     -- Pre-existing, not block-local. By IDENTITY (bug 093): a block-local that
     -- shadows an outer name (`let r = …` over a consumed outer `r`, a match
     -- binder `value` over an outer `value`) is a different binding and must
@@ -950,7 +952,7 @@ def checkBlockLocalsConsumed
     block left them in (a consume inside the block is not undone). Every block
     construct closes through here: `if`/`else` branches (statement and value),
     loop bodies, `for` headers and borrow blocks. -/
-def closeBlockScope (outer : List (String × VarInfo)) : CheckM Unit := do
+def closeBlockScope (outer : List (LocalRef × VarInfo)) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
 
