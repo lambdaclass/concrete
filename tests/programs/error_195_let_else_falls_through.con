@@ -1,0 +1,12 @@
+// Bug 195: the else block of a let ... else falls through in a function with a result type.
+// Expected: E0308 (PAT-5), before the reachable-end check.
+fn get(o: Option<Int>) -> Int {
+    let Option::Some { value } = o else {
+        let z: Int = 0;
+    };
+    return value;
+}
+
+fn main() -> Int {
+    return get(Option::Some { value: 42 });
+}

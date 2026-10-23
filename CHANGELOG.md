@@ -19,6 +19,15 @@ now refused with E0307. Before this fix nothing checked it: the binary failed in
 patterns chapter found that case. It is pinned by three `error_194_*.con` fixtures (the `let ... else`
 shape is bug 195's).
 
+### A `let ... else` Block Diverges (bug 195, 2026-10-23)
+
+The `else` block of a `let ... else` must end every path in `return`, `break`, `continue` or a
+call that never returns, and one that can fall through is now refused with E0308. The construct is
+desugared to a `match` before checking, so the rule its design stated had no enforcing site: falling
+out of the block silently skipped the rest of the function. The language specification's patterns
+chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`. A `let ... else`
+over a field-less variant is not recognized yet (it binds nothing; the record says why).
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.

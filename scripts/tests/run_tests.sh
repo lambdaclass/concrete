@@ -8285,6 +8285,9 @@ run_err "$TESTDIR/error_194_missing_return_plain.con" "(E0307)"
 run_err "$TESTDIR/error_194_missing_return_if.con" "(E0307)"
 run_err "$TESTDIR/error_194_missing_return_method.con" "(E0307)"
 run_ok "$TESTDIR/regress_194_unreachable_end_forms.con" 42
+# Bug 195: the else block of a let ... else fell through (the rest of the function was skipped).
+run_err "$TESTDIR/error_195_let_else_falls_through_unit.con" "(E0308)"
+run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
 # Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
 # the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
 run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"

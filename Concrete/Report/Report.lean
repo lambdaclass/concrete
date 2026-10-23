@@ -6394,6 +6394,7 @@ def diagnosticCodesReport : String :=
     entry "E0304" "check" "error" "a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)",
     entry "E0299" "check" "error" "a module binds one name twice (import vs local definition, or two imports)",
     entry "E0307" "check" "error" "the end of a function with a result type is reachable without a return (bug 194)",
+    entry "E0308" "check" "error" "the else block of a let ... else can fall through (bug 195)",
     entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
     entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
     -- Elab (E0400–E0419)
