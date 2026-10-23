@@ -723,7 +723,14 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
+  -- Bug 215 (Codex review): a constant's declared type and initializer are written types and
+  -- an expression like any function body's; the initializer was never walked, so
+  -- `const X: Int = (7 as Nope) as Int` reached the backend.
+  let constErrors := m.constants.foldl (fun acc c =>
+    let ctx := checkTyDeep externCtx0 c.ty (some c.span)
+    acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
+    ++ constErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 
 -- ============================================================

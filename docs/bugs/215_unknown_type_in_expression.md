@@ -31,8 +31,8 @@ Observed on main `dcc48dc1`: a backend panic natively, 7 under `--interp`. Expec
 
 `Resolve.resolveExpr` walked only the expression parts of `.cast`, `.call`, `.methodCall`,
 `.staticMethodCall`, `.structLit` and `.enumLit`: the cast target and the type-argument lists were
-never passed to `checkTyDeep`, which every other written type (annotations, signatures, fields)
-goes through. Check then resolved the cast target with `resolvedOr`, which keeps an unresolvable
+never passed to `checkTyDeep`, which `let` annotations and function signatures go through. A
+constant's initializer was not walked at all. Check then resolved the cast target with `resolvedOr`, which keeps an unresolvable
 type as written, so `Ty.named "Nope"` reached Core, and CoreCheck's cast rule reads an undeclared
 `named` type as a type parameter.
 
@@ -40,8 +40,14 @@ type as written, so `Ty.named "Nope"` reached Core, and CoreCheck's cast rule re
 
 Resolve checks every type written inside an expression (`checkWrittenTys`, built on
 `checkTyDeep`): cast targets and the type-argument lists of calls, method calls, static method
-calls, struct literals and enum literals. An unknown name is E0108 at `resolve`. Regression legs in
-`run_tests.sh`: the three `error_215_*.con` fixtures, `run_err ... (E0108)`.
+calls, struct literals and enum literals; and a constant's type and initializer are walked like a
+function body (the Codex review's witness: `const X: Int = (7 as Nope) as Int`). An unknown name is
+E0108 at `resolve`. Regression legs in `run_tests.sh`: the four `error_215_*.con` fixtures,
+`run_err ... (E0108)`.
+
+Not covered: contracts (`#[requires]`, `#[ensures]`, loop invariants) and spec functions, which are
+erased metadata Resolve does not walk; an unknown type there cannot reach the backend, and their
+checking belongs to the contract passes.
 
 ## Structural cause
 
