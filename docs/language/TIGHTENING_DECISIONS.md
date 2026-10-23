@@ -578,8 +578,14 @@ enforcement in exit 2i; bug 182 closes with it.
 and a whole-value binder over `&T` binds as `&T`, whether or not `T` is Copy. A Copy value is read
 with `*value`. Literal and range patterns still compare the referenced value. **Scope (decided
 2026-10-23):** a destructuring `let` of a struct through a reference (`let P { a, b } = r;` with
-`r: &P`) binds each field as `&T` by the same rule as enum payloads. Under REF-6 these are pattern
-binders, not `let`-introduced references, and like arm binders they are loans on the root.
+`r: &P`) binds each field as `&T` by the same rule as enum payloads. These binders are loans on the root,
+like arm binders, and live to the end of the enclosing block. **Interaction to reconcile:** exit
+2i's REF-6 (E0302, `letBindsReference`, applied to the binders a destructuring `let` desugars to,
+`PatBind.letBound`) refuses a `let` that holds a reference. The implementing branch states this
+form as REF-6's one exception: a destructuring-`let` binder through a reference parameter or
+reference binder is introduced inside its source's scope and is never assigned, so INV-REF's
+lexical argument still holds. Alternatively it confirms that the shape is refused and records that
+here.
 
 **Rationale.** Today the mode depends on whether the payload is Copy, a property monomorphization
 changes, and Check and Elab already disagree about it (bug 181: SIGSEGV in safe code at
