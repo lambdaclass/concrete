@@ -6421,7 +6421,8 @@ def diagnosticCodesReport : String :=
     entry "E0417" "elab" "error" "submodule elaboration error",
     entry "E0418" "elab" "error" "unknown module",
     entry "E0419" "elab" "error" "symbol not public in module",
-    entry "E0420" "elab" "error" "ghost value used in runtime code (the same code is also used for an unsupported append() argument type)",
+    entry "E0421" "check" "error" "append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)",
+    entry "E0420" "elab" "error" "ghost value used in runtime code",
     -- Core-check: type consistency (E0500–E0509)
     entry "E0500" "core-check" "error" "variable type mismatch",
     entry "E0501" "core-check" "error" "arithmetic on non-numeric type",

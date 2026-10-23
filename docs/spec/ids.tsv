@@ -231,6 +231,7 @@ TRAIT-6/one-bound	live	-
 TRAIT-7@1	live	7442767135f570ca923c02f735735fdc
 TRAIT-7/forward	live	-
 TRAIT-7/reversed	live	-
+TYPE-10/append-unsupported-argument	live	-
 PAT-2@2	live	d4a4a6e7aa70d7403dce257f00947918
 PAT-3@2	live	3fb6b3a8be943584b6e30da545fefb9b
 PAT-5@2	live	15be3132aaa169fd3c11a3fd6af7bd85

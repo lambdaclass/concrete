@@ -1,0 +1,10 @@
+// Bug 203: a ghost binding read by runtime code keeps E0420 (CON-4); the append() refusal
+// that shared the code is now E0421.
+fn f() -> Int {
+    ghost let bound: Int = 8;
+    return bound;
+}
+
+fn main() -> Int {
+    return f();
+}

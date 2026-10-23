@@ -1048,7 +1048,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
         | .bool => pure ()
         | .char => pure ()
-        | _ => throwCheckMsg s!"{fnName}() argument has unsupported type '{tyToString argTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
+        | _ => throwCheck (.builtinArgUnsupported fnName (tyToString argTy)) (some arg.getSpan)
       return .unit
     -- Intercept append(&mut buf, ...) — variadic mixed-arg buffer append
     if intrinsic == some .append then
@@ -1074,7 +1074,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
           | .bool => pure ()
           | .char => pure ()
-          | _ => throwCheckMsg s!"append() argument has unsupported type '{tyToString argTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
+          | _ => throwCheck (.builtinArgUnsupported "append" (tyToString argTy)) (some arg.getSpan)
         return .unit
       | [] => throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
     -- Intercept abort() calls

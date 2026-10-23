@@ -126,8 +126,8 @@ fn main() -> Int {
 **Rationale.** A ghost value names something a proof needs and the program does not keep. Proof
 code cannot change runtime ownership in the other direction either (OWN-11). Ghost destructuring
 bindings are not supported. A ghost initializer is elaborated as runtime code today, so it cannot
-read another ghost binding yet (the pending example below). The code E0420 is also used, wrongly, for an unsupported `append()`
-argument; only the ghost case is this rule.
+read another ghost binding yet (the pending example below). E0420 names only this refusal; the
+`append()` argument refusal that shared it is E0421 (TYPE-10, bug 203).
 
 ```con reject name=ghost-read-at-runtime code=E0420 stage=elab pair=ghost-in-contract
 fn f() -> Int {
