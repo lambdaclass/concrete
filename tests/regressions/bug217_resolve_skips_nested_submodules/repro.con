@@ -1,0 +1,16 @@
+// Bug 217 (OPEN): Resolve's body walk does not descend into a nested submodule, so a cast to an
+// unknown type two modules deep is not refused (bug 215's E0108) and reaches the backend, which
+// panics (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`); `--interp` prints 7.
+mod outer {
+    mod inner {
+        pub fn h() -> Int {
+            let a: i32 = 7;
+            return (a as Nope) as Int;
+        }
+    }
+    pub fn g() -> Int { return inner::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

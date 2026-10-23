@@ -100,13 +100,13 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 9** (1 silent, 2 loud, 6 filed before the discovery record) of 187 bug records.
+**Open bugs: 10** (1 silent, 3 loud, 6 filed before the discovery record) of 188 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 4 | 1 | 054, 077, 114, 122 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
-| 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
+| 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 217 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
@@ -114,7 +114,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 7 | 0 | 027, 049, 054, 058, 064, 077, 216 |
+| no exit names it | 8 | 0 | 027, 049, 054, 058, 064, 077, 216, 217 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
@@ -125,7 +125,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus hand probes after R-0492 steps 1-3 | 2026-10-23 | 13 programs | 5 | 2 | 3 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 13 counting batches recorded. 34 attribution-only batches (reviews, follow-ons, CI, controls, development) found 46 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 13 counting batches recorded. 35 attribution-only batches (reviews, follow-ons, CI, controls, development) found 47 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
