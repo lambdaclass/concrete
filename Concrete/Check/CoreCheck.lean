@@ -617,7 +617,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       --     the memory-safety obligation, never an unclassified effect;
       --   * only the CALL — the raw-operation gate (E0521) is untouched.
       let calleeCaps := if env.inTrusted then dropCrossPackageUnsafe calleeCaps else calleeCaps
-      let capD := Capabilities.decideCall env.currentCapSet calleeCaps
+      -- The callee's OWN capability parameters are instantiated at this call, which
+      -- Check decided with the inferred binding; what remains for this decision is the
+      -- callee's declared concrete set. The CALLER's variables entail only themselves
+      -- (bug 188), so `with(C)` no longer covers whatever the callee requires.
+      let capD := Capabilities.decideCall env.currentCapSet (Capabilities.instantiatedRequirement calleeCaps)
       if !capD.satisfied then
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
     | none => pure ()  -- builtin/extern: no recorded capability set

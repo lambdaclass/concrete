@@ -1657,7 +1657,8 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge; do
+# Bug 188: legitimate capability polymorphism (positive control), binary exit 42.
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_188_capvar_polymorphism; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -2454,6 +2455,8 @@ run_err "$TESTDIR/error_int_to_ptr_no_unsafe.con" "requires capability"
 # Trusted boundary tests
 run_ok "$TESTDIR/trusted_fn_ptr_deref.con" 0
 run_ok "$TESTDIR/trusted_impl_basic.con" 0
+# Bug 189: `trusted impl` is refused — a block never confers trust; each method declares it.
+run_err "$TESTDIR/error_189_trusted_impl_refused.con" "'trusted impl' is not allowed"
 run_ok "$TESTDIR/trusted_ptr_assign.con" 0
 run_ok "$TESTDIR/trusted_ptr_cast.con" 0
 run_ok  "$TESTDIR/trusted_absorbs_extern_unsafe.con" 0   # R-0484 R2: trusted absorbs extern Unsafe
@@ -2561,6 +2564,21 @@ run_ok "$TESTDIR/test_trusted_impl_method.con" 42
 run_ok "$TESTDIR/test_trusted_extern_call.con" 42
 run_err "$TESTDIR/error_cap_superset_missing.con" "requires File, Network but caller has"
 run_err "$TESTDIR/error_cap_poly_insufficient.con" "requires capability"
+# Bug 188: a capability VARIABLE entailed every requirement, so a `with(C)` body could
+# print, call `with(Process)`, call an untrusted extern or dereference a raw pointer, and
+# a caller instantiating `C := {}` ran it with no authority. A variable now entails only
+# itself; a callback's `Unsafe` is decided on the instantiated set; a capability parameter
+# may not be spelled like a capability (E0121).
+run_err "$TESTDIR/error_188_capvar_console.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_process.con"          "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_call.con"      "(E0520)"
+run_err "$TESTDIR/error_188_capvar_unsafe_op.con"        "(E0521)"
+run_err "$TESTDIR/error_188_capvar_unsafe_callback.con"  "(E0240)"
+run_err "$TESTDIR/error_188_capparam_named_unsafe.con"   "(E0121)"
+run_err "$TESTDIR/error_188_capvar_method_unsafe_callback.con" "(E0240)"
+run_err "$TESTDIR/error_188_capvar_impl_receiver.con"    "(E0520)"
+run_err "$TESTDIR/error_188_bodyless_capparam.con"       "bodiless declaration cannot take capability parameters"
+run_ok  "$TESTDIR/regress_188_capvar_polymorphism.con" 42
 run_err "$TESTDIR/error_trusted_not_viral.con" "requires capability"
 run_err "$TESTDIR/error_extern_needs_unsafe.con" "requires Unsafe"
 run_err "$TESTDIR/error_extern_undeclared.con" "E0116"   # R-0484 R3: an extern must declare its effects
@@ -3025,10 +3043,8 @@ echo "=== Report output tests ==="
 # The heading reads "trusted methods in impl X", not "trusted impl X". Since per-method
 # `trusted` exists (2026-09-25), `trustedImplOrigin` is set from the FUNCTION's flag, so a
 # method may be audited inside a block that is NOT — and the old wording asserted
-# something about the block that need not be true. This fixture happens to use a whole
-# `trusted impl`, where the old text was accurate; the new text is accurate in both cases
-# and cannot overclaim. The impl-level fact is still available in the source and in
-# `--report trust-edges`.
+# something about the block that need not be true. Since bug 189 there is no block-level
+# trust at all: this fixture's method declares `trusted fn` itself.
 check_report_multi "$TESTDIR/trusted_report_check.con" unsafe \
     "trusted_report_check.con --report unsafe shows trusted boundaries" \
     "trusted_report_check.con --report unsafe missing trusted boundaries" \

@@ -1852,10 +1852,9 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
         else none
       let isPub := tk == .pub_
       if isPub then advance; tk ← peek
-      -- PER-METHOD `trusted` — see the trait-impl loop above for why the axes stay
-      -- independent. Whole-impl `trusted impl` still applies to every method; Elab
-      -- ORs the two, so marking one method does not widen the block's trust and
-      -- marking the block does not need every method to repeat it.
+      -- PER-METHOD `trusted` — the only way a method is trusted. There is no
+      -- block-level trust: a `trusted impl` is refused (bug 189), because a marker
+      -- on a block would confer trust on methods that never declared it.
       let isTrustedM := tk == .trusted_
       if isTrustedM then advance; tk ← peek
       let (f0, selfKind) ← parseMethodDef
@@ -1996,6 +1995,13 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     pure .unit
   let tk2 ← peek
   if tk2 == .semicolon then
+    -- A bodiless declaration (a foreign binding or an intrinsic) has no call-site
+    -- instantiation: its capability parameters would be dropped here and its `with(C)`
+    -- would require a variable nobody binds, which a direct call's check then treats as
+    -- the callee's own (instantiated) parameter — `trusted fn f<cap C>() with(C);` was
+    -- callable with no authority (Codex review of bug 188). Refused.
+    if !capParams.isEmpty then
+      throwParse s!"a bodiless declaration cannot take capability parameters ('{name}' declares {", ".intercalate capParams}): a foreign binding declares the concrete effects it exercises" (span := some sp)
     advance  -- consume ';'
     let declCaps : Option CapSet :=
       if wroteWith then some (match capSet with | .concrete [] => CapSet.empty | other => other)
@@ -2312,13 +2318,13 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       else
         let isPub := tk == .pub_
         if isPub then advance; tk ← peek
-        -- Check for 'trusted' modifier (only valid before fn and impl)
+        -- Check for 'trusted' modifier (only valid before fn and extern fn)
         let isTrusted := tk == .trusted_
         if isTrusted then advance; tk ← peek
         if tk == .struct_ then
           if isTrusted then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           if pendingIsTest then
             let sp ← peekSpan
             throwParse "#[test] can only be applied to function definitions" (span := some sp)
@@ -2335,7 +2341,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         else if tk == .hash then
           if isTrusted then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           -- Attribute before a declaration (after pub)
           let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
           if key == "repr" then
@@ -2380,10 +2386,17 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           if pendingIsTest && tk != .fn then
             let sp ← peekSpan
             throwParse "#[test] can only be applied to function definitions" (span := some sp)
-          -- Reject 'trusted' on non-fn/impl/extern declarations
-          if isTrusted && tk != .fn && tk != .impl_ && tk != .extern_ then
+          -- Bug 189: trust is never conferred by a block. `trusted impl` used to make every
+          -- method of the block trusted whether or not it declared it, so a method added to
+          -- the block later was audited by nobody. Each function declares `trusted` itself.
+          if isTrusted && tk == .impl_ then
             let sp ← peekSpan
-            throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
+            throwParse "'trusted impl' is not allowed: trust is never conferred by a block (bug 189)" (span := some sp)
+              (hint := some "remove `trusted` from the impl and write `trusted fn` on each method that needs it")
+          -- Reject 'trusted' on non-fn/extern declarations
+          if isTrusted && tk != .fn && tk != .extern_ then
+            let sp ← peekSpan
+            throwParse "'trusted' can only be applied to fn or extern fn" (span := some sp)
           -- `#[intrinsic]` belongs to a bodiless declaration only; on anything else it would
           -- otherwise stay pending and attach to a LATER declaration.
           if pendingIntrinsic.isSome && tk != .fn && tk != .extern_ then
@@ -2409,8 +2422,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           else if tk == .impl_ then
             let result ← parseImplBlock
             match result with
-            | .inl ib => implBlocks := implBlocks ++ [{ ib with isTrusted }]
-            | .inr tb => traitImpls := traitImpls ++ [{ tb with isTrusted }]
+            | .inl ib => implBlocks := implBlocks ++ [ib]
+            | .inr tb => traitImpls := traitImpls ++ [tb]
           else if tk == .trait_ then
             let t ← parseTraitDef
             traits := traits ++ [{ t with isPublic := isPub }]

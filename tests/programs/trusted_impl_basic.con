@@ -1,10 +1,10 @@
-// Trusted impl methods can do pointer casts without with(Unsafe) — compiles successfully
+// Trusted methods (each declares `trusted fn`; an impl block confers no trust, bug 189) can do pointer casts without with(Unsafe) — compiles successfully
 struct Wrapper {
     value: i32,
 }
 
-trusted impl Wrapper {
-    fn cast_ref(p: *const i32) -> *const u8 {
+impl Wrapper {
+    trusted fn cast_ref(p: *const i32) -> *const u8 {
         let q: *const u8 = p as *const u8;
         return q;
     }

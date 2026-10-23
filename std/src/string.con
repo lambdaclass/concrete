@@ -10,8 +10,8 @@ mod string {
         cap: u64,
     }
 
-    trusted impl String {
-        pub fn new() -> String {
+    impl String {
+        pub trusted fn new() -> String {
             let value: String = String {
                 ptr: 0 as *mut u8,
                 len: 0,
@@ -48,7 +48,7 @@ mod string {
         }
 
         /// Bounds-checked access. Returns None if index is out of bounds.
-        pub fn get(&self, at: u64) -> Option<char> {
+        pub trusted fn get(&self, at: u64) -> Option<char> {
             if at >= self.len {
                 return Option::<char>::None;
             }
@@ -57,7 +57,7 @@ mod string {
         }
 
         /// Unchecked access. Caller must ensure index is within bounds.
-        pub fn get_unchecked(&self, at: u64) -> char {
+        pub trusted fn get_unchecked(&self, at: u64) -> char {
             let target_ptr: *mut u8 = self.ptr + at;
             return (*target_ptr) as char;
         }
@@ -92,13 +92,13 @@ mod string {
             string_append_int(self, n);
         }
 
-        fn grow(&mut self) with(Alloc) {
+        trusted fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
             self.ptr = grow::<u8>(self.ptr, new_cap);
             self.cap = new_cap;
         }
 
-        pub fn clear(&mut self) {
+        pub trusted fn clear(&mut self) {
             self.len = 0;
             if self.cap > 0 {
                 // c-str, set first to null just in case.
@@ -107,7 +107,7 @@ mod string {
             }
         }
 
-        pub fn eq(&self, other: &String) -> bool {
+        pub trusted fn eq(&self, other: &String) -> bool {
             if self.len != other.len {
                 return false;
             }
@@ -138,13 +138,13 @@ mod string {
         }
 
         /// TODO: drop should be a trait, and isn't really called yet automatically.
-        pub fn drop(self) with(Alloc) {
+        pub trusted fn drop(self) with(Alloc) {
             let String { ptr, len, cap } = self;
             dealloc::<u8>(ptr);
         }
 
         /// Check if this string starts with the given prefix.
-        pub fn starts_with(&self, prefix: &String) -> bool {
+        pub trusted fn starts_with(&self, prefix: &String) -> bool {
             if prefix.len > self.len {
                 return false;
             }
@@ -156,7 +156,7 @@ mod string {
         }
 
         /// Check if this string ends with the given suffix.
-        pub fn ends_with(&self, suffix: &String) -> bool {
+        pub trusted fn ends_with(&self, suffix: &String) -> bool {
             if suffix.len > self.len {
                 return false;
             }
@@ -170,7 +170,7 @@ mod string {
         }
 
         /// Check if this string contains the given needle as a substring.
-        pub fn contains(&self, needle: &String) -> bool {
+        pub trusted fn contains(&self, needle: &String) -> bool {
             if needle.len > self.len {
                 return false;
             }
@@ -229,8 +229,8 @@ mod string {
     // collections are destroyed by the generated glue. Infallible, memory-only
     // (with(Alloc)) per RUNTIME_COLLECTIONS.md drop-glue rules; `.drop()`
     // remains the direct disposal verb for owned locals.
-    trusted impl Destroy for String {
-        pub fn destroy(&self) with(Alloc) {
+    impl Destroy for String {
+        pub trusted fn destroy(&self) with(Alloc) {
             dealloc::<u8>(self.ptr);
         }
     }

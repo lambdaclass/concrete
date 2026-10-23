@@ -3190,8 +3190,9 @@ private def assessEligibility
     (if !f.capSet.isEmpty then
       [s!"has capabilities: {", ".intercalate concreteCaps}"] else []) ++
     (if f.isTrusted then ["marked trusted"] else []) ++
-    (if f.isEntryPoint then ["is entry point (main)"] else []) ++
-    (if f.trustedImplOrigin.isSome then ["from trusted impl"] else [])
+    -- No separate "from trusted impl" reason: since bug 189 a method is trusted only by
+    -- its own `trusted`, which "marked trusted" already reports.
+    (if f.isEntryPoint then ["is entry point (main)"] else [])
   let allocs := callees.filter isAllocCall
   let rec_ := match recMap.find? (fun (n, _, _) => n == qualName) with
     | some (_, .direct, _) => "direct"

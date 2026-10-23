@@ -24,6 +24,37 @@ two programs check `fopen` and report an environment error by exit code (100/101
 literal in any `.con` source, as it already did for gate scripts, and also scans the examples'
 scripts. Record: [bug 191](docs/bugs/191_test_scratch_at_fixed_tmp_paths.md).
 
+### A Block Never Confers Trust (bug 189, 2026-10-23)
+
+`trusted impl` is refused. It made every method of the block trusted whether or not the method
+declared it, so a method added to the block later was audited by nobody. Each function now
+declares `trusted fn` itself. Std and the corpus were migrated by compiling: every `trusted impl`
+became `impl`, and a method was marked `trusted fn` exactly when the compiler then refused it.
+That gave 175 of 326 methods, plus thirteen fixtures marked by hand where an intended earlier
+error hid the need. The other 151 methods were trusted only through their block. The stdlib
+surface manifest was regenerated, and 89 rows lose an inherited `trusted-boundary` class. Pinned
+by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh`.
+
+### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
+
+A function generic over a capability variable could perform any effect. `capsContain` treated a
+caller holding any capability variable as covering every requirement, `Unsafe` included, because
+the variable "is resolved at instantiation", but a generic body is checked once and nothing checks
+it again when it is instantiated. So `fn f<cap C>(..) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and a `main` declaring nothing ran it by
+instantiating `C := {}`. Now one entailment rule (`Capabilities.missingCaps`) serves direct calls,
+calls through function pointers, method calls, trait-bound calls and the raw-operation gate. A
+requirement is met by a concrete capability the caller declares, or by a capability variable of
+the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
+capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
+discharge. A capability parameter may not be spelled like a capability (E0121).
+`std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
+declare `trusted`. A bodiless declaration may not take capability parameters, and two
+legitimate shapes that Check refused with a false E0220 (forwarding a variable to a
+same-named parameter, a variable beside a concrete capability) now compile. The fix is pinned
+by nine witnesses, a positive control that agrees with `--interp`,
+`check_capability_judgment.sh` and five mutation families.
+
 ### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
 
 `concrete p.con --interp` read all of standard input before `main` ran, so a program that never

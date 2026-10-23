@@ -55,7 +55,7 @@ proof_coverage = { "Examples.ParseValidate.Proofs.validate_version_correct" = "i
 # ProvableV1 conformance — see docs/verification/PROVABLE_V1.md.  "full" = every
 # proof-eligible function in this flagship fits the ProvableV1
 # eligibility gates and supported-construct surface.  Entry points
-# and trusted impls are excluded by the profile itself, not counted
+# and trusted functions and methods are excluded by the profile itself, not counted
 # against conformance.  "partial" would name the proof-eligible
 # functions that fall outside.
 provable_v1_conformance = "full"

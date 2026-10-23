@@ -1402,7 +1402,7 @@ def provableV1ConformanceReport (modules : List CModule) (locMap : FnLocMap := [
             ++ excludedLines)
   let footer :=
     if blockedEntries.isEmpty then
-      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted impls, capability use), not counted against conformance."
+      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted functions and methods, capability use), not counted against conformance."
     else
       s!"{blockedEntries.length} function(s) are proof-eligible but use constructs\noutside the current ProvableV1 supported surface (see docs/verification/PROVABLE_V1.md)."
   s!"{header}\n\n{"\n".intercalate chunks}\n\nStatus: {conformance}\n{footer}\n"

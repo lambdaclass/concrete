@@ -261,8 +261,8 @@ mod parse {
         pos: u64,
     }
 
-    trusted impl Cursor {
-        pub fn new(s: &String) -> Cursor {
+    impl Cursor {
+        pub trusted fn new(s: &String) -> Cursor {
             let c: Cursor = Cursor {
                 data: s.raw_ptr() as *const u8,
                 len: s.len(),
@@ -283,7 +283,7 @@ mod parse {
             return self.pos >= self.len;
         }
 
-        pub fn peek(&self) -> Option<char> {
+        pub trusted fn peek(&self) -> Option<char> {
             if self.pos >= self.len {
                 return Option::<char>::None;
             }
@@ -291,7 +291,7 @@ mod parse {
             return Option::<char>::Some { value: (*(p as *mut u8)) as char };
         }
 
-        pub fn advance(&mut self) -> Option<char> {
+        pub trusted fn advance(&mut self) -> Option<char> {
             if self.pos >= self.len {
                 return Option::<char>::None;
             }
@@ -301,7 +301,7 @@ mod parse {
             return Option::<char>::Some { value: c };
         }
 
-        pub fn skip_whitespace(&mut self) {
+        pub trusted fn skip_whitespace(&mut self) {
             while self.pos < self.len {
                 let p: *const u8 = self.data + self.pos;
                 let c: char = (*(p as *mut u8)) as char;
@@ -325,7 +325,7 @@ mod parse {
             }
         }
 
-        pub fn expect_char(&mut self, expected: char) -> bool {
+        pub trusted fn expect_char(&mut self, expected: char) -> bool {
             if self.pos >= self.len {
                 return false;
             }
