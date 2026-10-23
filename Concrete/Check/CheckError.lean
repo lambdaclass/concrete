@@ -185,6 +185,8 @@ inductive CheckError where
   | typeMismatch (ctx : String) (expected : String) (actual : String)
   | cannotDerefNonRef
   | whileBreakTypeMismatch (breakTy : String) (elseTy : String)
+  -- Bug 195 (PAT-5): the `else` block of a `let ... else` can fall through.
+  | letElseFallsThrough
   | ifCondNotBool (ty : String)
   | ifBranchTypeMismatch (thenTy : String) (elseTy : String)
   | matchArmTypeMismatch (firstTy : String) (armTy : String)
@@ -402,6 +404,7 @@ def CheckError.message : CheckError → String
   -- arrayIndexNotInteger, indexingNonArray, cannotCast moved to CoreCheck
   | .cannotDerefNonRef => "cannot dereference non-reference type"
   | .whileBreakTypeMismatch breakTy elseTy => s!"while-expression break type '{breakTy}' does not match else type '{elseTy}'"
+  | .letElseFallsThrough => "the `else` block of a `let ... else` must diverge (end in `return`, `break`, `continue` or a call that never returns), but it can fall through"
   | .ifCondNotBool ty => s!"if condition must be Bool, got {ty}"
   | .ifBranchTypeMismatch thenTy elseTy => s!"if-expression then type '{thenTy}' does not match else type '{elseTy}'"
   | .matchArmTypeMismatch firstTy armTy => s!"match arm type '{armTy}' does not match first arm type '{firstTy}'"
@@ -584,6 +587,7 @@ def CheckError.code : CheckError → String
   | .typeMismatch _ _ _ => "E0220"
   | .cannotDerefNonRef => "E0221"
   | .whileBreakTypeMismatch _ _ => "E0222"
+  | .letElseFallsThrough => "E0308"
   | .ifCondNotBool _ => "E0223"
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"

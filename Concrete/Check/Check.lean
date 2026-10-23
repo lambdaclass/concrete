@@ -1582,6 +1582,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
     | none => throwCheck (.unknownEnumType enumName) (some e.getSpan)
   | .match_ _ scrutinee arms =>
+    -- Bug 195 (PAT-5): a `let ... else` reaches here as `match e { P => rest, _ => else }` (the
+    -- success arm's binders are `letBound`). Its `else` block must diverge: falling out of it
+    -- would continue after the whole statement with the pattern's bindings never made.
+    match arms with
+    | [.mk _ _ _ bs _ _, .varArm sp "_" none elseBody] =>
+      if !bs.isEmpty && bs.all (·.letBound) && !(blockDiverges elseBody) && !(blockNonTerminating elseBody) then
+        throwCheck .letElseFallsThrough (some sp)
+    | _ => pure ()
     -- `match *r` reads the pointee BY VALUE: a non-Copy pointee is E0290 (its payloads
     -- would bind as owned values the owner still holds); `match r` matches through the
     -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
