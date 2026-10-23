@@ -994,7 +994,7 @@ partial def parseStmtList : ParseM (List Stmt) := do
     tk ← peek
   return stmts
 
--- spec: PAT-6, spec: PAT-7 (docs/spec/patterns.md; this declaration enforces the rule)
+-- spec: PAT-6, spec: PAT-7, spec: MEM-3 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseStmt : ParseM Stmt := do
   let sp ← peekSpan
   let tk ← peek

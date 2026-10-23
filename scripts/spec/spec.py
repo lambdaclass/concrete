@@ -26,6 +26,9 @@ STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check"
 KINDS = {"refusal", "guarantee", "definition", "preservation"}
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
+# Constructs the interpreter does not have yet, each with the tracking ID that adds it. A guarantee
+# about such a construct can only be checked natively; S5 accepts that and names the entry.
+INTERP_GAPS = {"no-heap-allocation-in-the-interpreter": "R-0496"}
 # Generated acceptance manifests (README §5): name -> (output path, chapters whose tables feed it)
 MANIFESTS = {"exit_2i": ("tests/rules/exit_2i.tsv", ["references", "scope", "patterns"])}
 MANIFEST_HEADER = """# GENERATED from the conformance tables of docs/spec/{chapters} by
@@ -419,12 +422,13 @@ def check_coverage(spec):
             std_only = bool(e.names("Enforced by")) and all(is_std_site(n) for n in e.names("Enforced by"))
             both = any(not x.pending and "interp-exempt" not in x.attrs for x in acc.values())
             lib = std_only and any(not x.pending and "project" in x.attrs for x in acc.values())
-            if lib and not both: native_only.append(e.id)
-            if not (both or lib):
+            gap = any(not x.pending and x.attrs.get("interp-exempt") in INTERP_GAPS for x in acc.values())
+            if (lib or gap) and not both: native_only.append(e.id)
+            if not (both or lib or gap):
                 fail("S5", f"{e.id}: a guarantee needs a non-pending accept example run on both consumers"); bad += 1
     if bad == 0:
         ok("S5 coverage: every refusal has reject examples paired with accepted rewrites; every guarantee runs on both consumers"
-           + (f", except std library contracts covered natively by a project example ({', '.join(native_only)})" if native_only else ""))
+           + (f", except entries covered natively by a library project example or an interpreter gap ({', '.join(native_only)})" if native_only else ""))
 
 def check_tracking(spec, root):
     bad, seen = 0, set()

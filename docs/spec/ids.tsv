@@ -248,3 +248,12 @@ STMT-8/trailing-values	live	-
 STMT-9@1	pending	49e90d62b515eef9d0e34ef511987aa6
 STMT-9/one-branch-returns	pending	-
 STMT-9/every-path-returns	live	-
+MEM-3@1	live	9c0ef84006c376f5db13a4971ffd2369
+MEM-3/initialized-bindings	live	-
+MEM-4@1	live	d3ca42138342faea35dcdc9b305ed0d0
+MEM-4/one-hop-field-access	live	-
+MEM-5@1	live	634e85340fc2862e9b71d25aa73985e2
+MEM-5/heap-ownership	live	-
+MEM-6@1	live	3e364363e82e7bd2fb5ad9764032a77f
+MEM-6/index-in-bounds	live	-
+MEM-6/index-out-of-bounds	live	-
