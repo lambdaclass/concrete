@@ -121,7 +121,8 @@ trusted fn scratch_cstr(name: &String) with(Env, Alloc) -> *mut u8 {
     return buf;
 }
 
-fn main() with(Std) -> Int {
+// Trusted: it compares and frees the raw path buffer.
+trusted fn run() with(File, Env, Alloc) -> Int {
     let name: String = "file_write_read.txt";
     let path_buf: *mut u8 = scratch_cstr(&name);
     drop_string(name);
@@ -141,4 +142,8 @@ fn main() with(Std) -> Int {
         return 102;
     }
     return len;
+}
+
+fn main() with(Std) -> Int {
+    return run();
 }
