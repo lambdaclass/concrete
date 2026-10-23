@@ -142,8 +142,9 @@ fn main() -> Int {
 holding a linear value cannot be skipped silently (`field: _` ignores a Copy one, OWN-5), and an
 arm that can never be reached is a mistake. Two gaps fail closed at a later stage instead of at
 the checker: a variant of another enum makes the compiler panic (`Option.get!`) before elaboration
-reports `unknown variant` (bug 196), and a range arm over an enum reaches the SSA verifier
-natively while `--interp` runs it (bug 195).
+reports `unknown variant`, and a range arm over an enum reaches the SSA verifier natively while
+`--interp` runs it. Both are bug 196, fixed on `wip/bug196` with E0309; this entry's pending
+examples become enforced when it lands.
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -280,8 +281,11 @@ fn main() -> Int {
 
 **Rationale.** A struct always matches its own pattern; a multi-variant enum may not, so its
 pattern needs an `else`. Falling out of the `else` would continue with the bindings unbound. That
-divergence requirement has no enforcing site today: an `else` block that falls through reaches
-the backend, which fails in `llvm-as`, while `--interp` runs it (bug 194). Over a non-Copy enum the
+divergence requirement has no enforcing site today: an `else` block that falls through skips the
+rest of the function, or, in a function with a result type, reaches the backend, which fails in
+`llvm-as` while `--interp` runs it. That is bug 195 (fixed on `wip/bug195` with E0308); a function
+whose end is reachable without a `return` in general is bug 194 (`wip/bug194`, E0307, a statements
+rule). Over a non-Copy enum the
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
 
