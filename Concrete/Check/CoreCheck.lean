@@ -5,6 +5,7 @@ import Concrete.Resolve.Shared
 import Concrete.Check.Layout
 import Concrete.Resolve.Intrinsic
 import Concrete.Semantics.TrustEdges
+import Concrete.Semantics.RefWellFormed
 
 namespace Concrete
 
@@ -1037,11 +1038,23 @@ def ccCheckModuleDecls (m : CModule)
     | none => ()
   -- 5. Extern fn FFI safety
   for (efName, efParams, efRetTy, _) in m.externFns do
+    -- G15 (exit 2i, R-0285): a raw pointer is FFI-safe, but not one whose pointee holds a
+    -- reference (`*const &Int`): C would receive or hand back the address of a reference slot.
+    -- The pointee is looked through with the shared REF-1 judgment.
+    -- A pointee reference is a REF-1 violation at the C boundary, so its diagnostic carries the
+    -- rule evidence of MEMORY_SEMANTICS §15.5 (rule, spec, rewrite).
+    let refRule (d : Diagnostic) : Diagnostic :=
+      { d with evidence := [("rule", "REF-1@1"), ("spec", "docs/language/MEMORY_SEMANTICS.md §15")]
+               nextAction := some "pass or return a raw pointer to a value type (`*const T` where `T` contains no reference), or an owned value" }
     for (pName, pTy) in efParams do
       if !Layout.isFFISafe lctx pTy then
         errors := errors ++ [mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy))]
+      else if tyContainsRef pTy then
+        errors := errors ++ [refRule (mkDeclDiag (.externFnParamNotFFISafe efName pName (tyToString pTy)))]
     if !Layout.isFFISafe lctx efRetTy && efRetTy != .unit then
       errors := errors ++ [mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy))]
+    else if tyContainsRef efRetTy then
+      errors := errors ++ [refRule (mkDeclDiag (.externFnReturnNotFFISafe efName (tyToString efRetTy)))]
   -- 6. Builtin trait redeclaration — name collision check at validation boundary
   --    (user-defined traits have builtinId = none; the name check detects collisions)
   for td in m.traitDefs do

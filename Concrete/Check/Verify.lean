@@ -6,6 +6,7 @@ import Concrete.Semantics.IntArith
 import Concrete.Proof.CallCollect
 import Concrete.Semantics.Capabilities
 import Concrete.Resolve.Shared
+import Concrete.Semantics.RefWellFormed
 
 namespace Concrete
 
@@ -291,16 +292,6 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
   ) ([] : Diagnostics)
   violations
 
-/-- Does `ty` expose a reference (`&T`/`&mut T`) — directly or nested in a generic
-    instantiation or array element? A function-POINTER type is not itself a
-    reference (returning one is fine); a fn TYPE that returns a reference is
-    rejected separately in Check. -/
-partial def tyExposesRef : Ty → Bool
-  | .ref _ | .refMut _ => true
-  | .generic _ args _ => args.any tyExposesRef
-  | .array elem _ => tyExposesRef elem
-  | _ => false
-
 /-- **Returned-reference verifier** (Phase 6.5 #4, class 6). References are
     second-class: NO function may return a reference type, directly or nested in
     an aggregate/generic instantiation (docs/language/VALUE_MODEL.md). `Check.lean` already
@@ -314,7 +305,10 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
   | [] => []
   | m :: ms =>
     let here := m.functions.foldl (fun acc fn =>
-      if tyExposesRef fn.retTy then
+      -- The same judgment as Check's (`tyContainsRef`, REF-1), as defense in depth after
+      -- specialization: it looks through raw pointers and function results, which the old
+      -- `tyExposesRef` did not, so `id::<*const &Int>` reached transitively is caught (G2).
+      if tyContainsRef fn.retTy then
         acc ++ [({ severity := .error
                    message := s!"function '{fn.name}' returns a reference type ({tyToStr fn.retTy}); references are second-class and may not be returned — use a value, an owned view, a scoped accessor (with_value), or a raw pointer for low-level access"
                    pass := "post-mono"

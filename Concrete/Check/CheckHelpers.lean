@@ -1,4 +1,5 @@
 import Concrete.Frontend.AST
+import Concrete.Semantics.RefWellFormed
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
@@ -99,18 +100,6 @@ def isReferenceType : Ty → Bool
   | .ref _ | .refMut _ => true
   | _ => false
 
-/-- Does this type contain a reference (`&T`/`&mut T`) anywhere? Used to enforce
-    the "references are second-class — never returned" invariant
-    (docs/language/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
-    are allowed in return position (they are the audit-visible unsafe escape). -/
-partial def tyContainsRef : Ty → Bool
-  | .ref _ | .refMut _ => true
-  | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner
-  | .array elem _ => tyContainsRef elem
-  | .generic _ args _ => args.any tyContainsRef
-  | .fn_ params _ retTy => params.any tyContainsRef || tyContainsRef retTy
-  | _ => false
-
 /-- Bug 092: does a value of this type HOLD a reference — the type is a
     reference, or an aggregate (array, `Heap`, generic argument) that holds one?
     Function types do not: a fn pointer taking `&T` stores no reference. Raw
@@ -181,7 +170,12 @@ def resolveType (ty : Ty) : CheckM Ty := do
       -- The alias map is transitively pre-closed at build time (`closeAliasMap`),
       -- so this single lookup already yields the fully-expanded target
       -- (`type B = A; type A = i32` => B resolves straight to i32).
-      | some resolved => return resolved
+      | some resolved =>
+        -- An alias is checked after expansion like the type it names (G16): `type Cb = fn(&Int)
+        -- -> &Int;` is the same ill-formed function type as the spelled-out one.
+        if tyHasRefReturningFnType resolved then
+          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@1")
+        return resolved
       | none => return ty
   | .ref inner =>
     let inner' ← resolveType inner

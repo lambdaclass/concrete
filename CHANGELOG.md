@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Reference Well-Formedness Has One Judgment (exit 2i G2, G13, G15, G16, 2026-10-23)
+
+REF-1 (no function returns a reference) and REF-2 (no function type returns one) are decided by one
+judgment, `Concrete/Semantics/RefWellFormed.lean`, shared by Check, CoreCheck's FFI rule and the
+post-mono verifier. Four spellings escaped it: a trait method declaration returning `&Int` (G13), an
+`extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 with REF-1 evidence), a
+reference-returning function type behind a type alias or in a field (G16), and a generic reached at
+`*const &Int` only through another generic's type parameter, which the post-mono check's weaker
+predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. Each has
+an `exit_2i.tsv` row (227 rule checks pass); 0 corpus programs were affected.
+
 ### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)
 
 `let t = xs;`, a `match` arm binding an array, and an array passed by value no longer share the

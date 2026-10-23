@@ -1,0 +1,21 @@
+// Exit 2i REF-2@1, control for G16: a callback type whose PARAMETER borrows is well formed in a
+// field and through an alias; only a callback RESULT may not contain a reference. Exit 42.
+type Reader = fn(&Int) -> Int;
+
+struct Copy H {
+    f: fn(&Int) -> Int,
+}
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn apply(c: Reader, x: Int) -> Int {
+    return c(&x);
+}
+
+fn main() -> Int {
+    let h: H = H { f: read };
+    let g: fn(&Int) -> Int = h.f;
+    return apply(read, 20) + g(&22);
+}

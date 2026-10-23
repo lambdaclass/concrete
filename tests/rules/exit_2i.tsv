@@ -2,10 +2,9 @@
 # scripts/tests/check_rules_2i.sh. Columns: rule, fixture, expected (reject:<code>:<RULE@version> or
 # run:<exit status>), pair (shared by a reject row and the run row of its rewritten program), modes.
 # Rows are referenced, not copied: existing fixtures keep their run_tests.sh rows as well.
-# Not here, because the rule is not enforced yet (each a §15.7 gap with an owner): REF-1 for a trait
-# method declaration (G13) and an extern raw pointer to a reference (G15); REF-2 through a type alias or a
-# field type (G16); REF-5 for a borrow of a literal, call result or aggregate literal (G12); REF-8 for a
-# move of the owner inside an arm bound through `match &o` (G17).
+# Not here, because the rule is not enforced yet (a §15.7 gap with an owner): REF-5 for a borrow of a
+# literal, call result or aggregate literal (G12). G13, G15 and G16 (REF-1 / REF-2 well-formedness)
+# and the transitive generic of G2 have rows below (2026-10-23).
 REF-1	tests/programs/error_escape_return.con	reject:E0236:REF-1@1	ref1	-
 REF-1	tests/programs/error_2i_ref1_return_bare.con	reject:E0236:REF-1@1	ref1	-
 REF-1	tests/programs/error_2i_ref1_return_option.con	reject:E0236:REF-1@1	ref1	-
@@ -13,6 +12,13 @@ REF-1	tests/programs/error_2i_ref1_return_fnptr_ref_param.con	reject:E0236:REF-1
 REF-1	tests/programs/regress_2i_ref1_return_value.con	run:42	ref1	binary,interp
 REF-2	tests/programs/error_2i_ref2_fn_type_returns_ref.con	reject:E0236:REF-2@1	ref2	-
 REF-2	tests/programs/regress_2i_ref2_callback_takes_ref.con	run:42	ref2	binary,interp
+REF-1	tests/programs/error_2i_ref1_trait_decl_returns_ref.con	reject:E0236:REF-1@1	ref1	-
+REF-1	tests/programs/error_2i_ref1_extern_ptr_to_ref.con	reject:E0575:REF-1@1	ref1	-
+REF-1	tests/programs/error_2i_ref1_extern_param_ptr_to_ref.con	reject:E0574:REF-1@1	ref1	-
+REF-1	tests/programs/error_2i_ref1_transitive_generic.con	reject:E0236:REF-1@1	ref1	json-exempt:post-mono
+REF-2	tests/programs/error_2i_ref2_alias_fn_type_returns_ref.con	reject:E0236:REF-2@1	ref2	-
+REF-2	tests/programs/error_2i_ref2_field_fn_type_returns_ref.con	reject:E0236:REF-2@1	ref2	-
+REF-2	tests/programs/regress_2i_ref2_callback_field.con	run:42	ref2	binary,interp
 REF-3	tests/programs/error_092_ref_struct_field.con	reject:E0239:REF-3@1	ref3	-
 REF-3	tests/programs/error_092_ref_in_option.con	reject:E0239:REF-3@1	ref3	-
 REF-3	tests/programs/error_092_ref_in_array.con	reject:E0239:REF-3@1	ref3	-

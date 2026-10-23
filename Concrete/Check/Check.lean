@@ -3732,6 +3732,30 @@ def checkModule (m : Module) (summary : FileSummary)
     -- A module constant is storage, not a binding: a bare `&T` constant stores a reference too
     -- (REF-3; bug 123 — `const R: &Int = &X` was accepted and read an uninitialized slot).
     ++ (m.constants.map fun c => (s!"module constant '{c.name}'", c.ty, c.span))
+  -- G13 / G16 (signature well-formedness, REF-1 / REF-2): a field, newtype or constant type may
+  -- not contain a function type that returns a reference, after alias expansion; a trait method
+  -- may not declare a reference result (every implementation of it would be refused).
+  let expand (ty : Ty) : Ty := expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty
+  let wfViolations : List (String × Ty × Span × String) :=
+    (refFields.filterMap fun (desc, ty, sp) =>
+      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@1") else none)
+    ++ (m.traits.flatMap fun td => td.methods.filterMap fun sig =>
+      let rt := expand (substTy (td.typeParams.map fun n => (n, Ty.typeVar n)) sig.retTy)
+      if tyContainsRef rt || tyHasRefReturningFnType rt then
+        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@1")
+      else
+        let bad := sig.params.find? fun p => tyHasRefReturningFnType (expand p.ty)
+        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@1"))
+  match wfViolations.head? with
+  | some (desc, ty, sp, rule) =>
+    let msg := if rule == "REF-1@1"
+      then s!"{desc} may not return a reference ('{tyToString ty}'); references are second-class and cannot be returned (VALUE_MODEL.md)"
+      else s!"{desc}: '{tyToString ty}' contains a function type that returns a reference; a function type may not return a reference (REF-2, VALUE_MODEL.md)"
+    .error [{ severity := .error, message := CheckError.message (.returnsReference msg rule),
+              pass := "check", span := some sp, hint := CheckError.hint (.returnsReference msg rule),
+              code := CheckError.code (.returnsReference msg rule),
+              evidence := ruleEvidence (some rule), nextAction := ruleNextAction rule }]
+  | none =>
   -- Through type aliases (`type Ref = &Int; newtype W = Ref;`).
   match refFields.find? (fun (_, ty, _) =>
       tyStoresRef (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty)) with
