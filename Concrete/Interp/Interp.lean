@@ -2166,12 +2166,12 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- A function value (Lower intercepts intrinsics only at direct calls).
       if let some decl := (cx.foreign.lookup name.name).filter (cx.externs.contains ·) then
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
-      match ← liftE (resolveCall cx name) with
+      match ← liftE (resolveCall cx name.name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
       | none =>
         -- A declared foreign function the resolver did not record (a local extern under an
         -- intrinsic spelling, `free`): the value is that C function, as Lower emits it.
-        match resolveExtern cx name with
+        match resolveExtern cx name.name with
         | some decl => return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
         | none => fail s!"interp: undefined variable '{name}'"
 
@@ -2335,7 +2335,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | .direct name =>
         (cx.foreign.lookup name).filter fun decl =>
           decl.startsWith runtimeHelperPrefix || (cx.externs.contains decl && (resolveIntrinsic name).isNone)
-      | .indirect binding => match envGetLocal env binding with
+      | .indirect binding => match envGetLocal env binding.key with
         | some (.fnPtr real _) => if real.startsWith externPtrPrefix then some (real.drop externPtrPrefix.length).toString else none
         | _ => none
       -- A compiler-generated runtime call is its builtin, never a program definition (bug 165).
@@ -2355,7 +2355,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         let t ← liftE (resolveCall cx name)
         pure (name, t)
       | .indirect binding =>
-        match envGetLocal env binding with
+        match envGetLocal env binding.key with
         | some (.fnPtr real sc) =>
           -- The pointer names the definition it was resolved to when it was formed.
           let t := match sc with
@@ -3039,7 +3039,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
       let bound := match scrRef with
         | some r => if binderIsBorrow bindTy then r else scrutinee
         | none => scrutinee
-      let armEnv := if binding == "_" then env else envBind env binding bound
+      let armEnv := if binding == "_" then env else envBind env binding.key bound
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
         let (bodyEnv, flow) ← evalStmts cx gEnv body
@@ -3098,7 +3098,7 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
   | .letDecl name _ _ value => do
     let (env, f) ← evalExpr cx env value
     match f with
-    | .val v => return (envBind env name v, .val .unit)
+    | .val v => return (envBind env name.key v, .val .unit)
     | .ret v => return (env, .ret v)
     | .brk v l => return (env, .brk v l)
     | .cont l => return (env, .cont l)
@@ -3106,7 +3106,7 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
   | .assign name value => do
     let (env, f) ← evalExpr cx env value
     match f with
-    | .val v => return (envSetLocal env name v, .val .unit)
+    | .val v => return (envSetLocal env name.key v, .val .unit)
     | .ret v => return (env, .ret v)
     | .brk v l => return (env, .brk v l)
     | .cont l => return (env, .cont l)
@@ -3229,9 +3229,9 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
     -- `borrow var as ref in 'region { body }` — bind `ref` to a path that
     -- captures the current frame so callee shadows don't break it. Drop
     -- the binding on exit; mutations to `var` through `ref` survive.
-    let path : RefPath := { base := var, frame := env.length, steps := [], isMut := isMut }
+    let path : RefPath := { base := var.key, frame := env.length, steps := [], isMut := isMut }
     let outerLen := env.length
-    let inner := envBind env ref (.ref path)
+    let inner := envBind env ref.key (.ref path)
     let (postEnv, flow) ← evalStmts cx inner body
     let restored := postEnv.drop (postEnv.length - outerLen)
     match flow with
