@@ -366,7 +366,7 @@ FFI-3/pointer-to-value	live	-
 TRUST-7@1	live	8006aea90f8708f2fd4159114297d742
 TRUST-7/raw-deref-moves-linear	live	-
 TRUST-7/read-owned-moves	live	-
-PAT-8@1	live	2dbe7ebfb711df94e2015a0c5fc4fa07
+PAT-8@1	live	91fcfb36f0e7836bd0de64870ecd988f
 PAT-8/destructure-in-for-header	live	-
 PAT-8/destructure-before-loop	live	-
 TYPE-7/newtype-field-other-than-zero	live	-

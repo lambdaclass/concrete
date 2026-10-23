@@ -6407,7 +6407,7 @@ def diagnosticCodesReport : String :=
     entry "E0315" "check" "error" "builtin called with fewer arguments than its minimum (print, println, append; bug 206)",
     entry "E0316" "check" "error" "newtype field access other than .0 (bug 206)",
     entry "E0317" "check" "error" "trait method without a self receiver called as a method (bug 206)",
-    entry "E0318" "check" "error" "destructuring let in a for header (bug 206)",
+    entry "E0318" "check" "error" "enum destructuring let in a for header (bug 206)",
     entry "E0319" "check" "error" "#[test] function with parameters, type parameters or a result other than i32 (bug 206)",
     entry "E0320" "check" "error" "contract clause or spec function body of the wrong sort (bug 206)",
     entry "E0321" "check" "error" "contract or spec function body calls a non-spec or capability-requiring function (bug 206)",

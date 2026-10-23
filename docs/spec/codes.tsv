@@ -138,7 +138,7 @@ E0314	rule	wrapping_/saturating_ operation on non-integer operands or operands o
 E0315	rule	builtin called with fewer arguments than its minimum (print, println, append; bug 206)
 E0316	rule	newtype field access other than .0 (bug 206)
 E0317	rule	trait method without a self receiver called as a method (bug 206)
-E0318	rule	destructuring let in a for header (bug 206)
+E0318	rule	enum destructuring let in a for header (bug 206)
 E0319	rule	#[test] function with parameters, type parameters or a result other than i32 (bug 206)
 E0320	rule	contract clause or spec function body of the wrong sort (bug 206)
 E0321	rule	contract or spec function body calls a non-spec or capability-requiring function (bug 206)
