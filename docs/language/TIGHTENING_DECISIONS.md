@@ -67,13 +67,13 @@ changes. It measures what a rule breaks before the rule lands.
 
 | id | candidate | class | today (main `185d998c` / train3 `949d79e9`) | proposed rule | recommendation |
 |---|---|---|---|---|---|
-| T-G2 | post-mono reference predicate weaker than the front end's (G2 remainder) | SEMANTICS | front end refuses `T := *const &Int` in a return (E0236 on train3, no code on main); a transitive generic reaches `id::<*const &Int>` and passes | one predicate (`tyContainsRef`) at both sites, E0236 `post-mono`; completeness gate scans `Verify.lean` | now (exit 2i) |
+| T-G2 | post-mono reference check weaker than the front end's (G2 remainder) | HOLE (review, 2026-10-23) | front end refuses `T := *const &Int` in a return (E0236 on train3, no code on main); a transitive generic reaches `id::<*const &Int>` and passes | structural signature well-formedness plus the reference-storage restrictions, checked as generic constraints before specialization; the post-mono check is defense in depth (E0236) | now (exit 2i) |
 | T-G9 | `&mut` argument modes (G9, B1, B2) | SEMANTICS | a parameter `&mut` is reborrowed at each call; a borrow-block `&mut` is consumed by its first call (E0205 on the second); both may lapse unused | **decided (D1):** every `&mut` argument is an implicit reborrow; an unused `&mut` may lapse | implement with R-0496 (Core reborrow form); 0 corpus sites break |
 | T-G10 | owner reads under a shared borrow block (G10, B7) | STYLE | refused (E0203) | none: keep the freeze | deferred: a workload that needs owner reads under a named shared borrow (R-0499) |
 | T-REF5 | borrow of a temporary: literal, call result, aggregate literal (G12) | HOLE (bug 182) | accepted. `&alloc(..)` segfaults and `&int_to_string(..)` leaks (bug 182). `&42`, `&mk()` and `&P{..}` of Copy type give 42 in both consumers | **decided (D2):** only places are borrowable; a string literal is a static place; everything else is E0238 (REF-5@1) | now (exit 2i, closes bug 182); migration: 1 corpus site (`std/src/map.con:712`) |
-| T-G13 | trait method declaration returning a reference (G13) | SEMANTICS | accepted; every implementation is refused | E0236 at trait method declarations | now (exit 2i) |
+| T-G13 | trait method declaration returning a reference (G13) | HOLE (well-formedness; REF-1 is normative) | accepted; every implementation is refused | the uniform signature well-formedness check on trait method declarations (E0236) | now (exit 2i) |
 | T-G15 | `extern fn` with `*const &T` in its signature (G15) | SEMANTICS | result and parameter forms accepted; reading the inner reference is E0238 | E0575 looks through raw-pointer pointees, in parameters and results; 0 corpus sites | now (exit 2i, with R-0285) |
-| T-G16 | reference-returning function type via an alias or a field (G16) | SEMANTICS | accepted (no value can inhabit it) | E0236 after alias expansion and in struct/enum field declarations; 0 corpus sites | now (exit 2i) |
+| T-G16 | reference-returning function type via an alias or a field (G16) | HOLE (well-formedness; REF-2 is normative) | accepted | the same signature well-formedness after alias expansion and in field declarations (E0236); a callback type whose parameters borrow stays legal; 0 corpus sites | now (exit 2i) |
 | T-G17 | arm binder through `match &o` after its root moves (G17) | HOLE (not reproduced) | three variants refused, E0204 (train3: E0204, E0208) | none new | **closed 2026-10-23:** three rejection fixtures `error_g17_*.con`; §15.7 row and exit 0b clause corrected |
 | T-BIND | Copy-keyed binding mode through a borrowed scrutinee | HOLE + SEMANTICS (bug 181) | non-Copy payload binds `&P`, Copy payload binds `P`. A generic payload is `&T` to Check and `T` to Elab: segfault at `T := Int` (bug 181) | **decided (D3):** every binder through a reference scrutinee is a reference (`&T`), Copy or not | now (exit 2i, closes bug 181); migration: 2 fixtures, 0 std or example sites |
 | T-G19 | `noalias` / exclusivity exploitation; Core reborrow form (G19, B4, B5) | SEMANTICS | no `noalias` emitted | policy: no pass exploits `&mut` exclusivity before an aliasing model covering raw pointers exists | decide now (adopt sentence), implement later (R-0505, R-0496) |
@@ -81,7 +81,7 @@ changes. It measures what a rule breaks before the rule lands.
 | T-CAST | lossy numeric `as` | SEMANTICS | `300 as u8` is 44 silently in both consumers | decided 2026-10-21 (ARITHMETIC_POLICY §8): `as` lossless only; lossy is a compile error after the named operations exist | decide now (done), implement later (exit 2k after 2h) |
 | T-RAWDUP | trusted `*p` duplicates a non-Copy pointee (the raw-pointer generic leak, bug 046 shape) | HOLE | accepted with and without generics; binary exits 0, train3 `--interp` reports a use after free | `*p` by value of a non-Copy pointee is refused in trusted code (new code); an explicit `ptr::read_owned` marks the transfer | decide now, implement later (R-0014 → R-0514 / V6; scanner measures std first) |
 | T-165 | `println` binds a user `print_int` (bug 165) | HOLE | binary SIGABRT; IR calls `@_C.m.print_int` | no language rule: generated calls bind by identity | now (exit 0b repair) |
-| T-166 | foreign function value called with the Concrete ABI (bug 166) | HOLE (trusted boundary) | IR: `declare i64 @take_pair(i64)` but `call i64 %f(ptr %p)` | **decided (D4):** refuse now; long term, function types carry their calling convention (`extern "C" fn(..)`) | refusal now (exit 0b); the typed convention with the first callback workload |
+| T-166 | foreign function value called with the Concrete ABI (bug 166) | HOLE (trusted boundary) | IR: `declare i64 @take_pair(i64)` but `call i64 %f(ptr %p)` | **decided (D4, revised):** refuse **every** foreign function value now; long term, function types carry calling convention, required capabilities and safety obligations | refusal now (exit 0b); migration: 2 fixtures; the typed form with the first callback workload |
 | T-ORDER | evaluation-order lag: 136, 137, 183 | HOLE | functional update base runs twice; enum literal fields in declaration order; deref assignment destination first (binary 12, interp 21) | rule exists (exit 2j); implementation lags | now (exit 0b repairs) |
 | T-MAIN | `main`'s `Int` result outside 0–255 | STYLE (specified) | wrapper masks with `and 255`: 256 → 0, -1 → 255 | none now | deferred: the open surface decision (MAIN_EXIT_MODEL) |
 | T-H27 | ill-typed contracts (KNOWN_HOLES H27) | SEMANTICS | `#[requires(x < 9999999999)]` on `i32` and `(x > 0) + 1 > 0` accepted | contract expressions type-checked as expressions of the function's types (existing E0220 / E0228 / E0227) | decide now, implement later (R-0473) |
@@ -112,11 +112,16 @@ are not candidates here. Two other items are settled and are not repeated in the
   The direct instantiation `id::<*const &Int>(p)` is refused at the front end (E0236 on train3;
   the same message without a code on main). The transitive one reaches `id` at `*const &Int` only
   after substitution, and the post-mono check passes it.
-- **Class.** SEMANTICS. Producing a `*const &Int` takes trusted code, and no unsound safe program was
-  found. But REF-1's normative predicate is the front end's, so the formalized rule would have to
-  carry two predicates.
-- **Rule.** `verifyNoReturnedRefs` uses `tyContainsRef`: E0236 with pass `post-mono`, REF-1@1
-  unchanged. The completeness gate also scans `Verify.lean`.
+- **Class.** HOLE (reclassified by review, 2026-10-23): a normative rule (REF-1) whose enforcement
+  depends on where the type is reached. Producing a `*const &Int` takes trusted code, and no
+  unsound safe program was found.
+- **Rule.** Not "one predicate everywhere": a raw `tyContainsRef` test is the wrong shape, because a
+  stored `fn(&T) -> Int` stores no reference. The rule is **structural type well-formedness** (a
+  signature may not return a reference, at any depth, function types included) **plus the
+  reference-storage restrictions** (REF-3: no reference held in an aggregate, heap cell or
+  constant). On generics both are **constraints checked before specialization** on the type
+  parameters, so a specialization cannot introduce a violation; the post-mono check repeats them as
+  defense in depth (E0236 with pass `post-mono`). The completeness gate also scans `Verify.lean`.
 - **Interactions.** It finishes exit 2i's G2 row. There is no corpus migration expected: no corpus program returns a
   pointer to a reference.
 - **Recommendation.** Now, as part of closing exit 2i.
@@ -205,8 +210,10 @@ are not candidates here. Two other items are settled and are not repeated in the
 
 - **Witness:** `trait Get { fn get(&self) -> &Int; }` is accepted on all three revisions, and every
   `impl` of it is refused.
-- **Class.** SEMANTICS: the trait admits a signature that nothing can implement.
-- **Rule.** E0236 at trait method declarations (REF-1).
+- **Class.** HOLE (well-formedness): REF-1 is already normative for every signature, and the
+  declaration escapes its check.
+- **Rule.** The uniform signature well-formedness check (T-G2) runs on trait method declarations,
+  E0236 (REF-1).
 - **Recommendation.** Now (exit 2i). It breaks no corpus program (0 sites).
 
 #### T-G15. Raw pointers to references at the C boundary
@@ -227,9 +234,11 @@ are not candidates here. Two other items are settled and are not repeated in the
 
 - **Witnesses:** `type Cb = fn(&Int) -> &Int;` used as a parameter type, and
   `struct H { f: fn(&Int) -> &Int }`. Both are accepted on all three revisions.
-- **Class.** SEMANTICS: these are uninhabited types.
-- **Rule.** `resolveType` re-checks `.fn_` after alias expansion, and declarations use
-  `tyContainsRef`. Code E0236 (REF-2).
+- **Class.** HOLE (well-formedness): REF-2 is normative and these spellings escape its check. The
+  justification is uniform signature well-formedness, not that the types are uninhabited.
+- **Rule.** The well-formedness check of T-G2 runs after alias expansion and on struct and enum
+  field types: a function type may not *return* a reference. A callback type whose parameters
+  borrow (`fn(&T) -> Int`) stays legal wherever it is written, fields included. Code E0236 (REF-2).
 - **Recommendation.** Now (exit 2i). It affects 0 corpus sites.
 
 #### T-G17. Arm binder through a borrowed scrutinee whose root moves
@@ -485,17 +494,27 @@ binding mode; bug 181 closes with it.
 
 ### D4. Foreign function values: refuse now, typed calling convention later (Q4)
 
-**Rule now.** Taking as a value an `extern fn` whose signature contains a `#[repr(C)]` aggregate
-(parameter or result) is refused, with a new FFI code. Those are exactly the signatures where the C
-ABI and the Concrete ABI differ (a small aggregate travels in registers under C and by pointer under
-Concrete), so the refusal removes bug 166's wrong code; an `extern fn` over integers, floats and
-raw pointers passes the same way under both conventions and stays usable as a value.
+**Rule now (revised after review, 2026-10-23).** Taking **any** `extern fn` as a value is refused,
+with a new FFI code; a direct call is unchanged. The first version of this decision refused only
+signatures with a `#[repr(C)]` aggregate and kept scalar-only externs usable as values, because
+both conventions happen to pass scalars alike. The review rejected that exemption: it is a second
+rule that rests on an accidental ABI coincidence, and it would force a migration when function
+types gain conventions. The rewrite is a Concrete wrapper function that calls the extern directly
+and is passed instead.
+
+**Migration (scan of every `extern fn` name used other than as a direct call):** two sites, both
+fixtures. `tests/programs/regress_129_fn_value_extern.con` (`let f: fn(i32) -> i32 = abs;`) becomes
+a wrapper or a rejection fixture, and bug 166's reproducer becomes D4's rejection fixture. No std or
+example site takes an extern as a value. The implementing branch confirms with `rule_impact.sh`.
 
 **Long-term design.** The calling convention is part of the function type. Its sketch, normative
 in [FFI.md](../platform/FFI.md#calling-convention-in-function-types-decided-2026-10-23-not-implemented):
 
 - `fn(A) -> R` is a Concrete function type; `extern "C" fn(A) -> R` is a C function type. They are
-  distinct types and never convert implicitly.
+  distinct types and never convert implicitly. A function type carries three things: its **calling
+  convention**, its **required capabilities** (`with(..)`, as Concrete function types already do)
+  and its **safety obligations** (whether a call needs `Unsafe`, that is whether the target was
+  declared `trusted extern`).
 - An `extern fn` taken as a value has type `extern "C" fn(..)`; a Concrete function never does.
 - A call through an `extern "C" fn` value lowers with the C ABI (the same flattening a direct
   extern call uses), and needs what a direct call of that extern needs (`with(Unsafe)`, unless the
@@ -504,19 +523,109 @@ in [FFI.md](../platform/FFI.md#calling-convention-in-function-types-decided-2026
   the C ABI, `#[export_name]`); it is not a value of `extern "C" fn` type by coercion.
 
 It is implemented when the first workload passes a callback to C or stores a foreign function
-value with an aggregate signature; at that point the refusal above becomes a type error between the
-two function types, so the containment is a step toward the design and nothing written under it
-needs to change.
+value; at that point the refusal above is lifted for `extern "C" fn` values, and a mismatch becomes a
+type error between the two function types. The containment is a step toward the design: nothing
+written under it needs to change.
 
 **Homes.** FFI.md (the section linked above); R-0283 / R-0287 (ABI checks); bug 166 closes with the
 refusal.
 
-### Also closed: G17
+### G17: the moving shapes are closed; the Copy case is reopened by D3
 
-The three shapes of G17 are refused on main (E0204) and are now rejection fixtures
+The three moving shapes of G17 are refused on main (E0204) and are rejection fixtures
 (`tests/programs/error_g17_match_borrow_root_moved_in_arm.con`,
 `error_g17_if_let_borrow_root_moved.con`, `error_g17_match_borrow_heap_freed_in_arm.con`, wired in
-`run_tests.sh`); MEMORY_SEMANTICS §15.7 and ROADMAP exit 0b no longer describe it as open.
+`run_tests.sh`). The review reopened the **Copy case**: today a Copy payload binds by value, so
+reassigning the root inside the arm is safe and accepted, but under D3 the binder is a loan on the
+root, so that reassignment must be refused while the binder lives. The shapes below are the
+acceptance fixtures of D3 (the implementing branch adds them as rejection fixtures; probed
+2026-10-23):
+
+| shape (Copy `P`) | main `185d998c` | train3 `949d79e9` | under D3 |
+|---|---|---|---|
+| `match &o { Some { value } => { o = None; out = value.n; } }` | accepted, 42 | accepted, 42 | refused (write to a loaned root) |
+| the same with a guard `if value.n > 0` | accepted, 42 | accepted, 42 | refused; a failed guard ends its loan before the next arm |
+| `match r` with `r: &mut Option<P>`, then `*r = None` and `value.n` | refused, E0205 (`r` moved by the match) | refused, E0205 | refused as a write to the parent while its shared payload loan lives (not as a move) |
+| `defer show(value.n)` then `o = None` | accepted (binary prints 42) | refused, E0279 (projection in a deferred argument) | `defer show(*value)`-style forms keep the loan until the deferred call runs, so the write is refused |
+| `while let Some { value } = &o { o = None; out = value.n; break; }` | accepted, 42 | accepted, 42 | refused; each iteration makes a new loan, ended at the iteration's end or at the exit |
+
+### 4.5 Refinements from review (2026-10-23)
+
+A Codex review of D1 – D4 kept Q1 – Q3 and revised Q4 (above). Its refinements are part of the
+decisions; each is written into the rule's home when the rule is implemented.
+
+**D1, `&mut` as an exclusive scoped loan.** A `&mut` argument is a child loan of its parent
+reference or place. While the child lives, the parent is **suspended**: it may not be used, so
+`f(r, r)` with two overlapping exclusive arguments is refused (today already E0293, "borrowed more
+than once in the same call with at least one `&mut`", on main and train3), while sequential calls
+`f(r); f(r);` are fine. This holds for method receivers, indirect calls through function values and
+generic calls; the reborrows are recorded in Core before specialization, so a specialization cannot
+change them.
+
+**Defer.** A deferred call's arguments are read at the exit, not at registration (DEFER.md,
+decided 2026-10-21: arguments are local names, borrows of local names or constants; a local passed
+by value is reserved and one passed by borrow is pinned). A loan a deferred call retains, a borrow
+argument or a reference binder passed to it, **stays live until the deferred call runs**, so its
+root stays frozen to the end of the registering block.
+
+**Exit order.** On `return`, `break` or `continue` the order is: (1) the exit's value is evaluated;
+(2) for each scope being left, innermost first, its deferred calls run in LIFO order while that
+scope's loans are still live; (3) then that scope's loans end (arm binders, borrow-block binders),
+and a borrow block's write-back, where its representation has one, happens at its loan's end;
+(4) control transfers. The fall-through end of a block follows the same steps. An abort (a trap,
+`abort()`, OOM) runs none of them: no deferred call, no loan ending (see the arithmetic note below).
+
+**D2, places.** A string literal's whole representation, the `String` descriptor as well as its
+bytes, is static and immutable. Borrowing it never permits moving out of it, destroying it, or
+obtaining mutable access to it (`&mut "x"` is refused, and no operation turns a `&String` to a
+literal into an owned or mutable `String`). Places are defined **recursively by provenance**: a
+binding is a place, a projection of a place is a place, and a projection of a temporary is not
+(`mk().f` and `(P { n: 1 }).n` are not places, so `&mk().f` is refused like `&mk()`). A dereference
+of a raw pointer is a place only in trusted or `Unsafe` code, under its own validity premise (the
+pointer is aligned, live and initialized for its type), which that code's author discharges.
+
+**D3, binding mode.** The binding mode of every binder is carried explicitly through Core and
+through specialization, not recomputed from the instantiated type. Reading a Copy payload with
+`*value` copies only under an established Copy constraint (a concrete Copy type or a `T: Copy`
+bound); for an unconstrained `T` it is refused like any other move out of a borrow. Matching
+through `&mut T` creates **shared** payload loans and suspends conflicting use of the parent
+reference while they live. The rule covers nested patterns (each binder at any depth is a loan),
+whole-value binders, guards (a guard's loans are the arm's; a failed guard ends them before the
+next arm is tried) and `while let` (each iteration's loans end at the end of that iteration).
+
+**T-RAWDUP, moving out of raw memory.** `ptr::read_owned(p)` consumes an initialized slot and
+leaves it **logically uninitialized**: the slot must be written before it is read or dropped again.
+A move out through `&mut T` must restore a valid `T` before the loan ends, or use an explicit
+`replace` / `take` operation that does both at once. An arbitrary raw address carries a trusted
+ownership obligation (who owns the pointee, and that it is initialized). The rule distinguishes
+three operations on a slot: **initialization** (an uninitialized slot receives a value),
+**replacement** (an initialized slot's value is taken out and another put in) and **disposal** (the
+value is destroyed and the slot left uninitialized).
+
+**T-H27, contracts.** A contract expression gets its own **pure, non-consuming specification
+judgment**: it may read parameters and `result` but never moves, consumes or borrows mutably, and
+it calls only spec functions. Its arithmetic is **mathematical** (unbounded integers) unless it uses
+the explicit machine operations, so a machine-vs-mathematical distinction is part of the judgment
+rather than an accident of extraction.
+
+**T-ARITH, abort.** A trap is modelled explicitly as abort: the process ends, and no deferred call,
+destructor or loan ending runs (FAILURE_STRATEGY's abort-only model). Every "exactly once cleanup"
+claim in these rules is therefore qualified: exactly once on every path that does not abort.
+
+**T-CAST, lossless.** Losslessness is defined by **value domains**: a conversion is lossless when
+every value of the source type is a value of the target type (so `i32 → i64` and `u8 → i32` are,
+`i64 → f64` is not). The named conversions specify NaN, positive and negative infinity, and the
+rounding mode for every float case (ARITHMETIC_POLICY §8 is the home).
+
+**T-G19, exclusivity.** No pass, not only LLVM `noalias` emission, may exploit `&mut` exclusivity
+(reordering, caching or eliminating loads and stores on the assumption that a `&mut` does not
+alias) before an aliasing model that covers raw pointers exists. The operational loan rules of D1
+and D3 are still defined now, so the checker and the formal model agree on which programs are legal.
+
+**Validation.** Agreement between the interpreter and the native binary is necessary and not
+sufficient: both can implement the same wrong rule. Each rule's run fixtures compare both against
+the **specified transitions** (the expected outcome written from the rule, or the extracted model
+where it covers the construct), as exit 2c's golden-oracle policy already requires.
 
 ## 5. Implementation plan (HOLE and SEMANTICS items)
 
@@ -530,25 +639,31 @@ soundness-holes agent implements these; this record is where the two coordinate.
    - bug 183: `Lower` evaluates the right-hand side first;
    - bugs 136 and 137: Elab binds the functional-update base once and keeps enum fields in source
      order;
-   - bug 166: D4's refusal of a foreign function value with a `#[repr(C)]` aggregate signature;
+   - bug 166: D4's refusal of every foreign function value (2 fixtures migrate);
    - bug 165: generated calls carry the runtime callee.
 2. **D2, only places are borrowable** (REF-5@1, E0238; closes bug 182 and G12): the string-literal
    place, the refusal of every other non-place operand, the one `let` in `std/src/map.con`, and
    bug 182's reproducers as rejection fixtures.
 3. **D3, binders through a reference are references** (closes bug 181): Check, Elab and Mono agree
-   on `&T`; the two `patterns/match_ref_*` fixtures migrate; bug 181's reproducer becomes a run
-   fixture (42, binary = `--interp`).
+   on `&T`, carried explicitly in Core; the two `patterns/match_ref_*` fixtures migrate; bug 181's
+   reproducer becomes a run fixture (42, binary = `--interp`); the G17 Copy-case shapes of §4
+   (root reassigned, guard, `&mut` parent, defer, `while let` with early exit) become rejection
+   fixtures, with run controls for the legal forms (no write while the loan lives).
 4. **Exit 2i closure rules, no corpus migration:**
-   - T-G13: E0236 on trait method declarations;
-   - T-G16: E0236 after alias expansion and in field declarations;
-   - T-G15: E0575 looks through pointees;
-   - T-G2: one predicate post-mono, and the completeness gate scans `Verify.lean`.
+   - T-G2: signature well-formedness and the reference-storage restrictions as generic constraints
+     checked before specialization, post-mono as defense in depth; the completeness gate scans
+     `Verify.lean`;
+   - T-G13: the same well-formedness on trait method declarations;
+   - T-G16: the same well-formedness after alias expansion and on field types;
+   - T-G15: E0575 looks through pointees.
 
    Each is a reject row plus a run row in `tests/rules/exit_2i.tsv`; G17's fixtures join that
    manifest when it lands on main.
 5. **D1, one `&mut` argument mode**, with R-0496's Core reborrow form: the checker stops consuming
-   a borrow-block `&mut` passed to a call; B7 stays deferred (T-G10); the G19 policy sentence goes
-   into VERIFIED_PIPELINE.
+   a borrow-block `&mut` passed to a call, keeps refusing overlapping exclusive arguments (E0293),
+   and records reborrows before specialization; the defer and exit-order rules of §4.5 are written
+   into DEFER.md and MEMORY_SEMANTICS; B7 stays deferred (T-G10); the G19 policy sentence (every
+   pass) goes into VERIFIED_PIPELINE.
 6. **Contract typing** (T-H27) under R-0473, before V1a's contract claims.
 7. **Trusted move-out** (T-RAWDUP): add `ptr::read_owned`, measure with the scanner, migrate std,
    refuse. This is in V6's trusted-code slice and may be pulled earlier if a trusted defect needs it.
