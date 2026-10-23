@@ -1193,9 +1193,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       do
         let env ← getEnv
         -- Anti-smuggling: an indirect call must hold the pointer type's caps AND
-        -- its cap variables (Capabilities.missingCapsThroughPtr) — the stricter
-        -- through-pointer variant of the one shared missing-caps decision.
-        for cap in Capabilities.missingCapsThroughPtr env.currentCapSet fnPtrCapSet do
+        -- its cap variables — the one entailment rule (Capabilities.missingCaps),
+        -- the same one every direct call reads (bug 188).
+        for cap in Capabilities.missingCaps env.currentCapSet fnPtrCapSet do
           throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
@@ -1339,13 +1339,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
-        -- One shared direct-call decision (Capabilities.missingCaps): the caps the
-        -- caller lacks for this call. Same computation CoreCheck's satisfaction
-        -- check and the reports read, so they cannot disagree.
-        -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge and checks
-        -- every call (see the method path in CheckHelpers).
-        for cap in (Capabilities.missingCaps env.currentCapSet resolvedCapSet).filter (· != unsafeCapName) do
-          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- One entailment rule (Capabilities.missingCaps) on the INSTANTIATED set: the
+        -- caps the caller lacks for this call. `Unsafe` included (bug 188): CoreCheck
+        -- sees this call without the inferred binding, so a callback's `Unsafe`
+        -- reaching the callee through `C` is decided here or nowhere. A trusted body
+        -- discharges it exactly as CoreCheck's call-site discharge does.
+        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+          if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
@@ -2067,7 +2068,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.
           let envC ← getEnv
           for cap in Capabilities.missingCaps envC.currentCapSet sig.capSet do
-            if !(cap == unsafeCapName && envC.currentFnTrusted) then
+            if !Capabilities.trustedDischarges envC.currentFnTrusted cap then
               throwCheck (.missingCapability s!"{foundTrait}::{methodName}" cap envC.currentFnName) (some e.getSpan)
           -- Replace Self with the type variable in the trait signature
           let selfTy := Ty.typeVar n

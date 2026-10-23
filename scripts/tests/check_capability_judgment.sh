@@ -66,7 +66,7 @@ accepts "pure callee needs no cap" pure
 echo "=== calls THROUGH a function pointer must hold the pointer type's caps (anti-smuggling) ==="
 
 # A caller with no authority must NOT invoke a `fn() with(Network)` pointer — that
-# would smuggle Network past its own header (Capabilities.missingCapsThroughPtr).
+# would smuggle Network past its own header (Capabilities.missingCaps, the one entailment rule, bug 188).
 emit smuggle 'mod m { fn caller(f: fn() with(Network) -> Int) -> Int { return f(); } fn main() -> Int { return 0; } }'
 rejects "pure caller invokes a fn()with(Network) pointer" smuggle
 

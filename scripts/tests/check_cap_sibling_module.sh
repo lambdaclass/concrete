@@ -192,8 +192,12 @@ echo "=== a union of capabilities covers a requirement that spans it ==="
 # answered no. That also made it disagree with `missingCaps`, which always normalized, so
 # `decideCall` could report unsatisfied with nothing missing and render the self-refuting
 # "requires Alloc, Unsafe but caller has Alloc + Unsafe".
-if grep -A14 "def capsContain" "$ROOT_DIR/Concrete/Semantics/Capabilities.lean" |
-     grep -q "caller.normalize"; then
+# Since bug 188 `capsContain` is the boolean view of `missingCaps` (one entailment rule),
+# so the normalization lives in `missingCaps`.
+if grep -A14 "def missingCaps" "$ROOT_DIR/Concrete/Semantics/Capabilities.lean" |
+     grep -q "caller.normalize" &&
+   grep -A3 "def capsContain" "$ROOT_DIR/Concrete/Semantics/Capabilities.lean" |
+     grep -q "missingCaps caller callee"; then
   ok "capsContain normalizes the caller before testing membership"
 else
   no "capsContain no longer normalizes — a union caller will under-approximate again"
