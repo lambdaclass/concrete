@@ -255,7 +255,7 @@ ARITH-6@1	live	ca16605ebbe5a40a6444f0a542f3a6b2
 ARITH-6/unsigned-comparison	live	-
 STMT-4@1	live	45f93cfb6dba30b9733aeb5eb311561d
 STMT-4/source-order	live	-
-STMT-4/enum-literal-source-order	pending	-
+STMT-4/enum-literal-source-order	live	-
 STMT-5@1	live	cc91ded3ceb2c3307028e180cd149711
 STMT-5/return-in-argument	live	-
 STMT-5/exit-in-branch	live	-

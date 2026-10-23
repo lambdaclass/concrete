@@ -377,8 +377,8 @@ Each step lands with the gate green. The steps run in this order:
 5. **statements.md** (`STMT-`, migrated 2026-10-23): statements and expressions, value blocks, loops and loop
    control, evaluation order, `main` and the exit status. It replaces
    STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL and the language half of MAIN_EXIT_MODEL;
-   EXECUTION_MODEL stays the runtime and platform description. T-ORDER's violations are the
-   pending cases of STMT-4.
+   EXECUTION_MODEL stays the runtime and platform description. T-ORDER's violations (bugs 136,
+   137 and 183) were fixed in landing train 6, so STMT-4 is enforced.
 5a. **memory.md** (`MEM-`, migrated 2026-10-23): allocations, `Heap<T>`, what safe code may
    observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
    MEMORY_SEMANTICS.
