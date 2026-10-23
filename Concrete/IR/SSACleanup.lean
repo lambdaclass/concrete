@@ -28,24 +28,6 @@ private def termSuccessors : STerm → List String
   | .ret _ => []
   | .unreachable => []
 
-/-- Replace a label in a terminator. -/
-private def replaceLabelInTerm (t : STerm) (oldLabel newLabel : String) : STerm :=
-  match t with
-  | .br lbl => .br (if lbl == oldLabel then newLabel else lbl)
-  | .condBr cond tl el =>
-    .condBr cond
-      (if tl == oldLabel then newLabel else tl)
-      (if el == oldLabel then newLabel else el)
-  | other => other
-
-/-- Replace a label in phi node incoming entries. -/
-private def replaceLabelInInst (inst : SInst) (oldLabel newLabel : String) : SInst :=
-  match inst with
-  | .phi dst incoming ty =>
-    .phi dst (incoming.map fun (v, lbl) =>
-      (v, if lbl == oldLabel then newLabel else lbl)) ty
-  | other => other
-
 /-- A reference or raw pointer type: its SSA register IS an address. -/
 private def isPtrLikeTy : Ty → Bool
   | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true
@@ -106,21 +88,31 @@ private def replaceRegInTerm (t : STerm) (oldReg : String) (replacement : SVal) 
 -- Pass 1: Dead block elimination
 -- ============================================================
 
-/-- Find reachable blocks via BFS from an entry label. -/
-private partial def findReachable (worklist : List String) (visited : List String) (blocks : List SBlock) : List String :=
+/-- The first block with each label (what `blocks.find?` by label returned). -/
+private def firstBlockByLabel (blocks : List SBlock) : Std.HashMap String SBlock :=
+  blocks.foldl (fun m b => if m.contains b.label then m else m.insert b.label b) ∅
+
+/-- Find the labels reachable from an entry label. The set is all a caller ever
+    asks of it (membership), so the visit order is free: a DFS worklist (prepend)
+    over a HashSet, with successors from a label → block map. The old BFS used a
+    `List` visited set, `blocks.find?` per label and `wl ++ succs` per step —
+    O(blocks²) per call, and cleanup calls it several times per iteration
+    (bug 178). -/
+private partial def findReachable (worklist : List String) (visited : Std.HashSet String)
+    (byLabel : Std.HashMap String SBlock) : Std.HashSet String :=
   match worklist with
   | [] => visited
   | lbl :: wl =>
-    if visited.contains lbl then findReachable wl visited blocks
+    if visited.contains lbl then findReachable wl visited byLabel
     else
-      let visited := lbl :: visited
-      let succs := match blocks.find? fun b => b.label == lbl with
+      let visited := visited.insert lbl
+      let succs := match byLabel.get? lbl with
         | some b => termSuccessors b.term
         | none => []
-      findReachable (wl ++ succs) visited blocks
+      findReachable (succs ++ wl) visited byLabel
 
 /-- Remove phi entries that reference labels in the given dead set. -/
-private def stripDeadPhiEntries (blocks : List SBlock) (deadLabels : List String) : List SBlock :=
+private def stripDeadPhiEntries (blocks : List SBlock) (deadLabels : Std.HashSet String) : List SBlock :=
   if deadLabels.isEmpty then blocks
   else blocks.map fun b =>
     { b with insts := b.insts.map fun inst =>
@@ -135,8 +127,9 @@ private def eliminateDeadBlocks (blocks : List SBlock) : List SBlock :=
   match blocks with
   | [] => []
   | entry :: rest =>
-    let reachable := findReachable [entry.label] [] (entry :: rest)
-    let deadLabels := (entry :: rest).filter (fun b => !reachable.contains b.label) |>.map (·.label)
+    let reachable := findReachable [entry.label] ∅ (firstBlockByLabel (entry :: rest))
+    let deadLabels : Std.HashSet String := (entry :: rest).foldl
+      (fun d b => if reachable.contains b.label then d else d.insert b.label) ∅
     let live := (entry :: rest).filter fun b => reachable.contains b.label
     stripDeadPhiEntries live deadLabels
 
@@ -204,6 +197,50 @@ private def termUses : STerm → List String
   | .condBr cond _ _ => svalUses cond
   | .unreachable => []
 
+/-- Follow a replacement chain from `v` for at most `fuel` steps. -/
+private def chaseRepl (raw : Std.HashMap String SVal) : SVal → Nat → SVal
+  | v, 0 => v
+  | .reg r ty, f + 1 => match raw.get? r with
+    | some v' => chaseRepl raw v' f
+    | none => .reg r ty
+  | v, _ + 1 => v
+
+/-- Walk the chain from key `cur` until it ends (a value that is not a key), meets a
+    key whose final value is known (`memo`), or meets a cycle / a key known to lead to
+    one (`none`). Returns the keys on the path, newest first. -/
+private partial def chainWalk (raw memo : Std.HashMap String SVal) (tainted : Std.HashSet String)
+    (cur : String) (path : List String) (onPath : Std.HashSet String) : Option SVal × List String :=
+  let path := cur :: path
+  let onPath := onPath.insert cur
+  match raw.get? cur with
+  | some (.reg r ty) =>
+    match memo.get? r with
+    | some t => (some t, path)
+    | none =>
+      if tainted.contains r || onPath.contains r then (none, path)
+      else if raw.contains r then chainWalk raw memo tainted r path onPath
+      else (some (.reg r ty), path)
+  | some v => (some v, path)
+  | none => (none, path)
+
+/-- Every key's fully-chased value, `chaseRepl raw raw[k] fuel`, in O(keys): each
+    acyclic chain is walked once and its end shared by every key on it. Chasing each
+    key separately was O(keys × chain length), quadratic when trivial-phi elimination
+    leaves an n-long phi→phi chain (an n-deep nest of `if`s; bug 178). Requires
+    `fuel ≥ raw.size` (an acyclic chain is at most that long, so the fuel never runs
+    out and the shared end is exact). Keys on or leading into a cycle keep the old
+    fuel-bounded chase, whose result there depends on the fuel. -/
+private def resolveChains (raw : Std.HashMap String SVal) (fuel : Nat) : Std.HashMap String SVal :=
+  let (memo, _) := raw.fold (fun (st : Std.HashMap String SVal × Std.HashSet String) k _ =>
+    let (memo, tainted) := st
+    if memo.contains k || tainted.contains k then st
+    else match chainWalk raw memo tainted k [] ∅ with
+      | (some t, path) => (path.foldl (fun m p => m.insert p t) memo, tainted)
+      | (none, path) => (memo, path.foldl (·.insert ·) tainted)) (∅, ∅)
+  raw.fold (fun m k v => m.insert k (match memo.get? k with
+    | some t => t
+    | none => chaseRepl raw v fuel)) ∅
+
 /-- Apply register replacements across all blocks. -/
 private def applyReplacements (blocks : List SBlock)
     (replacements : List (String × SVal)) : List SBlock :=
@@ -217,15 +254,11 @@ private def applyReplacements (blocks : List SBlock)
     -- map (O(1) each). Chains are resolved so a single substitution is final.
     let raw : Std.HashMap String SVal :=
       replacements.foldl (fun m (old, new) => m.insert old new) ∅
-    let rec chase (v : SVal) (fuel : Nat) : SVal :=
-      match fuel, v with
-      | 0, _ => v
-      | f + 1, .reg r _ => match raw.get? r with
-        | some v' => chase v' f
-        | none => v
-      | _, _ => v
-    let rmap : Std.HashMap String SVal :=
-      raw.fold (fun m k v => m.insert k (chase v replacements.length)) ∅
+    -- Fuel `replacements.length` (≥ raw.size), as before; computed once — the old
+    -- `replacements.length` inside the per-key fold re-walked the list per key
+    -- (bug 178). `resolveChains` shares each chain's end instead of chasing every
+    -- key separately.
+    let rmap : Std.HashMap String SVal := resolveChains raw replacements.length
     blocks.map fun b =>
       let insts := b.insts.filter fun inst =>
         match inst with
@@ -252,26 +285,28 @@ private partial def eliminateTrivialPhis (blocks : List SBlock) : List SBlock :=
 -- Pass 3: Empty block folding
 -- ============================================================
 
-/-- Check if a label is referenced in any phi incoming of a block. -/
-private def isPhiSource (b : SBlock) (label : String) : Bool :=
-  b.insts.any fun inst =>
-    match inst with
-    | .phi _ incoming _ => incoming.any fun (_, lbl) => lbl == label
-    | _ => false
-
 /-- Find blocks that only contain a br (no instructions, just jump).
     Returns list of (emptyLabel, targetLabel).
     Skips the entry block and blocks whose target has phis referencing them
     (folding those requires complex phi predecessor updates). -/
 private def findEmptyBlocks (blocks : List SBlock) : List (String × String) :=
   let nonEntry := blocks.drop 1
+  -- label → phi source labels of the FIRST block with that label (the block
+  -- `blocks.find?` returned), built once. Asking `isPhiSource` per empty block
+  -- rescanned the target's phis, O(arms²) when every arm of a wide match is an
+  -- empty block into one merge with an arm-wide phi (bug 178).
+  let phiSources : Std.HashMap String (Std.HashSet String) := blocks.foldl (fun m b =>
+    if m.contains b.label then m
+    else m.insert b.label (b.insts.foldl (fun acc inst =>
+      match inst with
+      | .phi _ incoming _ => incoming.foldl (fun acc (_, lbl) => acc.insert lbl) acc
+      | _ => acc) ∅)) ∅
   nonEntry.filterMap fun b =>
     match b.insts, b.term with
     | [], .br target =>
       -- Skip folding if the target block has phis that reference this block
-      let targetBlock := blocks.find? fun tb => tb.label == target
-      match targetBlock with
-      | some tb => if isPhiSource tb b.label then none else some (b.label, target)
+      match phiSources.get? target with
+      | some srcs => if srcs.contains b.label then none else some (b.label, target)
       | none => some (b.label, target)
     | _, _ => none
 
@@ -280,13 +315,23 @@ private def foldEmptyBlocks (blocks : List SBlock) : List SBlock :=
   let empties := findEmptyBlocks blocks
   if empties.isEmpty then blocks
   else
-    -- For each empty block, redirect predecessors
-    let blocks := empties.foldl (fun blocks (emptyLabel, targetLabel) =>
-      blocks.map fun b =>
-        let term := replaceLabelInTerm b.term emptyLabel targetLabel
-        let insts := b.insts.map fun inst => replaceLabelInInst inst emptyLabel targetLabel
-        { b with term := term, insts := insts }
-    ) blocks
+    -- Redirect predecessors. The old code applied each rename (e_j → t_j) in
+    -- turn with a pass over every block: O(empties × blocks) (bug 178). The
+    -- composite rename F = R_k ∘ … ∘ R_1 is built once, back to front:
+    -- F_j(e_j) = F_{j+1}(t_j) and F_j(x) = F_{j+1}(x) elsewhere, so one pass
+    -- applying F gives the same labels as the sequence of passes.
+    let rename : Std.HashMap String String := empties.foldr (fun (e, t) m =>
+      m.insert e (m.getD t t)) ∅
+    let f := fun (l : String) => rename.getD l l
+    let blocks := blocks.map fun b =>
+      let term := match b.term with
+        | .br lbl => .br (f lbl)
+        | .condBr cond tl el => .condBr cond (f tl) (f el)
+        | other => other
+      let insts := b.insts.map fun inst => match inst with
+        | .phi dst incoming ty => .phi dst (incoming.map fun (v, lbl) => (v, f lbl)) ty
+        | other => other
+      { b with term := term, insts := insts }
     -- Remove the now-unreferenced empty blocks
     eliminateDeadBlocks blocks
 
@@ -698,7 +743,9 @@ private def forwardStoreToLoad (blocks : List SBlock) : List SBlock :=
         | .call .. | .memcpy .. => ([], repls)
         | _ => (storeMap, repls))
       ([], [])
-    acc ++ blockRepls) []
+    -- Per-block lists, flattened once: `acc ++ blockRepls` per block was
+    -- O(blocks × replacements) (bug 178).
+    blockRepls :: acc) [] |>.reverse.flatten
   if replacements.isEmpty then blocks
   else applyReplacements blocks replacements
 
@@ -725,7 +772,9 @@ private def eliminateRedundantLoads (blocks : List SBlock) : List SBlock :=
         | .store .. | .call .. | .memcpy .. => ([], repls)
         | _ => (loadMap, repls))
       ([], [])
-    acc ++ blockRepls) []
+    -- Per-block lists, flattened once: `acc ++ blockRepls` per block was
+    -- O(blocks × replacements) (bug 178).
+    blockRepls :: acc) [] |>.reverse.flatten
   if replacements.isEmpty then blocks
   else applyReplacements blocks replacements
 
@@ -771,9 +820,13 @@ private def eliminateConstantBranches (blocks : List SBlock) : List SBlock :=
     targeting this block). This is needed after constant branch elimination
     removes edges without updating PHIs in the target blocks. -/
 private def stripStalePhiEntries (blocks : List SBlock) : List SBlock :=
+  -- label → labels of the blocks branching to it, built once; the old per-block
+  -- `blocks.filter` was O(blocks²) (bug 178). Membership only.
+  let predsOf : Std.HashMap String (Std.HashSet String) := blocks.foldl (fun m pred =>
+    (termSuccessors pred.term).foldl (fun m s =>
+      m.insert s ((m.getD s ∅).insert pred.label)) m) ∅
   blocks.map fun b =>
-    let predLabels := blocks.filter (fun pred =>
-      (termSuccessors pred.term).contains b.label) |>.map (·.label)
+    let predLabels := predsOf.getD b.label ∅
     { b with insts := b.insts.map fun inst =>
       match inst with
       | .phi dst incoming ty =>

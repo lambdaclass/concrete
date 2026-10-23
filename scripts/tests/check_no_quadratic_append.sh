@@ -41,10 +41,12 @@ check() {
 echo "=== O(n^2) '++ [x]' ratchet over hot pipeline files ==="
 check Concrete/Frontend/Lexer.lean       1
 check Concrete/Frontend/Parser.lean      64
-check Concrete/IR/Lower.lean             64
+# 64->32, 2->1 (2026-10-22, bug 178): match arm lists prepend+reverse, blocks and entry
+# allocas accumulate newest-first, SSAVerify regTypes (dead) removed.
+check Concrete/IR/Lower.lean             32
 check Concrete/IR/Mono.lean              5
 check Concrete/IR/SSACleanup.lean        1
-check Concrete/IR/SSAVerify.lean         2
+check Concrete/IR/SSAVerify.lean         1
 # 29->34 (2026-07-15): +5 one-shot `saveArgcArgv ++ [...]` instruction lists in
 # wrapper construction, not in any loop.
 check Concrete/Backend/EmitSSA.lean      34

@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Std.Data.HashMap
 import Concrete.IR.SSA
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.Shared
@@ -21,22 +22,57 @@ cleanup transformations preserve all SSA invariants. Validates:
 -- Verification state
 -- ============================================================
 
+/-- Dominance over one function's CFG, answered in O(1) per query (bug 178).
+
+    Nodes are the DISTINCT block labels, numbered by first occurrence. `reach`
+    says whether a node is reachable from a root (the entry block or a block with
+    no predecessors); `pre`/`post` are entry/exit times of a DFS over the
+    dominator tree, so `d` dominates `n` iff `d` is an ancestor-or-self of `n`.
+
+    The relation is exactly the one the old list-based dataflow computed, which
+    was the GREATEST fixpoint of `D(entry) = {entry}`, `D(r) = {r}` for a block
+    `r` with no predecessors, and `D(n) = {n} ∪ ⋂ D(p)` over `n`'s predecessors:
+    * a node reachable from a root: its classical dominators in the graph where a
+      virtual root precedes the entry and every predecessor-less block;
+    * a node reachable from NO root (only from cycles nothing enters): every
+      label, because the greatest fixpoint never shrinks such a set. -/
+structure DomInfo where
+  index : Std.HashMap String Nat
+  reach : Array Bool
+  pre : Array Nat
+  post : Array Nat
+
+/-- Node-level dominance: `dn` dominates `ni` (reflexively). -/
+def DomInfo.dominatesIdx (di : DomInfo) (dn ni : Nat) : Bool :=
+  if !di.reach[ni]! then true
+  else di.reach[dn]! && di.pre[dn]! ≤ di.pre[ni]! && di.post[ni]! ≤ di.post[dn]!
+
+/-- Does block `d` dominate block `n` (reflexively)? `false` when either is not
+    a block label (the old `dominatedBy` answered `[]` for an unknown block). -/
+def DomInfo.dominates (di : DomInfo) (d n : String) : Bool :=
+  match di.index.get? n, di.index.get? d with
+  | some ni, some dn => di.dominatesIdx dn ni
+  | _, _ => false
+
 structure VerifyCtx where
   fnName : String
-  /-- All block labels in the current function. -/
-  blockLabels : List String
-  /-- Map from block label to its predecessor labels. -/
-  predecessors : List (String × List String)
+  /-- All block labels in the current function (membership only). -/
+  blockLabels : Std.HashSet String
+  /-- Map from block label to its predecessor labels (in block order). -/
+  predecessors : Std.HashMap String (List String)
   /-- Function parameter names. -/
   paramNames : List String
-  /-- Dominator map: label → list of labels that dominate it. -/
-  dominators : List (String × List String)
+  /-- Dominance relation (O(1) queries). -/
+  dom : DomInfo
+  /-- Register → dominator-graph nodes of every block that defines it. -/
+  defNodes : Std.HashMap String (List Nat)
+  /-- Register → label of the FIRST block (in block order) that defines it. -/
+  firstDefBlock : Std.HashMap String String
   /-- All blocks in the current function. -/
   blocks : List SBlock
-  /-- Register → type mapping (params + instruction defs). -/
-  regTypes : List (String × Ty)
-  /-- Known function signatures: name → (paramTypes, returnType). -/
-  fnSigs : List (String × List Ty × Ty)
+  /-- Known function signatures: name → (paramTypes, returnType); the FIRST
+      signature of a name wins, as the old `find?` over the list did. -/
+  fnSigs : Std.HashMap String (List Ty × Ty)
   /-- Return type of the current function. -/
   retTy : Ty
   /-- Declaration span of the current function, so verifier errors point at
@@ -185,75 +221,125 @@ private def termSuccessors : STerm → List String
   | .ret _ => []
   | .unreachable => []
 
-/-- Build predecessor map: label → list of predecessor labels. -/
-private def buildPredecessors (blocks : List SBlock) : List (String × List String) :=
-  let allLabels := blocks.map (·.label)
-  allLabels.map fun lbl =>
-    let preds := blocks.filter (fun b => (termSuccessors b.term).contains lbl)
-    (lbl, preds.map (·.label))
+/-- Build predecessor map: label → labels of the blocks (in block order, each
+    once) whose terminator targets it. One pass over the blocks with a HashMap;
+    the old per-label `blocks.filter` was O(blocks²) (bug 178). Only labels of
+    existing blocks are keys, as before. -/
+private def buildPredecessors (blocks : List SBlock) : Std.HashMap String (List String) :=
+  let init : Std.HashMap String (List String) :=
+    blocks.foldl (fun m b => if m.contains b.label then m else m.insert b.label []) ∅
+  -- Accumulate reversed (prepend), reverse once at the end.
+  let rev := blocks.foldl (fun m b =>
+    (termSuccessors b.term).eraseDups.foldl (fun m s =>
+      match m.get? s with
+      | some ps => m.insert s (b.label :: ps)
+      | none => m) m) init
+  rev.fold (fun m k ps => m.insert k ps.reverse) ∅
 
 -- ============================================================
 -- Dominator computation
 -- ============================================================
 
-/-- Compute dominators using iterative dataflow.
-    Returns map: label → set of labels that dominate it.
-    A block B dominates C if every path from entry to C goes through B. -/
-private partial def computeDominators (blocks : List SBlock) (predecessors : List (String × List String)) : List (String × List String) :=
-  match blocks with
-  | [] => []
-  | entry :: _ =>
-    let allLabels := blocks.map (·.label)
-    -- Initialize: entry dominates only itself, others dominated by all blocks
-    let init := allLabels.map fun lbl =>
-      if lbl == entry.label then (lbl, [lbl])
-      else (lbl, allLabels)
-    -- Iteratively refine until fixpoint, GAUSS-SEIDEL style: within one pass we
-    -- process labels in block order and read each predecessor's dom set from the
-    -- values ALREADY UPDATED THIS PASS (`acc`) when available, falling back to the
-    -- previous pass (`doms`). Dominators are a monotone dataflow framework, so
-    -- this reaches the SAME least fixpoint as a Jacobi update — but when blocks
-    -- are in forward/RPO order (as Lower emits them) it converges in ~2 passes
-    -- instead of the O(n) passes a Jacobi update needs (each Jacobi pass moves
-    -- information only one block forward). That is the fix for the O(n^3) blowup
-    -- on wide match chains: a long block chain took ~n passes × O(n) work.
-    let rec iterate (doms : List (String × List String)) (fuel : Nat) : List (String × List String) :=
-      match fuel with
-      | 0 => doms
-      | fuel + 1 =>
-        let newDoms := allLabels.foldl (fun (acc : List (String × List String)) lbl =>
-          let val :=
-            if lbl == entry.label then [lbl]
-            else
-              let preds := (predecessors.find? fun (l, _) => l == lbl).map (·.2) |>.getD []
-              let predDomSets := preds.filterMap fun p =>
-                match acc.find? fun (l, _) => l == p with
-                | some (_, s) => some s
-                | none => (doms.find? fun (l, _) => l == p).map (·.2)
-              -- Intersection of all predecessor dom sets
-              let intersection := match predDomSets with
-                | [] => []
-                | first :: rest => rest.foldl (fun a s => a.filter (s.contains ·)) first
-              lbl :: intersection
-          acc ++ [(lbl, val)]) []
-        if newDoms == doms then doms
-        else iterate newDoms fuel
-    iterate init (allLabels.length * 2 + 10)
+/-- Iterative DFS from `root`: returns (visited, postorder). -/
+private partial def dfsPostorder (succ : Array (List Nat))
+    (stack : List (Nat × List Nat)) (visited : Array Bool) (order : Array Nat) :
+    Array Bool × Array Nat :=
+  match stack with
+  | [] => (visited, order)
+  | (v, []) :: rest => dfsPostorder succ rest visited (order.push v)
+  | (v, s :: ss) :: rest =>
+    if visited[s]! then dfsPostorder succ ((v, ss) :: rest) visited order
+    else dfsPostorder succ ((s, succ[s]!) :: (v, ss) :: rest) (visited.set! s true) order
 
-/-- Look up which blocks a given block dominates. -/
-private def dominatedBy (doms : List (String × List String)) (block : String) : List String :=
-  (doms.find? fun (l, _) => l == block).map (·.2) |>.getD []
+/-- Cooper–Harvey–Kennedy `intersect`: walk the two fingers up the current
+    dominator tree (by postorder number) until they meet. -/
+private partial def domIntersect (idom : Array (Option Nat)) (po : Array Nat) (a b : Nat) : Nat :=
+  if a == b then a
+  else if po[a]! < po[b]! then domIntersect idom po ((idom[a]!).getD b) b
+  else domIntersect idom po a ((idom[b]!).getD a)
 
-/-- Get which block defines a register. -/
-private def regDefBlock (blocks : List SBlock) (reg : String) : Option String :=
-  blocks.find? (fun b => (blockDefs b).contains reg) |>.map (·.label)
+/-- Cooper–Harvey–Kennedy fixpoint over the nodes in reverse postorder. A root
+    (entry or predecessor-less block) is pinned to the virtual root `vroot`. -/
+private partial def domFixpoint (preds : Array (List Nat)) (isRoot : Array Bool)
+    (po : Array Nat) (rpo : List Nat) (vroot : Nat) (idom : Array (Option Nat)) :
+    Array (Option Nat) :=
+  let (idom', changed) := rpo.foldl (fun (idom, ch) v =>
+    if v == vroot then (idom, ch)
+    else
+      let new? : Option Nat :=
+        if isRoot[v]! then some vroot
+        else
+          match (preds[v]!).filter (fun p => (idom[p]!).isSome) with
+          | [] => none
+          | p :: ps => some (ps.foldl (fun a q => domIntersect idom po a q) p)
+      match new? with
+      | some new => if idom[v]! == some new then (idom, ch) else (idom.set! v (some new), true)
+      | none => (idom, ch)) (idom, false)
+  if changed then domFixpoint preds isRoot po rpo vroot idom' else idom'
 
-/-- Registers defined in blocks that strictly dominate the given block. -/
-private def strictDomDefs (ctx : VerifyCtx) (blockLabel : String) : List String :=
-  let doms := dominatedBy ctx.dominators blockLabel
-  let strictDoms := doms.filter (· != blockLabel)
-  ctx.blocks.filter (fun b => strictDoms.contains b.label)
-    |>.foldl (fun acc b => acc ++ blockDefs b) []
+/-- Entry/exit times of a DFS over the dominator tree (one shared counter). -/
+private partial def domNumber (children : Array (List Nat)) (stack : List (Nat × Bool))
+    (pre post : Array Nat) (c : Nat) : Array Nat × Array Nat :=
+  match stack with
+  | [] => (pre, post)
+  | (v, true) :: rest => domNumber children rest pre (post.set! v c) (c + 1)
+  | (v, false) :: rest =>
+    let stack := (children[v]!).foldl (fun st ch => (ch, false) :: st) ((v, true) :: rest)
+    domNumber children stack (pre.set! v c) post (c + 1)
+
+/-- Compute the dominance relation of a function's CFG (bug 178).
+
+    Replaces a list-based Gauss-Seidel dataflow whose sets were `List String`:
+    every intersection was `a.filter (s.contains ·)`, every lookup a `find?`, so
+    one pass cost O(blocks · |dom set|²) — cubic on a long block chain (a wide
+    `match` lowers to one) — and `strictDomDefs` then materialized, per block, the
+    defs of every strict dominator. Here: label → node index (HashMap), CHK
+    immediate dominators over Arrays in reverse postorder, and O(1) ancestor
+    queries by dominator-tree DFS times. See `DomInfo` for why the relation is
+    the one the old fixpoint computed, unreachable regions included. -/
+private def computeDomInfo (blocks : List SBlock)
+    (predecessors : Std.HashMap String (List String)) : DomInfo :=
+  -- Distinct labels, numbered by first occurrence (the old code's `find?` always
+  -- resolved a label to its first occurrence too).
+  let (index, n) := blocks.foldl (fun (m, k) b =>
+    if m.contains b.label then (m, k) else (m.insert b.label k, k + 1))
+    ((∅ : Std.HashMap String Nat), 0)
+  let vroot := n
+  let preds : Array (List Nat) := index.fold (fun a l i =>
+    a.set! i ((predecessors.getD l []).filterMap index.get?)) (Array.replicate (n + 1) [])
+  -- Roots: the entry (node 0) and every block with no predecessor.
+  let isRoot : Array Bool := (Array.range (n + 1)).map fun i => i < n && (i == 0 || (preds[i]!).isEmpty)
+  let succ0 : Array (List Nat) := (Array.range (n + 1)).foldl (fun a i =>
+    (preds[i]!).foldl (fun a p => a.set! p (i :: a[p]!)) a) (Array.replicate (n + 1) [])
+  let rootList := (List.range n).filter fun i => isRoot[i]!
+  let succ := succ0.set! vroot rootList
+  let (visited, order) := dfsPostorder succ [(vroot, rootList)]
+    ((Array.replicate (n + 1) false).set! vroot true) #[]
+  let po : Array Nat := (List.range order.size).foldl (fun a k => a.set! order[k]! k)
+    (Array.replicate (n + 1) 0)
+  let rpo := order.toList.reverse
+  let idom := domFixpoint preds isRoot po rpo vroot
+    ((Array.replicate (n + 1) none).set! vroot (some vroot))
+  let children : Array (List Nat) := (List.range n).foldr (fun v a =>
+    match idom[v]! with
+    | some p => if visited[v]! then a.set! p (v :: a[p]!) else a
+    | none => a) (Array.replicate (n + 1) [])
+  let (pre, post) := domNumber children [(vroot, false)]
+    (Array.replicate (n + 1) 0) (Array.replicate (n + 1) 0) 0
+  { index := index, reach := visited.extract 0 n, pre := pre, post := post }
+
+/-- Registers defined in a block that strictly dominates `blockLabel`: is `u`
+    one of them? Same answer as the old `strictDomDefs ... |>.contains u`, which
+    listed the defs of every block whose label is in the dominator set of
+    `blockLabel` other than `blockLabel` itself. -/
+private def definedInStrictDom (ctx : VerifyCtx) (blockLabel : String) (u : String) : Bool :=
+  match ctx.dom.index.get? blockLabel, ctx.defNodes.get? u with
+  | some bn, some ds => ds.any fun d => d != bn && ctx.dom.dominatesIdx d bn
+  | _, _ => false
+
+/-- Get which block defines a register (the first in block order). -/
+private def regDefBlock (ctx : VerifyCtx) (reg : String) : Option String :=
+  ctx.firstDefBlock.get? reg
 
 -- ============================================================
 -- Per-block validation
@@ -276,7 +362,10 @@ private def checkDuplicateDefs (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
     Phi operands are checked against predecessor block dominator sets. -/
 private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   let phiDefs := blockPhiDefs b
-  let strictDomRegs := strictDomDefs ctx b.label
+  -- Membership in "defined in a strictly dominating block" is answered per use
+  -- (`definedInStrictDom`, O(defs of u)), not by materializing every dominator's
+  -- defs for every block — that list was O(blocks · defs) per block (bug 178).
+  let strictDom := definedInStrictDom ctx b.label
   -- Walk non-phi instructions in order, accumulating defs
   let nonPhiInsts := b.insts.filter fun inst => match inst with | .phi _ _ _ => false | _ => true
   let (ctx, runningDefs) := nonPhiInsts.foldl (fun (ctx, running) inst =>
@@ -286,9 +375,9 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
       if ctx.paramNames.contains u then ctx
       else if phiDefs.contains u then ctx
       else if running.contains u then ctx
-      else if strictDomRegs.contains u then ctx
+      else if strictDom u then ctx
       else
-        match regDefBlock ctx.blocks u with
+        match regDefBlock ctx u with
         | some defBlock =>
           if defBlock == b.label then
             addSSAError ctx (.useBeforeDef b.label u)
@@ -306,12 +395,11 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   -- HashSet (O(1) membership) — the list `.contains` here was O(n) per use, i.e.
   -- O(n^2) for a block of n instructions (a large array literal: n stores in one
   -- block). Semantics are identical; only membership got faster.
-  let allBlockDefs := phiDefs ++ runningDefs.toList ++ strictDomRegs
   let ctx := (termUses b.term).foldl (fun ctx u =>
     if ctx.paramNames.contains u then ctx
-    else if allBlockDefs.contains u then ctx
+    else if phiDefs.contains u || runningDefs.contains u || strictDom u then ctx
     else
-      match regDefBlock ctx.blocks u with
+      match regDefBlock ctx u with
       | some defBlock =>
         addSSAError ctx (.useInNonDominatingBlock b.label u defBlock)
       | none => addSSAError ctx (.undefinedRegister b.label u)
@@ -325,10 +413,9 @@ private def checkUsesAreDefined (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
         | .reg name _ =>
           if ctx.paramNames.contains name then ctx
           else
-            let srcDoms := dominatedBy ctx.dominators srcLabel
-            match regDefBlock ctx.blocks name with
+            match regDefBlock ctx name with
             | some defBlock =>
-              if srcDoms.contains defBlock then ctx
+              if ctx.dom.dominates defBlock srcLabel then ctx
               else addSSAError ctx (.phiNotDominatedBySrc b.label name srcLabel defBlock)
             | none => addSSAError ctx (.phiUndefinedRegister b.label name)
         | _ => ctx
@@ -360,7 +447,8 @@ private def isAggregateType : Ty → Bool
 
 /-- Check phi node predecessors. Each phi should have entries for all predecessor blocks. -/
 private def checkPhiNodes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
-  let preds := (ctx.predecessors.find? fun (l, _) => l == b.label).map (·.2) |>.getD []
+  let preds := ctx.predecessors.getD b.label []
+  let predSet : Std.HashSet String := preds.foldl (·.insert ·) ∅
   b.insts.foldl (fun ctx inst =>
     match inst with
     | .phi dst incoming ty =>
@@ -368,44 +456,22 @@ private def checkPhiNodes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
       let ctx := if isAggregateType ty then
         addSSAError ctx (.aggregatePhi b.label dst (reprStr ty))
       else ctx
-      let phiLabels := incoming.map (·.2)
+      let phiLabelList := incoming.map (·.2)
+      -- HashSets: a wide merge has one predecessor and one phi entry per arm, so
+      -- list membership both ways was O(arms²) per phi (bug 178).
+      let phiLabels : Std.HashSet String := phiLabelList.foldl (·.insert ·) ∅
       -- Check that each predecessor has an entry
       let ctx := preds.foldl (fun ctx p =>
         if phiLabels.contains p then ctx
         else addSSAError ctx (.phiMissingPredecessor b.label p)
       ) ctx
       -- Check for extra entries (non-predecessor labels)
-      phiLabels.foldl (fun ctx lbl =>
-        if preds.contains lbl then ctx
+      phiLabelList.foldl (fun ctx lbl =>
+        if predSet.contains lbl then ctx
         else addSSAError ctx (.phiExtraPredecessor b.label lbl)
       ) ctx
     | _ => ctx
   ) ctx
-
--- ============================================================
--- Register type collection
--- ============================================================
-
-/-- Get the type produced by an instruction (for its dst register). -/
-private def instDefType : SInst → Option (String × Ty)
-  | .binOp dst _ _ _ ty => some (dst, ty)
-  | .unaryOp dst _ _ ty => some (dst, ty)
-  | .call (some dst) _ _ retTy => some (dst, retTy)
-  | .call none _ _ _ => none
-  | .alloca dst ty => some (dst, .ptrMut ty)
-  | .load dst _ ty => some (dst, ty)
-  | .store _ _ => none
-  | .gep dst _ _ ty => some (dst, ty)
-  | .phi dst _ ty => some (dst, ty)
-  | .cast dst _ tgt => some (dst, tgt)
-  | .memcpy _ _ _ => none
-
-/-- Build register type map from params and all block instructions. -/
-private def buildRegTypes (params : List (String × Ty)) (blocks : List SBlock) : List (String × Ty) :=
-  let paramTypes := params
-  let instTypes := blocks.foldl (fun acc b =>
-    acc ++ b.insts.filterMap instDefType) []
-  paramTypes ++ instTypes
 
 /-- Build function signature map from module functions + extern declarations. -/
 private def buildFnSigs (modules : List SModule) : List (String × List Ty × Ty) :=
@@ -418,10 +484,6 @@ private def buildFnSigs (modules : List SModule) : List (String × List Ty × Ty
 -- ============================================================
 -- New validation checks
 -- ============================================================
-
-/-- Look up a register's type. -/
-private def lookupRegType (ctx : VerifyCtx) (name : String) : Option Ty :=
-  ctx.regTypes.find? (fun (n, _) => n == name) |>.map (·.2)
 
 /-- Check phi type consistency: all incoming values should be compatible with the phi's type. -/
 private def checkPhiTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
@@ -445,8 +507,8 @@ private def checkCallArity (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   b.insts.foldl (fun ctx inst =>
     match inst with
     | .call _ (.direct fn) args _ =>
-      match ctx.fnSigs.find? fun (n, _, _) => n == fn with
-      | some (_, paramTys, _) =>
+      match ctx.fnSigs.get? fn with
+      | some (paramTys, _) =>
         if args.length != paramTys.length then
           addSSAError ctx (.callArityMismatch b.label fn args.length paramTys.length)
         else ctx
@@ -502,23 +564,31 @@ private def checkBinOpTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 -- Function and module validation
 -- ============================================================
 
-private def verifyFn (f : SFnDef) (fnSigs : List (String × List Ty × Ty)) : Diagnostics :=
+private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   if f.blocks.isEmpty then
     [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none }]
   else
-    let blockLabels := f.blocks.map (·.label)
+    let blockLabels : Std.HashSet String := f.blocks.foldl (·.insert ·.label) ∅
     let predecessors := buildPredecessors f.blocks
     let paramNames := f.params.map (·.1)
-    let dominators := computeDominators f.blocks predecessors
-    let regTypes := buildRegTypes f.params f.blocks
+    let dom := computeDomInfo f.blocks predecessors
+    -- Register → defining blocks, built once (bug 178: the old per-use
+    -- `blocks.find?` and per-block dominator-def lists were O(blocks²)+).
+    let (defNodes, firstDefBlock) := f.blocks.foldl (fun (dn, fd) b =>
+      let node := dom.index.getD b.label 0
+      (blockDefs b).foldl (fun (dn, fd) r =>
+        (dn.insert r (node :: dn.getD r []),
+         if fd.contains r then fd else fd.insert r b.label)) (dn, fd))
+      ((∅ : Std.HashMap String (List Nat)), (∅ : Std.HashMap String String))
     let ctx : VerifyCtx := {
       fnName := f.name
       blockLabels := blockLabels
       predecessors := predecessors
       paramNames := paramNames
-      dominators := dominators
+      dom := dom
+      defNodes := defNodes
+      firstDefBlock := firstDefBlock
       blocks := f.blocks
-      regTypes := regTypes
       fnSigs := fnSigs
       retTy := f.retTy
       declSpan := f.declSpan
@@ -537,11 +607,13 @@ private def verifyFn (f : SFnDef) (fnSigs : List (String × List Ty × Ty)) : Di
     ) ctx
     ctx.errors
 
-private def verifyModule (m : SModule) (fnSigs : List (String × List Ty × Ty)) : Diagnostics :=
+private def verifyModule (m : SModule) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   m.functions.foldl (fun acc f => acc ++ verifyFn f fnSigs) []
 
 def ssaVerifyProgram (modules : List SModule) : Except Diagnostics Unit :=
-  let fnSigs := buildFnSigs modules
+  -- First signature of a name wins, as the old list `find?` did.
+  let fnSigs : Std.HashMap String (List Ty × Ty) := (buildFnSigs modules).foldl
+    (fun m (n, ps, r) => if m.contains n then m else m.insert n (ps, r)) ∅
   let errors := modules.foldl (fun acc m => acc ++ verifyModule m fnSigs) []
   if errors.isEmpty then .ok ()
   else .error errors

@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 12** (5 silent, 1 loud, 6 filed before the discovery record) of 153 bug records.
+**Open bugs: 12** (5 silent, 1 loud, 6 filed before the discovery record) of 154 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -109,7 +109,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
 | 14. Trusted `std` and FFI code with no checked contract | 1 | 1 | 166 |
-| no class yet | 1 | 0 | 027 |
+| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
@@ -126,7 +126,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | interp-coverage: interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary | 2026-10-21 | unrecorded | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 9 counting batches recorded. 15 attribution-only batches (reviews, follow-ons, CI, controls, development) found 25 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 9 counting batches recorded. 16 attribution-only batches (reviews, follow-ons, CI, controls, development) found 26 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

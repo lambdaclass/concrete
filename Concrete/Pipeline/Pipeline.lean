@@ -509,7 +509,8 @@ partial def coreNodesTraps (ms : List CModule) : Nat × Nat :=
     (Phase 17 owns benchmarks). Built by concatenation to keep the JSON unambiguous. -/
 def telemetryJson (compiler : String) (astNodes : Nat) (core : ValidatedCore)
     (mono : MonomorphizedProgram) (ssa : SSAProgram) (diagnostics : Nat)
-    (timingMs : List (String × Nat) := []) (rssKb : Option Nat := none) : String :=
+    (timingMs : List (String × Nat) := []) (rssKb : Option Nat := none)
+    (heartbeats : List (String × Nat) := []) : String :=
   let (cMods, cFns, cEnums, cStructs) := countCore core.coreModules
   let (cNodes, cTraps) := coreNodesTraps core.coreModules
   let (mMods, mFns, _, _) := countCore mono.coreModules
@@ -519,6 +520,12 @@ def telemetryJson (compiler : String) (astNodes : Nat) (core : ValidatedCore)
   let timingJson := lb ++ String.intercalate ","
     (timingMs.map (fun (s, ms) => "\"" ++ esc s ++ "\":" ++ toString ms)) ++ rb
   let rssJson := match rssKb with | some kb => toString kb | none => "null"
+  -- Per-stage Lean heartbeats (small allocations): a deterministic operation count,
+  -- independent of machine load, that a scaling gate can fit exponents to where no
+  -- hardware counter is available (bug 178). Present only when the caller measured it.
+  let beatsJson := if heartbeats.isEmpty then "" else
+    "\"alloc_heartbeats\":" ++ lb ++ String.intercalate ","
+      (heartbeats.map (fun (s, n) => "\"" ++ esc s ++ "\":" ++ toString n)) ++ rb ++ ","
   lb ++ "\"schema\":\"concrete.pipeline.telemetry.v2\","
      ++ "\"compiler\":\"" ++ esc compiler ++ "\","
      ++ "\"stages\":" ++ lb
@@ -532,6 +539,7 @@ def telemetryJson (compiler : String) (astNodes : Nat) (core : ValidatedCore)
      ++ rb ++ ","
      ++ "\"trap_sites\":" ++ toString cTraps ++ ","
      ++ "\"timing_ms\":" ++ timingJson ++ ","
+     ++ beatsJson
      ++ "\"rss_kb\":" ++ rssJson ++ ","
      ++ "\"diagnostics\":" ++ toString diagnostics
      ++ rb
