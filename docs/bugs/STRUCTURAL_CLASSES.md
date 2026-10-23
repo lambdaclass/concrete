@@ -40,7 +40,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 4. No reference-provenance model in the source checker | 091 (receiver cases), 092, 104, 105 (checker containment), 131 | R-0499 (S8, row 4); rules in exit 2i (R-0500) |
 | 5. Borrow tracking by syntax instead of normalized places | 091 (receivers, arguments, explicit borrows), 092, 104, 120, 131, 143 (a deferred call's borrow reserved nothing) | R-0499 (S8, row 4) over Core places; interim: batch 2's normalized place rule |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 063, 071, 091 (impl capabilities), 105 (a source-level reference rule satisfied later by Mono's substitution) | R-0499 (S8 capability containment, re-checked after Mono); R-0510 (S8a) |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity), 140, 150 (the folder's float self-comparison), 152 (a runtime string builtin's empty-input edge) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 053, 066, 080, 084, 085, 086, 088, 101, 102, 105, 108, 109, 117, 118, 119, 120, 123, 127, 128, 130, 133, 134, 136 (until 127's fix the consumers disagreed), 137 (the payload list is both evaluation order and positional identity), 140, 150 (the folder's float self-comparison), 152 (a runtime string builtin's empty-input edge), 184 (the interpreter read all of stdin before `main`; the binary reads when the program does) | R-0493 (S6 `IntArith`), R-0496 (S7 Core semantics), R-0495 (S9 claims on Core); harness R-0491 (exit 2c) |
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 078, 095, 102, 107, 108, 110, 116, 126, 127, 130, 133, 134, 146 (`*h` lowered as a load only), 175 (a `match` whose arms all diverge left its merge open: 078's shape, missed in `match`) | R-0501 (S10 Place MIR); R-0502/R-0503 (S11); R-0504 (S12 validators) |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 079, 081, 083, 089, 067 | exit 0a (R-0482) now; R-0494 (S2 one `Verdict`), R-0495 (S9), R-0521 (row 9) |
 | 10. Evidence identity computed from a partial subject | 059, 060, 062, 068 | R-0521 (row 9 canonical `VerificationTask`); R-0497 (S5 payload-bound artifacts) |
@@ -194,7 +194,10 @@ by name, the program by position), 085 (a loop step read the pre-iteration envir
 discarded statement modeled as the block's value), 088 (an unhinted literal unchecked, and the
 folder compared it unwrapped), 101 (a branch-local `let` captured the continuation in the model),
 102 (the interpreter refuses a raw-pointer cast the backend miscompiles, so the differential gates
-are blind to it), 105 (the binary and the interpreter disagree on a reference-valued `if`).
+are blind to it), 105 (the binary and the interpreter disagree on a reference-valued `if`), 184
+(the interpreter modelled standard input as a snapshot the driver read before `main`, so it
+consumed input when and as far as the binary never does; every differential gate feeds a closed
+stdin, so none could see it).
 104's heap reproducer also cannot run under `--interp` (`alloc` is undefined there).
 
 **Design cause.** The language's meaning lives in `Proof.eval`'s `PExpr`, the interpreter, the SSA

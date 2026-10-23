@@ -1,0 +1,18 @@
+// Bug 184 control: standard input is read when, and as far as, the program reads it. One
+// read(0, buf, 2) of a pipe holding "AB" and then left open returns at once with both bytes,
+// natively and under --interp (which used to wait for the pipe to close first). Fed `AB` it
+// returns 65 + 66 = 131; a short read returns -1.
+extern fn read(fd: i32, buf: *mut u8, count: u64) with(Console) -> i64;
+
+trusted fn read_two() with(Console) -> Int {
+    let mut buf: [u8; 2] = [0, 0];
+    let n: i64 = read(0, &mut buf as *mut u8, 2);
+    if n != 2 {
+        return 0 - 1;
+    }
+    return (buf[0] as Int) + (buf[1] as Int);
+}
+
+fn main() with(Console) -> Int {
+    return read_two();
+}

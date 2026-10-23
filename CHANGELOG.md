@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
+
+`concrete p.con --interp` read all of standard input before `main` ran, so a program that never
+reads stdin, fed by a pipe that stays open (`sleep 30 | concrete p.con --interp`), waited for the
+writer to close it while the binary returns at once. The interpreter-coverage pass (728a2a98)
+had modelled stdin as a byte snapshot the driver took up front. It is now a source
+(`Interp.StdinSource`) that the `read` builtin pulls from, `n` bytes at the moment of each
+`read(0, buf, n)`. Two `run_tests.sh` legs hold stdin open under `timeout 10` and compare with the
+binary: a program that never reads (21) and a control whose single two-byte read returns at once
+(131). Record: [bug 184](docs/bugs/184_interp_reads_stdin_up_front.md).
+
 ### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
 
 The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
