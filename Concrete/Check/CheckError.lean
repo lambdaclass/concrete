@@ -664,9 +664,6 @@ def CheckError.code : CheckError → String
   | .refStoredInAggregate _ _ => "E0239"
   | .importBindingCollision _ _ => "E0299"
 
-/-- The normative statement every rule tag points at (MEMORY_SEMANTICS §15.5). -/
-def ruleSpecRef : String := "docs/language/MEMORY_SEMANTICS.md §15"
-
 /-- The exit 2i rule (with its version) a diagnostic enforces, MEMORY_SEMANTICS §15.5 item 2.
     A code that serves several rules (E0238) has a default here and is overridden at the sites
     that enforce another rule (`throwCheck (rule := ...)`). `none`: not a §15 rule. -/
@@ -705,7 +702,7 @@ def ruleNextAction (rule : String) : Option String :=
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
 def ruleEvidence (rule : Option String) : List (String × String) :=
   match rule with
-  | some r => [("rule", r), ("spec", ruleSpecRef)]
+  | some r => [("rule", r), ("spec", ruleSpecRef r)]
   | none => []
 
 def throwCheck (e : CheckError) (span : Option Span := none)

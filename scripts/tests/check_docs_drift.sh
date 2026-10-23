@@ -33,6 +33,9 @@
 #   5. ROADMAP's "Implemented, not yet accepted" table equals the one generated from
 #      docs/project/candidates.tsv (scripts/gen/candidate_table.py --check), with
 #      negative controls for a hand edit, a stale table and a malformed record.
+#   7. No Markdown file outside docs/spec restates a normative sentence of the language
+#      specification (scripts/spec/spec.py restatements; check_spec.sh S11 owns the check and its
+#      negative control, docs/spec/README.md §6).
 #   6. ROADMAP's "Bug dashboard" equals the one generated from the bug records, the structural
 #      classes, docs/bugs/discovery.tsv and the Phase 1 exits (scripts/gen/bug_dashboard.py
 #      --check), with negative controls for a hand edit, stale inputs and a malformed or incomplete
@@ -258,6 +261,15 @@ for eff in "0 hours" "3 hours" "2 programs"; do
     ok "control: a token batch ($eff) is shown but does not count toward the signal"
   else no "control: a token batch ($eff) moved the discovery signal"; fi
 done
+
+echo ""
+echo "=== 7. no doc restates a normative sentence of docs/spec (check_spec.sh S11, docs/spec/README.md §6) ==="
+if out="$(python3 scripts/spec/spec.py restatements 2>&1)"; then
+  ok "$(grep -m1 'S11' <<<"$out" | sed 's/^  ok   //')"
+else
+  printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
+  no "a normative sentence of docs/spec is restated outside docs/spec (cite the rule ID instead)"
+fi
 
 echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"

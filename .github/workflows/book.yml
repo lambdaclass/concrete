@@ -39,7 +39,11 @@ jobs:
           echo "$(pwd)/zola" >> "$GITHUB_PATH"
 
       - name: Build Site
+        # The language specification pages are generated from docs/spec (docs/spec/README.md §4);
+        # base.html links @/spec/_index.md, so a build without this step fails instead of
+        # publishing a site without the spec.
         run: |
+          python3 scripts/spec/spec.py site --out site/content/spec
           zola --root site build
 
       - name: Setup Pages

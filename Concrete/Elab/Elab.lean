@@ -448,6 +448,7 @@ private def bindArmVar (binding : String) (ty : Ty) : ElabM String := do
     names of programs that never shadow do not churn, and a sibling scope's
     reuse of a dead name is harmless because the earlier binder is no longer
     readable (`exitBlock` removed it). -/
+-- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 private def bindLocal (name : String) (ty : Ty) : ElabM String := do
   addBinder name
   let env ← getEnv
@@ -467,6 +468,7 @@ private def bindLocal (name : String) (ty : Ty) : ElabM String := do
     fingerprint is over that encoding. Opening a frame here would move the
     digest of every body with a `let` inside a branch without changing what any
     reference resolves to. Scoping is instead enforced at `exitBlock`. -/
+-- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 private def enterBlock : ElabM ElabEnv := getEnv
 
 /-- Bug 087: the binder frames after a block closes. Binders the block added

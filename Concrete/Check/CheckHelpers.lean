@@ -103,6 +103,7 @@ def isReferenceType : Ty → Bool
     the "references are second-class — never returned" invariant
     (docs/language/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
     are allowed in return position (they are the audit-visible unsafe escape). -/
+-- spec: REF-D1 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyContainsRef : Ty → Bool
   | .ref _ | .refMut _ => true
   | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner
@@ -118,6 +119,7 @@ partial def tyContainsRef : Ty → Bool
     not looked through either: a struct/enum field may not hold a reference
     (rejected at the declaration), so a named type can only hold one through
     its generic arguments. -/
+-- spec: REF-D2 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyStoresRef : Ty → Bool
   | .ref _ | .refMut _ => true
   | .heap inner | .heapArray inner => tyStoresRef inner
@@ -128,6 +130,7 @@ partial def tyStoresRef : Ty → Bool
 /-- Bug 092: a binding of this type would keep a reference stored INSIDE an
     aggregate (looking through a bare outer reference: `&[&T; 2]` too). A bare
     `&T` binding is not an aggregate — its source is frozen by `borrowedFrom`. -/
+-- spec: REF-D2 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyHoldsRefInAggregate : Ty → Bool
   | .ref inner | .refMut inner => tyHoldsRefInAggregate inner
   | .heap inner | .heapArray inner => tyStoresRef inner
@@ -165,6 +168,7 @@ def setEnv (env : TypeEnv) : CheckM Unit :=
   modify fun cur => { env with nextVarUid := max cur.nextVarUid env.nextVarUid }
 
 /-- Resolve type aliases. -/
+-- spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
 def resolveType (ty : Ty) : CheckM Ty := do
   match ty with
   | .named name =>
@@ -240,6 +244,7 @@ partial def tyParamOccursNested (name : String) : Ty → Bool
     position the body can read a `T` out of (`w: &W<T>`, `h: Heap<T>`, `a: [T; N]`) would let
     the body read a stored reference the rule never saw. Refused at the instantiation; a
     top-level `x: T` (the caller's own reference, checked at the call) stays allowed. -/
+-- spec: REF-4 (docs/spec/references.md; this declaration enforces the rule)
 def refuseNestedRefInstantiation (what : String) (mapping : List (String × Ty))
     (paramTys : List Ty) (retTy : Ty := .unit) : CheckM Unit := do
   for (pName, pTy0) in mapping do
@@ -458,6 +463,7 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
     entry to that loop — pass 1 to relax the loop-depth rule by one level
     (H14). Deeper outer values stay rejected: an enclosing loop could re-enter
     the broken loop and re-consume. -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def consumeVar (name : String) (span : Option Span := none) (breakDepthExempt : Nat := 0) : CheckM Unit := do
   let env ← getEnv
   match env.vars.lookup name with
@@ -1308,6 +1314,7 @@ def resolvedOr (t : Ty) : CheckM Ty := tryCatch (resolveType t) (fun _ => pure t
 
 mutual
 /-- The storage the place expression `e` names. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
 partial def normPlace (e : Expr) : CheckM Norm := do
   match e with
   | .paren _ inner => normPlace inner
@@ -1435,6 +1442,7 @@ def pathsOverlap (a b : String × List String) : Bool :=
     or `&mut w` + `&mut w.f`), and single-hop ALIASES: an ident argument
     whose binding is a ref/&mut with a tracked `borrowedFrom` root counts as
     a borrow of that root. Shared+shared overlap is fine. -/
+-- spec: REF-8 (docs/spec/references.md; this declaration enforces the rule)
 def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (span : Option Span) : CheckM Unit := do
   let mut seen : List ((String × List String) × Bool) := []
   for (path, isMut) in parts do

@@ -1150,6 +1150,23 @@ jobs:
       - name: "Exit 2i rules (MEMORY_SEMANTICS §15 — second-class references and one binding per visible name, with versioned migration diagnostics)"
         run: bash scripts/tests/check_rules_2i.sh
 
+      - name: Install Zola for the spec gate's site build (pinned, the version book.yml publishes with)
+        run: |
+          if command -v zola >/dev/null; then zola --version; else
+            tag="v0.19.2"
+            mkdir -p "$RUNNER_TEMP/zola"
+            curl -fsSL "https://github.com/getzola/zola/releases/download/${tag}/zola-${tag}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz --directory="$RUNNER_TEMP/zola"
+            echo "$RUNNER_TEMP/zola" >> "$GITHUB_PATH"
+          fi
+
+      - name: "Language specification (docs/spec — one normative statement; examples run natively and with --interp, codes, enforcing sites, Lean names, generated manifest and site, no restated rules)"
+        # S3 compares the spec's registries with a base revision: fetch the parent and main so the
+        # merge base (or HEAD~1) resolves in the shallow checkout. A missing base fails the gate.
+        run: |
+          git fetch --no-tags --deepen=1 origin || true
+          git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main || true
+          bash scripts/tests/check_spec.sh
+
       - name: "Effect opacity (R-0484 — an empty capability set is not a claim of purity)"
         run: bash scripts/tests/check_effect_opacity.sh
 

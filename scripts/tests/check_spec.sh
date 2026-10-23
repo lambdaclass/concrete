@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# The language-specification gate (docs/spec/README.md §3): docs/spec is the one written statement of
+# the language, and this gate checks the compiler, the interpreter, the Lean sources, the acceptance
+# manifests, the website and the other docs against it.
+#
+#   S1 format, S2 registry, S5 coverage, S8 tracking, S11 restatement   spec.py lint (no compiler)
+#   S3 history     ids.tsv / codes.tsv / Semantics: links against a base revision
+#   S4 examples    every example natively and with --interp; pending examples must match `now=` exactly
+#   S6 codes       every `--report diagnostic-codes` code classified; ledger rule tags == the spec's
+#   S7 sites       `spec: ID` comments at every Enforced by: declaration; names resolve in Lean
+#   S9 manifests   tests/rules/exit_2i.tsv == `spec.py manifest exit_2i`
+#   S10 site       the generated spec pages build with zola
+#
+# Fails closed: zero entries or examples is a failure, a missing compiler / Lean / zola / history base
+# is a failure, and the only skips are SPEC_SKIP_SITE=1 / SPEC_BASE=none outside CI (counted SKIPPED).
+# Section N plants one defect per check in a scratch copy and requires that check to fail with that
+# defect's own message.
+set -uo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/tests/lib/fresh.sh"
+require_fresh_binary || exit 1
+CC="$ROOT_DIR/.lake/build/bin/concrete"
+[ -x "$CC" ] || { echo "FATAL: compiler not built at $CC" >&2; exit 2; }
+SPECPY=(python3 "$ROOT_DIR/scripts/spec/spec.py")
+JOBS="${SPEC_JOBS:-8}"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+PASS=0; FAIL=0; PENDING=0; SKIPPED=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+skip(){ echo "  SKIP $1"; SKIPPED=$((SKIPPED+1)); }
+
+# run one spec.py command; fold its ok/FAIL/PENDING lines into the counters
+step() {
+  local out rc
+  out="$("${SPECPY[@]}" "$@" 2>&1)"; rc=$?
+  printf '%s\n' "$out"
+  PASS=$((PASS + $(grep -c '^  ok ' <<<"$out" || true)))
+  FAIL=$((FAIL + $(grep -c '^  FAIL ' <<<"$out" || true)))
+  PENDING=$((PENDING + $(grep -c '^  PENDING ' <<<"$out" || true)))
+  if [ "$rc" -ne 0 ] && ! grep -q '^  FAIL ' <<<"$out"; then no "spec.py $1 exited $rc without a FAIL line"; fi
+}
+
+echo "=== S1 S2 S5 S8 S11: format, registry, coverage, tracking, restatement ==="
+step lint
+
+echo ""
+echo "=== S3: history against the base revision ==="
+BASE="${SPEC_BASE:-}"
+if [ -z "$BASE" ]; then
+  MB="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+  if [ -n "$MB" ] && [ "$MB" != "$(git rev-parse HEAD)" ]; then BASE="$MB"; else BASE="HEAD~1"; fi
+fi
+if [ "$BASE" = "none" ]; then
+  if [ -n "${CI:-}" ]; then no "S3: SPEC_BASE=none is not allowed in CI"; else skip "S3 history (SPEC_BASE=none)"; fi
+elif ! git rev-parse --verify -q "$BASE^{commit}" >/dev/null; then
+  no "S3: base revision '$BASE' does not resolve (fetch history, or set SPEC_BASE)"
+else
+  mkdir -p "$TMP/base/spec"
+  git show "$BASE:docs/spec/ids.tsv" > "$TMP/base/ids.tsv" 2>/dev/null || rm -f "$TMP/base/ids.tsv"
+  git show "$BASE:docs/spec/codes.tsv" > "$TMP/base/codes.tsv" 2>/dev/null || rm -f "$TMP/base/codes.tsv"
+  for f in $(git ls-tree --name-only "$BASE" docs/spec/ 2>/dev/null); do git show "$BASE:$f" > "$TMP/base/spec/$(basename "$f")"; done
+  step history --base "$BASE" --base-ids "$TMP/base/ids.tsv" --base-codes "$TMP/base/codes.tsv" --base-spec "$TMP/base/spec"
+fi
+
+echo ""
+echo "=== S6: diagnostic codes ==="
+"$CC" tests/programs/fib.con --report diagnostic-codes > "$TMP/ledger.json" 2>/dev/null || true
+step codes --ledger "$TMP/ledger.json"
+
+echo ""
+echo "=== S7: enforcing sites and Lean names ==="
+step sites --out "$TMP/names.lean"
+if [ -s "$TMP/names.lean" ]; then
+  lake env lean "$TMP/names.lean" > "$TMP/names.out" 2>&1
+  step lean-result --out "$TMP/names.out" --count "$TMP/names.lean.count"
+else no "S7: no Lean name file was generated"; fi
+
+echo ""
+echo "=== S9: generated manifests ==="
+step manifest exit_2i --check
+
+echo ""
+echo "=== S10: website ==="
+site_gen() { "${SPECPY[@]}" site --out "$1/content/spec" > /dev/null; }
+site_check() {  # $1 = site copy dir with generated pages; 0 when every chapter and anchor is there
+  local d="$1" ch id
+  for ch in $(python3 -c 'import sys; sys.path.insert(0,"scripts/spec"); import spec; s=spec.Spec("docs/spec"); print(" ".join(c for c in s.chapters if c in s.text))'); do
+    [ -f "$d/content/spec/$ch.md" ] || { echo "    missing page $ch"; return 1; }
+  done
+  for id in $("${SPECPY[@]}" anchors | cut -f1); do
+    grep -rqF "<a id=\"$id\"></a>" "$d/content/spec/" || { echo "    missing anchor $id"; return 1; }
+  done
+  return 0
+}
+cp -R site "$TMP/site"
+if site_gen "$TMP/site" && site_check "$TMP/site"; then ok "S10: one generated page per chapter with every entry anchor"; else no "S10: generated site pages are incomplete"; fi
+if command -v zola > /dev/null 2>&1; then
+  if zola --root "$TMP/site" build --output-dir "$TMP/site-public" > "$TMP/zola.out" 2>&1; then
+    ok "S10: zola builds the site with the generated spec pages"
+  else no "S10: zola build failed: $(tail -3 "$TMP/zola.out" | tr '\n' ' ')"; fi
+elif [ -n "${CI:-}" ] || [ "${SPEC_SKIP_SITE:-0}" != 1 ]; then
+  no "S10: zola is not on PATH (CI installs it; locally use nix develop, or SPEC_SKIP_SITE=1 to skip)"
+else skip "S10 zola build (SPEC_SKIP_SITE=1)"; fi
+
+echo ""
+echo "=== S4: examples, natively and with --interp ==="
+step run-examples --compiler "$CC" --jobs "$JOBS" --work "$TMP/ex"
+
+echo ""
+echo "=== N: negative controls (each plants one defect and requires its own failure) ==="
+# control NAME CHECK MESSAGE-FRAGMENT -- spec.py args...   (runs on the scratch spec $TMP/n/spec)
+control() {
+  local name="$1" check="$2" frag="$3"; shift 4
+  local out rc
+  out="$("${SPECPY[@]}" "$@" 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -F "FAIL [$check]" <<<"$out" | grep -qF -- "$frag"; then
+    ok "$name"
+  else
+    no "$name (exit $rc; expected FAIL [$check] containing '$frag'): $(grep 'FAIL' <<<"$out" | head -2 | tr '\n' ' ')"
+  fi
+}
+fresh_copy() { rm -rf "$TMP/n"; mkdir -p "$TMP/n"; cp -R docs/spec "$TMP/n/spec"; }
+# mutate FILE PYTHON-EXPR-ON-s: apply, and require that the file really changed
+mutate() {
+  local f="$1" expr="$2"
+  python3 - "$f" "$expr" <<'PY' || { no "control setup: mutation of $1 did not apply"; return 1; }
+import sys
+p, expr = sys.argv[1], sys.argv[2]
+s = open(p).read()
+t = eval(expr, {"s": s, "re": __import__("re")})
+if t == s: sys.exit(1)
+open(p, "w").write(t)
+PY
+}
+SP=(--spec "$TMP/n/spec")
+REF=references.md
+
+# baseline: the unmodified copy passes the static checks (a control cannot pass on a broken baseline)
+fresh_copy
+if "${SPECPY[@]}" lint "${SP[@]}" > /dev/null 2>&1; then ok "N0: the scratch copy passes lint before any defect"; else no "N0: the scratch copy fails lint unmodified"; fi
+
+fresh_copy; mutate "$TMP/n/spec/scope.md" 's.replace("### SCOPE-2. What is not a collision", "### SCOPE-1. What is not a collision").replace("<a id=\"SCOPE-2\"></a>", "<a id=\"SCOPE-1\"></a>").replace("**SCOPE-2@1.**", "**SCOPE-1@1.**")' \
+  && control "N1a: a duplicate rule ID" S1 "duplicate ID" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("has a return type that contains a reference.", "has a return type that contains a reference. It is refused.", 1)' \
+  && control "N1b: a two-sentence normative statement" S1 "exactly one sentence" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "name=return-value exit=42 colour=red", 1)' \
+  && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \
+  && control "N1d: Uses names a missing definition" S1 "Uses names 'REF-D9'" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/pipeline.md" 's.rstrip("\n").removesuffix("```")' \
+  && control "N1e: an example fence that is never closed" S1 "is never closed" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", "```con pseudocode\nfn f() {}\n```\n<!-- CONFORMANCE", 1) if "<!-- CONFORMANCE" in s else s.replace("**Conformance fixtures.**", "```con pseudocode\nfn f() {}\n```\n\n**Conformance fixtures.**", 1)' \
+  && control "N1f: a pseudocode block inside an entry" S1 "inside entry" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"```con accept name=fn-pointer-field.*?```\n", "", s, count=1, flags=re.S)' \
+  && control "N2a: an example deleted while still registered" S2 "REF-3/fn-pointer-field is registered live" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("No assignment through a reference stores", "No assignment through a reference ever stores", 1)' \
+  && control "N2b: a sentence edited without a version bump" S2 "REF-7@1: the sentence changed without a new version" -- lint "${SP[@]}"
+fresh_copy; cp docs/spec/ids.tsv "$TMP/n/base_ids.tsv"; mutate "$TMP/n/spec/ids.tsv" 's.replace("REF-7/write-value\tlive\t-\n", "")' \
+  && control "N3a: a registry row deleted relative to the base" S3 "ids.tsv row REF-7/write-value was removed" -- history "${SP[@]}" --base ctl --base-ids "$TMP/n/base_ids.tsv"
+fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/codes.tsv" 's.replace("E0700\tinternal", "E0700\tunmigrated:statements")' \
+  && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("```con accept name=write-value exit=42", "```con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
+  && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\ntrait Get", "pending=R-9999 now=accept:42\ntrait Get", 1)' \
+  && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"
+mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@1\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@1\.\*\* //')" > "$TMP/n11/planted.md"
+control "N11: a normative sentence copied into another doc" S11 "planted.md restates the normative sentence of REF-6" -- restatements --scan-root "$TMP/n11"
+
+# S4: wrong expectations on real examples (run only the mutated example)
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "name=return-value exit=41", 1)' \
+  && control "N4a: a wrong exit code" S4 "REF-1/return-value" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-value
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=let-binds-ref code=E0302", "name=let-binds-ref code=E0303", 1)' \
+  && control "N4b: a wrong error code" S4 "REF-6/let-binds-ref" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/let-binds-ref
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=struct-field code=E0239 stage=check", "name=struct-field code=E0239 stage=post-mono", 1)' \
+  && control "N4c: a wrong stage" S4 "REF-3/struct-field" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-3/struct-field
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("**REF-1@1.**", "**REF-1@2.**", 1)' \
+  && control "N4d: a reject example whose diagnostic carries another rule version" S4 "REF-1/return-param" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-param
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=borrow-each-use exit=42", "name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
+  && control "N4e: a pending example that already holds" S4 "pending example already holds" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/borrow-each-use
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\ntrait Get", "pending=R-0500 now=accept:41\ntrait Get", 1)' \
+  && control "N4f: a pending example whose now= is wrong" S4 "pending example changed behaviour" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/trait-declaration
+
+# S6: an orphan code, and a rule-class code no entry names
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
+  && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0217\t[^\t\n]*", "E0217\trule", s, flags=re.M)' \
+  && control "N6b: a rule-class code that no entry names" S6 "E0217: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+
+# S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
+rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"
+mutate "$TMP/nsrc/Check/Check.lean" 's.replace("-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)\ndef refuseRefValuedBranch", "def refuseRefValuedBranch", 1)' \
+  && control "N7a: an Enforced by: declaration without its spec: comment" S7 "Concrete.refuseRefValuedBranch has no \`spec: REF-5\`" -- sites --src "$TMP/nsrc" --out "$TMP/n7.lean"
+rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"; printf '\n-- spec: REF-99\n' >> "$TMP/nsrc/Check/Check.lean"
+control "N7b: a spec: comment naming no live entry" S7 "spec: REF-99" -- sites --src "$TMP/nsrc" --out "$TMP/n7.lean"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Enforced by: Concrete.checkFn, ", "- Enforced by: Concrete.noSuchCheckFn, Concrete.checkFn, ", 1)' \
+  && { "${SPECPY[@]}" sites "${SP[@]}" --out "$TMP/n7c.lean" > /dev/null 2>&1
+       lake env lean "$TMP/n7c.lean" > "$TMP/n7c.out" 2>&1
+       control "N7c: an Enforced by: name that does not resolve in Lean" S7 "Concrete.noSuchCheckFn does not resolve" -- lean-result --out "$TMP/n7c.out" --count "$TMP/n7c.lean.count"; }
+
+# S9: a hand edit to the generated manifest
+mkdir -p "$TMP/nroot/tests/rules"; cp tests/rules/exit_2i.tsv "$TMP/nroot/tests/rules/"
+mutate "$TMP/nroot/tests/rules/exit_2i.tsv" 's.replace("run:42", "run:41", 1)' \
+  && control "N9: a hand edit to the generated manifest" S9 "differs from" -- manifest exit_2i --check --root "$TMP/nroot"
+
+# S10: a chapter missing from the generated site
+rm -rf "$TMP/nsite"; cp -R site "$TMP/nsite"
+if site_gen "$TMP/nsite" && site_check "$TMP/nsite" > /dev/null && rm "$TMP/nsite/content/spec/scope.md" \
+   && ! site_check "$TMP/nsite" > /dev/null; then
+  ok "N10: a chapter page missing from the generated site is detected"
+else no "N10: removing a generated chapter page went unnoticed (or the baseline failed)"; fi
+
+echo ""
+echo "SPEC: PASS=$PASS FAIL=$FAIL PENDING=$PENDING SKIPPED=$SKIPPED"
+[ "$FAIL" -eq 0 ]
