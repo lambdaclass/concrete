@@ -1322,11 +1322,19 @@ MUT_NEW+=("  if let some v := vis.reverse.find? (·.name == name) then -- MUTATI
 MUT_DESC+=("local identity: a use denotes the outermost visible binding of its spelling")
 gate_for_last "scripts/tests/check_local_identity.sh"
 
+# 99. R-0492 step 2: Elab ignores the walk's shadow fact and keeps every block-scoped binder's
+# spelling. check_local_identity.sh leg E reads the second destructure temporary's Core name.
+MUT_FILE+=("Concrete/Elab/Elab.lean")
+MUT_OLD+=("  let shadows := env.locals.shadowsAt id")
+MUT_NEW+=("  let shadows := false && env.locals.shadowsAt id -- MUTATION: shadow fact ignored")
+MUT_DESC+=("Elab: a shadowing block-scoped binder keeps its spelling")
+gate_for_last "scripts/tests/check_local_identity.sh"
+
 NUM_MUTATIONS=${#MUT_FILE[@]}
 # PINNED, not self-denominating. Every downstream count derives from this, so deleting families
 # silently shrank the population a "full" run reported on. Retiring a mutation withdraws the evidence
 # that some gate is load-bearing and must be a recorded decision.
-EXPECTED_MUTATIONS=98
+EXPECTED_MUTATIONS=99
 if [ "$NUM_MUTATIONS" != "$EXPECTED_MUTATIONS" ]; then
   echo "FATAL: the mutation inventory holds $NUM_MUTATIONS families, pinned at $EXPECTED_MUTATIONS." >&2
   echo "       If this change is intended, update EXPECTED_MUTATIONS in the SAME commit and say" >&2

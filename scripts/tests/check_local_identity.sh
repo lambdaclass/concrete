@@ -239,5 +239,37 @@ else
 fi
 
 echo ""
+echo "=== E: Elab resolves locals through the walk's table (R-0492 step 2) ==="
+ELAB=Concrete/Elab/Elab.lean
+EHITS="$(grep -nE '^  (vars|renames|ghostVars) :|bodyScope\.resolve\?|Proof\.evBinderRef [a-z(]' "$ELAB")"; ERC=$?
+[ "$ERC" -le 1 ] && [ -z "$EHITS" ] && ok "E: Elab keeps no name-keyed scope (vars / renames / ghostVars) and resolves no binder by spelling" \
+  || no "E: $EHITS"
+# Core names are the walk's decisions: a let keeps its spelling, an arm binder is fresh, and the
+# second struct-destructure temporary in one block shadows the first and is renamed.
+cat > "$TMP/core.con" <<'CON'
+mod m {
+    struct P { u: i32, t: i32 }
+    enum E { A { p: i32 }, B {} }
+    fn f(e: E) -> i32 {
+        let keep: i32 = 1;
+        let P { u, t } = P { u: keep, t: 2 };
+        let P { u: u2, t: t2 } = P { u: u, t: t };
+        match e {
+            E::A { p } => { return p + u2 + t2; },
+            E::B {} => { return 0; },
+        }
+    }
+    pub fn main() -> i32 { return f(E::B {}); }
+}
+CON
+CORE="$("$BIN" "$TMP/core.con" --emit-core 2>&1)" && CRC=0 || CRC=$?
+if [ "$CRC" -eq 0 ] && grep -q 'keep' <<<"$CORE" && grep -qE 'p\.b[0-9]+' <<<"$CORE" \
+   && grep -qE '__destr_P\.b[0-9]+' <<<"$CORE"; then
+  ok "E: Core names: a let keeps its spelling, an arm binder is fresh, a shadowing destructure temporary is renamed"
+else
+  no "E: Core names (rc=$CRC): $(grep -oE '__destr_P[^ ]*|p\.b[0-9]+' <<<"$CORE" | sort -u | tr '\n' ' ')"
+fi
+
+echo ""
 echo "LOCAL-IDENTITY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
