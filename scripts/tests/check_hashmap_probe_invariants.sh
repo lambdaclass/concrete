@@ -77,18 +77,18 @@ runs overwrite_past_tombstone 0 "$PRELUDE
     fn main() with(Std, Alloc, Unsafe) -> u8 {
         let mut bad: u8 = 0;
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
-        discard(m.insert(1, 10).is_none());
-        discard(m.insert(2, 20).is_none());
-        discard(m.insert(3, 30).is_none());
+        let probe_r1: Option<i32> = m.insert(1, 10); discard(probe_r1.is_none());
+        let probe_r2: Option<i32> = m.insert(2, 20); discard(probe_r2.is_none());
+        let probe_r3: Option<i32> = m.insert(3, 30); discard(probe_r3.is_none());
         let k2: i32 = 2;
-        discard(m.remove(&k2).is_some());
+        let probe_r4: Option<i32> = m.remove(&k2); discard(probe_r4.is_some());
         let old: Option<i32> = m.insert(3, 99);
         if old.is_none() { bad = 1; }
         if m.len() != 2 { bad = 2; }
         let k3: i32 = 3;
         let got: Option<i32> = m.get(&k3);
         match got { Option::Some { value } => { if value != 99 { bad = 3; } }, Option::None => { bad = 4; } }
-        discard(m.remove(&k3).is_some());
+        let probe_r5: Option<i32> = m.remove(&k3); discard(probe_r5.is_some());
         if m.contains(&k3) { bad = 5; }
         if m.len() != 1 { bad = 6; }
         m.drop();
@@ -103,11 +103,11 @@ runs zero_empty_slots_missing_lookup 0 "$PRELUDE
         let mut bad: u8 = 0;
         let mut z: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
         let mut i: i32 = 0;
-        while i < 200 { discard(z.insert(i, i).is_none()); i = i + 1; }
+        while i < 200 { let probe_r6: Option<i32> = z.insert(i, i); discard(probe_r6.is_none()); i = i + 1; }
         let mut j: i32 = 0;
-        while j < 200 { discard(z.remove(&j).is_some()); j = j + 1; }
+        while j < 200 { let probe_r7: Option<i32> = z.remove(&j); discard(probe_r7.is_some()); j = j + 1; }
         let mut n: i32 = 200;
-        while n < 260 { discard(z.insert(n, n).is_none()); n = n + 1; }
+        while n < 260 { let probe_r8: Option<i32> = z.insert(n, n); discard(probe_r8.is_none()); n = n + 1; }
         let miss: i32 = 999999;
         if z.contains(&miss) { bad = 1; }
         if z.len() != 60 { bad = 2; }
@@ -123,8 +123,8 @@ runs churn_10k 0 "$PRELUDE
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_mod16, e_i32);
         let mut i: i32 = 0;
         while i < 10000 {
-            discard(m.insert(i, i).is_none());
-            if i > 32 { let old: i32 = i - 32; discard(m.remove(&old).is_some()); }
+            let probe_r9: Option<i32> = m.insert(i, i); discard(probe_r9.is_none());
+            if i > 32 { let old: i32 = i - 32; let probe_r10: Option<i32> = m.remove(&old); discard(probe_r10.is_some()); }
             i = i + 1;
         }
         let miss: i32 = -1;
@@ -202,7 +202,7 @@ runs full_table_then_clear_reuse 0 "$PRELUDE
     fn main() with(Std, Alloc, Unsafe) -> u8 {
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
         let mut i: i32 = 0;
-        while i < 64 { discard(m.insert(i, i * 2).is_none()); i = i + 1; }
+        while i < 64 { let probe_r11: Option<i32> = m.insert(i, i * 2); discard(probe_r11.is_none()); i = i + 1; }
         let miss: i32 = 4242;
         if m.contains(&miss) { m.drop(); return 1; }
         m.clear();
@@ -210,7 +210,7 @@ runs full_table_then_clear_reuse 0 "$PRELUDE
         if m.contains(&miss) { m.drop(); return 3; }
         // Reuse after clear: tombstone accounting must have been reset too.
         let mut j: i32 = 0;
-        while j < 40 { discard(m.insert(j, j).is_none()); j = j + 1; }
+        while j < 40 { let probe_r12: Option<i32> = m.insert(j, j); discard(probe_r12.is_none()); j = j + 1; }
         if m.len() != 40 { m.drop(); return 4; }
         let k7: i32 = 7;
         let g: Option<i32> = m.get(&k7);
@@ -233,15 +233,15 @@ runs linear_payload_exactly_once 0 'mod main {
         let mut counter: u64 = 0;
         let cell: *mut u64 = &mut counter as *mut u64;
         let mut m: HashMap<DKey, i32> = HashMap::<DKey, i32>::new(h_dkey, e_dkey);
-        discard(m.insert(DKey { id: 1, cell: cell }, 10).is_none());
-        discard(m.insert(DKey { id: 2, cell: cell }, 20).is_none());
-        discard(m.insert(DKey { id: 3, cell: cell }, 30).is_none());
+        let probe_r13: Option<i32> = m.insert(DKey { id: 1, cell: cell }, 10); discard(probe_r13.is_none());
+        let probe_r14: Option<i32> = m.insert(DKey { id: 2, cell: cell }, 20); discard(probe_r14.is_none());
+        let probe_r15: Option<i32> = m.insert(DKey { id: 3, cell: cell }, 30); discard(probe_r15.is_none());
         // remove destroys the STORED key (+1)
         let probe2: DKey = DKey { id: 2, cell: cell };
-        discard(m.remove(&probe2).is_some());
+        let probe_r16: Option<i32> = m.remove(&probe2); discard(probe_r16.is_some());
         destroy(probe2);                                  // +1 (the probe)
         // overwrite past that tombstone destroys the DISPLACED stored key (+1)
-        discard(m.insert(DKey { id: 3, cell: cell }, 99).is_some());
+        let probe_r17: Option<i32> = m.insert(DKey { id: 3, cell: cell }, 99); discard(probe_r17.is_some());
         // drop destroys the 2 remaining stored keys (+2)
         m.drop();
         // 1 (removed) + 1 (probe) + 1 (displaced) + 2 (drop) = 5

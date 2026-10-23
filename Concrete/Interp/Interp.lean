@@ -1963,7 +1963,7 @@ private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields 
     -- D3 (bug 181): a borrowed binder (reference-typed in Core) names the payload field in the
     -- scrutinee's storage, as Lower's address does; a by-value binder copies the value.
     let bound := match scrRef with
-      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps ++ [.payload variant fname] } else v
+      | some p => if binderIsBorrow bty then IVal.ref { p with steps := p.steps.concat (.payload variant fname) } else v
       | none => v
     bindEnumFields (envBind env name bound) rest fRest scrRef variant
 

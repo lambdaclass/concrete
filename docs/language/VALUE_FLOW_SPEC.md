@@ -94,6 +94,11 @@ above). `callArg` is CONFINED to call/method/static-call argument checking —
 the gate pins its use-site count so a new use is a conscious decision, not an
 escape hatch.
 
+Two argument sites joined on 2026-10-23, both call arguments (pin 18 → 20): the value arguments
+of the `append` intrinsic when the argument is a reference binding (decision D1: a reference
+binding is read through, never consumed, in every call form), and the pointer argument of the
+`read_owned` intrinsic (bug 198), which is read, not moved.
+
 | constructor | value | callArg | place |
 |---|---|---|---|
 | `intLit` `floatLit` `boolLit` `strLit` `charLit` | creates | same as value | n/a (not addressable) |

@@ -209,10 +209,11 @@ reject_e0293 neg_whole_overlaps_part 'struct Copy F { v: i32 }
 struct W { f: F }
 fn mix(x: &mut W, y: &mut F) { y.v = 1; }
 fn main() -> Int { let mut w: W = W { f: F { v: 0 } }; mix(&mut w, &mut w.f); let W { f } = w; return f.v as Int; }'
-run pos_disjoint_field_muts 'struct Copy F { v: i32 }
+# D2 (loans keyed by root): two `&mut` fields of one owner in one call are two loans on `w`.
+reject_e0293 neg_disjoint_field_muts 'struct Copy F { v: i32 }
 struct Copy W { a: F, b: F }
 fn two(x: &mut F, y: &mut F) -> i32 { x.v = 1; y.v = 2; return x.v + y.v; }
-fn main() -> i64 { let mut w: W = W { a: F { v: 0 }, b: F { v: 0 } }; return two(&mut w.a, &mut w.b) as i64; }' 3
+fn main() -> i64 { let mut w: W = W { a: F { v: 0 }, b: F { v: 0 } }; return two(&mut w.a, &mut w.b) as i64; }'
 run pos_two_distinct_muts 'struct Copy X { v: i32 }
 fn two(a: &mut X, b: &mut X) -> i32 { a.v = 1; b.v = 2; return a.v + b.v; }
 fn main() -> i64 { let mut x: X = X { v: 0 }; let mut y: X = X { v: 0 }; return two(&mut x, &mut y) as i64; }' 3

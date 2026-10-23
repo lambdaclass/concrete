@@ -8174,17 +8174,24 @@ run_err "$TESTDIR/error_rawdup_trusted_deref.con" "(E0311)"
 run_ok "$TESTDIR/regress_198_read_owned.con" 42
 # Bug 199: a cast to a type alias crashed the backend.
 run_ok "$TESTDIR/regress_199_cast_to_alias.con" 42
-for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal branch_receiver; do
-    run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
-done
-for d2 in call_disjoint_fields call_field_read receiver_projection_read call_field_read_in_branch explicit_mut_receiver_read; do
-    run_err "$TESTDIR/error_d2_$d2.con" "(E0293)"
-done
+run_err "$TESTDIR/error_d2_borrow_literal.con" "(E0238)"
+run_err "$TESTDIR/error_d2_borrow_field_of_temporary.con" "(E0238)"
+run_err "$TESTDIR/error_d2_temporary_receiver.con" "(E0238)"
+run_err "$TESTDIR/error_d2_mut_borrow_string_literal.con" "(E0238)"
+run_err "$TESTDIR/error_d2_branch_receiver.con" "(E0238)"
+run_err "$TESTDIR/error_d2_call_disjoint_fields.con" "(E0293)"
+run_err "$TESTDIR/error_d2_call_field_read.con" "(E0293)"
+run_err "$TESTDIR/error_d2_receiver_projection_read.con" "(E0293)"
+run_err "$TESTDIR/error_d2_call_field_read_in_branch.con" "(E0293)"
+run_err "$TESTDIR/error_d2_explicit_mut_receiver_read.con" "(E0293)"
 run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro.con" "(E0238)"
 run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con" "(E0238)"
-for r181 in match while_let guard nested whole_binder defer; do
-    run_err "$TESTDIR/error_181_root_reassigned_$r181.con" "(E0232)"
-done
+run_err "$TESTDIR/error_181_root_reassigned_match.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_while_let.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_guard.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_nested.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_whole_binder.con" "(E0232)"
+run_err "$TESTDIR/error_181_root_reassigned_defer.con" "(E0232)"
 run_ok "tests/regressions/bug136_functional_update_base_reevaluated/repro.con" 59
 run_ok "tests/regressions/bug137_enum_literal_field_order/repro.con" 56
 # Bug 150: a float self-comparison is not folded (x != x is true for NaN).

@@ -485,15 +485,16 @@ private def orderFreeInit : CExpr → Bool
 private def withSourceOrder (inits : List (String × CExpr))
     (mk : List (String × CExpr) → CExpr) : ElabM CExpr := do
   if (inits.filter (fun (_, e) => !orderFreeInit e)).length < 2 then return mk inits
-  let mut binds : List (String × CExpr) := []
-  let mut operands : List (String × CExpr) := []
+  -- accumulated newest first, reversed once
+  let mut bindsRev : List (String × CExpr) := []
+  let mut operandsRev : List (String × CExpr) := []
   for (f, e) in inits do
-    if orderFreeInit e then operands := operands ++ [(f, e)]
+    if orderFreeInit e then operandsRev := (f, e) :: operandsRev
     else
       let t ← freshEvalTemp
-      binds := binds ++ [(t, e)]
-      operands := operands ++ [(f, .ident t e.ty)]
-  return binds.foldr (fun (t, e) body => letInExpr t e body) (mk operands)
+      bindsRev := (t, e) :: bindsRev
+      operandsRev := (f, .ident t e.ty) :: operandsRev
+  return bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) (mk operandsRev.reverse)
 
 /-- Bug 087: bind a block-scoped local (`let`, borrow ref). Registers the type
     under the surface name and returns the Core name to emit. A binding that
@@ -828,8 +829,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       -- temporaries (`letInExpr`), and the omitted fields read the base's temporary.
       let omitted := sd.fields.filter fun sf => !(fields.any fun (fn, _) => fn == sf.name)
       let fillFrom (cb : CExpr) (acc : List (String × CExpr)) : List (String × CExpr) :=
-        omitted.foldl (fun acc sf =>
-          acc ++ [(sf.name, .fieldAccess cb sf.name (substCapNamesTy capMap (substTy mapping sf.ty)))]) acc
+        acc ++ omitted.map fun sf =>
+          (sf.name, .fieldAccess cb sf.name (substCapNamesTy capMap (substTy mapping sf.ty)))
       for sf in omitted do
         if cBase.isSome then recordFieldUse sd sf.name
       let core ← match cBase with
@@ -840,17 +841,17 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             pure (CExpr.structLit name typeArgs (fillFrom cb cFields) resultTy)
           else do
             let tb ← freshEvalTemp
-            let mut binds : List (String × CExpr) := []
-            let mut explicit : List (String × CExpr) := []
+            let mut bindsRev : List (String × CExpr) := []
+            let mut explicitRev : List (String × CExpr) := []
             for (f, ex) in cFields do
-              if orderFreeInit ex then explicit := explicit ++ [(f, ex)]
+              if orderFreeInit ex then explicitRev := (f, ex) :: explicitRev
               else
                 let t ← freshEvalTemp
-                binds := binds ++ [(t, ex)]
-                explicit := explicit ++ [(f, .ident t ex.ty)]
-            binds := binds ++ [(tb, cb)]
-            let lit := CExpr.structLit name typeArgs (fillFrom (.ident tb cb.ty) explicit) resultTy
-            pure (binds.foldr (fun (t, e) body => letInExpr t e body) lit)
+                bindsRev := (t, ex) :: bindsRev
+                explicitRev := (f, .ident t ex.ty) :: explicitRev
+            bindsRev := (tb, cb) :: bindsRev
+            let lit := CExpr.structLit name typeArgs (fillFrom (.ident tb cb.ty) explicitRev.reverse) resultTy
+            pure (bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) lit)
       return ElaboratedExprV2.mk core (match sd.typeId? with
            | some owner =>
              .structLit owner (structFieldEvsRev.reverse.map fun fe =>
@@ -950,21 +951,22 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         -- positional identity for Lower's layout, the interpreter and the proof model; when the
         -- two orders differ, the initializers are evaluated into temporaries first
         -- (`withSourceOrder`).
-        let mut srcInits : List (String × CExpr) := []
-        let mut srcEvs : List (String × Proof.EvidenceExprV2) := []
+        let mut srcInitsRev : List (String × CExpr) := []
+        let mut srcEvsRev : List (String × Proof.EvidenceExprV2) := []
         for (fname, expr) in fields do
           match ev.fields.find? fun sf => sf.name == fname with
           | some sf =>
             let fieldTy := substTy mapping sf.ty
             let cExprEv ← elabExprEv expr (some fieldTy)
-            srcInits := srcInits ++ [(sf.name, cExprEv.core)]
-            srcEvs := srcEvs ++ [(sf.name, cExprEv.evidence)]
+            srcInitsRev := (sf.name, cExprEv.core) :: srcInitsRev
+            srcEvsRev := (sf.name, cExprEv.evidence) :: srcEvsRev
           | none => pure ()  -- unknown field: reported by the checker
+        let srcInits := srcInitsRev.reverse
         -- Evidence in SOURCE order: the written order is now observable (it is the evaluation
         -- order), so two literals differing only in it are different implementations and must
         -- not share an identity (Codex review). A literal written in declaration order keeps its
         -- previous evidence.
-        let fieldEvsRev : List (String × Proof.EvidenceExprV2) := srcEvs.reverse
+        let fieldEvsRev : List (String × Proof.EvidenceExprV2) := srcEvsRev
         let resultTy := if effectiveTypeArgs.isEmpty then Ty.named enumName
                          else Ty.generic enumName effectiveTypeArgs [] -- enums take no capability parameters
         let declOrder (ops : List (String × CExpr)) : List (String × CExpr) :=
