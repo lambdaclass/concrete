@@ -266,10 +266,12 @@ class Spec:
 def normalize(text):
     t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)          # links -> their text
     # inline HTML tags, only outside code spans (`Box<&Int>` is code, not a tag)
-    parts = t.split("`")
-    for k in range(0, len(parts), 2):
-        parts[k] = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>", " ", parts[k])
-    t = "`".join(parts)
+    codes = []
+    def keep(m):
+        codes.append(m.group(2)); return f"\x00{len(codes) - 1}\x00"
+    t = re.sub(r"(`+)(.+?)\1", keep, t, flags=re.S)                  # code spans, any backtick run
+    t = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>", " ", t)
+    t = re.sub(r"\x00([0-9]+)\x00", lambda m: codes[int(m.group(1))].strip(), t)
     t = t.replace("`", "").replace("**", "").replace("__", "")
     t = re.sub(r"(?<![A-Za-z0-9])\*([^*\s][^*]*)\*", r"\1", t)     # *emphasis*
     t = re.sub(r"^\s*([-*+>]|\d+\.)\s+", " ", t, flags=re.M)       # list and quote markers
