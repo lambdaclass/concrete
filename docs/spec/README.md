@@ -2,17 +2,24 @@
 
 **Status:** normative. Started 2026-10-23 (branch `spec-single-source`).
 
-`docs/spec/` is the one normative statement of the Concrete language. It has one chapter per
+`docs/spec/` is the one written statement of the Concrete language. It has one chapter per
 area, and every rule and every definition in it has a stable, versioned ID. Other documents, the
 website and the compiler cite a rule by its ID and do not restate it. The compiler, the
 interpreter and the test corpus are checked against this directory by
 `scripts/tests/check_spec.sh`.
 
 This follows Austral's discipline: the language should fit in one document that a reader can
-audit. It is also the informal half of the language definition that the verified pipeline
-([VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)) formalizes. There, Core's executable
-semantics in Lean is the formal definition. Each rule here names the Lean definitions that
-enforce it and the proof obligation it adds.
+audit.
+
+**Authority.** The normative definition of the language is Core's semantics in Lean: Core's
+executable semantics and the checker judgments on Core (R-0496 and R-0499 in
+[VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)). `docs/spec/` is the checked, readable
+view of that definition. It is not a second definition. Each entry links the Lean definition it
+describes (`Semantics:`). Where that definition exists, it governs, and the entry's sentence and
+examples are checked against it. Where it does not exist yet, the sentence is a provisional
+statement and the missing link is tracked debt, which closes as the Core semantics lands. The
+link is optional today and becomes required area by area (§2.1, S7). Once an entry has a link,
+it never loses it (S3).
 
 This README defines the format, the gate and the migration plan. It states no language rules.
 
@@ -36,6 +43,7 @@ areas exist (§8).
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | stub: PAT-1, the renamed pattern binder that SCOPE-1 depends on (it was gap G4) |
 | `ffi.md` | `FFI-` | stub: FFI-1, foreign function values |
+| `pipeline.md` | `PASS-` | stub: PASS-1 and PASS-2, the preservation statements for generic substitution and binder modes |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -62,6 +70,7 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
 - Codes: E0239 (check, post-mono)
 - Status: enforced
 - Enforced by: Concrete.verifyNoStoredRefs, Concrete.checkModule
+- Semantics: none
 - Obligation: INV-REF (R-0500, V1)
 - Evidence: tested
 
@@ -86,10 +95,16 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
    diagnostics carry the same versioned tag (`rule: REF-3@1`).
 4. **The fields.** Each field is one bullet. The fields appear in the order shown and none
    repeats. An unknown field is refused. Values that are lists are separated by `, `.
-   - `Kind:` one of `refusal`, `guarantee` or `definition`. A **refusal** rejects a breaking
-     program with a diagnostic. A **guarantee** is a semantic property with no diagnostic of
-     its own. A **definition** fixes a term that rules use. A definition is as normative as a
-     rule.
+   - `Kind:` one of `refusal`, `guarantee`, `definition` or `preservation`:
+     - A **refusal** rejects a breaking program with a diagnostic.
+     - A **guarantee** is a semantic property with no diagnostic of its own.
+     - A **definition** fixes a term that rules use. It is as normative as a rule.
+     - A **preservation** statement is one pipeline stage's contract: the relation between its
+       input and its output (for example, Mono's output refines its input, with binder modes
+       unchanged), stated against the stage boundaries of
+       [PIPELINE_CONTRACTS.md](../compiler/PIPELINE_CONTRACTS.md) and the pass interface of
+       VERIFIED_PIPELINE ("Passes"). Its `Enforced by:` names the pass or its validator. Its
+       examples are accepted programs whose result must be the same on every consumer.
    - `Uses:` the definitions the sentence depends on, or `none`. When a definition's version
      increases, every entry that uses it must increase its own version in the same change.
    - `Codes:` for a refusal, one or more `E<4 digits> (<stage>, ...)`. A pending refusal whose
@@ -100,9 +115,13 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
    - `Status:` one of `enforced`, `partial <tracking>` (the rule holds for its non-pending
      examples, and the pending ones are tracked) or `pending <tracking>` (decided, not
      implemented). A tracking ID is a roadmap item (`R-0496`) or a bug (`bug-181`).
-   - `Enforced by:` the Lean declarations that enforce the entry, as fully qualified names.
-     It is required unless the status is `pending`. A definition names the Lean predicate it
-     denotes, such as `Concrete.tyContainsRef`.
+   - `Enforced by:` the Lean declarations of today's compiler that implement the entry, as
+     fully qualified names. It is required unless the status is `pending`. A definition names
+     the Lean predicate it denotes, such as `Concrete.tyContainsRef`.
+   - `Semantics:` the declarations in Core's semantics or checker judgments that define the
+     entry, or `none` while they do not exist. This is the normative link (see "Authority"
+     above). `Enforced by:` names the implementation and `Semantics:` names the definition;
+     they are the same declaration only when the implementation is the definition.
    - `Obligation:` what the verified pipeline must prove for this entry, given as an
      invariant or roadmap ID, or `none`.
    - `Evidence:` exactly one of `tested`, `proved: <Lean theorem>` or `trusted: <ID>`. These
@@ -149,6 +168,13 @@ OUTCOME  := "accept:" N | "reject:" CODE ":" STAGE | "fail:" TEXT   (TEXT: no sp
 An unknown or repeated attribute is refused. Every example is a complete program. Its ID is
 `<entry>/<name>` (`REF-6/let-binds-ref`).
 
+Examples run on every available **consumer**: the native binary, `--interp`, and Core's
+executable semantics once it exists. VERIFIED_PIPELINE S7 makes the interpreter into that
+semantics plus an IO driver, and from then on the third leg runs every example of an entry whose
+`Semantics:` is set. Agreement between consumers is necessary and not sufficient, because two
+consumers can implement the same wrong rule. Every leg is therefore compared with the outcome the
+example states, never only with the other legs.
+
 - **accept**: the program builds natively and the binary exits `N`. `--interp` exits 0 and
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
   every exemption.
@@ -188,7 +214,7 @@ and it is counted in SKIPPED.
 | S4 examples | Every example behaves as §2.2 says, on both consumers. |
 | S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. |
 | S6 codes | Every code in `--report diagnostic-codes` has exactly one row in `codes.tsv`. The class is `rule` (named by an entry), `unmigrated:<chapter>`, `internal` (a compiler invariant failure, such as `ssa-verify` or `lower`), `tooling` (proof, policy and evidence tooling, not language) or `retired`. Class `rule` holds exactly for the codes some entry names. For each code, the ledger's `rules` field equals the set of `<ID>@<version>` of the entries that name it. The spec owns that mapping, and the compiler's copy is checked against it. |
-| S7 sites | Each name in `Enforced by:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
+| S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |
 | S9 manifests | Every generated manifest (§5) is byte-equal to its generator's output. |
 | S10 site | The site generator (§4) writes one page per chapter with every entry's anchor, and `zola build` succeeds on a scratch copy of `site/`. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
@@ -300,6 +326,11 @@ Every area of the language has a planned chapter. A migration step does the foll
 
 Each step lands with the gate green. The steps run in this order:
 
+0. **pipeline.md** (`PASS-`, grown from the stub): the boundary contracts of
+   PIPELINE_CONTRACTS.md, one preservation entry per stage (Elab, Mono, CoreCheck, Lower, SSA),
+   each with its relation and its evidence. Generic substitution and binder modes are first
+   (PASS-1 and PASS-2, in the pilot). `check_pipeline_contracts.sh`'s fixtures become the
+   entries' reject examples, and PIPELINE_CONTRACTS.md becomes their design record.
 1. **ownership.md** (`OWN-`): linearity, consumption, Copy and Destroy, discards, defer.
    It replaces the normative parts of OWNERSHIP_MODEL, VALUE_FLOW_SPEC (the constructor table
    and its gate), LANGUAGE_INVARIANTS §2, IGNORED_RESULT and DEFER. The decided defer and
