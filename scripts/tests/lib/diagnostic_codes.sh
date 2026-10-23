@@ -13,6 +13,8 @@ codeless_error_lines() {
     if (i == 0) next;
     pre = substr($0, 1, i - 1); rest = substr($0, i);
     if (pre != "" && pre !~ /\.con(:[0-9]+(:[0-9]+)?)?: $/) next;
+    # a rendered source line (`  3 | ...`) or a string that quotes a header is not a header
+    if (pre ~ /"/ || pre ~ /^ *[0-9]* *\|/ || pre ~ /^ *= /) next;
     if (rest !~ /^error\[[a-z0-9-]+\]: /) next;
     sub(/^error\[[a-z0-9-]+\]: /, "", rest);
     if (rest !~ /^\(E[0-9][0-9][0-9][0-9]\) /) print

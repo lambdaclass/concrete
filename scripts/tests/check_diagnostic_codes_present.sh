@@ -108,6 +108,8 @@ quoted='a.con: error[check]: see b.con: error[check]: (E0201) there'
 [ -n "$(codeless_error_lines <<<"$quoted")" ] && ok "control C2: a code-less header quoting a coded one is flagged" || no "control C2: a code-less header quoting a coded one passed"
 snippet=' 3 |     let s = "error[check]: not a header";'
 [ -z "$(codeless_error_lines <<<"$snippet")" ] && ok "a source snippet that spells a header is not read as one" || no "a source snippet was read as a header"
+snippet2=' 3 | let s = "a.con: error[check]: missing";'
+[ -z "$(codeless_error_lines <<<"$snippet2")" ] && ok "a source snippet quoting a path and header is not read as one" || no "a source snippet quoting a path and header was read as one"
 spaced='/tmp/my project/a.con:1:1: error[check]: missing code'
 [ -n "$(codeless_error_lines <<<"$spaced")" ] && ok "control C3: a code-less header after a path with spaces is flagged" || no "control C3: a path with spaces hid a code-less header"
 spacedok='/tmp/my project/a.con:1:1: error[check]: (E0201) coded'
