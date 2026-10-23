@@ -1799,7 +1799,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .litArm _ val guard body => do
           -- Bug 196 (PAT-3): a literal pattern has the scrutinee's type.
           let litTy ← checkExpr val (some innerTyR)
-          if litTy != innerTyR then
+          -- (an unknown scrutinee type comes from an earlier error; do not cascade)
+          if innerTyR != .placeholder && litTy != innerTyR then
             throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
@@ -1839,7 +1840,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           pure body
         | .rangeArm _ lo hi _ guard body => do
           -- Bug 196 (PAT-3): a range pattern needs an integer (or `char`) scrutinee.
-          if !(isInteger innerTyR || innerTyR == .char) then
+          if innerTyR != .placeholder && !(isInteger innerTyR || innerTyR == .char) then
             throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
           -- unhinted endpoint defaults to `Int` and is range-checked there).
@@ -1847,9 +1848,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           let _ ← checkExpr hi (some innerTyR)
           checkGuard guard
           pure body
-        | .mk _ armEnum armVariant _ _ _ => do
-          -- Bug 196 (PAT-3): a variant pattern over a scrutinee that is not an enum.
-          throwCheck (.patternDoesNotFit s!"{armEnum}::{armVariant}" (tyToString innerTyR)) (some e.getSpan)
+        | .mk _ armEnum armVariant _ guard body => do
+          -- Bug 196 (PAT-3): a variant pattern over a scrutinee that is not an enum (an unknown
+          -- scrutinee type comes from an earlier error and is not reported again).
+          if innerTyR != .placeholder then
+            throwCheck (.patternDoesNotFit s!"{armEnum}::{armVariant}" (tyToString innerTyR)) (some e.getSpan)
+          checkGuard guard
+          pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
         if exemptExitBranch body then
           let cur ← getEnv
