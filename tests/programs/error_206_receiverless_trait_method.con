@@ -1,0 +1,5 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0317
+// (docs/spec/types.md, example receiverless-trait-method).
+trait Make { fn make() -> Int; }
+fn call<T: Make>(x: &T) -> Int { return x.make(); }
+fn main() -> Int { return 0; }

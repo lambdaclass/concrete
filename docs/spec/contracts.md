@@ -75,8 +75,9 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: new (check)
-- Status: pending R-0473
+- Codes: E0320 (check), E0321 (check)
+- Status: partial R-0473
+- Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: the specification judgment of contract expressions (R-0473)
 - Evidence: tested
@@ -84,8 +85,13 @@ fn main() -> Int {
 **Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS, T-H27). Today a contract expression is
 checked like runtime code, so machine types leak into a claim (`#[requires(x < 9999999999)]` on an
 `i32`), and an ill-typed contract such as `(x > 0) + 1 > 0` is accepted (KNOWN_HOLES H27). The
-binder-free part is already enforced as SCOPE-1 (E0305). Under the judgment, operand sorts must
-agree and literals are mathematical.
+binder-free part is already enforced as SCOPE-1 (E0305). Two more parts are enforced: a clause or
+spec function body of the wrong sort (an integer `requires`, a boolean `variant`) is E0320, and a
+call that the clause may not make is E0321: from a spec function body, a call to anything but a
+spec function; from a contract clause, a call to a function that requires a capability (a
+capability-free runtime function is still callable there until the full judgment lands).
+Under the full judgment, operand sorts must agree inside an expression too and literals are
+mathematical.
 
 ```con reject name=ill-typed-contract code=new stage=check pair=well-typed-contract pending=R-0473 now=accept:42
 #[requires((x > 0) + 1 > 0)]
@@ -95,6 +101,29 @@ fn f(x: i32) -> i32 {
 
 fn main() -> Int {
     return f(42) as Int;
+}
+```
+
+```con reject name=integer-requires code=E0320 stage=check pair=well-typed-contract
+#[requires(x + 1)]
+fn f(x: i32) -> i32 {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42) as Int;
+}
+```
+
+```con reject name=spec-fn-calls-runtime-code code=E0321 stage=check pair=well-typed-contract
+fn twice(x: i32) -> i32 {
+    return x + x;
+}
+
+spec fn big(x: i32) -> bool = twice(x) > 10;
+
+fn main() -> Int {
+    return 42;
 }
 ```
 

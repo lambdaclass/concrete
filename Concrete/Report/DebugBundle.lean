@@ -227,7 +227,7 @@ where
 /-- Run the full pipeline, capturing state at each stage.
     Returns the bundle state (which may represent a failure at any point). -/
 partial def capturePipeline (inputPath source : String)
-    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO BundleState := do
   let srcMap0 : SourceMap := [(inputPath, source)]
   let mk (stage : CaptureStage) (ds : Diagnostics) (extras : BundleState → BundleState := id) : BundleState :=

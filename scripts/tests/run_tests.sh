@@ -861,6 +861,8 @@ run_ok_O2() {
 
 # Negative tests: should fail to compile with a specific error substring
 # Uses --emit-llvm to skip clang (error is detected before codegen linking).
+source "$ROOT_DIR/scripts/tests/lib/diagnostic_codes.sh"
+
 run_err_worker() {
     local file="$1"
     local expected_err="$2"
@@ -877,7 +879,16 @@ run_err_worker() {
         } > "$result_file"
         return
     fi
-    if grep -Fq -- "$expected_err" <<<"$stderr"; then
+    # Bug 206: every refusal names its code. A rendered error without one fails the fixture even
+    # when the expected text matched (scripts/tests/lib/diagnostic_codes.sh).
+    local codeless
+    codeless="$(codeless_error_lines <<<"$stderr")"
+    if [ -n "$codeless" ]; then
+        {
+            echo "FAIL"
+            echo "FAIL  $file — an error diagnostic has no code: $(head -1 <<<"$codeless")"
+        } > "$result_file"
+    elif grep -Fq -- "$expected_err" <<<"$stderr"; then
         {
             echo "PASS"
             echo "  ok  $file => error: $expected_err"
@@ -2883,6 +2894,16 @@ run_test "$TESTDIR/test_flag_submodule.con" 0
 
 # #[test] validation errors
 run_err "$TESTDIR/error_test_with_params.con" "must have no parameters"
+# Bug 206: refusals that had no diagnostic code; each now names its code (and run_err refuses a code-less error).
+run_err "$TESTDIR/error_206_newtype_field_other_than_zero.con" "(E0316)"
+run_err "$TESTDIR/error_206_newtype_constructor_arity.con" "(E0313)"
+run_err "$TESTDIR/error_206_receiverless_trait_method.con" "(E0317)"
+run_err "$TESTDIR/error_206_wrapping_on_non_integers.con" "(E0314)"
+run_err "$TESTDIR/error_206_print_without_arguments.con" "(E0315)"
+run_err "$TESTDIR/error_206_destructure_in_for_header.con" "(E0318)"
+run_err "$TESTDIR/error_206_test_with_parameter.con" "(E0319)"
+run_err "$TESTDIR/error_206_integer_requires.con" "(E0320)"
+run_err "$TESTDIR/error_206_spec_fn_calls_runtime_code.con" "(E0321)"
 run_err "$TESTDIR/error_test_generic.con" "must not be generic"
 run_err "$TESTDIR/error_test_wrong_return.con" "must return i32"
 run_err "$TESTDIR/error_test_on_struct.con" "can only be applied to function"

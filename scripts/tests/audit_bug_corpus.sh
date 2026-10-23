@@ -30,6 +30,8 @@ SKIP=0
 # Explicit mapping: bug number -> regression test file(s) in tests/programs/.
 # Multiple files separated by space.
 declare -A BUG_TEST_MAP=(
+  # Bug 206: refusals that had no diagnostic code (one per new code).
+  [206]="error_206_newtype_field_other_than_zero.con error_206_newtype_constructor_arity.con error_206_receiverless_trait_method.con error_206_wrapping_on_non_integers.con error_206_print_without_arguments.con error_206_destructure_in_for_header.con error_206_test_with_parameter.con error_206_integer_requires.con error_206_spec_fn_calls_runtime_code.con"
   # Bug 204: a trait bound on a primitive type argument (E0241, TRAIT-10).
   [204]="error_204_primitive_bound_unchecked.con error_204_primitive_bound_unused.con regress_204_primitive_bound_satisfied.con"
   # Bug 205: a struct containing itself through a generic instantiation (E0583, TYPE-16).

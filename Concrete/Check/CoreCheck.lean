@@ -293,7 +293,7 @@ def CoreCheckError.evidence : CoreCheckError → List (String × String)
     [("operation", callee), ("requires", cap), ("caller_has", caller)]
   | _ => []
 
-private def addError (msg : String) (hint : Option String := none) (code : String := "")
+private def addError (msg : String) (hint : Option String) (code : String)
     (reason : Option String := none) (evidence : List (String × String) := []) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := env.currentFnSpan, hint := hint, code := code, reason := reason, evidence := evidence }] }

@@ -327,3 +327,41 @@ fn main() -> Int {
 }
 ```
 
+<a id="STMT-10"></a>
+### STMT-10. A test function is an entry point
+
+**STMT-10@1.** A `#[test]` function takes no parameters, has no type parameters and returns `i32`, its exit status under `concrete test`.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0319 (check)
+- Status: enforced
+- Enforced by: Concrete.checkFn
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The test runner calls each test as it calls `main` (STMT-7): with nothing to pass and
+a status to read, so a test has the same shape.
+
+```con reject name=test-with-parameter code=E0319 stage=check pair=test-shape
+#[test]
+fn t(x: i32) -> i32 {
+    return x;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=test-shape exit=42
+#[test]
+fn t() -> i32 {
+    return 0;
+}
+
+fn main() -> Int {
+    return 42;
+}
+```

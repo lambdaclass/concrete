@@ -1,0 +1,11 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0321
+// (docs/spec/contracts.md, example spec-fn-calls-runtime-code).
+fn twice(x: i32) -> i32 {
+    return x + x;
+}
+
+spec fn big(x: i32) -> bool = twice(x) > 10;
+
+fn main() -> Int {
+    return 42;
+}

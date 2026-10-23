@@ -1,0 +1,6 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0314
+// (docs/spec/types.md, example wrapping-on-non-integers).
+fn main() -> Int {
+    let b: bool = wrapping_add(true, false);
+    return 0;
+}

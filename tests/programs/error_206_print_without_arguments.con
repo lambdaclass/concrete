@@ -1,0 +1,6 @@
+// Bug 206: this refusal had no diagnostic code (a bare-message Check error). It is E0315
+// (docs/spec/types.md, example print-without-arguments).
+fn main() with(Std) -> Int {
+    print();
+    return 0;
+}

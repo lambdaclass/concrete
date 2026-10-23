@@ -284,6 +284,7 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
     else sd.fields.foldl (fun acc (fname, fty) =>
       if isCopyTyPostMono allStructs allEnums fty then acc
       else acc ++ [{ severity := .error
+                     code := "E0571"
                      message := s!"Copy struct '{sd.name}' has non-Copy field '{fname}' after monomorphization"
                      pass := "post-mono"
                      span := none

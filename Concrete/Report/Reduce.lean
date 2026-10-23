@@ -66,7 +66,7 @@ private def diagsMatch (ds : Diagnostics) (substr : Option String) : Bool :=
 /-- Evaluate a predicate against source code.
     Returns true if the predicate holds (the bug is still present). -/
 def evalPredicate (pred : Predicate) (source : String)
-    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAllModules : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO Bool := do
   match pred with
   | .parseError substr =>
@@ -192,7 +192,7 @@ private def getAt? (xs : List α) (i : Nat) : Option α :=
     candidate whose formatted source passes the predicate. -/
 private def tryShrinkList (items : List α) (rebuild : List α → List Module)
     (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (Option (List α)) := do
   for i in List.range items.length do
     let candidate := removeAt items i
@@ -203,7 +203,7 @@ private def tryShrinkList (items : List α) (rebuild : List α → List Module)
 
 /-- Remove top-level items from a module one at a time. -/
 partial def shrinkTopLevel (modules : List Module) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (List Module) := do
   -- For single-module programs, shrink the module's contents
   match modules with
@@ -253,7 +253,7 @@ partial def shrinkTopLevel (modules : List Module) (pred : Predicate)
 
 /-- Remove statements from function bodies one at a time. -/
 partial def shrinkStatements (modules : List Module) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (List Module) := do
   match modules with
   | [m] => do
@@ -279,7 +279,7 @@ partial def shrinkStatements (modules : List Module) (pred : Predicate)
 
 /-- Remove match arms (keeping at least one) from expressions in function bodies. -/
 partial def shrinkMatchArms (modules : List Module) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (List Module) := do
   match modules with
   | [m] => do
@@ -331,7 +331,7 @@ where
 
 /-- Remove else branches from if statements. -/
 partial def shrinkElseBranches (modules : List Module) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     : IO (List Module) := do
   match modules with
   | [m] => do
@@ -362,7 +362,7 @@ partial def shrinkElseBranches (modules : List Module) (pred : Predicate)
 /-- Line-based reduction for programs that don't parse.
     Tries removing one line at a time. -/
 private partial def reduceLines (source : String) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     (verbose : Bool)
     : IO String := do
   let lines := source.splitOn "\n"
@@ -385,7 +385,7 @@ private partial def reduceLines (source : String) (pred : Predicate)
 /-- Run all shrinking passes in a fixpoint loop.
     Returns the minimized source code. -/
 partial def reduce (source : String) (pred : Predicate)
-    (resolveAll : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    (resolveAll : String → List Module → String → IO (Except Diagnostics (List Module × SourceMap)))
     (verbose : Bool := false)
     : IO String := do
   -- First verify the predicate holds on the original source

@@ -280,6 +280,15 @@ partial def tyHeadNames : Ty → List String
   | .fn_ ps _ r => ps.flatMap tyHeadNames ++ tyHeadNames r
   | _ => []
 
+/-- Bug 206: the code of an import refusal, by the pass that reports it (MOD-2): an unknown
+    module is E0110 / E0284 / E0418 and a symbol that is not public E0111 / E0285 / E0419 in
+    Resolve / Check / Elab. -/
+def importCode (pass : String) (unknownModule : Bool) : String :=
+  match pass, unknownModule with
+  | "check", true => "E0284" | "check", false => "E0285"
+  | "elab", true => "E0418" | "elab", false => "E0419"
+  | _, true => "E0110" | _, false => "E0111"
+
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
@@ -288,7 +297,7 @@ def resolveImports (imports : List ImportDecl)
     : Except Diagnostics ResolvedImports := do
   let resolved ← imports.foldlM (init := ({} : ResolvedImports)) fun acc imp =>
     match summaryTable.lookup imp.moduleName with
-    | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := some imp.span, hint := none }]
+    | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass true }]
     | some summary =>
       -- Build alias map from the exporting module's type aliases only.
       -- Newtypes are NOT erased at the module boundary anymore: Layout
@@ -358,7 +367,7 @@ def resolveImports (imports : List ImportDecl)
                                  implBlocks := acc.implBlocks ++ newtypeImpls,
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }
-                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none }]
+                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass false }]
   -- Auto-include impl methods for builtin types (String, Vec, etc.) from all
   -- loaded modules, so methods like String.drop() work without explicit import.
   let builtinNames := builtinTypeNames
