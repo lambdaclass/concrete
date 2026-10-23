@@ -82,6 +82,15 @@ set; a mutation in the shared path fails both entry points.
 verified-compiler plan's refinement is not a relational theorem. R-0459's 2-safety proposal and the
 paired-execution prose merge here; R-0136/R-0225/R-0226 keep source-flow restrictions.
 
+**Research questions (Jasmin comparison, 2026-10-22):** specify whether termination, traps,
+external calls and variable-latency operations are observable, and justify each declassification.
+On the existing bounded example, determine whether R-0136's enforced restriction implies the
+selected leakage property; supply a soundness argument or a counterexample that identifies the
+missing restriction. Separately enumerate what each lowering/optimization and target must preserve.
+Proceed to implementation only with a named admitted fragment, observation model, validation plan
+and workload benefit; otherwise record the limitation and reopening trigger. Functional refinement
+alone does not discharge these obligations. Reference: [Jasmin leakage models](https://jasmin-lang.readthedocs.io/en/latest/tools/ct.html).
+
 **Exit:** a decision record with the observation and declassification contract, one worked
 self-composition example on a bounded program, and an explicit statement of what native transport
 would additionally require; or a recorded deferral with its reopening trigger.
@@ -539,6 +548,12 @@ multiple fixtures or workloads, but the public flagship count remains three.
  loop bound. Wire `scripts/tests/check_secret_flow.sh`; the gate must reject
  every negative and must never present source-flow enforcement as timing
  proof.
+
+**Scope controls:** include checked-overflow/trap paths, early exits and calls whose observable
+behavior may depend on secrets in the profile's design and fixtures. Unsupported call summaries
+must not silently pass a broader leakage claim. Variable-latency operations require the target/model
+analysis in R-0527; a structural source-flow pass alone cannot certify their timing. Preserve the
+existing distinction between an enforced source restriction and a proved leakage property.
 
 ## Area: Proof Authoring And Automation
 
