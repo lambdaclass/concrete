@@ -9,7 +9,7 @@
 #   B. the deploy workflow and `make docs-site` / `docs-serve` run both generators before zola;
 #   C. the generators run and produce every page, and every `@/spec/` and `@/reference/` link in
 #      the tracked site content and templates names a page that exists after generation;
-#   D. zola builds the generated site (when zola is on PATH; required in CI).
+#   D. zola builds the generated site (when zola is on PATH; check_spec S10 requires it where it is).
 # Each check has a negative control on a copy.
 
 set -uo pipefail
@@ -27,7 +27,8 @@ tracked_copies() {  # $1 = file listing (one path per line); prints tracked page
 runs_generators() {  # $1 = file; 0 when both generators run before the zola build in it
   python3 -I - "$1" <<'PY'
 import re, sys
-s = open(sys.argv[1], encoding="utf-8").read()
+# comment lines (YAML / shell / make) do not run, so they are dropped before looking
+s = "\n".join(l for l in open(sys.argv[1], encoding="utf-8").read().split("\n") if not l.lstrip().startswith("#"))
 ok = True
 for m in re.finditer(r"zola[^\n]*--root site (build|serve)", s):
     before = s[:m.start()]
@@ -58,7 +59,9 @@ for f in .github/workflows/book.yml Makefile; do
   runs_generators "$f" && ok "$f runs both generators before zola" || no "$f builds the site without generating its pages"
 done
 sed 's|python3 scripts/gen/site_reference.py --out site/content/reference||' .github/workflows/book.yml > "$TMP/book.yml"
-runs_generators "$TMP/book.yml" && no "control B: a build step without the reference generator passed" || ok "control B: a build step without the reference generator is detected"
+runs_generators "$TMP/book.yml" && no "control B1: a build step without the reference generator passed" || ok "control B1: a build step without the reference generator is detected"
+sed 's|python3 scripts/gen/site_reference.py --out site/content/reference|# python3 scripts/gen/site_reference.py --out site/content/reference|' .github/workflows/book.yml > "$TMP/book2.yml"
+runs_generators "$TMP/book2.yml" && no "control B2: a commented-out generator passed" || ok "control B2: a commented-out generator is detected"
 
 echo "=== C. the generators produce every page, and every site link resolves ==="
 cp -R site "$TMP/site"; rm -rf "$TMP/site/content/spec" "$TMP/site/content/reference"
@@ -79,11 +82,12 @@ else
 fi
 
 echo "=== D. zola builds the generated site ==="
+# Where zola is installed (the devshell, CI's spec job) the build is required by check_spec S10,
+# which generates both sections too; this gate runs in jobs without zola and then skips it.
 if command -v zola > /dev/null 2>&1; then
   if zola --root "$TMP/site" build --output-dir "$TMP/public" > "$TMP/zola.out" 2>&1; then ok "zola builds the site"
   else no "zola build failed: $(tail -3 "$TMP/zola.out" | tr '\n' ' ')"; fi
-elif [ -n "${CI:-}" ]; then no "zola is not on PATH in CI"
-else echo "  skip zola build (zola not on PATH; nix develop provides it)"; fi
+else echo "  skip zola build (zola not on PATH; check_spec S10 builds the site where it is)"; fi
 
 echo ""
 echo "SITE-GENERATED: PASS=$PASS FAIL=$FAIL"

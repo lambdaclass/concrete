@@ -83,7 +83,8 @@ step manifest exit_2i --check
 
 echo ""
 echo "=== S10: website ==="
-site_gen() { "${SPECPY[@]}" site --out "$1/content/spec" > /dev/null; }
+site_gen() { "${SPECPY[@]}" site --out "$1/content/spec" > /dev/null \
+  && python3 scripts/gen/site_reference.py --out "$1/content/reference" > /dev/null; }
 site_check() {  # $1 = site copy dir with generated pages; 0 when every chapter and anchor is there
   local d="$1" ch id
   for ch in $(python3 -c 'import sys; sys.path.insert(0,"scripts/spec"); import spec; s=spec.Spec("docs/spec"); print(" ".join(c for c in s.chapters if c in s.text))'); do
