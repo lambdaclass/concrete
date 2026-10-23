@@ -8280,6 +8280,11 @@ run_ok "$TESTDIR/regress_108_bool_cast_widen.con" 42
 run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
+# Bug 194: a function with a result type and a reachable end reached llvm-as (`ret void`).
+run_err "$TESTDIR/error_194_missing_return_plain.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_if.con" "(E0307)"
+run_err "$TESTDIR/error_194_missing_return_method.con" "(E0307)"
+run_ok "$TESTDIR/regress_194_unreachable_end_forms.con" 42
 # Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
 # the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
 run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"
