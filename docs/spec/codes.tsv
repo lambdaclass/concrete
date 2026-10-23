@@ -166,6 +166,7 @@ E0418	rule	unknown module
 E0419	rule	symbol not public in module
 E0420	rule	ghost value used in runtime code
 E0421	rule	append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)
+E0422	internal	internal: a binder or function reached elaboration without its local binder table (R-0492; train 8 merge of bug 206 with R-0492 step 2)
 E0500	rule	variable type mismatch
 E0501	rule	arithmetic on non-numeric type
 E0502	rule	binary operand type mismatch
