@@ -1,0 +1,8 @@
+// FFI-3 (docs/spec/ffi.md), gap G15: the pointee reference is seen through a type alias too. E0575.
+type R = &Int;
+
+trusted extern fn f() with() -> *const R;
+
+fn main() -> Int {
+    return 0;
+}

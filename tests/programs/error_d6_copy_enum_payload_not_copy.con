@@ -1,0 +1,7 @@
+// D6: a generic enum declared `Copy` is checked like a struct: a payload that is never Copy is refused
+// at the declaration (E0571). Enum payloads had no declaration check.
+enum Copy E<T> { A { v: T }, B { s: String } }
+
+fn main() -> Int {
+    return 0;
+}

@@ -1,0 +1,16 @@
+// D1: the same for a `&mut` parameter: after `defer inc(r);`, writing through `r` before the
+// deferred call runs is refused (E0206).
+fn inc(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn f(r: &mut Int) {
+    defer inc(r);
+    *r = 5;
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    f(&mut x);
+    return x;
+}

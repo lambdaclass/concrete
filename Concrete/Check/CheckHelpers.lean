@@ -1,4 +1,5 @@
 import Concrete.Frontend.AST
+import Concrete.Semantics.RefWellFormed
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
@@ -99,19 +100,6 @@ def isReferenceType : Ty → Bool
   | .ref _ | .refMut _ => true
   | _ => false
 
-/-- Does this type contain a reference (`&T`/`&mut T`) anywhere? Used to enforce
-    the "references are second-class — never returned" invariant
-    (docs/language/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
-    are allowed in return position (they are the audit-visible unsafe escape). -/
--- spec: REF-D1 (docs/spec/references.md; this declaration enforces the rule)
-partial def tyContainsRef : Ty → Bool
-  | .ref _ | .refMut _ => true
-  | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner
-  | .array elem _ => tyContainsRef elem
-  | .generic _ args _ => args.any tyContainsRef
-  | .fn_ params _ retTy => params.any tyContainsRef || tyContainsRef retTy
-  | _ => false
-
 /-- Bug 092: does a value of this type HOLD a reference — the type is a
     reference, or an aggregate (array, `Heap`, generic argument) that holds one?
     Function types do not: a fn pointer taking `&T` stores no reference. Raw
@@ -184,7 +172,12 @@ def resolveType (ty : Ty) : CheckM Ty := do
       -- The alias map is transitively pre-closed at build time (`closeAliasMap`),
       -- so this single lookup already yields the fully-expanded target
       -- (`type B = A; type A = i32` => B resolves straight to i32).
-      | some resolved => return resolved
+      | some resolved =>
+        -- An alias is checked after expansion like the type it names (G16): `type Cb = fn(&Int)
+        -- -> &Int;` is the same ill-formed function type as the spelled-out one.
+        if tyHasRefReturningFnType resolved then
+          throwCheck (.returnsReference s!"type alias '{name}' names a function type that returns a reference ('{tyToString resolved}'); a function type may not return a reference (REF-2, VALUE_MODEL.md)" "REF-2@1")
+        return resolved
       | none => return ty
   | .ref inner =>
     let inner' ← resolveType inner
@@ -1451,7 +1444,12 @@ partial def normProjBase (base : Expr) : CheckM Norm := do
 partial def normRef (e : Expr) : CheckM Norm := do
   match e with
   | .paren _ inner => normRef inner
-  | .borrow _ inner => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
+  -- D2: a string literal is a static, immutable root, so `&"text"` points at storage, and a
+  -- reborrow or projection through it (`&*(&"ab")`) keeps that root (Codex review).
+  | .borrow _ inner =>
+    match unparenExpr inner with
+    | .strLit .. => return .place { root := none, reach := .shared "a string literal is static, immutable storage" }
+    | _ => return (← normPlace inner).reachedThrough (.shared "the place is reached through a `&` borrow")
   | .borrowMut _ inner => return (← normPlace inner).reachedThrough .exclusive
   | .ident sp n =>
     match ← lookupUse sp n with
@@ -1505,11 +1503,14 @@ end
 def NPlace.key (p : NPlace) : Option (LocalRef × List String) :=
   p.root.map fun r => (r, if p.exact then p.steps else [])
 
-/-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
-    Disjoint fields (`w.a` vs `w.b`) do NOT overlap — precise, no over-reject;
-    `w` vs `w.f` DO (the whole overlaps the part). -/
+/-- D2 (the Austral model): loans are keyed by ROOT variable only. A loan on `&s.f` is a loan on
+    `s`, so two borrows within one call overlap whenever they share a root, disjoint fields
+    included (`upd(&mut s.a, &s.b)` is refused). This matches the whole-owner freezing a borrow
+    block and an arm binder already do. Field-precise loans are deferred until a workload needs
+    two simultaneous borrows of different fields of one owner. -/
+-- spec: REF-11 (docs/spec/references.md; this declaration enforces the rule)
 def pathsOverlap (a b : LocalRef × List String) : Bool :=
-  a.1 == b.1 && (a.2.isPrefixOf b.2 || b.2.isPrefixOf a.2)
+  a.1 == b.1
 
 /-- #18 container-not-in-context: within one call's arguments (plus the
     auto-borrowed method receiver), two borrows may not OVERLAP when either
@@ -1523,8 +1524,113 @@ def checkCallBorrowConflicts (parts : List ((LocalRef × List String) × Bool)) 
   for (path, isMut) in parts do
     for (prevPath, prevMut) in seen do
       if pathsOverlap path prevPath && (isMut || prevMut) then
-        throwCheck (.conflictingCallBorrows path.1.name) span
+        -- REF-8 when one path is a prefix of the other (they overlap as places); REF-11 when
+        -- they are disjoint projections that conflict only through their shared root.
+        let nested := path.2.isPrefixOf prevPath.2 || prevPath.2.isPrefixOf path.2
+        throwCheck (.conflictingCallBorrows path.1.name !nested) span
     seen := (path, isMut) :: seen
+
+mutual
+/-- Every variable name an expression mentions, with the position of the use (R-0492: a use resolves
+    through the local table by position, never by spelling), nested blocks included (`if` / `match`
+    branches, guards and arm bodies): a read inside a branch is still a read of the root (Codex review). -/
+partial def exprMentionedNames : Expr → List (Span × String)
+  | .ident sp n => [(sp, n)]
+  | .paren _ e | .unaryOp _ _ e | .fieldAccess _ e _ | .borrow _ e | .borrowMut _ e | .deref _ e
+  | .cast _ e _ => exprMentionedNames e
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => exprMentionedNames l ++ exprMentionedNames r
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap exprMentionedNames
+  | .methodCall _ o _ _ args => exprMentionedNames o ++ args.flatMap exprMentionedNames
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => exprMentionedNames e) ++ (b.map exprMentionedNames).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => exprMentionedNames e)
+  | .match_ _ scr arms => exprMentionedNames scr ++ arms.flatMap armMentionedNames
+  | .ifExpr _ c t e => exprMentionedNames c ++ stmtsMentionedNames t ++ stmtsMentionedNames e
+  | _ => []
+
+partial def armMentionedNames : MatchArm → List (Span × String)
+  | .mk _ _ _ _ g body | .varArm _ _ g body =>
+    ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+  | .litArm _ v g body => exprMentionedNames v ++ ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+  | .rangeArm _ lo hi _ g body =>
+    exprMentionedNames lo ++ exprMentionedNames hi ++ ((g.map exprMentionedNames).getD []) ++ stmtsMentionedNames body
+
+partial def stmtsMentionedNames (ss : List Stmt) : List (Span × String) :=
+  ss.flatMap fun s => match s with
+    | .letDecl _ _ _ _ v _ | .defer _ v | .assert_ _ v | .assume_ _ v
+    | .letStructDestructure _ _ _ v => exprMentionedNames v
+    | .assign sp n v => (sp, n) :: exprMentionedNames v
+    | .return_ _ v | .break_ _ v _ => (v.map exprMentionedNames).getD []
+    | .expr _ e _ => exprMentionedNames e
+    | .ifElse _ c t e => exprMentionedNames c ++ stmtsMentionedNames t ++ ((e.map stmtsMentionedNames).getD [])
+    | .while_ _ c body _ => exprMentionedNames c ++ stmtsMentionedNames body
+    | .forLoop _ i c st body _ =>
+      ((i.map fun x => stmtsMentionedNames [x]).getD []) ++ exprMentionedNames c
+        ++ ((st.map fun x => stmtsMentionedNames [x]).getD []) ++ stmtsMentionedNames body
+    | .fieldAssign _ o _ v | .derefAssign _ o v => exprMentionedNames o ++ exprMentionedNames v
+    | .arrayIndexAssign _ a i v => exprMentionedNames a ++ exprMentionedNames i ++ exprMentionedNames v
+    | .borrowIn sp v _ _ _ body => (sp, v) :: stmtsMentionedNames body
+    | .letDestructure _ _ _ _ v e => exprMentionedNames v ++ ((e.map stmtsMentionedNames).getD [])
+    | _ => []
+end
+
+/-- D2 / D1: the root of the NEW mutable loan an operand makes, if it makes one. A plain reborrow of
+    a reference binding (`r`, `&mut *r`, a receiver `r` whatever kind of binding `r` is: a parameter,
+    a borrow-block binder, an arm binder) re-lends a reference the caller already holds and makes no
+    new loan (D1); anything else that is borrowed mutably (`&mut s.a`, a `self.offs` receiver, an
+    owned `s`) is a loan on its root (Codex review: decided from the operand, not from its root). -/
+def mutLoanRoot? (operand : Expr) (explicitBorrow : Bool) : CheckM (Option LocalRef) := do
+  -- An explicit `&mut e` (an argument, or a receiver spelled `(&mut s.a).m()`) loans `e`'s root
+  -- (Codex review: the receiver form was left unnormalized and slipped through).
+  let _ := explicitBorrow
+  let inner := match unparenExpr operand with
+    | .borrowMut _ x => x
+    | x => x
+  let rec stripDerefs : Expr → Expr
+    | .paren _ x | .deref _ x => stripDerefs x
+    | x => x
+  match stripDerefs inner with
+  | .ident sp n =>
+    match ← lookupUse sp n with
+    | some (_, info) =>
+      match info.ty with
+      | .ref _ | .refMut _ => return none
+      | _ => pure ()
+    | none => pure ()
+  | _ => pure ()
+  match ← normPlace inner with
+  | .place p => return p.key.map (·.1)
+  | _ => return none
+
+/-- D2: loans are keyed by root, so while one call borrows a root mutably, no OTHER argument (or
+    the receiver) of that call may mention that root at all: `add(&mut s.a, s.b)` and
+    `self.offs.push(self.names.len())` (the `&mut` receiver loan on `self` and a read of
+    `self.names`) are E0293, where a field-precise rule accepted them. A reference binding counts
+    as its recorded source. `operands` are the receiver (if any) and the arguments, in order;
+    `parts` are the call's borrows. A mutable borrow counts when it is a NEW loan on a root: of an
+    owned variable, or a projection (`&mut s.a`, a `self.offs` receiver). A plain reborrow of a
+    reference binding (`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the
+    root: it re-lends the reference the caller already holds, so reading through that reference in
+    another argument is not a second loan (D1: every `&mut` argument is an implicit reborrow). -/
+-- spec: REF-11 (docs/spec/references.md; this declaration enforces the rule)
+def checkCallRootReads (mutRoots : List LocalRef) (operands : List Expr) (span : Option Span) : CheckM Unit := do
+  if mutRoots.isEmpty then return
+  let mut counts : List (LocalRef × Nat) := []
+  for o in operands do
+    let mut rootsHere : List LocalRef := []
+    for (sp, n) in exprMentionedNames o do
+      -- a name that is not a local (a function, a constant) is no loan's root
+      match ← lookupUse sp n with
+      | some (r, info) =>
+        let root := info.borrowedFrom.getD r
+        if mutRoots.contains root && !rootsHere.contains root then rootsHere := root :: rootsHere
+      | none => pure ()
+    for r in rootsHere do
+      counts := match counts.lookup r with
+        | some k => (r, k + 1) :: counts.filter (·.1 != r)
+        | none => (r, 1) :: counts
+  match counts.find? (fun (_, k) => k ≥ 2) with
+  | some (r, _) => throwCheck (.conflictingCallBorrows r.name true) span
+  | none => pure ()
 
 /-- The borrows a call makes, as NORMALIZED places (E0293): a `&e` / `&mut e` argument
     borrows `e`'s place, a reference binding argument borrows its source. Every spelling of

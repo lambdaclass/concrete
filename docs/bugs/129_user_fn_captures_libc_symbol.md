@@ -76,7 +76,7 @@ named like a runtime helper, are refused (E0118).
 The reproducer now exits 42. Regressions in `run_tests.sh`: `regress_129_user_fn_named_malloc.con`
 (exit 42, and an IR leg: `define i64 @_C.main.malloc`, C `malloc` stays a `declare`, no
 `define @malloc`), `regress_129_extern_beside_same_named_fn.con` and
-`regress_129_imported_extern_beside_fn.con` and `regress_129_fn_value_extern.con` (an imported
+`regress_129_imported_extern_beside_fn.con` and `regress_129_fn_value_extern.con` (since bug 166 a Concrete wrapper of an imported
 extern taken as a function value), `regress_129_generic_extern.con` (a generic body's binding
 survives specialization; exit 105 each), and `regress_129_runtime_helper_beside_fn.con`
 (a call bound to the runtime helper `print_int` is not captured by another module's

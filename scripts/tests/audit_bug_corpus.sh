@@ -120,6 +120,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
   # Also check_local_identity.sh leg R.
   [202]="regress_202_project_let_else/src/main.con"
+  # Bug 185: a raw-pointer comparison through a safe generic escaped E0229 (instances lost `trusted`).
+  [185]="error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_authority.con"
   # Bug 188: a capability variable entailed every requirement (Unsafe included). Also
   # check_capability_judgment.sh and three mutation families.
   # Bug 189: `trusted impl` conferred trust on every method of the block. Also
@@ -154,6 +156,21 @@ declare -A BUG_TEST_MAP=(
   [196]="error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con"
   # Bug 197: a variant pattern without a field list dropped a non-Copy payload (E0288).
   [197]="error_197_variant_pattern_drops_payload.con regress_197_variant_pattern_ignores_copy.con"
+  # Bug 165: println/append desugared into spelled helper calls that bound to a same-named user fn.
+  [165]="regress_165_generated_helper_call.con"
+  # Bug 199: a cast to a type alias panicked the backend.
+  [199]="regress_199_cast_to_alias.con"
+  # Bug 198 (T-RAWDUP): *p by value of a non-Copy pointee through a raw pointer (E0311).
+  [198]="error_rawdup_trusted_deref.con regress_198_read_owned.con"
+  [182]="error_d2_borrow_literal.con error_d2_borrow_field_of_temporary.con error_d2_temporary_receiver.con error_d2_mut_borrow_string_literal.con error_d2_call_disjoint_fields.con error_d2_call_field_read.con error_d2_receiver_projection_read.con error_d2_branch_receiver.con error_d2_call_field_read_in_branch.con error_d2_explicit_mut_receiver_read.con regress_d2_roots_and_projections.con"
+  [181]="regress_181_borrowed_binders.con error_181_root_reassigned_match.con error_181_root_reassigned_while_let.con error_181_root_reassigned_guard.con error_181_root_reassigned_nested.con error_181_root_reassigned_whole_binder.con error_181_root_reassigned_defer.con"
+  # Bug 190: an array bound or passed by value aliased its source in the binary.
+  [190]="regress_190_array_value_copy.con"
+  [137]="regress_136_137_literal_eval_order.con"
+  [136]="regress_136_137_literal_eval_order.con"
+  [183]="regress_183_deref_assign_rhs_first.con"
+  # Bug 166: an extern fn taken as a value is refused (E0588, D4).
+  [166]="error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con error_166_foreign_fn_value_scalar.con error_166_imported_extern_value.con error_166_extern_value_in_const.con error_166_extern_value_after_scope.con regress_166_wrapper_value.con"
   # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
   # Also check_pipeline_artifacts.sh legs B, U and D.
   [180]="regress_180_report_scope/src/main.con"
@@ -197,11 +214,6 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
-  [183]="OPEN -- a dereference assignment *(&mut a[i()]) = j() lowers its destination before its right-hand side in the binary (Lower .derefAssign) while --interp evaluates the right-hand side first, as evaluation-order rule 7 requires (silent wrong code: exit 12 natively, 21 under --interp); reproducer tests/regressions/bug183_deref_assign_destination_first/repro.con, found writing the 2026-10-21 evaluation-order rule and filed by the language-tightening probes 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:12); the differential fixture lands with the fix under queue exit 0b"
-  [182]="OPEN -- a borrow of a call result (REF-5, gap G12) is accepted: &alloc(..) passes the heap pointer where &Heap<B> is a slot address (SIGSEGV in safe code; --interp prints 42), and &int_to_string(..) never destroys the String temporary (valgrind: 32 bytes definitely lost); reproducers tests/regressions/bug182_borrowed_call_result_temporary/repro.con and repro_linear_leak.con, found by the language-tightening probes 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, signals); the rejection fixtures land with the REF-5 rule under exit 2i"
-  [181]="OPEN -- a payload binder through a borrowed scrutinee whose payload type is a type parameter is &T to Check (T not known Copy) and T to Elab, so the Int specialization passes the loaded payload where fn(&T) expects a pointer (SIGSEGV in safe code; --interp: deref of non-ref value); reproducer tests/regressions/bug181_generic_borrowed_scrutinee_binder_mode/repro.con, found by the language-tightening probes 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, signals); the run fixture lands with the fix under queue exit 0b"
-  [166]="OPEN -- a foreign function taken as a value is called with the Concrete ABI: a small #[repr(C)] struct argument travels as a pointer through the fn value while C takes it in a register (silent wrong code at the C boundary); reproducer tests/regressions/bug166_foreign_fn_value_abi/repro.con (check-only), found by the Codex review of the symbol-name work 2026-10-22; pinned by run_tests.sh codegen section (bug 166 pin: the IR shows call i64 %f(ptr %p) beside declare i64 @take_pair(i64))"
-  [165]="OPEN -- Elab desugars println into calls spelled print_int/print_char/print_string/print_bool that bind by spelling, so a module defining its own print_int gets it called by println (silent wrong code); reproducer tests/regressions/bug165_generated_helper_call_binds_by_spelling/repro.con, found by the Codex review of the symbol-name work 2026-10-22; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, signals); predates mangling (a 2026-10-18 build calls the same user definition)"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"
   [006]="string literal collision -- fixed in EmitSSA, covered by cross-module tests"
   [009]="const decls not lowered -- fixed in Lower.lean, no standalone repro needed"
@@ -260,8 +272,6 @@ declare -A SKIP_BUGS=(
   [118]="FIXED 2026-10-21 (interpreter-coverage pass) -- the interpreter resolves a call spelling per calling module as the backend does (definitions, the module's import aliases, sibling aliases), refusing every ambiguity. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug118_interp_nested_module_import/repro.con; examples/snippets/import.con and examples/project promoted to interp=yes"
   [122]="OPEN -- the builtin Option/Result are emitted as one canonical LLVM union sized for the program's largest instantiation while the compiler lays out each instantiation (and a user enum named Option/Result) by its own size, so aggregate copies move or overrun fields (wrong code; a stack overflow in tests/programs/match_expr_linear.con); reproducer tests/regressions/bug122_builtin_enum_canonical_layout/repro.con, found by bug 121's layout probe 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit) and check_enum_union_layout.sh leg 5 (KNOWN_122)"
   [135]="FIXED 2026-10-21 -- concrete fmt printed float literals with toString (six decimals), so 0.0000000001 became 0.000000 and the formatted program differed; one exact canonical (shortest, then nearest) round-trip printer (Lexer.floatLiteralString) now serves fmt, --emit-core and --emit-ssa. Regression vehicle is a gate, not a tests/programs fixture: check_concrete_fmt.sh section 8 compiles every corpus float lexeme plus 311 sampled doubles before and after fmt and requires the LLVM f64 bits to equal Python's reading, requires each sampled double's canonical spelling to survive fmt, and requires tests/regressions/fmt_roundtrip/floats.con to keep its lexemes; both legs shown to fail with toString restored; see docs/bugs/135"
-  [136]="OPEN -- functional update S { f: e, ..base } evaluates base once per omitted field (Elab desugars each omitted field to base.field), where STATEMENT_EXPRESSION_MODEL rule 6 evaluates it exactly once after the explicit initializers; reproducer tests/regressions/bug136_functional_update_base_reevaluated/repro.con (599 natively and interpreted, 59 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:87); the run fixture lands with the fix under queue exit 0b"
-  [137]="OPEN -- enum-variant literal fields are evaluated in the variant's declaration order (Elab walks the variant's fields) in both the binary and --interp, where STATEMENT_EXPRESSION_MODEL rule 4 is source order; reproducer tests/regressions/bug137_enum_literal_field_order/repro.con (65 in both, 56 expected), found while fixing bug 127 2026-10-21; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit:65); the run fixture lands with the fix under queue exit 0b"
   [128]="FIXED 2026-10-21 (interpreter-coverage pass) -- the interpreter has IEEE float values; int -> float rounds to nearest-even exactly, float -> int is the checked conversion. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug128_interp_int_to_float_identity/repro.con and tests/codegen/float_semantics.con in check_codegen_differential.sh"
   [119]="FIXED 2026-10-20 (batch 2) -- interp dispatch of a trait method on a type parameter through the trait-impl table. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug119_interp_generic_trait_method/repro.con (a regression dir, not a tests/programs fixture)"
   [120]="FIXED 2026-10-20 (batch 2) -- interp projection base of reference type forwards its path. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug120_interp_field_borrow_through_ref/repro.con (a regression dir, not a tests/programs fixture)"

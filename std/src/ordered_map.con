@@ -127,7 +127,7 @@ mod ordered_map {
                 return false;
             }
             let v: *mut V = self.values + idx;
-            let old: V = *v;
+            let old: V = read_owned(v);
             let updated: V = f(old);
             *v = updated;
             return true;
@@ -278,7 +278,7 @@ mod ordered_map {
             }
 
             let val_ptr: *mut V = self.values + idx;
-            let old: V = *val_ptr;
+            let old: V = read_owned(val_ptr);
             // Destroy the REMOVED key before the shift overwrites it (H18
             // keyed-remove rule — the key is owned and not returned).
             (k as &K).destroy();
@@ -288,11 +288,11 @@ mod ordered_map {
             while i + 1 < self.len {
                 let src_k: *mut K = self.keys + (i + 1);
                 let dst_k: *mut K = self.keys + i;
-                *dst_k = *src_k;
+                *dst_k = read_owned(src_k);
 
                 let src_v: *mut V = self.values + (i + 1);
                 let dst_v: *mut V = self.values + i;
-                *dst_v = *src_v;
+                *dst_v = read_owned(src_v);
 
                 i = i + 1;
             }
@@ -315,7 +315,7 @@ mod ordered_map {
                     (existing as &K).destroy();
                     *existing = key;
                     let old_val_ptr: *mut V = self.values + idx;
-                    let old: V = *old_val_ptr;
+                    let old: V = read_owned(old_val_ptr);
                     *old_val_ptr = value;
                     return Option::<V>::Some { value: old };
                 }
@@ -331,11 +331,11 @@ mod ordered_map {
             while i > idx {
                 let src_k: *mut K = self.keys + (i - 1);
                 let dst_k: *mut K = self.keys + i;
-                *dst_k = *src_k;
+                *dst_k = read_owned(src_k);
 
                 let src_v: *mut V = self.values + (i - 1);
                 let dst_v: *mut V = self.values + i;
-                *dst_v = *src_v;
+                *dst_v = read_owned(src_v);
 
                 i = i - 1;
             }

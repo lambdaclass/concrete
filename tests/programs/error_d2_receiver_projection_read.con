@@ -1,0 +1,20 @@
+// D2: a `&mut self` receiver that projects a field of a reference (`self.offs`) is a loan on the
+// root `self`, so another argument may not read `self.names` in the same call (std/src/cli.con's
+// migrated site). E0293 (REF-8).
+struct Copy C { n: Int, m: Int }
+
+fn bump(r: &mut Int, by: Int) {
+    *r = *r + by;
+}
+
+struct Copy Pair { c: C }
+
+fn go(p: &mut Pair) {
+    bump(&mut p.c.n, p.c.m);
+}
+
+fn main() -> Int {
+    let mut p: Pair = Pair { c: C { n: 40, m: 2 } };
+    go(&mut p);
+    return p.c.n;
+}

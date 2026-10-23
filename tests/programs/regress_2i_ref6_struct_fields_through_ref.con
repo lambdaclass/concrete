@@ -1,0 +1,12 @@
+// Exit 2i REF-6, rewrite of `error_2i_ref6_struct_destructure_through_ref.con`: read the fields
+// through the reference instead of destructuring it. Run 42, binary = --interp.
+struct Copy S { x: Int, y: Int }
+
+fn read(s: &S) -> Int {
+    return s.x + s.y;
+}
+
+fn main() -> Int {
+    let s: S = S { x: 40, y: 2 };
+    return read(&s);
+}

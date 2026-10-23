@@ -801,8 +801,8 @@ mod main {
     import std.vec.{Vec};
     fn main() with(Std) -> u8 {
         let mut m: HashMap<u64, u64> = HashMap::<u64, u64>::new(hash_u64, eq_u64);
-        discard(m.insert(1, 10).is_none());
-        discard(m.insert(2, 20).is_none());
+        let probe_r18: Option<u64> = m.insert(1, 10); discard(probe_r18.is_none());
+        let probe_r19: Option<u64> = m.insert(2, 20); discard(probe_r19.is_none());
         let ks: Vec<u64> = m.keys();
         let vs: Vec<u64> = m.values();
         let count_ok: bool = ks.len() == 2 && vs.len() == 2;

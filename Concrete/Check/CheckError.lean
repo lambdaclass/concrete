@@ -78,6 +78,10 @@ structure VarInfo where
   -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
   -- the only way left). Lifted when that block ends (`checkStmts`).
   pinnedByDefer : Bool := false
+  /-- D1: a `&mut` reference binding whose loan a pending deferred call holds (`defer inc(r);`): no
+      use of it may come before that call runs. Released, not consumed, when the registering block
+      ends (a reference owns nothing). -/
+  heldByDefer : Bool := false
   -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
   -- may consume it (no runtime obligation is discharged).
   isGhost : Bool := false
@@ -230,6 +234,11 @@ inductive CheckError where
   -- Bug 091 round 3: a reference binding whose source the checker cannot trace would be a
   -- live borrow invisible to the aliasing rules.
   | untraceablePlace (subject : String) (why : String)
+  -- D2 (the Austral model, bug 182): only a variable, or a string literal (a static root), is
+  -- borrowed; a temporary is never a reference's root.
+  | temporaryNotBorrowable (subject : String)
+  -- T-RAWDUP: `*p` by value of a non-Copy pointee through a raw pointer.
+  | rawDerefMovesNonCopy (ty : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -365,7 +374,9 @@ inductive CheckError where
   -- `f(&x, &mut x)` alias the same object with exclusivity in one activation.
   -- This is what keeps a scoped callback's context from reaching the borrowed
   -- container (`m.with_value_mut(&k, &mut m, f)` rejects here).
-  | conflictingCallBorrows (name : String)
+  -- `byRoot`: the two borrows name different places of one root, which conflict only because
+  -- loans are keyed by root (REF-11, D2); otherwise they borrow one place (REF-8).
+  | conflictingCallBorrows (name : String) (byRoot : Bool)
   -- Slice 5 (CapabilityJudgment): a locally-provable PURE, trap-free, non-Unit
   -- value produced by a statement expression (`expr;`) is silently discarded. The
   -- value is Copy (a non-Copy discard is E0287) and non-fallible (E0286), the
@@ -446,6 +457,8 @@ def CheckError.message : CheckError → String
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
   | .untraceablePlace subject why => s!"cannot trace {subject}: {why}"
+  | .rawDerefMovesNonCopy ty => s!"cannot move a non-Copy '{ty}' out of raw memory with `*p`: the slot would still hold it, so the value would be owned twice (T-RAWDUP)"
+  | .temporaryNotBorrowable subject => s!"cannot borrow {subject}: only a variable or a string literal can be borrowed, and a reference into it is formed by projecting through that borrow; a temporary (a call result, a literal, an aggregate, an operator expression) is never a reference's root (REF-5)"
   | .mutReceiverThroughSharedRef subject desc => s!"cannot mutably borrow {subject} through a shared reference ({desc})"
   -- Slice 4
   | .missingCapability callee cap caller => s!"function '{callee}' requires capability '{cap}' but '{caller}' does not declare it"
@@ -522,7 +535,7 @@ def CheckError.message : CheckError → String
   | .refStoredInAggregate desc tyName => s!"{desc} stores a reference in an aggregate ('{tyName}'); references are second-class and may not be stored in a struct, enum, array or generic container"
   | .guardMovesLinear name => s!"match guard moves non-Copy value '{name}'; a guard is read-only (a false guard falls through to a later arm, which would see '{name}' already moved)"
   | .mainHasParams n => s!"`main` declares {n} parameter(s), but the program entry point takes none (`fn main() -> Int`): the generated entry wrapper calls it with no arguments"
-  | .conflictingCallBorrows name => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
+  | .conflictingCallBorrows name _ => s!"'{name}' is borrowed more than once in the same call with at least one `&mut` — the borrows would alias one object with exclusivity"
   | .intLiteralOutOfRange value tyName lo hi =>
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
@@ -534,7 +547,7 @@ def CheckError.hint : CheckError → Option String
   | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/language/VALUE_MODEL.md)"
   | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
   | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `fn main() -> Int`"
-  | .conflictingCallBorrows _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
+  | .conflictingCallBorrows _ _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
   | .assignToImmutable _ => some "declare with 'let mut' to make it mutable"
@@ -542,6 +555,8 @@ def CheckError.hint : CheckError → Option String
   | .destroyRequiresNamed _ => some "only struct and enum types can be destroyed"
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
+  | .rawDerefMovesNonCopy _ => some "write `read_owned(p)` (a compiler intrinsic): it moves the value out and leaves the slot logically uninitialized; read a field with `(*p).f` or borrow with `&*p` instead"
+  | .temporaryNotBorrowable _ => some "bind the value to a `let` and borrow the variable (`let v = mk(); f(&v)`)"
   | .untraceablePlace _ _ => some "use a named place (a binding, its fields, or `*` of a named reference); this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
   | .mutReceiverThroughSharedRef _ _ => some "take `&mut T` instead of `&T` (or `&mut self` instead of `&self`) where the value is mutated"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
@@ -637,6 +652,8 @@ def CheckError.code : CheckError → String
   | .cannotMutBorrowImmBorrowed _ => "E0235"
   | .mutReceiverThroughSharedRef _ _ => "E0237"
   | .untraceablePlace _ _ => "E0238"
+  | .temporaryNotBorrowable _ => "E0238"
+  | .rawDerefMovesNonCopy _ => "E0311"
   -- Slice 4: Capability (E0240–E0249)
   | .missingCapability _ _ _ => "E0240"
   | .traitBoundNotSatisfied _ _ _ => "E0241"
@@ -683,7 +700,7 @@ def CheckError.code : CheckError → String
   | .nonCopyProjection _ _ => "E0290"
   | .cannotOverwriteLinearPlace _ _ => "E0291"
   | .shadowsLiveLinear _ => "E0292"
-  | .conflictingCallBorrows _ => "E0293"
+  | .conflictingCallBorrows _ _ => "E0293"
   | .discardedPureValue _ => "E0294"
   | .discardNonCopy _ => "E0295"
   | .newtypeConstructPrivate _ => "E0296"
@@ -717,9 +734,10 @@ def CheckError.rule : CheckError → Option String
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"
   | .untraceablePlace _ _ => some "REF-5@1"
+  | .temporaryNotBorrowable _ => some "REF-5@1"
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
-  | .conflictingCallBorrows _ => some "REF-8@1"
+  | .conflictingCallBorrows _ byRoot => some (if byRoot then "REF-11@2" else "REF-8@1")
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
   | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@2" else "TYPE-7@1")
   | e => codeRuleTag e.code
@@ -739,6 +757,7 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
   | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
   | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | "REF-11@2" => some "make the two borrows in separate calls, or read the other field into a `let` before the call"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/

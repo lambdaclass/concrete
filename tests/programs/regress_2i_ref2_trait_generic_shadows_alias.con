@@ -1,0 +1,11 @@
+// Exit 2i REF-2@1, control: a trait's own type parameter shadows a module alias of the same name in
+// method parameters as in results, so `fn(Int) -> T` is not `fn(Int) -> &Int`. Exit 42.
+type T = &Int;
+
+trait Reader<T> {
+    fn apply(&self, cb: fn(Int) -> T) -> Int;
+}
+
+fn main() -> Int {
+    return 42;
+}

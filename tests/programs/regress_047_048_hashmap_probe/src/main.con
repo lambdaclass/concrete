@@ -22,28 +22,34 @@ mod main {
 
         // --- bug 047: overwrite past a tombstone must not duplicate ---
         let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
-        discard(m.insert(1, 10).is_none());
-        discard(m.insert(2, 20).is_none());
-        discard(m.insert(3, 30).is_none());
+        // D2: a temporary is never a reference's root, so a method's `&self` receiver is a variable.
+        let i1: Option<i32> = m.insert(1, 10);
+        discard(i1.is_none());
+        let i2: Option<i32> = m.insert(2, 20);
+        discard(i2.is_none());
+        let i3: Option<i32> = m.insert(3, 30);
+        discard(i3.is_none());
         let k2: i32 = 2;
-        discard(m.remove(&k2).is_some());
+        let r2: Option<i32> = m.remove(&k2);
+        discard(r2.is_some());
         let old: Option<i32> = m.insert(3, 99);
         if old.is_none() { bad = 1; }
         println(m.len() as Int);
         if m.len() != 2 { bad = 2; }
         let k3: i32 = 3;
-        discard(m.remove(&k3).is_some());
+        let r3: Option<i32> = m.remove(&k3);
+        discard(r3.is_some());
         if m.contains(&k3) { bad = 3; }
         m.drop();
 
         // --- bug 048: missing-key lookup with zero empty slots must return ---
         let mut z: HashMap<i32, i32> = HashMap::<i32, i32>::new(h_const, e_i32);
         let mut i: i32 = 0;
-        while i < 200 { discard(z.insert(i, i).is_none()); i = i + 1; }
+        while i < 200 { let zi: Option<i32> = z.insert(i, i); discard(zi.is_none()); i = i + 1; }
         let mut j: i32 = 0;
-        while j < 200 { discard(z.remove(&j).is_some()); j = j + 1; }
+        while j < 200 { let zj: Option<i32> = z.remove(&j); discard(zj.is_some()); j = j + 1; }
         let mut n: i32 = 200;
-        while n < 260 { discard(z.insert(n, n).is_none()); n = n + 1; }
+        while n < 260 { let zn: Option<i32> = z.insert(n, n); discard(zn.is_none()); n = n + 1; }
         let miss: i32 = 999999;
         if z.contains(&miss) { bad = 4; }
         println(z.len() as Int);

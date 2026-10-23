@@ -9,6 +9,7 @@ import Concrete.Resolve.Locals
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
+import Concrete.Semantics.BindingMode
 import Concrete.Check.Coherence
 
 namespace Concrete
@@ -173,11 +174,33 @@ def liveAliasesOf (r : LocalRef) (info : VarInfo) (onlyExclusive : Bool) : Check
       (!onlyExclusive || (match vi.ty with | .refMut _ => true | _ => false)) &&
       (match vi.borrowedFrom with | some src => roots.contains src | none => false)).map (·.1)
 
+/-- D1 (decision Q1): a reference binding whose loan a pending deferred call holds (`defer inc(r);`)
+    may not be used again before that call runs (MEMORY_SEMANTICS §15.3, the deferred loan). -/
+def refuseDeferHeldRef (r : LocalRef) (info : VarInfo) (span : Option Span) : CheckM Unit := do
+  if info.heldByDefer then throwCheck (.variableReservedByDefer r.name) span
+
+/-- D1 (decision Q1, R-0496): ONE argument mode for a reference binding. Passing a reference
+    binding (`r`, whatever made it: a parameter, a borrow-block binder, an arm binder) where a
+    reference is expected is an implicit REBORROW (a copy, for `&T`): the binding stays usable after
+    the call. An owned binding passed where a value is expected is moved, as before. Every call form
+    uses this one function (free, method, static, function-pointer calls), so the mode cannot
+    differ by binding or by call form again. -/
+-- spec: REF-10 (docs/spec/references.md; this declaration enforces the rule)
+def consumeCallArgIdent (sp : Span) (varName : String) (pTy : Ty) (span : Option Span) : CheckM Unit := do
+  match ← lookupUse sp varName with
+  | none => pure ()
+  | some (r, info) =>
+    match info.ty, pTy with
+    | .ref _, _ | .refMut _, _ => refuseDeferHeldRef r info span
+    | _, .ref _ | _, .refMut _ => pure ()
+    | _, _ => consumeVarIfExists r span
+
 /-- Using an exclusive reference binding `r` (`&mut T`) while another live reference shares its
     storage is the aliasing E0232 forbids for an owned binding. -/
 def checkExclusiveRefUse (r : LocalRef) (span : Option Span) : CheckM Unit := do
   match ← lookupLocal r with
   | some info =>
+    refuseDeferHeldRef r info span
     match info.ty with
     | .refMut _ =>
       if !(← liveAliasesOf r info false).isEmpty then
@@ -190,6 +213,7 @@ def checkExclusiveRefUse (r : LocalRef) (span : Option Span) : CheckM Unit := do
 def checkLiveExclusiveReborrow (r : LocalRef) (span : Option Span) : CheckM Unit := do
   match ← lookupLocal r with
   | some info =>
+    refuseDeferHeldRef r info span
     if !(← liveAliasesOf r info true).isEmpty then
       throwCheck (.cannotBorrowMutablyBorrowed r.name) span
   | none => pure ()
@@ -319,9 +343,12 @@ def consumeReceiver (selfKind : Option SelfKind) (obj0 : Expr) (objTy innerTy : 
   match selfKind with
   | some .refMut =>
     match objTy, obj with
+    -- D1: a `&mut self` receiver given a reference binding is an implicit reborrow (it used to
+    -- consume a borrow-block binder only).
     | .refMut _, .ident vsp varName =>
-      if let some r ← localAt? vsp varName then
-        if (← getEnv).borrowRefs.contains r then consumeVarIfExists r span
+      match ← lookupUse vsp varName with
+      | some (r, info) => refuseDeferHeldRef r info span
+      | none => pure ()
     | _, _ => pure ()
   | some .value =>
     let refusedRef := throwCheck (.nonCopyProjection (tyToString innerTy)
@@ -367,6 +394,34 @@ def refuseConstBorrow (subject : String) (e : Expr) (span : Option Span) : Check
     throwCheck (.untraceablePlace subject
       s!"'{n}' is a module constant, which has no storage to borrow (bug 123); copy it into a local first (`let c = {n};`)") span
 
+/-- D2 (the Austral model; closes bug 182): a reference is formed only by borrowing a variable
+    (a string literal counts as a static, immutable root) and projecting through that borrow. A
+    temporary (a call or method-call result, a literal, an aggregate or array literal, an operator
+    expression), and any projection of one (`&mk().f`), is never a root: E0238 (REF-5). `&mut` of a
+    string literal is refused too (the static root is immutable). The normalized place rule already
+    classifies every operand (`Norm.temp`), so this is one test on its verdict. -/
+-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)
+def refuseTemporaryBorrow (isMut : Bool) (subject : String) (e : Expr) (span : Option Span) : CheckM Unit := do
+  let isStrLit := match stripParens e with | .strLit .. => true | _ => false
+  if isStrLit && !isMut then return
+  if let .temp := (← normPlace e) then
+    throwCheck (.temporaryNotBorrowable subject) span
+
+/-- The roots of the new mutable loans a call's explicit `&mut` arguments make (`mutLoanRoot?`). -/
+def argMutLoanRoots (args : List Expr) : CheckM (List LocalRef) := do
+  let mut out : List LocalRef := []
+  for a in args do
+    match unparenExpr a with
+    | .borrowMut .. => if let some r ← mutLoanRoot? a true then out := r :: out
+    | _ => pure ()
+  return out
+
+/-- The root of the new mutable loan a `&mut self` receiver makes, if any. -/
+def receiverMutLoanRoot (selfKind : Option SelfKind) (obj : Expr) : CheckM (List LocalRef) := do
+  match selfKind with
+  | some .refMut => return (← mutLoanRoot? obj false).toList
+  | _ => return []
+
 /-- Bug 091 round 3: a method call's IMPLICIT receiver borrow is the explicit `&place` /
     `&mut place` it stands for, checked by the same `checkSharedAccess` / `checkMutAccess` on
     the receiver's NORMALIZED place (one rule for concrete and trait-bound receivers):
@@ -396,7 +451,18 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
       if let .temp := n then
         throwCheck (.untraceablePlace subject "a temporary is not a `&mut self` receiver; bind it to a `let mut` first") span
       checkMutAccess n subject span
-  | some .ref => checkSharedAccess n s!"the receiver of '{methodName}'" span
+  | some .ref =>
+    -- D2: an implicit `&self` borrow of an owned TEMPORARY receiver (`mk().get()`) borrows a
+    -- non-root, exactly as `&mk()` would (bug 182); a string literal receiver is a static root.
+    -- The verdict is `receiverNorm`'s (an `if` / `match` receiver is `.temp` there), so every
+    -- temporary receiver is refused, not only the ones `normPlace` would call temporary (Codex).
+    match objTy with
+    | .ref _ | .refMut _ => pure ()
+    | _ =>
+      let isStrLit := match stripParens obj with | .strLit .. => true | _ => false
+      if let .temp := n then
+        if !isStrLit then throwCheck (.temporaryNotBorrowable s!"the receiver of '{methodName}'") span
+    checkSharedAccess n s!"the receiver of '{methodName}'" span
   | _ => pure ()
 
 /-- Bug 091 round 3: `Destroy::destroy` is the PUBLIC destruction entry point, and its
@@ -558,18 +624,24 @@ partial def typeParamsAsVars (ps : List String) : Ty → Ty
   | t => t
 
 /-- Defer rule (a) (bug 143): the reservations and pins already in force when a block starts. -/
-def deferScopeEntry : CheckM (List LocalId × List LocalId) := do
+def deferScopeEntry : CheckM (List LocalId × List LocalId × List LocalId) := do
   let env ← getEnv
+  -- Reservations, pins and (D1) reference holds are snapshotted SEPARATELY, so each is released
+  -- at the exit of the scope that took it (Codex review: a shared list let an outer pin keep an
+  -- inner hold alive).
   return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
-          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none)
+          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none,
+          env.vars.filterMap fun (_, vi) => if vi.heldByDefer then some vi.uid else none)
 
 /-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
     trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
-def deferScopeExit (entry : List LocalId × List LocalId) : CheckM Unit := do
+def deferScopeExit (entry : List LocalId × List LocalId × List LocalId) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
-    let vi := if vi.pinnedByDefer && !entry.2.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    let vi := if vi.pinnedByDefer && !entry.2.1.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    -- D1: the deferred call that held a reference's loan has run; the reference is usable again.
+    let vi := if vi.heldByDefer && !entry.2.2.contains vi.uid then { vi with heldByDefer := false } else vi
     (n, vi) }
 
 set_option backward.do.legacy true in
@@ -606,7 +678,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
--- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4, spec: TRUST-7 (docs/spec/ownership.md; this declaration enforces the rule)
 -- spec: TRAIT-6, spec: PAT-5 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
@@ -876,7 +948,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     return ifTy
   | .call csp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
+    let parts ← argBorrowParts args
+    checkCallBorrowConflicts parts (some e.getSpan)
+    checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
@@ -922,6 +996,18 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       if args.length != 0 then throwCheckMsg s!"{fnName} takes no value arguments"
       if typeArgs.length != 1 then throwCheckMsg s!"{fnName} requires exactly 1 type argument: {fnName}::<T>()"
       return .uint
+    -- T-RAWDUP: `read_owned(p)` moves the value out of the raw slot `p` points to (`*mut T` or
+    -- `*const T`), leaving it logically uninitialized. Raw memory, so trusted or `Unsafe` code only.
+    if intrinsic == some .readOwned then
+      if args.length != 1 then throwCheckMsg s!"read_owned takes exactly 1 argument (a raw pointer)"
+      let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
+      let argTy ← checkExpr arg none .callArg
+      let env ← getEnv
+      if !Capabilities.capsAllowUnsafeOp env.currentFnTrusted env.currentCapSet then
+        throwCheck (.missingCapability "read_owned" "Unsafe" env.currentFnName) (some e.getSpan)
+      match ← resolvedOr argTy with
+      | .ptrMut t | .ptrConst t => return t
+      | t => throwCheckMsg s!"read_owned takes a raw pointer (`*mut T` / `*const T`), got '{tyToString t}'"
     -- Intercept unwrap(x) for newtype unwrapping (only if not a user-defined function)
     if intrinsic == some .unwrap && args.length == 1 then
         let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
@@ -974,7 +1060,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => throwCheckMsg s!"append() first argument must be &mut String, got '{tyToString bufTy}'"
         if rest.isEmpty then throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
         for arg in rest do
-          let argTy ← checkExpr arg
+          -- D1: a reference binding argument is read through, never consumed; an owned String is
+          -- moved as before.
+          let isRefIdent ← match stripParens arg with
+            | .ident vsp n => do
+              match ← lookupUse vsp n with
+              | some (_, info) => pure (match info.ty with | .ref _ | .refMut _ => true | _ => false)
+              | none => pure false
+            | _ => pure false
+          let argTy ← if isRefIdent then checkExpr arg none .callArg else checkExpr arg
           match argTy with
           | .string | .ref .string | .refMut .string => pure ()
           | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
@@ -1222,7 +1316,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument of function pointer call '{fnName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
+        | .ident vsp varName => consumeCallArgIdent vsp varName pTy (some e.getSpan)
         | _ => pure ()
       -- Function pointers are Copy, no need to consume
       if let some (r, _) := fnPtrVar then useVar r (some e.getSpan)
@@ -1372,24 +1466,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         let argTy ← checkExpr arg (some pTy) .callArg
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{fnName}'" (some e.getSpan)
-        -- If arg is a bare identifier of a linear type, consume it —
-        -- but NOT if the parameter type is a reference (borrow, not move).
-        -- Exception: borrow-block exclusive refs (&mut T) must be consumed on call,
-        -- since they are scoped linear views into an alloca.
-        -- Function parameter &mut T refs are reborrowable and not consumed.
+        -- An owned identifier argument is moved; a reference binding is reborrowed (D1).
         match stripParens arg with
-        | .ident vsp varName =>
-          match ← localAt? vsp varName with
-          | none => pure ()
-          | some r =>
-          match pTy with
-          | .ref _ => pure ()  -- shared reference: Copy, no consume needed
-          | .refMut _ =>
-            let env ← getEnv
-            if env.borrowRefs.contains r then
-              consumeVarIfExists r (some e.getSpan)
-            else pure ()
-          | _ => consumeVarIfExists r (some e.getSpan)
+        | .ident vsp varName => consumeCallArgIdent vsp varName pTy (some e.getSpan)
         | _ => pure ()
       return retTy
     | none =>
@@ -1580,21 +1659,27 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       match ed.variants.find? fun v => v.name == variant with
       | some ev =>
         for sf in ev.fields do
-          let fieldTy := substTy mapping sf.ty
-          match fields.find? fun (fn, _) => fn == sf.name with
-          | some (_, expr) =>
-            let exprTy ← checkExpr expr (some fieldTy)
-            expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
-            -- Bug 092: a payload holding a reference (`Option::Some { value: &s }`).
-            if tyStoresRef exprTy then
-              throwCheck (.refStoredInAggregate s!"payload '{sf.name}' of {enumName}::{variant}" (tyToString exprTy)) (some expr.getSpan)
-          | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
+          if !(fields.any fun (fn, _) => fn == sf.name) then
+            throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
         for (fn, _) in fields do
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
           | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
           if (fields.filter fun (f, _) => f == fn).length > 1 then
             throwCheck (.duplicateFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
+        -- SOURCE ORDER (bug 137): the initializers run in the order written, so ownership is
+        -- decided in that order too; checking them in declaration order credited a borrow
+        -- before a move the program executes first (Codex review).
+        for (fn, expr) in fields do
+          match ev.fields.find? fun sf => sf.name == fn with
+          | some sf =>
+            let fieldTy := substTy mapping sf.ty
+            let exprTy ← checkExpr expr (some fieldTy)
+            expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
+            -- Bug 092: a payload holding a reference (`Option::Some { value: &s }`).
+            if tyStoresRef exprTy then
+              throwCheck (.refStoredInAggregate s!"payload '{sf.name}' of {enumName}::{variant}" (tyToString exprTy)) (some expr.getSpan)
+          | none => pure ()
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs [] -- enums take no capability parameters
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
@@ -1680,13 +1765,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                   throwCheck (.untraceablePlace s!"what the payload reference '{binding}' borrows"
                     "a reference stored in an enum payload is not traced; borrow a named place instead") (some e.getSpan)
                 | _ => pure ()
-              -- Matching THROUGH a reference must not move payloads out of the
-              -- borrow: a non-Copy payload binds as a borrowed view (&T — Copy,
-              -- freely droppable), a Copy payload binds by value. An OWNED
-              -- scrutinee binds payloads owned, as before.
-              let bindTy ← do
-                if isRefScrutinee && !(← isCopyType fieldTy) then pure (Ty.ref fieldTy)
-                else pure fieldTy
+              -- D3 (bug 181): through a reference EVERY payload binds as `&T`, Copy or not;
+              -- through an owned scrutinee it binds the value. One function decides it for
+              -- Check and Elab (`payloadBinderTy`, Concrete/Semantics/BindingMode.lean), so the
+              -- checker's binder is the Core binder, and Copy-ness (which specialization
+              -- changes) no longer picks the mode.
+              let bindTy := payloadBinderTy scrTy fieldTy
               if fromLet && binding != "_" then
                 match ← resolvedOr bindTy with
                 | .ref _ | .refMut _ =>
@@ -1711,14 +1795,17 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- Bug 196 (PAT-3): a literal pattern over an enum scrutinee.
             throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           | .varArm varSp binding guard body => do
-            -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
-            -- reference (duplication, no provenance): refused (normalized place rule).
-            let isRefScrut := match scrTy with | .ref _ | .refMut _ => true | _ => false
-            if binding != "_" && isRefScrut && !(← isCopyType innerTyR) then
-              throwCheck (.nonCopyProjection (tyToString innerTyR)
-                "a reference (a catch-all match binder over a borrowed non-Copy enum); match its variants or bind `_`") (some e.getSpan)
+            -- D3: a catch-all binder over `&E` IS the reference (`wholeBinderTy`), never the
+            -- enum copied out of it, so it neither duplicates a non-Copy `E` nor loses
+            -- provenance: it borrows what the scrutinee borrows.
+            let isRefScrut := bindsThroughReference scrTy
+            let wholeTy := wholeBinderTy scrTy innerTyR
             if binding != "_" then
-              addVar (← binderAt varSp binding) innerTyR
+              let br ← binderAt varSp binding
+              let scrutPre ← if isRefScrut then some <$> normRef scrutinee else pure none
+              addVar br wholeTy
+              if isRefScrut then
+                recordRefProvenance br wholeTy scrutinee (some e.getSpan) (pre := scrutPre)
             -- Linear: a wildcard arm `_ => …` drops the whole scrutinee without
             -- accounting for it. That is allowed ONLY if the scrutinee is Copy; a
             -- non-Copy value must be destructured exhaustively, not swallowed by `_`.
@@ -1842,14 +1929,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         | .varArm varSp binding guard body => do
-          -- Value-pattern match auto-derefs the scrutinee (see innerTy above),
-          -- and the runtime loads the value through the reference — so a
-          -- variable arm over `&i32` binds the VALUE (i32), not `&i32`. Only a
-          -- Copy inner type binds by value: binding a non-Copy value out from
-          -- behind a reference would duplicate it, so those keep the ref type.
-          let isRefScrutinee := match scrTy with | .ref _ | .refMut _ => true | _ => false
-          let bindTy ← do
-            if isRefScrutinee && (← isCopyType innerTyR) then pure innerTyR else pure scrTy
+          -- D3: literal and range patterns compare the referenced value, but a variable arm
+          -- over `&T` binds the REFERENCE (`wholeBinderTy`), Copy or not; `*n` reads it.
+          let isRefScrutinee := bindsThroughReference scrTy
+          let bindTy := wholeBinderTy scrTy innerTyR
           let scrCopy ← isCopyType bindTy
           if binding != "_" then
             -- A named value pattern over a non-Copy scrutinee is a move into the
@@ -1858,15 +1941,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- through two names.
             -- (scrutinee ident already moved by value-mode checkExpr)
             let scrutPre ← if isRefScrutinee then some <$> normRef scrutinee else pure none
-            -- binding a REFERENCE loaded out of the referent (`r: & &T` binds the inner `&T`)
-            -- is an untraced reference read out of storage (normalized place rule, E0238)
-            if isRefScrutinee then
-              match ← resolvedOr bindTy with
-              | .ref _ | .refMut _ =>
-                if bindTy != scrTy then
-                  throwCheck (.untraceablePlace s!"what '{binding}' borrows"
-                    "a reference loaded out of a referenced place is not traced; bind the outer reference instead") (some e.getSpan)
-              | _ => pure ()
+            -- D3: the binder is the scrutinee reference itself (never a reference loaded out of the
+            -- referent), so its provenance is the scrutinee's, recorded below.
             let br ← binderAt varSp binding
             addVar br bindTy
             if isRefScrutinee then
@@ -1967,6 +2043,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       return matchResultTy
   | .borrow _ inner =>
     refuseConstBorrow "the borrowed place" inner (some e.getSpan)
+    refuseTemporaryBorrow false "the borrowed value" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- The normalized place rule (bug 091 round 3): `&e` borrows `e`'s normalized place;
     -- one shared-access check whatever the spelling, E0238 if `e` is not a traceable place.
@@ -1974,6 +2051,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     return .ref innerTy
   | .borrowMut _ inner =>
     refuseConstBorrow "a place" inner (some e.getSpan)
+    refuseTemporaryBorrow true "the mutably borrowed value" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- One rule for `&mut x`, `&mut (x)`, `&mut w.f` and `&mut (*r)`: never through a shared
     -- reference (E0237), and an owned root is `mut` and unborrowed (bug 091 round 3).
@@ -2000,9 +2078,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     match innerTy with
     | .ref t => refusedDeref t; return t
     | .refMut t => refusedDeref t; return t
-    | .ptrMut t =>
-      return t
-    | .ptrConst t =>
+    | .ptrMut t | .ptrConst t =>
+      -- T-RAWDUP (MEMORY_SEMANTICS §11, SAFETY: `trusted` does not relax linearity): `*p` read BY
+      -- VALUE of a non-Copy pointee duplicated the value the slot still holds (bug 046's shape: a
+      -- double free). Moving a value out of raw memory is spelled `std.mem.read_owned(p)`, which
+      -- states the transfer and leaves the slot logically uninitialized. Copy pointees, place uses
+      -- (`(*p).f`, `&*p`) and stores through `*p` are unchanged.
+      if mode != .place && !(← isCopyType t) then
+        throwCheck (.rawDerefMovesNonCopy (tyToString t)) (some e.getSpan)
       return t
     | .heap t =>
       -- *heap_ptr: loads value from heap, frees memory, consumes the Heap<T>
@@ -2140,7 +2223,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             throwCheckMsg s!"trait method '{foundTrait}::{methodName}' has no `self` receiver and cannot be called as a method"
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
-          checkCallBorrowConflicts ((← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)) (some e.getSpan)
+          let parts := (← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)
+          checkCallBorrowConflicts parts (some e.getSpan)
+          checkCallRootReads ((← receiverMutLoanRoot sig.selfKind obj) ++ (← argMutLoanRoots args)) (obj :: args) (some e.getSpan)
           -- `Destroy::destroy` consumes its receiver (`consumeDestroyReceiver` below); there
           -- is no implicit borrow to check, and the owner may already be moved by `w.0`.
           if !(foundBuiltin == some .destroy && methodName == destroyMethodName) then
@@ -2150,7 +2235,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             checkRefArg arg argTy (some e.getSpan)
             expectTy p.ty argTy s!"argument '{p.name}' of '{methodName}'" (some e.getSpan)
             match stripParens arg with
-            | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
+            | .ident vsp varName => consumeCallArgIdent vsp varName p.ty (some e.getSpan)
             | _ => pure ()
           if foundBuiltin == some .destroy && methodName == destroyMethodName then
             consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
@@ -2166,8 +2251,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
       -- alias the container through the context and must reject
       -- (container-not-in-context, #18 §5.1).
-      checkCallBorrowConflicts ((← receiverBorrowParts (selfKindOfParams sig.params) obj objTy)
-        ++ (← argBorrowParts args)) (some e.getSpan)
+      let parts := (← receiverBorrowParts (selfKindOfParams sig.params) obj objTy) ++ (← argBorrowParts args)
+      checkCallBorrowConflicts parts (some e.getSpan)
+      checkCallRootReads ((← receiverMutLoanRoot (selfKindOfParams sig.params) obj) ++ (← argMutLoanRoots args)) (obj :: args) (some e.getSpan)
       let isDestroyImplCall := methodName == destroyMethodName &&
         (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
       if !isDestroyImplCall then
@@ -2191,7 +2277,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
+        | .ident vsp varName => consumeCallArgIdent vsp varName pTy (some e.getSpan)
         | _ => pure ()
       -- A concrete call of a type's Destroy impl is the same public destruction as the
       -- bound call: it consumes (bug 091 round 3).
@@ -2204,7 +2290,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
+    let parts ← argBorrowParts args
+    checkCallBorrowConflicts parts (some e.getSpan)
+    checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     checkDirectDestroyImplUse mangledName (some e.getSpan)
     match ← lookupFn mangledName with
@@ -2223,7 +2311,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkRefArg arg argTy (some e.getSpan)
         expectTy pTy argTy s!"argument '{pName}' of '{typeName}::{methodName}'" (some e.getSpan)
         match stripParens arg with
-        | .ident vsp varName => consumeUseIfLocal vsp varName (some e.getSpan)
+        | .ident vsp varName => consumeCallArgIdent vsp varName pTy (some e.getSpan)
         | _ => pure ()
       return retTy
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
@@ -2785,12 +2873,21 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | .ident vsp varName =>
           let env ← getEnv
           match (← lookupUse vsp varName).map (·.2) with
+          -- D1: a reference binding passed to a deferred call is reborrowed, not consumed, and the
+          -- deferred call holds that loan until it runs: the binding is reserved, so no use of it
+          -- may come before (`defer inc(r); inc(r);` is refused).
           | some info =>
-            if info.state == .consumed then
+            match info.ty with
+            | .refMut _ =>
               let vars' := env.vars.map fun (n, vi) =>
-                if vi.uid == info.uid then (n, { vi with state := .reserved })
-                else (n, vi)
+                if vi.uid == info.uid then (n, { vi with heldByDefer := true }) else (n, vi)
               setEnv { env with vars := vars' }
+            | _ =>
+              if info.state == .consumed then
+                let vars' := env.vars.map fun (n, vi) =>
+                  if vi.uid == info.uid then (n, { vi with state := .reserved })
+                  else (n, vi)
+                setEnv { env with vars := vars' }
           | none => pure ()
         | _ =>
           match pinned? with
@@ -2910,7 +3007,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for (nameR, info) in (← getEnv).vars do
       let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
-      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
+      -- a reference owns nothing, so a loop exit leaves no obligation behind (D1)
+      let isRef := match info.ty with | .ref _ | .refMut _ => true | _ => false
+      if !info.isCopy && !isRef && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
@@ -2930,7 +3029,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for (nameR, info) in env.vars do
       let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
-      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
+      let isRef := match info.ty with | .ref _ | .refMut _ => true | _ => false
+      if !info.isCopy && !isRef && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
   -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
@@ -2983,6 +3083,11 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       let b := pb.name
       match ← lookupStructField structName pb.fieldName with
       | some fieldTy =>
+        -- REF-6 (a `let` may not hold a reference) with D3 (a binder through a reference is a
+        -- reference): destructuring a struct THROUGH a reference would bind references, so it is
+        -- refused (E0302), exactly as the enum form is. Read the field (`r.f`) or `match` instead.
+        if b != "_" && bindsThroughReference (← resolvedOr valTy) then
+          throwCheck (.letBindsReference b (tyToString (payloadBinderTy valTy (substTy mapping fieldTy)))) (some stmt.getSpan)
         let bTy ← resolvedOr (substTy mapping fieldTy)
         -- a reference-valued field has no traced source (normalized place rule): E0238
         match bTy with
@@ -3574,7 +3679,7 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
--- spec: REF-3, spec: STMT-7, spec: MOD-3 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := importBindingCollisions m imports
@@ -3711,6 +3816,37 @@ def checkModule (m : Module) (summary : FileSummary)
     -- A module constant is storage, not a binding: a bare `&T` constant stores a reference too
     -- (REF-3; bug 123 — `const R: &Int = &X` was accepted and read an uninitialized slot).
     ++ (m.constants.map fun c => (s!"module constant '{c.name}'", c.ty, c.span))
+  -- G13 / G16 (signature well-formedness, REF-1 / REF-2): a field, newtype or constant type may
+  -- not contain a function type that returns a reference, after alias expansion; a trait method
+  -- may not declare a reference result (every implementation of it would be refused).
+  let expand (ty : Ty) : Ty := expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty
+  let wfViolations : List (String × Ty × Span × String) :=
+    (refFields.filterMap fun (desc, ty, sp) =>
+      if tyHasRefReturningFnType (expand ty) then some (desc, ty, sp, "REF-2@1") else none)
+    -- A type alias is a written type even when nothing uses it (Codex review).
+    ++ (m.typeAliases.filterMap fun ta =>
+      if tyHasRefReturningFnType (expand ta.targetTy)
+      then some (s!"type alias '{ta.name}'", ta.targetTy, ta.span, "REF-2@1") else none)
+    ++ (m.traits.flatMap fun td => td.methods.filterMap fun sig =>
+      -- The trait's own type parameters shadow module aliases of the same name, in the result
+      -- and in the parameters alike (Codex review).
+      let own (t : Ty) : Ty := expand (substTy (td.typeParams.map fun n => (n, Ty.typeVar n)) t)
+      let rt := own sig.retTy
+      if tyContainsRef rt || tyHasRefReturningFnType rt then
+        some (s!"method '{sig.name}' of trait '{td.name}'", sig.retTy, td.span, "REF-1@1")
+      else
+        let bad := sig.params.find? fun p => tyHasRefReturningFnType (own p.ty)
+        bad.map fun p => (s!"parameter '{p.name}' of trait method '{td.name}.{sig.name}'", p.ty, td.span, "REF-2@1"))
+  match wfViolations.head? with
+  | some (desc, ty, sp, rule) =>
+    let msg := if rule == "REF-1@1"
+      then s!"{desc} may not return a reference ('{tyToString ty}'); references are second-class and cannot be returned (VALUE_MODEL.md)"
+      else s!"{desc}: '{tyToString ty}' contains a function type that returns a reference; a function type may not return a reference (REF-2, VALUE_MODEL.md)"
+    .error [{ severity := .error, message := CheckError.message (.returnsReference msg rule),
+              pass := "check", span := some sp, hint := CheckError.hint (.returnsReference msg rule),
+              code := CheckError.code (.returnsReference msg rule),
+              evidence := ruleEvidence (some rule), nextAction := ruleNextAction rule }]
+  | none =>
   -- Through type aliases (`type Ref = &Int; newtype W = Ref;`).
   match refFields.find? (fun (_, ty, _) =>
       tyStoresRef (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) ty)) with

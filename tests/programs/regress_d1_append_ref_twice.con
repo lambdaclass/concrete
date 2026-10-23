@@ -1,0 +1,14 @@
+// D1 (Codex review): `append` reads through a reference binding argument and never consumes it,
+// like every other call form. Exit 4.
+fn main() with(Alloc) -> Int {
+    let mut dst: String = "";
+    let s: String = "ab";
+    borrow s as r in R {
+        append(&mut dst, r);
+        append(&mut dst, r);
+    }
+    let n: Int = string_length(&dst);
+    drop_string(dst);
+    drop_string(s);
+    return n;
+}

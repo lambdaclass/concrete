@@ -15,8 +15,9 @@ declarations (FFI-3), layout attributes (FFI-4) and symbol names (FFI-5). The de
 
 - Kind: refusal
 - Uses: none
-- Codes: new (check)
-- Status: pending bug-166
+- Codes: E0588 (elab, core-check)
+- Status: enforced
+- Enforced by: Concrete.refuseForeignFnValue
 - Semantics: none
 - Obligation: none
 - Evidence: tested
@@ -27,9 +28,11 @@ function type use different calling conventions. A foreign function used as a Co
 the rule does not rest on that coincidence. The rewrite is a Concrete wrapper that calls the
 extern directly and is passed instead. The long-term design puts the calling convention in the
 function type (`extern "C" fn(A) -> R`, distinct from `fn(A) -> R`). It lifts this refusal when
-the first workload passes a callback to C.
+the first workload passes a callback to C. Enforced 2026-10-23 where a global function becomes a
+value, on the resolver's identity of the name, so an import alias, a constant initializer and a
+shadowing local are all decided right; CoreCheck re-checks it.
 
-```con reject name=extern-as-value code=new stage=check pair=wrapper-as-value pending=bug-166 now=accept:5
+```con reject name=extern-as-value code=E0588 stage=elab pair=wrapper-as-value
 mod c {
     pub trusted extern fn abs(x: i32) with() -> i32;
 }
@@ -79,13 +82,13 @@ removes the second copy.
 <a id="FFI-3"></a>
 ### FFI-3. An extern declaration declares its effects and FFI-safe types
 
-**FFI-3@1.** An `extern fn` has no body, declares its effects with `with(...)` (`with()` for none, never for a C symbol known to have effects), and takes and returns only FFI-safe types: integers, floats, `bool`, `char`, `Unit`, raw pointers and `#[repr(C)]` structs.
+**FFI-3@1.** An `extern fn` has no body, declares its effects with `with(...)` (`with()` for none, never for a C symbol known to have effects), and takes and returns only FFI-safe types: integers, floats, `bool`, `char`, `Unit`, raw pointers to a type that contains no reference, and `#[repr(C)]` structs.
 
 - Kind: refusal
-- Uses: none
+- Uses: REF-D1
 - Codes: E0116 (resolve), E0117 (resolve), E0574 (core-check), E0575 (core-check)
 - Status: enforced
-- Enforced by: Concrete.coreCheckProgram
+- Enforced by: Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: foreign calls are external events governed by their declared contracts (R-0496)
 - Evidence: tested
@@ -93,7 +96,10 @@ removes the second copy.
 **Rationale.** An undeclared binding is never read as having no effects (bug 113), and a reference
 or a Concrete aggregate has no C meaning, so it cannot cross. An `#[intrinsic = "n"]` declaration
 that the compiler implements is not a foreign binding and declares no effects. A raw pointer to a
-reference at the boundary is gap G15 of MEMORY_SEMANTICS §15.7.
+reference is refused too: C could keep the reference it was handed, or hand back the address of a
+reference slot, and nothing on the Concrete side could see it. E0574 and E0575 look through raw
+pointers with the REF-D1 judgment (gap G15 of MEMORY_SEMANTICS §15.7, closed 2026-10-23); a raw
+pointer to a value type stays FFI-safe.
 
 ```con reject name=undeclared-effects code=E0116 stage=resolve pair=declared-extern
 extern fn abs(x: i32) -> i32;
@@ -118,6 +124,31 @@ trusted extern fn abs(x: i32) with() -> i32;
 
 fn main() -> Int {
     return abs(0 - 42) as Int;
+}
+```
+
+```con reject name=returns-pointer-to-ref code=E0575 stage=core-check pair=pointer-to-value
+trusted extern fn f() with() -> *const &Int;
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con reject name=param-pointer-to-ref code=E0574 stage=core-check pair=pointer-to-value
+trusted extern fn keep(p: *const &Int) with();
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con accept name=pointer-to-value exit=42
+trusted extern fn f() with() -> *const Int;
+trusted extern fn keep(p: *const Int) with();
+
+fn main() -> Int {
+    return 42;
 }
 ```
 

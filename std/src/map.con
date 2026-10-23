@@ -74,7 +74,7 @@ mod map {
                 Option::Some { value } => {
                     let idx: u64 = value;
                     let val_ptr: *mut V = self.values + idx;
-                    let old: V = *val_ptr;
+                    let old: V = read_owned(val_ptr);
                     let updated: V = f(old);
                     *val_ptr = updated;
                     return true;
@@ -221,7 +221,7 @@ mod map {
                 if flag == 1 {
                     let key_ptr: *mut K = old_keys + i;
                     let val_ptr: *mut V = old_values + i;
-                    self.insert_for_grow(*key_ptr, *val_ptr);
+                    self.insert_for_grow(read_owned(key_ptr), read_owned(val_ptr));
                 }
                 i = i + 1;
             }
@@ -450,7 +450,7 @@ mod map {
                 Option::Some { value } => {
                     let idx: u64 = value;
                     let val_ptr: *mut V = self.values + idx;
-                    let old: V = *val_ptr;
+                    let old: V = read_owned(val_ptr);
                     // The STORED KEY is owned by the map and not returned —
                     // destroy it before tombstoning (H18 keyed-remove rule:
                     // later drop/clear skip tombstones, so an undestroyed key
@@ -541,7 +541,7 @@ mod map {
                         // is destroyed (H18 overwrite rule — never silently
                         // leaked; Copy keys elide to a no-op).
                         let val_ptr: *mut V = self.values + idx;
-                        let old: V = *val_ptr;
+                        let old: V = read_owned(val_ptr);
                         *val_ptr = value;
                         (key_ptr as &K).destroy();
                         *key_ptr = key;
@@ -709,7 +709,9 @@ mod map {
             Option::None => {},
         }
         // remove key 2: transferred out (destroy by hand = +1)
-        let rem: Option<MTracked> = m.remove(&2);
+        // D2: a literal is never a reference's root; borrow a variable.
+        let key2: i64 = 2;
+        let rem: Option<MTracked> = m.remove(&key2);
         match rem {
             Option::Some { value } => { destroy(value); },
             Option::None => {},

@@ -75,18 +75,18 @@ programs, not threads.
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: partial R-0500
+- Status: enforced
 - Enforced by: Concrete.Pipeline.lower
 - Semantics: none
 - Obligation: V1a's evaluation-order obligation; the verified pipeline may not model a looser order than the compiler implements (R-0500, R-0496)
 - Evidence: tested
 
 **Rationale.** A fixed order makes effects predictable and lets every consumer agree. A trap ends
-evaluation: no later operand is evaluated. Three cases are violated today, each a silent defect
-with its own record: an enum literal evaluates its fields in declaration order (bug 137), a
-functional update reads its base once per copied field (bug 136), and an assignment through a
-dereference evaluates its destination first natively (bug 183). Struct literals follow source
-order since bug 127.
+evaluation: no later operand is evaluated. Struct literals follow source order since bug 127.
+Three silent violations were fixed on 2026-10-23 (landing train 6), each with its own record: an
+enum literal evaluated its fields in declaration order (bug 137), a functional update read its
+base once per copied field (bug 136), and an assignment through a dereference evaluated its
+destination first natively (bug 183).
 
 ```con accept name=source-order exit=42
 struct Copy P { a: Int, b: Int }
@@ -104,7 +104,7 @@ fn main() -> Int {
 }
 ```
 
-```con accept name=enum-literal-source-order exit=21 pending=bug-137 now=accept:12
+```con accept name=enum-literal-source-order exit=21
 enum Copy E { V { a: Int, b: Int }, W }
 
 fn tick(acc: &mut Int, k: Int) -> Int {

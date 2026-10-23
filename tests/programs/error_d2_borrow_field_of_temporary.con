@@ -1,0 +1,14 @@
+// D2: a projection of a temporary (`&mk().f`) has no root either. E0238 (REF-5).
+struct Copy P { f: Int }
+
+fn mk() -> P {
+    return P { f: 42 };
+}
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return read(&mk().f);
+}

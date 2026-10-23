@@ -1,6 +1,6 @@
 # Bug 136 — functional update evaluates its base once per omitted field
 
-**Status:** OPEN
+**Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-21, while fixing [bug 127](127_struct_literal_field_order.md) (recorded as an
 unfiled disagreement in the evaluation-order section of
 [STATEMENT_EXPRESSION_MODEL](../language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
@@ -61,7 +61,40 @@ exit 0b under the defect disposition rule. The repair binds the base to a fresh 
 explicit initializers (which then also need temporaries, so they still run first) and reads the
 omitted fields from that local.
 
-## Containment while open
+## Fix
+
+Elab builds both literals so that Core evaluates their initializers in the rule's order, through one
+helper pair: `freshEvalTemp` / `letInExpr`. Core has no expression-level `let` yet (R-0496), and
+`match value { t => body }` with one unguarded binder arm is exactly `let t = value in body` in
+every consumer (Lower, the interpreter and the proof model bind a variable arm's scrutinee once).
+The temporaries are named `ev.t<n>`, which no source identifier can spell.
+
+- Bug 137, an enum-variant literal: initializers are elaborated in source order. The Core literal
+  keeps declaration order, which is the payload's positional identity for Lower's layout, the
+  interpreter and the proof model, so when the written order differs and at least two
+  initializers are order-sensitive (anything but a literal), they are evaluated into temporaries
+  in source order first (`withSourceOrder`). Literals already written in declaration order, and
+  literals with at most one order-sensitive initializer, produce the same Core as before.
+- Bug 136, functional update: the explicit initializers in source order, then the base exactly
+  once, then the omitted fields read from the base's temporary. A base that is a variable is read,
+  not evaluated, and every omitted field is read after the explicit initializers, so it keeps the
+  old inline form; so does an update that omits nothing.
+
+Check decides ownership for an enum literal's initializers in source order too, since that is now
+the order they run in (a borrow written after a move is the borrow of a moved value). The enum
+literal's evidence (its proof identity) records the fields in source order, so two literals that
+differ only in written order, and therefore in execution order, have different identities; a
+literal written in declaration order keeps its identity. All three were found by the Codex review
+of the first version, with the array case below.
+
+Regression fixture: `tests/programs/regress_136_137_literal_eval_order.con`: an enum literal written
+in reverse declaration order, a three-field variant with a literal in the middle, a functional
+update with one explicit initializer and with two written out of declaration order; each checks the
+order its ticks recorded and the values; exit 42 natively and under `--interp` (`run_tests.sh`,
+`run_ok` and the `--interp == binary` loop). The reproducers now exit 59 (136) and 56 (137)
+(`run_ok`); before the fix they exit 87 and 65.
+
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `runs-exit:87`) requires
 the binary to exit with the recorded wrong status. When it exits 59, that leg fails until this

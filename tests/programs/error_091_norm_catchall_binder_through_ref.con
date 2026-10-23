@@ -1,5 +1,7 @@
 // Normalized place rule (Codex static review): a catch-all binder in a match over `&E` bound
-// the whole non-Copy `E` by value out of the reference (duplication). E0290.
+// the whole non-Copy `E` by value out of the reference (duplication). Was E0290. Since D3 the
+// binder IS the reference (`whole: &E`), so nothing is duplicated, and destructuring it with a
+// `let` would bind references (`p: &P`), which REF-6 refuses: E0302.
 mod m {
     struct P { n: i64 }
     enum E { V { p: P } }

@@ -3,7 +3,9 @@
 **Status:** decision record, 2026-10-23. The four questions this record raised were decided by the
 user on 2026-10-23 ([§4](#4-decisions-of-2026-10-23)), with a second set of decisions (D5 – D12,
 [§4.6](#46-decisions-of-2026-10-23-second-set); D5, D8 and D10 revised the same day) and the
-ordered plan of §5. The other
+ordered plan of §5. D1 – D4, D6 and T-RAWDUP were implemented on 2026-10-23 (landing train 6); their
+rules are REF-10, REF-5 and REF-11, REF-9, FFI-1, OWN-D1 and TYPE-14, and TRUST-7 in
+[docs/spec](../spec/README.md). The other
 recommendations stand as recommendations until their owners implement them.
 This document does not restate rules. Each rule is normative in its canonical owner: references and
 binding in [MEMORY_SEMANTICS §15](MEMORY_SEMANTICS.md), evaluation order in
@@ -750,9 +752,12 @@ add syntax without removing a semantic case. Bug 181 is fixed by storing the bin
 **D6. Copy is explicit.** A struct or enum, generic or not, is Copy only when declared `Copy`, and
 the declaration is checked (every field Copy, under the declared kinds of its parameters). Copy is
 never derived from the fields of an instantiation. *Rationale:* it removes the conditional-Copy
-fixpoint Mono computes today (`Concrete/IR/Mono.lean`, "iterate to a fixpoint … either kind's
+fixpoint Mono computed (`Concrete/IR/Mono.lean`, "iterate to a fixpoint … either kind's
 Copy-ness can depend on the other's"), so Copy-ness is a fact of the declaration, not of a type
-graph.
+graph. *Refined 2026-10-23 (option (a)) and implemented the same day:* bare parameters keep kind
+Any, so the declaration is checked once with its type parameters taken as Copy, and an
+instantiation of a generic declared `Copy` is Copy exactly when every type argument is Copy, as a
+derived `Copy` is ([OWN-D1](../spec/ownership.md#OWN-D1), [TYPE-14](../spec/types.md#TYPE-14)).
 
 **D7. Trait coherence.** One impl per (trait, type), and it lives in the module of the trait or of
 the type. A method reachable through two bounds must be called qualified (`Trait::method(x)`),

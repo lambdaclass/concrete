@@ -1,0 +1,38 @@
+// Bug 183: a dereference assignment evaluates its right-hand side first, then the destination's
+// subexpressions (STATEMENT_EXPRESSION_MODEL, evaluation order rule 7). The binary ran the
+// destination first (exit 12 for the first shape); --interp ran the rule's order. Three shapes,
+// each recording its order in `c`: 21, then 43 (a deref of a borrowed field), then 65 (a raw
+// pointer in trusted code). main sums them: 21 + 43 + 65 = 129.
+struct Copy P { v: Int }
+
+fn tick(c: &mut Int, n: Int) -> Int {
+    *c = *c * 10 + n;
+    return n;
+}
+
+
+fn indexed() -> Int {
+    let mut c: Int = 0;
+    let mut a: [Int; 3] = [0, 0, 0];
+    *(&mut a[tick(&mut c, 1)]) = tick(&mut c, 2);
+    return c;
+}
+
+fn field() -> Int {
+    let mut c: Int = 0;
+    let mut ps: [P; 5] = [P { v: 0 }, P { v: 0 }, P { v: 0 }, P { v: 0 }, P { v: 0 }];
+    *(&mut ps[tick(&mut c, 3)].v) = tick(&mut c, 4);
+    return c;
+}
+
+trusted fn raw() -> Int {
+    let mut c: Int = 0;
+    let mut a: [Int; 7] = [0, 0, 0, 0, 0, 0, 0];
+    let base: *mut Int = &mut a[0] as *mut Int;
+    *(base + tick(&mut c, 5)) = tick(&mut c, 6);
+    return c;
+}
+
+fn main() -> Int {
+    return indexed() + field() + raw();
+}

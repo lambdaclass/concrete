@@ -118,7 +118,7 @@ write ml_ref_guard 'fn classify(p: &Int) -> i32 {
     match p {
         0 => { return 10; },
         1 | 2 => { return 20; },
-        n if n > 5 => { return 30; },
+        n if *n > 5 => { return 30; },
         _ => { return 40; },
     }
 }
