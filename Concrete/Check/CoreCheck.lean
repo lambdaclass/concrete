@@ -42,7 +42,8 @@ structure CoreCheckEnv where
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
-  vars : List (String × Ty)
+  -- R-0492 step 4: keyed by binding identity (a compiler temporary by its Core name)
+  vars : List (LocalKey × Ty)
   currentCapSet : CapSet
   currentRetTy : Ty
   inLoop : Bool
@@ -305,7 +306,7 @@ private def addError (msg : String) (hint : Option String) (code : String)
 private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
   addError e.message e.hint e.code e.reason (e.evidence ++ codeRuleEvidence e.code)
 
-private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
+private def addVar (name : LocalKey) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   -- Prepend so a rebinding SHADOWS (lookup is first-match). Appending made
   -- the first `value` binder in a function win forever: two match arms
@@ -313,7 +314,7 @@ private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   -- Option<bool>) raised a false E0500 on the second arm's uses.
   setEnv { env with vars := (name, ty) :: env.vars }
 
-private def lookupVar (name : String) : StateM CoreCheckEnv (Option Ty) := do
+private def lookupVar (name : LocalKey) : StateM CoreCheckEnv (Option Ty) := do
   let env ← getEnv
   return env.vars.lookup name
 
@@ -519,7 +520,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()
 
   | .ident name ty =>
-    match ← lookupVar name with
+    match ← lookupVar name.key with
     | some varTy =>
       -- Skip check when types involve named/generic/typeVar or ref/deref differences
       -- (match arms rebind names with different types; auto-deref also causes ref vs value differences)
@@ -533,9 +534,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         | .refMut inner, t | t, .refMut inner => typesCompatible inner t
         | _, _ => false
       if !typesCompatible varTy ty && !isLenient varTy && !isLenient ty && !isRefCompat then
-        addCCError (.typeMismatchVariable name (toString (repr varTy)) (toString (repr ty)))
+        addCCError (.typeMismatchVariable name.name (toString (repr varTy)) (toString (repr ty)))
     -- Not a local: a global function taken as a value (`let f = take_pair;`) when fn-typed.
-    | none => checkForeignFnValue name ty
+    | none => checkForeignFnValue name.name ty
 
   | .binOp op lhs rhs ty =>
     ccCheckExpr lhs
@@ -607,14 +608,14 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   -- global instead of against itself (bug 050's family, in the checker).
   | .call (.indirect binding) _typeArgs args _ty =>
     let env ← getEnv
-    match env.vars.lookup binding.name with
+    match env.vars.lookup binding.key with
     | some (.fn_ paramTys ptrCaps _) =>
       -- The call exercises the authority the fn TYPE declares — no capability
       -- smuggling through callbacks (mirrors the Check-pass fn-pointer rule).
       if !capsContain env.currentCapSet ptrCaps then
-        addCCError (.insufficientCapabilities binding (capSetToString ptrCaps) (capSetToString env.currentCapSet))
+        addCCError (.insufficientCapabilities binding.name (capSetToString ptrCaps) (capSetToString env.currentCapSet))
       if args.length != paramTys.length then
-        addCCError (.argCountMismatch binding paramTys.length args.length)
+        addCCError (.argCountMismatch binding.name paramTys.length args.length)
       else
         for (i, (pTy, arg)) in (List.range paramTys.length).zip (paramTys.zip args) do
           checkBinding s!"argument {i + 1} of '{binding}'" pTy arg
@@ -1379,7 +1380,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   setEnv { env with
     currentFnName' := f.name
-    vars := f.params
+    vars := f.paramKeys.zip (f.params.map (·.2))
     -- The DECLARED set, deliberately: the header is what callers rely on. A trusted
     -- body's discharge of a callee's `Unsafe` (extern calls included since R-0484)
     -- happens at the call site, not by widening this set, so it can never widen what
