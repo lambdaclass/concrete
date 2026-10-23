@@ -182,8 +182,8 @@ are not candidates here. Two other items are settled and are not repeated in the
   count of 79 / 1 / 0.
 - **Class.** HOLE: a leak of a linear value and a miscompile, both in safe code.
 - **Rule options.**
-  - (A) REF-5@1 as written. Every non-place borrow is E0238, and the 80 literal sites migrate to
-    named locals.
+  - (A) REF-5@1 as written, string literals included. Every non-place borrow is E0238, and the 79
+    literal sites (77 string literals, 2 integer literals) migrate to named locals.
   - (B) REF-5@2. A borrow of a value expression is an anonymous local of the enclosing
     statement, destroyed at its end. Linear temporaries would then be destroyed implicitly, which the 2026-10-21
     stance excludes.
