@@ -65,12 +65,18 @@ and every problem"):
 A second set of decisions the same day ("the best long term solution for everything we discussed")
 adds:
 
-- two declared generic kinds (Copy and Any) and explicit, checked Copy;
+- a bare `T` is Any (linear-capable) and `T: Copy` stays the only kind annotation (revised from
+  "two declared kinds"), with Copy for structs declared and checked, never derived;
 - trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
   identity;
-- no mutable globals in source, with the compiler's own globals inventoried;
+- global state: immutable globals everywhere, and mutable state only as declared global cells.
+  Cells live in an unsafe-marked module and are reached through capability-requiring functions;
+  there is no `static mut`, and the compiler's own globals are inventoried as trusted base (revised
+  from "no mutable globals");
 - one file per module, with generated interface artifacts;
-- a module allowlist for trusted, foreign and raw code;
+- a `trusted mod` marker in source: only marked modules may hold trusted, foreign and raw code.
+  The marker never confers trust, and a gate lists every marked module (it replaces the allowlist
+  idea);
 - the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
 - disciplines for every pass and every gate.
 
