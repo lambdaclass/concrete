@@ -183,6 +183,12 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   Arena; warns, never fails; SKIPs offline), from train 4 (wip/checker-pins). Its `--tier campaign`
 #   spelling is excluded above with the campaign driver: there a stale pin is a finding (exit 1), and an
 #   upstream commit must not turn a local pre-push or closure pass red.
+#   Train 4 as a whole, recounted with `--plan` on the merged workflow (267 commands): checker-pins
+#   +1 (the landing-tier freshness step above); lean435-ready +0 (its Lean 4.35 install is not a gate,
+#   and CONCRETE_REQUIRE_LEAN435 rides on the existing checker-acceptance step, the only run of
+#   check_kernel_recheck.sh); bug177 +0 (pipeline-test and fixtures inside existing gates);
+#   perf-tracking +0 and fast-gates +0 (check_perf_tracking.sh and the one-run-per-assertion steps
+#   were already counted in train 2's 264). 266 + 1 + 0 + 0 + 0 + 0 = 267.
 EXPECTED_GATE_COMMANDS=267
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
