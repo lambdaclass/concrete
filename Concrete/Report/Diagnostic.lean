@@ -89,9 +89,14 @@ def codeRuleTag : String → Option String
   | "E0250" | "E0251" | "E0253" | "E0254" | "E0260" | "E0261" | "E0306" | "E0416" | "E0550"
   | "E0551" | "E0552" => some "TYPE-7@1"
   | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
-  | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
+  | "E0262" | "E0264" | "E0265" | "E0266" | "E0522" => some "TYPE-9@1"
   | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
+  -- docs/spec/trusted.md and docs/spec/ffi.md
+  | "E0240" | "E0242" | "E0520" | "E0521" => some "TRUST-4@1"
+  | "E0116" | "E0117" | "E0574" | "E0575" => some "FFI-3@1"
+  | "E0572" | "E0573" | "E0576" | "E0577" | "E0585" => some "FFI-4@1"
+  | "E0118" | "E0119" => some "FFI-5@1"
   -- docs/spec/statements.md
   | "E0278" => some "STMT-5@1"
   | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@1"

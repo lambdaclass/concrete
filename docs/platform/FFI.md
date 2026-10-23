@@ -1,5 +1,9 @@
 # FFI and Unsafe Boundary
 
+The rules are FFI-1 to FFI-5 of [docs/spec/ffi.md](../spec/ffi.md) and TRUST-4 / TRUST-5 of
+[docs/spec/trusted.md](../spec/trusted.md); this document is the design record and keeps the
+wrapper patterns and the calling-convention design.
+
 Status: stable reference
 
 This document describes the current foreign-function interface boundary and the role of `Unsafe` in Concrete.

@@ -1,5 +1,9 @@
 # Safety Model
 
+The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-1 to TRUST-6) and
+[docs/spec/ffi.md](../spec/ffi.md) (FFI-1 to FFI-5); this document is the design record of the
+safety model and keeps its claims, audit reports and the high-integrity profile direction.
+
 Status: stable reference
 
 This document is the central reference for Concrete's safety model. It defines the organizing principles, explains how the pieces fit together, and points to the detailed references for each subsystem.

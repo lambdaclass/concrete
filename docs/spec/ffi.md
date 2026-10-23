@@ -1,8 +1,10 @@
 # Foreign Functions
 
-This chapter is a stub. It holds the decided rule on foreign function values. The C boundary,
-raw pointers and `trusted` code migrate here and to `trusted.md` later (README §8, step 6),
-from [FFI.md](../platform/FFI.md), SAFETY and TWO_AXIS_SAFETY.
+The C boundary is explicit: foreign functions are declared `extern fn`, raw pointers are their own
+types, and crossing the boundary needs `Unsafe` outside `trusted` code (TRUST-4, TRUST-5). This
+chapter covers foreign function values (FFI-1), the one layout authority (FFI-2, pending), extern
+declarations (FFI-3), layout attributes (FFI-4) and symbol names (FFI-5). The design record is
+[FFI.md](../platform/FFI.md), which keeps the wrapper patterns and the calling-convention design.
 
 ## Rules
 
@@ -73,4 +75,130 @@ mod m {
 disagreement shows up as wrong code at the boundary (structural classes 8 and 12). One authority,
 used by every consumer and stated for the AAPCS64 calling convention of the native profile,
 removes the second copy.
+
+<a id="FFI-3"></a>
+### FFI-3. An extern declaration declares its effects and FFI-safe types
+
+**FFI-3@1.** An `extern fn` has no body, declares its effects with `with(...)` (`with()` for none, never for a C symbol known to have effects), and takes and returns only FFI-safe types: integers, floats, `bool`, `char`, `Unit`, raw pointers and `#[repr(C)]` structs.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0116 (resolve), E0117 (resolve), E0574 (core-check), E0575 (core-check)
+- Status: enforced
+- Enforced by: Concrete.coreCheckProgram
+- Semantics: none
+- Obligation: foreign calls are external events governed by their declared contracts (R-0496)
+- Evidence: tested
+
+**Rationale.** An undeclared binding is never read as having no effects (bug 113), and a reference
+or a Concrete aggregate has no C meaning, so it cannot cross. An `#[intrinsic = "n"]` declaration
+that the compiler implements is not a foreign binding and declares no effects. A raw pointer to a
+reference at the boundary is gap G15 of MEMORY_SEMANTICS §15.7.
+
+```con reject name=undeclared-effects code=E0116 stage=resolve pair=declared-extern
+extern fn abs(x: i32) -> i32;
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con reject name=non-ffi-safe-parameter code=E0574 stage=core-check pair=declared-extern
+struct S { v: Int }
+
+extern fn f(s: S) with() -> i32;
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con accept name=declared-extern exit=42
+trusted extern fn abs(x: i32) with() -> i32;
+
+fn main() -> Int {
+    return abs(0 - 42) as Int;
+}
+```
+
+<a id="FFI-4"></a>
+### FFI-4. Layout attributes are well formed
+
+**FFI-4@1.** A `#[repr(C)]` struct is not generic and has only FFI-safe fields, `#[repr(packed)]` and `#[repr(align(N))]` are not combined, and `N` is a power of two no larger than the struct's natural alignment.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0572 (core-check), E0573 (core-check), E0576 (core-check), E0577 (core-check), E0585 (core-check)
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** `repr(C)` promises C's layout, which a generic or a non-C field cannot have.
+Over-alignment is refused because code generation does not support it yet (E0585).
+
+```con reject name=align-not-power-of-two code=E0577 stage=core-check pair=repr-c
+#[repr(C, align(3))]
+struct S { v: Int }
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con accept name=repr-c exit=42
+#[repr(C)]
+struct Copy S { a: i32, b: i32 }
+
+fn main() -> Int {
+    let s: S = S { a: 40, b: 2 };
+    return (s.a + s.b) as Int;
+}
+```
+
+<a id="FFI-5"></a>
+### FFI-5. Concrete symbols cannot collide with C symbols
+
+**FFI-5@1.** Every Concrete-defined function is emitted under a mangled symbol in a namespace disjoint from C identifiers, and only an `extern fn` (which binds its `#[link_name]` or its declared name) and an `#[export_name]` function use a C name.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0118 (resolve), E0119 (resolve)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A Concrete function named `malloc` used to replace C's `malloc` (bug 129). Every
+Concrete symbol contains `.` or `$`, which no C identifier does, so the namespaces are disjoint by
+construction. An export must be a C identifier of a C-compatible shape that no `extern fn` imports
+and that is not a runtime symbol the program uses; a missing foreign function is an error, never a
+synthesized body.
+
+```con reject name=bad-export-name code=E0119 stage=resolve pair=concrete-malloc
+#[export_name = "main"]
+fn entry() -> i32 {
+    return 0;
+}
+
+fn main() -> Int {
+    return 0;
+}
+```
+
+```con accept name=concrete-malloc exit=42
+struct Copy B { v: Int }
+
+fn malloc(n: Int) -> Int {
+    return n;
+}
+
+fn main() with(Std) -> Int {
+    let h: Heap<B> = alloc(B { v: 40 });
+    let b: B = *h;
+    return b.v + malloc(2);
+}
+```
 

@@ -263,7 +263,7 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
           postLower := postLower, postCleanup := postCleanup }
 
 /-- Emit LLVM IR from SSA modules. -/
--- spec: PASS-10, spec: ARITH-3, spec: ARITH-4, spec: ARITH-6 (docs/spec/pipeline.md, docs/spec/arithmetic.md: checked operations lower through the abort helpers)
+-- spec: PASS-10, spec: ARITH-3, spec: ARITH-4, spec: ARITH-6, spec: FFI-5 (docs/spec/pipeline.md, docs/spec/arithmetic.md: checked operations lower through the abort helpers)
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter
 

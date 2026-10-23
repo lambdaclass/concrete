@@ -14,6 +14,15 @@ E0108	unmigrated:modules	unknown type
 E0109	unmigrated:modules	Self outside impl block
 E0110	unmigrated:modules	unknown module
 E0111	unmigrated:modules	symbol not public in module
+E0112	unmigrated:modules	recursive type alias
+E0113	unmigrated:types	wrong number of type arguments
+E0114	unmigrated:trusted	capability argument of the wrong kind
+E0115	unmigrated:trusted	wrong number of capability arguments
+E0116	rule	foreign binding does not declare its effects
+E0117	rule	known effectful C symbol declared with()
+E0118	rule	invalid #[link_name]
+E0119	rule	invalid #[export_name]
+E0120	unmigrated:modules	import alias names an intrinsic
 E0200	unmigrated:modules	Self outside impl block
 E0201	unmigrated:modules	undeclared variable
 E0202	unmigrated:modules	assignment to undeclared variable
@@ -54,9 +63,9 @@ E0236	rule	a function, function type or instantiation returns a reference (front
 E0237	unmigrated:references	mutable borrow (explicit or `&mut self` receiver) through a shared reference
 E0238	rule	place or reference source that does not normalize to a traceable place
 E0239	rule	a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)
-E0240	unmigrated:trusted	missing capability
-E0241	unmigrated:trusted	trait bound not satisfied
-E0242	unmigrated:trusted	cannot infer capability variable
+E0240	rule	missing capability
+E0241	unmigrated:traits	trait bound not satisfied
+E0242	rule	cannot infer capability variable
 E0243	rule	proof-only statement (assert, assume, ghost let) moves a runtime value (bug 147)
 E0244	rule	right operand of && or || moves a value it may never run to move (bug 148)
 E0250	rule	unknown struct type
@@ -137,6 +146,7 @@ E0416	rule	empty array literal
 E0417	internal	submodule elaboration error
 E0418	unmigrated:modules	unknown module
 E0419	unmigrated:modules	symbol not public in module
+E0420	unmigrated:contracts	ghost value used in runtime code (also an unsupported append() argument type)
 E0500	rule	variable type mismatch
 E0501	rule	arithmetic on non-numeric type
 E0502	rule	binary operand type mismatch
@@ -148,9 +158,9 @@ E0507	rule	negation on non-numeric type
 E0508	rule	logical not on non-Bool
 E0509	rule	bitwise not on non-integer
 E0510	internal	binding type mismatch (let, assignment, argument, field or store)
-E0520	unmigrated:trusted	insufficient capabilities
-E0521	unmigrated:trusted	missing capability
-E0522	unmigrated:trusted	argument count mismatch
+E0520	rule	insufficient capabilities
+E0521	rule	missing capability
+E0522	rule	argument count mismatch
 E0530	rule	non-exhaustive match: missing variant
 E0531	rule	match arm wrong enum
 E0532	rule	duplicate match arm
@@ -169,12 +179,12 @@ E0555	rule	assign through a target that is not `&mut T` or `*mut T`
 E0560	rule	return type mismatch
 E0570	rule	Copy/Destroy conflict
 E0571	rule	Copy struct has non-Copy field
-E0572	unmigrated:ffi	repr(C) struct has generics
-E0573	unmigrated:ffi	repr(C) field not FFI-safe
-E0574	unmigrated:ffi	extern fn parameter not FFI-safe
-E0575	unmigrated:ffi	extern fn return not FFI-safe
-E0576	unmigrated:ffi	repr(packed) and repr(align) conflict
-E0577	unmigrated:ffi	repr(align) not power of two
+E0572	rule	repr(C) struct has generics
+E0573	rule	repr(C) field not FFI-safe
+E0574	rule	extern fn parameter not FFI-safe
+E0575	rule	extern fn return not FFI-safe
+E0576	rule	repr(packed) and repr(align) conflict
+E0577	rule	repr(align) not power of two
 E0578	unmigrated:modules	reserved function name
 E0579	unmigrated:modules	builtin trait redeclared
 E0580	unmigrated:traits	unknown trait
@@ -182,7 +192,7 @@ E0581	unmigrated:traits	missing trait method
 E0582	unmigrated:traits	trait method return type mismatch
 E0583	unmigrated:traits	recursive type has infinite size
 E0584	rule	Destroy impl requires capabilities beyond Alloc (v1 drop-glue restriction)
-E0585	unmigrated:ffi	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
+E0585	rule	repr(align) exceeds natural alignment (over-aligned structs not yet supported in codegen)
 E0586	unmigrated:traits	trait impl method requires capabilities beyond its trait method's declared set
 E0587	unmigrated:traits	trait impl method signature (receiver, parameters, generics) does not match its trait method
 E0600	tooling	post-elab: placeholder type survived elaboration

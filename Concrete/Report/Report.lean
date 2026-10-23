@@ -6248,6 +6248,15 @@ def diagnosticCodesReport : String :=
     entry "E0109" "resolve" "error" "Self outside impl block",
     entry "E0110" "resolve" "error" "unknown module",
     entry "E0111" "resolve" "error" "symbol not public in module",
+    entry "E0112" "resolve" "error" "recursive type alias",
+    entry "E0113" "resolve" "error" "wrong number of type arguments",
+    entry "E0114" "resolve" "error" "capability argument of the wrong kind",
+    entry "E0115" "resolve" "error" "wrong number of capability arguments",
+    entry "E0116" "resolve" "error" "foreign binding does not declare its effects",
+    entry "E0117" "resolve" "error" "known effectful C symbol declared with()",
+    entry "E0118" "resolve" "error" "invalid #[link_name]",
+    entry "E0119" "resolve" "error" "invalid #[export_name]",
+    entry "E0120" "resolve" "error" "import alias names an intrinsic",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
@@ -6381,6 +6390,7 @@ def diagnosticCodesReport : String :=
     entry "E0417" "elab" "error" "submodule elaboration error",
     entry "E0418" "elab" "error" "unknown module",
     entry "E0419" "elab" "error" "symbol not public in module",
+    entry "E0420" "elab" "error" "ghost value used in runtime code (the same code is also used for an unsupported append() argument type)",
     -- Core-check: type consistency (E0500–E0509)
     entry "E0500" "core-check" "error" "variable type mismatch",
     entry "E0501" "core-check" "error" "arithmetic on non-numeric type",

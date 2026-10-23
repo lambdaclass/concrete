@@ -604,7 +604,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
     | _ => return t
   | _ => return t
 
--- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4 (docs/spec/ownership.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>

@@ -48,12 +48,12 @@ areas exist (§8).
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-7 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives) |
-| `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
+| `ffi.md` | `FFI-` | migrated: FFI-1 to FFI-5 (foreign function values, Layout authority, extern declarations, layout attributes, symbol names) |
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
 | `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-14 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds) |
 | `memory.md` | `MEM-` | migrated: MEM-1 to MEM-6 (two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
-| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
+| `trusted.md` | `TRUST-` | migrated: TRUST-1 to TRUST-6 (pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules); handle capabilities and callable-value capabilities still in their documents |
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
@@ -333,7 +333,7 @@ them.
 | existing | relation |
 |---|---|
 | `check_rules_2i.sh` and `tests/rules/exit_2i.tsv` | The manifest is generated (§5), and the gate's code-to-rule table comes from the spec. |
-| `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean` and `CoreCheck.lean` has a ledger row. It does not see codes built elsewhere. S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. Widening the first gate's scan to every emitter is tracked separately. |
+| `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean`, `CoreCheck.lean`, `Resolve.lean` and `Elab.lean` has a ledger row (widened 2026-10-23, which added E0112 – E0120 and E0420 to the ledger). S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. |
 | `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | Migrated (step 0): the boundary contracts are `pipeline.md`'s PASS-5 to PASS-11, their fixtures are its examples, the leak check is part of S4, and the gate is retired. PIPELINE_CONTRACTS.md is the design record. |
 | `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | Migrated (step 1): the per-constructor tables are OWN-15 in `ownership.md`. `check_value_flow_spec.sh` stays the owner of constructor coverage and now reads `ownership.md`; it is a fast source gate, so it stays out of `check_spec.sh`, which needs a compiler. VALUE_FLOW_SPEC.md is the design record. |
 | `check_constructor_coverage.sh` | It checks that every compiler walker handles every constructor. That is a fact about the compiler, not the language, so it stays separate. |
@@ -379,7 +379,7 @@ Each step lands with the gate green. The steps run in this order:
 5a. **memory.md** (`MEM-`, migrated 2026-10-23): allocations, `Heap<T>`, what safe code may
    observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
    MEMORY_SEMANTICS.
-6. **ffi.md** (`FFI-`, grown from the stub) and **trusted.md** (`TRUST-`): the C boundary,
+6. **ffi.md** (`FFI-`) and **trusted.md** (`TRUST-`), migrated 2026-10-23 except handle and callable-value capabilities: the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the
    normative parts of platform/FFI, SAFETY, TWO_AXIS_SAFETY, CAPABILITY_FACTS,
    HANDLE_CAPABILITIES and CALLABLE_VALUES_AND_CAPABILITIES. T-RAWDUP, D8 (global state) and D10
