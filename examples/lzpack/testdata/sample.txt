@@ -1,0 +1,19 @@
+# lzpack sample input: config-like text with repeated keys and values.
+[server]
+host = "127.0.0.1"
+port = 8080
+timeout = 30
+[server.tls]
+enabled = true
+cert = "/etc/lzpack/server.crt"
+key = "/etc/lzpack/server.key"
+[client]
+host = "127.0.0.1"
+port = 8081
+timeout = 30
+retries = 3
+[client.tls]
+enabled = true
+cert = "/etc/lzpack/client.crt"
+key = "/etc/lzpack/client.key"
+padding = "========================================================================"

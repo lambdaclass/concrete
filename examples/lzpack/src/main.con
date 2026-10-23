@@ -1,0 +1,804 @@
+// lzpack — WORKLOAD 9 (P7: compression codec, byte-exact format, round trip).
+// Usage:
+//   lzpack c [-r] <in> <out>   compress <in> (LZSS; -r: PackBits RLE) to <out>
+//   lzpack d <in> <out>        decompress <in> to <out>
+//   lzpack t <in>              round-trip <in> through both codecs in memory
+//   lzpack selftest            built-in vectors + corrupt-stream checks
+//
+// Container (12-byte header, little-endian):
+//   "LZP" method('1' = LZSS, '2' = RLE) | original length u32 | CRC32 of original u32
+// LZSS payload: a flag byte, then up to 8 items, flag bit k (LSB first) set
+//   for a match: two bytes b0 b1, distance = 1 + (b0 | (b1 >> 4) << 8)
+//   (1..4096), length = (b1 & 15) + 3 (3..18); clear for one literal byte.
+//   Matches are found greedily through a 3-byte hash chain (32 candidates,
+//   the most recent first, a longer match strictly wins).
+// RLE payload (PackBits): control c < 128 -> c+1 literal bytes follow;
+//   c >= 128 -> one byte follows, repeated c - 125 times (3..130).
+// The format and the greedy parse are deterministic, so
+// scripts/tests/check_lzpack_differential.sh compares the compressed bytes
+// with an independent Python implementation of the same specification.
+// Exit codes (13t): 0 ok, 1 bad input (unreadable, corrupt stream), 2 usage.
+mod lzpack {
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+    import std.cli.{Cli, CliResult};
+    import std.fs.{read_file, write_file, FsError};
+    import std.checksum.{crc32_all};
+    import std.io.{println, eprintln};
+
+    const WINDOW: u64 = 4096;
+    const MIN_MATCH: u64 = 3;
+    const MAX_MATCH: u64 = 18;
+    const MAX_CHAIN: u64 = 32;
+    const HASH_SIZE: u64 = 4096;
+    const HEADER_LEN: u64 = 12;
+    const METHOD_LZ: u8 = 49;    // '1'
+    const METHOD_RLE: u8 = 50;   // '2'
+    const MAX_LITERALS: u64 = 128;
+    const MAX_RUN: u64 = 130;
+
+    enum Copy DecodeError {
+        Truncated,
+        BadMagic,
+        BadMethod,
+        BadDistance,
+        Overrun,
+        TrailingData,
+        BadChecksum,
+    }
+
+    // FRICTION (no tuples): find_match returns two numbers.
+    struct Copy Match {
+        len: u64,
+        dist: u64,
+    }
+
+    struct Copy Stats {
+        literals: u64,
+        matches: u64,
+        runs: u64,
+        longest: u64,
+    }
+
+    fn new_stats() -> Stats {
+        return Stats { literals: 0, matches: 0, runs: 0, longest: 0 };
+    }
+
+    fn error_name(e: DecodeError) -> String {
+        match e {
+            DecodeError::Truncated => { return "truncated stream"; },
+            DecodeError::BadMagic => { return "bad magic"; },
+            DecodeError::BadMethod => { return "unknown method"; },
+            DecodeError::BadDistance => { return "match distance before start of output"; },
+            DecodeError::Overrun => { return "output longer than header length"; },
+            DecodeError::TrailingData => { return "trailing data after stream"; },
+            DecodeError::BadChecksum => { return "checksum mismatch"; },
+        }
+    }
+
+    fn say(s: String) with(Console, Alloc) {
+        println(&s);
+        s.drop();
+    }
+
+    fn fail(s: String) with(Console, Alloc) -> u8 {
+        eprintln(&s);
+        s.drop();
+        return 1;
+    }
+
+    fn usage() with(Console, Alloc) -> u8 {
+        let u: String = "usage: lzpack c [-r] <in> <out> | d <in> <out> | t <in> | selftest";
+        eprintln(&u);
+        u.drop();
+        return 2;
+    }
+
+    fn push_le32(out: &mut Bytes, v: u64) with(Alloc) {
+        out.push((v & 255) as u8);
+        out.push(((v >> 8) & 255) as u8);
+        out.push(((v >> 16) & 255) as u8);
+        out.push(((v >> 24) & 255) as u8);
+    }
+
+    fn filled(n: u64, v: u64) with(Alloc) -> Vec<u64> {
+        let mut out: Vec<u64> = Vec::<u64>::new();
+        let mut i: u64 = 0;
+        while i < n {
+            out.push(v);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    // ---------------------------------------------------------------- LZSS
+
+    fn hash3(d: &Bytes, i: u64) -> u64 {
+        let a: u64 = d.get_unchecked(i) as u64;
+        let b: u64 = d.get_unchecked(i + 1) as u64;
+        let c: u64 = d.get_unchecked(i + 2) as u64;
+        return ((a << 8) ^ (b << 4) ^ c) & (HASH_SIZE - 1);
+    }
+
+    // head[h] and prev[i] hold a position + 1; 0 ends the chain.
+    fn insert(d: &Bytes, head: &mut Vec<u64>, prev: &mut Vec<u64>, i: u64) {
+        if i + MIN_MATCH > d.len() { return; }
+        let h: u64 = hash3(d, i);
+        prev.set_unchecked(i, head.get_unchecked(h));
+        head.set_unchecked(h, i + 1);
+    }
+
+    fn match_len(d: &Bytes, cand: u64, i: u64, limit: u64) -> u64 {
+        let mut k: u64 = 0;
+        while k < limit && d.get_unchecked(cand + k) == d.get_unchecked(i + k) {
+            k = k + 1;
+        }
+        return k;
+    }
+
+    fn find_match(d: &Bytes, head: &Vec<u64>, prev: &Vec<u64>, i: u64) -> Match {
+        let mut best: Match = Match { len: 0, dist: 0 };
+        let n: u64 = d.len();
+        if i + MIN_MATCH > n { return best; }
+        let mut limit: u64 = n - i;
+        if limit > MAX_MATCH { limit = MAX_MATCH; }
+        let mut c: u64 = head.get_unchecked(hash3(d, i));
+        let mut steps: u64 = 0;
+        while c != 0 && steps < MAX_CHAIN {
+            let cand: u64 = c - 1;
+            if i - cand > WINDOW { break; }
+            let l: u64 = match_len(d, cand, i, limit);
+            if l > best.len {
+                best = Match { len: l, dist: i - cand };
+                if l == limit { break; }
+            }
+            c = prev.get_unchecked(cand);
+            steps = steps + 1;
+        }
+        return best;
+    }
+
+    fn lz_encode(d: &Bytes, out: &mut Bytes, st: &mut Stats) with(Alloc) {
+        let n: u64 = d.len();
+        let mut head: Vec<u64> = filled(HASH_SIZE, 0);
+        let mut prev: Vec<u64> = filled(n, 0);
+        let mut i: u64 = 0;
+        let mut flag_pos: u64 = 0;
+        let mut flag: u64 = 0;
+        let mut items: u64 = 8;
+        while i < n {
+            if items == 8 {
+                flag_pos = out.len();
+                out.push(0);
+                flag = 0;
+                items = 0;
+            }
+            let m: Match = find_match(d, &head, &prev, i);
+            if m.len >= MIN_MATCH {
+                flag = flag | (1 << items);
+                let off: u64 = m.dist - 1;
+                out.push((off & 255) as u8);
+                out.push((((off >> 8) << 4) | (m.len - MIN_MATCH)) as u8);
+                let mut k: u64 = 0;
+                while k < m.len {
+                    insert(d, &mut head, &mut prev, i + k);
+                    k = k + 1;
+                }
+                i = i + m.len;
+                st.matches = st.matches + 1;
+                if m.len > st.longest { st.longest = m.len; }
+            } else {
+                out.push(d.get_unchecked(i));
+                insert(d, &mut head, &mut prev, i);
+                i = i + 1;
+                st.literals = st.literals + 1;
+            }
+            items = items + 1;
+            discard(out.set(flag_pos, flag as u8));
+        }
+        head.drop();
+        prev.drop();
+    }
+
+    // Decodes from src[start..] until out holds orig bytes; returns the
+    // position just past the last byte read.
+    fn lz_decode(src: &Bytes, start: u64, orig: u64, out: &mut Bytes) with(Alloc) -> Result<u64, DecodeError> {
+        let n: u64 = src.len();
+        let mut p: u64 = start;
+        while out.len() < orig {
+            if p >= n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+            let flag: u64 = src.get_unchecked(p) as u64;
+            p = p + 1;
+            let mut bit: u64 = 0;
+            while bit < 8 && out.len() < orig {
+                if ((flag >> bit) & 1) == 1 {
+                    if p + 2 > n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+                    let b0: u64 = src.get_unchecked(p) as u64;
+                    let b1: u64 = src.get_unchecked(p + 1) as u64;
+                    p = p + 2;
+                    let dist: u64 = (b0 | ((b1 >> 4) << 8)) + 1;
+                    let len: u64 = (b1 & 15) + MIN_MATCH;
+                    if dist > out.len() { return Result::<u64, DecodeError>::Err { error: DecodeError::BadDistance }; }
+                    if out.len() + len > orig { return Result::<u64, DecodeError>::Err { error: DecodeError::Overrun }; }
+                    let mut k: u64 = 0;
+                    while k < len {
+                        let at: u64 = out.len() - dist;
+                        let b: u8 = out.get_unchecked(at);
+                        out.push(b);
+                        k = k + 1;
+                    }
+                } else {
+                    if p >= n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+                    out.push(src.get_unchecked(p));
+                    p = p + 1;
+                }
+                bit = bit + 1;
+            }
+        }
+        return Result::<u64, DecodeError>::Ok { value: p };
+    }
+
+    // ----------------------------------------------------------------- RLE
+
+    fn run_len(d: &Bytes, i: u64, cap: u64) -> u64 {
+        let n: u64 = d.len();
+        let b: u8 = d.get_unchecked(i);
+        let mut k: u64 = 1;
+        while k < cap && i + k < n && d.get_unchecked(i + k) == b {
+            k = k + 1;
+        }
+        return k;
+    }
+
+    fn flush_literals(d: &Bytes, start: u64, end: u64, out: &mut Bytes, st: &mut Stats) with(Alloc) {
+        if end <= start { return; }
+        out.push((end - start - 1) as u8);
+        let mut k: u64 = start;
+        while k < end {
+            out.push(d.get_unchecked(k));
+            k = k + 1;
+        }
+        st.literals = st.literals + (end - start);
+    }
+
+    fn rle_encode(d: &Bytes, out: &mut Bytes, st: &mut Stats) with(Alloc) {
+        let n: u64 = d.len();
+        let mut i: u64 = 0;
+        let mut lit_start: u64 = 0;
+        while i < n {
+            let r: u64 = run_len(d, i, MAX_RUN);
+            if r >= 3 {
+                flush_literals(d, lit_start, i, out, st);
+                out.push((r + 125) as u8);
+                out.push(d.get_unchecked(i));
+                i = i + r;
+                lit_start = i;
+                st.runs = st.runs + 1;
+                if r > st.longest { st.longest = r; }
+            } else {
+                i = i + 1;
+                if i - lit_start == MAX_LITERALS {
+                    flush_literals(d, lit_start, i, out, st);
+                    lit_start = i;
+                }
+            }
+        }
+        flush_literals(d, lit_start, n, out, st);
+    }
+
+    fn rle_decode(src: &Bytes, start: u64, orig: u64, out: &mut Bytes) with(Alloc) -> Result<u64, DecodeError> {
+        let n: u64 = src.len();
+        let mut p: u64 = start;
+        while out.len() < orig {
+            if p >= n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+            let c: u64 = src.get_unchecked(p) as u64;
+            p = p + 1;
+            if c < 128 {
+                let count: u64 = c + 1;
+                if p + count > n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+                if out.len() + count > orig { return Result::<u64, DecodeError>::Err { error: DecodeError::Overrun }; }
+                let mut k: u64 = 0;
+                while k < count {
+                    out.push(src.get_unchecked(p + k));
+                    k = k + 1;
+                }
+                p = p + count;
+            } else {
+                let count: u64 = c - 125;
+                if p >= n { return Result::<u64, DecodeError>::Err { error: DecodeError::Truncated }; }
+                if out.len() + count > orig { return Result::<u64, DecodeError>::Err { error: DecodeError::Overrun }; }
+                let b: u8 = src.get_unchecked(p);
+                p = p + 1;
+                let mut k: u64 = 0;
+                while k < count {
+                    out.push(b);
+                    k = k + 1;
+                }
+            }
+        }
+        return Result::<u64, DecodeError>::Ok { value: p };
+    }
+
+    // ----------------------------------------------------------- container
+
+    fn compress(d: &Bytes, method: u8, st: &mut Stats) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::new();
+        out.push(76);   // 'L'
+        out.push(90);   // 'Z'
+        out.push(80);   // 'P'
+        out.push(method);
+        push_le32(&mut out, d.len());
+        push_le32(&mut out, crc32_all(d));
+        if method == METHOD_LZ {
+            lz_encode(d, &mut out, st);
+        } else {
+            rle_encode(d, &mut out, st);
+        }
+        return out;
+    }
+
+    fn decompress(src: &Bytes) with(Alloc) -> Result<Bytes, DecodeError> {
+        if src.len() < HEADER_LEN {
+            return Result::<Bytes, DecodeError>::Err { error: DecodeError::Truncated };
+        }
+        if src.get_unchecked(0) != 76 || src.get_unchecked(1) != 90 || src.get_unchecked(2) != 80 {
+            return Result::<Bytes, DecodeError>::Err { error: DecodeError::BadMagic };
+        }
+        let method: u8 = src.get_unchecked(3);
+        if method != METHOD_LZ && method != METHOD_RLE {
+            return Result::<Bytes, DecodeError>::Err { error: DecodeError::BadMethod };
+        }
+        let orig: u64 = src.le32(4);
+        let crc: u64 = src.le32(8);
+        let mut out: Bytes = Bytes::new();
+        let r: Result<u64, DecodeError> = if method == METHOD_LZ {
+            lz_decode(src, HEADER_LEN, orig, &mut out)
+        } else {
+            rle_decode(src, HEADER_LEN, orig, &mut out)
+        };
+        match r {
+            Result::Err { error } => {
+                out.drop();
+                return Result::<Bytes, DecodeError>::Err { error: error };
+            },
+            Result::Ok { value } => {
+                if value != src.len() {
+                    out.drop();
+                    return Result::<Bytes, DecodeError>::Err { error: DecodeError::TrailingData };
+                }
+            },
+        }
+        if crc32_all(&out) != crc {
+            out.drop();
+            return Result::<Bytes, DecodeError>::Err { error: DecodeError::BadChecksum };
+        }
+        return Result::<Bytes, DecodeError>::Ok { value: out };
+    }
+
+    fn method_name(method: u8) -> String {
+        if method == METHOD_LZ { return "lz"; }
+        return "rle";
+    }
+
+    // Compress with one method, decompress, compare. Appends the report
+    // line to `line`; returns whether the round trip reproduced the input.
+    fn roundtrip(d: &Bytes, method: u8, line: &mut String) with(Alloc) -> bool {
+        let mut st: Stats = new_stats();
+        let packed: Bytes = compress(d, method, &mut st);
+        let name: String = method_name(method);
+        line.append(&name);
+        name.drop();
+        line.push_char('=');
+        line.append_int(packed.len() as Int);
+        let ok: bool = match decompress(&packed) {
+            Result::Err { error } => {
+                discard(error);
+                false
+            },
+            Result::Ok { value } => {
+                let same: bool = value.eq(d);
+                value.drop();
+                same
+            },
+        };
+        packed.drop();
+        if method == METHOD_LZ {
+            line.append(&" (literals ");
+            line.append_int(st.literals as Int);
+            line.append(&", matches ");
+            line.append_int(st.matches as Int);
+            line.append(&", longest ");
+            line.append_int(st.longest as Int);
+            line.push_char(')');
+        } else {
+            line.append(&" (literals ");
+            line.append_int(st.literals as Int);
+            line.append(&", runs ");
+            line.append_int(st.runs as Int);
+            line.append(&", longest ");
+            line.append_int(st.longest as Int);
+            line.push_char(')');
+        }
+        return ok;
+    }
+
+    // Round-trips d through both codecs and prints one line per codec.
+    fn report(label: &String, d: &Bytes) with(Console, Alloc) -> bool {
+        let mut all_ok: bool = true;
+        let mut m: u64 = 0;
+        while m < 2 {
+            let method: u8 = if m == 0 { METHOD_LZ } else { METHOD_RLE };
+            let mut line: String = String::new();
+            line.append(label);
+            line.append(&": ");
+            line.append_int(d.len() as Int);
+            line.append(&" -> ");
+            let ok: bool = roundtrip(d, method, &mut line);
+            if ok {
+                line.append(&" ok");
+            } else {
+                line.append(&" MISMATCH");
+                all_ok = false;
+            }
+            say(line);
+            m = m + 1;
+        }
+        return all_ok;
+    }
+
+    // ------------------------------------------------------------ selftest
+
+    fn bytes_of(s: &String) with(Alloc) -> Bytes {
+        return Bytes::from_string(s);
+    }
+
+    fn repeat_text(s: &String, times: u64) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::new();
+        let mut t: u64 = 0;
+        while t < times {
+            let mut k: u64 = 0;
+            while k < s.len() {
+                out.push(s.get_unchecked(k) as u8);
+                k = k + 1;
+            }
+            t = t + 1;
+        }
+        return out;
+    }
+
+    fn lcg_bytes(n: u64, seed: u64) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::new();
+        let mut x: u64 = seed;
+        let mut i: u64 = 0;
+        while i < n {
+            x = (x * 1103515245 + 12345) % 2147483648;
+            out.push(((x >> 16) & 255) as u8);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    fn every_byte(times: u64) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::new();
+        let mut t: u64 = 0;
+        while t < times {
+            let mut b: u64 = 0;
+            while b < 256 {
+                out.push(b as u8);
+                b = b + 1;
+            }
+            t = t + 1;
+        }
+        return out;
+    }
+
+    // Expects decompress to fail with `want`; prints the outcome.
+    fn expect_error(label: &String, stream: Bytes, want: DecodeError) with(Console, Alloc) -> bool {
+        let mut line: String = String::new();
+        line.append(&"corrupt ");
+        line.append(label);
+        line.append(&": ");
+        let mut ok: bool = false;
+        match decompress(&stream) {
+            Result::Ok { value } => {
+                value.drop();
+                line.append(&"accepted (WRONG)");
+            },
+            Result::Err { error } => {
+                let got: String = error_name(error);
+                line.append(&got);
+                got.drop();
+                ok = error_tag(error) == error_tag(want);
+                if !ok { line.append(&" (WRONG)"); }
+            },
+        }
+        stream.drop();
+        say(line);
+        return ok;
+    }
+
+    // FRICTION: enums have no equality; compare by a hand-written tag.
+    fn error_tag(e: DecodeError) -> u64 {
+        match e {
+            DecodeError::Truncated => { return 0; },
+            DecodeError::BadMagic => { return 1; },
+            DecodeError::BadMethod => { return 2; },
+            DecodeError::BadDistance => { return 3; },
+            DecodeError::Overrun => { return 4; },
+            DecodeError::TrailingData => { return 5; },
+            DecodeError::BadChecksum => { return 6; },
+        }
+    }
+
+    fn sample_text() with(Alloc) -> Bytes {
+        let s: String = "the quick brown fox jumps over the lazy dog; the lazy dog sleeps. ";
+        let b: Bytes = repeat_text(&s, 12);
+        s.drop();
+        return b;
+    }
+
+    fn selftest() with(Console, Alloc) -> u8 {
+        let mut ok: bool = true;
+
+        let e: Bytes = Bytes::new();
+        ok = report(&"empty", &e) && ok;
+        e.drop();
+
+        let one: Bytes = bytes_of(&"a");
+        ok = report(&"one byte", &one) && ok;
+        one.drop();
+
+        let abc: String = "abc";
+        let rep: Bytes = repeat_text(&abc, 40);
+        abc.drop();
+        ok = report(&"abc x40", &rep) && ok;
+        rep.drop();
+
+        let z: String = "z";
+        let zs: Bytes = repeat_text(&z, 1000);
+        z.drop();
+        ok = report(&"z x1000", &zs) && ok;
+        zs.drop();
+
+        let txt: Bytes = sample_text();
+        ok = report(&"text", &txt) && ok;
+        txt.drop();
+
+        let rnd: Bytes = lcg_bytes(2000, 7);
+        ok = report(&"lcg 2000", &rnd) && ok;
+        rnd.drop();
+
+        let all: Bytes = every_byte(2);
+        ok = report(&"bytes 0-255 x2", &all) && ok;
+        all.drop();
+
+        // Corrupt streams, all derived from one valid LZSS stream of the text.
+        let base: Bytes = sample_text();
+        let mut st: Stats = new_stats();
+        let good: Bytes = compress(&base, METHOD_LZ, &mut st);
+        base.drop();
+
+        let cut: Bytes = match good.slice(0, good.len() - 1) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        ok = expect_error(&"cut last byte", cut, DecodeError::Truncated) && ok;
+
+        let mut magic: Bytes = match good.slice(0, good.len()) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        discard(magic.set(0, 77));
+        ok = expect_error(&"magic", magic, DecodeError::BadMagic) && ok;
+
+        let mut meth: Bytes = match good.slice(0, good.len()) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        discard(meth.set(3, 57));
+        ok = expect_error(&"method", meth, DecodeError::BadMethod) && ok;
+
+        // header + a flag byte announcing a match as the very first item
+        let mut far: Bytes = Bytes::new();
+        far.push(76); far.push(90); far.push(80); far.push(METHOD_LZ);
+        push_le32(&mut far, 10);
+        push_le32(&mut far, 0);
+        far.push(1); far.push(0); far.push(0);
+        ok = expect_error(&"distance", far, DecodeError::BadDistance) && ok;
+
+        let mut long: Bytes = match good.slice(0, good.len()) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        discard(long.set(4, 5));
+        discard(long.set(5, 0));
+        ok = expect_error(&"short length", long, DecodeError::TrailingData) && ok;
+
+        let mut extra: Bytes = match good.slice(0, good.len()) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        extra.push(0);
+        ok = expect_error(&"extra byte", extra, DecodeError::TrailingData) && ok;
+
+        let mut flip: Bytes = match good.slice(0, good.len()) {
+            Option::Some { value } => { value },
+            Option::None => { Bytes::new() },
+        };
+        // byte 13 is the first literal ('t'); 'T' keeps the stream well formed
+        discard(flip.set(13, 84));
+        ok = expect_error(&"flipped literal", flip, DecodeError::BadChecksum) && ok;
+
+        // RLE: a run that overshoots the declared length
+        let mut over: Bytes = Bytes::new();
+        over.push(76); over.push(90); over.push(80); over.push(METHOD_RLE);
+        push_le32(&mut over, 2);
+        push_le32(&mut over, 0);
+        over.push(128); over.push(65);
+        ok = expect_error(&"rle overrun", over, DecodeError::Overrun) && ok;
+
+        good.drop();
+        if ok {
+            say("selftest: all ok");
+            return 0;
+        }
+        say("selftest: FAILED");
+        return 1;
+    }
+
+    // ------------------------------------------------------------ commands
+
+    fn load(path: &String) with(File, Alloc) -> Option<Bytes> {
+        match read_file(path) {
+            Result::Err { error } => {
+                discard(error);
+                return Option::<Bytes>::None;
+            },
+            Result::Ok { value } => {
+                return Option::<Bytes>::Some { value: value };
+            },
+        }
+    }
+
+    fn store(path: &String, data: &Bytes) with(File, Alloc) -> bool {
+        match write_file(path, data) {
+            Result::Err { error } => {
+                discard(error);
+                return false;
+            },
+            Result::Ok { value } => {
+                return value == data.len();
+            },
+        }
+    }
+
+    fn cmd_compress(inp: &String, outp: &String, method: u8) with(Std) -> u8 {
+        let data: Bytes = match load(inp) {
+            Option::None => { return fail("lzpack: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        let mut st: Stats = new_stats();
+        let packed: Bytes = compress(&data, method, &mut st);
+        let mut line: String = String::new();
+        line.append_int(data.len() as Int);
+        line.append(&" -> ");
+        line.append_int(packed.len() as Int);
+        line.append(&" bytes (");
+        let name: String = method_name(method);
+        line.append(&name);
+        name.drop();
+        line.push_char(')');
+        data.drop();
+        let written: bool = store(outp, &packed);
+        packed.drop();
+        if !written {
+            line.drop();
+            return fail("lzpack: cannot write output");
+        }
+        say(line);
+        return 0;
+    }
+
+    fn cmd_decompress(inp: &String, outp: &String) with(Std) -> u8 {
+        let src: Bytes = match load(inp) {
+            Option::None => { return fail("lzpack: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        let in_len: u64 = src.len();
+        let r: Result<Bytes, DecodeError> = decompress(&src);
+        src.drop();
+        match r {
+            Result::Err { error } => {
+                let mut m: String = "lzpack: corrupt stream: ";
+                let why: String = error_name(error);
+                m.append(&why);
+                why.drop();
+                return fail(m);
+            },
+            Result::Ok { value } => {
+                let written: bool = store(outp, &value);
+                let mut line: String = String::new();
+                line.append_int(in_len as Int);
+                line.append(&" -> ");
+                line.append_int(value.len() as Int);
+                line.append(&" bytes");
+                value.drop();
+                if !written {
+                    line.drop();
+                    return fail("lzpack: cannot write output");
+                }
+                say(line);
+                return 0;
+            },
+        }
+    }
+
+    fn cmd_test(inp: &String) with(Std) -> u8 {
+        let data: Bytes = match load(inp) {
+            Option::None => { return fail("lzpack: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        let ok: bool = report(inp, &data);
+        data.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    fn main() with(Std) -> u8 {
+        let mut cli: Cli = Cli::new();
+        let f_rle: u64 = cli.flag_bool("-r");
+        match cli.parse(1, 3) {
+            CliResult::Err { error } => {
+                discard(error);
+                return usage();
+            },
+            CliResult::Ok { flags, positionals } => {
+                let rle: bool = flags.seen(f_rle);
+                flags.drop();
+                // FRICTION: a Vec<String> element cannot be borrowed in
+                // place; pop them off the end (reverse order).
+                let mut ps: Vec<String> = positionals;
+                let n: u64 = ps.len();
+                let mut args: Vec<String> = Vec::<String>::new();
+                while !ps.is_empty() {
+                    match ps.pop() {
+                        Option::Some { value } => { args.push(value); },
+                        Option::None => {},
+                    }
+                }
+                ps.drop();
+                // args is reversed: args[n-1] is the command.
+                let cmd: String = match args.pop() {
+                    Option::Some { value } => { value },
+                    Option::None => { String::new() },
+                };
+                let a1: String = match args.pop() {
+                    Option::Some { value } => { value },
+                    Option::None => { String::new() },
+                };
+                let a2: String = match args.pop() {
+                    Option::Some { value } => { value },
+                    Option::None => { String::new() },
+                };
+                args.drop();
+                let mut status: u8 = 2;
+                if cmd.eq(&"c") && n == 3 {
+                    let method: u8 = if rle { METHOD_RLE } else { METHOD_LZ };
+                    status = cmd_compress(&a1, &a2, method);
+                } else if cmd.eq(&"d") && n == 3 && !rle {
+                    status = cmd_decompress(&a1, &a2);
+                } else if cmd.eq(&"t") && n == 2 && !rle {
+                    status = cmd_test(&a1);
+                } else if cmd.eq(&"selftest") && n == 1 && !rle {
+                    status = selftest();
+                } else {
+                    status = usage();
+                }
+                cmd.drop();
+                a1.drop();
+                a2.drop();
+                return status;
+            },
+        }
+    }
+}
