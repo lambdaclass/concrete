@@ -25,11 +25,13 @@ Surface forms removed:
     minted for it. Elab fills `id`. The struct-destructure temporary has one (the walk mints it);
     an evaluation-order temporary (`ev.t<n>`), a constant or a function value has none.
 
-    MIGRATION (the R-0002 technique): the Core constructors that named a local by a bare `String`
-    now carry a `CLocal`, with coercions both ways so consumers keep compiling while they move to
-    the identity one at a time. Equality, hashing, ordering, `Repr` and `ToString` are the NAME's,
-    so no consumer changes behaviour, and no printed or hashed form of Core moves. The identity
-    is consulted only by consumers that ask for it (`ElabVerify`, which checks it). -/
+    No conversion to or from `String` (R-0492 step 4 removed the migration coercions). A consumer
+    asks for what it means: `.key` (`LocalKey`) to find the binding a reference denotes -- every
+    backend's local environment is keyed by it -- or `.name` for the spelling a printer, a
+    fingerprint or the proof model uses. There is deliberately no `BEq`, `Hashable` or `Ord` on
+    `CLocal`: an equality on the spelling would be a hidden name lookup, and one on the identity
+    would silently disagree with a name-keyed consumer. `Repr` and `ToString` print the spelling,
+    so no printed form of Core moved. -/
 structure CLocal where
   name : String
   id : Option LocalId := none
@@ -61,8 +63,6 @@ def key (c : CLocal) : LocalKey :=
   | some i => .id i
   | none => .name c.name
 
-/-- The names of a binder list, for a consumer still keyed by spelling (migration helper). -/
-def names {α : Type} (bs : List (CLocal × α)) : List (String × α) := bs.map fun (b, x) => (b.name, x)
 end CLocal
 
 abbrev LocalKey := CLocal.LocalKey

@@ -6,8 +6,9 @@
 # is keyed by that identity (TypeEnv.vars : List (LocalRef × VarInfo)), so it never decides by
 # spelling which binding a name denotes (structural class 2). This gate proves:
 #
-#   F   compile-fail: a LocalId / LocalTable cannot be built outside their module, and the
-#       checker's environment cannot be searched by a spelling;
+#   F   compile-fail: a LocalId / LocalTable cannot be built outside their module, the
+#       checker's environment cannot be searched by a spelling, and a Core local (CLocal) neither
+#       converts to its spelling nor compares by it (R-0492 step 4);
 #   S   source: the minting functions are called only by the walk; the checker has no
 #       name-keyed lookup helper left;
 #   T   the walk's answers on a program with loops, branches, arms, a borrow block and sibling
@@ -62,6 +63,20 @@ neg F7 "$MISMATCH" 'def byLit : CStmt → Bool
   | .letDecl "y" _ _ _ => true
   | _ => false'
 neg F8 "$MISMATCH" 'def byLit (e : CExpr) : Bool := if let .ident "x" _ := e then true else false'
+# R-0492 step 4: the backends key locals by `CLocal.key`, and the CLocal -> String coercion is gone,
+# so a Core local cannot be read by its spelling without saying `.name`. There is no equality, hash
+# or order on CLocal either: `a == b` on the spelling was the same name lookup, hidden in an instance.
+neg F9 "$MISMATCH" 'def spell (c : CLocal) : String := c'
+neg F10 'failed to synthesize' 'def same (a b : CLocal) : Bool := a == b'
+neg F11 'failed to synthesize' 'def h (a : CLocal) : UInt64 := hash a'
+neg F12 'failed to synthesize' 'def lt (a b : CLocal) : Bool := compare a b == .lt'
+neg F13 'failed to synthesize' 'def same (a b : Callee) : Bool := a == b'
+# Control: the same questions, asked explicitly, elaborate (so F9 - F13 fail for the stated reason only).
+printf '%s\n%s\n' "$HDR" 'def spell (c : CLocal) : String := c.name
+def same (a b : CLocal) : Bool := a.key == b.key
+def keys (f : CFnDef) : List LocalKey := f.paramKeys' > "$TMP/P9.lean"
+if POUT="$(lake env lean "$TMP/P9.lean" 2>&1)"; then ok "P9: .name, .key and paramKeys elaborate"
+else no "P9: the explicit forms did not elaborate: $(grep -m2 error <<<"$POUT" | cut -c1-300)"; fi
 
 echo ""
 echo "=== S: one minting site, no name-keyed lookup ==="
