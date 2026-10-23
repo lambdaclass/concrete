@@ -274,7 +274,7 @@ mod m {
 CON
 CORE="$("$BIN" "$TMP/core.con" --emit-core 2>&1)" && CRC=0 || CRC=$?
 PROFILE="$(grep -oE '(keep|__destr_P|p|u3|K|rz|z)(\.b[0-9]+)?\b' <<<"$CORE" | sort | uniq -c | awk '{printf "%s %s ", $1, $2}')"
-WANT="4 __destr_P 3 __destr_P.b0 3 __destr_P.b1 1 K 2 keep 1 p 2 p.b2 3 rz 2 u3 3 z "
+WANT="1 K 4 __destr_P 3 __destr_P.b0 3 __destr_P.b1 2 keep 1 p 2 p.b2 3 rz 2 u3 3 z "
 if [ "$CRC" -eq 0 ] && [ "$PROFILE" = "$WANT" ]; then
   ok "E: Core names match the pre-step-2 compiler exactly (let spelling, three destructure temporaries, region not counted, fresh arm binder, ghost does not capture a constant)"
 else

@@ -56,7 +56,7 @@ private def bindLocal (vis : List Visible) (key : BinderKey) (name : String) (sp
   if name == "_" then
     let (t', id) := (← get).mintBinder key name shadows
     set t'
-    return { name, span := sp, id, cls := .wild } :: vis
+    return { name, span := sp, id, cls := .wild, elabVar } :: vis
   if let some prev := vis.find? (fun v => v.name == name && v.cls == .source) then
     modify fun t => t.mintCollision { name, kind, at_ := sp, earlier := prev.span }
   let (t', id) := (← get).mintBinder key name shadows
