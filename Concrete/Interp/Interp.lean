@@ -7,6 +7,10 @@ import Std.Data.HashMap
 
 namespace Concrete.Interp
 
+-- R-0492 step 4: the interpreter keys locals by identity (`CLocal.key`). The name coercion is off
+-- in this file, so any remaining read of a local by its spelling is a compile error.
+attribute [-instance] CLocal.coeName
+
 open Concrete
 
 /-! ## Source-level interpreter
@@ -1980,13 +1984,19 @@ partial def placeNeedsPath : CExpr → Bool
 -- Helpers (must precede mutual block — no forward refs in Lean 4)
 -- ============================================================
 
-private def bindParams (env : Env) (params : List (String × Ty)) (args : List IVal) : Env :=
+/-- The keys a function's parameters bind under: their identities when Elab recorded them, their
+    names otherwise (a synthesized function). -/
+def paramKeys (f : CFnDef) : List LocalKey :=
+  if f.paramIds.length == f.params.length then f.paramIds.map .id
+  else f.params.map fun (n, _) => .name n
+
+private def bindParams (env : Env) (params : List LocalKey) (args : List IVal) : Env :=
   match params, args with
   | [], _ => env
   | _, [] => env
-  | (name, _) :: ps, v :: vs => bindParams (envBind env name v) ps vs
+  | k :: ps, v :: vs => bindParams (envBind env k v) ps vs
 
-private def bindEnumFields (env : Env) (bindings : List (String × Ty)) (fields : List (String × IVal))
+private def bindEnumFields (env : Env) (bindings : List (LocalKey × Ty)) (fields : List (String × IVal))
     (scrRef : Option RefPath := none) (variant : String := "") : Env :=
   -- POSITIONAL, matching Core/Lower semantics: Elab zips arm bindings with
   -- the variant's fields in declaration order, and (bug 045) binders are
@@ -2366,7 +2376,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         -- bindings (through ref params or otherwise) survive in the lower
         -- portion of the env.
         let outerLen := env.length
-        let callEnv := bindParams (envEnterFrame env) fdef.params argVals
+        let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) argVals
         -- The callee's type parameters stand for the call's type arguments (resolved in the
         -- caller's own instantiation), so `sizeof::<T>()` and `*mut T` arithmetic in a generic
         -- body see the concrete types. A call that names none leaves them unresolved, and
@@ -2904,7 +2914,7 @@ partial def destroyValue (cx : Ctx) (env : Env) (arg : IVal) :
     match findFn cx.fns (destroyImplKey n) with
     | some fdef =>
       let outerLen := env.length
-      let callEnv := bindParams (envEnterFrame env) fdef.params [arg]
+      let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) [arg]
       let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n), foreign := fdef.foreignCalls } callEnv fdef.body
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
@@ -2934,7 +2944,7 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
         fail s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
       else
         let outerLen := env.length
-        let callEnv := bindParams (envEnterFrame env) fdef.params argVals
+        let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) argVals
         let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m), foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
@@ -2999,7 +3009,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
           let refPath := match scrRef with | some (.ref p) => some p | _ => none
-          let armEnv := bindEnumFields env (CLocal.names bindings) sFields refPath variant
+          let armEnv := bindEnumFields env (bindings.map fun (b, t) => (b.key, t)) sFields refPath variant
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
             let (bodyEnv, flow) ← evalStmts cx gEnv body
@@ -3060,9 +3070,9 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
     compiler's `storeToPlace` so the interpreter handles nested assignment
     targets (`o.i.v`, `a[i].x`, `m[i][j]`) instead of only single-level ones. -/
 partial def resolvePlaceSteps (cx : Ctx) (env : Env) (place : CExpr)
-    : IM (Env × String × List RefStep) := do
+    : IM (Env × LocalKey × List RefStep) := do
   match place with
-  | .ident name _ => return (env, name, [])
+  | .ident name _ => return (env, name.key, [])
   | .fieldAccess obj field _ =>
     let (env, root, steps) ← resolvePlaceSteps cx env obj
     return (env, root, steps ++ [.field field])
