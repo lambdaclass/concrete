@@ -395,7 +395,7 @@ def check_format(spec, root):
         ok(f"S1 format: {len(spec.entries)} entries, {sum(len(e.examples) for e in spec.entries)} examples in {len(spec.text)} chapters")
 
 def check_coverage(spec):
-    bad = 0
+    bad, native_only = 0, []
     for e in spec.entries:
         st, _ = e.status()
         acc = {x.name: x for x in e.examples if x.verdict == "accept"}
@@ -413,12 +413,14 @@ def check_coverage(spec):
                     fail("S5", f"{x.key}: its pair {p.key} is pending"); bad += 1
         if e.kind in ("guarantee", "preservation") and st != "pending":
             std_only = bool(e.names("Enforced by")) and all(is_std_site(n) for n in e.names("Enforced by"))
-            covered = any(not x.pending and "interp-exempt" not in x.attrs for x in acc.values()) or (
-                std_only and any(not x.pending and "project" in x.attrs for x in acc.values()))
-            if not covered:
+            both = any(not x.pending and "interp-exempt" not in x.attrs for x in acc.values())
+            lib = std_only and any(not x.pending and "project" in x.attrs for x in acc.values())
+            if lib and not both: native_only.append(e.id)
+            if not (both or lib):
                 fail("S5", f"{e.id}: a guarantee needs a non-pending accept example run on both consumers"); bad += 1
     if bad == 0:
-        ok("S5 coverage: every refusal has reject examples paired with accepted rewrites; every guarantee runs on both consumers")
+        ok("S5 coverage: every refusal has reject examples paired with accepted rewrites; every guarantee runs on both consumers"
+           + (f", except std library contracts covered natively by a project example ({', '.join(native_only)})" if native_only else ""))
 
 def check_tracking(spec, root):
     bad, seen = 0, set()
@@ -576,9 +578,9 @@ def first_error(out):
             return ("reject", m.group(2), m.group(1), tag)
     return None
 
-def run(cmd, timeout=120, cwd=None):
+def run(cmd, timeout=120, cwd=None, env=None):
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, cwd=cwd)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, cwd=cwd, env=env)
         return r.returncode, r.stdout + r.stderr, r.stdout
     except subprocess.TimeoutExpired:
         return None, "timeout", ""
@@ -590,8 +592,7 @@ def outcome_native(cc, src, workdir, project=None):
         os.makedirs(os.path.join(d, "src"), exist_ok=True)
         open(os.path.join(d, "Concrete.toml"), "w").write(f'[package]\nname = "{project}"\nversion = "0.1.0"\n')
         os.replace(src, os.path.join(d, "src", "main.con"))
-        os.environ.setdefault("CONCRETE_STD", os.path.join(ROOT, "std"))
-        rc, out, _ = run([cc, "build", "-o", binp], cwd=d)
+        rc, out, _ = run([cc, "build", "-o", binp], cwd=d, env=dict(os.environ, CONCRETE_STD=os.path.join(ROOT, "std")))
     else:
         rc, out, _ = run([cc, src, "-o", binp])
     if rc is None or rc < 0:

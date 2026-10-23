@@ -307,7 +307,7 @@ fn main() -> Int {
 <a id="REF-5"></a>
 ### REF-5. A reference is a root binding plus projections
 
-**REF-5@1.** A reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root.
+**REF-5@1.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root.
 
 - Kind: refusal
 - Uses: none
@@ -329,7 +329,7 @@ rewritten to "borrow the root variable, then project", and they add no semantic 
 typing or loan rule of their own. A string literal is a static, immutable root, its `String`
 descriptor included: `&"text"` is allowed, and `&mut "text"`, moving out of a literal and
 destroying one are not. A raw-pointer dereference is neither of the two operations: in trusted
-or `Unsafe` code, `&*p` forms a reference only under that code's validity premise. Borrowing a temporary is gap G12 (bug 182: a borrowed call result
+or `Unsafe` code, `&*p` forms a reference only under that code's validity premise (TRUST-3). Borrowing a temporary is gap G12 (bug 182: a borrowed call result
 miscompiled or leaked). Its examples are pending until R-0500 enforces it. Loans are keyed by
 the root (REF-11).
 
@@ -769,7 +769,7 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@1.** A borrow through a projection is a loan on the projection's root binding, so two borrows made by one call conflict when they share a root and at least one is exclusive, whatever their projections.
+**REF-11@1.** A borrow through a projection is a loan on the projection's root binding, so within one call two borrows of the same root conflict when at least one is exclusive, and an exclusive borrow conflicts with any other use of its root, whatever their projections.
 
 - Kind: refusal
 - Uses: none
@@ -783,7 +783,8 @@ fn main() -> Int {
 `&s.f` is a loan on `s`, as the whole-owner freeze of a borrow block already is, and the loan
 checker needs no path-overlap analysis. The measured migration: one std site
 (`std/src/cli.con:77`, where a `&mut self` receiver overlaps a read of `self.names`; bind the read
-with `let` first) and this conformance fixture. Field-precise loans are
+with `let` first) and this conformance fixture. Both `upd(&mut s.a, &s.b)` and
+`add(&mut s.a, s.b)` are refused once it lands. Field-precise loans are
 deferred until a workload needs two simultaneous borrows of different fields of one owner and
 cannot be restructured with a `let` or a borrow block. Until this lands, the conformance row
 `regress_2i_ref8_call_disjoint.con` (run, 42) records today's field-disjoint acceptance under

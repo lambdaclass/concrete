@@ -91,7 +91,7 @@ fn main() -> Int {
 <a id="TYPE-3"></a>
 ### TYPE-3. `Text` is owned
 
-**TYPE-3@1.** A `Text` owns an immutable copy of validated UTF-8 bytes, never aliases another value's buffer, and is linear.
+**TYPE-3@1.** A `Text` owns an immutable copy of its bytes, never aliases another value's buffer, and is linear.
 
 - Kind: guarantee
 - Uses: none
@@ -106,7 +106,10 @@ fn main() -> Int {
 The old `Copy` pointer-and-length pair could outlive the buffer it pointed into, and its UTF-8
 validation went stale when the source was mutated. Every constructor now copies, the fields are
 private, and there is no `&mut` access, so the property established at construction holds for the
-value's whole life. The borrowed form of a string is `&String`.
+value's whole life. UTF-8 validity is checked by `Text::copy_from_raw`; `Text::from_string`
+relies on `String`'s own UTF-8 invariant, which `String::push_char` does not check today (STRING_TEXT_CONTRACT
+§6 and §12), so this entry claims ownership, not validity. The borrowed
+form of a string is `&String`.
 [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md) is the library contract.
 
 ```con accept name=outlives-its-source exit=42 project=text_owned interp-exempt=project-needs-std

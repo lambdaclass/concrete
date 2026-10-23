@@ -17,7 +17,7 @@ REF-3/fn-pointer-field	live	-
 REF-4@1	live	f6d7d30ec8e401837a45c79b7886dbc4
 REF-4/generic-return	live	-
 REF-4/top-level-ref-arg	live	-
-REF-5@1	live	d45a54cd6a3d4602ee4d56ef17d752fc
+REF-5@1	live	a6856fca91f18c45c2279e48b072f6f8
 REF-5/borrow-operator	live	-
 REF-5/root-plus-projections	live	-
 REF-5/borrow-int-literal	pending	-
@@ -39,7 +39,7 @@ REF-9@1	pending	cde1ef74acd68536373441e5e4dcfb6c
 REF-9/copy-payload-is-ref	pending	-
 REF-10@1	pending	63dc8107de80fbe74f8e72e1bfe85be6
 REF-10/reborrow-in-borrow-block	pending	-
-REF-11@1	pending	7eaadaf1e7aaa4fdf35bcc0c6432fbae
+REF-11@1	pending	97454bcc4fd20c562dce878c05b25e6a
 REF-11/disjoint-fields-one-call	pending	-
 REF-11/fields-in-sequence	live	-
 SCOPE-D1@1	live	7c4e5273e014f57bbfa31a35e0f9147b
@@ -67,7 +67,7 @@ TYPE-1@1	live	b14957e7906eac84e73f6246a70aa117
 TYPE-1/explicit-context	live	-
 TYPE-2@1	live	3464f687392ebfd01befec5d6777308e
 TYPE-2/static-dispatch	live	-
-TYPE-3@1	live	547a58235a9e3a4a403309e3df4757a0
+TYPE-3@1	live	1a096f8668b0a7acd6bdff151f96709b
 TYPE-3/outlives-its-source	live	-
 MEM-1@1	pending	dbebff7ddab44a25774fabd4338379b7
 MEM-2@1	pending	813c57f0a8b6a3dae407a4ca501edd09
@@ -75,8 +75,9 @@ TRUST-1@1	pending	25f2913134a0f33d1016bc063d1fcfb3
 TRUST-1/pointer-to-integer-cast	pending	-
 TRUST-1/no-pointer-cast	live	-
 TRUST-2@1	pending	a25dc11b2d0da5683fb86bd23d33904d
-STMT-1@1	pending	150906a672481c2958c6719e23d712ab
+STMT-1@1	pending	ec6802325a1b62bff5d8796b49ce3560
 STMT-2@1	pending	801e21487830f29db4e93b9b8684c4ca
 STMT-3@1	pending	60110fb570d3f77d136908e8bfb751fc
 ARITH-1@1	pending	434f6d27349c4e5ea5d9be3e91edd9c2
 CON-1@1	pending	e812409f6e1e4921fc62493b778d25b9
+TRUST-3@1	pending	b661ade02642a4f34f8acdd89fed990c

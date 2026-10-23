@@ -52,7 +52,7 @@ areas exist (§8).
 | `pipeline.md` | `PASS-` | stub: PASS-1 to PASS-4 (substitution, binder modes, the native-profile theorem, the trusted LLVM profile) |
 | `types.md` | `TYPE-` | stub: TYPE-1 to TYPE-3 (callable values, no dynamic dispatch, owned `Text`) |
 | `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
-| `trusted.md` | `TRUST-` | stub: TRUST-1 and TRUST-2 (pointer operations, no undefined behaviour in safe code) |
+| `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
 | `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
 | `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
 | `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
@@ -128,7 +128,9 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      examples, and the pending ones are tracked) or `pending <tracking>` (decided, not
      implemented). A tracking ID is a roadmap item (`R-0496`) or a bug (`bug-181`).
    - `Enforced by:` the Lean declarations of today's compiler that implement the entry, as
-     fully qualified names. It is required unless the status is `pending`. A definition names
+     fully qualified names, or, for a library contract, a std declaration written
+     `std/src/<file>.con#<Name>` (whose `//` comment block carries the `spec:` comment). It is
+     required unless the status is `pending`. A definition names
      the Lean predicate it denotes, such as `Concrete.tyContainsRef`.
    - `Semantics:` the declarations in Core's semantics or checker judgments that define the
      entry, or `none` while they do not exist. This is the normative link (see "Authority"
@@ -174,6 +176,8 @@ attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the
           | "now=" OUTCOME               required if and only if pending
           | "now-interp=" OUTCOME        optional, only when pending
           | "interp-exempt=" NAME        accept only; a reason slug, such as no-heap-in-interp
+          | "project=" NAME              compile as a package of that name against this checkout's std
+                                          (`concrete build`, CONCRETE_STD pinned); needs interp-exempt
 OUTCOME  := "accept:" N | "reject:" CODE ":" STAGE | "fail:" TEXT   (TEXT: no spaces; `_` reads as a space)
 ```
 
@@ -224,7 +228,7 @@ and it is counted in SKIPPED.
 | S2 registry | `ids.tsv` has one row per allocated key: an entry version (`REF-3@1`) or an example (`REF-3/stored-field`). Columns: `key`, `state` (`live`, `pending`, `superseded` or `retired:<reason>`) and, for an entry version, the SHA-256 of its normalized sentence (`-` for an example). The `live` and `pending` rows equal what the chapters contain, state for state. A sentence whose hash differs from its version's row needs a new version row. |
 | S3 history | Against a base revision: no `ids.tsv` row is removed, a hash never changes, and a row's state changes only along `pending → live`, `live → superseded` (only when a newer version of the same entry exists) and `pending` or `live → retired:<reason>`. A `superseded` or `retired` row is final, so an ID is never reused. `codes.tsv` gains no `unmigrated` row. When a definition gains a version, every entry that uses it gains one in the same change. The base is `$SPEC_BASE`, or else the merge base with `origin/main`, or `HEAD~1` when that merge base is `HEAD`. |
 | S4 examples | Every example behaves as §2.2 says, on both consumers. |
-| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. |
+| S5 coverage | An enforced or partial refusal has at least one non-pending reject example. Every reject example's `pair` names an accept example of the same entry, and the pair of a non-pending reject example is itself non-pending, so every refusal shows the program it refuses next to the rewrite it accepts. A pending refusal has at least one reject example. A guarantee that is not pending has at least one non-pending accept example that runs on both consumers. One exception: a library contract whose `Enforced by:` names only std declarations may be covered by a native project example, since the interpreter runs single files; the check names every entry covered this way. |
 | S6 codes | Every code in `--report diagnostic-codes` has exactly one row in `codes.tsv`. The class is `rule` (named by an entry), `unmigrated:<chapter>`, `internal` (a compiler invariant failure, such as `ssa-verify` or `lower`), `tooling` (proof, policy and evidence tooling, not language) or `retired`. Class `rule` holds exactly for the codes some entry names. For each code, the ledger's `rules` field equals the set of `<ID>@<version>` of the entries that name it. The spec owns that mapping, and the compiler's copy is checked against it. |
 | S7 sites | Each name in `Enforced by:` and `Semantics:` resolves (a generated Lean file, run with `lake env lean`). The text of its declaration, from its doc comment to the next top-level declaration, contains a `spec: <ID>` comment. Every `spec: <ID>` comment in `Concrete/**/*.lean` names a live entry. Each `proved:` name is a theorem with standard axioms only. Each `trusted:` ID occurs in TRUSTED_COMPUTING_BASE.md. |
 | S8 tracking | Every tracking ID exists: an `R-` ID in ROADMAP.md or its backlog, a `bug-` ID as a record in `docs/bugs/`. |

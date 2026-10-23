@@ -47,8 +47,9 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
   bytes, and `Text::copy_from_raw(ptr, len)` validates UTF-8 and copies. A `Text` never aliases
   another value's buffer.
 - Linear, not `Copy`: it must be consumed exactly once (`drop`, or `Destroy`).
-- Immutable: there is no `&mut` accessor and no raw-parts escape, so the UTF-8 property
-  established at construction holds for the value's whole life.
+- Immutable: there is no `&mut` accessor and no raw-parts escape. `copy_from_raw` validates
+  UTF-8; `from_string` relies on `String`'s UTF-8 invariant, which `push_char` does not check
+  today (§6, Invalid Sequence Handling, and §12).
 - R-0483 (closed 2026-10-09) made it owning. Before that, `Text` was a `Copy` pointer-and-length
   pair that borrowed another value's bytes. It could outlive its buffer, and its validation went
   stale when the source was mutated. The rule is TYPE-3 in [docs/spec/types.md](../spec/types.md#TYPE-3).

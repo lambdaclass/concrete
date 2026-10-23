@@ -58,3 +58,22 @@ fn main() -> Int {
 behaviour exists only where a trusted operation states a premise it cannot check, such as a raw
 dereference needing an aligned, live and initialized pointer. Naming each premise makes the
 trusted base a list that can be audited ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md)).
+
+<a id="TRUST-3"></a>
+### TRUST-3. A reference from a raw pointer carries a premise
+
+**TRUST-3@1.** In trusted or `Unsafe` code, `&*p` and `&mut *p` form a reference from a raw pointer `p` only under the premise that `p` is aligned, live and initialized for its type, and the reference then obeys every rule of the references chapter.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0506
+- Semantics: none
+- Obligation: the premise is a named premise of the trusted dereference (TRUST-2)
+- Evidence: tested
+
+**Rationale.** A raw-pointer dereference is not one of REF-5's two operations that form a
+reference. Trusted code may form a reference this way, but only by discharging the validity
+premise itself (TIGHTENING_DECISIONS D2, caveats). The resulting reference is second-class like
+any other.
+
