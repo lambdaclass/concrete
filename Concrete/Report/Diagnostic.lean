@@ -235,6 +235,8 @@ def ruleSpecRef (rule : String) : String :=
     | "STMT" => "statements"
     | "ARITH" => "arithmetic"
     | "CON" => "contracts"
+    | "MOD" => "modules"
+    | "SYN" => "syntax"
     | _ => "README"
   s!"docs/spec/{chapter}.md#{id}"
 
@@ -269,6 +271,9 @@ def codeRuleTag : String → Option String
   | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
   | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
+  -- docs/spec/arithmetic.md
+  | "E0227" => some "ARITH-2@1"
+  | "E0553" => some "ARITH-5@1"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@2"
   | "E0304" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"

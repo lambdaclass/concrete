@@ -147,7 +147,7 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
   | .error ds => .error ds
 
 /-- Lower to SSA, verify, and clean up. -/
--- spec: PASS-9 (docs/spec/pipeline.md; this stage boundary)
+-- spec: PASS-9, spec: ARITH-3 (docs/spec/pipeline.md, docs/spec/arithmetic.md: every required runtime check is in the CFG)
 def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
   let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   match ssaVerifyProgram ssaModules with
@@ -263,7 +263,7 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
           postLower := postLower, postCleanup := postCleanup }
 
 /-- Emit LLVM IR from SSA modules. -/
--- spec: PASS-10 (docs/spec/pipeline.md; this stage boundary)
+-- spec: PASS-10, spec: ARITH-3, spec: ARITH-4, spec: ARITH-6 (docs/spec/pipeline.md, docs/spec/arithmetic.md: checked operations lower through the abort helpers)
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter
 

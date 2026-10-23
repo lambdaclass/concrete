@@ -41,7 +41,7 @@ E0223	rule	if condition not Bool
 E0224	rule	if branch type mismatch
 E0225	rule	match arm type mismatch
 E0226	rule	break value type mismatch
-E0227	unmigrated:arithmetic	integer literal out of range
+E0227	rule	integer literal out of range
 E0228	rule	binary operand type mismatch
 E0229	rule	comparison not defined on this type (integers, floats, bool, char; raw pointers in Unsafe code; bugs 134/140)
 E0230	rule	cannot borrow: already moved
@@ -163,7 +163,7 @@ E0543	unmigrated:statements	continue outside loop
 E0550	rule	empty array literal
 E0551	rule	array index not integer
 E0552	rule	indexing non-array type
-E0553	unmigrated:arithmetic	cannot cast between types
+E0553	rule	cannot cast between types
 E0554	rule	dereference of non-reference type
 E0555	rule	assign through a target that is not `&mut T` or `*mut T`
 E0560	rule	return type mismatch

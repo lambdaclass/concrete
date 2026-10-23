@@ -1,4 +1,7 @@
-# Numeric Model (literals, casts, overflow)
+# Numeric Model (literals, casts, overflow) (design record)
+
+**Superseded as the normative text (2026-10-23).** See [docs/spec/arithmetic.md](../spec/arithmetic.md)
+(ARITH-2 to ARITH-6) and TYPE-4 / TYPE-6 of [docs/spec/types.md](../spec/types.md).
 
 Status: CORE-COMPLETE — ROADMAP old Phase 6 #6. The literal rules are
 documented and gated here; the soundness footgun (silent out-of-range literal

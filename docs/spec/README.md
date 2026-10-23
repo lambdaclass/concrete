@@ -55,7 +55,7 @@ areas exist (§8).
 | `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
 | `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
 | `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
-| `arithmetic.md` | `ARITH-` | stub: ARITH-1 (IEEE-754, round-to-nearest-even) |
+| `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
@@ -166,7 +166,7 @@ An example is a fenced block. Its info string is `con`, followed by space-separa
 
 ```
 info     := "con" SP verdict (SP attr)*
-verdict  := "accept" | "reject"
+verdict  := "accept" | "reject" | "abort"
 attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the entry
           | "exit=" N                    accept only, required; 0 <= N <= 125
           | "code=" CODE                 reject only, required; E<4 digits>, or "new" if pending
@@ -195,6 +195,9 @@ example states, never only with the other legs.
 - **accept**: the program builds natively and the binary exits `N`. `--interp` exits 0 and
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
   every exemption.
+- **abort**: the program compiles and traps at run time: the binary is killed by `SIGABRT` (the
+  abort helpers of checked operations) and `--interp` stops with a run-time error, not a
+  diagnostic. It takes no `exit`, `code` or `stage`.
 - **reject**: the first error reported by the native compile, and the first error reported
   by `--interp`, are each `error[<stage>]: (<code>)`, and no lower layer leaked (`llvm-as`,
   the system linker, a panic). In a preservation entry (a stage boundary), the code may belong
@@ -364,7 +367,7 @@ Each step lands with the gate green. The steps run in this order:
 3. **patterns.md** (`PAT-`, migrated 2026-10-23): exhaustiveness, nested and destructuring
    patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING and
    PATTERN_ERGONOMICS; NESTED_PATTERNS and TUPLES stay the records of their deferred decisions.
-4. **arithmetic.md** (`ARITH-`): integer and float semantics, overflow, checked, wrapping and
+4. **arithmetic.md** (`ARITH-`, migrated 2026-10-23): integer and float semantics, overflow, checked, wrapping and
    saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL. T-ARITH and
    T-CAST enter as pending.
 5. **statements.md** (`STMT-`): statements and expressions, value blocks, loops and loop

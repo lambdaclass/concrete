@@ -60,8 +60,8 @@ class Example:
         self.entry, self.info, self.body, self.line, self.chapter = entry, info, body, line, chapter
         self.attrs, self.verdict, self.errors = {}, None, []
         words = info.split()
-        if len(words) < 2 or words[0] != "con" or words[1] not in ("accept", "reject"):
-            self.errors.append(f"info string '{info}' is not `con accept|reject ...`")
+        if len(words) < 2 or words[0] != "con" or words[1] not in ("accept", "reject", "abort"):
+            self.errors.append(f"info string '{info}' is not `con accept|reject|abort ...`")
             return
         self.verdict = words[1]
         for w in words[2:]:
@@ -73,11 +73,11 @@ class Example:
                 self.errors.append(f"repeated attribute '{k}'")
             self.attrs[k] = v
         allowed = {"name", "pending", "now", "now-interp", "project", "interp-exempt"} | (
-            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
+            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else set())
         for k in self.attrs:
             if k not in allowed:
                 self.errors.append(f"unknown attribute '{k}' for {self.verdict}")
-        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
+        need = {"name"} | ({"exit"} if self.verdict == "accept" else {"code", "stage", "pair"} if self.verdict == "reject" else set())
         for k in sorted(need - set(self.attrs)):
             self.errors.append(f"missing attribute '{k}'")
         n = self.attrs.get("name", "")
@@ -635,6 +635,10 @@ def matches_target(x, o):
     e = x.entry
     if x.verdict == "accept":
         return o[0] == "accept" and o[1] == int(x.attrs["exit"])
+    if x.verdict == "abort":
+        # a run-time trap: the binary is killed by SIGABRT (the abort helpers), the interpreter
+        # stops with a run-time error; a compile-time diagnostic is not an abort
+        return o[0] == "fail" and (o[1] == "signal 6" or (o[1].startswith("interp:") and not ERR_RE.search(o[1])))
     if o[0] != "reject" or o[2] != x.attrs["stage"]:
         return False
     if x.attrs["code"] == "new":
@@ -933,7 +937,9 @@ def gen_site(spec, out_dir):
 
 def label(x):
     a = x.attrs
-    if x.verdict == "accept":
+    if x.verdict == "abort":
+        s = "Accepted, aborts at run time"
+    elif x.verdict == "accept":
         s = f"Accepted, exits {a.get('exit')}"
         if "interp-exempt" in a: s += f" (natively; interpreter exempt: {a['interp-exempt']})"
     else:
