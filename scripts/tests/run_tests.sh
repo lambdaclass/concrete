@@ -2348,6 +2348,7 @@ run_err "$TESTDIR/error_type_arg_count_missing.con" "E0113"   # bug 073: missing
 # Bug 200 (silent): a generic type named without its argument list compiled.
 run_err "$TESTDIR/error_200_bare_generic_type.con" "(E0113)"
 run_ok "$TESTDIR/regress_200_generic_type_with_arguments.con" 42
+run_ok "$TESTDIR/regress_200_type_param_shadows_generic.con" 42
 run_ok  "$TESTDIR/type_arg_count_ok.con"            7         # bug 073 positive control
 # R-0484: structs with capability parameters (`struct Sink<cap C>`). Positives build and use
 # them; negatives are the authority escapes they must refuse, and the kind/count checks.

@@ -135,6 +135,9 @@ structure ResolveCtx where
   traitImpls : List (String × String) := []
   /-- True when resolving inside a trait definition (Self is allowed). -/
   inTraitDef : Bool := false
+  /-- The type parameters in scope (the function's and its impl's). A type parameter shadows a
+      declaration or builtin of the same name, so no arity is looked up for it (bug 200). -/
+  typeParams : List String := []
 
 /-- Result of the shallow (declaration-level) resolution phase.
     Carries everything the body phase needs plus any errors found during the shallow phase. -/
@@ -223,19 +226,26 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
 private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  if ctx.typeParams.contains name then none else
   match lookupSymKind ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
-  | _ => match name with
+  -- Any other declaration of the name (an alias, a trait) is not a builtin.
+  | some _ => none
+  | none => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" | "Result" => some 0
     | _ => none
 
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
+  if ctx.typeParams.contains name then none else
   match lookupSymKind ctx name with
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
-  | _ => match name with
+  -- Any other declaration of the name (an alias, a trait) is not a builtin: `type Vec = ..`
+  -- takes no arguments (bug 200 review).
+  | some _ => none
+  | none => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" => some 1
     | "Result" => some 2
     | _ => none
@@ -541,14 +551,15 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
 
 /-- Resolve a single function body. -/
 private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : FnDef)
-    (implType : Option String := none)
+    (implType : Option String := none) (implTypeParams : List String := [])
     (traitMethods : List (String × List String) := [])
     (traitImpls : List (String × String) := []) : Diagnostics :=
   let ctx : ResolveCtx := {
     globalScope := globalScope
     localScopes := [[]]
     errors := []
-    knownTypes := knownTypes ++ f.typeParams
+    knownTypes := knownTypes ++ implTypeParams ++ f.typeParams
+    typeParams := implTypeParams ++ f.typeParams
     currentImplType := implType
     traitMethods := traitMethods
     traitImpls := traitImpls
@@ -673,15 +684,15 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let aliasErrors := resolveTypeAliases m globalScope knownTypes
   -- Check top-level functions
   let fnErrors := m.functions.foldl (fun acc f =>
-    acc ++ resolveFnBody globalScope knownTypes f none traitMethods traitImpls_) []
+    acc ++ resolveFnBody globalScope knownTypes f none [] traitMethods traitImpls_) []
   -- Check impl block methods (with Self)
   let implErrors := m.implBlocks.foldl (fun acc ib =>
     acc ++ ib.methods.foldl (fun acc method =>
-      acc ++ resolveFnBody globalScope (knownTypes ++ ib.typeParams) method (some ib.typeName) traitMethods traitImpls_) []) []
+      acc ++ resolveFnBody globalScope knownTypes method (some ib.typeName) ib.typeParams traitMethods traitImpls_) []) []
   -- Check trait impl methods (with Self)
   let traitImplErrors := m.traitImpls.foldl (fun acc ti =>
     acc ++ ti.methods.foldl (fun acc method =>
-      acc ++ resolveFnBody globalScope (knownTypes ++ ti.typeParams) method (some ti.typeName) traitMethods traitImpls_) []) []
+      acc ++ resolveFnBody globalScope knownTypes method (some ti.typeName) ti.typeParams traitMethods traitImpls_) []) []
   -- R-0484 R3: every foreign binding declares its effects, and a known-effectful
   -- symbol may not be declared effect-free. The rule covers EVERY module: the walk
   -- descends into nested submodules (bug 113: it read only `m.externFns`, so an
