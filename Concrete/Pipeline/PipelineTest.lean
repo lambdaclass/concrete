@@ -387,7 +387,7 @@ def testCoreCheckBinderAgreement : IO UInt32 := do
     IO.eprintln (renderDiagnostics ds)
     return 1
   | .ok (_, _, validCore) =>
-    let wide : CExpr := .ident "a" .i32
+    let wide : CExpr := .ident (CLocal.ofName "a") .i32
     -- (label, rewrite, a fragment the E0510/E0560 message must contain)
     let cases : List (String × (CStmt → CStmt) × String × String) := [
       -- Binder names are matched by GUARD, never by a string-literal pattern: a Core binder is a
