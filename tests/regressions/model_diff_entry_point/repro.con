@@ -1,14 +1,14 @@
 // The entry point is compared against the model (it is excluded from proof only for being main):
-// a program whose behaviour is all in main, with a branch, a let and a call.
-fn half(n: Int) -> Int {
-    return n / 2;
+// a program whose behaviour is all in main, with a let, a call, an assignment and a branch.
+fn less(n: Int) -> Int {
+    return n - 40;
 }
 
 fn main() -> Int {
-    let base: Int = 80;
-    let h: Int = half(base);
-    if h > 30 {
-        return h + 2;
+    let mut acc: Int = 80;
+    acc = less(acc);
+    if acc > 30 {
+        acc = acc + 2;
     }
-    return 0;
+    return acc;
 }
