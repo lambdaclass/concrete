@@ -389,6 +389,21 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
   let env ← getEnv
   return env.enumDefs.find? fun ed => ed.name == name
 
+/-- Whether CoreCheck must leave a type's operator and cast rules to the instantiation: a type
+    parameter (`typeVar`), or a `named` type that is not a declared struct, enum or newtype (a
+    parameter Core still spells as a name). A declared nominal type is CONCRETE and is held to
+    TYPE-6 and the cast table here. The one predicate every operator and cast rule reads (bug 210:
+    the operator rules kept their own copy that read every `named` type as a parameter, so
+    `p + p` on a struct, `e * e` on an enum and `m + m` on a newtype were accepted). -/
+private def isOpaqueOperandTy (env : CoreCheckEnv) (t : Ty) : Bool :=
+  match t with
+  | .typeVar _ => true
+  | .named n =>
+    !(env.structDefs.any (fun sd => sd.name == n)
+      || env.enumDefs.any (fun ed => ed.name == n)
+      || env.newtypes.any (fun nt => nt.name == n))
+  | _ => false
+
 /-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
     built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
     `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
@@ -549,7 +564,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
           addCCError (.missingCapability "ptr_arith" "Unsafe" "")
       else
-        let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+        let hasTypeVar := isOpaqueOperandTy (← getEnv)
         if !isNumeric lTy && !hasTypeVar lTy then
           addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
         -- Operands must agree EXACTLY (width and signedness): a mixed-width
@@ -561,7 +576,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     | .saturatingAdd | .saturatingSub | .saturatingMul =>
       -- Explicit wrapping/saturating arithmetic is INTEGER-ONLY (no
       -- float/bool/char/ptr) and operands must share the type. ROADMAP #10 Stage 2.
-      let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+      let hasTypeVar := isOpaqueOperandTy (← getEnv)
       if !isInteger lTy && !hasTypeVar lTy then
         addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
       if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
@@ -579,7 +594,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         addCCError (.bitwiseOnNonInteger (toString (repr lTy)))
       -- Bitwise/shift operands previously had NO agreement check at all and
       -- mixed widths escaped to SSA-verify (E0715).
-      let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+      let hasTypeVar := isOpaqueOperandTy (← getEnv)
       if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
         addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
 
@@ -856,14 +871,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- must not get a free pass. The historical broad skip on `.named _` was
     -- a loophole that made every newtype-involving cast accepted.
     let env ← getEnv
-    let isKnownConcrete := fun (n : String) =>
-      env.structDefs.any (fun sd => sd.name == n)
-        || env.enumDefs.any (fun ed => ed.name == n)
-        || env.newtypes.any (fun nt => nt.name == n)
-    let hasTypeVar := fun (t : Ty) => match t with
-      | .typeVar _ => true
-      | .named n => !isKnownConcrete n
-      | _ => false
+    let hasTypeVar := isOpaqueOperandTy env
     -- Newtype wrap/unwrap: Elab inserts a `.cast` at the newtype constructor
     -- and at `.0` field access to carry the wrapper name through type-level
     -- without changing the runtime representation. Allow those — and ONLY
