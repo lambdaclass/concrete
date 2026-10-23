@@ -576,7 +576,10 @@ enforcement in exit 2i; bug 182 closes with it.
 **Rule.** Every pattern binder that binds through a scrutinee of reference type (`match r`,
 `match &o`, `if let`, `while let`) has reference type: a payload field of type `T` binds as `&T`,
 and a whole-value binder over `&T` binds as `&T`, whether or not `T` is Copy. A Copy value is read
-with `*value`. Literal and range patterns still compare the referenced value.
+with `*value`. Literal and range patterns still compare the referenced value. **Scope (decided
+2026-10-23):** a destructuring `let` of a struct through a reference (`let P { a, b } = r;` with
+`r: &P`) binds each field as `&T` by the same rule as enum payloads. Under REF-6 these are pattern
+binders, not `let`-introduced references, and like arm binders they are loans on the root.
 
 **Rationale.** Today the mode depends on whether the payload is Copy, a property monomorphization
 changes, and Check and Elab already disagree about it (bug 181: SIGSEGV in safe code at
@@ -753,6 +756,16 @@ never derived from the fields of an instantiation. *Rationale:* it removes the c
 fixpoint Mono computes today (`Concrete/IR/Mono.lean`, "iterate to a fixpoint … either kind's
 Copy-ness can depend on the other's"), so Copy-ness is a fact of the declaration, not of a type
 graph.
+
+**D6 refined (a), 2026-10-23.** A `Copy` declaration on a generic struct or enum means **"Copy when
+every type parameter is Copy"**: `struct Copy Pair<A, B> { .. }` makes `Pair<X, Y>` Copy exactly when
+`X` and `Y` are Copy. This is decided from the declaration alone, with no type-graph fixpoint. The
+declaration is checked once: every field must be Copy under the assumption that every parameter is
+Copy. The builtin `Option` and `Result` are declared this way, so `Option<Int>` is Copy and
+`Option<String>` is not. A generic that is not declared `Copy` is never Copy, whatever its
+arguments. *Rationale:* it matches Rust's derived `Copy`, it is invariant under substitution (the
+answer for an instantiation follows from the declaration and the arguments' own Copy-ness, both
+known before specialization), and it keeps `Option<Int>` Copy without a fixpoint.
 
 **D7. Trait coherence.** One impl per (trait, type), and it lives in the module of the trait or of
 the type. A method reachable through two bounds must be called qualified (`Trait::method(x)`),
