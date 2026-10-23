@@ -623,11 +623,12 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     let env ← getEnv
     -- A local shadows a module constant of the same name (Check resolves locals first too).
     -- R-0492 step 2: which binding `name` denotes is the local walk's answer at this use.
-    match ← useLocal? isp name with
+    -- A `ghost let` is not a runtime variable: as before, a constant or function of the same
+    -- spelling answers first, and only then is the read reported as a ghost leak.
+    let use? ← useLocal? isp name
+    let isGhostUse := match use? with | some (_, b) => b.ghost | none => false
+    match use?.filter (fun (_, b) => !b.ghost) with
     | some (_, b) =>
-      -- A name bound by `ghost let` is erased: reading it from runtime code is a leak,
-      -- reported precisely instead of as a generic undeclared var.
-      if b.ghost then throwElab (.ghostInRuntime name) (some e.getSpan)
       -- COVERAGE: a binding with no frame position leaves the body uncovered rather than
       -- encoded against a guessed position.
       if b.pos.isNone then markBodyIdentityUncovered
@@ -642,7 +643,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
-      | none => throwElab (.undeclaredVariable name) (some e.getSpan)
+      | none =>
+        -- A name bound by `ghost let` is erased: reading it from runtime code is a leak,
+        -- reported precisely instead of as a generic undeclared var.
+        if isGhostUse then throwElab (.ghostInRuntime name) (some e.getSpan)
+        throwElab (.undeclaredVariable name) (some e.getSpan)
 
   | .paren _ inner => elabExprEv inner hint
 

@@ -1315,8 +1315,8 @@ gate_for_last "scripts/tests/check_capability_explanations.sh"
 # instead of the innermost. check_local_identity.sh's walk legs (branch-local `w`, the shadowing
 # `x` of g) read the wrong binder.
 MUT_FILE+=("Concrete/Resolve/Locals.lean")
-MUT_OLD+=("  if let some v := vis.find? (fun v => v.name == name && v.cls != .wild) then")
-MUT_NEW+=("  if let some v := vis.reverse.find? (fun v => v.name == name && v.cls != .wild) then -- MUTATION: outermost binding wins")
+MUT_OLD+=("  if let some v := vis.find? (fun v => v.name == name && v.cls == .source) then")
+MUT_NEW+=("  if let some v := vis.reverse.find? (fun v => v.name == name && v.cls == .source) then -- MUTATION: outermost binding wins")
 MUT_DESC+=("local identity: a use denotes the outermost visible binding of its spelling")
 gate_for_last "scripts/tests/check_local_identity.sh"
 
