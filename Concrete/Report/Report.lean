@@ -6285,7 +6285,7 @@ def diagnosticCodesReport : String :=
     entry "E0120" "resolve" "error" "import alias names an intrinsic",
     entry "E0121" "resolve" "error" "capability parameter spelled like a capability (bug 188)",
     entry "E0122" "resolve" "error" "a `mod X;` module file not found (bug 206)",
-    entry "E0123" "resolve" "error" "circular `mod` import (bug 206)",
+    entry "E0123" "resolve" "error" "a module file loaded twice (a `mod` cycle or two declarations; bug 206)",
     entry "E0124" "resolve" "error" "a module file holds other than one module (bug 206)",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",

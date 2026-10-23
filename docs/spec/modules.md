@@ -153,7 +153,7 @@ mod m {
 <a id="MOD-4"></a>
 ### MOD-4. A `mod` declaration loads one module file
 
-**MOD-4@1.** A `mod X;` declaration loads exactly one module from `X.con` or `X/mod.con` beside the declaring file, and a file that does not exist, holds other than one module, or is already being loaded on the same path of `mod` declarations is refused.
+**MOD-4@1.** A `mod X;` declaration loads exactly one module from `X.con` or `X/mod.con` beside the declaring file, and a file that does not exist, holds other than one module, or was already loaded by another `mod` declaration of the program is refused.
 
 - Kind: refusal
 - Uses: none
@@ -165,7 +165,8 @@ mod m {
 - Evidence: tested
 
 **Rationale.** A module file is a module body, so a program's module tree is the tree of its
-`mod` declarations, each file read once. A parse error inside a loaded file is that file's own
+`mod` declarations, each file read once: a file reached twice, by a cycle or by two declarations,
+is refused (E0123). A parse error inside a loaded file is that file's own
 SYN-1 diagnostic (E0001), reported with the file's path, not a loading failure (bug 206).
 
 ```con reject name=missing-module-file code=E0122 stage=resolve pair=inline-module

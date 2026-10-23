@@ -4,8 +4,17 @@
 #
 # codeless_error_lines: read compiler output on stdin, print each error line that carries no
 # `(E<4 digits>)` code right after its `error[<pass>]:` prefix. Prints nothing when all are coded.
-# A header is `error[...]` at the start of a line, optionally after `<file>: ` (no spaces in the
-# path), so a source snippet or a message that quotes another header is not read as one.
+# A header is the line's FIRST `error[<pass>]: `, either at the start of the line or after a
+# `<path>.con[:line[:col]]: ` prefix (the path may hold spaces), so a source snippet (`  3 | ...`) or
+# a message that quotes another header is not read as one. The code must follow that first one.
 codeless_error_lines() {
-  grep -E '^([^ ]+: )?error\[[a-z0-9-]+\]: ' | grep -vE '^([^ ]+: )?error\[[a-z0-9-]+\]: \(E[0-9]{4}\) ' || true
+  awk '{
+    i = index($0, "error[");
+    if (i == 0) next;
+    pre = substr($0, 1, i - 1); rest = substr($0, i);
+    if (pre != "" && pre !~ /\.con(:[0-9]+(:[0-9]+)?)?: $/) next;
+    if (rest !~ /^error\[[a-z0-9-]+\]: /) next;
+    sub(/^error\[[a-z0-9-]+\]: /, "", rest);
+    if (rest !~ /^\(E[0-9][0-9][0-9][0-9]\) /) print
+  }'
 }
