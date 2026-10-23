@@ -2375,9 +2375,12 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   let resolvedRetTy ← resolveTypeE retTy
   modify fun e => { e with currentRetTy := resolvedRetTy }
   -- Add parameters to scope (resolve type aliases so params don't carry unresolved alias names)
+  let mut paramIdsRev : List LocalId := []
   for ((pname, pty), pIdx) in params.zipIdx do
     let resolvedPty ← resolveTypeE pty
-    discard <| bindLocal (.param pIdx) pname resolvedPty (some f.span)
+    let pc ← bindLocal (.param pIdx) pname resolvedPty (some f.span)
+    if let some pid := pc.id then paramIdsRev := pid :: paramIdsRev
+  let paramIds := paramIdsRev.reverse
   -- Elaborate body
   -- THE COLLECTION POINT. The function's evidence body is assembled STRUCTURALLY here,
   -- from the same traversal that produced Core — not accumulated into a side channel,
@@ -2423,6 +2426,7 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
     capSet := f.capSet
     declSpan := some f.span
     exportName := f.exportName
+    paramIds := paramIds
   }
   return (cfn, bodyIdentityInputs, evidenceBody)
 

@@ -182,6 +182,10 @@ structure CFnDef where
       identities (`CallableId`, qualified names) are the declaration's; the Core name is
       only the symbol. Submodule prefixing (`prefixModuleFnNames`) prefixes both. -/
   declName : Option String := none
+  /-- The parameters' binding identities, in order (R-0492 step 3), as Elab bound them. Empty for
+      a function Elab did not produce (a synthesized helper). `ElabVerify` seeds its scope with
+      them. -/
+  paramIds : List LocalId := []
   capSet : CapSet := .empty
   -- Source location of the function declaration, carried across the AST→Core
   -- boundary so Core-level diagnostics, the compiler ledger, and audit/obligation
