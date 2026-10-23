@@ -504,7 +504,7 @@ private def freshEvalTemp : ElabM String := do
   return s!"ev.t{env.freshBinder}"
 
 private def letInExpr (name : String) (value : CExpr) (body : CExpr) : CExpr :=
-  .match_ value [.varArm name value.ty none [.expr body true]] body.ty
+  .match_ value [.varArm (CLocal.ofName name) value.ty none [.expr body true]] body.ty
 
 /-- An initializer whose evaluation has no observable order: a literal. (A variable read is
     order-sensitive: another initializer may write it through `&mut`.) -/
@@ -526,7 +526,7 @@ private def withSourceOrder (inits : List (String × CExpr))
     else
       let t ← freshEvalTemp
       bindsRev := (t, e) :: bindsRev
-      operandsRev := (f, .ident t e.ty) :: operandsRev
+      operandsRev := (f, .ident (CLocal.ofName t) e.ty) :: operandsRev
   return bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) (mk operandsRev.reverse)
 
 /-- Bug 087: bind a block-scoped local (`let`, borrow ref, parameter, destructure binder or
@@ -699,13 +699,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)
     | none =>
       match env.constants.lookup name with
-      | some ty => return ElaboratedExprV2.mk (CExpr.ident name ty) (Proof.evConstRef env.proofPath name)
+      | some ty => return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName name) ty) (Proof.evConstRef env.proofPath name)
       | none =>
       match ← lookupFnSig name with
       | some sig =>
         refuseForeignFnValue env name (some e.getSpan)
         let paramTys := sig.params.map Prod.snd
-        return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
+        return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName (← coreFnSpelling name)) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
       | none =>
@@ -886,9 +886,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               else
                 let t ← freshEvalTemp
                 bindsRev := (t, ex) :: bindsRev
-                explicitRev := (f, .ident t ex.ty) :: explicitRev
+                explicitRev := (f, .ident (CLocal.ofName t) ex.ty) :: explicitRev
             bindsRev := (tb, cb) :: bindsRev
-            let lit := CExpr.structLit name typeArgs (fillFrom (.ident tb cb.ty) explicitRev.reverse) resultTy
+            let lit := CExpr.structLit name typeArgs (fillFrom (.ident (CLocal.ofName tb) cb.ty) explicitRev.reverse) resultTy
             pure (bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) lit)
       return ElaboratedExprV2.mk core (match sd.typeId? with
            | some owner =>
