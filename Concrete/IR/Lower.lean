@@ -501,7 +501,7 @@ private def addContinueEdge (vars : List (LocalKey × SVal)) (label : String) : 
   | [] => pure ()
 
 /-- Peek at the continue edges of the innermost loop without popping. -/
-private def peekContinueEdges : LowerM (List (List (String × SVal) × String)) := do
+private def peekContinueEdges : LowerM (List (List (LocalKey × SVal) × String)) := do
   let s ← getState
   match s.loopStack with
   | info :: _ => return info.continueEdges
@@ -516,15 +516,15 @@ private def prependInstsToBlock (label : String) (newInsts : List SInst) : Lower
   setState { s with blocksRev := blocks' }
 
 /-- Get current var map snapshot. -/
-private def snapshotVars : LowerM (List (String × SVal)) := do
+private def snapshotVars : LowerM (List (LocalKey × SVal)) := do
   let s ← getState
   -- `__last_expr` is the internal trailing-value pseudo-variable (set by `.expr`
   -- lowering); it is not a real local. It must never participate in merge/loop phi
   -- reconciliation — a leaked `__last_expr` from a previous value block would build
   -- a spurious, mistyped, or non-dominated phi (E0708/E0710/E0715). Snapshots feed
   -- exactly that reconciliation, so drop it here at the single source. The trailing
-  -- value is read separately via `lookupVar "__last_expr"` (lastExprVal).
-  return s.vars.filter fun (n, _) => n != "__last_expr"
+  -- value is read separately via `lookupVar (.name "__last_expr")` (lastExprVal).
+  return s.vars.filter fun (n, _) => n != .name "__last_expr"
 
 -- ============================================================
 -- Expression and statement lowering
@@ -564,19 +564,19 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
     -- A pure state read: `lookupVar` would emit a load of a promoted local (a dead instruction
     -- that renumbered every later temporary, golden ssa/cap_basic).
     let st ← getState
-    let isLocal := (st.vars.lookup name.name).isSome || st.promotedAllocas.any fun (n, _, _) => n == name.name
-    if !isLocal && (st.constants.any fun (n, _, _) => n == name) then
+    let isLocal := (st.vars.lookup name.key).isSome || st.promotedAllocas.any fun (n, _, _) => n == name.key
+    if !isLocal && (st.constants.any fun (n, _, _) => n == name.name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
     -- arrays are already stack-allocated: the array SVal is its storage
     | .array _ _ => return none
     | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ =>
       if !borrowsSlot varTy refTy then return none
-      promoteForAddr name varTy refTy
-    | _ => promoteForAddr name varTy refTy
+      promoteForAddr name.key varTy refTy
+    | _ => promoteForAddr name.key varTy refTy
   | _ => return none
 where
-  promoteForAddr (name : String) (varTy refTy : Ty) : LowerM (Option SVal) := do
+  promoteForAddr (name : LocalKey) (varTy refTy : Ty) : LowerM (Option SVal) := do
       match ← isPromoted name with
       | some (reg, _) => return some (.reg reg refTy)
       | none =>
@@ -596,9 +596,9 @@ where
 -- memory mid-body while the loop still phi-tracks it, and the two representations
 -- diverge (lost condition / re-initialized counter / silent infinite loop — C9).
 mutual
-partial def cexprTakesAddrOf (name : String) : CExpr → Bool
-  | .borrow inner _ => (match inner with | .ident n _ => n == name | _ => false) || cexprTakesAddrOf name inner
-  | .borrowMut inner _ => (match inner with | .ident n _ => n == name | _ => false) || cexprTakesAddrOf name inner
+partial def cexprTakesAddrOf (name : LocalKey) : CExpr → Bool
+  | .borrow inner _ => (match inner with | .ident n _ => n.key == name | _ => false) || cexprTakesAddrOf name inner
+  | .borrowMut inner _ => (match inner with | .ident n _ => n.key == name | _ => false) || cexprTakesAddrOf name inner
   | .binOp _ l r _ => cexprTakesAddrOf name l || cexprTakesAddrOf name r
   | .unaryOp _ o _ => cexprTakesAddrOf name o
   | .call _ _ args _ => args.any (cexprTakesAddrOf name)
@@ -613,13 +613,13 @@ partial def cexprTakesAddrOf (name : String) : CExpr → Bool
   | .ifExpr c t e _ => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t || cstmtsTakeAddrOf name e
   | _ => false
 
-partial def cmatchArmTakesAddrOf (name : String) : CMatchArm → Bool
+partial def cmatchArmTakesAddrOf (name : LocalKey) : CMatchArm → Bool
   | .enumArm _ _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
   | .litArm v guard body => cexprTakesAddrOf name v || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
   | .varArm _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
   | .rangeArm lo hi _ guard body => cexprTakesAddrOf name lo || cexprTakesAddrOf name hi || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
 
-partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
+partial def cstmtTakesAddrOf (name : LocalKey) : CStmt → Bool
   | .letDecl _ _ _ v => cexprTakesAddrOf name v
   | .assign _ v => cexprTakesAddrOf name v
   | .return_ (some v) _ => cexprTakesAddrOf name v
@@ -634,10 +634,10 @@ partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
   | .break_ (some v) _ => cexprTakesAddrOf name v
   | .break_ none _ => false
   | .defer b => cexprTakesAddrOf name b
-  | .borrowIn var _ _ _ _ body => var == name || cstmtsTakeAddrOf name body
+  | .borrowIn var _ _ _ _ body => var.key == name || cstmtsTakeAddrOf name body
   | .continue_ _ => false
 
-partial def cstmtsTakeAddrOf (name : String) (body : List CStmt) : Bool :=
+partial def cstmtsTakeAddrOf (name : LocalKey) (body : List CStmt) : Bool :=
   body.any (cstmtTakesAddrOf name)
 end
 
@@ -1656,7 +1656,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
 partial def lastExprVal (body : List CStmt) (_ty : Ty) : LowerM SVal := do
   match body.getLast? with
   | some (.expr _ true) =>
-    match ← lookupVar "__last_expr" with
+    match ← lookupVar (.name "__last_expr") with
     | some val => pure val
     | none => pure .unit
   | some (.return_ (some _) _) => pure .unit  -- arm returned, won't reach phi
@@ -1959,7 +1959,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     -- Only a trailing value expression (no `;`) is the block's value; a discarded
     -- statement still lowers (side effects) but does not set the block value (#42).
     -- A block's value is taken before the block's deferred calls run (bug 190).
-    if iv then setVar "__last_expr" (← snapshotArrayValue e v) else pure ()
+    if iv then setVar (.name "__last_expr") (← snapshotArrayValue e v) else pure ()
 
   | .ifElse cond then_ else_ =>
     let condVal ← lowerExpr cond
