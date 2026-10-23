@@ -33,8 +33,10 @@ inference, it never fails it.
 
 /-- The environment a peek reads. Every lookup is side-effect free. -/
 structure PeekCtx (m : Type → Type) where
-  /-- A local variable's type. Locals shadow module constants. -/
-  var : String → m (Option Ty)
+  /-- A local variable's type, for the use of `name` at the given position (the checker resolves
+      it through its local table, R-0492; Elab by its own scopes). Locals shadow module
+      constants. -/
+  var : Span → String → m (Option Ty)
   /-- A named constant's type. -/
   constant : String → m (Option Ty)
   /-- A callable's signature as seen from a call site. -/
@@ -81,9 +83,9 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
   | .boolLit _ _ => return .bool
   | .strLit _ _ => return .string
   | .charLit _ _ => return .char
-  | .ident _ name =>
+  | .ident sp name =>
     -- locals shadow module constants (the `.ident` case of both passes)
-    match ← ctx.var name with
+    match ← ctx.var sp name with
     | some ty => return ty
     | none =>
     match ← ctx.constant name with
@@ -175,8 +177,8 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
     | .heap (.array t _) => return t
     | _ => return .placeholder
   -- A call's return type is declared (bug 063); a generic callee's is not answered.
-  | .call _ fnName _ _ =>
-    match ← ctx.var fnName with
+  | .call csp fnName _ _ =>
+    match ← ctx.var csp fnName with
     | some (.fn_ _ _ retTy) => return retTy
     | some _ => return .placeholder
     | none =>

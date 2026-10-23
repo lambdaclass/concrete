@@ -2,6 +2,7 @@ import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
 import Concrete.Resolve.FileSummary
 import Concrete.Resolve.Resolve
+import Concrete.Resolve.Locals
 import Concrete.Frontend.Parser
 import Concrete.Frontend.CapArgs
 import Concrete.Check.Check
@@ -154,11 +155,20 @@ def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
 def buildSummary (prog : ParsedProgram) : SummaryTable :=
   { entries := buildSummaryTable prog.modules }
 
+/-- What every resolved program goes through before Check and Elab see it: destructuring `let`s
+    are desugared, then the local walk (`Resolve/Locals.lean`) attaches each function's local
+    binder table. Part of resolution, not a separate step, so no path can reach Check with a
+    body it skipped. Bug 202: `desugar` was a step each caller had to remember; the project,
+    debug-bundle, reducer and test paths did not, so a project's `let … else` reached Check
+    undesugared and was refused. -/
+private def finishResolve (rm : ResolvedModule) : ResolvedModule :=
+  { rm with module := resolveModuleLocals (desugarModule rm.module) }
+
 /-- Name-resolution pass: validates all identifiers and imports. -/
 -- spec: MOD-1, spec: MOD-2 (docs/spec/modules.md; names resolve once, before checking)
 def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics ResolvedProgram :=
   match resolveProgram prog.modules summary.entries with
-  | .ok resolved => .ok { modules := resolved }
+  | .ok resolved => .ok { modules := resolved.map finishResolve }
   | .error ds => .error ds
 
 /-- Name-resolution pass, error-tolerant: returns the (always structurally complete)
@@ -166,12 +176,7 @@ def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics
     diagnostics path only (ROADMAP Phase 4 #12a). -/
 def resolvePartial (prog : ParsedProgram) (summary : SummaryTable) : ResolvedProgram × Diagnostics :=
   let (resolved, ds) := resolveProgramPartial prog.modules summary.entries
-  ({ modules := resolved }, ds)
-
-/-- Desugar destructuring let statements before Check and Elab see them. -/
-def desugar (resolved : ResolvedProgram) : ResolvedProgram :=
-  { modules := resolved.modules.map fun rm =>
-      { rm with module := desugarModule rm.module } }
+  ({ modules := resolved.map finishResolve }, ds)
 
 /-- Type-checking pass. Consumes resolved program (proving name resolution happened). -/
 -- spec: PASS-5 (docs/spec/pipeline.md; this stage boundary)
@@ -358,7 +363,6 @@ def runFrontend (inputPath source : String)
     match Pipeline.resolve resolved summary with
     | .error ds => return .error ds
     | .ok resolvedProg =>
-    let resolvedProg := Pipeline.desugar resolvedProg
     match Pipeline.check resolvedProg summary with
     | .error ds => return .error ds
     | .ok () =>
@@ -397,7 +401,6 @@ def runFrontendDiagnostics (inputPath source : String)
   | .ok (resolved, _) =>
     let summary := Pipeline.buildSummary resolved
     let (resolvedProg, resolveDs) := Pipeline.resolvePartial resolved summary
-    let resolvedProg := Pipeline.desugar resolvedProg
     -- Typechecking is safe on the structurally complete resolved program even when
     -- name resolution reported errors, so run it regardless and merge diagnostics.
     let checkResult := Pipeline.check resolvedProg summary

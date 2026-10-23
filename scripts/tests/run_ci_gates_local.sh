@@ -205,7 +205,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   check_spec.sh); verified-pipeline +1 (check_pipeline_artifacts.sh, the only workflow step the
 #   train adds); spec-single-source after train 4 +0 (types.md and patterns.md run inside check_spec.sh).
 #   267 + 0 + 0 + 1 + 0 = 268.
-EXPECTED_GATE_COMMANDS=268
+# 268 -> 269: check_local_identity.sh (R-0492 slice 1, branch vp-r0492: local binder identity in the
+#   checker; bug 202).
+EXPECTED_GATE_COMMANDS=269
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

@@ -3276,7 +3276,13 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Resolved identities — the identity half of S5; R-0497 owns immutable, payload-bound artifacts — stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
-**Status (2026-10-18): planned; starts now.**
+**Status (2026-10-23): slice 1 landed on branch `vp-r0492`; the slice contract is S5 slice
+contract 2 in [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md).** `LocalId` is minted by
+the one lexical walk (`Resolve/Locals.lean`), which runs inside `Pipeline.resolve`. The checker's
+environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Checks are in
+`check_local_identity.sh`, plus mutation family 98. The slice found bug 202: project builds
+skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
+`VariantIdx`; contract expressions; `ElabVerify`.
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration
