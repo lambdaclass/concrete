@@ -1492,8 +1492,11 @@ end
     new loan (D1); anything else that is borrowed mutably (`&mut s.a`, a `self.offs` receiver, an
     owned `s`) is a loan on its root (Codex review: decided from the operand, not from its root). -/
 def mutLoanRoot? (operand : Expr) (explicitBorrow : Bool) : CheckM (Option String) := do
+  -- An explicit `&mut e` (an argument, or a receiver spelled `(&mut s.a).m()`) loans `e`'s root
+  -- (Codex review: the receiver form was left unnormalized and slipped through).
+  let _ := explicitBorrow
   let inner := match unparenExpr operand with
-    | .borrowMut _ x => if explicitBorrow then x else operand
+    | .borrowMut _ x => x
     | x => x
   let rec stripDerefs : Expr → Expr
     | .paren _ x | .deref _ x => stripDerefs x

@@ -8164,7 +8164,7 @@ run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
 for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal branch_receiver; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
 done
-for d2 in call_disjoint_fields call_field_read receiver_projection_read call_field_read_in_branch; do
+for d2 in call_disjoint_fields call_field_read receiver_projection_read call_field_read_in_branch explicit_mut_receiver_read; do
     run_err "$TESTDIR/error_d2_$d2.con" "(E0293)"
 done
 run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro.con" "(E0238)"

@@ -148,6 +148,7 @@ REF-8	tests/programs/error_d2_call_disjoint_fields.con	reject:E0293:REF-8@2	ref8
 REF-8	tests/programs/error_d2_call_field_read.con	reject:E0293:REF-8@2	ref8-call	-
 REF-8	tests/programs/error_d2_receiver_projection_read.con	reject:E0293:REF-8@2	ref8-call	-
 REF-8	tests/programs/error_d2_call_field_read_in_branch.con	reject:E0293:REF-8@2	ref8-call	-
+REF-8	tests/programs/error_d2_explicit_mut_receiver_read.con	reject:E0293:REF-8@2	ref8-call	-
 REF-5	tests/programs/error_d2_borrow_literal.con	reject:E0238:REF-5@2	ref5d2	-
 REF-5	tests/programs/error_d2_borrow_field_of_temporary.con	reject:E0238:REF-5@2	ref5d2	-
 REF-5	tests/programs/error_d2_temporary_receiver.con	reject:E0238:REF-5@2	ref5d2	-
