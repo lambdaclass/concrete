@@ -1986,12 +1986,6 @@ partial def placeNeedsPath : CExpr → Bool
 -- Helpers (must precede mutual block — no forward refs in Lean 4)
 -- ============================================================
 
-/-- The keys a function's parameters bind under: their identities when Elab recorded them, their
-    names otherwise (a synthesized function). -/
-def paramKeys (f : CFnDef) : List LocalKey :=
-  if f.paramIds.length == f.params.length then f.paramIds.map .id
-  else f.params.map fun (n, _) => .name n
-
 private def bindParams (env : Env) (params : List LocalKey) (args : List IVal) : Env :=
   match params, args with
   | [], _ => env
@@ -2378,7 +2372,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         -- bindings (through ref params or otherwise) survive in the lower
         -- portion of the env.
         let outerLen := env.length
-        let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) argVals
+        let callEnv := bindParams (envEnterFrame env) fdef.paramKeys argVals
         -- The callee's type parameters stand for the call's type arguments (resolved in the
         -- caller's own instantiation), so `sizeof::<T>()` and `*mut T` arithmetic in a generic
         -- body see the concrete types. A call that names none leaves them unresolved, and
@@ -2916,7 +2910,7 @@ partial def destroyValue (cx : Ctx) (env : Env) (arg : IVal) :
     match findFn cx.fns (destroyImplKey n) with
     | some fdef =>
       let outerLen := env.length
-      let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) [arg]
+      let callEnv := bindParams (envEnterFrame env) fdef.paramKeys [arg]
       let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n), foreign := fdef.foreignCalls } callEnv fdef.body
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
@@ -2946,7 +2940,7 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
         fail s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
       else
         let outerLen := env.length
-        let callEnv := bindParams (envEnterFrame env) (paramKeys fdef) argVals
+        let callEnv := bindParams (envEnterFrame env) fdef.paramKeys argVals
         let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m), foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with

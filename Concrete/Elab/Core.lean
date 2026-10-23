@@ -233,6 +233,13 @@ structure CFnDef where
       keeps its generic's bindings. An emission fact; no identity or digest reads it. -/
   foreignCalls : List (String × String) := []
 
+/-- The keys a function's parameters bind under (R-0492 step 4): their identities when Elab
+    recorded them, their names otherwise (a synthesized function). Every backend binds parameters
+    through this, so a parameter's key is the one its references carry. -/
+def CFnDef.paramKeys (f : CFnDef) : List LocalKey :=
+  if f.paramIds.length == f.params.length then f.paramIds.map .id
+  else f.params.map fun (n, _) => .name n
+
 /-- The declaration name proof and report identities use (see `CFnDef.declName`). -/
 def CFnDef.sourceName (f : CFnDef) : String := f.declName.getD f.name
 

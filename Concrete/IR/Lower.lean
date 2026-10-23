@@ -841,7 +841,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .intConst (Int.ofNat c.toNat) .char
 
   | .ident name ty =>
-    match ← lookupVar name with
+    match ← lookupVar name.key with
     | some val => return val
     | none =>
       -- Check module-level constants and inline their value
@@ -849,9 +849,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- Constants reach Lower flattened by bare name (Core carries no module path), so two
       -- modules defining one name are indistinguishable here: a submodule's `A` read the
       -- top-level `A`. Refused at the use rather than guessed (as Mono does for type names).
-      if (s.constants.filter fun (n, _, _) => n == name).length > 1 then
+      if (s.constants.filter fun (n, _, _) => n == name.name).length > 1 then
         throwLower s!"module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names; rename one of them"
-      match s.constants.find? fun (n, _, _) => n == name with
+      match s.constants.find? fun (n, _, _) => n == name.name with
       | some (_, _, constExpr) =>
         -- Hygiene (bug 123 review): the initializer is module-scope code. Inlined in the
         -- caller's environment, a local shadowing a constant it names captured it
@@ -867,8 +867,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with
-        | .fn_ _ _ _ => return .fnRef name ty
-        | _ => return .reg name ty
+        | .fn_ _ _ _ => return .fnRef name.name ty
+        | _ => return .reg name.name ty
 
   | .binOp op lhs rhs ty =>
     match op with
@@ -1012,7 +1012,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     else
     -- Track borrowMut args that need write-back after the call
     let mut aVals : List SVal := []
-    let mut mutBorrows : List (String × String × Ty) := []  -- (varName, allocaReg, innerTy)
+    let mut mutBorrows : List (LocalKey × String × Ty) := []  -- (var key, allocaReg, innerTy)
     for arg in args do
       match arg with
       | .borrowMut (.ident varName innerTy) _ =>
@@ -1021,7 +1021,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- e.g. an address-taken loop counter), pass that alloca directly — the
         -- alloca IS the storage, so no copy + write-back is needed (and a
         -- write-back via setVar would desync from the promoted alloca).
-        match ← isPromoted varName with
+        match ← isPromoted varName.key with
         | some (allocaReg, _) =>
           aVals := aVals ++ [.reg allocaReg (.refMut innerTy)]
         | none =>
@@ -1034,7 +1034,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emitEntryAlloca (.alloca slot innerTy)
           emit (.store curVal (.reg slot innerTy))
           aVals := aVals ++ [.reg slot (.refMut innerTy)]
-          mutBorrows := mutBorrows ++ [(varName.name, slot, innerTy)]
+          mutBorrows := mutBorrows ++ [(varName.key, slot, innerTy)]
       | _ =>
         -- All other borrow/place args (incl. `&mut o.f`, `&mut a[i]`,
         -- `&mut a[i].f`) lower through `borrowMut`/`placeAddr`, which GEPs into a
@@ -1055,7 +1055,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- The helper's reserved `_C$rt.` symbol, which no Concrete definition can take (bug 165).
       | .runtime helper => pure (.foreign (Symbols.runtimeFn helper))
       | .indirect binding =>
-        match ← lookupVar binding with
+        match ← lookupVar binding.key with
         -- Devirtualization: the binding holds a statically-known function, so
         -- this becomes a direct call. It is now a decision about a VALUE's
         -- constructor, not a string prefix a later pass has to re-parse.
@@ -1175,9 +1175,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- Exclude names any arm REBINDS (enum payload binding / var arm): promotion
     -- is keyed by name, so a shadowed binding's setVar would store the arm-local
     -- value into the OUTER variable's alloca.
-    let armShadows (n : String) : Bool := arms.any fun arm => match arm with
-      | .enumArm _ _ bindings _ _ => bindings.any fun (bn, _) => bn == n
-      | .varArm v _ _ _ => v == n
+    let armShadows (n : LocalKey) : Bool := arms.any fun arm => match arm with
+      | .enumArm _ _ bindings _ _ => bindings.any fun (bn, _) => bn.key == n
+      | .varArm v _ _ _ => v.key == n
       | _ => false
     prePromoteAddrTaken preMatchVars fun name =>
       !armShadows name && arms.any (cmatchArmTakesAddrOf name)
@@ -1221,7 +1221,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.gep payloadGep scrVal [.intConst (Int.ofNat payloadOff) .int] .i8)
           for (fieldIdx, (bname, bty)) in enumerate bindings do
             -- `_` is a wildcard field: skip the load/bind entirely (not read).
-            if bname != "_" then
+            if bname.name != "_" then
               let gepDst ← freshReg
               let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
               -- The base operand carries the binder's type for a borrowed binder: SSA cleanup
@@ -1233,11 +1233,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
               -- BindingMode.lean) is the payload field's ADDRESS in the scrutinee's storage; a
               -- by-value binder is its value.
               if binderIsBorrow bty then
-                setVar bname (.reg gepDst bty)
+                setVar bname.key (.reg gepDst bty)
               else
                 let loadDst ← freshReg
                 emit (.load loadDst (.reg gepDst bty) bty)
-                setVar bname (.reg loadDst bty)
+                setVar bname.key (.reg loadDst bty)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1249,7 +1249,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding != "_" then setVar binding scrVal
+          if binding.name != "_" then setVar binding.key scrVal
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1356,7 +1356,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding != "_" then setVar binding (if binderIsBorrow _bindTy then scrRef else scrVal)
+          if binding.name != "_" then setVar binding.key (if binderIsBorrow _bindTy then scrRef else scrVal)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1661,7 +1661,7 @@ partial def lastExprVal (body : List CStmt) (_ty : Ty) : LowerM SVal := do
     | none => pure .unit
   | some (.return_ (some _) _) => pure .unit  -- arm returned, won't reach phi
   | some (.letDecl name _ _ _) =>
-    match ← lookupVar name with
+    match ← lookupVar name.key with
     | some val => pure val
     | none => pure .unit
   | _ => pure .unit
@@ -1792,9 +1792,9 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
 partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
   match place with
   | .ident name _ =>
-    match ← isPromoted name with
+    match ← isPromoted name.key with
     | some (allocaReg, structTy) => emit (.store newVal (.reg allocaReg structTy))
-    | none => setVar name newVal
+    | none => setVar name.key newVal
   | .deref inner _ =>
     let p ← lowerExpr inner
     emit (.store newVal p)
@@ -1909,7 +1909,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     -- `setVar` consults the promoted table first, so an UNPROMOTED re-declaration (immutable,
     -- or a scalar, or another type) was stored into — and read back from — the dead
     -- binding's storage at the dead binding's type (Codex round 2 of bug 087).
-    removePromotedAllocas [name]
+    removePromotedAllocas [name.key]
     -- A mutable VALUE aggregate (array, or a user struct/enum) needs a stable
     -- alloca so in-place element/field assignment AND `&mut place` borrows operate
     -- on real storage. This must happen at the declaration, not lazily mid-
@@ -1935,13 +1935,13 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       -- The initializing store stays here, at the declaration site.
       emitEntryAlloca (.alloca allocaReg ty)
       emit (.store val (.reg allocaReg ty))
-      addPromotedAlloca name allocaReg ty
+      addPromotedAlloca name.key allocaReg ty
     else
-      setVar name (← snapshotArrayValue value val)
+      setVar name.key (← snapshotArrayValue value val)
 
   | .assign name value =>
     let val ← lowerExpr value
-    setVar name val
+    setVar name.key val
 
   | .return_ (some value) _retTy =>
     -- The result is read BEFORE the deferred calls run, so an array result is copied first
@@ -2308,7 +2308,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     -- so that when passed as a function argument, the correct pointer type is emitted.
     -- The alloca is hoisted to the entry block so it dominates all uses, including
     -- across early returns inside the borrow block body.
-    let curVal ← lookupVar var
+    let curVal ← lookupVar var.key
     let innerTy := match refTy with
       | .ref t | .refMut t | .ptrMut t | .ptrConst t => t
       | _ => refTy
@@ -2317,7 +2317,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     match curVal with
     | some cv => emit (.store cv (.reg slot innerTy))
     | none => pure ()
-    setVar ref (.reg slot refTy)
+    setVar ref.key (.reg slot refTy)
     lowerStmts body
     -- For mutable borrows, load back the value and update the original variable.
     -- Skip write-back if the body terminated early (return/break) — the write-back
@@ -2327,7 +2327,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       if !s.blockTerminated then
         let loadBack ← freshReg "wb."
         emit (.load loadBack (.reg slot innerTy) innerTy)
-        setVar var (.reg loadBack innerTy)
+        setVar var.key (.reg loadBack innerTy)
 
 partial def lowerStmts (stmts : List CStmt) : LowerM Unit := do
   pushScope .block
@@ -2359,7 +2359,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     currentInsts := []
     labelCounter := 0
     regCounter := 0
-    vars := f.params.map fun (n, ty) => (n, SVal.reg n ty)
+    vars := (f.paramKeys.zip f.params).map fun (k, (n, ty)) => (k, SVal.reg n ty)
     stringLits := []
     structDefs := structDefs
     enumDefs := enumDefs
