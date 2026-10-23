@@ -49,7 +49,7 @@ areas exist (§8).
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | stub: PAT-1, the renamed pattern binder that SCOPE-1 depends on (it was gap G4) |
 | `ffi.md` | `FFI-` | stub: FFI-1 (foreign function values) and FFI-2 (one Layout authority for AAPCS64) |
-| `pipeline.md` | `PASS-` | stub: PASS-1 to PASS-4 (substitution, binder modes, the native-profile theorem, the trusted LLVM profile) |
+| `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
 | `types.md` | `TYPE-` | stub: TYPE-1 to TYPE-3 (callable values, no dynamic dispatch, owned `Text`) |
 | `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
 | `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
@@ -195,7 +195,12 @@ example states, never only with the other legs.
   prints `N` as its last line. `interp-exempt` drops the interpreter leg, and the gate prints
   every exemption.
 - **reject**: the first error reported by the native compile, and the first error reported
-  by `--interp`, are each `error[<stage>]: (<code>)`. The code must be one of the entry's
+  by `--interp`, are each `error[<stage>]: (<code>)`, and no lower layer leaked (`llvm-as`,
+  the system linker, a panic). In a preservation entry (a stage boundary), the code may belong
+  to another chapter's rule, so it need not be among the entry's `Codes` and no rule tag is
+  required, and `code=none` is allowed for a `link` diagnostic that has no code yet.
+  `interp-exempt=` on a reject example drops the interpreter leg, for a stage the interpreter
+  does not have. The code must be one of the entry's
   `Codes`, the stage one of that code's stages, and the diagnostic must carry
   `rule: <ID>@<version>` for this entry.
 - **pending**: the entry is decided and not implemented. The example is still run, and
@@ -324,7 +329,7 @@ them.
 |---|---|
 | `check_rules_2i.sh` and `tests/rules/exit_2i.tsv` | The manifest is generated (§5), and the gate's code-to-rule table comes from the spec. |
 | `check_diagnostic_codes_complete.sh` | It owns one fact: every code in the literal `=> "E…"` mappings of `CheckError.lean` and `CoreCheck.lean` has a ledger row. It does not see codes built elsewhere. S6 owns the next fact: every ledger row is classified, and rule rows match the spec. The two chain. Widening the first gate's scan to every emitter is tracked separately. |
-| `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | They own the boundary contracts between stages. Spec examples use the same pass-tag vocabulary and pin the first responsible stage the same way. |
+| `check_pipeline_contracts.sh` and `PIPELINE_CONTRACTS.md` | Migrated (step 0): the boundary contracts are `pipeline.md`'s PASS-5 to PASS-11, their fixtures are its examples, the leak check is part of S4, and the gate is retired. PIPELINE_CONTRACTS.md is the design record. |
 | `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | These hold per-constructor value-flow coverage. They migrate into `ownership.md` as that chapter's constructor table, and the coverage check becomes part of `check_spec.sh` (§8, step 1). |
 | `check_constructor_coverage.sh` | It checks that every compiler walker handles every constructor. That is a fact about the compiler, not the language, so it stays separate. |
 | `check_doc_snippets.sh` (13r: `con`, `con reject:E…`, `con pseudocode`) | It owns snippets in other documents, at the bar of `--emit-core`. Spec examples are stricter: they run, compare both consumers and pin the stage. `docs/spec/` is outside its glob. |
@@ -342,7 +347,7 @@ Every area of the language has a planned chapter. A migration step does the foll
 
 Each step lands with the gate green. The steps run in this order:
 
-0. **pipeline.md** (`PASS-`, grown from the stub): the boundary contracts of
+0. **pipeline.md** (`PASS-`, migrated 2026-10-23): the boundary contracts of
    PIPELINE_CONTRACTS.md, one preservation entry per stage (Elab, Mono, CoreCheck, Lower, SSA),
    each with its relation and its evidence (D12: every pass states what it preserves). Generic
    substitution and binder modes are first (PASS-1 and PASS-2, in the pilot). `check_pipeline_contracts.sh`'s fixtures become the

@@ -22,7 +22,7 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
-STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check"}
+STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation"}
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
@@ -72,8 +72,8 @@ class Example:
             if k in self.attrs:
                 self.errors.append(f"repeated attribute '{k}'")
             self.attrs[k] = v
-        allowed = {"name", "pending", "now", "now-interp", "project"} | (
-            {"exit", "interp-exempt"} if self.verdict == "accept" else {"code", "stage", "pair"})
+        allowed = {"name", "pending", "now", "now-interp", "project", "interp-exempt"} | (
+            {"exit"} if self.verdict == "accept" else {"code", "stage", "pair"})
         for k in self.attrs:
             if k not in allowed:
                 self.errors.append(f"unknown attribute '{k}' for {self.verdict}")
@@ -88,8 +88,9 @@ class Example:
         if "stage" in self.attrs and self.attrs["stage"] not in STAGES:
             self.errors.append(f"unknown stage '{self.attrs['stage']}'")
         c = self.attrs.get("code")
-        if c is not None and not (re.fullmatch(r"E[0-9]{4}", c) or (c == "new" and "pending" in self.attrs)):
-            self.errors.append(f"code '{c}' is not E<4 digits> (or `new` on a pending example)")
+        if c is not None and not (re.fullmatch(r"E[0-9]{4}", c) or (c == "new" and "pending" in self.attrs)
+                                  or (c == "none" and self.attrs.get("stage") == "link")):
+            self.errors.append(f"code '{c}' is not E<4 digits> (or `new` on a pending example, or `none` at stage link)")
         if ("pending" in self.attrs) != ("now" in self.attrs):
             self.errors.append("`now=` is required exactly when `pending=` is present")
         if "now-interp" in self.attrs and "pending" not in self.attrs:
@@ -371,7 +372,7 @@ def check_format(spec, root):
             names.add(x.name)
             if st == "enforced" and x.pending:
                 fail("S1", f"{x.key}: a pending example under an enforced rule (Status must be partial)"); s1 += 1
-            if x.verdict == "reject" and x.attrs.get("code") not in ("new", None):
+            if x.verdict == "reject" and x.attrs.get("code") not in ("new", "none", None) and e.kind != "preservation":
                 stg = dict((c, s) for c, s in codes if c)
                 if x.attrs["code"] not in stg:
                     fail("S1", f"{x.key}: code {x.attrs['code']} is not in the rule's Codes"); s1 += 1
@@ -405,6 +406,9 @@ def check_coverage(spec):
                 fail("S5", f"{e.id}: an enforced refusal needs a non-pending reject example"); bad += 1
             if st == "pending" and not rej:
                 fail("S5", f"{e.id}: a pending refusal needs a reject example"); bad += 1
+        if rej and e.kind not in ("refusal", "preservation"):
+            fail("S5", f"{e.id}: a {e.kind} has no reject examples (only refusals and stage boundaries do)"); bad += 1
+        if True:
             for x in rej:
                 p = acc.get(x.attrs.get("pair", ""))
                 if p is None:
@@ -563,7 +567,9 @@ def check_history(spec, base, old_ids_path, old_codes_path, old_spec_dir):
 # ---------------------------------------------------------------------------------------------
 # S4 examples
 # ---------------------------------------------------------------------------------------------
-ERR_RE = re.compile(r"error\[([a-z-]+)\]: \((E[0-9]{4})\)")
+ERR_RE = re.compile(r"error\[([a-z-]+)\]: (?:\((E[0-9]{4})\))?")
+# a diagnostic must come from a compiler stage; any of these means a lower layer leaked (PIPELINE_CONTRACTS)
+LEAK_RE = re.compile(r"llvm-as|LLVM IR validation|Undefined symbols|^ld:|clang: error|llc:|PANIC|panic|Segmentation", re.M)
 
 def first_error(out):
     lines = out.split("\n")
@@ -575,7 +581,7 @@ def first_error(out):
                 if ERR_RE.search(l2) or l2.startswith("error"): break
                 t = re.match(r"^\s+rule: (\S+)$", l2)
                 if t: tag = t.group(1); break
-            return ("reject", m.group(2), m.group(1), tag)
+            return ("reject", m.group(2) or "none", m.group(1), tag)
     return None
 
 def run(cmd, timeout=120, cwd=None, env=None):
@@ -598,6 +604,8 @@ def outcome_native(cc, src, workdir, project=None):
     if rc is None or rc < 0:
         return ("fail", f"compiler {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0:
+        if LEAK_RE.search(out):
+            return ("fail", "leaked past the compiler: " + LEAK_RE.search(out).group(0))
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
     if rc is None:
@@ -630,6 +638,8 @@ def matches_target(x, o):
     if x.attrs["code"] == "new":
         now = parse_outcome(x.attrs["now"])
         return not (now[0] == "reject" and now[1] == o[1])
+    if e.kind == "preservation":   # a stage boundary: the code belongs to another chapter's rule
+        return o[1] == x.attrs["code"]
     return o[1] == x.attrs["code"] and o[3] == e.tag
 
 def matches_now(spec_o, o):

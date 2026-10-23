@@ -636,6 +636,7 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
     literal fits its now-concrete type (bug 088). Mixed-width binops
     (class 3) are already re-asserted at the CoreCheck boundary (E0502) — see
     docs/compiler/COMPILER_BOUNDARY.md. -/
+-- spec: PASS-7 (docs/spec/pipeline.md; this stage boundary)
 def verifyPostMono (modules : List CModule) : Diagnostics :=
   verifyNoTypeVars modules ++ verifyCopyFieldsPostMono modules ++ verifyNoReturnedRefs modules
     ++ verifyLiteralRanges modules ++ verifyNoStoredRefs modules

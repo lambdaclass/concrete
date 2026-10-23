@@ -110,10 +110,12 @@ def desugar (resolved : ResolvedProgram) : ResolvedProgram :=
       { rm with module := desugarModule rm.module } }
 
 /-- Type-checking pass. Consumes resolved program (proving name resolution happened). -/
+-- spec: PASS-5 (docs/spec/pipeline.md; this stage boundary)
 def check (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnostics Unit :=
   checkProgram resolved.modules summary.entries
 
 /-- Elaborate and canonicalize (no validation yet). Consumes resolved program. -/
+-- spec: PASS-6 (docs/spec/pipeline.md; this stage boundary)
 def elaborate (resolved : ResolvedProgram) (summary : SummaryTable) : Except Diagnostics ElaboratedProgram :=
   match elabProgram resolved.modules summary.entries with
   | .error ds => .error ds
@@ -123,6 +125,7 @@ def elaborate (resolved : ResolvedProgram) (summary : SummaryTable) : Except Dia
     Note: the post-Elab placeholder check (`verifyPostElab`) is **not** run here — it is
     only available via `--report verify`. Placeholder legitimately survives elaboration
     in try/defer expressions and is resolved during lowering. -/
+-- spec: PASS-6 (docs/spec/pipeline.md; this stage boundary)
 def coreCheck (elabProg : ElaboratedProgram) : Except Diagnostics ValidatedCore :=
   match coreCheckProgram elabProg.coreModules with
   | .error ds => .error ds
@@ -134,6 +137,7 @@ def verifyPostElab (modules : List CModule) : Diagnostics :=
   (verifyNoPlaceholders modules).map fun d => { d with severity := .warning }
 
 /-- Monomorphize generic functions.  Runs the post-Mono verifier (no Ty.typeVar). -/
+-- spec: PASS-7 (docs/spec/pipeline.md; this stage boundary)
 def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram :=
   match monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
   | .ok modules =>
@@ -143,6 +147,7 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
   | .error ds => .error ds
 
 /-- Lower to SSA, verify, and clean up. -/
+-- spec: PASS-9 (docs/spec/pipeline.md; this stage boundary)
 def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
   let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   match ssaVerifyProgram ssaModules with
@@ -258,6 +263,7 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
           postLower := postLower, postCleanup := postCleanup }
 
 /-- Emit LLVM IR from SSA modules. -/
+-- spec: PASS-10 (docs/spec/pipeline.md; this stage boundary)
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter
 

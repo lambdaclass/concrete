@@ -182,7 +182,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 # 266 -> 267: check_spec.sh (docs/spec, the single language specification: examples on both consumers,
 #   code classification, enforcing sites, Lean names, generated exit_2i manifest and site), pinned in the
 #   same commit.
-EXPECTED_GATE_COMMANDS=267
+# 267 -> 266: check_pipeline_contracts.sh retired; its six boundary fixtures are reject and accept examples of
+#   docs/spec/pipeline.md (PASS-5 .. PASS-10), run by check_spec.sh with the same leak check.
+EXPECTED_GATE_COMMANDS=266
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

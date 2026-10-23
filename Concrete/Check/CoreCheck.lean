@@ -1222,6 +1222,7 @@ partial def ccCheckModule (m : CModule)
    finalEnv.trustEdges ++ subEdges, finalEnv.trustAttrs ++ subAttrs)
 
 /-- Validate all Core modules. Returns the first error or Ok. -/
+-- spec: PASS-8 (docs/spec/pipeline.md; this stage boundary)
 def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
