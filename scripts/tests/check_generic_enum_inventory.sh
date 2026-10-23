@@ -14,7 +14,11 @@
 #   (b) E0808 CONTAINMENT coverage — asserted with `run_err "<file>" "(E0808)"`
 #       in run_tests.sh. E0808 is now the residual backstop for an instantiation
 #       that escapes specialization, so a fixture classified this way is
-#       asserting that a shape is still refused rather than laid out.
+#       asserting that a shape is still refused rather than laid out, OR
+#   (c) DECLARATION refusal — `run_err "<file>" "(E0571)"`: a generic enum declared `Copy` whose
+#       payload is linear with its type parameters taken as Copy (D6, OWN-14@2) is refused at the
+#       declaration, before any instantiation or layout exists, so no mixed layout can compile.
+#       The allowlist is that one code; any other run_err still fails.
 #
 # A user-generic-enum fixture that is neither — or that lives outside
 # tests/programs where run_ok/run_err do not reach — FAILS. This forces a
@@ -54,6 +58,8 @@ for f in "${FILES[@]}"; do
     no "$f declares a user generic enum but is OUTSIDE tests/programs — no run_ok/run_err reaches it; classify it via a corpus with an assertion mechanism first"
   elif [ -n "$errline" ] && grep -q '(E0808)' <<<"$errline"; then
     ok "$base — E0808 containment coverage"
+  elif [ -n "$errline" ] && grep -q '(E0571)' <<<"$errline"; then
+    ok "$base — E0571 declaration refusal (D6: never reaches layout)"
   elif [ -n "$errline" ]; then
     no "$base — run_err present but does NOT require (E0808) specifically (a parser/checker/linker/crash failure would masquerade as containment)"
   elif [ -n "$okline" ]; then
