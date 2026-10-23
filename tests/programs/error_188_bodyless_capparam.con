@@ -1,0 +1,8 @@
+// Bug 188 (Codex review): a bodiless declaration has no call-site instantiation, so its
+// capability parameters were dropped and `with(C)` required a variable nobody binds —
+// callable with no authority. Refused at parse (E0001).
+trusted fn getpid<cap C>() with(C) -> i32;
+
+fn main() -> i32 {
+    return getpid();
+}

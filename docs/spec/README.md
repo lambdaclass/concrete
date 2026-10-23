@@ -59,6 +59,7 @@ areas exist (§8).
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-3 (name resolution, visibility, one binding per name) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
+| `traits.md` | `TRAIT-` | pilot: TRAIT-D1, TRAIT-1 to TRAIT-7 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.

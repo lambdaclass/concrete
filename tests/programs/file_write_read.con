@@ -1,4 +1,15 @@
 // File I/O: write a string to a file, read it back, check length
+//
+// The file lives in the run's private scratch directory, CONCRETE_TEST_TMPDIR, which the harness
+// (run_tests.sh, test_ssa.sh) sets for every program it runs (bug 191). A fixed /tmp path was
+// owned by whichever user ran the suite first on a shared host: fopen returned NULL for everyone
+// else and the program dereferenced it (SIGSEGV, rc 139). Every environment failure now has its
+// own exit code instead:
+//   100  CONCRETE_TEST_TMPDIR is unset or empty (no fallback to a shared path)
+//   101  fopen for writing failed
+//   102  fopen for reading failed
+trusted extern fn getenv(name: *mut u8) with(Env) -> *const u8;
+trusted extern fn strlen(s: *const u8) with() -> u64;
 trusted extern fn fopen(name: *mut u8, mode: *mut u8) with(File) -> *const u8;
 trusted extern fn fclose(file: *const u8) with(File) -> i32;
 trusted extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) with(File) -> u64;
@@ -43,12 +54,14 @@ trusted fn mode_cstr(ch: u8) with(Alloc) -> *mut u8 {
     return buf;
 }
 
-trusted fn write_file_str(path: &String, data: &String) with(File, Alloc) -> Int {
-    let path_buf: *mut u8 = string_to_cstr(path);
+// Writes `data` to the NUL-terminated path; -1 when the file cannot be opened.
+trusted fn write_file_str(path_buf: *mut u8, data: &String) with(File, Alloc) -> Int {
     let mode_buf: *mut u8 = mode_cstr(119); // 'w'
     let fp: *const u8 = fopen(path_buf, mode_buf);
     free(mode_buf);
-    free(path_buf);
+    if fp == (0 as *const u8) {
+        return 0 - 1;
+    }
     let data_len: Int = string_length(data);
     let data_buf: *mut u8 = string_to_buf(data);
     let written: u64 = fwrite(data_buf as *const u8, 1, data_len as u64, fp);
@@ -57,24 +70,80 @@ trusted fn write_file_str(path: &String, data: &String) with(File, Alloc) -> Int
     return written as Int;
 }
 
-trusted fn read_file_len(path: &String) with(File, Alloc) -> Int {
-    let path_buf: *mut u8 = string_to_cstr(path);
+// The length of the file at the NUL-terminated path; -1 when it cannot be opened.
+trusted fn read_file_len(path_buf: *mut u8) with(File, Alloc) -> Int {
     let mode_buf: *mut u8 = mode_cstr(114); // 'r'
     let fp: *const u8 = fopen(path_buf, mode_buf);
     free(mode_buf);
-    free(path_buf);
+    if fp == (0 as *const u8) {
+        return 0 - 1;
+    }
     fseek(fp, 0, 2);
     let size: i64 = ftell(fp);
     fclose(fp);
     return size as Int;
 }
 
-fn main() with(Std) -> Int {
-    let path: String = "/tmp/concrete_test_io.txt";
+// "$CONCRETE_TEST_TMPDIR/<name>" as a NUL-terminated C string, or null when the variable is unset
+// or empty.
+trusted fn scratch_cstr(name: &String) with(Env, Alloc) -> *mut u8 {
+    let var: String = "CONCRETE_TEST_TMPDIR";
+    let var_buf: *mut u8 = string_to_cstr(&var);
+    drop_string(var);
+    let dir: *const u8 = getenv(var_buf);
+    free(var_buf);
+    if dir == (0 as *const u8) {
+        return 0 as *mut u8;
+    }
+    let dir_len: u64 = strlen(dir);
+    if dir_len == 0 {
+        return 0 as *mut u8;
+    }
+    let name_len: Int = string_length(name);
+    let buf: *mut u8 = malloc(dir_len + 1 + (name_len as u64) + 1);
+    let mut i: u64 = 0;
+    while i < dir_len {
+        let src: *const u8 = dir + i;
+        let dst: *mut u8 = buf + i;
+        *dst = *src;
+        i = i + 1;
+    }
+    let slash: *mut u8 = buf + dir_len;
+    *slash = 47; // '/'
+    let mut j: Int = 0;
+    while j < name_len {
+        let dst: *mut u8 = buf + dir_len + 1 + (j as u64);
+        *dst = string_char_at(name, j) as u8;
+        j = j + 1;
+    }
+    let nul: *mut u8 = buf + dir_len + 1 + (name_len as u64);
+    *nul = 0;
+    return buf;
+}
+
+// Trusted: it compares and frees the raw path buffer.
+trusted fn run() with(File, Env, Alloc) -> Int {
+    let name: String = "file_write_read.txt";
+    let path_buf: *mut u8 = scratch_cstr(&name);
+    drop_string(name);
+    if path_buf == (0 as *mut u8) {
+        return 100;
+    }
     let data: String = "hello";
-    write_file_str(&path, &data);
+    let written: Int = write_file_str(path_buf, &data);
     drop_string(data);
-    let len: Int = read_file_len(&path);
-    drop_string(path);
+    if written < 0 {
+        free(path_buf);
+        return 101;
+    }
+    let len: Int = read_file_len(path_buf);
+    free(path_buf);
+    if len < 0 {
+        return 102;
+    }
     return len;
+}
+
+fn main() with(Std) -> Int {
+    return run();
 }

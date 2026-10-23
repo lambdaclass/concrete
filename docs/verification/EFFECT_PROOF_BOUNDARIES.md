@@ -113,19 +113,20 @@ Extern functions are the boundary between Concrete and external code. Calling an
 
 ### Trusted Code
 
-`trusted fn`, `trusted impl`, and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. `trusted` permits pointer arithmetic, raw pointer dereference, and raw pointer assignment — but does not relax capabilities, linearity, or borrow checking.
+`trusted fn` (functions and methods) and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. `trusted` permits pointer arithmetic, raw pointer dereference, and raw pointer assignment — but does not relax capabilities, linearity, or borrow checking.
 
 | Trust state | Proof status | Evidence level |
 |-------------|--------------|----------------|
 | Not trusted | **Eligible** or **enforced** depending on other gates; never automatically proved | Compiler-enforced (+ separately attached proof evidence where present) |
-| `trusted fn` / `trusted impl` | **Trusted assumption** — the code is outside the proof model; correctness depends on audit | Compiler-reported |
+| `trusted fn` (functions and methods) | **Trusted assumption** — the code is outside the proof model; correctness depends on audit | Compiler-reported |
 | `trusted extern fn` | **Trusted assumption** — audited pure foreign binding; stronger than untrusted extern but still not verified | Compiler-reported |
 | Caller of trusted code | **Enforced** — callers see a safe signature; the trust boundary is contained at the declaration site | Compiler-enforced |
 
 **Where functional ProofCore extraction stops:** At the `trusted` marker. A
 trusted function is ineligible regardless of whether it has an empty capability
-set, because its pointer-level behavior is outside the model. Functions from
-`trusted impl` blocks inherit this exclusion via `trustedImplOrigin`.
+set, because its pointer-level behavior is outside the model. A trusted METHOD
+(declared `trusted fn` inside an impl, recorded as `trustedImplOrigin`) is excluded the
+same way; an impl block confers no trust (bug 189).
 
 **What the compiler still guarantees:**
 - Linearity is not relaxed inside trusted code. Linear values follow ownership rules everywhere.

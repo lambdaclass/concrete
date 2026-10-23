@@ -37,7 +37,7 @@ awk '/trusted fn console_write/,/^    }/' std/src/io.con | grep -q "WriteFailed"
 # H4: ordered traversal is unbounded (borrowed non-Copy values) + fixture
 grep -q "test_omap_traversal_non_copy_values" std/src/ordered_map.con \
   && ok "H4: non-Copy traversal fixture present" || no "H4: non-Copy traversal fixture missing"
-awk '/trusted impl<K, V> OrderedMap/,/^    }$/' std/src/ordered_map.con | grep -q "pub fn fold" \
+awk '/^    impl<K, V> OrderedMap/,/^    }$/' std/src/ordered_map.con | grep -qE "pub (trusted )?fn fold" \
   && ok "H4: fold lives in the unbounded impl" || no "H4: fold still Copy-bounded"
 
 # H5: strict canonical base64 padding + reject fixtures

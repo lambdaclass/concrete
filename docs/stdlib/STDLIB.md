@@ -34,7 +34,7 @@ contracts, not by broad helper piles or hidden runtime assumptions.
 For low-level internals, the split is now:
 
 - semantic effects remain visible in public signatures (`with(Alloc)`, `with(File)`, etc.)
-- pointer-level implementation unsafety is contained by `trusted fn` / `trusted impl`
+- pointer-level implementation unsafety is contained by `trusted fn`, declared per function and method
 - foreign boundaries (`extern fn`) remain under `with(Unsafe)` even inside trusted code
 
 See [SAFETY.md](../language/SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../../research/language/trusted-boundary.md) for the exploratory design notes. For active design work on checked access, slice views, and validated wrapper types, see [../research/language/checked-indexing-and-slice-views.md](../../research/language/checked-indexing-and-slice-views.md) and [../research/language/opaque-validated-types.md](../../research/language/opaque-validated-types.md).
@@ -474,6 +474,10 @@ Test assertion helpers:
 - `assert_str_eq(a: &String, b: &String, message) -> bool` — string equality assertion
 
 All assertions return `bool` and print the message on failure.
+
+`scratch_path(name: String) with(Env, Alloc) -> Option<String>` gives a test that writes files the
+path `name` in the run's private scratch directory (`CONCRETE_TEST_TMPDIR`, set by `concrete test`
+and `--test`), or None when no runner set it. A test never writes a fixed `/tmp` path (bug 191).
 
 ## Error and Result Design
 

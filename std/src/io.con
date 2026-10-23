@@ -26,7 +26,7 @@ mod io {
         ptr: *const u8,
     }
 
-    trusted impl TextFile {
+    impl TextFile {
         pub trusted fn create(path: &String) with(File, Alloc) -> Result<TextFile, IoError> {
             let mode: String = "w";
             let h: *const u8 = fopen_cstr_io(path, &mode);
@@ -60,7 +60,7 @@ mod io {
             return buf as i32;
         }
 
-        pub fn flush(&self) with(File) {
+        pub trusted fn flush(&self) with(File) {
             fflush(self.ptr);
         }
 
@@ -69,7 +69,7 @@ mod io {
         /// succeeds; there is nothing to retry. A failure usually means
         /// buffered writes were lost, so check it.
         /// (Ownership-on-failure convention: docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md.)
-        pub fn close(self) with(File) -> Result<u64, IoError> {
+        pub trusted fn close(self) with(File) -> Result<u64, IoError> {
             let TextFile { ptr } = self;
             if fclose(ptr) != 0 {
                 return Result::<u64, IoError>::Err { error: IoError::CloseFailed };
@@ -99,7 +99,7 @@ mod io {
         close_fn: fn(*mut u8) with(C) -> Result<u64, IoError>,
     }
 
-    trusted impl<cap C> Writer<C> {
+    impl<cap C> Writer<C> {
         /// Write `len` bytes from `data`. Returns bytes written.
         pub fn write_raw(&self, data: *const u8, len: u64) with(Unsafe, C) -> Result<u64, IoError> {
             let f: fn(*mut u8, *const u8, u64) with(C) -> Result<u64, IoError> = self.write_fn;
@@ -107,13 +107,13 @@ mod io {
         }
 
         /// Write the contents of a `Bytes` buffer.
-        pub fn write(&self, data: &Bytes) with(C) -> Result<u64, IoError> {
+        pub trusted fn write(&self, data: &Bytes) with(C) -> Result<u64, IoError> {
             let raw: BytesRaw = data.raw_view();
             return self.write_raw(raw.ptr as *const u8, raw.len);
         }
 
         /// Write the bytes of a `String`.
-        pub fn write_str(&self, data: &String) with(C) -> Result<u64, IoError> {
+        pub trusted fn write_str(&self, data: &String) with(C) -> Result<u64, IoError> {
             return self.write_raw(data.raw_ptr() as *const u8, data.len());
         }
 
@@ -242,7 +242,7 @@ mod io {
         close_fn: fn(*mut u8) with(C) -> Result<u64, IoError>,
     }
 
-    trusted impl<cap C> Reader<C> {
+    impl<cap C> Reader<C> {
         /// Read up to `len` bytes into caller-owned `buf`. Ok(0) = EOF.
         pub fn read(&self, buf: *mut u8, len: u64) with(Unsafe, C) -> Result<u64, IoError> {
             let f: fn(*mut u8, *mut u8, u64) with(C) -> Result<u64, IoError> = self.read_fn;
@@ -385,6 +385,9 @@ mod io {
         return buf;
     }
 
+    // Scratch files live in the run's private directory, never at a fixed /tmp path (bug 191).
+    import std.test.{scratch_path};
+
     #[test]
     trusted fn test_read_all_drains() with(Alloc) -> i32 {
         let data: [u8; 5] = [10, 20, 30, 40, 50];
@@ -523,8 +526,11 @@ mod io {
 
     // The success path of the same API: a close that works reports Ok.
     #[test]
-    fn test_textfile_close_ok() with(File, Alloc) -> i32 {
-        let path: String = "/tmp/concrete_io_test_close_ok.txt";
+    fn test_textfile_close_ok() with(File, Env, Alloc) -> i32 {
+        let path: String = match scratch_path("io_test_close_ok.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let result: Result<TextFile, IoError> = TextFile::create(&path);
         path.drop();
         match result {

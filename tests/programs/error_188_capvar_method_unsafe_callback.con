@@ -1,0 +1,19 @@
+// Bug 188 (Codex review): the METHOD path. A capability-polymorphic method called with an
+// `Unsafe` callback instantiates `C := Unsafe`; a pure caller is refused (E0240). The
+// method path decides the instantiated set itself (CheckHelpers), as the call path does.
+extern fn abs(x: i32) with() -> i32;
+
+struct Copy Box { v: i32 }
+
+impl Box {
+    fn apply<cap C>(&self, f: fn(i32) with(C) -> i32) with(C) -> i32 {
+        return f(self.v);
+    }
+}
+
+fn magnitude(x: i32) with(Unsafe) -> i32 { return abs(x); }
+
+fn main() -> i32 {
+    let b: Box = Box { v: 0 - 42 };
+    return b.apply(magnitude);
+}

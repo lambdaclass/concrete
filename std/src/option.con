@@ -151,7 +151,7 @@ mod option {
     // this test compiling at all is the guarantee; the empty destroy keeps it
     // Alloc-free while still exercising terminal linear consumption.
     struct OptionTestLin { v: i32 }
-    trusted impl Destroy for OptionTestLin {
+    impl Destroy for OptionTestLin {
         pub fn destroy(&self) { }
     }
     fn lin_fallback() -> OptionTestLin { return OptionTestLin { v: 7 }; }

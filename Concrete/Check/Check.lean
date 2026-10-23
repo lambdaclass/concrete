@@ -8,6 +8,7 @@ import Concrete.Resolve.Resolve
 import Concrete.Resolve.Shared
 import Concrete.Semantics.TypeJudgment
 import Concrete.Check.CheckHelpers
+import Concrete.Check.Coherence
 
 namespace Concrete
 
@@ -605,6 +606,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | _ => return t
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4 (docs/spec/ownership.md; this declaration enforces the rule)
+-- spec: TRAIT-6 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
   match e with
   | .intLit sp n =>
@@ -1203,9 +1205,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       do
         let env ← getEnv
         -- Anti-smuggling: an indirect call must hold the pointer type's caps AND
-        -- its cap variables (Capabilities.missingCapsThroughPtr) — the stricter
-        -- through-pointer variant of the one shared missing-caps decision.
-        for cap in Capabilities.missingCapsThroughPtr env.currentCapSet fnPtrCapSet do
+        -- its cap variables — the one entailment rule (Capabilities.missingCaps),
+        -- the same one every direct call reads (bug 188).
+        for cap in Capabilities.missingCaps env.currentCapSet fnPtrCapSet do
           throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
@@ -1323,12 +1325,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           match Capabilities.resolveCaps sig.capParams capBindings sig.capSet with
           | .ok resolvedCaps => pure (CapSet.concrete resolvedCaps, capBindings)
           | .error cv => throwCheck (.cannotInferCapVariable cv fnName) (some e.getSpan)
-      -- Resolve cap variables in parameter types for type comparison
-      let capBindings' := if sig.capParams.isEmpty then [] else
-        sig.capParams.map fun cp =>
-          match resolvedCapSet with
-          | .concrete caps => (cp, caps.filter fun c => !sig.capParams.contains c)
-          | _ => (cp, ([] : List String))
+      -- Resolve cap variables in parameter types for type comparison, from the INFERRED
+      -- bindings — the same ones the method path uses (CheckHelpers). These were rebuilt
+      -- from the whole resolved set minus names equal to a callee parameter, which gave
+      -- every parameter the callee's fixed caps too (`with(C, Unsafe)` compared its
+      -- callback at `with(Unsafe)`) and erased a caller variable that shares the
+      -- parameter's name (`twice<cap C>` forwarding to `apply<cap C>`): two false E0220s
+      -- (Codex review of bug 188).
+      let capBindings' : List (String × List String) := if sig.capParams.isEmpty then [] else
+        sig.capParams.map fun cp => (cp, ((inferredCapBindings.find? (·.1 == cp)).map (·.2)).getD [])
       let resolveCapInTy : Ty → Ty := fun ty =>
         match ty with
         | .fn_ params (.concrete caps) ret =>
@@ -1349,13 +1354,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check resolved capabilities for cap-polymorphic calls (cap variable inference)
       if !sig.capParams.isEmpty then
         let env ← getEnv
-        -- One shared direct-call decision (Capabilities.missingCaps): the caps the
-        -- caller lacks for this call. Same computation CoreCheck's satisfaction
-        -- check and the reports read, so they cannot disagree.
-        -- `Unsafe` is left to CoreCheck, which owns the trusted-body discharge and checks
-        -- every call (see the method path in CheckHelpers).
-        for cap in (Capabilities.missingCaps env.currentCapSet resolvedCapSet).filter (· != unsafeCapName) do
-          throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
+        -- One entailment rule (Capabilities.missingCaps) on the INSTANTIATED set: the
+        -- caps the caller lacks for this call. `Unsafe` included (bug 188): CoreCheck
+        -- sees this call without the inferred binding, so a callback's `Unsafe`
+        -- reaching the callee through `C` is decided here or nowhere. A trusted body
+        -- discharges it exactly as CoreCheck's call-site discharge does.
+        for cap in Capabilities.missingCaps env.currentCapSet resolvedCapSet do
+          if !Capabilities.trustedDischarges env.currentFnTrusted cap then
+            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       if args.length != paramTypes.length then
         throwCheck (.wrongArgCount s!"function '{fnName}'" paramTypes.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip paramTypes do
@@ -2059,18 +2065,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | .typeVar n =>
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
-        -- Find the method in one of the bound traits
-        let mut foundSig : Option FnSigDef := none
-        let mut foundTrait : String := ""
-        let mut foundBuiltin : Option BuiltinTraitId := none
-        for traitName in bounds do
-          match env.traits.find? fun td => td.name == traitName with
-          | some td =>
-            match td.methods.find? fun ms => ms.name == methodName with
-            | some ms => foundSig := some ms; foundTrait := traitName; foundBuiltin := td.builtinId; break
-            | none => pure ()
-          | none => pure ()
-        match foundSig with
+        -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
+        -- that had the method used to win, so `T: A + B` resolved by declaration order.
+        let cands := boundMethodCandidates env.traits bounds methodName
+        if cands.length > 1 then
+          throwCheck (.ambiguousBoundMethod methodName n (cands.map (·.1.name))) (some e.getSpan)
+        let foundTrait : String := (cands.head?.map (·.1.name)).getD ""
+        let foundBuiltin : Option BuiltinTraitId := cands.head?.bind (·.1.builtinId)
+        match cands.head?.map Prod.snd with
         | none => throwCheck (.noMethodOnTypeVar methodName n) (some e.getSpan)
         | some sig =>
           -- Bug 091: a call through a trait bound exercises the authority the TRAIT
@@ -2082,7 +2084,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- trusted body discharges the `Unsafe` obligation, exactly as at a direct call.
           let envC ← getEnv
           for cap in Capabilities.missingCaps envC.currentCapSet sig.capSet do
-            if !(cap == unsafeCapName && envC.currentFnTrusted) then
+            if !Capabilities.trustedDischarges envC.currentFnTrusted cap then
               throwCheck (.missingCapability s!"{foundTrait}::{methodName}" cap envC.currentFnName) (some e.getSpan)
           -- Replace Self with the type variable in the trait signature
           let selfTy := Ty.typeVar n
@@ -4088,12 +4090,11 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
-    -- A method of a `trusted impl` is trusted (as Elab records it): the trusted-only
-    -- rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
+    -- A method is trusted only when it declares `trusted` itself (bug 189); the
+    -- trusted-only rules (borrowed drop glue, bug 091 round 3) read `currentFnTrusted`.
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams
-              , typeBounds := ib.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
+              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName
@@ -4101,8 +4102,7 @@ def checkModule (m : Module) (summary : FileSummary)
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
     acc ++ tb.methods.map fun f =>
       ({ f with typeParams := tb.typeParams ++ f.typeParams
-              , typeBounds := tb.typeBounds ++ f.typeBounds
-              , isTrusted := f.isTrusted || tb.isTrusted }, some implTy)
+              , typeBounds := tb.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let (allErrors, _) := allFnPairs.foldl (fun (errs, env) (f, implTy) =>
@@ -4175,6 +4175,10 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     happened) and uses summary table for import resolution. -/
 def checkProgram (resolved : List ResolvedModule)
     (summaryTable : List (String × FileSummary) := []) : Except Diagnostics Unit :=
+  -- Trait coherence FIRST (bug 186): every impl is unique, local and fully generic, and every
+  -- (type, method) names one method, before any method table below is built from them.
+  let coherence := Coherence.checkProgram (resolved.map (·.module)) summaryTable
+  if !coherence.isEmpty then .error coherence else
   -- Build sibling module summaries for inline modules (mod A {} mod B {}).
   -- Each module's summary is indexed by name for qualified :: access.
   let moduleSummaryList : List (String × FileSummary) := resolved.map fun rm =>

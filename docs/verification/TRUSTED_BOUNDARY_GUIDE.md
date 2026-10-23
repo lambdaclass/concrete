@@ -148,7 +148,7 @@ Every trusted boundary should be visible in compiler reports:
 
 ### `--report unsafe`
 
-Shows all `trusted fn`, `trusted impl`, and `trusted extern fn` declarations with their capabilities and what they wrap.
+Shows all `trusted fn` (functions and methods) and `trusted extern fn` declarations with their capabilities and what they wrap.
 
 ### `--report effects`
 

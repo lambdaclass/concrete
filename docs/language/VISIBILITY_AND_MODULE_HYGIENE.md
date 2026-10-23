@@ -86,7 +86,7 @@ For the first release, Concrete does not add per-field visibility. The reasons:
 
 1. **Concrete has no constructors.** Structs are constructed with struct literal syntax (`Pair { x: 1, y: 2 }`). If fields were private, external code could not construct the struct at all without a factory function. This is the right design for encapsulated types, but it is a pattern that requires `impl` methods like `new()` on every struct -- which the stdlib already provides for complex types (`Vec::new()`, `String::new()`).
 
-2. **The stdlib already uses the right pattern.** Types that need encapsulation (`Vec`, `String`, `HashMap`) have raw-pointer fields (`ptr: *mut T`) that should never be accessed directly. These types are inside `trusted impl` blocks, and all access goes through methods. The encapsulation is enforced by convention and by the `trusted` boundary, not by field visibility.
+2. **The stdlib already uses the right pattern.** Types that need encapsulation (`Vec`, `String`, `HashMap`) have raw-pointer fields (`ptr: *mut T`) that should never be accessed directly. Their raw work lives in per-method `trusted fn` methods, and all access goes through methods. The encapsulation is enforced by convention and by the `trusted` boundary, not by field visibility.
 
 3. **Copy structs are value types.** `pub struct Copy Pair { x: Int, y: Int }` is a plain data type. Making its fields private would be counterproductive -- the whole point of a Copy struct is transparent data.
 
@@ -102,7 +102,7 @@ pub struct String {
 }
 ```
 
-This is deferred. The first release ships with all-fields-visible for public structs. The `trusted impl` pattern provides sufficient encapsulation today.
+This is deferred. The first release ships with all-fields-visible for public structs. Per-method `trusted fn` inside an impl provides sufficient encapsulation today.
 
 ### 5. Enum Variants
 
@@ -268,8 +268,8 @@ The rule is simple: a function can only call functions whose capabilities are a 
 
 ```
 // In std.io
-trusted impl TextFile {
-    pub fn write(&self, data: &String) with(Unsafe) { ... }
+impl TextFile {
+    pub trusted fn write(&self, data: &String) with(Unsafe) { ... }
 }
 ```
 

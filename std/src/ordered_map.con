@@ -11,9 +11,9 @@ mod ordered_map {
         cmp_fn: fn(&K, &K) -> i32,
     }
 
-    trusted impl<K, V> OrderedMap<K, V> {
+    impl<K, V> OrderedMap<K, V> {
         /// Create a new ordered map. cmp_fn returns <0 if a<b, 0 if a==b, >0 if a>b.
-        pub fn new(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V> {
+        pub trusted fn new(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V> {
             let m: OrderedMap<K, V> = OrderedMap::<K, V> {
                 keys: 0 as *mut K,
                 values: 0 as *mut V,
@@ -25,7 +25,7 @@ mod ordered_map {
         }
 
         /// Binary search. Returns the index where key is or should be inserted.
-        fn find_index(&self, key: &K) -> u64 {
+        trusted fn find_index(&self, key: &K) -> u64 {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             let mut lo: u64 = 0;
             let mut hi: u64 = self.len;
@@ -56,7 +56,7 @@ mod ordered_map {
         // if the key was present. ROADMAP Phase 6 #8a.
         /// Scoped SHARED read of one value (docs/CALLABLE_VALUES §5): the
         /// borrowed `&V` lives only inside `f`; the result returns BY VALUE.
-        pub fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
+        pub trusted fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return Option::<R>::None;
@@ -76,7 +76,7 @@ mod ordered_map {
 
         /// Scoped MUTABLE access in place (docs/CALLABLE_VALUES §5): `&mut V`
         /// is confined to `f`; E0293 keeps the container out of the context.
-        pub fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
+        pub trusted fn with_value_mut<Ctx, R, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C) -> R) with(C) -> Option<R> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return Option::<R>::None;
@@ -95,7 +95,7 @@ mod ordered_map {
         }
 
         /// Convenience over `with_value_mut` for the no-result case.
-        pub fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
+        pub trusted fn modify<Ctx, cap C>(&mut self, key: &K, ctx: &mut Ctx, f: fn(&mut Ctx, &mut V) with(C)) with(C) -> bool {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return false;
@@ -113,7 +113,7 @@ mod ordered_map {
             return true;
         }
 
-        pub fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
+        pub trusted fn update(&mut self, key: &K, f: fn(V) -> V) -> bool {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return false;
@@ -133,7 +133,7 @@ mod ordered_map {
             return true;
         }
 
-        pub fn contains(&self, key: &K) -> bool {
+        pub trusted fn contains(&self, key: &K) -> bool {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return false;
@@ -164,7 +164,7 @@ mod ordered_map {
         }
 
 
-        fn grow(&mut self) with(Alloc) {
+        trusted fn grow(&mut self) with(Alloc) {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
             self.keys = grow::<K>(self.keys, new_cap);
             self.values = grow::<V>(self.values, new_cap);
@@ -175,11 +175,11 @@ mod ordered_map {
 
     // H4: borrowed traversal works for ANY value type — the scoped-callback
     // model passes &K/&V, so no Copy bound belongs here.
-    trusted impl<K, V> OrderedMap<K, V> {
+    impl<K, V> OrderedMap<K, V> {
         /// In-order fold (ascending key order — the DEFINED-order traversal
         /// that HashMap deliberately does not promise; see the HashMap policy
         /// in KNOWN_HOLES). Capability-polymorphic like map.fold.
-        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
+        pub trusted fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let mut i: u64 = 0;
             while i < self.len {
@@ -192,7 +192,7 @@ mod ordered_map {
         }
 
         /// In-order visit (ascending key order).
-        pub fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
+        pub trusted fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
             let mut i: u64 = 0;
             while i < self.len {
                 let kp: *mut K = self.keys + i;
@@ -205,8 +205,8 @@ mod ordered_map {
     }
 
     // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
-    trusted impl<K, V: Copy> OrderedMap<K, V> {
-        pub fn get(&self, key: &K) -> Option<V> {
+    impl<K, V: Copy> OrderedMap<K, V> {
+        pub trusted fn get(&self, key: &K) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return Option::<V>::None;
@@ -225,15 +225,15 @@ mod ordered_map {
     }
 
     // Min/max key value readers for Copy keys.
-    trusted impl<K: Copy, V> OrderedMap<K, V> {
-        pub fn min_key(&self) -> Option<K> {
+    impl<K: Copy, V> OrderedMap<K, V> {
+        pub trusted fn min_key(&self) -> Option<K> {
             if self.len == 0 {
                 return Option::<K>::None;
             }
             return Option::<K>::Some { value: *self.keys };
         }
 
-        pub fn max_key(&self) -> Option<K> {
+        pub trusted fn max_key(&self) -> Option<K> {
             if self.len == 0 {
                 return Option::<K>::None;
             }
@@ -262,8 +262,8 @@ mod ordered_map {
     }
 
     // H18: insert/remove destroy displaced/removed keys.
-    trusted impl<K: Destroy, V> OrderedMap<K, V> {
-        pub fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
+    impl<K: Destroy, V> OrderedMap<K, V> {
+        pub trusted fn remove(&mut self, key: &K) with(Alloc) -> Option<V> {
             let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
             if self.len == 0 {
                 return Option::<V>::None;
@@ -352,8 +352,8 @@ mod ordered_map {
     }
 
     // H18 drop-glue: destroy every live K and V in [0, len), then free.
-    trusted impl<K: Destroy, V: Destroy> OrderedMap<K, V> {
-        pub fn clear(&mut self) with(Alloc) {
+    impl<K: Destroy, V: Destroy> OrderedMap<K, V> {
+        pub trusted fn clear(&mut self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.len {
                 ((self.keys + i) as &K).destroy();
@@ -363,7 +363,7 @@ mod ordered_map {
             self.len = 0;
         }
 
-        pub fn drop(self) with(Alloc) {
+        pub trusted fn drop(self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.len {
                 ((self.keys + i) as &K).destroy();
@@ -379,8 +379,8 @@ mod ordered_map {
     }
 
     // Composition: OrderedMap is destroyable iff K and V are.
-    trusted impl<K: Destroy, V: Destroy> Destroy for OrderedMap<K, V> {
-        pub fn destroy(&self) with(Alloc) {
+    impl<K: Destroy, V: Destroy> Destroy for OrderedMap<K, V> {
+        pub trusted fn destroy(&self) with(Alloc) {
             let mut i: u64 = 0;
             while i < self.len {
                 ((self.keys + i) as &K).destroy();
@@ -395,8 +395,8 @@ mod ordered_map {
     }
 
     struct ODKey { id: i64, cell: *mut u64 }
-    trusted impl Destroy for ODKey {
-        pub fn destroy(&self) {
+    impl Destroy for ODKey {
+        pub trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

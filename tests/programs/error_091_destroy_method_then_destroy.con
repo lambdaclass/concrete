@@ -3,8 +3,8 @@
 // second `destroy(t)` is a use after move (it ran the destructor twice).
 mod m {
     struct Tracked { cell: *mut u64 }
-    trusted impl Destroy for Tracked {
-        fn destroy(&self) {
+    impl Destroy for Tracked {
+        trusted fn destroy(&self) {
             *self.cell = *self.cell + 1;
         }
     }

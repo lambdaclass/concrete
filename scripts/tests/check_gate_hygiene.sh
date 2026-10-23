@@ -596,6 +596,10 @@ fixed_tmp_scan() {
 }
 mapfile -t TMPSCAN < <(find "$ROOT_DIR/scripts/tests" "$ROOT_DIR/scripts/tests/lib" "$ROOT_DIR/scripts/ci" \
   -maxdepth 1 -type f -name '*.sh' ! -name 'check_gate_hygiene.sh' 2>/dev/null | LC_ALL=C sort -u)
+# The examples' scripts (benchmarks, demos) run on the same shared hosts (bug 191: four bench.sh
+# wrote fixed /tmp names).
+mapfile -t -O "${#TMPSCAN[@]}" TMPSCAN < <(cd "$ROOT_DIR" && git ls-files 'examples/*.sh' 2>/dev/null \
+  | sed "s|^|$ROOT_DIR/|" | LC_ALL=C sort -u)
 TMPHITS=""
 while IFS= read -r h; do
   [ -n "$h" ] || continue
@@ -627,6 +631,99 @@ printf '%s\n' 'D="$(mktemp -d /tmp/ok.XXXXXX)"' 'echo x > /tmp/ok_name.$$' '# ec
   && ok "CONTROL: the fixed-/tmp scan accepts mktemp, .\$\$ names and comments" \
   || no "CONTROL: the fixed-/tmp scan flags per-run paths: $(fixed_tmp_scan "$TTMP/perrun.sh" | tr '\n' ' ')"
 rm -rf "$TTMP"
+
+echo ""
+echo "=== no test program or std test uses a fixed shared /tmp path (bug 191) ==="
+# The same rule one level down: the PROGRAMS the suite runs. tests/programs/file_write_read.con
+# wrote /tmp/concrete_test_io.txt and std's fs/io tests wrote /tmp/concrete_fs_test_*.txt. On a
+# shared host the first user to run the suite owns those files; for every other user fopen returned
+# NULL and the program segfaulted (test_ssa rc 139, `concrete test` rc 1). Test code builds its
+# paths from CONCRETE_TEST_TMPDIR, which the runner sets to a directory private to the run
+# (`concrete test` / `--test` in Main.lean runTestBinary, run_tests.sh, test_ssa.sh); std tests
+# use std.test.scratch_path. A `/tmp/...` string literal in any .con source is refused unless it is
+# listed here with the reason nothing touches the filesystem through it. Comments are not code: a
+# path in a `//` or `///` line (a doc example) is not scanned.
+declare -A CON_TMP_OK=(
+  ["std/src/path.con:/tmp/x"]="PathBuf display test: the path is parsed and printed, never opened"
+)
+# Prints "path:line:<literal>" for each string literal of a .con source that names a /tmp path (paths
+# relative to the repo root; the WHOLE literal, so an exemption covers exactly one literal). Each file is tokenized whole, as the lexer does, left to right: a char
+# literal (one character or one escape, so a `'outer` loop label is a lone apostrophe and hides
+# nothing), a string literal (which may span lines), or a `//` comment to the end of its line (the
+# only comment form). A `//` or an apostrophe inside a string belongs to the string.
+con_fixed_tmp_scan() {
+  perl -0777 -ne '
+    my $src = $_;
+    while ($src =~ m{\x27(?:\\.|[^\x27\\\n])\x27|"((?:[^"\\]|\\.)*)"|//[^\n]*|\x27}gs) {
+      next unless defined $1;
+      my ($lit, $at) = ($1, $-[1]);
+      # A /tmp path starts the literal or follows a separator (space, `=`, `:`, `,`, `;`, a quote
+      # (an escaped `\"` too) or a bracket); after anything else (`build//tmp`, `x+/tmp`) it is part of a relative path.
+      next unless $lit =~ m#(?:^|[\s=:,;"\x27(\[{])/tmp/#;
+      my $line = 1 + (substr($src, 0, $at) =~ tr/\n//);
+      (my $shown = $lit) =~ s/\n/\\n/g;
+      print "$ARGV:$line:$shown\n";
+    }' "$@"
+}
+mapfile -t CONSCAN < <(cd "$ROOT_DIR" && git ls-files '*.con' 2>/dev/null | LC_ALL=C sort)
+CONHITS=""
+if [ "${#CONSCAN[@]}" -gt 0 ]; then
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    f="${h%%:*}"; rest="${h#*:}"; t="${rest#*:}"
+    [ -n "${CON_TMP_OK[$f:$t]:-}" ] && continue
+    CONHITS="$CONHITS $h"
+  done < <(cd "$ROOT_DIR" && con_fixed_tmp_scan "${CONSCAN[@]}" || echo "SCANNER-FAILED:0:con_fixed_tmp_scan exited nonzero")
+fi
+# Every allowlist entry must still name a literal that exists, so a stale exemption cannot linger.
+for k in "${!CON_TMP_OK[@]}"; do
+  f="${k%%:*}"; t="${k#*:}"
+  grep -qF "\"$t\"" "$ROOT_DIR/$f" 2>/dev/null || no "stale CON_TMP_OK entry $k: the literal is gone (remove the entry)"
+done
+if [ "${#CONSCAN[@]}" -lt 500 ]; then
+  no "only ${#CONSCAN[@]} .con sources enumerated for the fixed-/tmp scan — the check would be vacuous"
+elif [ -z "$CONHITS" ]; then
+  ok "no fixed shared /tmp path in ${#CONSCAN[@]} .con sources (test programs, std tests, examples)"
+else
+  no "fixed shared /tmp path(s) in .con sources — build the path from CONCRETE_TEST_TMPDIR (std: std.test.scratch_path):$CONHITS"
+fi
+CTMP="$(mktemp -d)"
+cat > "$CTMP/fixed.con" <<'CONEOF'
+fn main() with(Std) -> Int {
+    let path: String = "/tmp/shared_name.txt";
+    drop_string(path);
+    'outer: while true { let q: String = "/tmp/after_label.txt"; drop_string(q); break 'outer; }
+    let c: char = '"';
+    let r: String = "/tmp/after_quote_char.txt";
+    let m: String = "/tmp/multi
+line.txt";
+    let x: String = "/tmp/x other.txt";
+    let k: String = "key=/tmp/after_separator.txt";
+    let q: String = "touch \"/tmp/quoted.txt\"";
+    drop_string(r); drop_string(m); drop_string(x); drop_string(k); drop_string(q);
+    return 0;
+}
+CONEOF
+cat > "$CTMP/clean.con" <<'CONEOF'
+// A doc example may name /tmp/example.txt in a comment.
+/// let p: String = "/tmp/doc_example.txt";
+fn main() with(Std) -> Int {
+    let a: String = "data.txt"; // not "/tmp/trailing_comment.txt"
+    let b: String = "/nonexistent/tmp/file.txt";
+    let c: String = "x/tmp/y";
+    let d: String = "build//tmp/file.txt";
+    let e: String = "build+/tmp/file.txt";
+    drop_string(a); drop_string(b); drop_string(c); drop_string(d); drop_string(e);
+    return 0;
+}
+CONEOF
+[ "$( (cd "$CTMP" && con_fixed_tmp_scan fixed.con) | tr '\n' ' ')" = "fixed.con:2:/tmp/shared_name.txt fixed.con:4:/tmp/after_label.txt fixed.con:6:/tmp/after_quote_char.txt fixed.con:7:/tmp/multi\\nline.txt fixed.con:9:/tmp/x other.txt fixed.con:10:key=/tmp/after_separator.txt fixed.con:11:touch \\\"/tmp/quoted.txt\\\" " ] \
+  && ok "CONTROL: the .con fixed-/tmp scan flags /tmp literals (plain, after a loop label, after a '\"' char, spanning lines, an exempt prefix of a longer literal, after a separator or an escaped quote) whole, at their lines" \
+  || no "CONTROL: the .con fixed-/tmp scan missed or misplaced a hit: $(con_fixed_tmp_scan "$CTMP/fixed.con" | tr '\n' ' ')"
+[ -z "$(con_fixed_tmp_scan "$CTMP/clean.con")" ] \
+  && ok "CONTROL: the .con fixed-/tmp scan ignores comments, doc examples and relative paths containing /tmp/" \
+  || no "CONTROL: the .con fixed-/tmp scan flags non-shared text: $(con_fixed_tmp_scan "$CTMP/clean.con" | tr '\n' ' ')"
+rm -rf "$CTMP"
 
 echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"

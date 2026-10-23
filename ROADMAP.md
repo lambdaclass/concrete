@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 160 bug records.
+**Open bugs: 15** (8 silent, 1 loud, 6 filed before the discovery record) of 165 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -127,7 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 18 attribution-only batches (reviews, follow-ons, CI, controls, development) found 28 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 11 counting batches recorded. 22 attribution-only batches (reviews, follow-ons, CI, controls, development) found 33 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -3285,8 +3285,8 @@ and extern/intrinsic distinctions, with a validated `DefId → DefinitionIdentit
 boundaries; owner-checked `FieldIdx`/`VariantIdx`; `RegId`/`BlockId` in SSA. No `String → identity`
 coercions: identities come from scope-aware environments through checked adapters;
 capture-preserving alpha-canonicalization before hashing, frozen identity bytes preserved or
-explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (`ValidatedCore` is
-publicly constructible today, `Pipeline.lean` ~:48), with diagnostic artifacts typed separately.
+explicitly versioned. Pipeline artifacts (owned by R-0497) become immutable and payload-bound (slice 1 sealed `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram`, 2026-10-23), with diagnostic artifacts typed separately.
 
 **Semantics decisions (2026-10-21):** the compiler refers to `Option` and `Result` only by resolved
 identity, never by spelling, so a user enum named `Result` is a distinct type (LAYOUT_CONTRACT §3.4);
@@ -3461,9 +3461,16 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Immutable, payload-bound pipeline artifacts — the artifact half of stage S5 of the [verified-compiler pipeline](docs/compiler/VERIFIED_PIPELINE.md); R-0492 owns the identity half.
 
-**Status (2026-10-18): planned; starts with R-0492.**
+**Status (2026-10-23): slice 1 landed on branch `verified-pipeline`; the slice contract is in
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (S5 slice contract 1).** `ValidatedCore`,
+`MonomorphizedProgram` and `SSAProgram` are sealed and carry erased certificates about their exact
+payload. `ElaboratedProgram` is sealed. `UnverifiedSSA` and `CoreSubset` are separate uncertified
+types. Compile-fail controls are in `check_pipeline_artifacts.sh`. The slice found bug 180: a project
+report replaced a certificate's payload and ran Mono on the result. Remaining: the stage types
+after SSA as each IR lands; binding `ElaboratedProgram` to its input; payload-bound evidence
+records (class 10); the identity half under R-0492.
 
-Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (`ValidatedCore` is publicly constructible today, `Pipeline.lean` ~:48); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
+Each stage's output is an immutable artifact bound to its exact payload, constructible only by its producer or verifier (slice 1, 2026-10-23, sealed `ValidatedCore`, `MonomorphizedProgram` and `SSAProgram` in `Pipeline.lean`); any mutation yields an unverified artifact; diagnostic artifacts (including `lowerUnverified`) have separate types that downstream stages and evidence APIs reject. The stage sequence follows the target IR chain (HIR → Core → `CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR), extended as each IR lands. Private constructors are API discipline; soundness comes from the stated theorems.
 
 **Exit:** compile-fail controls cover artifact forgery, certificate reuse after mutation and the diagnostic-path bypass; `Pipeline.lean` exposes only typed stages.
 

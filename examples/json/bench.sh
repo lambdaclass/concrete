@@ -12,6 +12,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Private scratch per run: a fixed /tmp name is owned by whoever ran first on a shared host (bug 191).
+BENCH_TMP="$(mktemp -d)"
+trap 'rm -rf "$BENCH_TMP"' EXIT
 
 C_SRC="$SCRIPT_DIR/bench_c.c"
 C_BIN="$SCRIPT_DIR/json_c"
@@ -28,8 +31,8 @@ echo "    done."
 echo "==> Building Concrete version (emit-llvm + clang -O2)..."
 CON_OK=1
 cd "$ROOT"
-if ~/.elan/bin/lake env concrete "$CON_SRC" --emit-llvm > /tmp/json_con.ll 2>&1; then
-    if clang /tmp/json_con.ll -o "$CON_BIN" -O2 -Wno-override-module 2>/dev/null; then
+if ~/.elan/bin/lake env concrete "$CON_SRC" --emit-llvm > "$BENCH_TMP/json_con.ll" 2>&1; then
+    if clang "$BENCH_TMP/json_con.ll" -o "$CON_BIN" -O2 -Wno-override-module 2>/dev/null; then
         echo "    done."
     else
         echo "    WARNING: clang compilation failed; skipping Concrete benchmarks."
@@ -76,4 +79,4 @@ echo ""
 echo "==> Benchmark complete."
 
 # ── Cleanup ──────────────────────────────────────────────────────────
-rm -f "$C_BIN" "$CON_BIN" /tmp/json_con.ll
+rm -f "$C_BIN" "$CON_BIN" "$BENCH_TMP/json_con.ll"

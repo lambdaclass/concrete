@@ -211,6 +211,34 @@ def withPrivateDirKeptOnFailure (f : System.FilePath → IO (UInt32 × Bool)) : 
   return rc
 
 
+/-- The environment variable naming a test run's private scratch directory (bug 191). -/
+def testScratchEnvVar : String := "CONCRETE_TEST_TMPDIR"
+
+/-- Run a compiled test binary (`--test`, `concrete test`) and relay its output.
+
+    TEST SCRATCH IS PRIVATE TO THE RUN (bug 191). A test that touches the filesystem must never
+    use a fixed shared path: `/tmp/concrete_fs_test_roundtrip.txt` is owned by whichever user ran
+    the suite first on a shared host, and two concurrent runs read and truncate each other's file.
+    The binary runs with `CONCRETE_TEST_TMPDIR` set to `<dir>/scratch`, a directory inside the
+    run's private intermediate directory (bug 179), and test code builds its paths from it
+    (`std.test.scratch_path`). The working directory is unchanged, so a test still reads fixtures
+    relative to where it was started. Returns the binary's exit code. -/
+def runTestBinary (dir : System.FilePath) (outPath : String) : IO UInt32 := do
+  let scratch := dir / "scratch"
+  IO.FS.createDirAll scratch
+  let child ← IO.Process.spawn {
+    cmd := outPath
+    stdout := .piped
+    stderr := .piped
+    env := #[(testScratchEnvVar, some scratch.toString)]
+  }
+  let stdout ← child.stdout.readToEnd
+  let stderr ← child.stderr.readToEnd
+  let exitCode ← child.wait
+  IO.print stdout
+  if !stderr.isEmpty then IO.eprint stderr
+  return exitCode
+
 /-- Best-effort resident-set size in KB. Reads `/proc/self/statm` (Linux); returns
     `none` on any platform without it (e.g. macOS) — the telemetry field is
     platform-graceful, never a hard dependency. -/
@@ -545,16 +573,7 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
         IO.eprintln s!"LLVM IR left at: {llPath}"
         return (exitCode, true)
       -- Run the test binary (keep .ll and binary for debugging)
-      let child ← IO.Process.spawn {
-        cmd := outPath
-        stdout := .piped
-        stderr := .piped
-      }
-      let stdout ← child.stdout.readToEnd
-      let stderr ← child.stderr.readToEnd
-      let exitCode ← child.wait
-      IO.print stdout
-      if !stderr.isEmpty then IO.eprint stderr
+      let exitCode ← runTestBinary dir outPath
       if exitCode != 0 then
         IO.eprintln s!"Test binary exited with code {exitCode}"
         IO.eprintln s!"LLVM IR at: {llPath}"
@@ -580,15 +599,17 @@ def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
       IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
       return 1
     | .ok mono =>
+    -- Two artifact types: the debugging view never yields an `SSAProgram`, so it cannot reach
+    -- `emit`; both are printed from their modules alone.
     let lowerResult := if mode == "ssa-unverified"
-                        then Pipeline.lowerUnverified mono
-                        else Pipeline.lower mono
+                        then (Pipeline.lowerUnverified mono).map (·.ssaModules)
+                        else (Pipeline.lower mono).map (·.ssaModules)
     match lowerResult with
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
       return 1
-    | .ok ssa =>
-      for sm in ssa.ssaModules do
+    | .ok ssaModules =>
+      for sm in ssaModules do
         IO.println (ppSModule sm)
       return 0
 
@@ -1685,8 +1706,8 @@ def compileAndReport (inputPath : String) (reportType : String)
   -- Concrete.toml project, route through project mode so dependency imports
   -- (e.g. std) resolve; mirrors compileAndCheck.
   let inputDir := dirOf inputPath
-  -- Returns (parsed, fullValidCore, scopedValidCore, srcMap). In project
-  -- mode the two validCores differ: full covers the entire user package
+  -- Returns (parsed, fullValidCore, scopedCore, srcMap). In project
+  -- mode the two differ: full covers the entire user package
   -- (used for pc/registry validation, so sibling-file entries don't
   -- appear "unknown"), scoped covers just the file the user invoked
   -- (used to drive report output). In standalone mode they're identical.
@@ -1697,7 +1718,7 @@ def compileAndReport (inputPath : String) (reportType : String)
   -- `elf_header` reported 5 proved through the file path and 4 through the project path. One producer
   -- means one answer; carrying it here is what makes that true rather than intended.
   let frontendResult : Except UInt32
-      (ParsedProgram × ValidatedCore × ValidatedCore × SourceMap ×
+      (ParsedProgram × CoreSubset × List CModule × SourceMap ×
        Except Proof.IdentityRefusal Proof.ResolvedIdentity × List CModule ×
        List (String × String × String) × List (String × Nat) × Option ProofCore ×
        List NativeLibDecl) ←
@@ -1707,16 +1728,19 @@ def compileAndReport (inputPath : String) (reportType : String)
       | .error ec => pure (Except.error ec)
       | .ok ctx =>
         let { validCore, parsed, allSrcMap, depNames, identity := packageIdentity, filePackages, .. } := ctx
-        let userModules := validCore.coreModules.filter fun m => !depNames.contains m.name
-        let fullValidCore : ValidatedCore := { validCore with coreModules := userModules }
-        let scopedModules ← scopeUserModulesToFile userModules inputPath root
-        let scopedValidCore : ValidatedCore := { validCore with coreModules := scopedModules }
+        -- The user package, drawn from the validated whole program. A `CoreSubset`, not a
+        -- `ValidatedCore`: CoreCheck certified the whole program, and these modules without
+        -- their dependencies are not what it certified. `fullValidCore.source` is.
+        let fullValidCore := validCore.filterModules fun m => !depNames.contains m.name
+        -- The invoked file's modules, wrapped in empty parents (`scopeUserModulesToFile`): a
+        -- listing scope for the report text, which no pass runs on.
+        let scopedModules ← scopeUserModulesToFile fullValidCore.coreModules inputPath root
         -- The dependency modules travel too (R-0484 R10): the unsafe report lists the
         -- foreign-binding assumptions a program inherits from them.
         let depModules := validCore.coreModules.filter fun m => depNames.contains m.name
         -- The WHOLE program's per-scope tally (dependencies and std included), from the ProofCore
         -- `loadProject` already extracted; the report path's own ProofCore holds user modules only.
-        pure (Except.ok (parsed, fullValidCore, scopedValidCore, allSrcMap, packageIdentity, depModules, filePackages,
+        pure (Except.ok (parsed, fullValidCore, scopedModules, allSrcMap, packageIdentity, depModules, filePackages,
           ctx.pc.definitionsByScope, some (ctx.pc.scopeToUser depNames), ctx.nativeLibs))
     | none =>
       match ← Pipeline.runFrontend inputPath source resolveAllModules with
@@ -1727,13 +1751,13 @@ def compileAndReport (inputPath : String) (reportType : String)
         -- STANDALONE: synthetic over the COMPLETE resolved source map, not the invoked file alone.
         -- Hashing one file made two programs sharing that file — and differing everywhere else —
         -- the same package, which is the collision content-binding exists to prevent.
-        pure (Except.ok (parsed, validCore, validCore, srcMap,
+        pure (Except.ok (parsed, validCore.whole, validCore.coreModules, srcMap,
           Proof.ResolvedIdentity.standalone inputPath srcMap,
           ([] : List CModule), ([] : List (String × String × String)), ([] : List (String × Nat)), none,
           ([] : List NativeLibDecl)))
   match frontendResult with
   | .error ec => return ec
-  | .ok (parsed, fullValidCore, scopedValidCore, projSrcMap, packageIdentity, depModules, filePackages, programTally, programPc?, nativeLibs) =>
+  | .ok (parsed, fullValidCore, scopedCore, projSrcMap, packageIdentity, depModules, filePackages, programTally, programPc?, nativeLibs) =>
     -- R-0484 R10: assumption identities are package-scoped. Each source file maps to its
     -- package's canonical identity; standalone mode has one (synthetic) package.
     let assumptionPkgDefault : String × String := match packageIdentity with
@@ -1782,8 +1806,9 @@ def compileAndReport (inputPath : String) (reportType : String)
       | none => match extractProofCore? fullValidCore packageIdentity (mkAssumptions ()) simpleLocMap registry with
         | .ok pc => pure pc
         | .error w => IO.eprintln s!"error: {w.explain}"; return 1
-    -- Report output still iterates only the scoped modules.
-    let validCore := scopedValidCore
+    -- Report output still iterates only the scoped modules (`scopedCore`). Passes that compile
+    -- (verify, traceability, mono) run on `fullValidCore.source`, the program CoreCheck
+    -- certified and the build compiles (bug 180).
     -- Validate registry against ProofCore and surface warnings/errors
     let regIssues := Concrete.validateRegistry pc registry
     for issue in regIssues do
@@ -2027,8 +2052,8 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- The guarantees the code generator commits to (Phase 4 #17a), rendered from
       -- the same Concrete.Backend facts the emitter uses, plus this program's
       -- trusted boundaries. Human + JSON from one source.
-      if reportJson then IO.println (Concrete.Backend.toJson validCore.coreModules 1)
-      else IO.println (Concrete.Backend.report validCore.coreModules)
+      if reportJson then IO.println (Concrete.Backend.toJson scopedCore 1)
+      else IO.println (Concrete.Backend.report scopedCore)
       return 0
     if reportType == "contracts" then
       IO.println (← renderContracts parsed.modules registry locMap)
@@ -2065,7 +2090,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         else pure dvcs
       let vcLedger := Concrete.ObligationCore.ledgerOfVCs dvcs
       let proofLinks := Concrete.ObligationCore.proofLinkLedger
-        (Report.proofStatusEntries validCore.coreModules locMap registry pc)
+        (Report.proofStatusEntries scopedCore locMap registry pc)
       let ledger := vcLedger ++ proofLinks
       if reportJson then IO.println (Concrete.ObligationCore.ledgerJson ledger 1)
       else IO.println (Concrete.ObligationCore.ledgerReport ledger)
@@ -2504,8 +2529,8 @@ def compileAndReport (inputPath : String) (reportType : String)
       --     `Goal f args = <interpreter result>. Proof. reflexivity. Qed.`
       -- Agreement means two independently-implemented evaluators computed the same
       -- value. A mismatch is a real bridge-level defect.
-      let fns := Concrete.Interp.collectFns validCore.coreModules
-      let enums := Concrete.Interp.collectEnums validCore.coreModules
+      let fns := Concrete.Interp.collectFns scopedCore
+      let enums := Concrete.Interp.collectEnums scopedCore
       let interpCx : Concrete.Interp.Ctx := { fns, enums }
       let extractable := Concrete.CoreExtract.extractableFns fns
       let missed := Concrete.CoreExtract.unextractableFns fns
@@ -2666,7 +2691,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         then "claimed" else "unproved"
       -- The invoked file's own functions, from the SCOPED Core rather than from `locMap`
       -- (whose `file` field is stamped uniformly and cannot distinguish dependencies).
-      let ownFns := (scopedValidCore.coreModules.flatMap Report.coreFnFingerprints).map (·.1)
+      let ownFns := (scopedCore.flatMap Report.coreFnFingerprints).map (·.1)
       let cases := Report.artifactFuzzCases parsed.modules ownFns claimOf
       let total := cases.foldl (fun n c => n + c.argRows.length) 0
       let allFns := ownFns.length
@@ -2850,41 +2875,41 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (out ++ "\n")
       return 0
     if reportType == "caps" then
-      IO.println (Report.capabilityReport validCore.coreModules (mkAssumptions ()))
+      IO.println (Report.capabilityReport scopedCore (mkAssumptions ()))
       return 0
     if reportType == "unsafe" then
       -- R-0484 R10: one assumption summary over the program AND its loaded dependencies.
       let assumptions := mkAssumptions ()
       -- Declared native libraries are trusted foreign dependencies too (G1): listed after the
       -- foreign bindings that rely on them.
-      IO.println (Report.unsafeReport validCore.coreModules pc assumptions (depsLoaded := !depModules.isEmpty)
+      IO.println (Report.unsafeReport scopedCore pc assumptions (depsLoaded := !depModules.isEmpty)
         ++ nativeTrustSection nativeLibs)
       return 0
     if reportType == "assumptions" then
       -- R-0484 R10: the machine-readable view of the assumption summary the text reports render.
       let assumptions := mkAssumptions ()
-      IO.println (assumptions.toJson (validCore.coreModules.map (·.name)) (!depModules.isEmpty))
+      IO.println (assumptions.toJson (scopedCore.map (·.name)) (!depModules.isEmpty))
       return 0
     if reportType == "trust-edges" then
-      IO.println (Report.trustEdgeReport validCore.coreModules)
+      IO.println (Report.trustEdgeReport scopedCore)
       return 0
     if reportType == "layout" then
-      IO.println (Report.layoutReport validCore.coreModules)
+      IO.println (Report.layoutReport scopedCore)
       return 0
     if reportType == "alloc" then
-      IO.println (Report.allocReport validCore.coreModules)
+      IO.println (Report.allocReport scopedCore)
       return 0
     if reportType == "authority" then
-      IO.println (Report.authorityReport validCore.coreModules (mkAssumptions ()))
+      IO.println (Report.authorityReport scopedCore (mkAssumptions ()))
       return 0
     if reportType == "proof" then
-      IO.println (Report.proofReport validCore.coreModules pc)
+      IO.println (Report.proofReport scopedCore pc)
       return 0
     if reportType == "eligibility" then
       IO.println (Report.eligibilityReport pc)
       return 0
     if reportType == "proof-status" then
-      IO.println (Report.proofStatusReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc))
+      IO.println (Report.proofStatusReport scopedCore locMap srcMap (registry := registry) (pc := pc))
       -- RECEIPT CONSUMPTION. The status above is derived from source facts alone and explicitly does
       -- NOT mean the kernel re-ran. A stored receipt is the only thing that can say it did — and it
       -- is untrusted input, so it is re-checked against material computed fresh right now. A receipt
@@ -2912,7 +2937,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         let importsId := match checkerNow with
           | some (_, e) => Proof.importsIdOf e.importDigests
           | none => ""
-        let statusEntries := Report.proofStatusEntries validCore.coreModules locMap registry pc
+        let statusEntries := Report.proofStatusEntries scopedCore locMap registry pc
         let trustedDepsOf := fun (qn : String) =>
           (statusEntries.find? (fun s => s.qualName == qn)).map (·.trustedDeps) |>.getD []
         let env : Proof.IssueEnvironment := { compilerVersion, importsId }
@@ -3026,7 +3051,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         if notCurrent + unreadable + missing.length > 0 then return 1
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "obligations" then
-      IO.println (Report.obligationsReport validCore.coreModules locMap registry pc)
+      IO.println (Report.obligationsReport scopedCore locMap registry pc)
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "proof-deps" then
       IO.println (Report.proofDepsReport pc)
@@ -3038,7 +3063,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       let ms ← IO.monoMsNow
       let timestamp := toString ms
       let ident ← compilerIdentity
-      IO.println (Report.proofBundleJson inputPath timestamp ident validCore.coreModules locMap (registry := registry) (pc := pc))
+      IO.println (Report.proofBundleJson inputPath timestamp ident scopedCore locMap (registry := registry) (pc := pc))
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "extraction" then
       IO.println (Report.extractionReport (registry := registry) (pc := pc))
@@ -3142,7 +3167,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- library produced a byte-identical receipt, and nothing in the evidence said whose theorems
       -- had been accepted. That was an authority gap, not a documentation one.
       let importsId := Proof.importsIdOf res.environment.importDigests
-      let statusEntries := Report.proofStatusEntries validCore.coreModules locMap registry pc
+      let statusEntries := Report.proofStatusEntries scopedCore locMap registry pc
       -- Keyed on the qualified name, which is what `ProofStatusEntry` carries. Trust comes from
       -- the same producer the status report reads; recomputing it here would be a second answer to
       -- "which boundaries does this rest on", and the receipt would be the copy nobody re-checks.
@@ -3463,7 +3488,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- too, so the summary line and the exit code describe the same run.
       return (if failed.isEmpty && res.rejected.isEmpty && !generalFailure then 0 else 1)
     if reportType == "diagnostics-json" then
-      IO.println (Report.diagnosticsJson validCore.coreModules locMap (registry := registry) (pc := pc) (assumptions := mkAssumptions ()))
+      IO.println (Report.diagnosticsJson scopedCore locMap (registry := registry) (pc := pc) (assumptions := mkAssumptions ()))
       return 0
     if reportType == "schema" then
       IO.println Report.schemaReport
@@ -3472,16 +3497,16 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println Report.diagnosticCodesReport
       return 0
     if reportType == "effects" then
-      IO.println (Report.effectsReport validCore.coreModules locMap pc (mkAssumptions ()))
+      IO.println (Report.effectsReport scopedCore locMap pc (mkAssumptions ()))
       return 0
     if reportType == "arithmetic" then
-      IO.println (Report.arithmeticReport validCore.coreModules locMap)
+      IO.println (Report.arithmeticReport scopedCore locMap)
       return 0
     if reportType == "recursion" then
       IO.println (Report.recursionReport pc)
       return 0
     if reportType == "stack-depth" then
-      IO.println (Report.stackDepthReport validCore.coreModules locMap pc)
+      IO.println (Report.stackDepthReport scopedCore locMap pc)
       return 0
     if reportType == "fingerprints" then
       IO.println (Report.fingerprintReport pc)
@@ -3498,7 +3523,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       let auditVCs ← computeVCsDischarged parsed.modules locMap registry
       let vcSum := Report.vcAuditSummary auditVCs
       let assumptions := mkAssumptions ()
-      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum)
+      IO.println (Report.auditReport scopedCore locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum)
         (assumptions := assumptions) (depsLoaded := !depModules.isEmpty))
       if Report.hasContracts parsed.modules then
         IO.println (← renderContracts parsed.modules registry locMap)
@@ -3510,11 +3535,11 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- run, lower aborting entirely) surface via the standard
       -- Pipeline.* error path; runVerifyGates short-circuits at the
       -- first such failure.
-      let r := Pipeline.runVerifyGates validCore
+      let r := Pipeline.runVerifyGates fullValidCore.source
       IO.println (renderVerifyGates r.postElab r.postMono r.postLower r.postCleanup)
       if r.errorCount > 0 then return 1 else return 0
     if reportType == "traceability" then
-      match Pipeline.monomorphize validCore with
+      match Pipeline.monomorphize fullValidCore.source with
       | .error ds =>
         IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
         return 1
@@ -3524,15 +3549,16 @@ def compileAndReport (inputPath : String) (reportType : String)
           IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
           return 1
         | .ok ssa =>
-          IO.println (Report.traceabilityReport validCore.coreModules mono.coreModules ssa.ssaModules locMap (registry := registry) (pc := pc))
+          IO.println (Report.traceabilityReport scopedCore mono.coreModules ssa.ssaModules locMap (registry := registry) (pc := pc))
           return 0
     if reportType == "mono" then
-      match Pipeline.monomorphize validCore with
+      match Pipeline.monomorphize fullValidCore.source with
       | .error ds =>
         IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
         return 1
       | .ok mono =>
-        IO.println (Report.monoReport validCore.coreModules mono.coreModules)
+        -- Mono ran on the certified whole program; the listing is the invoked file's (bug 180).
+        IO.println (Report.monoReport scopedCore (Report.restrictMonoToScope scopedCore mono.coreModules))
         return 0
     IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, vcs, obligation-ledger, backend-contracts, verify, audit, bool-kernel, vcgen-diff"
     return 1
@@ -3555,7 +3581,7 @@ def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do
       -- classification, call graph, and extern info must reflect every
       -- caller — even ones in sibling files — for a per-file query to
       -- be accurate.
-      let fullUserValidCore : ValidatedCore := { validCore with coreModules := userModules }
+      let fullUserValidCore := validCore.filterModules fun m => !depNames.contains m.name
       let locMap := Report.buildFnLocMap parsed.modules inputPath
       let simpleLocMap := locMap.map fun (e : Report.FnLocEntry) => (e.qualName, (e.file, e.fnSpan.line))
       -- ONE PRODUCER: manifest identity when a project is in scope, synthetic otherwise. A refusal
@@ -3739,16 +3765,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
           nativeLinkFailureNote ctx
           IO.eprintln s!"LLVM IR left at: {llPath}"
           return (exitCode, true)
-        let child ← IO.Process.spawn {
-          cmd := outPath
-          stdout := .piped
-          stderr := .piped
-        }
-        let stdout ← child.stdout.readToEnd
-        let stderr ← child.stderr.readToEnd
-        let testExit ← child.wait
-        IO.print stdout
-        if !stderr.isEmpty then IO.eprint stderr
+        let testExit ← runTestBinary dir outPath
         if testExit != 0 then
           IO.eprintln s!"Test binary exited with code {testExit}"
           IO.eprintln s!"LLVM IR at: {llPath}"
