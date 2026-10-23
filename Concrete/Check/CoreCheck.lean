@@ -945,7 +945,7 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   | .enumArm _ _ bindings guard body =>
     let saved := (← getEnv).vars
     for (bname, bty) in bindings do
-      addVar bname bty
+      addVar bname.key bty
     match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
     | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
     | none => pure ()
@@ -960,7 +960,7 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     inCoreBlock (for s in body do ccCheckStmt s)
   | .varArm binding bindTy guard body =>
     let saved := (← getEnv).vars
-    addVar binding bindTy
+    addVar binding.key bindTy
     match guard with  -- bug 192 (TYPE-5): a guard is a `bool` condition
     | some g => do ccCheckExpr g; if g.ty != .bool then addCCError (.ifCondNotBool (toString (repr g.ty)))
     | none => pure ()
@@ -983,11 +983,11 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     -- Bug 177: the declared type was recorded and never compared with the value's,
     -- so a front-end slip (bug 176: `let y: u8 = <i32>`) passed through to a binary.
     checkBinding s!"let '{name}'" ty value
-    addVar name ty
+    addVar name.key ty
 
   | .assign name value =>
     ccCheckExpr value
-    match ← lookupVar name with
+    match ← lookupVar name.key with
     | some varTy => checkBinding s!"assignment to '{name}'" varTy value
     | none => pure ()
 
@@ -1092,7 +1092,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   | .borrowIn _var ref _region _isMut refTy body =>
     -- The reference is a binder of the block, so a store to it is checked like any other.
     inCoreBlock do
-      addVar ref refTy
+      addVar ref.key refTy
       for s in body do ccCheckStmt s
 
 end
