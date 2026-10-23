@@ -9,6 +9,6 @@ fn call<T: Tr>(x: &T) -> Int { return x.m(); }
 pub fn main() -> Int {
     let b: bool = true;
     let n: Int = 0;
-    // Through the bound and directly: 40 + 2 - (40 + 2) + 40 + 2 = 42.
+    // Through the bound and directly: (40 + 2) - (40 + 2) + 42 = 42.
     return call::<bool>(&b) + call::<Int>(&n) - (b.m() + n.m()) + 42;
 }

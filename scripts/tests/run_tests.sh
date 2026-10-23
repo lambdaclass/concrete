@@ -1472,9 +1472,16 @@ run_err "$TESTDIR/error_186_specialized_impl.con"        "(E0593)"
 run_err "$TESTDIR/error_186_method_clash.con"            "(E0594)"
 run_err "$TESTDIR/error_186_inherent_clash.con"          "(E0594)"
 run_err "$TESTDIR/error_186_ambiguous_bound_method.con"  "(E0595)"
+# Codex round 1: `Int`/`i64` are one head (E0590); a sibling submodule's type is foreign to
+# the module beside it (E0592); an imported alias and bare `Option` are refused targets (E0593).
+run_err "$TESTDIR/error_186_duplicate_primitive_spelling.con" "(E0590)"
+run_err "$TESTDIR/error_186_orphan_sibling.con"          "(E0592)"
+run_err "$TESTDIR/error_186_imported_alias_target.con"   "(E0593)"
+run_err "$TESTDIR/error_186_builtin_arity.con"           "(E0593)"
+run_ok  "$TESTDIR/regress_186_primitive_impl_spellings.con" 42
 run_ok  "$TESTDIR/regress_186_coherent_impls.con" 42
 run_ok  "$TESTDIR/regress_186_coherent_impls_reversed.con" 42
-for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed; do
+for r186 in regress_186_coherent_impls regress_186_coherent_impls_reversed regress_186_primitive_impl_spellings; do
     r186_i=$($COMPILER "$TESTDIR/$r186.con" --interp </dev/null 2>&1 | awk 'END{print}' || true)
     if [ "$r186_i" = "42" ]; then
         echo "  ok  bug 186: $r186 --interp == binary (42)"

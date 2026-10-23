@@ -24,7 +24,7 @@ call instead of asking for qualification; adding the syntax is a follow-up (READ
 <a id="TRAIT-D1"></a>
 ### TRAIT-D1. Impl target
 
-**TRAIT-D1@1.** The target of an impl is the type declaration its type name resolves to at the impl site, applied to the type arguments written after that name, where a name that is one of the impl's own type parameters is a blanket target.
+**TRAIT-D1@1.** The target of an impl is the type its type name resolves to at the impl site (a type declaration, a compiler enum, or a primitive by its canonical type), applied to the type arguments written after that name, where a name that is one of the impl's own type parameters is a blanket target.
 
 - Kind: definition
 - Uses: none
@@ -35,7 +35,10 @@ call instead of asking for qualification; adding the syntax is a follow-up (READ
 - Obligation: none
 - Evidence: by-users
 
-**Rationale.** Before bug 186 the parser consumed and dropped the type arguments of an impl's
+**Rationale.** A name is resolved the way the checker resolves it: the module's own
+declarations and aliases, its imports, a sibling submodule's struct or enum, the compiler's
+`Option` and `Result`, the always-visible std types, then the primitives, where `i64` and `Int`
+are one type. Before bug 186 the parser consumed and dropped the type arguments of an impl's
 target, so `impl Tr for Box<i32>` and `impl<T> Tr for Box<T>` were the same impl to every later
 pass. The arguments are now kept on the impl (`targetArgs`) so that TRAIT-2 and TRAIT-4 can judge
 them.
@@ -83,6 +86,8 @@ pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
 |---|---|---|---|
 | `tests/programs/error_186_duplicate_impl.con` | `reject:E0590:TRAIT-1@1` | `coherent` | `-` |
 | `tests/programs/error_186_duplicate_generic_impl.con` | `reject:E0590:TRAIT-1@1` | `coherent` | `-` |
+| `tests/programs/error_186_duplicate_primitive_spelling.con` | `reject:E0590:TRAIT-1@1` | `primitive` | `-` |
+| `tests/programs/regress_186_primitive_impl_spellings.con` | `run:42` | `primitive` | `binary,interp` |
 | `tests/programs/regress_186_coherent_impls.con` | `run:42` | `coherent` | `binary,interp` |
 
 <a id="TRAIT-2"></a>
@@ -174,11 +179,12 @@ mod main {
 | fixture | expected | pair | modes |
 |---|---|---|---|
 | `tests/programs/error_186_orphan_impl.con` | `reject:E0592:TRAIT-3@1` | `coherent` | `-` |
+| `tests/programs/error_186_orphan_sibling.con` | `reject:E0592:TRAIT-3@1` | `coherent` | `-` |
 
 <a id="TRAIT-4"></a>
 ### TRAIT-4. An impl covers every instantiation of its type
 
-**TRAIT-4@1.** The target of an impl is a type declaration, not a type parameter or an alias, applied to exactly the impl's own type parameters (and, for an inherent impl, then its capability parameters) in declaration order, as many as the declaration takes.
+**TRAIT-4@1.** The target of an impl is a type that resolves to a single declaration, a compiler enum or a primitive, not a type parameter or an alias, applied to exactly the impl's own type parameters (and, for an inherent impl, then its capability parameters) in declaration order, as many as the declaration takes.
 
 - Kind: refusal
 - Uses: TRAIT-D1
@@ -216,6 +222,8 @@ pub fn main() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<
 | fixture | expected | pair | modes |
 |---|---|---|---|
 | `tests/programs/error_186_specialized_impl.con` | `reject:E0593:TRAIT-4@1` | `coherent` | `-` |
+| `tests/programs/error_186_imported_alias_target.con` | `reject:E0593:TRAIT-4@1` | `coherent` | `-` |
+| `tests/programs/error_186_builtin_arity.con` | `reject:E0593:TRAIT-4@1` | `coherent` | `-` |
 
 <a id="TRAIT-5"></a>
 ### TRAIT-5. One method of a name per type
