@@ -1420,6 +1420,9 @@ run_ok "$TESTDIR/integration_state_machine.con" 42
 run_ok "$TESTDIR/integration_compiler_stress.con" 42
 run_ok "$TESTDIR/integration_multi_module.con" 42
 run_ok "$TESTDIR/integration_recursive_structures.con" 42
+# Bug 205 (silent on --interp): a struct holding itself through a generic instantiation.
+run_err "$TESTDIR/error_205_recursive_through_instantiation.con" "(E0583)"
+run_ok "$TESTDIR/regress_205_instantiations_without_cycle.con" 42
 run_ok "$TESTDIR/integration_multi_file_calculator.con" 42
 run_ok "$TESTDIR/integration_type_registry.con" 42
 run_ok "$TESTDIR/integration_pipeline_processor.con" 42

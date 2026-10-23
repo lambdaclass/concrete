@@ -184,7 +184,7 @@ def CoreCheckError.hint : CoreCheckError → Option String
   | .continueOutsideLoop => some "continue can only be used inside while or for loops"
   | .copyDestroyConflict _ => some "remove the Destroy impl or remove #[copy]"
   | .copyFieldNotCopy _ _ => some "mark the field type as #[copy] or remove #[copy] from the struct"
-  | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — heap<T>, a reference, or a raw pointer"
+  | .recursiveType _ => some "a value cannot contain itself by value; store the recursive field behind an indirection — Heap<T> or a raw pointer (a reference cannot be a field)"
   | .traitImplCapsExceedTrait traitName _ methodName implCaps _ =>
     some s!"declare 'with({implCaps})' on '{methodName}' in trait '{traitName}' (every generic caller must then hold it), or remove the effect from the impl"
   | .traitMethodSigMismatch _ _ _ _ => some "an impl method must have exactly the trait method's receiver, parameters and generics"
