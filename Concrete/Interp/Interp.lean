@@ -52,6 +52,8 @@ inductive RefStep where
 structure RefPath where
   -- the borrowed binding (R-0492 step 4: by identity, or by Core name for a temporary)
   base : LocalKey
+  -- the borrowed binding's Core name, for display only (a key is not a spelling)
+  baseName : String := ""
   frame : Nat
   steps : List RefStep
   isMut : Bool := false
@@ -2082,7 +2084,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     IM (Env × RefPath) := do
   match e with
   | .ident name _ =>
-    return (env, { base := name.key, frame := env.length, steps := [], isMut := isMut })
+    return (env, { base := name.key, baseName := name.name, frame := env.length, steps := [], isMut := isMut })
   | .fieldAccess obj fld _ => do
     let (env, p) ← evalProjectionBase cx env obj isMut
     return (env, { p with steps := p.steps ++ [.field fld] })
@@ -2115,11 +2117,11 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     let v ← newStringValue cx s.toUTF8 (s.utf8ByteSize + 1) (nul := true) (what := "a string literal's copy")
     let name : LocalKey := .name s!"__interp_str_lit_{env.length}"
     let env := envBind env name v
-    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
+    return (env, { base := name, baseName := toString name, frame := env.length, steps := [], isMut := isMut })
   | .charLit c => do
     let name : LocalKey := .name s!"__interp_char_lit_{env.length}"
     let env := envBind env name (.int (Int.ofNat c.toNat) .char)
-    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
+    return (env, { base := name, baseName := toString name, frame := env.length, steps := [], isMut := isMut })
   -- Any other borrow target is an owned TEMPORARY (a call result, a struct literal, an
   -- `if`): Check admits `make().bump()` / `(P { .. }).bump()` (the implicit receiver borrow
   -- of a value). Materialize it like a literal so the borrow has a place (bug 091 round 3).
@@ -2127,7 +2129,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     let (env, v) ← evalExprVal cx env other
     let name : LocalKey := .name s!"__interp_tmp_{env.length}"
     let env := envBind env name v
-    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
+    return (env, { base := name, baseName := toString name, frame := env.length, steps := [], isMut := isMut })
 
 partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
   match e with
@@ -3039,7 +3041,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
       let bound := match scrRef with
         | some r => if binderIsBorrow bindTy then r else scrutinee
         | none => scrutinee
-      let armEnv := if binding == "_" then env else envBind env binding.key bound
+      let armEnv := if binding.name == "_" then env else envBind env binding.key bound
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
         let (bodyEnv, flow) ← evalStmts cx gEnv body
@@ -3229,7 +3231,7 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
     -- `borrow var as ref in 'region { body }` — bind `ref` to a path that
     -- captures the current frame so callee shadows don't break it. Drop
     -- the binding on exit; mutations to `var` through `ref` survive.
-    let path : RefPath := { base := var.key, frame := env.length, steps := [], isMut := isMut }
+    let path : RefPath := { base := var.key, baseName := var.name, frame := env.length, steps := [], isMut := isMut }
     let outerLen := env.length
     let inner := envBind env ref.key (.ref path)
     let (postEnv, flow) ← evalStmts cx inner body
@@ -3501,7 +3503,7 @@ partial def IVal.toString : IVal → String
       | .index i => s!"[{i}]"
       | .payload v n => s!"::{v}.{n}"
     let pfx := if p.isMut then "&mut " else "&"
-    pfx ++ p.base ++ String.join (p.steps.map stepStr)
+    pfx ++ p.baseName ++ String.join (p.steps.map stepStr)
   | .fnPtr name _ => "fn " ++ name
   | .float f _ => Float.toString f
   | .ptr blk off => s!"<heap block {blk} + {off}>"
