@@ -1,0 +1,17 @@
+// Bug 208 regression: a fn-typed LOCAL spelled like an imported submodule function. Elab's
+// import-rename pass rewrote every fn-typed identifier whose spelling an import maps, so `inc`
+// below (the parameter) was renamed to the submodule's `inc` when used as a value: both the
+// binary and --interp returned 141 instead of 42. Core references now carry their binding
+// identity (R-0492 step 3), and an identified local is never renamed.
+mod m {
+    mod s {
+        pub fn inc(x: i32) -> i32 { return x + 100; }
+    }
+    import s.{inc};
+    fn plus1(x: i32) -> i32 { return x + 1; }
+    fn apply(inc: fn(i32) -> i32, v: i32) -> i32 {
+        let g: fn(i32) -> i32 = inc;
+        return g(v);
+    }
+    pub fn main() -> i32 { return apply(plus1, 41); }
+}

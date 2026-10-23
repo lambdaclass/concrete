@@ -626,6 +626,24 @@ def outcome_interp(cc, src):
         return ("accept", int(v)) if re.fullmatch(r"-?[0-9]+", v) else ("fail", out)
     return first_error(out) or ("fail", out)
 
+MODEL_SUMMARY = re.compile(r"^MODEL-DIFF: .*\bagree=([0-9]+) mismatch=([0-9]+)", re.M)
+
+def outcome_model(cc, src):
+    """The Lean semantics' verdict (decision B17): `--report model-diff` evaluates every extracted
+    scalar function of the program with the ProofCore model (`Concrete.Proof.eval`) and with the
+    interpreter, on boundary inputs. Returns (agree, mismatch rows); (0, []) when nothing is
+    extracted; ("fail", msg) when the report itself fails."""
+    rc, out, stdout = run([cc, src, "--report", "model-diff"])
+    if rc is None or rc < 0:
+        return ("fail", f"model-diff {'timeout' if rc is None else 'signal ' + str(-rc)}")
+    if rc != 0:
+        return ("fail", "model-diff failed: " + (out.strip().split("\n") or [""])[-1])
+    m = MODEL_SUMMARY.search(stdout)
+    if not m:
+        return ("fail", "model-diff printed no summary")
+    bad = [l for l in stdout.split("\n") if l.startswith("MISMATCH\t")]
+    return (int(m.group(1)), bad)
+
 def show(o):
     if o[0] == "accept": return f"accept:{o[1]}"
     if o[0] == "reject": return f"reject:{o[1]}:{o[2]}" + (f" ({o[3]})" if o[3] else " (no rule tag)")
@@ -688,18 +706,30 @@ def run_examples(spec, cc, jobs, workdir, only=None):
         i, x = ix
         src = os.path.join(workdir, f"ex{i:04d}.con")
         open(src, "w").write(x.body)
+        # the Lean semantics, before outcome_native (a project example moves its source)
+        mdl = None
+        if x.verdict in ("accept", "abort") and not x.pending and not x.attrs.get("project"):
+            mdl = outcome_model(cc, src)
         nat = outcome_native(cc, src, workdir, x.attrs.get("project"))
         itp = None if "interp-exempt" in x.attrs else outcome_interp(cc, src)
-        return x, judge(x, nat, itp)
+        v, msg = judge(x, nat, itp)
+        if mdl is not None and v == "PASS":
+            if mdl[0] == "fail": v, msg = "FAIL", "Lean model: " + mdl[1]
+            elif mdl[1]: v, msg = "FAIL", "the Lean model disagrees with the interpreter: " + "; ".join(r.replace("\t", " ") for r in mdl[1][:3])
+            elif mdl[0]: msg += f"; Lean model agrees on {mdl[0]} input(s)"
+        return x, (v, msg, mdl)
     counts = {"PASS": 0, "FAIL": 0, "PENDING": 0}
+    modeled = rows = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
-        for x, (v, msg) in ex.map(one, enumerate(xs)):
+        for x, (v, msg, mdl) in ex.map(one, enumerate(xs)):
             counts[v] += 1
+            if mdl is not None and mdl[0] != "fail" and mdl[0]: modeled += 1; rows += mdl[0]
             ex_note = f" [interp-exempt: {x.attrs['interp-exempt']}]" if "interp-exempt" in x.attrs else ""
             if v == "PASS": ok(f"S4 {x.key} ({x.verdict}){ex_note}: {msg}")
             elif v == "PENDING": print(f"  PENDING {x.key} ({x.verdict}): {msg}")
             else: fail("S4", f"{x.key} ({x.chapter}.md:{x.line}): {msg}")
     print(f"  examples: PASS={counts['PASS']} FAIL={counts['FAIL']} PENDING={counts['PENDING']}")
+    print(f"  Lean model: {modeled} accepted examples compared with the interpreter on {rows} inputs, 0 disagreements allowed")
     return counts
 
 
@@ -937,6 +967,19 @@ def gen_site(spec, out_dir):
             f'+++\ntitle = "{title}"\nweight = {w + 1}\n+++\n\n<!-- GENERATED from docs/spec/{ch}.md by '
             f'scripts/spec/spec.py site -- do not edit -->\n{txt}\n')
         n += 1
+    # The rule index: every entry with its chapter, kind, status and codes, one row each, so the
+    # site shows the state of the whole specification at a glance (decision B18).
+    rows = ["| ID | Title | Kind | Status | Codes |", "|---|---|---|---|---|"]
+    for e in spec.entries:
+        codes = ", ".join(c for c, _ in e.codes() if c) or "none"
+        title = e.title.replace("|", "\\|")
+        rows.append(f"| [{e.id}](@/spec/{e.chapter}.md#{e.id}) | {title} | {e.kind} | {e.fields.get('Status', '')} | {codes} |")
+    open(os.path.join(out_dir, "rules.md"), "w").write(
+        '+++\ntitle = "Rule Index"\nweight = 0\n+++\n\n<!-- GENERATED from docs/spec by '
+        'scripts/spec/spec.py site -- do not edit -->\n# Rule Index\n\nEvery rule and definition of the '
+        'specification, in chapter order. An entry\'s anchor is its ID; a cited rule names its version '
+        '(`OWN-5@1`), and the registry `docs/spec/ids.tsv` keeps every version ever published.\n\n'
+        + "\n".join(rows) + "\n")
     return n
 
 def label(x):

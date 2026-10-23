@@ -64,7 +64,7 @@ extraction returns `none` (blocked), dependency collection contributes no edge,
 and the fingerprint uses a `callptr` prefix so a direct call and an indirect call
 through a same-named local cannot share a proof subject.
 
-## Remaining gap in the same family
+## Remaining gap in the same family (closed: bug 208, R-0492 step 3)
 
 `.ident name (.fn_ ..)` in the same rename pass has the identical hazard — it
 cannot tell a global function used as a value from a LOCAL of fn type, so a local

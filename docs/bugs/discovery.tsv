@@ -65,3 +65,5 @@ date	kind	probe	effort	bugs	silent
 2026-10-23	review	Codex review of the bug 198 fix	unrecorded	199	-
 2026-10-23	review	bug 203's E0420 split (the append() refusal had no code at all in Check)	unrecorded	206	-
 2026-10-23	review	Codex review of the specification's traits chapter (TRAIT-8 to TRAIT-10, TYPE-16), confirmed by probes on spec-t6 c170057d	unrecorded	204,205	204,205
+2026-10-23	development	R-0492 step 3 (Codex review: ElabVerify flagged the import-rename pass renaming an identified local; bug 050's recorded remaining gap)	unrecorded	208	208
+2026-10-23	development	R-0492 step 2 mutation runs (families 55-57 gave no verdict, also on the slice-1 base)	unrecorded	207	-

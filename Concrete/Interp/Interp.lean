@@ -2141,7 +2141,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- of its own (module-scope code: a caller's local of the same name must not capture a
       -- name the initializer reads, Lower's bug 123 hygiene). A name two modules define is
       -- refused, as Lower refuses it (E0602, bug 132): Core cannot tell which one is meant.
-      match cx.consts.filter (·.1 == name) with
+      match cx.consts.filter (·.1 == name.name) with
       | [(_, init)] =>
         let outerLen := env.length
         let (env', v) ← evalExprVal cx (envEnterFrame env) init
@@ -2152,7 +2152,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
       -- A function value (Lower intercepts intrinsics only at direct calls).
-      if let some decl := (cx.foreign.lookup name).filter (cx.externs.contains ·) then
+      if let some decl := (cx.foreign.lookup name.name).filter (cx.externs.contains ·) then
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
       match ← liftE (resolveCall cx name) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
@@ -2997,7 +2997,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
           let refPath := match scrRef with | some (.ref p) => some p | _ => none
-          let armEnv := bindEnumFields env bindings sFields refPath variant
+          let armEnv := bindEnumFields env (CLocal.names bindings) sFields refPath variant
           let (gEnv, ok) ← guardOk armEnv guard
           if ok then
             let (bodyEnv, flow) ← evalStmts cx gEnv body

@@ -33,9 +33,11 @@ cat > "$TMP_DIR/p.lean" <<'LEAN'
 import Concrete
 open Concrete Concrete.Proof
 
+-- Bug 207: a failed assertion PRINTS its verdict and the probe goes on. It used to throw, so
+-- the first failure aborted the probe, the shell stopped at FATAL, and the gate never printed
+-- its verdict line: the mutation harness read every family this gate kills as "no verdict".
 def a (label : String) (c : Bool) : IO Unit :=
-  if c then IO.println ("  ok   " ++ label)
-  else throw (IO.userError ("FAILED: " ++ label))
+  IO.println ((if c then "  ok   " else "  FAIL ") ++ label)
 
 def facts (s : String) : Option ProofBodyIdentityInputsV2 :=
   match (do
@@ -116,14 +118,23 @@ def outerFromArm : String :=
 LEAN
 
 OUT="$TMP_DIR/out.txt"
-if ! lake env lean "$TMP_DIR/p.lean" > "$OUT" 2>&1; then
-  echo "FATAL: binder-ref probe did not elaborate" >&2; sed -n '1,12p' "$OUT" >&2; exit 1
-fi
-if grep -qE "error|sorry" "$OUT"; then
-  echo "FATAL: probe emitted a diagnostic" >&2; sed -n '1,10p' "$OUT" >&2; exit 1
+# Every outcome of the probe is a counted verdict and the gate always reaches its summary line
+# (bug 207): a probe that does not elaborate, emits a diagnostic, or fails an assertion is a
+# FAIL here, never an exit before the verdict.
+PRC=0; lake env lean "$TMP_DIR/p.lean" > "$OUT" 2>&1 || PRC=$?
+if [ "$PRC" -ne 0 ]; then
+  no "binder-ref probe did not elaborate (rc=$PRC): $(grep -m3 -E 'error' "$OUT" | tr '\n' ' ' | cut -c1-400)"
+elif grep -qE "error|sorry" "$OUT"; then
+  no "probe emitted a diagnostic: $(grep -m3 -E 'error|sorry' "$OUT" | tr '\n' ' ' | cut -c1-400)"
 fi
 cat "$OUT"
-PASS=$(( PASS + $(grep -c '^  ok   ' "$OUT" || true) ))
+NOK="$(grep -c '^  ok   ' "$OUT" || true)"; NFL="$(grep -c '^  FAIL ' "$OUT" || true)"
+PASS=$(( PASS + NOK )); FAIL=$(( FAIL + NFL ))
+# The probe's own assertion count is pinned: a probe that stops early (or loses legs) prints
+# fewer verdicts, and that is a failure, not a smaller pass.
+if [ "$PRC" -eq 0 ] && [ $(( NOK + NFL )) -ne 8 ]; then
+  no "the probe printed $(( NOK + NFL )) verdicts, expected 8"
+fi
 
 # CHECK 3, structurally: the local-reference path must not be able to emit nothing.
 # Every scope-resolution failure has to reach markBodyIdentityUncovered, or a binder

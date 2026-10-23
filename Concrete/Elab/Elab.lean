@@ -39,7 +39,8 @@ No linearity checking, no borrow checking, no capability validation.
     outermost first, and index in that frame), which is what evidence binder references are
     computed from. -/
 structure BoundLocal where
-  core : String
+  -- the Core binder: its Core name and the walk's identity (R-0492 step 3)
+  core : CLocal
   ty : Ty
   ghost : Bool := false
   pos : Option (Nat × Nat) := none
@@ -475,20 +476,21 @@ private def binderId (key : BinderKey) (name : String) (span : Option Span) : El
   | none => throwElab (.binderTableMissing s!"the binder '{name}' has no identity in the local table (R-0492)") span
 
 /-- Register a binding: its frame position, Core name and type. -/
-private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM Unit := do
+private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM CLocal := do
   let pos ← addBinder name
-  modify fun env => { env with bound := (id, { core, ty, pos := some pos }) :: env.bound }
+  let c : CLocal := { name := core, id := some id }
+  modify fun env => { env with bound := (id, { core := c, ty, pos := some pos }) :: env.bound }
+  return c
 
 /-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core name (`value` →
     `value.b7`) and return it. `_` stays `_` and binds nothing. -/
-private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM String := do
-  if binding == "_" then return binding
+private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM CLocal := do
+  if binding == "_" then return { name := binding }
   let id ← binderId key binding span
   let env ← getEnv
   let fresh := s!"{binding}.b{env.freshBinder}"
   setEnv { env with freshBinder := env.freshBinder + 1 }
   registerBound id binding fresh ty
-  return fresh
 
 /-- Evaluation-order temporaries (bugs 136, 137). Core has no expression-level `let` yet (R-0496
     owns one); `match value { t => body }` with a single unguarded binder arm is exactly
@@ -502,7 +504,7 @@ private def freshEvalTemp : ElabM String := do
   return s!"ev.t{env.freshBinder}"
 
 private def letInExpr (name : String) (value : CExpr) (body : CExpr) : CExpr :=
-  .match_ value [.varArm name value.ty none [.expr body true]] body.ty
+  .match_ value [.varArm (CLocal.ofName name) value.ty none [.expr body true]] body.ty
 
 /-- An initializer whose evaluation has no observable order: a literal. (A variable read is
     order-sensitive: another initializer may write it through `&mut`.) -/
@@ -524,7 +526,7 @@ private def withSourceOrder (inits : List (String × CExpr))
     else
       let t ← freshEvalTemp
       bindsRev := (t, e) :: bindsRev
-      operandsRev := (f, .ident t e.ty) :: operandsRev
+      operandsRev := (f, .ident (CLocal.ofName t) e.ty) :: operandsRev
   return bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) (mk operandsRev.reverse)
 
 /-- Bug 087: bind a block-scoped local (`let`, borrow ref, parameter, destructure binder or
@@ -534,14 +536,13 @@ private def withSourceOrder (inits : List (String × CExpr))
     A non-shadowing binder keeps its spelling: Core names of programs that never shadow do not
     churn. -/
 -- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
-private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM String := do
+private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM CLocal := do
   let id ← binderId key name span
   let env ← getEnv
   let shadows := env.locals.shadowsAt id
   let core := if shadows then s!"{name}.b{env.freshBinder}" else name
   setEnv { env with freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
   registerBound id name core ty
-  return core
 
 /-- The evidence reference for a use of a binding: its frame position, made relative to the
     current frame stack. A binding with no position (a ghost) is a gap. -/
@@ -607,7 +608,7 @@ private def restoreScope (saved : ElabEnv) : ElabM Unit := do
     reported as a ghost leak. -/
 private def addGhostVar (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM Unit := do
   let id ← binderId key name span
-  modify fun env => { env with bound := (id, { core := name, ty, ghost := true }) :: env.bound }
+  modify fun env => { env with bound := (id, { core := { name, id := some id }, ty, ghost := true }) :: env.bound }
 
 
 
@@ -698,13 +699,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)
     | none =>
       match env.constants.lookup name with
-      | some ty => return ElaboratedExprV2.mk (CExpr.ident name ty) (Proof.evConstRef env.proofPath name)
+      | some ty => return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName name) ty) (Proof.evConstRef env.proofPath name)
       | none =>
       match ← lookupFnSig name with
       | some sig =>
         refuseForeignFnValue env name (some e.getSpan)
         let paramTys := sig.params.map Prod.snd
-        return ElaboratedExprV2.mk (CExpr.ident (← coreFnSpelling name) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
+        return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName (← coreFnSpelling name)) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
       | none =>
@@ -885,9 +886,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               else
                 let t ← freshEvalTemp
                 bindsRev := (t, ex) :: bindsRev
-                explicitRev := (f, .ident t ex.ty) :: explicitRev
+                explicitRev := (f, .ident (CLocal.ofName t) ex.ty) :: explicitRev
             bindsRev := (tb, cb) :: bindsRev
-            let lit := CExpr.structLit name typeArgs (fillFrom (.ident tb cb.ty) explicitRev.reverse) resultTy
+            let lit := CExpr.structLit name typeArgs (fillFrom (.ident (CLocal.ofName tb) cb.ty) explicitRev.reverse) resultTy
             pure (bindsRev.reverse.foldr (fun (t, e) body => letInExpr t e body) lit)
       return ElaboratedExprV2.mk core (match sd.typeId? with
            | some owner =>
@@ -1058,7 +1059,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
               | .error _ => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
             recordVariantUse ed armVariant
             let typeMapping := ed.typeParams.zip enumTypeArgs
-            let mut typedBindings : List (String × Ty) := []
+            let mut typedBindings : List (CLocal × Ty) := []
             for (binding, sf) in bindings.zip ev.fields do
               -- aliases expanded (the enum's own type parameters shadow them), as the
               -- enum's Core payload types are (bug 096's agreement checker compares the two)
@@ -2376,9 +2377,12 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   let resolvedRetTy ← resolveTypeE retTy
   modify fun e => { e with currentRetTy := resolvedRetTy }
   -- Add parameters to scope (resolve type aliases so params don't carry unresolved alias names)
+  let mut paramIdsRev : List LocalId := []
   for ((pname, pty), pIdx) in params.zipIdx do
     let resolvedPty ← resolveTypeE pty
-    discard <| bindLocal (.param pIdx) pname resolvedPty (some f.span)
+    let pc ← bindLocal (.param pIdx) pname resolvedPty (some f.span)
+    if let some pid := pc.id then paramIdsRev := pid :: paramIdsRev
+  let paramIds := paramIdsRev.reverse
   -- Elaborate body
   -- THE COLLECTION POINT. The function's evidence body is assembled STRUCTURALLY here,
   -- from the same traversal that produced Core — not accumulated into a side channel,
@@ -2424,6 +2428,7 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
     capSet := f.capSet
     declSpan := some f.span
     exportName := f.exportName
+    paramIds := paramIds
   }
   return (cfn, bodyIdentityInputs, evidenceBody)
 
@@ -2452,14 +2457,13 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     -- Only rename function-typed idents (fn refs used as values), not local variables
     match ty with
     | .fn_ .. =>
-      -- KNOWN GAP (bug 050's family, tracked in its doc): this cannot tell a
-      -- global fn used as a value from a LOCAL of fn type, so a local whose name
-      -- collides with a submodule function is renamed to that function. Unlike
-      -- the call case above, Core carries no marker for it — `.ident` has only a
-      -- name and a type. Closing it needs the same treatment as the callee:
-      -- record at elaboration, where the scope is still known.
-      let name' := rmap.lookup name |>.getD name
-      .ident name' ty
+      -- Bug 050's remaining gap, closed by R-0492 step 3: a LOCAL of fn type carries its binding
+      -- identity, so it is never renamed to a same-spelled submodule function. Only a global
+      -- function used as a value (no identity) is.
+      if name.id.isSome then .ident name ty
+      else
+        let name' := rmap.lookup name.name |>.getD name.name
+        .ident { name with name := name' } ty
     | _ => .ident name ty
   | .binOp op l r ty => .binOp op (renameFnExpr rmap l) (renameFnExpr rmap r) ty
   | .unaryOp op e ty => .unaryOp op (renameFnExpr rmap e) ty
@@ -3855,7 +3859,7 @@ partial def tyAgreeArm (c : TyAgreeCtx) (scrutTy : Ty) : CMatchArm → List TyAg
             (ft, bt, s!"the binding of field '{fname}' of '{en}::{v}'", ed.typeParams)
         | none => []
       | none => []
-    let c' := { c with locals := bs.map (·.1) ++ c.locals }
+    let c' := { c with locals := bs.map (·.1.name) ++ c.locals }
     payload ++ ((g.map (tyAgreeExpr c')).getD []) ++ tyAgreeStmts c' b
   | .varArm n bt g b =>
     -- a catch-all binder holds the scrutinee itself

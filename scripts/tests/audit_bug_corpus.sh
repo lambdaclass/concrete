@@ -123,6 +123,9 @@ declare -A BUG_TEST_MAP=(
   # Bug 175: a match whose arms all diverge left its merge block open (E0708 in a loop).
   # Also four rows of check_divergence_detection.sh.
   [175]="regress_175_match_arms_all_diverge.con"
+  # Bug 208: a fn-typed local spelled like an imported function was renamed to it when used as a
+  # value (run_tests.sh also compares --interp with the binary).
+  [208]="regress_208_fn_local_named_like_import.con"
   # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
   # Also check_local_identity.sh leg R.
   [202]="regress_202_project_let_else/src/main.con"
@@ -222,6 +225,7 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
+  [207]="FIXED 2026-10-23 -- check_binder_refs.sh aborted before its verdict on a failed assertion. Regression vehicle is the mutation harness (families 55-57 KILLED), not a tests/programs fixture"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"
   [006]="string literal collision -- fixed in EmitSSA, covered by cross-module tests"
   [009]="const decls not lowered -- fixed in Lower.lean, no standalone repro needed"

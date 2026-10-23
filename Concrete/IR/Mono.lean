@@ -661,6 +661,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               isTrusted := fnDef.isTrusted
               trustedImplOrigin := fnDef.trustedImplOrigin
               declSpan := fnDef.declSpan
+              paramIds := fnDef.paramIds
               -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
               foreignCalls := fnDef.foreignCalls
             }
@@ -700,6 +701,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         isTrusted := fnDef.isTrusted
         trustedImplOrigin := fnDef.trustedImplOrigin
         declSpan := fnDef.declSpan
+        paramIds := fnDef.paramIds
         -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
         foreignCalls := fnDef.foreignCalls
       }
@@ -798,15 +800,15 @@ partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := d
     match target with
     | .array elem size =>
       let elemRefTy : Ty := .ref elem
-      let idx : CExpr := .ident "i" .uint
-      let elemRef : CExpr := .borrow (.arrayIndex (.ident "x0" argTy) idx elem) elemRefTy
+      let idx : CExpr := .ident (CLocal.ofName "i") .uint
+      let elemRef : CExpr := .borrow (.arrayIndex (.ident (CLocal.ofName "x0") argTy) idx elem) elemRefTy
       enqueueMono glueName {
         name := glueName, typeParams := [], params := [("x0", argTy)], retTy := .unit
         body := [
-          .letDecl "i" true .uint (.intLit 0 .uint),
+          .letDecl (CLocal.ofName "i") true .uint (.intLit 0 .uint),
           .while_ (.binOp .lt idx (.intLit size .uint) .bool)
             [ .expr (.call (.direct destroyDispatchCallee) [] [elemRef] .unit) false,
-              .assign "i" (.binOp .add idx (.intLit 1 .uint) .uint) ]
+              .assign (CLocal.ofName "i") (.binOp .add idx (.intLit 1 .uint) .uint) ]
             none [] ]
         isPublic := false, isTest := false
         -- The builtin `Destroy::destroy` is bounded by `Alloc` (bug 091, H18 v1 fence), and

@@ -200,9 +200,9 @@ Phase 12 obligation R-03 is FULLY discharged end-to-end
 2026-05-30. -/
 theorem var_preservation (name : String) (ty : Ty) (fuel : Nat)
     (fns : FnTable) (env : Env) :
-    cExprToPExpr (.ident name ty) = some (.var name)
+    cExprToPExpr (.ident (CLocal.ofName name) ty) = some (.var name)
   ∧ eval fns env (fuel + 1) (.var name) = env name
-  ∧ evalSourceIdent env (.ident name ty) = env name := by
+  ∧ evalSourceIdent env (.ident (CLocal.ofName name) ty) = env name := by
   refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 
@@ -320,9 +320,9 @@ theorem let_preservation
     (h_esc  : cExprNoEscape val = true)
     (h_val  : cExprToPExpr val = some pv)
     (h_rest : cStmtsToPExprK rest k = some pb) :
-    cStmtsToPExprK ((CStmt.letDecl name isMut ty val) :: rest) k
+    cStmtsToPExprK ((CStmt.letDecl (CLocal.ofName name) isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  simp [cStmtsToPExprK, h_esc, h_val, h_rest]
+  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -438,10 +438,10 @@ theorem array_set_preservation
     (h_val  : cExprToPExpr val = some pv)
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK
-      ((CStmt.arrayIndexAssign (.ident name idxTy) idx val) :: rest) k
+      ((CStmt.arrayIndexAssign (.ident (CLocal.ofName name) idxTy) idx val) :: rest) k
       = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
   simp only [Bool.and_eq_true] at h_esc
-  simp [cStmtsToPExprK, h_esc, h_idx, h_val, h_rest]
+  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
 
 /-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
 
