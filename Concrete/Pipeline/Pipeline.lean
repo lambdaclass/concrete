@@ -92,7 +92,6 @@ def resolveFiles (baseDir : String) (prog : ParsedProgram) (inputPath : String)
 def buildSummary (prog : ParsedProgram) : SummaryTable :=
   { entries := buildSummaryTable prog.modules }
 
-/-- Name-resolution pass: validates all identifiers and imports. -/
 /-- What every resolved program goes through before Check and Elab see it: destructuring `let`s
     are desugared, then the local walk (`Resolve/Locals.lean`) attaches each function's local
     binder table. Part of resolution, not a separate step, so no path can reach Check with a
@@ -102,6 +101,7 @@ def buildSummary (prog : ParsedProgram) : SummaryTable :=
 private def finishResolve (rm : ResolvedModule) : ResolvedModule :=
   { rm with module := resolveModuleLocals (desugarModule rm.module) }
 
+/-- Name-resolution pass: validates all identifiers and imports. -/
 def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics ResolvedProgram :=
   match resolveProgram prog.modules summary.entries with
   | .ok resolved => .ok { modules := resolved.map finishResolve }
