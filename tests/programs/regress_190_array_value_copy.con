@@ -1,7 +1,9 @@
 // Bug 190: an array is a Copy value, but Lower represents an array value by the address of its
 // storage, so binding one from a place or passing one by value shared the source's storage. Each
 // shape below copies an array, then writes the source, then reads the copy: it must still hold 5.
-// The binary read 9 in the first four (exit 1-4); --interp read 5. Exit 42.
+// The binary read 9 in the first three (exit 1-3); --interp read 5. Exit 42. (A by-value argument
+// aliased by a `&mut` argument of the same call was a fourth shape; D2 now refuses that call, E0293,
+// and parameters are immutable, so the argument copy is no longer observable; Lower still makes it.)
 enum E { V { a: Int, b: [Int; 1] } }
 
 fn set(r: &mut Int) -> Int {
@@ -30,16 +32,6 @@ fn literal_snapshot() -> Int {
     match e {
         E::V { a, b } => { return b[0] + a * 0; }
     }
-}
-
-fn by_value(a: [Int; 1], r: &mut [Int; 1]) -> Int {
-    r[0] = 9;
-    return a[0];
-}
-
-fn arg_copy() -> Int {
-    let mut xs: [Int; 1] = [5];
-    return by_value(xs, &mut xs);
 }
 
 fn assign_copy() -> Int {
@@ -76,7 +68,6 @@ fn main() -> Int {
     if let_copy() != 5 { return 1; }
     if match_binder_copy() != 5 { return 2; }
     if literal_snapshot() != 5 { return 3; }
-    if arg_copy() != 5 { return 4; }
     if assign_copy() != 5 { return 5; }
     let r: [Int; 1] = returned_before_defer();
     if r[0] != 5 { return 6; }

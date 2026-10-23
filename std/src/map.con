@@ -709,7 +709,9 @@ mod map {
             Option::None => {},
         }
         // remove key 2: transferred out (destroy by hand = +1)
-        let rem: Option<MTracked> = m.remove(&2);
+        // D2: a literal is never a reference's root; borrow a variable.
+        let key2: i64 = 2;
+        let rem: Option<MTracked> = m.remove(&key2);
         match rem {
             Option::Some { value } => { destroy(value); },
             Option::None => {},

@@ -149,7 +149,7 @@ def guardShadowedSource (name : String) (span : Option Span) : CheckM Unit := do
   if (← getEnv).vars.any (fun (_, vi) => vi.state != .consumed &&
       (vi.borrowedFrom == some name || vi.refParent == some name)) then
     throwCheck (.untraceablePlace s!"what the live references to '{name}' borrow"
-      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@1")
+      "shadowing it would detach them from the storage they borrow; use a different name") span (rule := some "REF-8@2")
 
 /-- The reference bindings `r` was made from (reborrows and copies), nearest first. -/
 def refAncestors (r : String) : CheckM (List String) := do
@@ -363,6 +363,18 @@ def refuseConstBorrow (subject : String) (e : Expr) (span : Option Span) : Check
     throwCheck (.untraceablePlace subject
       s!"'{n}' is a module constant, which has no storage to borrow (bug 123); copy it into a local first (`let c = {n};`)") span
 
+/-- D2 (the Austral model; closes bug 182): a reference is formed only by borrowing a variable
+    (a string literal counts as a static, immutable root) and projecting through that borrow. A
+    temporary (a call or method-call result, a literal, an aggregate or array literal, an operator
+    expression), and any projection of one (`&mk().f`), is never a root: E0238 (REF-5). `&mut` of a
+    string literal is refused too (the static root is immutable). The normalized place rule already
+    classifies every operand (`Norm.temp`), so this is one test on its verdict. -/
+def refuseTemporaryBorrow (isMut : Bool) (subject : String) (e : Expr) (span : Option Span) : CheckM Unit := do
+  let isStrLit := match stripParens e with | .strLit .. => true | _ => false
+  if isStrLit && !isMut then return
+  if let .temp := (← normPlace e) then
+    throwCheck (.temporaryNotBorrowable subject) span
+
 /-- Bug 091 round 3: a method call's IMPLICIT receiver borrow is the explicit `&place` /
     `&mut place` it stands for, checked by the same `checkSharedAccess` / `checkMutAccess` on
     the receiver's NORMALIZED place (one rule for concrete and trait-bound receivers):
@@ -392,7 +404,13 @@ def checkImplicitReceiverBorrow (selfKind : Option SelfKind) (obj : Expr) (objTy
       if let .temp := n then
         throwCheck (.untraceablePlace subject "a temporary is not a `&mut self` receiver; bind it to a `let mut` first") span
       checkMutAccess n subject span
-  | some .ref => checkSharedAccess n s!"the receiver of '{methodName}'" span
+  | some .ref =>
+    -- D2: an implicit `&self` borrow of an owned TEMPORARY receiver (`mk().get()`) borrows a
+    -- non-root, exactly as `&mk()` would (bug 182); a string literal receiver is a static root.
+    match objTy with
+    | .ref _ | .refMut _ => pure ()
+    | _ => refuseTemporaryBorrow false s!"the receiver of '{methodName}'" obj span
+    checkSharedAccess n s!"the receiver of '{methodName}'" span
   | _ => pure ()
 
 /-- Bug 091 round 3: `Destroy::destroy` is the PUBLIC destruction entry point, and its
@@ -862,7 +880,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     return ifTy
   | .call _sp fnName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
+    let parts ← argBorrowParts args
+    checkCallBorrowConflicts parts (some e.getSpan)
+    checkCallRootReads parts args (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
     match ← lookupNewtype fnName with
@@ -1903,6 +1923,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       return matchResultTy
   | .borrow _ inner =>
     refuseConstBorrow "the borrowed place" inner (some e.getSpan)
+    refuseTemporaryBorrow false "the borrowed value" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- The normalized place rule (bug 091 round 3): `&e` borrows `e`'s normalized place;
     -- one shared-access check whatever the spelling, E0238 if `e` is not a traceable place.
@@ -1910,6 +1931,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     return .ref innerTy
   | .borrowMut _ inner =>
     refuseConstBorrow "a place" inner (some e.getSpan)
+    refuseTemporaryBorrow true "the mutably borrowed value" inner (some e.getSpan)
     let innerTy ← checkExpr inner none .place
     -- One rule for `&mut x`, `&mut (x)`, `&mut w.f` and `&mut (*r)`: never through a shared
     -- reference (E0237), and an owned root is `mut` and unborrowed (bug 091 round 3).
@@ -2077,7 +2099,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             throwCheckMsg s!"trait method '{foundTrait}::{methodName}' has no `self` receiver and cannot be called as a method"
           -- The receiver obeys the TRAIT's declared form exactly as a concrete receiver obeys
           -- its method's (Codex round 2 of bug 091): borrow conflicts, then consumption.
-          checkCallBorrowConflicts ((← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)) (some e.getSpan)
+          let parts := (← receiverBorrowParts sig.selfKind obj objTy) ++ (← argBorrowParts args)
+          checkCallBorrowConflicts parts (some e.getSpan)
+          checkCallRootReads parts (obj :: args) (some e.getSpan)
           -- `Destroy::destroy` consumes its receiver (`consumeDestroyReceiver` below); there
           -- is no implicit borrow to check, and the owner may already be moved by `w.0`.
           if !(foundBuiltin == some .destroy && methodName == destroyMethodName) then
@@ -2103,8 +2127,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
       -- alias the container through the context and must reject
       -- (container-not-in-context, #18 §5.1).
-      checkCallBorrowConflicts ((← receiverBorrowParts (selfKindOfParams sig.params) obj objTy)
-        ++ (← argBorrowParts args)) (some e.getSpan)
+      let parts := (← receiverBorrowParts (selfKindOfParams sig.params) obj objTy) ++ (← argBorrowParts args)
+      checkCallBorrowConflicts parts (some e.getSpan)
+      checkCallRootReads parts (obj :: args) (some e.getSpan)
       let isDestroyImplCall := methodName == destroyMethodName &&
         (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
       if !isDestroyImplCall then
@@ -2141,7 +2166,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     | none => throwCheck (.noMethodOnType methodName typeName) (some e.getSpan)
   | .staticMethodCall _ typeName methodName typeArgs args =>
     -- E0293: no overlapping borrows of one place within a single call (any &mut).
-    checkCallBorrowConflicts (← argBorrowParts args) (some e.getSpan)
+    let parts ← argBorrowParts args
+    checkCallBorrowConflicts parts (some e.getSpan)
+    checkCallRootReads parts args (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     checkDirectDestroyImplUse mangledName (some e.getSpan)
     match ← lookupFn mangledName with

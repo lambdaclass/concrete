@@ -1,4 +1,4 @@
-// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): the owner is freed after the borrow block over it ends. Run 42 (binary; the interpreter has no heap allocation).
+// Exit 2i REF-8@2 (MEMORY_SEMANTICS §15.3): the owner is freed after the borrow block over it ends. Run 42 (binary; the interpreter has no heap allocation).
 struct Copy B { v: Int }
 
 fn read(r: &Int) -> Int {

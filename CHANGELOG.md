@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### References Have A Variable Root: The Austral Model (decision D2, bug 182, 2026-10-23)
+
+A reference is formed only by borrowing a variable, or a string literal as a static immutable root,
+and by projecting through a reference; `&s.f` is that, spelled as sugar. A temporary is never a root,
+so `&alloc(..)` (which segfaulted) and `&int_to_string(..)` (which leaked) are refused, as are a
+literal, a field of a temporary and a temporary method receiver (E0238, REF-5@2). Loans are keyed by
+the root variable: one call may not take a mutable loan on a root and also borrow or read it in
+another argument, disjoint fields included (E0293, REF-8@2); a reborrow of a `&mut` parameter beside
+a read through it stays legal. Two std sites and three fixtures migrated, measured with
+`rule_impact.sh`. Bug 182 and gap G12 are closed.
+
 ### A Binder Through A Reference Is A Reference (decision D3, bug 181, 2026-10-23)
 
 Every pattern binder that binds through a borrowed scrutinee (`match r`, `match &o`, `if let`,

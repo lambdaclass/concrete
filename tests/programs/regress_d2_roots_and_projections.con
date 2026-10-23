@@ -1,0 +1,34 @@
+// D2 (the Austral model), run control: a reference is formed by borrowing a variable (or a string
+// literal, a static root) and projecting through that borrow. `&s.f` is sugar for borrowing `s` and
+// projecting `f`; `&r.f` projects through a reference parameter; a reborrow of a `&mut` parameter as
+// a receiver beside a read through it in the same call makes no second loan (D1). Exit 42.
+struct Copy Inner { x: Int }
+
+struct Copy S { f: Int, inner: Inner }
+
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn via(r: &S) -> Int {
+    return read(&r.inner.x);
+}
+
+struct Copy Counter { n: Int, step: Int }
+
+impl Counter {
+    fn add(&mut self, by: Int) {
+        self.n = self.n + by;
+    }
+    fn tick(&mut self) {
+        self.add(self.step);
+    }
+}
+
+fn main() -> Int {
+    let s: S = S { f: 10, inner: Inner { x: 20 } };
+    let lit: Int = string_length(&"ab");
+    let mut c: Counter = Counter { n: 0, step: 5 };
+    c.tick();
+    return read(&s.f) + via(&s) + lit + c.n + 5;
+}

@@ -1,0 +1,9 @@
+// D2: a literal other than a string literal is never a reference's root (std/src/map.con:712 was
+// `m.remove(&2)`). E0238 (REF-5).
+fn read(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    return read(&42);
+}

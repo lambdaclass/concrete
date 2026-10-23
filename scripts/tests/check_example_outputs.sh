@@ -493,7 +493,6 @@ open_bug_reproducers() {
   done <<'TABLE'
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
-182|bug182_borrowed_call_result_temporary/repro.con|signals|
 TABLE
 }
 if [ -z "$ONLY" ]; then

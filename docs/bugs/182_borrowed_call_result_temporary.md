@@ -1,6 +1,6 @@
 # Bug 182 — a borrowed call result is accepted: a `Heap` temporary is miscompiled and a linear one leaks
 
-**Status:** OPEN
+**Status:** FIXED (branch `soundness-holes`, decision D2)
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
 [TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md), the REF-5 / G12 row).
 **Severity:** memory-unsafe wrong code in safe code, and a silent leak of a linear value. REF-5@1
@@ -54,7 +54,41 @@ an anonymous local of the enclosing statement, as decided in
 temporaries places for good. Containment under exit 0b: refuse a borrow of a call result or
 aggregate literal whose type is not Copy (it is the only form that leaks or is miscompiled).
 
-## Containment while open
+## Fix
+
+Decision D2, the Austral model (TIGHTENING_DECISIONS; normative in MEMORY_SEMANTICS §15.3 REF-5 and
+REF-8, now version 2): a reference is formed only by borrowing a variable (a string literal counts
+as a static, immutable root) and by projecting through a reference. A temporary is never a root, so
+`&alloc(..)` and `&int_to_string(..)` are refused (E0238 REF-5@2), and neither the miscompile nor
+the leak can be written. The check is one test on the normalized place rule's existing verdict
+(`Norm.temp`, `refuseTemporaryBorrow` in `Check.lean`) at every reference-forming site: an explicit
+`&e` / `&mut e` (a projection of a temporary, `&mk().f`, included) and a method's implicit `&self`
+receiver (`mk().get()`). `&mut "text"` is refused (the static root is immutable). `&s.f` stays legal
+as sugar: the normalized place is already "root `s`, projection `f`".
+
+D2's second half lands with it: loans are keyed by the root variable. Within one call, borrows of
+one root overlap whatever their fields (`pathsOverlap` compares roots), and a call that makes a new
+mutable loan on a root (an owned variable, or a projection such as a `self.offs` receiver) may not
+mention that root in another argument (`checkCallRootReads`, E0293 REF-8@2). A plain reborrow of a
+`&mut` parameter as a receiver beside a read through it (`self.sift_up(self.len - 1)`) makes no new
+loan and stays legal (D1).
+
+Migration (`rule_impact.sh`, 2198 units against `wip/train3` 1df4cf48): `std/src/map.con`
+(`m.remove(&2)` becomes `m.remove(&key2)`), `std/src/cli.con` (`self.offs.push(self.names.len())`
+reads `self.names.len()` into a local first), `tests/programs/regress_047_048_hashmap_probe`
+(`m.insert(..).is_none()` binds the result first), `regress_2i_ref8_call_disjoint.con` (two fields
+of one struct in one call become two calls), and `regress_190_array_value_copy.con` (its by-value
+argument aliased by a `&mut` argument is now refused); both reproducers become rejection fixtures.
+
+Regression (`run_tests.sh` and `tests/rules/exit_2i.tsv`): E0238 for both reproducers,
+`error_d2_borrow_literal.con`, `error_d2_borrow_field_of_temporary.con`,
+`error_d2_temporary_receiver.con`, `error_d2_mut_borrow_string_literal.con`; E0293 for
+`error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
+`error_d2_receiver_projection_read.con`; run control `regress_d2_roots_and_projections.con` (a
+variable, a string literal, sugar `&s.f`, a projection through a reference parameter, a receiver
+reborrow beside a read through it; exit 42, `--interp == binary`).
+
+## Containment while open (historical)
 
 `scripts/tests/check_example_outputs.sh` (leg "open-bug reproducers", mode `signals`) requires
 `repro.con`'s binary to be killed by a signal; when it exits 42 or is refused, that leg fails until

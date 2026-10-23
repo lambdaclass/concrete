@@ -1,4 +1,4 @@
-// Exit 2i REF-8@1 (MEMORY_SEMANTICS §15.3): the owner is freed inside a borrow block that freezes it. Rejected: E0203.
+// Exit 2i REF-8@2 (MEMORY_SEMANTICS §15.3): the owner is freed inside a borrow block that freezes it. Rejected: E0203.
 struct B { v: Int }
 
 fn read(r: &Heap<B>) -> Int {

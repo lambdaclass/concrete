@@ -17,5 +17,6 @@ fn apply(c: Reader, x: Int) -> Int {
 fn main() -> Int {
     let h: H = H { f: read };
     let g: fn(&Int) -> Int = h.f;
-    return apply(read, 20) + g(&22);
+    let twenty_two: Int = 22;
+    return apply(read, 20) + g(&twenty_two);
 }

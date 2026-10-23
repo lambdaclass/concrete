@@ -61,6 +61,9 @@ trailing value. The last two matter because the value is taken before the deferr
 ## Regression
 
 `tests/programs/regress_190_array_value_copy.con`: `let`, a `match` binder, an evaluation-order
-temporary in an enum literal, a by-value argument aliased by a `&mut` argument, assignment (a
-control), and a returned array and a block's array value with a `defer` that writes it; each copies, writes the source, reads the copy; exit 42 natively and under `--interp`
+temporary in an enum literal, assignment (a control), and a returned array and a block's array value with a `defer` that writes it; each copies, writes the source, reads the copy; exit 42 natively and under `--interp`
 (`run_tests.sh`: `run_ok` and the `--interp == binary` loop). Before the fix the binary exits 1.
+
+Since D2 (loans keyed by root) a by-value argument can no longer be aliased by a `&mut` argument of
+the same call (E0293), so that shape left the fixture; `snapshotArrayValue` still copies the
+argument.

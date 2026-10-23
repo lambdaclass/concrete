@@ -57,12 +57,12 @@ printf '%s' "$LEDGER" > "$TMP/ledger.json"
 # The normative code -> rules map of MEMORY_SEMANTICS §15.5, stated here independently of the
 # compiler's ledger: a manifest tag must be allowed for its code, and the ledger must say the same.
 declare -A SPEC_RULES=(
-  [E0203]="REF-8@1" [E0204]="REF-8@1" [E0231]="REF-8@1" [E0232]="REF-8@1" [E0293]="REF-8@1"
+  [E0203]="REF-8@2" [E0204]="REF-8@2" [E0231]="REF-8@2" [E0232]="REF-8@2" [E0293]="REF-8@2"
   [E0214]="SCOPE-1@1" [E0215]="SCOPE-1@1" [E0292]="SCOPE-1@1" [E0301]="SCOPE-1@1" [E0305]="SCOPE-1@1"
   [E0234]="REF-6@1" [E0302]="REF-6@1" [E0303]="REF-6@1"
   [E0236]="REF-1@2, REF-2@2, REF-4@1" [E0239]="REF-3@1, REF-4@1"
   [E0574]="REF-1@2" [E0575]="REF-1@2"
-  [E0238]="REF-4@1, REF-5@1, REF-6@1, REF-7@1, REF-8@1"
+  [E0238]="REF-4@1, REF-5@2, REF-6@1, REF-7@1, REF-8@2"
 )
 
 # ---------------------------------------------------------------------------
@@ -307,9 +307,9 @@ for bad in '-' 'interp' 'interp-exempt:x' 'binary,model:no-such-model' 'binary,t
   { cat "$MANIFEST"; printf 'G4\ttests/programs/regress_2i_renamed_pattern_binder.con\trun:42\t-\t%s\n' "$bad"; } > "$TMP/n4b.tsv"
   validate_manifest "$TMP/n4b.tsv" > /dev/null && no "N4b: run row modes '$bad' went unnoticed" || ok "N4b: run row modes '$bad' are refused (nothing or nothing real executes)"
 done
-{ cat "$MANIFEST"; printf 'REF-7\ttests/programs/error_105_ref_valued_if_arg.con\treject:E0238:REF-5@1\tref7\t-\n'; } > "$TMP/n4c.tsv"
+{ cat "$MANIFEST"; printf 'REF-7\ttests/programs/error_105_ref_valued_if_arg.con\treject:E0238:REF-5@2\tref7\t-\n'; } > "$TMP/n4c.tsv"
 validate_manifest "$TMP/n4c.tsv" > /dev/null && no "N4c: a REF-5 fixture filed as REF-7 went unnoticed" || ok "N4c: a row whose tag names another rule than its rule column is refused"
-{ cat "$MANIFEST"; printf 'REF-5\ttests/programs/error_escape_return.con\treject:E0236:REF-5@1\tref5\t-\n'; } > "$TMP/n4d.tsv"
+{ cat "$MANIFEST"; printf 'REF-5\ttests/programs/error_escape_return.con\treject:E0236:REF-5@2\tref5\t-\n'; } > "$TMP/n4d.tsv"
 validate_manifest "$TMP/n4d.tsv" > /dev/null && no "N4d: a tag §15.5 does not assign to the code went unnoticed" || ok "N4d: a tag §15.5 does not assign to the code is refused"
 # N4e: a malformed negative model assertion must fail the row, not read as "absent".
 printf '087-bad\ttests/programs/regress_2i_scope1_087_renamed.con\t![\n' > "$TMP/badside.tsv"
@@ -340,7 +340,7 @@ check_reject SCOPE-1 tests/programs/regress_2i_scope1_block_let_renamed.con E030
   && no "N7: a program that compiles passed as a rejection" || ok "N7: an accepted twin cannot pass as its own rejection"
 check_run SCOPE-1 tests/programs/regress_2i_scope1_block_let_renamed.con 41 binary,interp > /dev/null \
   && no "N8: a wrong run value was accepted" || ok "N8: a run row with the wrong value fails in binary and interp"
-python3 - "$TMP/ledger.json" E0301 REF-5@1 <<'PY' && no "N9: the ledger check accepted a rule E0301 does not enforce" || ok "N9: the ledger check refuses a rule the code does not enforce"
+python3 - "$TMP/ledger.json" E0301 REF-5@2 <<'PY' && no "N9: the ledger check accepted a rule E0301 does not enforce" || ok "N9: the ledger check refuses a rule the code does not enforce"
 import json, sys
 p, code, tag = sys.argv[1:]
 d = json.load(open(p))

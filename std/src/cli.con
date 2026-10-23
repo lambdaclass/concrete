@@ -74,7 +74,10 @@ mod cli {
 
         fn declare(&mut self, name: String, kind: u64, default: u64) with(Alloc) -> u64 {
             let f: u64 = self.offs.len();
-            self.offs.push(self.names.len());
+            // D2: loans are keyed by root, so the `&mut` loan on `self` (through `self.offs`) and a read
+            // of `self.names` cannot share one call; read first.
+            let names_len: u64 = self.names.len();
+            self.offs.push(names_len);
             self.lens.push(name.len());
             let mut k: u64 = 0;
             while k < name.len() {

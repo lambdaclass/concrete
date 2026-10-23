@@ -2,9 +2,8 @@
 # scripts/tests/check_rules_2i.sh. Columns: rule, fixture, expected (reject:<code>:<RULE@version> or
 # run:<exit status>), pair (shared by a reject row and the run row of its rewritten program), modes.
 # Rows are referenced, not copied: existing fixtures keep their run_tests.sh rows as well.
-# Not here, because the rule is not enforced yet (a §15.7 gap with an owner): REF-5 for a borrow of a
-# literal, call result or aggregate literal (G12). G13, G15 and G16 (REF-1 / REF-2 well-formedness)
-# and the transitive generic of G2 have rows below (2026-10-23).
+# Every §15.7 gap that exit 2i owns has rows: G12 (REF-5, D2) and G13, G15, G16 and the transitive
+# generic of G2 (REF-1 / REF-2 well-formedness) were closed 2026-10-23.
 REF-1	tests/programs/error_escape_return.con	reject:E0236:REF-1@2	ref1	-
 REF-1	tests/programs/error_2i_ref1_return_bare.con	reject:E0236:REF-1@2	ref1	-
 REF-1	tests/programs/error_2i_ref1_return_option.con	reject:E0236:REF-1@2	ref1	-
@@ -42,16 +41,16 @@ REF-4	tests/programs/error_092_generic_array_ref.con	reject:E0239:REF-4@1	ref4	j
 REF-4	tests/programs/error_091_norm_generic_fn_mut_param.con	reject:E0238:REF-4@1	ref4	-
 REF-4	tests/programs/error_091_norm_generic_transitive_ref.con	reject:E0238:REF-4@1	ref4	json-exempt:mono
 REF-4	tests/programs/regress_2i_ref4_top_level_ref_arg.con	run:42	ref4	binary,interp
-REF-5	tests/programs/error_105_ref_valued_if_arg.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_105_ref_valued_if_field.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_091_norm_temporaries.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_091_norm_if_local_binding.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_091_norm_double_deref_read.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_091_norm_nested_ref_binder.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_2i_ref5_borrow_temporary.con	reject:E0238:REF-5@1	ref5	-
-REF-5	tests/programs/error_123_const_borrow_in_body.con	reject:E0238:REF-5@1	ref5	-
+REF-5	tests/programs/error_105_ref_valued_if_arg.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_105_ref_valued_if_field.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_091_norm_temporaries.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_091_norm_if_local_binding.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_091_norm_double_deref_read.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_091_norm_nested_ref_binder.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_2i_ref5_borrow_temporary.con	reject:E0238:REF-5@2	ref5	-
+REF-5	tests/programs/error_123_const_borrow_in_body.con	reject:E0238:REF-5@2	ref5	-
 REF-5	tests/programs/regress_2i_ref5_canonical_places.con	run:42	ref5	binary,interp
-REF-5	tests/programs/error_091_norm_if_projection.con	reject:E0238:REF-5@1	ref5-branch	-
+REF-5	tests/programs/error_091_norm_if_projection.con	reject:E0238:REF-5@2	ref5-branch	-
 REF-5	tests/programs/regress_2i_ref5_bind_branch_first.con	run:42	ref5-branch	binary,interp
 REF-5	tests/programs/regress_2i_ref5_heap_field_borrow.con	run:42	ref5-heap	binary,interp-exempt:no-heap-allocation-in-the-interpreter
 REF-6	tests/programs/error_2i_ref6_let_shared_ref.con	reject:E0302:REF-6@1	ref6-place	-
@@ -102,7 +101,7 @@ REF-6	tests/programs/error_2i_ref6_const_branch_borrow.con	reject:E0302:REF-6@1	
 REF-6	tests/programs/error_2i_ref6_const_destructure_through_borrow.con	reject:E0302:REF-6@1	const-init	-
 REF-6	tests/programs/error_2i_ref6_const_match_through_borrow.con	reject:E0302:REF-6@1	const-init	-
 REF-6	tests/programs/error_2i_ref6_const_typed_ref_let.con	reject:E0302:REF-6@1	const-init	-
-REF-5	tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con	reject:E0238:REF-5@1	ref5	-
+REF-5	tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con	reject:E0238:REF-5@2	ref5	-
 REF-6	tests/programs/error_2i_ref6_const_borrow_block.con	reject:E0302:REF-6@1	const-init	-
 SCOPE-1	tests/programs/error_2i_ref6_contract_ref_binding.con	reject:E0305:SCOPE-1@1	contract	-
 SCOPE-1	tests/programs/error_2i_scope1_contract_let.con	reject:E0305:SCOPE-1@1	contract	-
@@ -139,12 +138,22 @@ REF-6	tests/programs/error_2i_ref6_mut_param_repointed.con	reject:E0303:REF-6@1	
 REF-6	tests/programs/regress_2i_ref6_write_through_param.con	run:42	ref6-write	binary,interp
 REF-7	tests/programs/error_091_norm_ref_write_through_ref.con	reject:E0238:REF-7@1	ref7	-
 REF-7	tests/programs/regress_2i_ref7_write_value_through_mut_ref.con	run:42	ref7	binary,interp
-REF-8	tests/programs/error_borrow_frozen.con	reject:E0203:REF-8@1	ref8-block	-
-REF-8	tests/programs/error_2i_ref8_free_in_borrow_block.con	reject:E0203:REF-8@1	ref8-block	-
+REF-8	tests/programs/error_borrow_frozen.con	reject:E0203:REF-8@2	ref8-block	-
+REF-8	tests/programs/error_2i_ref8_free_in_borrow_block.con	reject:E0203:REF-8@2	ref8-block	-
 REF-8	tests/programs/regress_2i_ref8_free_after_ref_block.con	run:42	ref8-block	binary,interp-exempt:no-heap-allocation-in-the-interpreter
-REF-8	tests/programs/error_2i_ref8_call_overlap.con	reject:E0293:REF-8@1	ref8-call	-
-REF-8	tests/programs/error_091_norm_cast_arg_overlap.con	reject:E0293:REF-8@1	ref8-call	-
+REF-8	tests/programs/error_2i_ref8_call_overlap.con	reject:E0293:REF-8@2	ref8-call	-
+REF-8	tests/programs/error_091_norm_cast_arg_overlap.con	reject:E0293:REF-8@2	ref8-call	-
 REF-8	tests/programs/regress_2i_ref8_call_disjoint.con	run:42	ref8-call	binary,interp
+REF-8	tests/programs/error_d2_call_disjoint_fields.con	reject:E0293:REF-8@2	ref8-call	-
+REF-8	tests/programs/error_d2_call_field_read.con	reject:E0293:REF-8@2	ref8-call	-
+REF-8	tests/programs/error_d2_receiver_projection_read.con	reject:E0293:REF-8@2	ref8-call	-
+REF-5	tests/programs/error_d2_borrow_literal.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/programs/error_d2_borrow_field_of_temporary.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/programs/error_d2_temporary_receiver.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/programs/error_d2_mut_borrow_string_literal.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/regressions/bug182_borrowed_call_result_temporary/repro.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con	reject:E0238:REF-5@2	ref5d2	-
+REF-5	tests/programs/regress_d2_roots_and_projections.con	run:42	ref5d2	binary,interp
 REF-8	tests/programs/regress_2i_ref8_match_borrow_scrutinee.con	run:42	-	binary,interp
 SCOPE-1	tests/programs/error_2i_scope1_same_block_let.con	reject:E0301:SCOPE-1@1	scope1-same_block_let	-
 SCOPE-1	tests/programs/regress_2i_scope1_same_block_let_renamed.con	run:42	scope1-same_block_let	binary,interp

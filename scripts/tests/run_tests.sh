@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first regress_136_137_literal_eval_order regress_190_array_value_copy regress_181_borrowed_binders regress_d2_roots_and_projections; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -8158,6 +8158,17 @@ run_ok "$TESTDIR/regress_190_array_value_copy.con" 42
 # Bug 181 (D3): every binder through a borrowed scrutinee is a reference; the root stays frozen.
 run_ok "$TESTDIR/regress_181_borrowed_binders.con" 42
 run_ok "tests/regressions/bug181_generic_borrowed_scrutinee_binder_mode/repro.con" 42
+# Bug 182 / D2 (the Austral model): only a variable or a string literal is a reference's root
+# (E0238), and loans are keyed by root (E0293).
+run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
+for d2 in borrow_literal borrow_field_of_temporary temporary_receiver mut_borrow_string_literal; do
+    run_err "$TESTDIR/error_d2_$d2.con" "(E0238)"
+done
+for d2 in call_disjoint_fields call_field_read receiver_projection_read; do
+    run_err "$TESTDIR/error_d2_$d2.con" "(E0293)"
+done
+run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro.con" "(E0238)"
+run_err "tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con" "(E0238)"
 for r181 in match while_let guard nested whole_binder defer; do
     run_err "$TESTDIR/error_181_root_reassigned_$r181.con" "(E0232)"
 done

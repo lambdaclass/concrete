@@ -1417,11 +1417,13 @@ end
 def NPlace.key (p : NPlace) : Option (String × List String) :=
   p.root.map fun r => (r, if p.exact then p.steps else [])
 
-/-- Path `a` overlaps path `b` iff one is a prefix of the other (equal roots).
-    Disjoint fields (`w.a` vs `w.b`) do NOT overlap — precise, no over-reject;
-    `w` vs `w.f` DO (the whole overlaps the part). -/
+/-- D2 (the Austral model): loans are keyed by ROOT variable only. A loan on `&s.f` is a loan on
+    `s`, so two borrows within one call overlap whenever they share a root, disjoint fields
+    included (`upd(&mut s.a, &s.b)` is refused). This matches the whole-owner freezing a borrow
+    block and an arm binder already do. Field-precise loans are deferred until a workload needs
+    two simultaneous borrows of different fields of one owner. -/
 def pathsOverlap (a b : String × List String) : Bool :=
-  a.1 == b.1 && (a.2.isPrefixOf b.2 || b.2.isPrefixOf a.2)
+  a.1 == b.1
 
 /-- #18 container-not-in-context: within one call's arguments (plus the
     auto-borrowed method receiver), two borrows may not OVERLAP when either
@@ -1436,6 +1438,58 @@ def checkCallBorrowConflicts (parts : List ((String × List String) × Bool)) (s
       if pathsOverlap path prevPath && (isMut || prevMut) then
         throwCheck (.conflictingCallBorrows path.1) span
     seen := (path, isMut) :: seen
+
+/-- The variable names an expression mentions outside nested blocks (`if` / `match` bodies are
+    not visited: a branch that reads a root is still a read, so they are included by their
+    condition/scrutinee only, which is the conservative direction for D2's call rule only when
+    combined with the explicit borrow parts). -/
+partial def exprMentionedNames : Expr → List String
+  | .ident _ n => [n]
+  | .paren _ e | .unaryOp _ _ e | .fieldAccess _ e _ | .borrow _ e | .borrowMut _ e | .deref _ e
+  | .cast _ e _ => exprMentionedNames e
+  | .binOp _ _ l r | .arrayIndex _ l r | .allocCall _ l r => exprMentionedNames l ++ exprMentionedNames r
+  | .call _ _ _ args | .staticMethodCall _ _ _ _ args | .arrayLit _ args => args.flatMap exprMentionedNames
+  | .methodCall _ o _ _ args => exprMentionedNames o ++ args.flatMap exprMentionedNames
+  | .structLit _ _ _ fs b => fs.flatMap (fun (_, e) => exprMentionedNames e) ++ (b.map exprMentionedNames).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => exprMentionedNames e)
+  | .match_ _ scr _ => exprMentionedNames scr
+  | .ifExpr _ c _ _ => exprMentionedNames c
+  | _ => []
+
+/-- D2: loans are keyed by root, so while one call borrows a root mutably, no OTHER argument (or
+    the receiver) of that call may mention that root at all: `add(&mut s.a, s.b)` and
+    `self.offs.push(self.names.len())` (the `&mut` receiver loan on `self` and a read of
+    `self.names`) are E0293, where a field-precise rule accepted them. A reference binding counts
+    as its recorded source. `operands` are the receiver (if any) and the arguments, in order;
+    `parts` are the call's borrows. A mutable borrow counts when it is a NEW loan on a root: of an
+    owned variable, or a projection (`&mut s.a`, a `self.offs` receiver). A plain reborrow of a
+    reference binding (`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the
+    root: it re-lends the reference the caller already holds, so reading through that reference in
+    another argument is not a second loan (D1: every `&mut` argument is an implicit reborrow). -/
+def checkCallRootReads (parts : List ((String × List String) × Bool)) (operands : List Expr) (span : Option Span) : CheckM Unit := do
+  let mut mutRoots : List String := []
+  for ((root, steps), isMut) in parts do
+    if !isMut then continue
+    let isRefBinding ← match ← lookupVarInfo root with
+      | some info => pure (match info.ty with | .ref _ | .refMut _ => true | _ => false)
+      | none => pure false
+    if !steps.isEmpty || !isRefBinding then mutRoots := root :: mutRoots
+  if mutRoots.isEmpty then return
+  let mut counts : List (String × Nat) := []
+  for o in operands do
+    let mut rootsHere : List String := []
+    for n in exprMentionedNames o do
+      let root := match ← lookupVarInfo n with
+        | some info => info.borrowedFrom.getD n
+        | none => n
+      if mutRoots.contains root && !rootsHere.contains root then rootsHere := root :: rootsHere
+    for r in rootsHere do
+      counts := match counts.lookup r with
+        | some k => (r, k + 1) :: counts.filter (·.1 != r)
+        | none => (r, 1) :: counts
+  match counts.find? (fun (_, k) => k ≥ 2) with
+  | some (r, _) => throwCheck (.conflictingCallBorrows r) span
+  | none => pure ()
 
 /-- The borrows a call makes, as NORMALIZED places (E0293): a `&e` / `&mut e` argument
     borrows `e`'s place, a reference binding argument borrows its source. Every spelling of

@@ -1,4 +1,4 @@
-// Exit 2i REF-5@1 (MEMORY_SEMANTICS §15.3): a call-scoped borrow of a heap field (`f(&h.v)`), then `free(h)`. Run 42 (binary; the interpreter has no heap allocation).
+// Exit 2i REF-5@2 (MEMORY_SEMANTICS §15.3): a call-scoped borrow of a heap field (`f(&h.v)`), then `free(h)`. Run 42 (binary; the interpreter has no heap allocation).
 struct Copy B { v: Int }
 
 fn read(r: &Int) -> Int {

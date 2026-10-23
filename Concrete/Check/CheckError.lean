@@ -209,6 +209,9 @@ inductive CheckError where
   -- Bug 091 round 3: a reference binding whose source the checker cannot trace would be a
   -- live borrow invisible to the aliasing rules.
   | untraceablePlace (subject : String) (why : String)
+  -- D2 (the Austral model, bug 182): only a variable, or a string literal (a static root), is
+  -- borrowed; a temporary is never a reference's root.
+  | temporaryNotBorrowable (subject : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -417,6 +420,7 @@ def CheckError.message : CheckError → String
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
   | .untraceablePlace subject why => s!"cannot trace {subject}: {why}"
+  | .temporaryNotBorrowable subject => s!"cannot borrow {subject}: only a variable or a string literal can be borrowed, and a reference into it is formed by projecting through that borrow; a temporary (a call result, a literal, an aggregate, an operator expression) is never a reference's root (REF-5)"
   | .mutReceiverThroughSharedRef subject desc => s!"cannot mutably borrow {subject} through a shared reference ({desc})"
   -- Slice 4
   | .missingCapability callee cap caller => s!"function '{callee}' requires capability '{cap}' but '{caller}' does not declare it"
@@ -509,6 +513,7 @@ def CheckError.hint : CheckError → Option String
   | .destroyRequiresNamed _ => some "only struct and enum types can be destroyed"
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
+  | .temporaryNotBorrowable _ => some "bind the value to a `let` and borrow the variable (`let v = mk(); f(&v)`)"
   | .untraceablePlace _ _ => some "use a named place (a binding, its fields, or `*` of a named reference); this is the normalized place rule of docs/bugs/091 (a deliberate restriction until R-0499)"
   | .mutReceiverThroughSharedRef _ _ => some "take `&mut T` instead of `&T` (or `&mut self` instead of `&self`) where the value is mutated"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
@@ -600,6 +605,7 @@ def CheckError.code : CheckError → String
   | .cannotMutBorrowImmBorrowed _ => "E0235"
   | .mutReceiverThroughSharedRef _ _ => "E0237"
   | .untraceablePlace _ _ => "E0238"
+  | .temporaryNotBorrowable _ => "E0238"
   -- Slice 4: Capability (E0240–E0249)
   | .missingCapability _ _ _ => "E0240"
   | .traitBoundNotSatisfied _ _ _ => "E0241"
@@ -680,10 +686,11 @@ def CheckError.rule : CheckError → Option String
   | .referenceEscapesBorrowBlock _ => some "REF-6@1"
   | .returnsReference _ r => some r
   | .refStoredInAggregate _ _ => some "REF-3@1"
-  | .untraceablePlace _ _ => some "REF-5@1"
-  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
-  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
-  | .conflictingCallBorrows _ => some "REF-8@1"
+  | .untraceablePlace _ _ => some "REF-5@2"
+  | .temporaryNotBorrowable _ => some "REF-5@2"
+  | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@2"
+  | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@2"
+  | .conflictingCallBorrows _ => some "REF-8@2"
   | _ => none
 
 /-- The mechanical rewrite for a rule's rejected shape (MEMORY_SEMANTICS §15.5 item 3),
@@ -696,10 +703,10 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-2@2" => some "make the callback return a value; pass the reference down as its argument instead of handing one back"
   | "REF-3@1" => some "store an owned value, an index or a `ByteView` instead, or pass the reference down as an argument"
   | "REF-4@1" => some "instantiate the generic at a value type, or pass the reference directly as an argument"
-  | "REF-5@1" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
+  | "REF-5@2" => some "bind the value to a `let` and borrow that; for a branch, borrow inside each branch or choose the value first and borrow a named place"
   | "REF-6@1" => some "borrow the place at each use (`f(&w.p)`) or borrow the owner in a borrow block (`borrow w as rw in R { f(&rw.p); }`); evaluate an effectful index once into a Copy local; instead of assigning a reference binding, use the other reference directly"
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
-  | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
+  | "REF-8@2" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/
