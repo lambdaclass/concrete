@@ -14,10 +14,11 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
 enum, a literal or range over an enum, a variant over a non-enum, a literal of another type, and a
-range over a scrutinee that is not an integer or `char`. Before this fix the checker left these to
+range over a scrutinee that is not an integer or `char`, and a literal or range over a type
+parameter. Before this fix the checker left these to
 CoreCheck, which runs after Elab: a foreign variant made the checker panic, and a range over an enum
 failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
-chapter (PAT-3) found it. It is pinned by four `error_196_*.con` fixtures.
+chapter (PAT-3) found it. It is pinned by five `error_196_*.con` fixtures.
 
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 

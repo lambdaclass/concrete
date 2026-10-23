@@ -40,10 +40,14 @@ accepted outright.
 
 The checker refuses, with the new code E0309: a variant arm naming another enum, a literal or range
 arm over an enum, a variant arm over a non-enum, a literal of another type, and a range over a
-scrutinee that is not an integer or `char`. An unknown variant of the right enum is E0260, and the
+scrutinee that is not an integer or `char`. A literal or range pattern over a type-parameter
+scrutinee is refused as well: a generic body is checked once at its opaque parameter, and no bound
+says every instantiation has integer literals (before, an integer literal took the parameter as its
+type and passed, and the specialization decided). An unknown variant of the right enum is E0260, and the
 `get!` is gone. An unknown scrutinee type (from an earlier error) is not reported again. Fixtures:
 `error_196_other_enum_variant.con`, `error_196_range_over_enum.con`,
-`error_196_variant_over_int.con` and `error_196_literal_type.con` (E0309, in `run_tests.sh`). A
+`error_196_variant_over_int.con`, `error_196_literal_type.con` and
+`error_196_literal_over_type_param.con` (E0309, in `run_tests.sh`). A
 rule-impact scan over the 2,169 units of the train 4 corpus found no program whose outcome changed.
 
 ## Structural cause
@@ -55,6 +59,8 @@ it.
 
 ## Structural owner
 
-R-0499 (S8: the checker on Core owns pattern well-formedness, before elaboration consumes it).
+R-0499 (S8: one checker owns pattern well-formedness). Until then the source checker must run every
+pattern check that elaboration relies on, because elaboration is not total on malformed patterns
+(the `get!`); a check deferred past a stage that depends on it is the cause, not a placement.
 The specification's PAT-3 reject examples run on both consumers and pin the first responsible
 stage.

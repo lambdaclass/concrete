@@ -1799,8 +1799,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | .litArm _ val guard body => do
           -- Bug 196 (PAT-3): a literal pattern has the scrutinee's type.
           let litTy ← checkExpr val (some innerTyR)
-          -- (an unknown scrutinee type comes from an earlier error; do not cascade)
-          if innerTyR != .placeholder && litTy != innerTyR then
+          -- (an unknown scrutinee type comes from an earlier error; do not cascade). A type
+          -- parameter is opaque: a generic body is checked once, and no bound says its
+          -- instantiations have literals, so a literal pattern over one is refused too.
+          let isTyVar := match innerTyR with | .typeVar _ => true | _ => false
+          if innerTyR != .placeholder && (isTyVar || litTy != innerTyR) then
             throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body

@@ -8210,7 +8210,7 @@ run_err "$TESTDIR/error_108_int_as_bool.con" "E0553"
 # Bug 130: the same refusal for an `Int` source (it was `bitcast i64 to i1`).
 run_err "$TESTDIR/error_130_int_as_bool_int.con" "E0553"
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
-for b196 in other_enum_variant range_over_enum variant_over_int literal_type; do
+for b196 in other_enum_variant range_over_enum variant_over_int literal_type literal_over_type_param; do
     run_err "$TESTDIR/error_196_${b196}.con" "(E0309)"
 done
 # Bug 109: float constants are the hex of their IEEE bits, f32 rounded first
