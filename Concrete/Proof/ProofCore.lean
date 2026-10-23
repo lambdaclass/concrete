@@ -1254,52 +1254,12 @@ def cStmtsToStepExpr (assigns : List (String × Proof.PExpr)) (body : List CStmt
     Option Proof.PExpr :=
   cStmtsToStepExprK [] assigns body none
 
-/-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
-    `.letDecl :: rest` directly so Phase 12 R-06 (letIn
-    preservation) can discharge against the REAL extractor.
-    All other CStmt-list shapes delegate to the partial-def
-    implementation in the mutual block above.
-
-    Recursion is structural on `rest` (shorter than the
-    input list).  The val arm uses `cExprToPExpr` (the
-    expression wrapper) so the val side is also wrapper-
-    reducible when val itself is in the supported fragment. -/
-def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
-  | [], k => k
-  | [.return_ (some e) _], _ => if cExprTailOk e then cExprToPExpr e else none
-  | [.expr e true], _ => if cExprTailOk e then cExprToPExpr e else none
-  | (.letDecl name _ _ val) :: rest, k => do
-    if !cExprNoEscape val then none
-    let pv ← cExprToPExpr val
-    let pb ← cStmtsToPExprK rest k
-    some (.letIn name.name pv pb)
-  | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
-    if !(cExprNoEscape idx && cExprNoEscape val) then none
-    let pi ← cExprToPExpr idx
-    let pv ← cExprToPExpr val
-    let pb ← cStmtsToPExprK rest k
-    some (.letIn name.name (.arraySet (.var name.name) pi pv) pb)
-  -- if-without-else (early-return shape): then branch's cont
-  -- is `rest with k`; implicit else is the same.
-  | (.ifElse cond thenBranch none) :: rest, k => do
-    if !cExprNoEscape cond then none
-    let pc ← cExprToPExpr cond
-    let pkRest ← cStmtsToPExprK rest k
-    if !cBranchComposes thenBranch pkRest then none  -- bug 101
-    let pt ← cStmtsToPExprK thenBranch (some pkRest)
-    some (.ifThenElse pc pt pkRest)
-  -- Bounded while loop: flat-assign body extracts to PExpr.while_;
-  -- richer body falls back to PExpr.while_step.
-  | (.while_ cond body _ _step) :: rest, k => do
-    if !cExprNoEscape cond then none
-    let pc ← cExprToPExpr cond
-    let pCont ← cStmtsToPExprK rest k
-    match cAssignBodyToUpdates body with
-    | some updates => some (.while_ pc updates pCont)
-    | none => do
-      let stepE ← cStmtsToStepExpr [] body
-      some (.while_step pc (extractCarried body) stepE pCont)
-  | stmts, k => cStmtsToPExprKImpl stmts k
+/-- The public statement extractor: exactly `cStmtsToPExprKImpl`, with no arm of its own (bug 219,
+    as for `cExprToPExpr`). It used to repeat the `let`, `arr[i] = v`, if-without-else and `while`
+    arms so the ProofSoundness theorems (R-06, R-18, R-19 ...) could reduce them while the
+    implementation was a `partial def`; they now unfold the implementation's equations. -/
+def cStmtsToPExprK (stmts : List CStmt) (k : Option Proof.PExpr) : Option Proof.PExpr :=
+  cStmtsToPExprKImpl stmts k
 
 -- Unsupported construct identification
 

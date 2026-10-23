@@ -317,7 +317,8 @@ theorem let_preservation
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK ((CStmt.letDecl (CLocal.ofName name) isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_val, h_rest]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, CLocal.ofName, h_esc, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -439,7 +440,8 @@ theorem array_set_preservation
       ((CStmt.arrayIndexAssign (.ident (CLocal.ofName name) idxTy) idx val) :: rest) k
       = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
   simp only [Bool.and_eq_true] at h_esc
-  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
 
 /-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
 
@@ -475,7 +477,8 @@ theorem if_no_else_as_fallthrough_preservation
     (h_then : cStmtsToPExprK thenBranch (some pkRest) = some pt) :
     cStmtsToPExprK ((CStmt.ifElse cond thenBranch none) :: rest) k
       = some (.ifThenElse pc pt pkRest) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_scope, h_then]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_scope, h_then]
 
 /-! ## Rules unlocked by the partial-def → def lift (2026-05-30)
 
@@ -563,7 +566,8 @@ theorem while_flat_preservation
     (h_updates : cAssignBodyToUpdates body = some updates) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_ pc updates pCont) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_updates]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_updates]
 
 /-! ## R-20: `while_step_preservation` (extraction)
 
@@ -589,7 +593,8 @@ theorem while_step_preservation
     (h_step : cStmtsToStepExpr [] body = some stepE) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_step pc (extractCarried body) stepE pCont) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_not_flat, h_step]
+  simp only [cStmtsToPExprK, cExprToPExpr, cStmtsToStepExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_not_flat, h_step]
 
 /-! ## Eval-side compositional reductions (closing the remaining gaps)
 
