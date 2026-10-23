@@ -1,0 +1,8 @@
+// Bug 194: the end of a function with a result type is reachable. Expected: E0307.
+fn f() -> Int {
+    let x: Int = 1;
+}
+
+fn main() -> Int {
+    return f();
+}

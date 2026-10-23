@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Function With A Result Type Returns On Every Path (bug 194, 2026-10-23)
+
+A function whose result type is not `Unit` and whose body can reach its end without a `return` is
+now refused with E0307. Before this fix nothing checked it: the binary failed in `llvm-as` (a
+`ret void` in a non-void function) and `--interp` ran the program. A falling-through
+`let ... else` block in such a function was one way to write it; the language specification's
+patterns chapter found that case. It is pinned by four `error_194_*.con` fixtures.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
