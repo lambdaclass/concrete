@@ -2056,16 +2056,17 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- under its own position and name); each field binder is bound under the walk's
     -- destructure key (R-0492: position + field + spelling, so two `_`s are two bindings).
     let tmpPart ← elabStmtEv tmpLet
-    let mut fieldParts : List ElaboratedStmtV2 := []
+    -- prepended and reversed once (the quadratic-append ratchet)
+    let mut fieldPartsRev : List ElaboratedStmtV2 := []
     for b in bindings do
       let cValEv ← elabExprEv (Expr.fieldAccess sp (Expr.ident sp tmpName) b.fieldName) none
       let cVal := cValEv.core
       let coreName ← bindLocal (destructureKey sp b) b.name cVal.ty (some sp)
-      fieldParts := fieldParts ++ [ElaboratedStmtV2.mk [.letDecl coreName false cVal.ty cVal]
-        (Proof.EvidenceStmtV2.letBind false none cValEv.evidence)]
+      fieldPartsRev := ElaboratedStmtV2.mk [.letDecl coreName false cVal.ty cVal]
+        (Proof.EvidenceStmtV2.letBind false none cValEv.evidence) :: fieldPartsRev
     -- A destructure desugars to several statements; evidence keeps them as ONE block so
     -- the tree mirrors the source construct rather than the desugaring.
-    let parts := tmpPart :: fieldParts
+    let parts := tmpPart :: fieldPartsRev.reverse
     return ElaboratedStmtV2.mk (parts.flatMap (·.core))
       (Proof.EvidenceStmtV2.block (parts.map (·.evidence)))
   -- assert(e)/assume(e): proof-only, ERASED before Core (like contracts/ghost).
