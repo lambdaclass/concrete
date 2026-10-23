@@ -459,14 +459,14 @@ def classifyRecursion (graph : CallGraph) (sccs : List (List String))
     could be 0 or negative — so it reads as no progress, which classifies the loop unbounded
     and gets it REJECTED by the predictable profile. That is the safe direction: a loop wrongly
     called unbounded is refused, a loop wrongly called bounded is admitted and may hang. -/
-private def stepsToward (v : String) (dir : Bool) (step : List CStmt) : Bool :=
+private def stepsToward (v : LocalKey) (dir : Bool) (step : List CStmt) : Bool :=
   step.any fun st => match st with
     | .assign nm (.binOp op (.ident nm2 _) (.intLit k _) _) =>
-        nm == v && nm2 == v && k > 0 &&
+        nm.key == v && nm2.key == v && k > 0 &&
           ((dir && op == .add) || (!dir && op == .sub))
     -- `i = 1 + i`, the commuted form
     | .assign nm (.binOp op (.intLit k _) (.ident nm2 _) _) =>
-        nm == v && nm2 == v && k > 0 && dir && op == .add
+        nm.key == v && nm2.key == v && k > 0 && dir && op == .add
     | _ => false
 
 /-- A loop is BOUNDED only if a variable in its condition is stepped toward the bound.
@@ -484,18 +484,21 @@ private def stepsToward (v : String) (dir : Bool) (step : List CStmt) : Bool :=
     program that hangs rather than one that crashes — invisible to every safety obligation.
 
     `neq` is deliberately NOT accepted: `while (i != n)` terminates only for a starting value
-    this analysis cannot see, so it cannot be certified locally. -/
+    this analysis cannot see, so it cannot be certified locally.
+
+    The condition variable and the stepped variable are matched by binding identity
+    (`CLocal.key`, R-0492 step 4e), not by spelling. -/
 private def isBoundedCond (cond : CExpr) (step : List CStmt) : Bool :=
   match cond with
   -- `i < n` / `i <= n`: i must increase.   `i > n` / `i >= n`: i must decrease.
   | .binOp op (.ident v _) _ _ =>
-      if op == .lt || op == .leq then stepsToward v.name true step
-      else if op == .gt || op == .geq then stepsToward v.name false step
+      if op == .lt || op == .leq then stepsToward v.key true step
+      else if op == .gt || op == .geq then stepsToward v.key false step
       else false
   -- the commuted form: `n > i` means i increases; `n < i` means i decreases.
   | .binOp op _ (.ident v _) _ =>
-      if op == .gt || op == .geq then stepsToward v.name true step
-      else if op == .lt || op == .leq then stepsToward v.name false step
+      if op == .gt || op == .geq then stepsToward v.key true step
+      else if op == .lt || op == .leq then stepsToward v.key false step
       else false
   | _ => false
 
