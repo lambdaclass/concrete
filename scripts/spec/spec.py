@@ -937,6 +937,19 @@ def gen_site(spec, out_dir):
             f'+++\ntitle = "{title}"\nweight = {w + 1}\n+++\n\n<!-- GENERATED from docs/spec/{ch}.md by '
             f'scripts/spec/spec.py site -- do not edit -->\n{txt}\n')
         n += 1
+    # The rule index: every entry with its chapter, kind, status and codes, one row each, so the
+    # site shows the state of the whole specification at a glance (decision B18).
+    rows = ["| ID | Title | Kind | Status | Codes |", "|---|---|---|---|---|"]
+    for e in spec.entries:
+        codes = ", ".join(c for c, _ in e.codes() if c) or "none"
+        title = e.title.replace("|", "\\|")
+        rows.append(f"| [{e.id}](@/spec/{e.chapter}.md#{e.id}) | {title} | {e.kind} | {e.fields.get('Status', '')} | {codes} |")
+    open(os.path.join(out_dir, "rules.md"), "w").write(
+        '+++\ntitle = "Rule Index"\nweight = 0\n+++\n\n<!-- GENERATED from docs/spec by '
+        'scripts/spec/spec.py site -- do not edit -->\n# Rule Index\n\nEvery rule and definition of the '
+        'specification, in chapter order. An entry\'s anchor is its ID; a cited rule names its version '
+        '(`OWN-5@1`), and the registry `docs/spec/ids.tsv` keeps every version ever published.\n\n'
+        + "\n".join(rows) + "\n")
     return n
 
 def label(x):

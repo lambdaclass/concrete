@@ -38,6 +38,7 @@ GATES=(
   "construction rights + fixtures|bash scripts/tests/check_construction_rights.sh"
   "module visibility + import fixtures|bash scripts/tests/check_module_visibility.sh"
   "generated-file / docs drift|bash scripts/tests/check_docs_drift.sh"
+  "site pages generated from docs|bash scripts/tests/check_site_generated.sh"
 )
 
 run_all() {
