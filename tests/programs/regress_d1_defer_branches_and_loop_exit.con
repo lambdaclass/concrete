@@ -1,0 +1,21 @@
+// D1 (Codex review): a deferred call's loan on a `&mut` reference ends when its block ends, so the
+// reference is usable after an `if` whose branches each deferred a call with it; and a borrow-block
+// binder (a reference, owning nothing) leaves no obligation at a `break`. Exit 2.
+fn inc(r: &mut Int) { *r = *r + 1; }
+fn f(r: &mut Int, flag: bool) {
+    if flag { defer inc(r); } else { defer inc(r); }
+    inc(r);
+}
+fn main() -> Int {
+    let mut x: Int = 0;
+    f(&mut x, true);
+    let mut i: Int = 0;
+    while true {
+        let mut y: Int = 0;
+        borrow mut y as r in R {
+            inc(r);
+            break;
+        }
+    }
+    return x;
+}

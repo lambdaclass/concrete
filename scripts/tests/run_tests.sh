@@ -2301,14 +2301,14 @@ run_err "$TESTDIR/error_borrow_consumed_var.con" "already moved"
 run_err "$TESTDIR/error_assign_frozen_by_borrow.con" "frozen by borrow block"
 run_err "$TESTDIR/error_linear_array_leak.con" "was never consumed"
 # &mut T borrow-block ref consumption errors
-run_err "$TESTDIR/error_mut_ref_double_use.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_double_call.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_call_then_deref.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_use_after_call.con" "used after move"
-run_err "$TESTDIR/error_mut_ref_branch_disagree.con" "consumed in one branch"
-run_err "$TESTDIR/error_mut_ref_loop_consume.con" "inside a loop"
+run_ok "$TESTDIR/regress_d1_mut_ref_double_use.con" 12
+run_ok "$TESTDIR/regress_d1_mut_ref_double_call.con" 12
+run_ok "$TESTDIR/regress_d1_mut_ref_call_then_deref.con" 99
+run_ok "$TESTDIR/regress_d1_mut_ref_use_after_call.con" 11
+run_ok "$TESTDIR/regress_d1_mut_ref_branch_disagree.con" 11
+run_ok "$TESTDIR/regress_d1_mut_ref_loop_consume.con" 13
 run_err "$TESTDIR/error_mut_ref_rebind_then_use.con" "(E0302)"
-run_err "$TESTDIR/error_mut_ref_method_on_borrow_ref.con" "used after move"
+run_ok "$TESTDIR/regress_d1_mut_ref_method_on_borrow_ref.con" 12
 # Memory regression checklist gap-closing tests
 run_err "$TESTDIR/error_continue_skip_linear.con" "continue would skip unconsumed linear"
 run_err "$TESTDIR/error_mut_borrow_immutable.con" "cannot take mutable borrow of immutable"
@@ -8164,6 +8164,8 @@ run_ok "$TESTDIR/regress_d2_roots_and_projections.con" 42
 # D1: every &mut argument is an implicit reborrow; a deferred call holds its loan; two exclusive
 # reborrows of one reference in one call overlap.
 run_ok "$TESTDIR/regress_d1_mut_ref_reborrow.con" 42
+run_ok "$TESTDIR/regress_d1_defer_branches_and_loop_exit.con" 2
+run_ok "$TESTDIR/regress_d1_append_ref_twice.con" 4
 run_err "$TESTDIR/error_d1_defer_holds_loan.con" "(E0206)"
 run_err "$TESTDIR/error_d1_defer_holds_loan_param.con" "(E0206)"
 run_err "$TESTDIR/error_d1_overlapping_mut_args.con" "(E0293)"

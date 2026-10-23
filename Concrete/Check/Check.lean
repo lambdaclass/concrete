@@ -178,9 +178,7 @@ def liveAliasesOf (r : String) (info : VarInfo) (onlyExclusive : Bool) : CheckM 
 /-- D1 (decision Q1): a reference binding whose loan a pending deferred call holds (`defer inc(r);`)
     may not be used again before that call runs (MEMORY_SEMANTICS §15.3, the deferred loan). -/
 def refuseDeferHeldRef (r : String) (info : VarInfo) (span : Option Span) : CheckM Unit := do
-  match info.ty with
-  | .ref _ | .refMut _ => if info.state == .reserved then throwCheck (.variableReservedByDefer r) span
-  | _ => pure ()
+  if info.heldByDefer then throwCheck (.variableReservedByDefer r) span
 
 /-- D1 (decision Q1, R-0496): ONE argument mode for a reference binding. Passing a reference
     binding (`r`, whatever made it: a parameter, a borrow-block binder, an arm binder) where a
@@ -617,7 +615,7 @@ partial def typeParamsAsVars (ps : List String) : Ty → Ty
 def deferScopeEntry : CheckM (List Nat × List Nat) := do
   let env ← getEnv
   return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
-          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none)
+          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer || vi.heldByDefer then some vi.uid else none)
 
 /-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
     trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
@@ -626,6 +624,8 @@ def deferScopeExit (entry : List Nat × List Nat) : CheckM Unit := do
   setEnv { env with vars := env.vars.map fun (n, vi) =>
     let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
     let vi := if vi.pinnedByDefer && !entry.2.contains vi.uid then { vi with pinnedByDefer := false } else vi
+    -- D1: the deferred call that held a reference's loan has run; the reference is usable again.
+    let vi := if vi.heldByDefer && !entry.2.contains vi.uid then { vi with heldByDefer := false } else vi
     (n, vi) }
 
 set_option backward.do.legacy true in
@@ -1028,7 +1028,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => throwCheckMsg s!"append() first argument must be &mut String, got '{tyToString bufTy}'"
         if rest.isEmpty then throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
         for arg in rest do
-          let argTy ← checkExpr arg
+          -- D1: a reference binding argument is read through, never consumed; an owned String is
+          -- moved as before.
+          let isRefIdent ← match stripParens arg with
+            | .ident _ n => do
+              match ← lookupVarInfo n with
+              | some info => pure (match info.ty with | .ref _ | .refMut _ => true | _ => false)
+              | none => pure false
+            | _ => pure false
+          let argTy ← if isRefIdent then checkExpr arg none .callArg else checkExpr arg
           match argTy with
           | .string | .ref .string | .refMut .string => pure ()
           | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
@@ -2779,7 +2787,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           -- may come before (`defer inc(r); inc(r);` is refused).
           | some info@{ ty := .refMut _, .. } =>
             let vars' := env.vars.map fun (n, vi) =>
-              if vi.uid == info.uid then (n, { vi with state := .reserved }) else (n, vi)
+              if vi.uid == info.uid then (n, { vi with heldByDefer := true }) else (n, vi)
             setEnv { env with vars := vars' }
           | some info =>
             if info.state == .consumed then
@@ -2905,7 +2913,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => env.loopDepth
     for (name, info) in (← getEnv).vars do
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
-      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
+      -- a reference owns nothing, so a loop exit leaves no obligation behind (D1)
+      let isRef := match info.ty with | .ref _ | .refMut _ => true | _ => false
+      if !info.isCopy && !isRef && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.breakSkipsUnconsumedLinear name) (some stmt.getSpan)
   | .continue_ _ lbl =>
     let env ← getEnv
@@ -2924,7 +2934,8 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       | none => env.loopDepth
     for (name, info) in env.vars do
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
-      if !info.isCopy && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
+      let isRef := match info.ty with | .ref _ | .refMut _ => true | _ => false
+      if !info.isCopy && !isRef && st != .consumed && st != .reserved && info.loopDepth >= targetDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
   -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
   -- (erased in Elab); the obligation (assert) / assumption taint (assume) is

@@ -67,6 +67,10 @@ structure VarInfo where
   -- block that registered it (a deferred consumer registered EARLIER runs later, so it is
   -- the only way left). Lifted when that block ends (`checkStmts`).
   pinnedByDefer : Bool := false
+  /-- D1: a `&mut` reference binding whose loan a pending deferred call holds (`defer inc(r);`): no
+      use of it may come before that call runs. Released, not consumed, when the registering block
+      ends (a reference owns nothing). -/
+  heldByDefer : Bool := false
   -- Bug 147: a `ghost let` binding. It exists only in proof-only code, so an erased statement
   -- may consume it (no runtime obligation is discharged).
   isGhost : Bool := false
