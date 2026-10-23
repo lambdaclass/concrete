@@ -1145,8 +1145,11 @@ add "implementation-facts-match-callable" "Concrete/Proof/ImplementationIdentity
 # The refusals check is left intact by this mutation, so the probe that kills it is the one whose
 # refusal list is EMPTY and whose rows are a strict subset of `expected` — i.e. it can only be caught
 # by the stored-denominator comparison, not by any other condition.
+# The anchor's `·` is spelled as its UTF-8 bytes (\xc2\xb7): bash expands $'\u00b7' only under a
+# UTF-8 locale, and under POSIX (a non-login ssh session on Arch) the anchor matched nothing and the
+# family read as INERT on that host alone (2026-10-23).
 add "manifest-rows-match-expected" "Concrete/Proof/DependencyEdge.lean" "check_dependency_edges.sh" yes \
-  $'  else if r.impls.map (\u00b7.callable) != r.expected then none' \
+  $'  else if r.impls.map (\xc2\xb7.callable) != r.expected then none' \
   $'  else if false then none'
 
 # R-0004 slice 6, the laundering itself. The producer records a NAMED refusal for an entry it cannot

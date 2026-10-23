@@ -186,6 +186,17 @@ else
   PATH="$ht_empty" host_tool_missing "bash ./scripts/tests/check_example_outputs.sh" >/dev/null \
     && no "CONTROL: a command needing no host tool was classified missing" \
     || ok "CONTROL: the plain command needs no host tool"
+  # elan is asked the way check_external_checker.sh asks: an executable $ELAN_HOME/bin/lake, on PATH
+  # or not. The gate host keeps elan off its ssh PATH, and a PATH probe skipped a gate it could run.
+  ec_cmd="bash scripts/tests/check_external_checker.sh"
+  mkdir -p "$ht_stub/elan/bin"; printf '#!/bin/sh\nexit 0\n' > "$ht_stub/elan/bin/lake"; chmod +x "$ht_stub/elan/bin/lake"
+  got="$(PATH="$ht_empty" ELAN_HOME="$ht_empty" host_tool_missing "$ec_cmd")"; rc=$?
+  { [ "$rc" = 0 ] && [ "$got" = "elan" ]; } \
+    && ok "CONTROL: without \$ELAN_HOME/bin/lake the external-checker gate is classified host-skipped (elan)" \
+    || no "CONTROL: without \$ELAN_HOME/bin/lake the external-checker gate was not classified missing (rc=$rc, got '$got')"
+  PATH="$ht_empty" ELAN_HOME="$ht_stub/elan" host_tool_missing "$ec_cmd" >/dev/null \
+    && no "CONTROL: an elan lake at \$ELAN_HOME (not on PATH) still skipped the external-checker gate" \
+    || ok "CONTROL: an elan lake at \$ELAN_HOME runs the external-checker gate, PATH notwithstanding"
   rm -rf "$ht_empty" "$ht_stub"
   # The table must match the workflow: every row names something CI actually runs (a dead row is a
   # stale exemption), and the valgrind spelling CI uses is covered.

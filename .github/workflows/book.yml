@@ -44,6 +44,7 @@ jobs:
         # publishing a site without the spec.
         run: |
           python3 scripts/spec/spec.py site --out site/content/spec
+          python3 scripts/gen/site_reference.py --out site/content/reference
           zola --root site build
 
       - name: Setup Pages
