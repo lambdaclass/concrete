@@ -1,0 +1,12 @@
+// Bug 184: `--interp` read ALL of standard input before `main` ran, so a program that never
+// reads stdin, fed by a pipe that stays open (`sleep 30 | concrete p.con --interp`), waited
+// for the writer to close it; the binary returns at once. This program never reads stdin.
+fn main() -> Int {
+    let mut s: Int = 0;
+    let mut i: Int = 0;
+    while i < 7 {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}

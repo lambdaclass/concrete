@@ -281,6 +281,37 @@ structure Block where
 -- The evaluation monad
 -- ============================================================
 
+/-- Standard input as the program reads it, pulled only when the program performs a read.
+
+    Bug 184: the driver used to read ALL of standard input before `main` ran
+    (`readBinToEnd`), so a program that never reads stdin, fed by a pipe that stays open
+    (`sleep 30 | concrete p.con --interp`), waited for the writer to close it; the binary
+    returns at once. The input is now a source the `read` builtin pulls from, `n` bytes at a
+    time, at the moment of the read: nothing is read before then, and what is read is what the
+    program asked for, as `read(2)` would.
+
+    `bytes`: input given up front (tests, report harnesses), consumed from `pos`.
+    `lazy pull`: the host's descriptor. `pull n` (`n > 0`) reads at most `n` more bytes:
+    `ok (b, next)` with `b` empty at end of input, or `error msg` when the host read failed.
+    Each source value is pulled at most once: the run's state threads it linearly, replacing
+    it with `next` after every read (nothing in `IM` restores an earlier state), so a lazy
+    source never re-reads. The host source and why its hidden effect is sound to call from
+    here: `hostStdinPull` in `Main.lean`. -/
+inductive StdinSource where
+  | bytes (data : ByteArray) (pos : Nat)
+  | lazy (pull : Nat → Except String (ByteArray × StdinSource))
+
+instance : Inhabited StdinSource := ⟨.bytes .empty 0⟩
+
+/-- Read at most `n` bytes (`n > 0`) of `src`: the bytes (empty at end of input) and the
+    source to continue from. -/
+def StdinSource.take (src : StdinSource) (n : Nat) : Except String (ByteArray × StdinSource) :=
+  match src with
+  | .bytes data pos =>
+    let k := min n (data.size - pos)
+    .ok (data.extract pos (pos + k), .bytes data (pos + k))
+  | .lazy pull => pull n
+
 /-- Why evaluation stopped early.
 
     `fail`: the program trapped, or it reached something the interpreter does not model; the
@@ -318,14 +349,13 @@ structure IState where
   stdio : ByteArray := .empty
   /-- stdout is a terminal, so the C library line-buffers it: each newline flushes. -/
   lineBuffered : Bool := false
-  /-- Standard input is a terminal: reading it is not modelled (it is not read up front). -/
+  /-- Standard input is a terminal: reading it is not modelled (a read is refused). -/
   stdinTty : Bool := false
   /-- The heap: every block ever allocated, by index (freed blocks stay, marked dead, so a use
       after free is detected rather than reaching a recycled block). -/
   heap : Array Block := #[]
-  /-- Standard input not yet consumed (`read(0, ..)`). -/
-  stdin : ByteArray := .empty
-  stdinPos : Nat := 0
+  /-- Standard input not yet consumed (`read(0, ..)`), pulled only when the program reads. -/
+  stdin : StdinSource := default
   /-- Files this run wrote (closed or flushed), by path; they shadow the host's. -/
   files : List (String × ByteArray) := []
   /-- The blocks standing for `getenv` results and `argv` strings, by key: the C library hands
@@ -1686,13 +1716,14 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     let nI := (← int n "the length") % 2 ^ 64
     if nI > (if System.Platform.isOSX then 2 ^ 31 - 1 else 2 ^ 63 - 1) then return (env, .int (-1) .int)
     let n := nI.toNat
-    let st ← get
-    let avail := st.stdin.size - st.stdinPos
-    let k := min n avail
-    let bytes := st.stdin.extract st.stdinPos (st.stdinPos + k)
-    set { st with stdinPos := st.stdinPos + k }
-    let env ← ptrWriteBytes cx env buf bytes name
-    return (env, .int k .int)
+    -- `read(0, buf, 0)` reads nothing: the source is not pulled.
+    if n == 0 then return (env, .int 0 .int)
+    match (← get).stdin.take n with
+    | .error msg => fail s!"interp: reading standard input failed: {msg}"
+    | .ok (bytes, next) =>
+      modify fun st => { st with stdin := next }
+      let env ← ptrWriteBytes cx env buf bytes name
+      return (env, .int bytes.size .int)
   | "getenv", [n] => do
     let keyB ← ptrCString cx env n name
     match String.fromUTF8? keyB with
@@ -3313,7 +3344,7 @@ structure RunResult where
   outcome : Outcome
 
 /-- Run one computation from an empty environment, with `stdin` as standard input. -/
-def runIM {α : Type} (m : IM α) (stdin : ByteArray := .empty) (lineBuffered : Bool := false)
+def runIM {α : Type} (m : IM α) (stdin : StdinSource := default) (lineBuffered : Bool := false)
     (stdinTty : Bool := false) : Except IErr α × IState :=
   (m.run).run { stdin, lineBuffered, stdinTty }
 
@@ -3327,7 +3358,7 @@ def evalClosed (cx : Ctx) (e : CExpr) : Except String IVal :=
 
 /-- Interpret a program from its validated Core modules: run `main` with `args` (after
     `argv[0]`) and `stdin`. -/
-def interpret (modules : List CModule) (args : List String := []) (stdin : ByteArray := .empty)
+def interpret (modules : List CModule) (args : List String := []) (stdin : StdinSource := default)
     (argv0 : String := "a.out") (stdoutIsTty : Bool := false) (stdinIsTty : Bool := false) : RunResult :=
   let cx := { mkCtx modules with args, argv0 }
   match cx.defs.find? (fun (f, _) => f.name == "main") with
