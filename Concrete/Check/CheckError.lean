@@ -274,6 +274,10 @@ inductive CheckError where
   | unknownFunctionRef (name : String)
   | builtinWrongArgCount (fnName : String) (expected : Nat)
   | builtinWrongTypeArgCount (fnName : String) (desc : String)
+  /-- Bug 221 (TYPE-9): an explicit type-argument list at a call whose length is not the callee's
+      type-parameter count. Extra arguments were dropped and a short list left parameters
+      unbound. -/
+  | callTypeArgCount (callee : String) (expected : Nat) (got : Nat)
   | builtinWrongFirstArg (fnName : String) (expectedDesc : String) (actualTy : String)
   -- Bug 203: an `append()` / print-family argument of a type the builtin does not format.
   | builtinArgUnsupported (fnName : String) (actualTy : String)
@@ -508,6 +512,8 @@ def CheckError.message : CheckError → String
     else if expected == 1 then s!"{fnName}() takes exactly 1 argument"
     else s!"{fnName}() takes exactly {expected} arguments"
   | .builtinWrongTypeArgCount fnName desc => s!"{fnName} requires exactly {desc}"
+  | .callTypeArgCount callee expected got =>
+    s!"{callee} takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} were given"
   | .builtinWrongFirstArg fnName expectedDesc actualTy => s!"{fnName}() requires {expectedDesc}, got {actualTy}"
   | .builtinBadKeyType fnName ty => s!"{fnName}() key type must be Int or String, got {ty}"
   | .destroyRequiresNamed ty => s!"destroy() requires a named type, got {ty}"
@@ -702,6 +708,7 @@ def CheckError.code : CheckError → String
   | .unknownFunctionRef _ => "E0267"
   | .builtinWrongArgCount _ _ => "E0268"
   | .builtinWrongTypeArgCount _ _ => "E0269"
+  | .callTypeArgCount _ _ _ => "E0322"
   | .builtinWrongFirstArg _ _ _ => "E0270"
   | .builtinArgUnsupported _ _ => "E0421"
   | .binderTableMissing _ _ => "E0312"

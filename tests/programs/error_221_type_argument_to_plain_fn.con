@@ -1,0 +1,6 @@
+// Bug 221: a type-argument list on a function with no type parameters was ignored. Expected: E0322.
+fn g(x: Int) -> Int { return x; }
+
+fn main() -> Int {
+    return g::<Int>(1);
+}

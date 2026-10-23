@@ -1,0 +1,6 @@
+// Bug 221: a type-argument list shorter than the type parameters left `B` unbound. Expected: E0322.
+fn first<A: Copy, B: Copy>(x: A, y: B) -> A { return x; }
+
+fn main() -> Int {
+    return first::<Int>(1, 2);
+}

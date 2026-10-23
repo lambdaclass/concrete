@@ -144,6 +144,7 @@ E0318	rule	enum destructuring let in a for header (bug 206)
 E0319	rule	#[test] function with parameters, type parameters or a result other than i32 (bug 206)
 E0320	rule	contract clause or spec function body of the wrong sort (bug 206)
 E0321	rule	contract or spec function body calls a non-spec or capability-requiring function (bug 206)
+E0322	rule	an explicit type-argument list at a call does not match the callee's type parameters (bug 221)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable
 E0402	internal	undeclared function

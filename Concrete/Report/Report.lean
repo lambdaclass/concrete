@@ -6413,6 +6413,7 @@ def diagnosticCodesReport : String :=
     entry "E0319" "check" "error" "#[test] function with parameters, type parameters or a result other than i32 (bug 206)",
     entry "E0320" "check" "error" "contract clause or spec function body of the wrong sort (bug 206)",
     entry "E0321" "check" "error" "contract or spec function body calls a non-spec or capability-requiring function (bug 206)",
+    entry "E0322" "check" "error" "an explicit type-argument list at a call does not match the callee's type parameters (bug 221)",
     -- Elab (E0400–E0419)
     entry "E0400" "elab" "error" "Self outside impl block",
     entry "E0401" "elab" "error" "undeclared variable",

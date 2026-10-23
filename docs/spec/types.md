@@ -376,7 +376,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check), E0313 (check), E0317 (check)
+- Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check), E0313 (check), E0317 (check), E0322 (check)
 - Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none

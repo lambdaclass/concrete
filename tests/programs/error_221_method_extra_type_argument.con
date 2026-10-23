@@ -1,0 +1,12 @@
+// Bug 221: a method call with more type arguments than the method's type parameters (both backends
+// returned 5). Expected: E0322.
+struct Copy S { v: Int }
+
+impl S {
+    fn m<T>(&self, x: T) -> T { return x; }
+}
+
+fn main() -> Int {
+    let s: S = S { v: 1 };
+    return s.m::<Int, u8>(5);
+}

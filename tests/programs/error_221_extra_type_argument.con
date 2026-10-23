@@ -1,0 +1,7 @@
+// Bug 221: a call names more type arguments than the function has type parameters; the extra one
+// was silently dropped (both backends returned 1). Expected: E0322.
+fn g<T>(x: T) -> T { return x; }
+
+fn main() -> Int {
+    return g::<Int, Int>(1);
+}

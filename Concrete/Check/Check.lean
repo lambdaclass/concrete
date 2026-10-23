@@ -1324,6 +1324,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     | _ =>
     match ← lookupFn fnName with
     | some sig =>
+      -- Bug 221: an explicit type-argument list names every type parameter (none are dropped,
+      -- none are left unbound).
+      if !typeArgs.isEmpty && typeArgs.length != sig.typeParams.length then
+        throwCheck (.callTypeArgCount s!"function '{fnName}'" sig.typeParams.length typeArgs.length) (some e.getSpan)
       -- Infer type arguments if not explicitly provided
       let inferredTypeArgs ← do
         if !typeArgs.isEmpty || sig.typeParams.isEmpty then
@@ -2264,6 +2268,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => []
       let implTypeParams := sig.typeParams.take objTypeArgs.length
       let methodTypeParams := sig.typeParams.drop objTypeArgs.length
+      if !typeArgs.isEmpty && typeArgs.length != methodTypeParams.length then
+        throwCheck (.callTypeArgCount s!"method '{methodName}'" methodTypeParams.length typeArgs.length) (some e.getSpan)
       let implMapping := implTypeParams.zip objTypeArgs
       -- Infer the method's own type params + cap params from argument types
       -- (mirrors free-fn inference), so capability-polymorphic methods work
