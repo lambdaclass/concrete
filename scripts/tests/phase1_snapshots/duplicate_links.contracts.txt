@@ -1,1 +1,3 @@
 examples/contract_negatives/duplicate_links/src/main.con: error[parse]: (E0001) duplicate #[spec(...)] on one function
+  rule: SYN-1@1
+  spec: docs/spec/syntax.md#SYN-1
