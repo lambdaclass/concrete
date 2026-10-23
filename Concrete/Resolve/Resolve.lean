@@ -230,9 +230,10 @@ private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   match lookupSymKind ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
-  -- Any other declaration of the name (an alias, a trait) is not a builtin.
-  | some _ => none
-  | none => match name with
+  -- A type declared under the name (an alias, a trait) is not the builtin. A value binding is
+  -- in another namespace and does not hide it.
+  | some (.typeAlias _) | some (.trait _) => none
+  | _ => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" | "Result" => some 0
     | _ => none
 
@@ -242,10 +243,10 @@ private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
-  -- Any other declaration of the name (an alias, a trait) is not a builtin: `type Vec = ..`
-  -- takes no arguments (bug 200 review).
-  | some _ => none
-  | none => match name with
+  -- A type declared under the name (an alias, a trait) is not the builtin: `type Vec = ..` takes
+  -- no arguments (bug 200 review). A value binding is in another namespace and does not hide it.
+  | some (.typeAlias _) | some (.trait _) => none
+  | _ => match name with
     | "Heap" | "HeapArray" | "Vec" | "Option" => some 1
     | "Result" => some 2
     | _ => none
