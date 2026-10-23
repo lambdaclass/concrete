@@ -29,7 +29,7 @@ in a row reach Lower.
 
 ## Cause
 
-`Lower.lowerMatch` lowers an unguarded binding or `_` arm with an unconditional branch into the arm
+The `.match_` case of `Lower.lowerExpr` lowers an unguarded binding or `_` arm with an unconditional branch into the arm
 and then opens the next arm's check block, which therefore has no predecessor. The following arm
 was lowered into that block, so its uses of values defined earlier (the scrutinee's aggregate, a
 loaded local) sat in a block the entry does not dominate: SSAVerify treats a predecessor-less
@@ -37,7 +37,7 @@ block as its own root.
 
 ## Fix
 
-Both of `lowerMatch`'s arm loops (enum and non-enum scrutinee) stop at the first unguarded binding
+Both arm loops of that case (enum and non-enum scrutinee) stop at the first unguarded binding
 or `_` arm: the arms after it can never be selected and are not lowered. The interpreter already
 selected the first matching arm. Pinned by `regress_213_arm_after_binding_arm.con` (42 natively
 and under `--interp`, three shapes: a value match, a statement match whose arms return, an enum
