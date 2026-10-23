@@ -126,6 +126,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 208: a fn-typed local spelled like an imported function was renamed to it when used as a
   # value (run_tests.sh also compares --interp with the binary).
   [208]="regress_208_fn_local_named_like_import.con"
+  # Bug 210: arithmetic on a struct, enum or newtype operand (E0501).
+  [210]="error_210_struct_arith.con error_210_enum_arith.con error_210_newtype_arith.con error_210_struct_minus_literal.con"
   # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
   # Also check_local_identity.sh leg R.
   [202]="regress_202_project_let_else/src/main.con"

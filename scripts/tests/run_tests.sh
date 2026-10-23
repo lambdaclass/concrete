@@ -8355,6 +8355,11 @@ run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
 # Bug 197: a variant pattern without a field list dropped a non-Copy payload.
 run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
 run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
+# Bug 210: arithmetic on a struct, enum or newtype operand compiled (CoreCheck read every named
+# type as a type parameter); TYPE-6 refuses it with E0501.
+for b210 in struct_arith enum_arith newtype_arith struct_minus_literal; do
+    run_err "$TESTDIR/error_210_${b210}.con" "(E0501)"
+done
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
 run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
 run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
