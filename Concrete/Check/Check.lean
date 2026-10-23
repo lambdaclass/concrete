@@ -2997,7 +2997,7 @@ partial def mergeVarStates
     let thenConsumed := thenState == .consumed
     let elseConsumed := elseState == .consumed
     if !thenDiverges && !elseDiverges && thenConsumed != elseConsumed then
-      throwCheck (.linearConsumedOneBranchNotOther name) span
+      throwCheck (.linearConsumedOneBranchNotOther name.name) span
     -- Apply the most progressed state (consumed > used > unconsumed) of the
     -- branches that actually FALL THROUGH to the merge point.
     let mergedState :=
@@ -3029,7 +3029,7 @@ partial def checkNoBranchConsumption
       | some info => info.state
       | none => infoBefore.state
     if thenState == .consumed then
-      throwCheck (.linearConsumedNoBranch name ctx) span
+      throwCheck (.linearConsumedNoBranch name.name ctx) span
 
 end
 
