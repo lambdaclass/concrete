@@ -8363,6 +8363,10 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 220: `0x` / `0b` / `0o` with no digit lexed as 0; now a lexical error.
+run_err "$TESTDIR/error_220_empty_hex_literal.con" "(E0001)"
+run_err "$TESTDIR/error_220_empty_binary_literal.con" "(E0001)"
+run_ok "$TESTDIR/regress_220_radix_literals.con" 203
 # Bug 218: two declarations of one name in a module (MOD-3) were accepted (the first silently won,
 # or llvm-as failed); refused with E0299. A type and a value may share a spelling.
 run_err "$TESTDIR/error_218_duplicate_function.con" "(E0299)"
