@@ -2876,16 +2876,18 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
           -- D1: a reference binding passed to a deferred call is reborrowed, not consumed, and the
           -- deferred call holds that loan until it runs: the binding is reserved, so no use of it
           -- may come before (`defer inc(r); inc(r);` is refused).
-          | some info@{ ty := .refMut _, .. } =>
-            let vars' := env.vars.map fun (n, vi) =>
-              if vi.uid == info.uid then (n, { vi with heldByDefer := true }) else (n, vi)
-            setEnv { env with vars := vars' }
           | some info =>
-            if info.state == .consumed then
+            match info.ty with
+            | .refMut _ =>
               let vars' := env.vars.map fun (n, vi) =>
-                if vi.uid == info.uid then (n, { vi with state := .reserved })
-                else (n, vi)
+                if vi.uid == info.uid then (n, { vi with heldByDefer := true }) else (n, vi)
               setEnv { env with vars := vars' }
+            | _ =>
+              if info.state == .consumed then
+                let vars' := env.vars.map fun (n, vi) =>
+                  if vi.uid == info.uid then (n, { vi with state := .reserved })
+                  else (n, vi)
+                setEnv { env with vars := vars' }
           | none => pure ()
         | _ =>
           match pinned? with
