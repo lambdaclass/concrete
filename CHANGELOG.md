@@ -28,6 +28,25 @@ out of the block silently skipped the rest of the function. The language specifi
 chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`. A `let ... else`
 over a field-less variant is not recognized yet (it binds nothing; the record says why).
 
+### A Variant Pattern Without Fields Ignores Only Copy Payloads (bug 197, 2026-10-23)
+
+A `match` arm written as a bare variant name (`E::A =>`) over an owned value whose variant carries
+a non-Copy field is now refused with E0288, as `E::A { _ }` already was. Before this fix the payload
+silently vanished: the discard rule was attached to `_` binders and CoreCheck's field count skips
+an empty list. Through a reference, and for Copy fields, a bare variant name stays legal. It is
+pinned by `error_197_variant_pattern_drops_payload.con` and `regress_197_variant_pattern_ignores_copy.con`.
+
+### A Match Arm Fits Its Scrutinee (bug 196, 2026-10-23)
+
+A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
+enum, a literal or range over an enum, a variant over a non-enum, a literal of another type, and a
+range over a scrutinee that is not an integer or `char`, and a literal or range over a type
+parameter. Before this fix the checker left these to
+CoreCheck, which runs after Elab: a foreign variant made the checker panic or, when it shared a name
+with one of the scrutinee's variants, was silently taken as that variant; and a range over an enum
+failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
+chapter (PAT-3) found it. It is pinned by six `error_196_*.con` fixtures.
+
 ### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
 
 Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.

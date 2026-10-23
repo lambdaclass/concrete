@@ -1,0 +1,12 @@
+// Bug 196: a literal pattern over a type-parameter scrutinee (a generic body is checked once).
+// Expected: E0309.
+fn f<T: Copy>(x: T) -> Int {
+    match x {
+        0 => { return 1; },
+        _ => { return 0; }
+    }
+}
+
+fn main() -> Int {
+    return f::<Int>(0);
+}

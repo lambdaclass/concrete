@@ -147,6 +147,10 @@ declare -A BUG_TEST_MAP=(
   [194]="error_194_missing_return_plain.con error_194_missing_return_if.con error_194_missing_return_method.con regress_194_unreachable_end_forms.con"
   # Bug 195: a let ... else whose else block falls through (E0308).
   [195]="error_195_let_else_falls_through_unit.con error_195_let_else_falls_through.con"
+  # Bug 196: a match arm whose pattern does not fit the scrutinee (E0309).
+  [196]="error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con"
+  # Bug 197: a variant pattern without a field list dropped a non-Copy payload (E0288).
+  [197]="error_197_variant_pattern_drops_payload.con regress_197_variant_pattern_ignores_copy.con"
   # Bug 180: project reports ran Mono on the invoked file's modules under a replaced certificate.
   # Also check_pipeline_artifacts.sh legs B, U and D.
   [180]="regress_180_report_scope/src/main.con"

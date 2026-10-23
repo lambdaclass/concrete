@@ -1636,13 +1636,27 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant patBinds guard body => do
-            -- Bind variant fields in scope (substitute generic type args)
-            let ev := (ed.variants.find? fun v => v.name == armVariant).get!
+          | .mk _ armEnum armVariant patBinds guard body => do
+            -- Bug 196 (PAT-3): the arm names a variant of THIS enum. CoreCheck's wrong-enum check
+            -- (E0531) runs after Elab, which met the foreign variant first; `get!` here panicked.
+            if armEnum != "" && armEnum != enumName then
+              throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
+            let some ev := ed.variants.find? fun v => v.name == armVariant
+              | throwCheck (.unknownVariant armVariant enumName) (some e.getSpan)
             -- Labeled binders (`value: inner`, exit 2i G4) resolve to the variant's field order.
             let bindings ← match PatBind.resolveEnum (ev.fields.map (·.name)) patBinds with
               | .ok bs => pure bs
               | .error why => throwCheck (.patternFieldMismatch s!"{enumName}::{armVariant}" why) (some e.getSpan)
+            -- Bug 197 (OWN-5): `E::A` written without a field list ignores every field of `A`, which
+            -- (like `_`) may ignore only Copy fields. A non-Copy payload of an owned scrutinee was
+            -- dropped. CoreCheck's field count (E0533) skips an empty list, so nothing caught it.
+            let isRefScr0 := match scrTy with | .ref _ | .refMut _ => true | _ => false
+            if patBinds.isEmpty && !isRefScr0 then
+              let typeMapping0 := ed.typeParams.zip enumTypeArgs
+              for sf in ev.fields do
+                let fieldTy0 := substTy typeMapping0 sf.ty
+                if !(← isCopyType fieldTy0) then
+                  throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy0)) (some e.getSpan)
             -- a destructuring `let` (desugared to this arm) binds `let` binders (REF-6@1 (a))
             let fromLet := patBinds.any (·.letBound)
             let typeMapping := ed.typeParams.zip enumTypeArgs
@@ -1688,9 +1702,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 throwCheck (.wildcardDiscardsNonCopy (tyToString fieldTy)) (some e.getSpan)
             checkGuard guard
             pure body
-          | .litArm _ _val guard body => do
-            checkGuard guard
-            pure body
+          | .litArm _ _ _ _ => do
+            -- Bug 196 (PAT-3): a literal pattern over an enum scrutinee.
+            throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           | .varArm _ binding guard body => do
             -- A catch-all binder over `&E` would bind the whole non-Copy `E` by value out of the
             -- reference (duplication, no provenance): refused (normalized place rule).
@@ -1708,13 +1722,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               throwCheck (.wildcardDiscardsNonCopy (tyToString innerTyR)) (some e.getSpan)
             checkGuard guard
             pure body
-          | .rangeArm _ lo hi _ guard body => do
-            -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
-            -- unhinted endpoint defaults to `Int` and is range-checked there).
-            let _ ← checkExpr lo (some innerTyR)
-            let _ ← checkExpr hi (some innerTyR)
-            checkGuard guard
-            pure body
+          | .rangeArm _ _ _ _ _ _ => do
+            -- Bug 196 (PAT-3): a range pattern over an enum scrutinee reached the SSA verifier
+            -- (an enum compared with an integer) while `--interp` ran it.
+            throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
           if exemptExitBranch body then
@@ -1814,7 +1825,15 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
-        | .litArm _ _val guard body => do
+        | .litArm _ val guard body => do
+          -- Bug 196 (PAT-3): a literal pattern has the scrutinee's type.
+          let litTy ← checkExpr val (some innerTyR)
+          -- (an unknown scrutinee type comes from an earlier error; do not cascade). A type
+          -- parameter is opaque: a generic body is checked once, and no bound says its
+          -- instantiations have literals, so a literal pattern over one is refused too.
+          let isTyVar := match innerTyR with | .typeVar _ => true | _ => false
+          if innerTyR != .placeholder && (isTyVar || litTy != innerTyR) then
+            throwCheck (.patternDoesNotFit "a literal pattern" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
         | .varArm _ binding guard body => do
@@ -1852,13 +1871,20 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         | .rangeArm _ lo hi _ guard body => do
+          -- Bug 196 (PAT-3): a range pattern needs an integer (or `char`) scrutinee.
+          if innerTyR != .placeholder && !(isInteger innerTyR || innerTyR == .char) then
+            throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Endpoints take the scrutinee's type, as in Elab (bug 088: an
           -- unhinted endpoint defaults to `Int` and is range-checked there).
           let _ ← checkExpr lo (some innerTyR)
           let _ ← checkExpr hi (some innerTyR)
           checkGuard guard
           pure body
-        | .mk _ _ _ _ guard body => do
+        | .mk _ armEnum armVariant _ guard body => do
+          -- Bug 196 (PAT-3): a variant pattern over a scrutinee that is not an enum (an unknown
+          -- scrutinee type comes from an earlier error and is not reported again).
+          if innerTyR != .placeholder then
+            throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).

@@ -8288,6 +8288,16 @@ run_ok "$TESTDIR/regress_194_unreachable_end_forms.con" 42
 # Bug 195: the else block of a let ... else fell through (the rest of the function was skipped).
 run_err "$TESTDIR/error_195_let_else_falls_through_unit.con" "(E0308)"
 run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
+# Bug 197: a variant pattern without a field list dropped a non-Copy payload.
+run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
+run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
+# Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
+run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
+run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"
+run_err "$TESTDIR/error_196_variant_over_int.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_type.con" "(E0309)"
+run_err "$TESTDIR/error_196_literal_over_type_param.con" "(E0309)"
+run_err "$TESTDIR/error_196_same_name_other_enum.con" "(E0309)"
 # Bug 192 (silent): an integer condition of an if / while / for statement compiled (C truthiness in
 # the binary, a run-time error in --interp); TYPE-5 refuses it with E0223.
 run_err "$TESTDIR/error_192_int_if_condition.con" "(E0223)"

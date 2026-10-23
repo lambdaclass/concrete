@@ -1,0 +1,11 @@
+// Bug 196: a variant of another enum over an enum scrutinee (the checker panicked). Expected: E0309.
+enum Copy E { A, B }
+enum Copy F { X, Y }
+
+fn main() -> Int {
+    let e: E = E::A;
+    match e {
+        F::X => { return 1; },
+        _ => { return 0; }
+    }
+}
