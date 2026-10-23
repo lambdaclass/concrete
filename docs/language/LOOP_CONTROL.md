@@ -1,4 +1,7 @@
-# Loop Control
+# Loop Control (design record)
+
+**Superseded as the normative text (2026-10-23).** The rule is STMT-6 of
+[docs/spec/statements.md](../spec/statements.md).
 
 Status: IMPLEMENTED — ROADMAP old Phase 6 #4. Gated by
 `scripts/tests/check_loop_control.sh` (fixtures in `tests/programs/loop_control/`).

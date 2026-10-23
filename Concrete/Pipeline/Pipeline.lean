@@ -147,7 +147,7 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
   | .error ds => .error ds
 
 /-- Lower to SSA, verify, and clean up. -/
--- spec: PASS-9, spec: ARITH-3 (docs/spec/pipeline.md, docs/spec/arithmetic.md: every required runtime check is in the CFG)
+-- spec: PASS-9, spec: ARITH-3, spec: STMT-4 (docs/spec/pipeline.md, docs/spec/arithmetic.md: every required runtime check is in the CFG)
 def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
   let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m mono.coreModules)
   match ssaVerifyProgram ssaModules with

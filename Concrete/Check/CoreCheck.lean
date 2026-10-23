@@ -914,7 +914,7 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
     | none => pure ()
     inCoreBlock (for s in body do ccCheckStmt s)
 
--- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-8, spec: STMT-6 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   match stmt with
   | .letDecl name _mutable ty value =>

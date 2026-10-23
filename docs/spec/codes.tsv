@@ -30,7 +30,7 @@ E0212	rule	linear consumed in one branch not other
 E0213	rule	linear consumed in then-branch (no else)
 E0214	rule	borrow ref shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
 E0215	rule	borrow region shadows existing name (no longer emitted: subsumed by E0301, exit 2i)
-E0216	unmigrated:statements	unknown loop label
+E0216	rule	unknown loop label
 E0217	rule	assignment to immutable variable
 E0218	rule	assignment to frozen variable
 E0219	rule	reassignment of linear variable
@@ -87,12 +87,12 @@ E0274	rule	free requires Heap type
 E0275	retired	former ? operator required Result type
 E0276	retired	former ? operator required Ok/Err variants
 E0277	retired	former ? operator required an Ok value field
-E0278	unmigrated:statements	return/break/continue inside a call argument, literal element or operator operand (bug 142)
+E0278	rule	return/break/continue inside a call argument, literal element or operator operand (bug 142)
 E0279	rule	deferred call argument is not a local, a borrow of a local, or a constant (bug 143)
-E0280	unmigrated:statements	break outside loop
-E0281	unmigrated:statements	continue outside loop
+E0280	rule	break outside loop
+E0281	rule	continue outside loop
 E0282	rule	defer body must be a function call
-E0283	unmigrated:statements	reserved identifier
+E0283	unmigrated:syntax	reserved identifier
 E0284	unmigrated:modules	unknown module
 E0285	unmigrated:modules	symbol not public in module
 E0286	rule	fallible result discarded (must use)
@@ -116,7 +116,7 @@ E0303	rule	a reference binding is assigned (references are never re-pointed; exi
 E0304	rule	a labeled pattern field list does not match the variant or struct (unknown, repeated or missing field; exit 2i G4)
 E0305	rule	a contract expression binds a name (contracts are binder-free propositions; exit 2i)
 E0306	rule	a struct or enum literal gives a field more than once (bug 193)
-E0310	unmigrated:statements	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
+E0310	rule	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
 E0400	internal	Self outside impl block
 E0401	internal	undeclared variable
 E0402	internal	undeclared function
@@ -158,8 +158,8 @@ E0533	rule	variant field count mismatch
 E0534	rule	non-enum match without default arm
 E0540	rule	while condition not Bool
 E0541	rule	if condition not Bool
-E0542	unmigrated:statements	break outside loop
-E0543	unmigrated:statements	continue outside loop
+E0542	rule	break outside loop
+E0543	rule	continue outside loop
 E0550	rule	empty array literal
 E0551	rule	array index not integer
 E0552	rule	indexing non-array type

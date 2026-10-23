@@ -54,7 +54,7 @@ areas exist (§8).
 | `types.md` | `TYPE-` | migrated: TYPE-1 to TYPE-14 (callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds) |
 | `memory.md` | `MEM-` | stub: MEM-1 and MEM-2 (two-layer memory, quasi-concrete addresses) |
 | `trusted.md` | `TRUST-` | stub: TRUST-1 to TRUST-3 (pointer operations, no undefined behaviour in safe code, references from raw pointers) |
-| `statements.md` | `STMT-` | stub: STMT-1 to STMT-3 (outcomes, abort only, single-threaded) |
+| `statements.md` | `STMT-` | migrated: STMT-1 to STMT-9 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | stub: CON-1 (partial correctness) |
 
@@ -371,10 +371,11 @@ Each step lands with the gate green. The steps run in this order:
 4. **arithmetic.md** (`ARITH-`, migrated 2026-10-23): integer and float semantics, overflow, checked, wrapping and
    saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL. T-ARITH and
    T-CAST enter as pending.
-5. **statements.md** (`STMT-`): statements and expressions, value blocks, loops and loop
+5. **statements.md** (`STMT-`, migrated 2026-10-23): statements and expressions, value blocks, loops and loop
    control, evaluation order, `main` and the exit status. It replaces
-   STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL, EXECUTION_MODEL and the language half of
-   MAIN_EXIT_MODEL. T-ORDER enters as pending.
+   STATEMENT_EXPRESSION_MODEL, LOOP_CONTROL and the language half of MAIN_EXIT_MODEL;
+   EXECUTION_MODEL stays the runtime and platform description. T-ORDER's violations are the
+   pending cases of STMT-4.
 5a. **memory.md** (`MEM-`, grown from the stub): allocations, `Heap<T>`, what safe code may
    observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
    MEMORY_SEMANTICS.

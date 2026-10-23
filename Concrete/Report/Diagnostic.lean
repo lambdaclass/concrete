@@ -271,6 +271,10 @@ def codeRuleTag : String → Option String
   | "E0262" | "E0264" | "E0265" | "E0266" => some "TYPE-9@1"
   | "E0268" | "E0269" | "E0270" | "E0271" | "E0274" => some "TYPE-10@1"
   | "E0296" | "E0297" | "E0298" => some "TYPE-11@1"
+  -- docs/spec/statements.md
+  | "E0278" => some "STMT-5@1"
+  | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@1"
+  | "E0310" => some "STMT-7@1"
   -- docs/spec/arithmetic.md
   | "E0227" => some "ARITH-2@1"
   | "E0553" => some "ARITH-5@1"
