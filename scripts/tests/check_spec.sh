@@ -185,8 +185,8 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("pending=R-0500 now=accept:42\n
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
   && control "N6a: a ledger code with no classification (orphan)" S6 "E0216" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
-fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0217\t[^\t\n]*", "E0217\trule", s, flags=re.M)' \
-  && control "N6b: a rule-class code that no entry names" S6 "E0217: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0220\t[^\t\n]*", "E0220\trule", s, flags=re.M)' \
+  && control "N6b: a rule-class code that no entry names" S6 "E0220: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 
 # S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"
