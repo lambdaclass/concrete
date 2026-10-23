@@ -2201,8 +2201,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     storeToPlace (.fieldAccess obj field value.ty) fVal
 
   | .derefAssign target value =>
-    let tVal ← lowerExpr target
+    -- Evaluation-order rule 7 (STATEMENT_EXPRESSION_MODEL): the right-hand side first, then
+    -- the destination's subexpressions, as every other assignment form here and the
+    -- interpreter do. Lowering `target` first ran its effects first (bug 183).
     let vVal ← lowerExpr value
+    let tVal ← lowerExpr target
     emit (.store vVal tVal)
 
   | .arrayIndexAssign arr index value =>

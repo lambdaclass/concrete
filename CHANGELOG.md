@@ -10,6 +10,13 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### A Dereference Assignment Evaluates Its Right-Hand Side First (bug 183, 2026-10-23)
+
+`*(&mut a[i()]) = j()` now runs `j()` before `i()` in the binary, as evaluation-order rule 7 and
+the interpreter say. `Lower` lowered the destination of a dereference assignment first, unlike the
+indexed and field assignment forms. Pinned by `regress_183_deref_assign_rhs_first.con` (three
+shapes, binary equal to `--interp`) and the reproducer.
+
 ### A Monomorphized Instance Keeps Its Definition's Authority (bug 185, 2026-10-23)
 
 Raw pointers compare only in trusted code or a function declaring `with(Unsafe)` (bug 140). Through

@@ -1608,7 +1608,7 @@ run_err "$TESTDIR/error_g17_match_borrow_heap_freed_in_arm.con"     "(E0204)"
 # reference paths in the interpreter; 105's reproducer runs in both).
 # Bug 175: a match whose arms all diverge (break/continue/return) left its merge open (E0708
 # inside a loop, E0703 under an if); five shapes, binary exit 42.
-for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge; do
+for r102 in regress_102_pointer_local_address regress_102_ptr_eq_through_raw_base regress_105_ref_valued_branch_generic regress_175_match_arms_all_diverge regress_183_deref_assign_rhs_first; do
     r102_src="$TESTDIR/$r102.con"
     r102_i=$($COMPILER "$r102_src" --interp 2>&1 | awk "NR<=1" || true)
     r102_n=""
@@ -8142,6 +8142,10 @@ run_ok "$TESTDIR/regress_133_deref_field_borrow.con" 42
 # Bug 175 (fails closed): a match whose arms all diverge left its merge block open, so a
 # loop around it failed SSA verification (E0708). --interp agreement: the r102 loop.
 run_ok "$TESTDIR/regress_175_match_arms_all_diverge.con" 42
+# Bug 183 (silent): a dereference assignment lowered its destination first (rule 7: the
+# right-hand side first). --interp agreement: the r102 loop.
+run_ok "$TESTDIR/regress_183_deref_assign_rhs_first.con" 129
+run_ok "tests/regressions/bug183_deref_assign_destination_first/repro.con" 21
 # Bug 150: a float self-comparison is not folded (x != x is true for NaN).
 run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
 # Bug 152: string_trim("") is the empty string (it was one byte, read past the source).
