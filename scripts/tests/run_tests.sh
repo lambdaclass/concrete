@@ -8363,6 +8363,11 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 215: an unknown type written in a cast or a type-argument list (backend panic / silent
+# acceptance before); Resolve refuses it with E0108.
+run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"
+run_err "$TESTDIR/error_215_turbofish_unknown_type.con" "(E0108)"
+run_err "$TESTDIR/error_215_cast_field_spelling.con" "(E0108)"
 # Bug 213: arms after an unguarded binding / `_` arm were lowered into a predecessor-less block
 # (E0703 natively); binary and --interp must agree on 42.
 run_ok "$TESTDIR/regress_213_arm_after_binding_arm.con" 42
