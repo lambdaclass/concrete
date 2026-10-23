@@ -1786,7 +1786,11 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
     if !implCapParams.isEmpty then
       throwParse "capability parameters on a trait impl are not supported; declare them on an inherent impl (`impl<cap C> Writer<C>`)"
     advance
-    let typeName ← expectIdent
+    -- The head is spelled canonically (`i64` → `Int`, `bool` → `Bool`): every later pass keys an
+    -- impl's methods by this spelling, and Elab names the method definitions by the canonical
+    -- type, so `impl Tr for bool` reached Check and the interpreter as `bool_m` beside a
+    -- definition `Bool_m` (bug 186).
+    let typeName := tyName (tyFromName (← expectIdent))
     -- Conditional trait impl target may be generic: `impl<T: Destroy> Destroy
     -- for Vec<T>` — consume the target's type args (the impl's typeParams
     -- already name them).
@@ -1828,8 +1832,8 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       throwParse "a trait in `impl Trait for Type` takes no type arguments"
     return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp, targetArgs }
   | _ =>
-    -- Inherent impl: impl TypeName { ... }
-    let typeName := firstName
+    -- Inherent impl: impl TypeName { ... }. Head spelled canonically, as for a trait impl.
+    let typeName := tyName (tyFromName firstName)
     expect .lbrace
     let mut methods : List FnDef := []
     let mut tk ← peek
