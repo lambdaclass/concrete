@@ -68,6 +68,12 @@
             gnumake
             gnugrep
             coreutils
+            # perl for `shasum`: the checker identity hashes the Lean images with it
+            # (Concrete/Proof/Replay.lean, sha256Files), and without it every receipt is withheld
+            # as "Checker: UNIDENTIFIED". The shell used to inherit it from the host, and Arch
+            # keeps it in /usr/bin/core_perl, which only login shells put on PATH, so 17
+            # receipt/replay/checker-identity gates failed on the Arch gate host (2026-10-23).
+            perl
             # pyyaml so scripts/tests/check_workflow_yaml.sh can actually run: it
             # needs pyyaml or ruby and FAILS (rather than skips) without either, so
             # the gate was red in this shell for everyone.
