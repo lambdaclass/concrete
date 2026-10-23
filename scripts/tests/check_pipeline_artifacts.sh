@@ -125,48 +125,25 @@ echo "=== S: no source opens the seals ==="
 HITS="$(grep -rnE 'open private .*(ValidatedCore|MonomorphizedProgram|SSAProgram|ElaboratedProgram|CoreSubset)' \
   --include='*.lean' Concrete Main.lean tests 2>/dev/null || true)"
 [ -z "$HITS" ] && ok "S: no 'open private' of a pipeline artifact constructor" || no "S: $HITS"
-# Comments are stripped (line comments, and nested doc/block comments) and string and char literal
-# contents are masked, by a small scanner, so a `sorry` with a trailing comment on its line is
-# still seen, a `"/-"` literal does not hide the code after it, and `"sorry"` is not a hit.
-CODE="$(python3 - "$P" <<'PY2'
-import re, sys
-s = open(sys.argv[1]).read()
-CHAR = re.compile(r"'(\\.|[^\\'\n])'")
-out, i, depth = [], 0, 0
-mask = lambda t: ''.join('\n' if c == '\n' else ' ' for c in t)
-while i < len(s):
-    if s.startswith('/-', i): depth += 1; i += 2; continue
-    if depth and s.startswith('-/', i): depth -= 1; i += 2; continue
-    if depth: out.append(mask(s[i])); i += 1; continue
-    if s.startswith('--', i):
-        j = s.find('\n', i); i = len(s) if j < 0 else j; continue
-    if s[i] == '"':
-        # Literal text is masked; an interpolated string's `{…}` holes (`s!"…{e}…"`) are code
-        # and are kept, so `s!"{(sorry : Nat)}"` is still seen.
-        interp = i > 0 and s[i-1] == '!'
-        out.append('"'); j = i + 1; hole = 0
-        while j < len(s) and (hole or s[j] != '"'):
-            c = s[j]
-            if not hole and c == '\\': j += 2; continue
-            if interp and c == '{': hole += 1; out.append(' ' if hole == 1 else c); j += 1; continue
-            if interp and hole and c == '}':
-                hole -= 1; out.append(' ' if hole == 0 else c); j += 1; continue
-            out.append(c if hole else ('\n' if c == '\n' else ''))
-            j += 1
-        out.append('"'); i = j + 1; continue
-    m = CHAR.match(s, i)
-    if m and (i == 0 or not (s[i-1].isalnum() or s[i-1] in "_'")):
-        out.append("' '"); i = m.end(); continue
-    out.append(s[i]); i += 1
-print(''.join(out))
-PY2
-)"
-if [ -z "$CODE" ]; then
-  no "S: could not read $P's code"
-elif grep -qE '\bsorry\b|^\s*axiom\b|\badmit\b' <<<"$CODE"; then
-  no "S: $P holds a sorry/admit/axiom: $(grep -nE '\bsorry\b|^\s*axiom\b|\badmit\b' <<<"$CODE" | tr '\n' ' ')"
+# `sorry`/`admit` is judged by Lean, not by a text scan: elaborating Pipeline.lean reports
+# "declaration uses 'sorry'" for any declaration that reaches one, wherever it is spelled (inside an
+# interpolation hole, after a comment, through a macro). A text scan of comments and literals got
+# both directions wrong (Codex rounds 2-4).
+PL_OUT="$(lake env lean "$P" 2>&1)"; PL_RC=$?
+if [ "$PL_RC" -ne 0 ]; then
+  no "S: $P did not elaborate on its own (rc=$PL_RC): $(grep -m2 'error' <<<"$PL_OUT" | cut -c1-300)"
+elif grep -q "declaration uses 'sorry'" <<<"$PL_OUT"; then
+  no "S: $P uses sorry: $(grep "declaration uses 'sorry'" <<<"$PL_OUT" | tr '\n' ' ' | cut -c1-300)"
 else
-  ok "S: $P holds no sorry and no axiom"
+  ok "S: Lean reports no sorry in $P"
+fi
+# A new `axiom` declaration would let a certificate be proved from nothing. Declarations start at the
+# beginning of a line, after optional modifiers; the doc comments in this file never start a line
+# with the word.
+if grep -nE '^(private |protected |noncomputable |unsafe )*axiom[[:space:]]' "$P" >/dev/null; then
+  no "S: $P declares an axiom: $(grep -nE '^(private |protected |noncomputable |unsafe )*axiom[[:space:]]' "$P" | tr '\n' ' ')"
+else
+  ok "S: $P declares no axiom"
 fi
 # The record-update forgery this slice removed must not come back under another spelling.
 HITS="$(grep -rnE '\{ *[A-Za-z_]+ with (coreModules|ssaModules) *:=' --include='*.lean' Concrete Main.lean 2>/dev/null | grep -v "^$P:" || true)"

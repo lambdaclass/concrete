@@ -30,6 +30,12 @@ private def collectFnNames (modules : List CModule) : List String :=
   modules.foldl (fun acc m =>
     acc ++ m.functions.map (·.name) ++ collectSubFnNames m) []
 
+/-- The first module named `n`, and the list without it. -/
+def takeNamesake (n : String) : List CModule → Option (CModule × List CModule)
+  | [] => none
+  | m :: ms => if m.name == n then some (m, ms)
+    else (takeNamesake n ms).map fun (t, rest) => (t, m :: rest)
+
 /-- The part of a monomorphized program that corresponds to a listing scope: for each scope module,
     its namesake in `mono` at the same level, keeping that module's functions (originals and the
     specializations Mono placed there) only when the scope module itself lists functions, and
@@ -37,12 +43,6 @@ private def collectFnNames (modules : List CModule) : List String :=
     parent) therefore contributes only its matched children. With the whole program as scope this
     is `mono` itself, up to module order (bug 180: the mono report runs Mono on the validated whole
     program and restricts the listing, instead of running Mono on the scope). -/
-/-- The first module named `n`, and the list without it. -/
-def takeNamesake (n : String) : List CModule → Option (CModule × List CModule)
-  | [] => none
-  | m :: ms => if m.name == n then some (m, ms)
-    else (takeNamesake n ms).map fun (t, rest) => (t, m :: rest)
-
 partial def restrictMonoToScope (scope mono : List CModule) : List CModule :=
   -- Match by OCCURRENCE, in order: a scope module takes the first not-yet-taken namesake, so two
   -- sibling modules of one name map to their own counterparts (Mono keeps module order).
