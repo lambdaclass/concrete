@@ -14,7 +14,7 @@ REF-2/through-alias	pending	-
 REF-3@1	live	bb897b5d21b30e01104264caf329eeed
 REF-3/struct-field	live	-
 REF-3/fn-pointer-field	live	-
-REF-4@1	live	9b4f1122f8f126261401439b2305859d
+REF-4@1	live	f6d7d30ec8e401837a45c79b7886dbc4
 REF-4/generic-return	live	-
 REF-4/top-level-ref-arg	live	-
 REF-5@1	live	d45a54cd6a3d4602ee4d56ef17d752fc

@@ -208,7 +208,11 @@ class Spec:
                 body, j = [], i + 1
                 while j < len(lines) and not lines[j].startswith("```"):
                     body.append(lines[j]); j += 1
-                if info.split()[0] == "con" and info != "con pseudocode":
+                if j >= len(lines):
+                    self.loose.append((ch, i + 1, f"fence `{info}` is never closed"))
+                if info == "con pseudocode" and cur is not None:
+                    self.loose.append((ch, i + 1, f"`con pseudocode` inside entry {cur.id} (allowed only outside entries)"))
+                elif info.split()[0] == "con" and info != "con pseudocode":
                     if cur is None:
                         self.loose.append((ch, i + 1, f"example `{info}` outside an entry"))
                     else:
@@ -261,7 +265,11 @@ class Spec:
 # ---------------------------------------------------------------------------------------------
 def normalize(text):
     t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)          # links -> their text
-    t = re.sub(r"<[^>]+>", " ", t)                                 # inline HTML
+    # inline HTML tags, only outside code spans (`Box<&Int>` is code, not a tag)
+    parts = t.split("`")
+    for k in range(0, len(parts), 2):
+        parts[k] = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>", " ", parts[k])
+    t = "`".join(parts)
     t = t.replace("`", "").replace("**", "").replace("__", "")
     t = re.sub(r"(?<![A-Za-z0-9])\*([^*\s][^*]*)\*", r"\1", t)     # *emphasis*
     t = re.sub(r"^\s*([-*+>]|\d+\.)\s+", " ", t, flags=re.M)       # list and quote markers
@@ -564,20 +572,26 @@ def run(cmd, timeout=120, cwd=None):
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, cwd=cwd)
         return r.returncode, r.stdout + r.stderr, r.stdout
     except subprocess.TimeoutExpired:
-        return 124, "timeout", ""
+        return None, "timeout", ""
 
 def outcome_native(cc, src, workdir):
     binp = src[:-4] + ".bin"
     rc, out, _ = run([cc, src, "-o", binp])
+    if rc is None or rc < 0:
+        return ("fail", f"compiler {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc != 0:
         return first_error(out) or ("fail", out)
     rc, out, _ = run([binp])
+    if rc is None:
+        return ("fail", "timeout")
     if rc < 0:
         return ("fail", f"signal {-rc}")
-    return ("accept", rc) if rc != 124 else ("fail", "timeout")
+    return ("accept", rc)
 
 def outcome_interp(cc, src):
     rc, out, stdout = run([cc, src, "--interp"])
+    if rc is None or rc < 0:
+        return ("fail", f"interpreter {'timeout' if rc is None else 'signal ' + str(-rc)}")
     if rc == 0:
         last = [l for l in stdout.split("\n") if l.strip()]
         v = last[-1].strip() if last else ""
@@ -743,9 +757,12 @@ def check_sites(spec, src_dir, lean_out):
     live = {e.id for e in spec.entries}
     bad, names = 0, []
     for e in spec.entries:
-        if e.status()[0] == "pending": continue
         for n in e.names("Semantics"):
             names.append((n, "any", e.id))
+            cands = decls.get(n.split(".")[-1], [])
+            if not any(re.search(r"spec: " + re.escape(e.id) + r"\b", t) for _, _, _, t in cands):
+                fail("S7", f"{e.id}: Semantics declaration {n} has no `spec: {e.id}` comment" + ("" if cands else " (declaration not found)")); bad += 1
+        if e.status()[0] == "pending": continue
         en = e.names("Enforced by")
         if not en:
             fail("S7", f"{e.id}: no Enforced by: names"); bad += 1

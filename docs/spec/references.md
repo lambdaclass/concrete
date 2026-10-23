@@ -245,7 +245,7 @@ fn main() -> Int {
 <a id="REF-4"></a>
 ### REF-4. Generic instantiation preserves REF-1 and REF-3
 
-**REF-4@1.** A type parameter is not instantiated at a type that contains a reference when it occurs in the generic's return type or behind a reference, pointer or function type in one of its parameter types, and no instantiation makes a field, binding, parameter or constant hold a reference in an aggregate.
+**REF-4@1.** A type parameter is not instantiated at a type that contains a reference when it occurs in the generic's return type or behind a reference or pointer in one of its parameter types (inside a function type's parameters too), and no instantiation makes a field, binding, parameter or constant hold a reference in an aggregate.
 
 - Kind: refusal
 - Uses: REF-D1, REF-D2
@@ -259,7 +259,8 @@ fn main() -> Int {
 **Rationale.** A generic body is checked once, at its opaque type parameter. Instantiating that
 parameter at a reference type must not create a returned or stored reference that the check of
 the body never saw. A top-level `x: T` parameter and a by-value callback `fn(T) -> U` are not
-nested positions, so `ignore::<&Int>(&v, k)` is allowed.
+nested positions, so `ignore::<&Int>(&v, k)` and `apply::<&Int>(&v, read)` with
+`f: fn(T) -> Int` are allowed, while `f: fn(&mut T)` puts `T` behind a reference and is refused.
 
 ```con reject name=generic-return code=E0236 stage=check pair=top-level-ref-arg
 fn wrap<R>(r: R) -> R {
