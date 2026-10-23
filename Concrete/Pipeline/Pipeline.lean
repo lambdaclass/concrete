@@ -221,7 +221,14 @@ def monomorphize (vc : ValidatedCore) : Except Diagnostics MonomorphizedProgram 
   match hm : monoProgram vc.coreModules (preTypeCheck := verifyNoStoredRefs) with
   | .ok modules =>
     match hv : verifyPostMono modules with
-    | [] => .ok ⟨vc, modules, hm, hv⟩
+    | [] =>
+      -- R-0492 step 4: Lower keys locals by binding identity, which is sound only while every
+      -- reference keeps its binder's key through Mono's specialization. ElabVerify checks it.
+      match elabVerifyModules modules with
+      | [] => .ok ⟨vc, modules, hm, hv⟩
+      | findings => .error (findings.map fun m =>
+          { severity := .error, message := s!"internal: ElabVerify after monomorphization: {m} (R-0492)",
+            pass := "mono", span := none, hint := none, code := "E0422" })
     | d :: ds => .error (d :: ds)
   | .error ds => .error ds
 
