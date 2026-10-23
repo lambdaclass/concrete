@@ -629,5 +629,82 @@ printf '%s\n' 'D="$(mktemp -d /tmp/ok.XXXXXX)"' 'echo x > /tmp/ok_name.$$' '# ec
 rm -rf "$TTMP"
 
 echo ""
+echo "=== no test program or std test uses a fixed shared /tmp path (bug 191) ==="
+# The same rule one level down: the PROGRAMS the suite runs. tests/programs/file_write_read.con
+# wrote /tmp/concrete_test_io.txt and std's fs/io tests wrote /tmp/concrete_fs_test_*.txt. On a
+# shared host the first user to run the suite owns those files; for every other user fopen returned
+# NULL and the program segfaulted (test_ssa rc 139, `concrete test` rc 1). Test code builds its
+# paths from CONCRETE_TEST_TMPDIR, which the runner sets to a directory private to the run
+# (`concrete test` / `--test` in Main.lean runTestBinary, run_tests.sh, test_ssa.sh); std tests
+# use std.test.scratch_path. A `/tmp/...` string literal in any .con source is refused unless it is
+# listed here with the reason nothing touches the filesystem through it. Comments are not code: a
+# path in a `//` or `///` line (a doc example) is not scanned.
+declare -A CON_TMP_OK=(
+  ["std/src/path.con:/tmp/x"]="PathBuf display test: the path is parsed and printed, never opened"
+)
+# Prints "path:line:/tmp/name" for each `/tmp/...` inside a string literal on a non-comment line of
+# a .con source (paths relative to the repo root).
+con_fixed_tmp_scan() {
+  perl -ne '
+    # Left to right: a char literal, a string literal, or `//` (the rest of the line is a comment).
+    # A `//` inside a string is consumed by the string branch, so it does not end the scan.
+    while (m{(\x27(?:[^\x27\\]|\\.)*\x27)|"((?:[^"\\]|\\.)*)"|(//)}g) {
+      last if defined $3;
+      next unless defined $2;
+      my $lit = $2;
+      while ($lit =~ m{(?<![\w.-])(/tmp/[A-Za-z0-9_./-]*)}g) { print "$ARGV:$.:$1\n"; }
+    }
+    close ARGV if eof;' "$@"
+}
+mapfile -t CONSCAN < <(cd "$ROOT_DIR" && git ls-files '*.con' 2>/dev/null | LC_ALL=C sort)
+CONHITS=""
+if [ "${#CONSCAN[@]}" -gt 0 ]; then
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    f="${h%%:*}"; t="${h##*:}"
+    [ -n "${CON_TMP_OK[$f:$t]:-}" ] && continue
+    CONHITS="$CONHITS $h"
+  done < <(cd "$ROOT_DIR" && con_fixed_tmp_scan "${CONSCAN[@]}")
+fi
+# Every allowlist entry must still name a literal that exists, so a stale exemption cannot linger.
+for k in "${!CON_TMP_OK[@]}"; do
+  f="${k%%:*}"; t="${k#*:}"
+  grep -qF "\"$t\"" "$ROOT_DIR/$f" 2>/dev/null || no "stale CON_TMP_OK entry $k: the literal is gone (remove the entry)"
+done
+if [ "${#CONSCAN[@]}" -lt 500 ]; then
+  no "only ${#CONSCAN[@]} .con sources enumerated for the fixed-/tmp scan — the check would be vacuous"
+elif [ -z "$CONHITS" ]; then
+  ok "no fixed shared /tmp path in ${#CONSCAN[@]} .con sources (test programs, std tests, examples)"
+else
+  no "fixed shared /tmp path(s) in .con sources — build the path from CONCRETE_TEST_TMPDIR (std: std.test.scratch_path):$CONHITS"
+fi
+CTMP="$(mktemp -d)"
+cat > "$CTMP/fixed.con" <<'CONEOF'
+fn main() with(Std) -> Int {
+    let path: String = "/tmp/shared_name.txt";
+    drop_string(path);
+    return 0;
+}
+CONEOF
+cat > "$CTMP/clean.con" <<'CONEOF'
+// A doc example may name /tmp/example.txt in a comment.
+/// let p: String = "/tmp/doc_example.txt";
+fn main() with(Std) -> Int {
+    let a: String = "data.txt"; // not "/tmp/trailing_comment.txt"
+    let b: String = "/nonexistent/tmp/file.txt";
+    let c: String = "x/tmp/y";
+    drop_string(a); drop_string(b); drop_string(c);
+    return 0;
+}
+CONEOF
+[ "$(con_fixed_tmp_scan "$CTMP/fixed.con" | wc -l | tr -d ' ')" = "1" ] \
+  && ok "CONTROL: the .con fixed-/tmp scan flags a /tmp string literal" \
+  || no "CONTROL: the .con fixed-/tmp scan is inert: $(con_fixed_tmp_scan "$CTMP/fixed.con" | tr '\n' ' ')"
+[ -z "$(con_fixed_tmp_scan "$CTMP/clean.con")" ] \
+  && ok "CONTROL: the .con fixed-/tmp scan ignores comments, doc examples and non-/tmp paths" \
+  || no "CONTROL: the .con fixed-/tmp scan flags non-shared text: $(con_fixed_tmp_scan "$CTMP/clean.con" | tr '\n' ' ')"
+rm -rf "$CTMP"
+
+echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

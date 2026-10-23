@@ -196,6 +196,9 @@ mod fs {
         }
     }
 
+    // Scratch files live in the run's private directory, never at a fixed /tmp path (bug 191).
+    import std.test.{scratch_path};
+
     #[test]
     fn test_file_exists() with(File, Alloc) -> i32 {
         let path: String = "/dev/null";
@@ -214,8 +217,11 @@ mod fs {
     }
 
     #[test]
-    fn test_write_read_roundtrip() with(File, Alloc) -> i32 {
-        let path: String = "/tmp/concrete_fs_test_roundtrip.txt";
+    fn test_write_read_roundtrip() with(File, Env, Alloc) -> i32 {
+        let path: String = match scratch_path("fs_test_roundtrip.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut data: Bytes = Bytes::new();
         data.push(72);  // H
         data.push(105); // i
@@ -351,9 +357,12 @@ mod fs {
     }
 
     #[test]
-    fn test_read_file_empty() with(File, Alloc) -> i32 {
+    fn test_read_file_empty() with(File, Env, Alloc) -> i32 {
         // Write an empty file, then read it back — should get 0-length Bytes
-        let path: String = "/tmp/concrete_fs_test_empty.txt";
+        let path: String = match scratch_path("fs_test_empty.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let data: Bytes = Bytes::new();
         let wrote: bool = write_file_ok(&path, &data);
         data.drop();
@@ -371,9 +380,12 @@ mod fs {
     }
 
     #[test]
-    fn test_append_file() with(File, Alloc) -> i32 {
+    fn test_append_file() with(File, Env, Alloc) -> i32 {
         // Write "AB", append "CD", read back — should be "ABCD" (4 bytes)
-        let path: String = "/tmp/concrete_fs_test_append.txt";
+        let path: String = match scratch_path("fs_test_append.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut d1: Bytes = Bytes::new();
         d1.push(65); // A
         d1.push(66); // B
@@ -403,9 +415,12 @@ mod fs {
     }
 
     #[test]
-    fn test_seek_tell() with(File, Alloc) -> i32 {
+    fn test_seek_tell() with(File, Env, Alloc) -> i32 {
         // Write 5 bytes, reopen, seek to offset 3, verify tell returns 3
-        let path: String = "/tmp/concrete_fs_test_seek.txt";
+        let path: String = match scratch_path("fs_test_seek.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut data: Bytes = Bytes::new();
         data.push(1);
         data.push(2);
@@ -444,9 +459,12 @@ mod fs {
     }
 
     #[test]
-    fn test_read_to_string_roundtrip() with(File, Alloc) -> i32 {
+    fn test_read_to_string_roundtrip() with(File, Env, Alloc) -> i32 {
         // Write "Hi" via write_file, read back via read_to_string
-        let path: String = "/tmp/concrete_fs_test_rts.txt";
+        let path: String = match scratch_path("fs_test_rts.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut data: Bytes = Bytes::new();
         data.push(72);  // H
         data.push(105); // i
@@ -479,10 +497,13 @@ mod fs {
     }
 
     #[test]
-    trusted fn test_read_past_eof() with(File, Alloc) -> i32 {
+    trusted fn test_read_past_eof() with(File, Env, Alloc) -> i32 {
         // Write 3 bytes via write_file, read back via read_file to confirm,
         // then open and read_bytes(64) — fread should return < 64
-        let path: String = "/tmp/concrete_fs_test_read_past_eof.txt";
+        let path: String = match scratch_path("fs_test_read_past_eof.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut data: Bytes = Bytes::new();
         data.push(10);
         data.push(20);
@@ -522,10 +543,13 @@ mod fs {
     }
 
     #[test]
-    trusted fn test_seek_past_end() with(File, Alloc) -> i32 {
+    trusted fn test_seek_past_end() with(File, Env, Alloc) -> i32 {
         // Write 5 bytes, seek to offset 100, verify tell returns 100
         // (fseek past end is valid in C — read returns 0 bytes)
-        let path: String = "/tmp/concrete_fs_test_seek_past_end.txt";
+        let path: String = match scratch_path("fs_test_seek_past_end.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let mut data: Bytes = Bytes::new();
         data.push(1);
         data.push(2);
@@ -557,9 +581,12 @@ mod fs {
     }
 
     #[test]
-    fn test_read_to_string_empty() with(File, Alloc) -> i32 {
+    fn test_read_to_string_empty() with(File, Env, Alloc) -> i32 {
         // Write empty file, read as string — should get empty string
-        let path: String = "/tmp/concrete_fs_test_rts_empty.txt";
+        let path: String = match scratch_path("fs_test_rts_empty.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let data: Bytes = Bytes::new();
         let wrote: bool = write_file_ok(&path, &data);
         data.drop();

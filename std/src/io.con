@@ -385,6 +385,9 @@ mod io {
         return buf;
     }
 
+    // Scratch files live in the run's private directory, never at a fixed /tmp path (bug 191).
+    import std.test.{scratch_path};
+
     #[test]
     trusted fn test_read_all_drains() with(Alloc) -> i32 {
         let data: [u8; 5] = [10, 20, 30, 40, 50];
@@ -523,8 +526,11 @@ mod io {
 
     // The success path of the same API: a close that works reports Ok.
     #[test]
-    fn test_textfile_close_ok() with(File, Alloc) -> i32 {
-        let path: String = "/tmp/concrete_io_test_close_ok.txt";
+    fn test_textfile_close_ok() with(File, Env, Alloc) -> i32 {
+        let path: String = match scratch_path("io_test_close_ok.txt") {
+            Option::Some { value } => { value },
+            Option::None => { return 1; },
+        };
         let result: Result<TextFile, IoError> = TextFile::create(&path);
         path.drop();
         match result {

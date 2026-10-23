@@ -346,6 +346,13 @@ BOUNDED_PARENT="$SUITE_TMPDIR"
 source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 JOBDIR="$TMPDIR/jobs"
 mkdir -p "$JOBDIR"
+# TEST SCRATCH IS PRIVATE TO THE RUN (bug 191). A program that touches the filesystem builds its
+# paths from CONCRETE_TEST_TMPDIR, never a fixed /tmp name: a fixed name is owned by whichever user
+# ran first on a shared host (fopen then fails for everyone else) and is shared by concurrent runs.
+# This default covers every program the suite runs; run_ok / run_ok_O2 workers narrow it to a
+# directory per job, so the same program run twice in one pass cannot collide either.
+export CONCRETE_TEST_TMPDIR="$SUITE_TMPDIR/scratch"
+mkdir -p "$CONCRETE_TEST_TMPDIR"
 
 # --- Compiler output cache ---
 # Avoids recompiling the same file with the same flags.
@@ -680,6 +687,9 @@ run_ok_worker() {
     local name
     name=$(path_key "${file%.con}")
     local out="$TMPDIR/$name"
+    # Per-job scratch directory (bug 191); see CONCRETE_TEST_TMPDIR above.
+    local -x CONCRETE_TEST_TMPDIR="$out.scratch"
+    mkdir -p "$CONCRETE_TEST_TMPDIR"
 
     # MAIN_EXIT_MODEL stage 2.1: a numeric expectation in 0-255 is compared as
     # the PROCESS EXIT CODE (compiled without the legacy echo knob; stdout must
@@ -795,6 +805,9 @@ run_ok_O2_worker() {
     name=$(path_key "${file%.con}")
     local llpath="$TMPDIR/${name}.ll"
     local out="$TMPDIR/${name}_O2"
+    # Per-job scratch directory (bug 191); see CONCRETE_TEST_TMPDIR above.
+    local -x CONCRETE_TEST_TMPDIR="$out.scratch"
+    mkdir -p "$CONCRETE_TEST_TMPDIR"
 
     local rc_mode=0
     case "$expected" in
