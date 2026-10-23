@@ -1,0 +1,7 @@
+// Bug 205 control: the same instantiations with no by-value cycle compile and run (42).
+struct Copy W<T> { v: T }
+struct Copy Pair { a: W<Int>, b: W<W<Int>> }
+fn main() -> Int {
+    let p: Pair = Pair { a: W::<Int> { v: 40 }, b: W::<W<Int>> { v: W::<Int> { v: 2 } } };
+    return p.a.v + p.b.v.v;
+}

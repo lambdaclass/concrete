@@ -1096,8 +1096,7 @@ private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagn
     `heapArray`) breaks the cycle, as do primitives. `visited` guards against
     non-target cycles so the walk terminates. A struct whose fields reach itself
     this way has infinite size and would otherwise escape to LLVM as a recursive
-    struct type. Generic instantiations are not traversed here (their fields are
-    settled during monomorphization). -/
+    struct type, through generic instantiations with their arguments substituted (bug 205). -/
 private partial def tyReachesByValue (structs : List CStructDef) (enums : List CEnumDef)
     (target : String) (visited : List String) : Ty → Bool
   | .named n =>
@@ -1113,6 +1112,25 @@ private partial def tyReachesByValue (structs : List CStructDef) (enums : List C
               tyReachesByValue structs enums target v fty
           | none => false)
   | .array elem _ => tyReachesByValue structs enums target visited elem
+  -- Bug 205: an instantiation is laid out inline too, so its fields are followed with the type
+  -- arguments substituted (`W<Node>` inside `Node` holds a `Node` by value). The visited key is
+  -- the instantiated type, so `B<Int>` and `B<Node>` are distinct; the depth bound stops an
+  -- instantiation that grows without reaching `target` (that type is refused as its own target).
+  | ty@(.generic n args _) =>
+    if n == target then true
+    else
+      let key := tyToString ty
+      if visited.contains key || visited.length > 64 then false
+      else
+        let v := key :: visited
+        (match structs.find? fun sd => sd.name == n with
+         | some sd => sd.fields.any fun (_, fty) =>
+             tyReachesByValue structs enums target v (Layout.substTyVars (sd.typeParams.zip args) fty)
+         | none => false)
+        || (match enums.find? fun ed => ed.name == n with
+            | some ed => ed.variants.any fun (_, vfs) => vfs.any fun (_, fty) =>
+                tyReachesByValue structs enums target v (Layout.substTyVars (ed.typeParams.zip args) fty)
+            | none => false)
   | _ => false
 
 -- spec: OWN-13, spec: OWN-14, spec: FFI-4 (docs/spec/ownership.md; this declaration enforces the rule)
