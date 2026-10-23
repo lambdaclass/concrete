@@ -8278,6 +8278,17 @@ fi
 # code was refused (E0217/E0233/E0220) and a u8 was typed over an i32 holding 300.
 # The regress fixture now reuses the body's names in LATER siblings (legal under
 # SCOPE-1); the H9 legs below are the leak the rule does not reach.
+# Bug 208: a fn-typed local spelled like an imported function is not renamed to it (both
+# backends returned 141); binary and --interp must agree on 42.
+run_ok "$TESTDIR/regress_208_fn_local_named_like_import.con" 42
+r208_interp=$($COMPILER "$TESTDIR/regress_208_fn_local_named_like_import.con" --interp 2>&1 || true)
+if [ "$r208_interp" = "42" ]; then
+    echo "  ok  bug 208: an identified fn-typed local is not renamed to an import — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 208: interp gave '$r208_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 run_ok "$TESTDIR/regress_176_loop_shadow_restores_outer.con" 42
 r176_interp=$($COMPILER "$TESTDIR/regress_176_loop_shadow_restores_outer.con" --interp 2>&1 || true)
 if [ "$r176_interp" = "42" ]; then

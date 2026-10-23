@@ -1,4 +1,4 @@
-# Structural Classes of Bugs 039 – 107
+, 208 (a fn-typed local renamed to a same-spelled imported function) |# Structural Classes of Bugs 039 – 107
 
 Status: reference (2026-10-20). Bugs 108 – 122 (the examples-health pass and bug 121's layout probe) 123 – 124 (the exit 2i
 specification, 2026-10-21) and 127 – 131 (the semantics probes, 2026-10-21) and 132 (batch 2's review of 123, 2026-10-21) and 126 (2026-10-21) and 135 – 137 (135 recorded by 109's fix, 136 – 137 found fixing 127; 2026-10-21) are placed in the summary table (102, 105, 115 and 126 were fixed on 2026-10-21; their classes stand, and 105 moved from class 8 to classes 12 and 6 once its cause was reduced) from their records' structural sections; the per-class prose below predates them. Maintained under R-0491: every new bug record states its
