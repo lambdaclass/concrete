@@ -5,8 +5,8 @@
 code E0420 (a ghost binding read by runtime code) was also the code of an `append()` argument of
 an unsupported type, so the specification's one-code-one-rule mapping (S6) could not tag it
 **Severity:** a diagnostic-identity defect, not a soundness one. Both programs were refused, but
-the code did not say which rule refused them, so the rule tag and the specification link of an
-E0420 diagnostic could be wrong.
+the `append()` / `print()` refusal carried no code at all from Check, and Elab's copy of it the
+ghost-read code, so neither said which rule refused the program.
 
 ## Reproducer
 
@@ -19,21 +19,25 @@ fn main() with(Alloc) -> Int {
 }
 ```
 
-Expected: a code of its own (TYPE-10, builtin signatures). Observed on `main` `1b2dba60`: E0420,
-the code of `ghost let` read at run time (CON-4).
+Expected: a code of its own (TYPE-10, builtin signatures). Observed on `main` `1b2dba60`: Check
+refuses it with no code (`throwCheckMsg`), and the same refusal in Elab's `append()` desugaring
+spelled E0420, the code of a `ghost let` read at run time (CON-4). `print(1.5)` is the same.
 
 ## Cause
 
-`Concrete/Elab/Elab.lean`: the `append()` desugaring builds its diagnostic inline and spelled
-`code := "E0420"`, the code `ElabError.ghostInRuntime` already used. Codes are chosen by hand at
-each site, and nothing checked that a code is used by one error only.
+`Concrete/Check/Check.lean`, the `print`/`println` and `append` intercepts, built the refusal from
+a bare message (`throwCheckMsg`, which sets no code), and `Concrete/Elab/Elab.lean`'s `append()`
+desugaring built it inline with `code := "E0420"`, the code `ElabError.ghostInRuntime` already
+used. Codes are chosen by hand at each site, and nothing checked that a code names one error.
 
 ## Fix
 
-The `append()` refusal is E0421, with a diagnostic-codes ledger entry, a `codes.tsv` row and a
-place in TYPE-10's `Codes`. E0420 stays the ghost read. Fixtures:
-`error_203_append_unsupported_argument.con` (E0421) and `error_203_ghost_read_at_runtime.con`
-(E0420), in `run_tests.sh`.
+Check reports `CheckError.builtinArgUnsupported`, code E0421, for `append`, `print` and `println`;
+Elab's copy (defense in depth behind Check) uses E0421 too. E0421 has a diagnostic-codes ledger
+entry, a `codes.tsv` row and a place in TYPE-10's `Codes`. E0420 stays the ghost read. Fixtures:
+`error_203_append_unsupported_argument.con` and `error_203_print_unsupported_argument.con`
+(E0421) and `error_203_ghost_read_at_runtime.con` (E0420), in `run_tests.sh`. Eighteen other
+Check refusals still use `throwCheckMsg` and carry no code; they are filed separately.
 
 ## Structural cause
 
