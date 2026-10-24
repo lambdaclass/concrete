@@ -21,6 +21,13 @@ Verdicts per input:
 - `model_stuck` — the model produces nothing where the runtime does (fuel, or an unmodeled shape);
 - `ERROR` — NEITHER side produces a value: the input compared nothing, so it is not agreement.
 
+Module constants are bound on both sides: the interpreter evaluates a constant's initializer at its
+use (bug 117), and the model binds each constant one module defines to the value of its extracted
+initializer before the parameters, so a body reading `I64_MAX` is compared rather than stuck. A name
+two modules define stays unbound on both sides (the interpreter refuses it, bug 132). A CALLEE's
+constant is still unbound in the model (`Proof.eval` gives a callee a fresh frame), so a subject that
+reaches a constant only through a call is stuck there, never in false agreement.
+
 A gate requires zero `MISMATCH` rows across the corpus. It is a test, not a proof: it samples
 boundaries, it cannot show agreement everywhere.
 -/
@@ -134,15 +141,36 @@ def modelDiffEntryPoints (pc : ProofCore) : List ModelDiffSubject :=
         , body := normalizePExpr body, claimed := false }
     else none
 
+/-- The model's module constants: each name exactly one module defines, bound to the value
+    `Proof.eval` gives its extracted initializer. An initializer may read another constant, so the
+    binding repeats until a pass binds nothing new; an initializer the model cannot extract or
+    evaluate leaves its name unbound, as does a name two modules define (the interpreter refuses
+    that use, bug 132). -/
+def modelDiffConstEnv (table : Proof.FnTable) (consts : List (String × CExpr)) : Proof.Env :=
+  let unique := consts.filter fun (n, _) => (consts.filter (·.1 == n)).length == 1
+  let pass : List String × Proof.Env → List String × Proof.Env := fun (bound, env) =>
+    unique.foldl (fun (bound, env) (n, init) =>
+      if bound.contains n then (bound, env) else
+      match (cExprToPExpr init).bind (Proof.eval table env 2000 ·) with
+      | some v => (n :: bound, env.bind n v)
+      | none => (bound, env)) (bound, env)
+  let rec go : Nat → List String × Proof.Env → Proof.Env
+    | 0, (_, env) => env
+    | k + 1, st =>
+      let st' := pass st
+      if st'.1.length == st.1.length then st'.2 else go k st'
+  go (unique.length + 1) ([], Proof.Env.empty)
+
 /-- One subject's rows. -/
 def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
+    (consts : List (String × CExpr)) (constEnv : Proof.Env)
     (perturb : Option String) (e : ModelDiffSubject) : List ModelDiffRow :=
     let body := e.body
     let tys := e.fn.params.map (·.2)
     let table := modelDiffTable pc
     (modelDiffInputs tys).map fun args =>
       let toPVal : ModelDiffArg → Proof.PVal := fun | .int v => .int v | .bool b => .bool b
-      let env := (e.params.zip args).foldl (fun en (n, v) => en.bind n (toPVal v)) Proof.Env.empty
+      let env := (e.params.zip args).foldl (fun en (n, v) => en.bind n (toPVal v)) constEnv
       let model : Option String := match Proof.eval table env 2000 body with
         | some (.int n) => some (toString n)
         | some (.bool b) => some (toString b)
@@ -155,7 +183,7 @@ def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
       -- The runtime side runs under a loop budget (bug 106): a sampled boundary input can make
       -- a loop run 2^63 times, which hung the report. Running out is its own outcome,
       -- `exhausted` — compared nothing, never a trap and never agreement.
-      let result := Interp.evalClosed { fns, enums, loopFuel := modelDiffRuntimeBudget } call
+      let result := Interp.evalClosed { fns, enums, consts, loopFuel := modelDiffRuntimeBudget } call
       let exhausted := match result with
         | .error msg => msg.startsWith Interp.loopBudgetExhausted
         | _ => false
@@ -172,8 +200,10 @@ def modelDiffRows (pc : ProofCore) (modules : List CModule) (perturb : Option St
     List ModelDiffRow :=
   let fns := Interp.collectFns modules
   let enums := Interp.collectEnums modules
+  let consts := Interp.collectConsts modules
+  let constEnv := modelDiffConstEnv (modelDiffTable pc) consts
   ((pc.entries.filterMap ModelDiffSubject.ofEntry?) ++ modelDiffEntryPoints pc).flatMap
-    (modelDiffOf pc fns enums perturb)
+    (modelDiffOf pc fns enums consts constEnv perturb)
 
 /-- `--report model-diff`: one line per (function, input), then one `MODEL-DIFF-ELIGIBLE` line per
     compared function (so a gate can require that each has rows), then a summary. -/

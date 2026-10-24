@@ -105,20 +105,21 @@ UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | 
 # legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
 # at all; only the functions named here may be, each for a stated reason, and each must still be all
 # ERROR (so an entry cannot outlive its reason silently).
-ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer error_conventions.main project.main proven_oob.main proven_div_zero.main "
+ALL_ERROR_OK=" cv.divzero_const cn.violation calls.middle calls.outer error_conventions.main project.main proven_oob.main proven_div_zero.main "
 #   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
 #   cn.violation      is ratio(10, 0): the same trap, nullary;
-#   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
-#                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement);
 #   calls.middle, calls.outer (proof_patterns/composition_deep_trust) call the `trusted fn leaf`, which
 #                     deliberately has no model: the model is stuck on every input by design;
+#   (scope.accumulate left this list on 2026-10-24: it reads the module constant LIMIT, which
+#   neither side bound; both bind module constants now (ModelDiff.modelDiffConstEnv), so it is
+#   compared, as are stackvm's add_ok/sub_ok, which read I64_MAX/I64_MIN.)
 #   (std.time.time_test_duration_from_millis left this list on 2026-10-23: its callee's division at
 #   Int is modelled now, so it is compared.)
 # Entry points are compared too (an entry point whose only exclusion from proof is being `main`):
 #   error_conventions.main  matches on the Result its callee returns: the model is stuck there;
 #   project.main      calls functions imported from other files of the project, which the in-process
-#                     interpreter call does not resolve, so the runtime side traps (a harness gap, as
-#                     for scope.accumulate; `--interp` itself returns 18);
+#                     interpreter call does not resolve, so the runtime side traps (a harness gap;
+#                     `--interp` itself returns 18);
 #   proven_oob.main   (known_holes/proven_oob_index) indexes out of bounds on purpose: the runtime
 #                     traps and the model has no value;
 #   proven_div_zero.main  divides by zero on purpose (a known-hole example): both sides trap.
