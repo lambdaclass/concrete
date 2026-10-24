@@ -8455,7 +8455,8 @@ done
 # (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
 # each fixture has the top-level and the nested shape.
 for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_not_hide_builtin \
-            regress_229_child_newtype_known regress_229_option_named_alias_or_struct; do
+            regress_229_child_newtype_known regress_229_option_named_alias_or_struct \
+            regress_229_alias_and_enum_literal_precedence; do
     run_ok "$TESTDIR/$r229.con" 42
     r229_interp=$($COMPILER "$TESTDIR/$r229.con" --interp 2>&1 || true)
     if [ "$r229_interp" = "42" ]; then

@@ -106,12 +106,13 @@ structure Scope where
       module of N mutually-referencing functions (`--emit-core` alone was O(N²)).
       Built at scope-assembly time (bounded), read O(1) per reference. -/
   symbolMap : Std.HashMap String SymKind := ∅
-  /-- name → kind over the TYPE declarations only (struct, enum, trait, alias, newtype), first
-      occurrence wins. Types and values are separate namespaces (MOD-3; bug 218's
+  /-- name → every TYPE declaration of that name (struct, enum, trait, alias, newtype), in scope
+      order. Types and values are separate namespaces (MOD-3; bug 218's
       `regress_218_type_and_value_namespaces`), so a type lookup must not meet a function or
-      constant of the same spelling, which `symbolMap` returns when it was registered first
-      (bug 229). -/
-  typeMap : Std.HashMap String SymKind := ∅
+      constant of the same spelling, which `symbolMap` returns when it was registered first; and
+      Check and Elab consult aliases, structs and enums in separate tables, so which declaration
+      answers depends on the position, not on scope order alone (bug 229). -/
+  typeKinds : Std.HashMap String (Array SymKind) := ∅
 
 /-- A declaration in the type namespace. -/
 def SymKind.isType : SymKind → Bool
@@ -124,8 +125,8 @@ def SymKind.isType : SymKind → Bool
 def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
   { symbols := symbols,
     symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅,
-    typeMap := symbols.foldl (fun m (n, k) =>
-      if !k.isType || m.contains n then m else m.insert n k) ∅ }
+    typeKinds := symbols.foldl (fun m (n, k) =>
+      if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
 
 structure ResolvedModule where
   module : Module
@@ -218,17 +219,40 @@ private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   -- Check global scope (O(1) via symbolMap)
   ctx.globalScope.symbolMap.contains name
 
-/-- The type declaration a name denotes in a type position (bug 229). Only the type namespace is
-    searched (local scopes hold values only). Among enums the builtin `Option` comes first: Check
-    and Elab put it ahead of every user enum and never withhold it (`BuiltinEnums.builtinEnums`),
-    so a user `enum Option` does not answer `Option<T>` or `Option::Some`. Only the enum table is
-    so ordered: a struct, alias or newtype named `Option` answers as itself, as in Check and Elab.
-    `Result` is the user's when one is in scope (`hasUserResultEnum`), as there. -/
-private def lookupTypeKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
-  match ctx.globalScope.typeMap.get? name with
-  | some (.enum _) => if name == optionEnumName then some (.enum builtinOptionEnum)
-                      else ctx.globalScope.typeMap.get? name
-  | k => k
+/-- The builtin enum a name denotes in an enum table, as `BuiltinEnums.builtinEnums` orders it
+    for Check and Elab: `Option` comes before every user enum and is never withheld; `Result` is
+    the builtin unless a user enum of that name is in scope (`hasUserResultEnum`). -/
+private def builtinEnumFor (name : String) (userEnumInScope : Bool) : Option EnumDef :=
+  if name == optionEnumName then some builtinOptionEnum
+  else if name == resultEnumName && !userEnumInScope then some builtinResultEnum
+  else none
+
+/-- The declaration a WRITTEN type name denotes (an annotation, a signature, a type argument), in
+    Check's order (bug 229): an alias is expanded first (`closeAliasMap` runs before any struct or
+    enum lookup), then the struct, enum or newtype; among enums the builtin `Option` comes first.
+    Only the type namespace is searched (local scopes hold values only). -/
+private def lookupWrittenType (ctx : ResolveCtx) (name : String) : Option SymKind :=
+  let ks := ctx.globalScope.typeKinds.getD name #[]
+  match ks.find? (fun k => match k with | .typeAlias _ => true | _ => false) with
+  | some k => some k
+  | none =>
+    let userEnum := ks.any fun k => match k with | .enum _ => true | _ => false
+    let first : Option SymKind := ks[0]?
+    match first, builtinEnumFor name userEnum with
+    | some (SymKind.enum _), some b => some (SymKind.enum b)
+    | k, _ => k
+
+/-- The enum an enum literal or pattern head `E::V` names, from the enum table as Check and Elab
+    build it (builtins first, then the scope's enums), whatever else of that name is declared: a
+    `type Option = i32` does not hide the builtin's `Option::Some` (bug 229, Codex review r5).
+    `some` of a non-enum when the name is declared only as another type (E0104). -/
+private def lookupEnumForLiteral (ctx : ResolveCtx) (name : String) : Option SymKind :=
+  let ks := ctx.globalScope.typeKinds.getD name #[]
+  let userEnum := ks.find? fun k => match k with | .enum _ => true | _ => false
+  let first : Option SymKind := ks[0]?
+  match builtinEnumFor name userEnum.isSome with
+  | some b => some (SymKind.enum b)
+  | none => userEnum <|> first
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
@@ -247,12 +271,13 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
 /-- How many type arguments a generic type name takes, when that is known.
 
     The declaration wins over the builtin table, because a program may define its own
-    `Result` (`hasUserResultEnum`); `Option` is always the builtin (`lookupTypeKind`). `none` means "not known here" — an imported
+    `Result` (`hasUserResultEnum`); an enum named `Option` is always the builtin
+    (`lookupWrittenType`). `none` means "not known here" — an imported
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
 private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupTypeKind ctx name with
+  match lookupWrittenType ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
   -- A type declared under the name (an alias, a trait) is not the builtin. A value binding is
@@ -264,7 +289,7 @@ private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
 
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupTypeKind ctx name with
+  match lookupWrittenType ctx name with
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
@@ -380,7 +405,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .fieldAccess _ obj _ => resolveExpr ctx obj
   | .enumLit sp enumName variant typeArgs fields =>
     let ctx := checkWrittenTys ctx typeArgs sp
-    let ctx := match lookupTypeKind ctx enumName with
+    let ctx := match lookupEnumForLiteral ctx enumName with
       | some (.enum def_) =>
         if def_.variants.any (fun v => v.name == variant) then ctx
         else addError ctx (.unknownEnumVariant variant enumName) (some sp)

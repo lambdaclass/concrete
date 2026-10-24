@@ -35,14 +35,20 @@ Expected and now observed: each exits 42 natively and under `--interp`.
 
 ## Fix
 
-`Scope` carries a `typeMap` (type declarations only, first wins), and type positions look up
-`lookupTypeKind`: the type namespace, where an enum named `Option` is always the builtin (only the
-enum table is so ordered: a struct, alias or newtype named `Option` answers as itself, as in Check
-and Elab; the first version answered every `Option` with the builtin, Codex review r4).
-`lookupSymKind` is gone.
+`Scope` carries `typeKinds` (every type declaration of a name, in scope order), and each type
+position consults it the way Check and Elab consult their tables. A written type
+(`lookupWrittenType`: annotations, signatures, type arguments, arity checks) takes an alias first,
+since Check expands aliases before any struct or enum lookup, then the first struct, enum or
+newtype, an enum named `Option` being the builtin. An enum literal or pattern head
+(`lookupEnumForLiteral`) reads the enum table: the builtin `Option`, the builtin `Result` unless a
+user enum `Result` is in scope (`builtinEnums`), else the scope's enum. `lookupSymKind` is gone.
+The reviews narrowed the first versions: answering every `Option` with the builtin refused
+`type Option = i32` and a `struct Option<A, B>` (r4); one first-wins type map let an imported
+generic struct `N<T>` beat a local `type N = i32` and a `type Option` hide `Option::Some` (r5).
 `buildGlobalScopeFromSummary` registers children's newtypes (symbols and known types), and bug 217's
-submodule scope includes them. Regression legs in `run_tests.sh`: the four `regress_229_*.con`
-fixtures (`regress_229_option_named_alias_or_struct.con` the r4 witness), `run_ok ... 42` and
+submodule scope includes them. Regression legs in `run_tests.sh`: the five `regress_229_*.con`
+fixtures (`regress_229_option_named_alias_or_struct.con` and
+`regress_229_alias_and_enum_literal_precedence.con` the r4 and r5 witnesses), `run_ok ... 42` and
 `--interp` = 42.
 
 ## Structural cause

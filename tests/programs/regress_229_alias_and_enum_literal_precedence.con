@@ -1,0 +1,25 @@
+// Bug 229 (Codex review r5): Resolve consults declarations by position, as Check and Elab do. In a
+// written type a local alias is expanded before any struct (an imported generic struct `N<T>`
+// does not make `let x: N` need a type argument: was E0113), and an enum literal reads the enum
+// table, where the builtin `Option` stays beside a `type Option = i32` (`Option::Some` was E0104).
+// Exits 42 natively and under --interp.
+mod outer {
+    mod shapes { pub struct Copy N<T> { pub v: T } }
+    mod inner {
+        import shapes.{N};
+        type N = i32;
+        pub fn h() -> Int { let x: N = 20; return x as Int; }
+    }
+    mod other {
+        type Option = i32;
+        pub fn h() -> Int {
+            let o = Option::<i32>::Some { value: 22 };
+            match o { Option::Some { value } => { return value as Int; }, Option::None => { return 0; }, }
+        }
+    }
+    pub fn g() -> Int { return inner::h() + other::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}
