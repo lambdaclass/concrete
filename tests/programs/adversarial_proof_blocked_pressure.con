@@ -6,12 +6,13 @@
 // (commit e2ab5eef, 2026-05-23: "ProofCore extracts struct literal + field
 // access"), so the original struct/match/if-without-else blockers no longer
 // block. To keep five distinct named-blocker cases, those three were repointed
-// at constructs that remain durably unmodeled in ProvableV1 — integer division
-// (no PBinOp.div), field assignment, and deref — the same approach used for the
+// at constructs that remain durably unmodeled in ProvableV1 — integer remainder at
+// Int (formerly integer division, modelled since 2026-10-23), field assignment, and deref — the same approach used for the
 // classify_range fix in commit 8a53c3db.
 //
 // Expected:
-//   uses_div          → blocked: unsupported operator (integer division)
+//   uses_rem          → blocked: unsupported operator (integer remainder at Int; division at Int
+//                       is modelled since 2026-10-23)
 //   uses_field_assign → blocked: field assignment
 //   uses_mut          → blocked: mutable assignment
 //   uses_string       → blocked: string literal
@@ -23,8 +24,8 @@ struct Copy Point {
     y: Int,
 }
 
-fn uses_div(x: Int) -> Int {
-    return x / 2;
+fn uses_rem(x: Int) -> Int {
+    return x % 2;
 }
 
 fn uses_field_assign(x: Int) -> Int {

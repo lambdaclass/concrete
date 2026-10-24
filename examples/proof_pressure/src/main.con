@@ -11,7 +11,7 @@
 //   3. compute_checksum   → stale      (registry fingerprint is outdated)
 //   4. format_result      → ineligible (has Console capability)
 //   5. clamp_value        → missing    (pure, extractable, no registry entry)
-//   6. classify_range     → blocked    (pure, eligible, uses integer division — unsupported)
+//   6. classify_range     → blocked    (pure, eligible, uses integer remainder at Int — unsupported)
 //
 // Run:
 //   concrete src/main.con --report proof-status
@@ -144,7 +144,9 @@ fn clamp_value(x: Int, lo: Int, hi: Int) -> Int {
 struct Copy Bounds { lo: Int, hi: Int }
 
 fn classify_range(b: Bounds, x: Int) -> Int {
-    if x < (b.lo + b.hi) / 2 {
+    // `%` at Int is not in the model (division is, since 2026-10-23), which keeps this the
+    // blocked case; `(s - s % 2) / 2` is `s / 2` for every s.
+    if x < ((b.lo + b.hi) - (b.lo + b.hi) % 2) / 2 {
         return 1;
     } else {
         if x > b.hi {
