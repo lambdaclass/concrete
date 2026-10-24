@@ -93,12 +93,6 @@ The current `ProvableV1` ProofCore expression surface is:
 | saturating add / sub (`addsat`, `subsat`) | Since 2026-10-23, at every integer width: the mathematical result clamped to the type's range (ARITH-4). |
 | `&&`, `\|\|` | Since 2026-10-23, as conditionals (`if a then b else false`, `if a then true else b`), so the right operand is evaluated only when it decides the result, as at runtime. |
 | unary `-`, `!` | Since 2026-10-23: `-x` on an integer is `0 - x` (mathematical, so at `MIN` the model has a value where the runtime aborts, as for `-`); `!b` is `if b then false else true`. `~x` is not admitted. |
-
-Where the model has a value and the runtime aborts, the comparison reads `partial` and a proof is a
-partial-correctness claim (the trap is the separate obligation). That is the case for the
-mathematical `+`, `-`, `*` and unary `-`, and for two forced-width cases written before the general
-ones: `div 32 true` at `MIN / -1` and `shl 32 false` with a count of at least 32. The cases added on
-2026-10-23 are stuck exactly where the runtime aborts.
 | let bindings | Supported. |
 | if/then/else and early-return fall-through shape | Supported. |
 | non-recursive direct calls | Supported when FnTable-complete. |
@@ -110,6 +104,13 @@ ones: `div 32 true` at `MIN / -1` and `shl 32 false` with a count of at least 32
 | array functional update | Supported via `arraySet`; out of bounds evaluates to `none`. |
 | bounded flat-assignment while loops | Supported through `while_` with fuel in the proof evaluator and boundedness checked by profile tooling. Loop bodies may rebind scalars AND write array elements (`arr[i] = v`, modelled as `arraySet`); R-27. |
 | richer loop body with Cont/Break | Supported through `while_step` and the `LoopStep` enum encoding. |
+
+Where the model has a value and the runtime aborts, the comparison reads `partial` and a proof is a
+partial-correctness claim (the trap is the separate obligation). That is the case for the
+mathematical `+`, `-`, `*` and unary `-`, and for two forced-width cases written before the general
+ones: `div 32 true` at `MIN / -1` and `shl 32 false` with a count of at least 32. The other
+operators added on 2026-10-23 (division, shifts, bitwise and, wrapping and saturating add/sub at the
+other widths) are stuck exactly where the runtime aborts.
 
 Excluded from `ProvableV1` until explicitly added:
 
