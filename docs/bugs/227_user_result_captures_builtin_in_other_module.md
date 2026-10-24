@@ -18,6 +18,11 @@ the native build fails in Lower, `(E0602) Lower.variantIndex: variant 'Ok' not f
 Resolve refuses `b`'s `Result<i32, i32>`, `(E0113) 'Result' takes 0 type arguments, but 2 were
 given`. Expected: 42.
 
+The bug 217 witness `tests/programs/regress_217_enclosing_type_not_in_scope.con` is the nested
+shape: `run_tests.sh` checks it through `--emit-core` and `--interp` only, and
+`check_enum_union_layout.sh` pins it in `OPEN_BUG_REJECTED` (its native emission is refused), so the
+fix must remove that entry and the layout probe then covers it.
+
 ## Cause
 
 Two lookups of a type by its spelled name in a program-wide table, first match wins:

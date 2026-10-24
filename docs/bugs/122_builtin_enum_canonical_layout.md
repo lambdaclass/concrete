@@ -34,7 +34,12 @@ A user enum named `Option` or `Result` (generic or not) is also emitted as the c
 canonical `%enum.Result` is 16: the 24-byte `memcpy` of the `String` into the payload at offset 8
 writes 16 bytes past the 16-byte alloca, and `load %enum.Result` drops the string's length and capacity. The
 test passes by accident. `let_else.con`, `test_defer_result_nested.con` and `wildcard_pattern.con`
-show the size/alignment disagreement without an observed failure.
+show the size/alignment disagreement without an observed failure. Bug 229's
+`tests/programs/regress_229_user_option_does_not_hide_builtin.con` (landing train 15) declares
+`enum Copy Option { A }` (and `{ B }` in a submodule) beside uses of the builtin `Option<i32>`: the
+report sizes the user enums 16/8 and `%enum.Option` is the canonical 8/4 union. Every `Option` the
+program writes is the builtin (Check never withholds it), so the user enums are never built and
+nothing runs wrong; the two entries are pinned with the others.
 
 ## Expected
 
