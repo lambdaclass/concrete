@@ -31,8 +31,11 @@ mod asm {
         line: u64,
     }
 
+    // FRICTION: `Destroy::destroy` takes `&self`, and destroying a field through a
+    // reference is reserved for trusted code (E0290), so a struct owning a String
+    // can be Destroy (and so live in a droppable Vec / Stack) only through `trusted`.
     impl Destroy for Fixup {
-        fn destroy(&self) with(Alloc) {
+        trusted fn destroy(&self) with(Alloc) {
             self.name.destroy();
         }
     }
@@ -189,12 +192,14 @@ mod asm {
         }
     }
 
-    /// The earliest unresolved fixup's line and name, after resolving every
-    /// fixup of `fx` against `names` / `pos` (a jump) or the function table
-    /// (a call). Consumes the worklist.
+    /// Resolves every fixup of one worklist against the labels (a jump) or the
+    /// function table (a call), consuming it; returns the earliest miss.
     fn resolve(a: &mut Asm, is_call: bool) with(Alloc) -> Option<AsmError> {
-        let mut bad_at: u64 = 0;
-        let mut bad: Option<AsmError> = Option::<AsmError>::None;
+        // Popping runs in reverse, so the last miss seen is the earliest. A linear
+        // `Option<AsmError>` cannot be replaced inside the loop (E0207/E0219), so the
+        // misses are collected and the last one kept.
+        let mut misses: Vec<String> = Vec::<String>::new();
+        let mut miss_line: u64 = 0;
         let mut going: bool = true;
         while going {
             let next: Option<Fixup> = if is_call { a.calls.pop() } else { a.jumps.pop() };
@@ -215,26 +220,24 @@ mod asm {
                             name.drop();
                         },
                         Option::None => {
-                            // Popping runs in reverse, so the last miss seen is the earliest.
-                            let what: String = if is_call { "undefined function " } else { "undefined label " };
-                            let m: String = quoted_name(what, &name, "");
-                            name.drop();
-                            match bad {
-                                Option::Some { value: old } => {
-                                    let AsmError { line: l0, msg: m0 } = old;
-                                    m0.drop();
-                                },
-                                Option::None => {},
-                            }
-                            bad = Option::<AsmError>::Some { value: AsmError { line: line, msg: m } };
-                            bad_at = at;
+                            misses.push(name);
+                            miss_line = line;
                         },
                     }
                 },
             }
         }
-        discard(bad_at);
-        return bad;
+        let earliest: Option<String> = misses.pop();
+        misses.drop();
+        match earliest {
+            Option::None => { return Option::<AsmError>::None; },
+            Option::Some { value } => {
+                let what: String = if is_call { "undefined function " } else { "undefined label " };
+                let m: String = quoted_name(what, &value, "");
+                value.drop();
+                return Option::<AsmError>::Some { value: AsmError { line: miss_line, msg: m } };
+            },
+        }
     }
 
     fn new_asm() -> Asm {
@@ -291,7 +294,8 @@ mod asm {
                     return fail(a, line, "bad fn header");
                 }
                 let name: String = tok_string(src, t.s[1], t.e[1]);
-                if find_name(&a.prog.names, &name).is_some() {
+                let dup: Option<u64> = find_name(&a.prog.names, &name);
+                if dup.is_some() {
                     let m: String = quoted_name("duplicate function ", &name, "");
                     name.drop();
                     return fail(a, line, m);
@@ -332,7 +336,8 @@ mod asm {
                     fname.drop();
                     return fail(a, line, m);
                 }
-                a.prog.funcs.push(Func { entry: a.entry, len: len, nparams: a.nparams, nlocals: a.nlocals });
+                let fi: Func = Func { entry: a.entry, len: len, nparams: a.nparams, nlocals: a.nlocals };
+                a.prog.funcs.push(fi);
                 a.labels.clear();
                 a.lpos.clear();
                 a.llines.clear();
@@ -346,7 +351,8 @@ mod asm {
                     return fail(a, line, quoted("bad name ", src, s0, e0 - 1, ""));
                 }
                 let lname: String = tok_string(src, s0, e0 - 1);
-                if find_name(&a.labels, &lname).is_some() {
+                let dup: Option<u64> = find_name(&a.labels, &lname);
+                if dup.is_some() {
                     let m: String = quoted_name("duplicate label ", &lname, "");
                     lname.drop();
                     return fail(a, line, m);

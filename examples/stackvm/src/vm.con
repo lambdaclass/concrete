@@ -151,7 +151,8 @@ mod vm {
                 return push(vm, *value);
             },
             Instr::Pop => {
-                if pop1(vm).is_none() { return fail("stack underflow"); }
+                let top: Option<i64> = pop1(vm);
+                if top.is_none() { return fail("stack underflow"); }
                 vm.pc = next_pc;
                 return Step::Next;
             },
@@ -176,7 +177,7 @@ mod vm {
                     Option::Some { value } => { value },
                     Option::None => { return fail("stack underflow"); },
                 };
-                if a == I64_MIN { return fail("integer overflow"); }
+                if (a == I64_MIN) { return fail("integer overflow"); }
                 vm.pc = next_pc;
                 return push(vm, 0 - a);
             },
@@ -274,7 +275,7 @@ mod vm {
     fn call(vm: &mut Vm, p: &Program, g: u64, ret_pc: u64) with(Alloc) -> Step {
         let f: Func = p.funcs.get_unchecked(g);
         if vm.ops.len() < f.nparams { return fail("stack underflow"); }
-        if vm.frames.len() >= MAX_FRAMES { return fail("call stack overflow"); }
+        if (vm.frames.len() >= MAX_FRAMES) { return fail("call stack overflow"); }
         let base: u64 = vm.locals.len();
         let mut k: u64 = 0;
         while k < f.nlocals {
@@ -298,7 +299,10 @@ mod vm {
     pub fn run(p: &Program, main_idx: u64) with(Alloc, Console) -> Result<u64, VmError> {
         let mut vm: Vm = new_vm();
         defer drop_vm(vm);
-        discard(call(&mut vm, p, main_idx, 0));
+        match call(&mut vm, p, main_idx, 0) {
+            Step::Fail { msg } => { msg.drop(); },
+            _ => {},
+        }
         return loop_run(&mut vm, p);
     }
 
@@ -316,7 +320,7 @@ mod vm {
             if cur_pc >= f.entry + f.len {
                 return vm_error(cur_func, cur_pc, "fell off the end of the function");
             }
-            if vm.steps >= MAX_STEPS {
+            if (vm.steps >= MAX_STEPS) {
                 return vm_error(cur_func, cur_pc, "step limit exceeded");
             }
             vm.steps = vm.steps + 1;

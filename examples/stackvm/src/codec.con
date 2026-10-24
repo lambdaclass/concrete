@@ -7,7 +7,7 @@
 mod codec {
     import std.bytes.{Bytes};
     import std.vec.{Vec};
-    import stackvm.isa.{Instr, Func, Program, Encode, encode_all, push_le, empty_program, drop_program, jump_target};
+    import stackvm.isa.{Instr, Func, Program, encode_all, push_le, empty_program, drop_program, jump_target};
     import stackvm.names.{valid_name_bytes, find_name, name_at};
 
     pub fn encode_program(p: &Program) with(Alloc) -> Bytes {

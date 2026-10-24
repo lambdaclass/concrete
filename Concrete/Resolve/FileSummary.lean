@@ -294,6 +294,22 @@ def importCode (pass : String) (unknownModule : Bool) : String :=
   | "elab", true => "E0418" | "elab", false => "E0419"
   | _, true => "E0110" | _, false => "E0111"
 
+/-- Bug 222: what travels with an imported type declared as `name` in `summary`, whatever kind
+    of declaration it is (struct, enum or newtype): its inherent impl blocks, its trait impls and
+    the signatures of their public methods. The struct and newtype import paths each restated this
+    selection and the enum paths omitted it, so an imported enum's methods were E0264 and its trait
+    bounds E0241 outside its module. Every type import now takes its impls from here. -/
+private def typeImplsOf (summary : FileSummary) (name : String) :
+    List ImplBlock × List ImplTraitBlock × List (String × FnSummary) :=
+  let impls := summary.implBlocks.filter fun ib => ib.typeName == name
+  let traitImpls := summary.traitImpls.filter fun tb => tb.typeName == name
+  let mangled := impls.foldl (fun ns ib =>
+    ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
+    ++ traitImpls.foldl (fun ns tb =>
+    ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
+  let sigs := summary.implMethodSigs.filter fun (n, _) => mangled.contains n
+  (impls, traitImpls, sigs)
+
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
@@ -324,14 +340,7 @@ def resolveImports (imports : List ImportDecl)
         | none =>
           match summary.structs.find? fun sd => sd.name == origName with
           | some sd =>
-            let structImpls := summary.implBlocks.filter fun ib => ib.typeName == origName
-            let structTraitImpls := summary.traitImpls.filter fun tb => tb.typeName == origName
-            let mangledNames := structImpls.foldl (fun ns ib =>
-              ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
-              ++ structTraitImpls.foldl (fun ns tb =>
-              ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
-            let matchingSigs := summary.implMethodSigs.filter fun (name, _) =>
-              mangledNames.contains name
+            let (structImpls, structTraitImpls, matchingSigs) := typeImplsOf summary origName
             -- Bug 064: register under the name the IMPORTER uses. The original
             -- `sd` kept `name = origName`, so `lookupStruct alias` found nothing
             -- and a field access on an aliased imported type was rejected as
@@ -350,7 +359,12 @@ def resolveImports (imports : List ImportDecl)
                            implMethodSigs := acc.implMethodSigs ++ matchingSigs }
           | none =>
             match summary.enums.find? fun ed => ed.name == origName with
-            | some ed => .ok { acc with enums := acc.enums ++ [{ ed with name := localName }] }
+            | some ed =>
+              let (enumImpls, enumTraitImpls, enumSigs) := typeImplsOf summary origName
+              .ok { acc with enums := acc.enums ++ [{ ed with name := localName }],
+                             implBlocks := acc.implBlocks ++ enumImpls,
+                             traitImpls := acc.traitImpls ++ enumTraitImpls,
+                             implMethodSigs := acc.implMethodSigs ++ enumSigs }
             | none =>
               match summary.typeAliases.find? fun ta => ta.isPublic && ta.name == origName with
               | some ta => .ok { acc with typeAliases := acc.typeAliases ++ [(localName, ta.targetTy)] }
@@ -360,14 +374,7 @@ def resolveImports (imports : List ImportDecl)
                   -- Pull along inherent impl methods on the newtype, mirroring
                   -- the struct path. This keeps `Wrap::try_new(...)` callable
                   -- after `import Wrap.{Port}`.
-                  let newtypeImpls := summary.implBlocks.filter fun ib => ib.typeName == origName
-                  let newtypeTraitImpls := summary.traitImpls.filter fun tb => tb.typeName == origName
-                  let mangledNames := newtypeImpls.foldl (fun ns ib =>
-                    ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
-                    ++ newtypeTraitImpls.foldl (fun ns tb =>
-                    ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
-                  let matchingSigs := summary.implMethodSigs.filter fun (name, _) =>
-                    mangledNames.contains name
+                  let (newtypeImpls, newtypeTraitImpls, matchingSigs) := typeImplsOf summary origName
                   .ok { acc with newtypes := acc.newtypes ++ [nt],
                                  implBlocks := acc.implBlocks ++ newtypeImpls,
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
@@ -427,13 +434,7 @@ def resolveImports (imports : List ImportDecl)
              || acc.newtypes.any (·.name == n) then continue
           match summary.structs.find? fun sd => sd.name == n with
           | some sd =>
-            let impls := summary.implBlocks.filter fun ib => ib.typeName == n
-            let traitImpls := summary.traitImpls.filter fun tb => tb.typeName == n
-            let mangled := impls.foldl (fun ns ib =>
-              ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
-              ++ traitImpls.foldl (fun ns tb =>
-              ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
-            let sigs := summary.implMethodSigs.filter fun (name, _) => mangled.contains name
+            let (impls, traitImpls, sigs) := typeImplsOf summary n
             -- R-0004 path 3 (transitive closure): preserve the identity already
             -- minted by the defining summary. Reminting from this traversal's
             -- module would turn a transport path into an identity owner.
@@ -445,12 +446,20 @@ def resolveImports (imports : List ImportDecl)
           | none =>
             match summary.enums.find? fun ed => ed.name == n with
             | some ed =>
-              acc := { acc with enums := acc.enums ++ [ed] }
+              let (impls, traitImpls, sigs) := typeImplsOf summary n
+              acc := { acc with enums := acc.enums ++ [ed],
+                                implBlocks := acc.implBlocks ++ impls,
+                                traitImpls := acc.traitImpls ++ traitImpls,
+                                implMethodSigs := acc.implMethodSigs ++ sigs }
               grew := true
             | none =>
               match summary.newtypes.find? fun nt => nt.isPublic && nt.name == n with
               | some nt =>
-                acc := { acc with newtypes := acc.newtypes ++ [nt] }
+                let (impls, traitImpls, sigs) := typeImplsOf summary n
+                acc := { acc with newtypes := acc.newtypes ++ [nt],
+                                  implBlocks := acc.implBlocks ++ impls,
+                                  traitImpls := acc.traitImpls ++ traitImpls,
+                                  implMethodSigs := acc.implMethodSigs ++ sigs }
                 grew := true
               | none => pure ()
       if !grew then break
