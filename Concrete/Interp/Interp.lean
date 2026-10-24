@@ -114,22 +114,43 @@ inductive Flow where
 -- ============================================================
 
 -- R-0492 step 4: keyed by binding identity (`CLocal.key`); a temporary by its Core name.
-abbrev Env := List (LocalKey × IVal)
+/-- The environment: the bindings, latest first, and their number. Bug 234: the number is kept,
+    not recomputed. Every call, branch, arm, block and borrow reads the environment's length (a
+    scope's restore point, a reference's frame), and `List.length` walks the whole list, so each
+    of those cost the depth of the call stack and a recursion of depth n took time n²
+    (64000 frames: 44 s). -/
+structure Env where
+  items : List (LocalKey × IVal) := []
+  size : Nat := 0
+  deriving Inhabited
 
-partial def envGet (env : Env) (name : LocalKey) : Option IVal :=
-  match env with
+/-- The number of bindings, O(1). -/
+@[inline] def Env.length (env : Env) : Nat := env.size
+
+/-- Drop the `k` latest bindings (a scope's or frame's), keeping the count. -/
+def Env.drop (env : Env) (k : Nat) : Env :=
+  { items := env.items.drop k, size := env.size - k }
+
+private partial def envItemsGet (l : List (LocalKey × IVal)) (name : LocalKey) : Option IVal :=
+  match l with
   | [] => none
-  | (n, v) :: rest => if n == name then some v else envGet rest name
+  | (n, v) :: rest => if n == name then some v else envItemsGet rest name
 
-def envBind (env : Env) (name : LocalKey) (val : IVal) : Env :=
-  (name, val) :: env
-
-partial def envSet (env : Env) (name : LocalKey) (val : IVal) : Env :=
-  match env with
+private partial def envItemsSet (l : List (LocalKey × IVal)) (name : LocalKey) (val : IVal)
+    : List (LocalKey × IVal) :=
+  match l with
   | [] => []
   | (n, v) :: rest =>
     if n == name then (n, val) :: rest
-    else (n, v) :: envSet rest name val
+    else (n, v) :: envItemsSet rest name val
+
+def envGet (env : Env) (name : LocalKey) : Option IVal := envItemsGet env.items name
+
+def envBind (env : Env) (name : LocalKey) (val : IVal) : Env :=
+  { items := (name, val) :: env.items, size := env.size + 1 }
+
+def envSet (env : Env) (name : LocalKey) (val : IVal) : Env :=
+  { env with items := envItemsSet env.items name val }
 
 /-- Reserved binding pushed at the start of every function frame (`$` cannot occur in a source
     identifier). The environment is one list shared by all frames, so that borrows of a
@@ -140,23 +161,29 @@ def frameMarker : LocalKey := .name "$frame"
 /-- Push a new function frame. -/
 def envEnterFrame (env : Env) : Env := envBind env frameMarker .unit
 
-/-- Look a name up in the current frame only (stops at the frame boundary). -/
-partial def envGetLocal (env : Env) (name : LocalKey) : Option IVal :=
-  match env with
+private partial def listGetLocal (l : List (LocalKey × IVal)) (name : LocalKey) : Option IVal :=
+  match l with
   | [] => none
   | (n, v) :: rest =>
     if n == name then some v
     else if n == frameMarker then none
-    else envGetLocal rest name
+    else listGetLocal rest name
 
-/-- Rebind a name of the current frame (stops at the frame boundary). -/
-partial def envSetLocal (env : Env) (name : LocalKey) (val : IVal) : Env :=
-  match env with
+private partial def listSetLocal (l : List (LocalKey × IVal)) (name : LocalKey) (val : IVal)
+    : List (LocalKey × IVal) :=
+  match l with
   | [] => []
   | (n, v) :: rest =>
     if n == name then (n, val) :: rest
     else if n == frameMarker then (n, v) :: rest
-    else (n, v) :: envSetLocal rest name val
+    else (n, v) :: listSetLocal rest name val
+
+/-- Look a name up in the current frame only (stops at the frame boundary). -/
+def envGetLocal (env : Env) (name : LocalKey) : Option IVal := listGetLocal env.items name
+
+/-- Rebind a name of the current frame (stops at the frame boundary). -/
+def envSetLocal (env : Env) (name : LocalKey) (val : IVal) : Env :=
+  { env with items := listSetLocal env.items name val }
 
 def defaultLoopFuel : Nat := 10000000
 def loopBudgetExhausted : String := "interp: loop budget exhausted"
@@ -1449,14 +1476,18 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
 /-- Like envSet but only rewrites bindings at depth >= `skip` (counting
     from the head). Used so that a ref-update walks past intervening
     callee frames and rewrites the binding that was actually borrowed. -/
-private partial def envSetSkipping (env : Env) (skip : Nat) (name : LocalKey) (val : IVal) : Env :=
-  match env, skip with
+private partial def listSetSkipping (l : List (LocalKey × IVal)) (skip : Nat) (name : LocalKey)
+    (val : IVal) : List (LocalKey × IVal) :=
+  match l, skip with
   | [], _ => []
   | (n, v) :: rest, 0 =>
     if n == name then (n, val) :: rest
-    else (n, v) :: envSetSkipping rest 0 name val
+    else (n, v) :: listSetSkipping rest 0 name val
   | (n, v) :: rest, k + 1 =>
-    (n, v) :: envSetSkipping rest k name val
+    (n, v) :: listSetSkipping rest k name val
+
+private def envSetSkipping (env : Env) (skip : Nat) (name : LocalKey) (val : IVal) : Env :=
+  { env with items := listSetSkipping env.items skip name val }
 
 /-- Store through a reference: into a binding (through its path), or into a heap cell. -/
 partial def updatePath (cx : Ctx) (env : Env) (p : RefPath) (newVal : IVal) : IM Env := do
@@ -2189,7 +2220,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         | some (b, o, _) => some (.inl (b, o))
         | none =>
           let view := env.drop (env.length - min p.frame env.length)
-          (view.findIdx? (·.1 == p.base)).map fun k => .inr (view.length - 1 - k)
+          (view.items.findIdx? (·.1 == p.base)).map fun k => .inr (view.length - 1 - k)
       match op, lv, rv with
       | .eq, .ref a, .ref b | .neq, .ref a, .ref b =>
         -- Heap-rooted references compare by byte address (the root's offset plus the layout
@@ -3436,7 +3467,7 @@ def runIM {α : Type} (m : IM α) (stdin : StdinSource := default) (lineBuffered
 
 /-- Evaluate one Core expression (a report harness's sampled call) to its value. -/
 def evalClosed (cx : Ctx) (e : CExpr) : Except String IVal :=
-  match (runIM (do let (_, v) ← evalExprVal cx [] e; pure v)).1 with
+  match (runIM (do let (_, v) ← evalExprVal cx {} e; pure v)).1 with
   | .ok v => .ok v
   | .error (.fail msg) => .error msg
   | .error (.exit c) => .error s!"interp: the program called exit({c})"
@@ -3450,7 +3481,7 @@ def interpret (modules : List CModule) (args : List String := []) (stdin : Stdin
   match cx.defs.find? (fun (f, _) => f.name == "main") with
   | none => { events := #[], outcome := .failed "interp: no 'main' function found" }
   | some (mainFn, mainScope) =>
-    let (r, st) := runIM (evalStmts { cx with scope := some mainScope, foreign := mainFn.foreignCalls } [] mainFn.body) stdin stdoutIsTty stdinIsTty
+    let (r, st) := runIM (evalStmts { cx with scope := some mainScope, foreign := mainFn.foreignCalls } {} mainFn.body) stdin stdoutIsTty stdinIsTty
     -- What reached stdout: `exit` and a return from `main` flush stdio. A trap aborts, and
     -- whether `abort` flushes stdio is the C library's choice: Darwin's does, glibc's (since
     -- 2.27) does not, so a trapping run's buffered output appears on macOS only. Past

@@ -146,6 +146,8 @@ declare -A BUG_TEST_MAP=(
   [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
+  # Bug 234: interpreter calls linear in the call depth (run_tests.sh: --interp within 20 s).
+  [234]="regress_234_interp_deep_recursion.con"
   # Bug 231: a bound's trait names resolve (E0125); module traits, Copy and Destroy still admitted.
   [231]="error_231_unknown_bound_trait.con error_231_enclosing_trait_bound.con error_231_trait_param_bound.con error_231_union_param_bound.con error_231_bodiless_decl_bound.con regress_231_bounds_name_module_traits.con"
   # Bug 233 (OPEN, contained): an import of a public constant or trait is refused with its reason.

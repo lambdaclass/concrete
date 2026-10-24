@@ -8415,6 +8415,17 @@ else
     echo "FAIL  bug 228: interp gave '$r228_interp' within 20 s, want 42"
     FAIL=$((FAIL + 1))
 fi
+# Bug 234: the interpreter's calls cost the call-stack depth (its environment's length was walked at
+# every call, branch, arm and borrow); a depth-100000 recursion must finish under --interp in 20 s.
+run_ok "$TESTDIR/regress_234_interp_deep_recursion.con" 42
+r234_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_234_interp_deep_recursion.con" --interp 2>&1 || true)
+if [ "$r234_interp" = "42" ]; then
+    echo "  ok  bug 234: a depth-100000 recursion runs under --interp within 20 s (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 234: interp gave '$r234_interp' within 20 s, want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241
 # outside its module, directly imported and through the transitive closure); binary and --interp
 # must agree on 42.

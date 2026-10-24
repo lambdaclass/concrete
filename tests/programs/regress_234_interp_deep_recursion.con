@@ -1,0 +1,23 @@
+// Bug 234 regression: the interpreter recomputed its environment's length (a walk of the whole
+// list) at every call, branch, arm and borrow, so each of them cost the depth of the call stack
+// and a recursion of depth n took time n²: depth 64000 took 44 s under --interp on main, 0.1 s
+// after. Each of the 100000 frames below makes a call, takes a branch, matches and borrows.
+// run_tests.sh runs it under --interp with a 20 s budget; binary and interpreter agree on 42.
+enum Copy Step { Down { k: i64 }, Stop }
+
+fn peek(x: &i64) -> i64 { return *x; }
+
+fn depth(n: i64) -> i64 {
+    let s: Step = if n == 0 { Step::Stop } else { Step::Down { k: n - 1 } };
+    match s {
+        Step::Stop => { return 0; },
+        Step::Down { k } => {
+            let here: i64 = n;
+            return peek(&here) - n + 1 + depth(k);
+        },
+    }
+}
+
+fn main() -> Int {
+    return (depth(100000) - 99958) as Int;
+}
