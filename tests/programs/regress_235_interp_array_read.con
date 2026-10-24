@@ -1,0 +1,14 @@
+// Bug 235 regression: the interpreter read an array element by converting the array to a list and
+// walking it (`arrayGet` over `elems.toList`), so every `a[i]` cost the array's length. 400000
+// reads of a 10000-element array are 4·10⁹ steps that way; they now take well under a second.
+// run_tests.sh runs it under --interp with a 20 s budget; binary and interpreter agree on 42.
+fn main() -> Int {
+    let a: [i64; 10000] = [3; 10000];
+    let mut i: i64 = 0;
+    let mut s: i64 = 0;
+    while i < 400000 {
+        s = (s + a[i % 10000]) % 1000003;
+        i = i + 1;
+    }
+    return (s - 199955) as Int;
+}

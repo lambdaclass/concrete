@@ -146,6 +146,10 @@ declare -A BUG_TEST_MAP=(
   [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
+  # Bug 236: an array literal elaborates in linear time (run_tests.sh: --emit-core and --interp within 20 s).
+  [236]="regress_236_array_repeat_literal.con"
+  # Bug 235: interpreter array reads O(1) (run_tests.sh: --interp within 20 s).
+  [235]="regress_235_interp_array_read.con"
   # Bug 234: interpreter calls linear in the call depth (run_tests.sh: --interp within 20 s).
   [234]="regress_234_interp_deep_recursion.con"
   # Bug 231: a bound's trait names resolve (E0125); module traits, Copy and Destroy still admitted.

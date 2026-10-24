@@ -1,0 +1,9 @@
+// Bug 236 regression: Elab appended each element of an array literal to the list built so far
+// (`cElems ++ [cE]`), and the parser expands `[v; n]` to n elements, so the literal below took
+// time n² in Elab (n = 40000: 4 s; 200000: well over a minute). run_tests.sh elaborates it
+// (`--emit-core`) with a 20 s budget. It is not compiled natively: the backend's own cost for a
+// literal this size is bug 027.
+fn main() -> Int {
+    let a: [i64; 200000] = [7; 200000];
+    return (a[199999] * 6) as Int;
+}

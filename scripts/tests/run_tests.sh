@@ -8426,6 +8426,28 @@ else
     echo "FAIL  bug 234: interp gave '$r234_interp' within 20 s, want 42"
     FAIL=$((FAIL + 1))
 fi
+# Bug 235: an array element read under --interp walked the whole array; 400000 reads of a
+# 10000-element array must finish under --interp in 20 s.
+run_ok "$TESTDIR/regress_235_interp_array_read.con" 42
+r235_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_235_interp_array_read.con" --interp 2>&1 || true)
+if [ "$r235_interp" = "42" ]; then
+    echo "  ok  bug 235: 400000 array reads run under --interp within 20 s (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 235: interp gave '$r235_interp' within 20 s, want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 236: Elab appended an array literal's elements one by one; [7; 200000] must elaborate and run
+# under --interp within 20 s each (not compiled natively: the backend's cost is bug 027's).
+r236_rc=0; bounded_run 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --emit-core >/dev/null 2>&1 || r236_rc=$?
+r236_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --interp 2>&1 || true)
+if [ "$r236_rc" = 0 ] && [ "$r236_interp" = "42" ]; then
+    echo "  ok  bug 236: a 200000-element array literal elaborates and runs under --interp within 20 s (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 236: --emit-core rc $r236_rc, --interp '$r236_interp' within 20 s each (want 0, 42)"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241
 # outside its module, directly imported and through the transitive closure); binary and --interp
 # must agree on 42.

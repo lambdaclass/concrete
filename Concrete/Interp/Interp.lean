@@ -1055,21 +1055,10 @@ def findEnum (enums : List CEnumDef) (name : String) : Option CEnumDef :=
 -- Array safe access
 -- ============================================================
 
-private def listGet (xs : List IVal) (n : Nat) : Option IVal :=
-  match xs, n with
-  | [], _ => none
-  | x :: _, 0 => some x
-  | _ :: rest, n + 1 => listGet rest n
-
+/-- Bug 235: the element at `n`, read from the array itself in O(1). It converted the array to a
+    list and walked it (`elems.toList`), so every `a[i]` cost the array's length. -/
 private def arrayGet (elems : Array IVal) (n : Nat) : Option IVal :=
-  listGet elems.toList n
-
-/-- A positional lookup inside the list's length succeeds. -/
-private theorem listGet_isSome : ∀ {xs : List IVal} {n : Nat}, n < xs.length →
-    (listGet xs n).isSome = true
-  | [], _, h => absurd h (by simp)
-  | _ :: _, 0, _ => rfl
-  | _ :: rest, n + 1, h => listGet_isSome (xs := rest) (n := n) (by simpa using h)
+  elems[n]?
 
 /-- **R-0460: `boundsObligations`'s condition is SUFFICIENT.**
 
@@ -1088,17 +1077,10 @@ private theorem listGet_isSome : ∀ {xs : List IVal} {n : Nat}, n < xs.length �
 theorem bounds_obligation_sufficient (elems : Array IVal) {i : Int}
     (hlo : 0 ≤ i) (hhi : i < elems.size) :
     (arrayGet elems i.toNat).isSome = true := by
-  refine listGet_isSome ?_
   have : (i.toNat : Int) < (elems.size : Int) := by
     rw [Int.toNat_of_nonneg hlo]; exact hhi
-  simpa using Int.ofNat_lt.mp this
-
-/-- A positional lookup at or past the length fails. -/
-private theorem listGet_isNone : ∀ {xs : List IVal} {n : Nat}, xs.length ≤ n →
-    listGet xs n = none
-  | [], _, _ => rfl
-  | _ :: _, 0, h => absurd h (by simp)
-  | _ :: rest, n + 1, h => listGet_isNone (xs := rest) (n := n) (by simpa using h)
+  have h : i.toNat < elems.size := Int.ofNat_lt.mp this
+  simp [arrayGet, h]
 
 /-- **The bounds condition is NECESSARY as well as sufficient.**
 
@@ -1108,9 +1090,9 @@ private theorem listGet_isNone : ∀ {xs : List IVal} {n : Nat}, xs.length ≤ n
 theorem bounds_obligation_necessary (elems : Array IVal) {i : Int}
     (hlo : 0 ≤ i) (hhi : (elems.size : Int) ≤ i) :
     arrayGet elems i.toNat = none := by
-  refine listGet_isNone ?_
   have : (elems.size : Int) ≤ (i.toNat : Int) := by rw [Int.toNat_of_nonneg hlo]; exact hhi
-  simpa using Int.ofNat_le.mp this
+  have h : elems.size ≤ i.toNat := Int.ofNat_le.mp this
+  simp [arrayGet, h]
 
 -- ============================================================
 -- Floating point (IEEE binary64 / binary32, as the backend's `double` / `float`)

@@ -1258,15 +1258,17 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let cFirstEv ← elabExprEv first elemHint
       let cFirst := cFirstEv.core
       let elemTy := cFirst.ty
-      let mut cElems : List CExpr := [cFirst]
       -- Prepended and reversed once: appending in a loop is quadratic, and the ratchet
-      -- has caught that three times in this arc already.
+      -- has caught that three times in this arc already. Bug 235: the elements were still
+      -- appended (`cElems ++ [cE]`), so `[v; 40000]` (expanded to 40000 elements by the
+      -- parser) took 4 s in Elab.
+      let mut cElemsRev : List CExpr := [cFirst]
       let mut elemEvsRev : List Proof.EvidenceExprV2 := [cFirstEv.evidence]
       for e in rest do
         let cEEv ← elabExprEv e (some elemTy)
-        let cE := cEEv.core
-        cElems := cElems ++ [cE]
+        cElemsRev := cEEv.core :: cElemsRev
         elemEvsRev := cEEv.evidence :: elemEvsRev
+      let cElems := cElemsRev.reverse
       let elemEvs := elemEvsRev.reverse
       let elemRef ← typeRefOf elemTy
       return ElaboratedExprV2.mk (CExpr.arrayLit cElems (.array elemTy elems.length))
