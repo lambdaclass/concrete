@@ -88,7 +88,11 @@ The current `ProvableV1` ProofCore expression surface is:
 | bitxor / bitor | Supported for currently forced widths: `i32`, `u32`, `u8` as applicable. |
 | bitand | Supported at `u32` (unsigned view), forced by HMAC-SHA256's `Ch`/`Maj`. Other widths are append-only follow-ups. |
 | shr (logical right shift) | Supported at `u32` (unsigned view, models LLVM `lshr`), forced by HMAC-SHA256's `sigma` functions and `rotr`. Other widths / arithmetic `ashr` are append-only follow-ups. |
-| shl (left shift) | Supported at `u32` (unsigned view, TRUNCATES to width, models LLVM `shl`), forced by HMAC-SHA256's `rotr`. Other widths are append-only follow-ups. |
+| shl (left shift) | Supported at `u32` (unsigned view, TRUNCATES to width, models LLVM `shl`), forced by HMAC-SHA256's `rotr`. Since 2026-10-23 at every other integer width too, as ARITH-3 states it: a count that is negative or at least the width is stuck (the runtime aborts), and otherwise the bits shifted out are discarded and the pattern read at the type's signedness. |
+| `div`, `bitand`, wrapping add at other widths | Since 2026-10-23 at every integer width: `div` truncates and is stuck on a zero divisor and, signed, on `MIN / -1`; `bitand` is the and of the two w-bit patterns; wrapping add is modulo 2^w read at the type's signedness (ARITH-3, ARITH-4). |
+| saturating add / sub (`addsat`, `subsat`) | Since 2026-10-23, at every integer width: the mathematical result clamped to the type's range (ARITH-4). |
+| `&&`, `\|\|` | Since 2026-10-23, as conditionals (`if a then b else false`, `if a then true else b`), so the right operand is evaluated only when it decides the result, as at runtime. |
+| unary `-`, `!` | Since 2026-10-23: `-x` on an integer is `0 - x` (mathematical, so at `MIN` the model has a value where the runtime aborts, as for `-`); `!b` is `if b then false else true`. `~x` is not admitted. |
 | let bindings | Supported. |
 | if/then/else and early-return fall-through shape | Supported. |
 | non-recursive direct calls | Supported when FnTable-complete. |

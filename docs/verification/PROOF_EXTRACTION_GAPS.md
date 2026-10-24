@@ -91,14 +91,14 @@ the way fixed arrays already are.
 The specification's accepted examples also run under the model (`--report model-diff`, the third
 leg of check_spec S4). Of 117 accepted single-file examples, 16 were compared at first: `main` was
 excluded from extraction as the entry point, so a program whose behaviour is all in `main` had no
-model. Two changes raised that to 48, every compared input agreeing:
+model. Three changes raised that to 56, every compared input agreeing:
 
 - the comparison also extracts an entry point whose only exclusion is being `main` (proof
   eligibility is unchanged; the comparison alone uses it): 16 to 42;
 - the functional state model gained assignments outside loops and `match` statements followed by
   more code ([PROVABLE_V1.md](PROVABLE_V1.md), "Statements And State"): 42 to 49.
 
-What blocks the remaining 69, by examples blocked (one example can have several blockers):
+What blocks the remaining 61, by examples blocked (one example can have several blockers):
 
 | blocker (`--report extraction`) | examples | status in PROVABLE_V1 |
 |---|---|---|
@@ -106,8 +106,7 @@ What blocks the remaining 69, by examples blocked (one example can have several 
 | unmodelled statement (`discard(e)`, expression statements, destructuring) | 6 | not admitted |
 | `main` has capabilities, a non-scalar result or sits in a module | 7 | outside the comparison |
 | unbounded loops | 5 | excluded |
-| unsupported operator (`div`/`shl`/`bitand` at `Int`/`u8`, wrapping/saturating at `u8`/`i8`, `&&`) | 7 | width follow-ups |
-| `unary operator` | 3 | not admitted |
+| examples that abort (both sides trap, so an input compares nothing) | 6 | by construction |
 | guards, range patterns, labelled `break` | 4 | not admitted |
 
 References are the largest: admitting shared borrows of values (a `&x` argument read through
