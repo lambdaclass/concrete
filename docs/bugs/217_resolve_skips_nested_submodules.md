@@ -62,7 +62,7 @@ the same precedence:
    with E0111 and `resolveImports` admits: bug 226). When they do not resolve, Resolve leaves the
    submodule to Check, which refuses it (E0284/E0285) and does not descend past it either;
 2. its own declarations, with its children's functions and foreign bindings by qualified name
-   (`leaf_two`), but not its children's types or constants;
+   (`leaf_two`) and its children's newtypes, but not their other types or constants;
 3. the structs, enums and public methods of the modules declared beside it (Check and Elab inject
    these).
 
@@ -73,6 +73,10 @@ Each of those was tried and refused accepted programs: rooted at `globalScope` (
 searched first (the second), an enclosing `enum E { A }` hid a sibling's `enum E { B }` (E0103,
 Codex review r1), and with the children's types included, a child's `E` did the same, and an
 enclosing non-generic `enum Result` hid the builtin (E0113, Codex review r2).
+
+Three rules of Resolve's own scope also refused programs Check accepts, at top level on main and,
+through this walk, in submodules (Codex review r3): a function hid a same-named enum, a user
+`enum Option` hid the builtin, and a child's newtype was unknown. They are bug 229, fixed alongside.
 
 Known type names, which carry no arity or fields and so cannot answer a lookup wrongly, are still a
 superset: the submodule's own and its children's, its imports', its siblings', and its enclosing

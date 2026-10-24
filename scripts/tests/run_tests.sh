@@ -8450,6 +8450,21 @@ for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_preceden
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 229: Resolve's module scope refused what Check admits: a function hid a same-named enum
+# (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
+# each fixture has the top-level and the nested shape.
+for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_not_hide_builtin \
+            regress_229_child_newtype_known; do
+    run_ok "$TESTDIR/$r229.con" 42
+    r229_interp=$($COMPILER "$TESTDIR/$r229.con" --interp 2>&1 || true)
+    if [ "$r229_interp" = "42" ]; then
+        echo "  ok  bug 229: $r229 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 229: $r229 --interp gave '$r229_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # The enclosing module's `enum Result` is not in the nested scope. Front end and interpreter only:
 # the native build meets bug 227 (Lower looks enums up by spelling), pinned in check_example_outputs.
 r217_src="$TESTDIR/regress_217_enclosing_type_not_in_scope.con"

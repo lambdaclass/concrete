@@ -3,6 +3,7 @@ import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Token
 import Concrete.Resolve.FileSummary
+import Concrete.Resolve.BuiltinEnums
 import Concrete.Resolve.Intrinsic
 import Concrete.Backend.Symbols
 
@@ -105,13 +106,26 @@ structure Scope where
       module of N mutually-referencing functions (`--emit-core` alone was O(N²)).
       Built at scope-assembly time (bounded), read O(1) per reference. -/
   symbolMap : Std.HashMap String SymKind := ∅
+  /-- name → kind over the TYPE declarations only (struct, enum, trait, alias, newtype), first
+      occurrence wins. Types and values are separate namespaces (MOD-3; bug 218's
+      `regress_218_type_and_value_namespaces`), so a type lookup must not meet a function or
+      constant of the same spelling, which `symbolMap` returns when it was registered first
+      (bug 229). -/
+  typeMap : Std.HashMap String SymKind := ∅
 
-/-- Build a `Scope` from a symbol list, materializing the O(1) lookup map (first
+/-- A declaration in the type namespace. -/
+def SymKind.isType : SymKind → Bool
+  | .struct _ | .enum _ | .trait _ | .typeAlias _ | .newtype _ => true
+  | _ => false
+
+/-- Build a `Scope` from a symbol list, materializing the O(1) lookup maps (first
     occurrence wins, matching `find?`). Use instead of `{ symbols := … }` so every
     scope carries a consistent map. -/
 def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
   { symbols := symbols,
-    symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅ }
+    symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅,
+    typeMap := symbols.foldl (fun m (n, k) =>
+      if !k.isType || m.contains n then m else m.insert n k) ∅ }
 
 structure ResolvedModule where
   module : Module
@@ -204,9 +218,14 @@ private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   -- Check global scope (O(1) via symbolMap)
   ctx.globalScope.symbolMap.contains name
 
-private def lookupSymKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
-  (ctx.localScopes.findSome? (fun scope => scope.find? (fun (n, _) => n == name) |>.map (·.2)))
-  <|> (ctx.globalScope.symbolMap.get? name)
+/-- The type declaration a name denotes in a type position (bug 229). Only the type namespace is
+    searched (local scopes hold values only), and `Option` is always the builtin: Check and Elab
+    put the builtin first and never withhold it (`BuiltinEnums.builtinEnums`), so a user
+    `enum Option` does not answer `Option<T>` or `Option::Some`. `Result` is the user's when one
+    is in scope (`hasUserResultEnum`), as there. -/
+private def lookupTypeKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
+  if name == optionEnumName then some (.enum builtinOptionEnum)
+  else ctx.globalScope.typeMap.get? name
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
@@ -225,12 +244,12 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
 /-- How many type arguments a generic type name takes, when that is known.
 
     The declaration wins over the builtin table, because a program may define its own
-    `Result`/`Option` (`hasUserResultEnum`). `none` means "not known here" — an imported
+    `Result` (`hasUserResultEnum`); `Option` is always the builtin (`lookupTypeKind`). `none` means "not known here" — an imported
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
 private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupSymKind ctx name with
+  match lookupTypeKind ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
   -- A type declared under the name (an alias, a trait) is not the builtin. A value binding is
@@ -242,7 +261,7 @@ private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
 
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupSymKind ctx name with
+  match lookupTypeKind ctx name with
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
@@ -358,7 +377,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .fieldAccess _ obj _ => resolveExpr ctx obj
   | .enumLit sp enumName variant typeArgs fields =>
     let ctx := checkWrittenTys ctx typeArgs sp
-    let ctx := match lookupSymKind ctx enumName with
+    let ctx := match lookupTypeKind ctx enumName with
       | some (.enum def_) =>
         if def_.variants.any (fun v => v.name == variant) then ctx
         else addError ctx (.unknownEnumVariant variant enumName) (some sp)
@@ -548,6 +567,7 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.enums.map fun e => (e.name, SymKind.enum e))
     ++ (subS.externFns.map fun ef => (s!"{subName}_{ef.name}", SymKind.externFn ef.params ef.retTy))
     ++ (subS.constants.map fun c => (c.name, SymKind.const c.ty))
+    ++ (subS.newtypes.map fun nt => (nt.name, SymKind.newtype nt))
     ++ (implSigsToSymbols (subS.implMethodSigs.filter fun (name, _) =>
         subS.publicNames.contains name))
   ) []
@@ -557,6 +577,8 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.enums.map (·.name))
     ++ (subS.typeAliases.map (·.name))
     ++ (subS.traits.map (·.name))
+    -- Bug 229: a child's newtype is in Check's environment (`allNewtypes`), so it is a known type.
+    ++ (subS.newtypes.map (·.name))
   ) []
   (Scope.ofSymbols symbols, types)
 
@@ -764,8 +786,8 @@ private def submoduleImportScope (summaryTable : List (String × FileSummary)) (
 
     A submodule's symbol scope is the environment Check's `checkSubmodules`/`checkModule` give it,
     in the same precedence: its imports (`submoduleImportScope`); its own declarations, with its
-    children's functions and foreign bindings by qualified name (`leaf_two`) but not its
-    children's types or constants; then the structs, enums and public methods of the modules
+    children's functions and foreign bindings by qualified name (`leaf_two`) and its children's
+    newtypes but not their other types or constants; then the structs, enums and public methods of the modules
     declared beside it (which Check and Elab inject). Nothing of an enclosing module is in it:
     an enclosing `enum E` or `enum Result` would otherwise answer, by first-wins lookup, where
     Check selects a sibling's `E` or the builtin `Result` (Codex reviews of this fix), and the
@@ -798,7 +820,9 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
           ++ c.functions.map (fun (n, fs) => (s!"{childName}_{n}",
               SymKind.fn (fs.params.map fun (pn, ty) => { name := pn, ty := ty }) fs.retTy))
           ++ c.externFns.map (fun ef => (s!"{childName}_{ef.name}",
-              SymKind.externFn ef.params ef.retTy))) []
+              SymKind.externFn ef.params ef.retTy))
+          -- and its children's newtypes, which Check's `allNewtypes` includes (bug 229).
+          ++ c.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))) []
       let subSyms := impSyms ++ declScope.symbols ++ childFns ++ siblingSyms
       let subTypes := (buildGlobalScopeFromSummary subSummary).2 ++ impTys ++ siblingTypes
         ++ knownTypes

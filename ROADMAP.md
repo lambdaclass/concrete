@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 11** (1 silent, 4 loud, 6 filed before the discovery record) of 196 bug records.
+**Open bugs: 11** (1 silent, 4 loud, 6 filed before the discovery record) of 197 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -125,7 +125,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | workload: Phase 7 workload 9 lzpack (LZSS + PackBits codec, CRC container) and nine probe programs on its shapes (fixed-array hash chains through &mut, ring buffer, Huffman tree, trait codecs, fn values in structs, shift and cast edges, nested linear Result/Option, borrow and defer forms), plus a 400-case corrupt-stream fuzz against a Python reference | 2026-10-23 | 10 programs | 2 | 0 | 2 | found bugs |
 | fuzz: fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus about 100 hand probes after R-0492 steps 1-3 (shadowing, fn-pointer locals, generics, match through references, defer exits, nested modules, diagnostics) | 2026-10-23 | 113 programs | 8 | 5 | 3 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 14 counting batches recorded. 37 attribution-only batches (reviews, follow-ons, CI, controls, development) found 50 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 14 counting batches recorded. 38 attribution-only batches (reviews, follow-ons, CI, controls, development) found 51 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

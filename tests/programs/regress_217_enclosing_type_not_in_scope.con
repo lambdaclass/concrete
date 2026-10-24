@@ -2,7 +2,9 @@
 // submodule's scope (Check's environment for it has none of them), so an enclosing
 // non-generic `enum Result` does not hide the builtin `Result<T, E>` there. The second version of
 // the submodule walk searched the enclosing module's declarations and refused `Result<i32, i32>`
-// (E0113: 'Result' takes 0 type arguments). Exits 42 natively and under --interp.
+// (E0113: 'Result' takes 0 type arguments). The front end accepts it and --interp returns 42;
+// the native build meets bug 227 (Lower looks enums up by spelling), so run_tests.sh checks only
+// --emit-core and --interp.
 mod outer {
     enum Copy Result { A }
     mod inner {
