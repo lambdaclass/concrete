@@ -35,6 +35,10 @@ structure ParserState where
   -- threaded state (not a `mut` local) precisely because `ExceptT` rolls `mut`
   -- locals back on a throw but leaves the base `StateM` state intact.
   errors : Diagnostics := []
+  -- Bug 212: the token position of every `{` the parser took as the start of a struct or enum
+  -- literal's field list, with the literal's name. Read only to explain a failed control-flow head
+  -- (`withCondHeadHint`); it never steers the parse.
+  structLitBraces : List (Nat × String) := []
   deriving Inhabited
 
 abbrev ParseM := ExceptT Diagnostics (StateM ParserState)
@@ -461,6 +465,48 @@ private def demoteTrailingValue (stmts : List Stmt) : List Stmt :=
   | some (.expr sp e true) => stmts.dropLast ++ [.expr sp e false]
   | _ => stmts
 
+/-- Bug 212: record that the `{` at the current position starts a struct or enum literal named
+    `name`. -/
+private def noteStructLitBrace (name : String) : ParseM Unit :=
+  modify fun s => { s with structLitBraces := (s.pos, name) :: s.structLitBraces }
+
+/-- Bug 212. In the head of an `if`, `while` or `match` (and `if let` / `while let`), an
+    uppercase name followed by `{` is read as a struct literal, so `if n > LIMIT { … }` with a
+    module constant `LIMIT` does not parse. That reading is the grammar's (`ident_tail` admits
+    `'{' field_values '}'` after any IDENT; the parser decides by the name's case), and which
+    programs the head accepts is a syntax decision this does not take. This only explains the
+    failure: it finds the head's first `{` at bracket depth 0 (tokens from `start` up to the
+    error position `stop`) and returns a hint when the parser actually took that `{` as the start
+    of a literal (`structLitBraces`), so a head that parsed as written is never blamed. -/
+private def condHeadHint (start stop : Nat) : ParseM (Option String) := do
+  let s ← get
+  let mut depth : Int := 0
+  for i in [start:min (stop + 1) s.tokens.size] do
+    if h : i < s.tokens.size then
+      match s.tokens[i].kind with
+      | .lparen | .lbracket => depth := depth + 1
+      | .rparen | .rbracket => depth := depth - 1
+      | .lbrace =>
+        if depth == 0 then
+          match s.structLitBraces.lookup i with
+          | some n =>
+            return some s!"in an `if`, `while` or `match` head, `{n} {"{"}` is read as the start of a struct literal, not as the end of the condition; if `{n}` is a constant, parenthesize the condition, e.g. `if (x < {n}) {"{"} … {"}"}`"
+          | none => return none
+      | _ => pure ()
+  return none
+
+/-- Run the parse of a control-flow head, up to (not consuming) the `{` that must follow it; on a
+    parse error there, attach `condHeadHint`'s explanation when it applies (bug 212). An error in
+    the block after a head that parsed is never hinted, even when the head holds a literal. The
+    accepted language is unchanged. -/
+private def withCondHeadHint (start : Nat) (act : ParseM α) : ParseM α := do
+  try act catch e =>
+    match ← condHeadHint start (← get).pos with
+    | none => throw e
+    | some h =>
+      throw (e.map fun d =>
+        { d with hint := some (match d.hint with | some old => old ++ "; " ++ h | none => h) })
+
 mutual
 
 partial def parsePrimary : ParseM Expr := do
@@ -485,7 +531,11 @@ partial def parsePrimary : ParseM Expr := do
     -- if-as-expression: if cond { then } else { else }
     let sp ← peekSpan
     advance
-    let cond ← parseExpr
+    let start := (← get).pos
+    let cond ← withCondHeadHint start do
+      let c ← parseExpr
+      if (← peek) != .lbrace then expect .lbrace
+      pure c
     let then_ ← parseExprBlock
     expect .else_
     -- `else if ...` chains in value position: the trailing `if` is itself an
@@ -541,6 +591,7 @@ partial def parsePrimary : ParseM Expr := do
               expect .rparen
               return .staticMethodCall sp name nextName [] args
             else if next2 == .lbrace then
+              noteStructLitBrace s!"{name}::{nextName}"
               expect .lbrace
               let (fields, _) ← parseStructLitFields
               expect .rbrace
@@ -616,6 +667,7 @@ partial def parsePrimary : ParseM Expr := do
     else if next2 == .lbrace then
       -- Could be struct literal: Name[::<Type>] { field: val, ... }
       if name.length > 0 && (name.toList.head!).isUpper then
+        noteStructLitBrace name
         advance
         let (fields, base) ← parseStructLitFields
         expect .rbrace
@@ -627,8 +679,11 @@ partial def parsePrimary : ParseM Expr := do
   | .match_ =>
     let sp ← peekSpan
     advance
-    let scrutinee ← parseExpr
-    expect .lbrace
+    let start := (← get).pos
+    let scrutinee ← withCondHeadHint start do
+      let sc ← parseExpr
+      expect .lbrace
+      pure sc
     let arms ← parseMatchArms
     expect .rbrace
     return .match_ sp scrutinee arms
@@ -1216,7 +1271,11 @@ partial def parseIfLet (sp : Span) : ParseM Stmt := do
   expect .lbrace
   let bindings ← parseBindingList
   expect .assign
-  let scrutinee ← parseExpr
+  let start := (← get).pos
+  let scrutinee ← withCondHeadHint start do
+    let sc ← parseExpr
+    if (← peek) != .lbrace then expect .lbrace
+    pure sc
   let thenBody ← parseBlock
   let elseBody ← if (← peek) == .else_ then do
     advance
@@ -1243,7 +1302,11 @@ partial def parseIfInExprBlock : ParseM Stmt := do
   expect .if_
   if (← peek) == .«let» then
     return ← parseIfLet sp
-  let cond ← parseExpr
+  let start := (← get).pos
+  let cond ← withCondHeadHint start do
+    let c ← parseExpr
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
   let thenBody ← parseExprBlock
   -- Value-form only if a branch actually ENDS with a value (a trailing
   -- expression, value match, or nested value if). A trailing `if c { a(); }
@@ -1280,7 +1343,11 @@ partial def parseIf : ParseM Stmt := do
   -- `if let` is a destructuring conditional; desugar to a match.
   if (← peek) == .«let» then
     return ← parseIfLet sp
-  let cond ← parseExpr
+  let start := (← get).pos
+  let cond ← withCondHeadHint start do
+    let c ← parseExpr
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
   let thenBody ← parseBlock
   let tk ← peek
   let elseBody ← if tk == .else_ then
@@ -1309,7 +1376,11 @@ partial def parseWhileLet (sp : Span) (lbl : Option String) : ParseM Stmt := do
   expect .lbrace
   let bindings ← parseBindingList
   expect .assign
-  let scrutinee ← parseExpr
+  let start := (← get).pos
+  let scrutinee ← withCondHeadHint start do
+    let sc ← parseExpr
+    if (← peek) != .lbrace then expect .lbrace
+    pure sc
   let body ← parseBlock
   let successArm := MatchArm.mk sp enumName variant bindings none body
   let breakArm := MatchArm.varArm sp "_" none [Stmt.break_ sp none none]
@@ -1322,7 +1393,11 @@ partial def parseWhile (lbl : Option String) : ParseM Stmt := do
   -- `while let` is a destructuring loop; desugar to a `while true` + match + break.
   if (← peek) == .«let» then
     return ← parseWhileLet sp lbl
-  let cond ← parseExpr
+  let start := (← get).pos
+  let cond ← withCondHeadHint start do
+    let c ← parseExpr
+    if (← peek) != .lbrace then expect .lbrace
+    pure c
   let body ← parseBlock
   return .while_ sp cond body lbl
 
@@ -1392,8 +1467,11 @@ partial def parseExprOrAssignNoSemicolon : ParseM Stmt := do
 partial def parseMatchStmt : ParseM Stmt := do
   let sp ← peekSpan
   advance  -- consume match_
-  let scrutinee ← parseExpr
-  expect .lbrace
+  let start := (← get).pos
+  let scrutinee ← withCondHeadHint start do
+    let sc ← parseExpr
+    expect .lbrace
+    pure sc
   let arms ← parseMatchArms
   expect .rbrace
   return .expr sp (.match_ sp scrutinee arms) false

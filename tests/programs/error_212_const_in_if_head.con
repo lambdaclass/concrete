@@ -1,0 +1,13 @@
+// Bug 212: an uppercase name followed by `{` in an `if` head is read as a struct literal, so a
+// module constant before the block (`if n > LIMIT { … }`) does not parse (E0001). The diagnostic
+// explains that reading and names the parenthesized form; which heads are accepted is a syntax
+// decision this fixture does not take (docs/bugs/212_const_before_block_parses_as_struct_literal.md).
+mod m {
+    const LIMIT: i32 = 16;
+
+    fn main() -> i32 {
+        let mut n: i32 = 20;
+        if n > LIMIT { n = LIMIT; }
+        return n;
+    }
+}

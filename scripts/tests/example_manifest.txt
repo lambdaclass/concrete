@@ -136,6 +136,7 @@ examples/known_holes/returned_ref_provenance_vec/src/main.con skip owner=scripts
 examples/kvstore/src/main.con project-build
 examples/loop_invariant/src/main.con compile
 examples/lox/src/main.con project-build
+examples/lzpack/src/main.con project-build
 examples/mal/main.con compile
 examples/multi_kernel_policy/allow/src/main.con compile
 examples/multi_kernel_policy/blocked/src/main.con compile
@@ -439,6 +440,15 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/kvstore/ get_missing exit=0 ret=0 interp=yes oracle=interp -- get nope
 @run examples/lox/ hello exit=0 ret=0 interp=yes oracle=interp -- testdata/hello.lox
 @run examples/lox/ comprehensive exit=0 ret=0 interp=yes oracle=interp -- test_comprehensive.lox
+# lzpack (Phase 7 workload 9). The interpreter keeps written files in memory, so the `c` and `d`
+# cases compare the printed sizes; check_lzpack_differential.sh owns the written bytes (against an
+# independent Python encoder) and the scale inputs.
+@run examples/lzpack/ selftest exit=0 ret=0 interp=yes oracle=interp -- selftest
+@run examples/lzpack/ roundtrip exit=0 ret=0 interp=yes oracle=interp -- t testdata/sample.txt
+@run examples/lzpack/ compress exit=0 ret=0 interp=yes oracle=interp -- c testdata/sample.txt out.lzp
+@run examples/lzpack/ compress_rle exit=0 ret=0 interp=yes oracle=interp -- c -r testdata/sample.txt out.lzp
+@run examples/lzpack/ decompress exit=0 ret=0 interp=yes oracle=interp -- d testdata/sample.lzp out.txt
+@run examples/lzpack/ corrupt exit=1 ret=1 interp=yes oracle=interp stdout=empty -- d testdata/corrupt.lzp out.txt
 @run examples/packet/ packet exit=0 ret=0 interp=yes oracle=interp
 @run examples/patterns/byte_ranges/ byte_ranges exit=0 ret=0 interp=yes oracle=interp
 @run examples/png_chunks/ tiny exit=0 ret=0 interp=yes oracle=interp -- testdata/tiny.png

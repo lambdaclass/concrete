@@ -1,0 +1,14 @@
+// Bug 214: `b` is left unconsumed by both returns. Each E0208 now names its `return` (a related
+// span), so the two refusals are told apart; before, both read "linear variable 'b' was never
+// consumed" at the declaration and named neither exit.
+mod m {
+    struct R { x: i32 }
+
+    fn f(n: i32) -> i32 {
+        let b: R = R { x: 1 };
+        if n == 0 { return 0; }
+        return n;
+    }
+
+    fn main() -> i32 { return f(1); }
+}

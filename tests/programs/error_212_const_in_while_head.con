@@ -1,0 +1,10 @@
+// Bug 212: the `while` form of error_212_const_in_if_head.con.
+mod m {
+    const LIMIT: i32 = 16;
+
+    fn main() -> i32 {
+        let mut n: i32 = 0;
+        while n < LIMIT { n = n + 1; }
+        return n;
+    }
+}

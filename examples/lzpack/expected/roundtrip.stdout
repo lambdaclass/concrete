@@ -1,0 +1,2 @@
+testdata/sample.txt: 456 -> lz=266 (literals 171, matches 29, longest 18) ok
+testdata/sample.txt: 456 -> rle=402 (literals 384, runs 1, longest 72) ok
