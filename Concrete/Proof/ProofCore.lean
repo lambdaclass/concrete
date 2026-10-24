@@ -692,24 +692,11 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .geq, _ => some .ge
   | _, _    => none
 
-/-- Non-partial extractor restricted to the LITERAL fragment of
-    `CExpr`.  Mirrors the literal cases of `cExprToPExpr` (lines
-    708–709) so the Phase 12 soundness proofs in
-    `Concrete.ProofSoundness` can reason about it WITHOUT the
-    `partial def` opacity barrier.
-
-    Returns `none` on any non-literal `CExpr` shape — extending
-    the helper to other constructs would require unwinding the
-    mutual block that makes `cExprToPExpr` `partial def` in the
-    first place; do not extend this helper construct-by-construct
-    in lockstep with `cExprToPExpr`, that defeats the purpose.
-
-    Phase 12 obligation: a future commit that lifts the entire
-    mutual block out of `partial def` (by replacing the `mapM`
-    over field/element/arm lists with explicit structural
-    recursion) discharges
-    `cExprToPExpr (.intLit n ty) = cExprLitToPExpr (.intLit n ty)`
-    as a theorem; today it holds by source inspection. -/
+/-- Extractor restricted to the LITERAL fragment of `CExpr`, a literal-only cross-check of
+    `cExprToPExprImpl`. It dates from when the mutual block was a `partial def` and the
+    ProofSoundness proofs could not reduce it; the block is an ordinary `def` now and the theorems
+    are stated against the real extractor, so no theorem depends on this helper. Returns `none`
+    on any non-literal shape; do not extend it construct by construct. -/
 def cExprLitToPExpr : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b  => some (.lit (.bool b))
@@ -1362,127 +1349,28 @@ def cAssignBodyToUpdates :
     | _ => none
 end
 
-/-- Non-partial wrapper for `cExprToPExprImpl`.  The literal
-    cases reduce by `rfl` so Phase 12 preservation theorems
-    (R-01, R-02) can close their antecedent against the REAL
-    extractor, not just a parallel helper.  All other cases
-    delegate to the partial-def implementation in the mutual
-    block above.
+/-- The public expression extractor: exactly `cExprToPExprImpl`, with no arm of its own (bug 219).
 
-    Why: `cExprToPExprImpl` is `partial def` (the mutual block
-    contains `mapM` calls Lean's structural-recursion checker
-    can't see decreasing through).  Lean's kernel treats partial
-    def as opaque — no equation lemmas, `rfl` cannot reduce.
-    This wrapper sits OUTSIDE the mutual block, so its literal
-    arms ARE reducible by definition.
-
-    The wrapper preserves the public API: every caller of
-    `cExprToPExpr` (Report.lean, the rest of ProofCore) gets
-    the same behavior as before.  Internal recursive calls
-    inside the mutual block use `cExprToPExprImpl` directly. -/
-def cExprToPExpr : CExpr → Option Proof.PExpr
-  | .intLit n _   => some (.lit (.int n))
-  | .boolLit b    => some (.lit (.bool b))
-  | .ident name _ => some (.var name.name)
-  | .binOp op lhs rhs _ => do
-    let pop ← binOpToPBinOp op (CExpr.ty lhs)
-    let pl ← cExprToPExpr lhs
-    let pr ← cExprToPExpr rhs
-    some (.binOp pop pl pr)
-  | .cast inner tgt => do
-    let pi ← cExprToPExpr inner
-    castToPExpr (CExpr.ty inner) tgt pi
-  | .fieldAccess obj field _ => do
-    let po ← cExprToPExpr obj
-    some (.fieldAccess po field)
-  | .arrayIndex arr idx _ => do
-    let pa ← cExprToPExpr arr
-    let pi ← cExprToPExpr idx
-    some (.arrayIndex pa pi)
-  | .call (.direct fn) _ args _ => do
-    let pargs ← cExprListToPExpr args
-    some (.call fn pargs)
-  -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
-  -- not need the callee's definition — it needs an identity for the thing being
-  -- applied, and inside this body the parameter name IS that identity, which the
-  -- theorem quantifies over. Refusing to extract these was too strong: it cost
-  -- std three real proofs (Option::map, Result::map, Result::map_err), whose
-  -- statements hold for ANY `f` precisely because `f` is opaque.
-  --
-  -- Extracting them as `.call` was ALSO wrong (bug 061): a parameter named `f`
-  -- and a definition named `f` became the SAME node, so the evaluator resolved a
-  -- parameter application through the GLOBAL function table — a soundness hazard
-  -- in the one place soundness claims are made. `.applyVar` keeps the identity
-  -- local, answerable only by `FnTable.callables` (R-0442).
-  | .call (.indirect binding) _ args _ => do
-    let pargs ← cExprListToPExpr args
-    some (.applyVar binding.name pargs)
-  | .structLit name _ fields _ => do
-    let pfields ← cFieldsToPExpr fields
-    some (.structLit name pfields)
-  | .enumLit ename variant _ fields _ => do
-    let pfields ← cFieldsToPExpr fields
-    some (.enumLit ename variant pfields)
-  | .arrayLit elems _ => do
-    let pelems ← cExprListToPExpr elems
-    some (.arrayLit pelems)
-  | .match_ scrutinee arms _ => do
-    let ps ← cExprToPExpr scrutinee
-    let parms ← cMatchArmsToP arms
-    some (.match_ ps parms)
-  | e             => cExprToPExprImpl e
+    It used to be a second copy of the extractor's arms, kept outside the mutual block so the
+    ProofSoundness theorems could reduce literal cases by `rfl` when `cExprToPExprImpl` was a
+    `partial def`. The mutual block is now an ordinary `def`, so its equations are available and the
+    theorems unfold it directly. A second copy was worse than unnecessary: mutation 31 restored bug
+    061 in the copy, which nothing executes, and survived. Every extraction rule now exists once,
+    in `cExprToPExprImpl`; `check_proofcore_callable_identity.sh` fails if this definition grows
+    an arm again. -/
+def cExprToPExpr (e : CExpr) : Option Proof.PExpr := cExprToPExprImpl e
 
 /-- A loop body's step expression: `cStmtsToStepExprK` with no enclosing continuation. -/
 def cStmtsToStepExpr (assigns : List (String × Proof.PExpr)) (body : List CStmt) :
     Option Proof.PExpr :=
   cStmtsToStepExprK [] assigns body none
 
-/-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
-    `.letDecl :: rest` directly so Phase 12 R-06 (letIn
-    preservation) can discharge against the REAL extractor.
-    All other CStmt-list shapes delegate to the partial-def
-    implementation in the mutual block above.
-
-    Recursion is structural on `rest` (shorter than the
-    input list).  The val arm uses `cExprToPExpr` (the
-    expression wrapper) so the val side is also wrapper-
-    reducible when val itself is in the supported fragment. -/
-def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
-  | [], k => k
-  | [.return_ (some e) _], _ => if cExprTailOk e then cExprToPExpr e else none
-  | [.expr e true], _ => if cExprTailOk e then cExprToPExpr e else none
-  | (.letDecl name _ _ val) :: rest, k => do
-    if !cExprNoEscape val then none
-    let pv ← cExprToPExpr val
-    let pb ← cStmtsToPExprK rest k
-    some (.letIn name.name pv pb)
-  | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
-    if !(cExprNoEscape idx && cExprNoEscape val) then none
-    let pi ← cExprToPExpr idx
-    let pv ← cExprToPExpr val
-    let pb ← cStmtsToPExprK rest k
-    some (.letIn name.name (.arraySet (.var name.name) pi pv) pb)
-  -- if-without-else (early-return shape): then branch's cont
-  -- is `rest with k`; implicit else is the same.
-  | (.ifElse cond thenBranch none) :: rest, k => do
-    if !cExprNoEscape cond then none
-    let pc ← cExprToPExpr cond
-    let pkRest ← cStmtsToPExprK rest k
-    if !cBranchComposes thenBranch pkRest then none  -- bug 101
-    let pt ← cStmtsToPExprK thenBranch (some pkRest)
-    some (.ifThenElse pc pt pkRest)
-  -- Bounded while loop: flat-assign body extracts to PExpr.while_;
-  -- richer body falls back to PExpr.while_step.
-  | (.while_ cond body _ _step) :: rest, k => do
-    if !cExprNoEscape cond then none
-    let pc ← cExprToPExpr cond
-    let pCont ← cStmtsToPExprK rest k
-    match cAssignBodyToUpdates body with
-    | some updates => some (.while_ pc updates pCont)
-    | none => do
-      let stepE ← cStmtsToStepExpr [] body
-      some (.while_step pc (extractCarried body) stepE pCont)
-  | stmts, k => cStmtsToPExprKImpl stmts k
+/-- The public statement extractor: exactly `cStmtsToPExprKImpl`, with no arm of its own (bug 219,
+    as for `cExprToPExpr`). It used to repeat the `let`, `arr[i] = v`, if-without-else and `while`
+    arms so the ProofSoundness theorems (R-06, R-18, R-19 ...) could reduce them while the
+    implementation was a `partial def`; they now unfold the implementation's equations. -/
+def cStmtsToPExprK (stmts : List CStmt) (k : Option Proof.PExpr) : Option Proof.PExpr :=
+  cStmtsToPExprKImpl stmts k
 
 -- Unsupported construct identification
 

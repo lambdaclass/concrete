@@ -32,6 +32,13 @@ nothing a gate executes.
 The anchor now names the arm of `cExprToPExprImpl` (the line followed by `| .ifExpr ...`), with a
 comment saying why. Family 31 is KILLED by `check_proofcore_callable_identity.sh`.
 
+Structural follow-up (2026-10-24, branch `vp-219-wrapper`): the copies are gone. `cExprToPExpr` and
+`cStmtsToPExprK` are now bare delegations to `cExprToPExprImpl` / `cStmtsToPExprKImpl`, and the
+ProofSoundness preservation theorems (R-01 – R-20) unfold the implementation's equations instead of
+a wrapper's arms, so they are about the code the compiler runs. `check_proofcore_callable_identity.sh`
+fails if either public name grows an arm again or a second site builds `.applyVar`, with controls
+for both.
+
 ## Structural cause
 
 One decision (a locally bound callable extracts as `.applyVar`, never as a global `.call`) is kept
@@ -42,9 +49,8 @@ in two places).
 ## Structural owner
 
 R-0513 (trustworthy gate execution): a mutation anchor must sit on code a gate executes; "matches
-exactly once" does not establish that. The duplicate arm itself belongs to the proof-extraction
-wrappers (ProofSoundness R-01/R-02 lifts), which should delegate every non-literal case to the
-implementation rather than repeat it.
+exactly once" does not establish that. The duplicate arms were removed by the follow-up above, which
+makes the class unrepresentable for these two extractors.
 
 ## Regression
 

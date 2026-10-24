@@ -107,10 +107,10 @@ def evalSourceLetStep (env : Env) (name : String) (vv : PVal)
     `evalBinOp pop vl vr`.  Stated as a partial
     "given-the-pieces" lookup rather than a recursive
     source-eval function because the recursion for
-    not-yet-discharged constructs (call, structLit, ...) goes
-    through `cExprToPExprImpl`'s partial-def shape — building
-    a full recursive source semantics now would re-create the
-    same `partial def` opacity problem on the source side.
+    not-yet-discharged constructs (call, structLit, ...) would
+    need a full recursive source semantics. (Written when
+    `cExprToPExprImpl` was a `partial def`; that opacity is
+    gone, the source-side semantics is still future work.)
 
     R-04 uses this to state the source-side conclusion as a
     compositional fact: "given operand values, the binop step
@@ -118,41 +118,27 @@ def evalSourceLetStep (env : Env) (name : String) (vv : PVal)
 def evalSourceBinOpStep (pop : PBinOp) (vl vr : PVal) : Option PVal :=
   evalBinOp pop vl vr
 
-/-! ## Phase 12 wrapper architecture (lift landed 2026-05-30)
+/-! ## The extractor the theorems are about (bug 219, 2026-10-24)
 
-`cExprToPExprImpl` (the partial-def, in the mutual block)
-still has the structural-recursion barrier through
-`List.mapM` over field / element / arm lists.  Lean's
-kernel treats `partial def` as opaque — no equation
-lemmas, `rfl` cannot reduce.
+The theorems below are stated against `cExprToPExpr` and `cStmtsToPExprK`, which are now exactly
+`cExprToPExprImpl` and `cStmtsToPExprKImpl` (the mutual block the compiler runs), with no arm of
+their own. Each proof unfolds the public name (`simp only [cExprToPExpr, ...] at *`) and then one
+equation of the implementation (`simp [cExprToPExprImpl, ...]`).
 
-**The lift.**  `cExprToPExpr` (the public entry point in
-`Concrete.ProofCore`) is now a non-partial wrapper that
-handles `.intLit` and `.boolLit` definitionally and
-delegates all other cases to `cExprToPExprImpl`.  Because
-the wrapper sits OUTSIDE the mutual block and is a plain
-`def`, Lean reduces `cExprToPExpr (.intLit n ty)` to
-`some (.lit (.int n))` by `rfl`.
-
-This is the minimum refactor that makes the literal cases
-of the REAL extractor theorem-friendly.  All other cases
-of `cExprToPExpr` still go through the partial-def
-implementation; theorems about them remain blocked until a
-future commit replaces the `mapM`s with paired structural
-recursion.
-
-R-01 and R-02 below are now stated against `cExprToPExpr`
-(the wrapper), not the parallel `cExprLitToPExpr` helper.
-The helper remains in `ProofCore` as a literal-only spec
-useful for documentation and as a redundant cross-check;
-the theorems below no longer depend on it. -/
+History: while the mutual block was a `partial def` (opaque to the kernel), the public names were
+WRAPPERS outside it that repeated the arms the theorems needed (literals 2026-05-30, then
+`binOp`, `let`, `if`, `while` ...), so those arms reduced. Once the block became an ordinary `def`
+the copies were unnecessary, and they were a hazard: a theorem about a copy is a theorem about code
+nothing executes, and mutation 31 (bug 061 restored) survived because it hit the copy. The
+`cExprLitToPExpr` helper remains in `ProofCore` as a literal-only cross-check; no theorem depends
+on it. -/
 
 /-! ## R-01: `lit_int_preservation` (against real extractor)
 
 For any int literal source `e := .intLit n ty`:
   * `cExprToPExpr e = some (.lit (.int n))` —
     proved against the REAL public extractor
-    (closed by `rfl` via the non-partial wrapper);
+    (one equation of `cExprToPExprImpl`);
   * evaluating that PExpr at any non-zero fuel produces
     `some (.int n)`;
   * the source-level semantics produces `some (.int n)`.
@@ -165,7 +151,7 @@ theorem lit_int_preservation (n : Int) (ty : Ty) (fuel : Nat)
     cExprToPExpr (.intLit n ty) = some (.lit (.int n))
   ∧ eval fns env (fuel + 1) (.lit (.int n)) = some (.int n)
   ∧ evalSourceLit (.intLit n ty) = some (.int n) := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-02: `lit_bool_preservation` (against real extractor)
@@ -177,15 +163,15 @@ theorem lit_bool_preservation (b : Bool) (fuel : Nat)
     cExprToPExpr (.boolLit b) = some (.lit (.bool b))
   ∧ eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
   ∧ evalSourceLit (.boolLit b) = some (.bool b) := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-03: `var_preservation` (against real extractor)
 
 For any identifier source `e := .ident name ty`:
   * `cExprToPExpr e = some (.var name)` — proved against
-    the REAL public extractor (closed by `rfl` via the
-    non-partial wrapper, same pattern as R-01/R-02);
+    the REAL public extractor (one equation of
+    `cExprToPExprImpl`, same pattern as R-01/R-02);
   * evaluating that PExpr at any non-zero fuel produces
     `env name` (the scope's value for `name`);
   * the source-level semantics produces the same lookup.
@@ -203,7 +189,7 @@ theorem var_preservation (name : String) (ty : Ty) (fuel : Nat)
     cExprToPExpr (.ident (CLocal.ofName name) ty) = some (.var name)
   ∧ eval fns env (fuel + 1) (.var name) = env name
   ∧ evalSourceIdent env (.ident (CLocal.ofName name) ty) = env name := by
-  refine ⟨rfl, ?_, rfl⟩
+  refine ⟨by simp [cExprToPExpr, cExprToPExprImpl, CLocal.ofName], ?_, rfl⟩
   simp [eval]
 
 /-! ## R-04: `binop_preservation` (compositional form)
@@ -221,7 +207,7 @@ For `e := .binOp op lhs rhs ty`, given:
 
 the conclusion holds in three views:
   * `cExprToPExpr e = some (.binOp pop pl pr)` — proved
-    against the REAL extractor via the new wrapper arm
+    against the REAL extractor via `cExprToPExprImpl`'s arm
     (closed by `simp` over the hypotheses);
   * eval on `.binOp pop pl pr` reduces via `evalBinOp`
     once `pl`/`pr` evaluate (the eval side is a
@@ -233,7 +219,7 @@ rules (R-06 letIn, R-07 if, R-08 call, ...) follow this
 shape — hypotheses on sub-expressions; conclusion about
 the composite.
 
-The wrapper's `.binOp` arm:
+The extractor's `.binOp` arm (shown with the public name):
 
     | .binOp op lhs rhs _ => do
         let pop ← binOpToPBinOp op (CExpr.ty lhs)
@@ -251,13 +237,8 @@ theorem binop_preservation
     (h_lhs : cExprToPExpr lhs = some pl)
     (h_rhs : cExprToPExpr rhs = some pr) :
     cExprToPExpr (.binOp op lhs rhs ty) = some (.binOp pop pl pr) := by
-  show (do
-    let pop' ← binOpToPBinOp op (CExpr.ty lhs)
-    let pl' ← cExprToPExpr lhs
-    let pr' ← cExprToPExpr rhs
-    some (PExpr.binOp pop' pl' pr')) = some (.binOp pop pl pr)
-  rw [h_op, h_lhs, h_rhs]
-  rfl
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_op, h_lhs, h_rhs]
 
 /-! ## R-04: eval-side compositional reduction
 
@@ -298,12 +279,11 @@ theorem source_binop_step
 
 /-! ## R-06: `let_preservation` (compositional, three views)
 
-`letIn` extraction lives in `cStmtsToPExprK`, not
-`cExprToPExpr`.  Same wrapper-arm pattern as R-04 but
-applied to the CStmt-list extractor — the new
-`cStmtsToPExprK` wrapper handles `.letDecl :: rest`
-directly, recursing through itself for both `val` (via
-the expression wrapper) and `rest`.
+`letIn` extraction lives in `cStmtsToPExprK` (=
+`cStmtsToPExprKImpl`), not `cExprToPExpr`.  Same pattern as
+R-04 applied to the CStmt-list extractor: its
+`.letDecl :: rest` arm recurses into the expression extractor
+for `val` and into itself for `rest`.
 
 For `(.letDecl name _ ty val) :: rest`, given:
   * `cExprToPExpr val = some pv`,
@@ -312,7 +292,7 @@ the conclusion is
   `cStmtsToPExprK ((.letDecl name _ ty val) :: rest) k
     = some (.letIn name pv pb)`.
 
-Closed by `show`/`rw`/`rfl` over the two hypotheses. -/
+Closed by `simp` over the hypotheses. -/
 theorem let_preservation
     (name : String) (isMut : Bool) (ty : Ty) (val : CExpr)
     (rest : List CStmt) (k : Option PExpr)
@@ -322,7 +302,8 @@ theorem let_preservation
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK ((CStmt.letDecl (CLocal.ofName name) isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_val, h_rest]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, CLocal.ofName, h_esc, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -370,7 +351,8 @@ theorem field_access_preservation
     (po : PExpr) (h_obj : cExprToPExpr obj = some po) :
     cExprToPExpr (.fieldAccess obj field ty)
       = some (.fieldAccess po field) := by
-  simp [cExprToPExpr, h_obj]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_obj]
 
 /-! ## R-13: `cast_identity_preservation` (extraction + eval)
 
@@ -381,7 +363,8 @@ theorem cast_preservation
     (inner : CExpr) (ty : Ty)
     (pi : PExpr) (h_inner : cExprToPExpr inner = some pi) :
     cExprToPExpr (.cast inner ty) = castToPExpr (CExpr.ty inner) ty pi := by
-  simp [cExprToPExpr, h_inner]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_inner]
 
 /-- Bug 080. The identity model is reserved for VALUE-PRESERVING integer casts: a cast whose target
     range does not contain the source's is a wrap. `cast_identity_preservation` stated the identity
@@ -416,13 +399,14 @@ theorem array_index_preservation
     (h_idx : cExprToPExpr idx = some pi) :
     cExprToPExpr (.arrayIndex arr idx ty)
       = some (.arrayIndex pa pi) := by
-  simp [cExprToPExpr, h_arr, h_idx]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_arr, h_idx]
 
 /-! ## R-19: `array_set_preservation` (extraction)
 
 Source-level `arr[i] = v;` extracts to a shadowing letIn
 that rebinds `arr` via `arraySet`.  Only supported when
-`arr` is a simple identifier — the wrapper arm:
+`arr` is a simple identifier — the extractor's arm:
 
     | (.arrayIndexAssign (.ident name _) idx val) :: rest, k =>
         let pi ← cExprToPExpr idx
@@ -441,7 +425,8 @@ theorem array_set_preservation
       ((CStmt.arrayIndexAssign (.ident (CLocal.ofName name) idxTy) idx val) :: rest) k
       = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
   simp only [Bool.and_eq_true] at h_esc
-  simp [cStmtsToPExprK, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, CLocal.ofName, h_esc, h_idx, h_val, h_rest]
 
 /-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
 
@@ -477,7 +462,8 @@ theorem if_no_else_as_fallthrough_preservation
     (h_then : cStmtsToPExprK thenBranch (some pkRest) = some pt) :
     cStmtsToPExprK ((CStmt.ifElse cond thenBranch none) :: rest) k
       = some (.ifThenElse pc pt pkRest) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_scope, h_then]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_scope, h_then]
 
 /-! ## Rules unlocked by the partial-def → def lift (2026-05-30)
 
@@ -490,9 +476,9 @@ recursion via paired mutual helpers; Lean's structural
 recursion checker accepts the whole block.
 
 Consequence: every rule whose extraction lives inside the
-mutual block is now wrapper-free reducible — theorems can
-prove against `cExprToPExprImpl` (or the public
-`cExprToPExpr` which dispatches into it) by `simp`. -/
+mutual block reduces by its equations — theorems prove
+against the public `cExprToPExpr`, which IS
+`cExprToPExprImpl`, by `simp`. -/
 
 /-! ## R-08: `call_preservation` (extraction)
 
@@ -505,7 +491,8 @@ theorem call_preservation
     (pargs : List PExpr)
     (h_args : cExprListToPExpr args = some pargs) :
     cExprToPExpr (.call fn typeArgs args ty) = some (.call fn pargs) := by
-  simp [cExprToPExpr, h_args]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_args]
 
 /-! ## R-09: `struct_lit_preservation` (extraction) -/
 theorem struct_lit_preservation
@@ -515,7 +502,8 @@ theorem struct_lit_preservation
     (h_fields : cFieldsToPExpr fields = some pfields) :
     cExprToPExpr (.structLit name typeArgs fields ty)
       = some (.structLit name pfields) := by
-  simp [cExprToPExpr, h_fields]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_fields]
 
 /-! ## R-11: `enum_lit_preservation` (extraction) -/
 theorem enum_lit_preservation
@@ -525,7 +513,8 @@ theorem enum_lit_preservation
     (h_fields : cFieldsToPExpr fields = some pfields) :
     cExprToPExpr (.enumLit enumName variant typeArgs fields ty)
       = some (.enumLit enumName variant pfields) := by
-  simp [cExprToPExpr, h_fields]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_fields]
 
 /-! ## R-15: `array_lit_preservation` (extraction) -/
 theorem array_lit_preservation
@@ -533,7 +522,8 @@ theorem array_lit_preservation
     (pelems : List PExpr)
     (h_elems : cExprListToPExpr elems = some pelems) :
     cExprToPExpr (.arrayLit elems ty) = some (.arrayLit pelems) := by
-  simp [cExprToPExpr, h_elems]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_elems]
 
 /-! ## R-12: `match_preservation` (extraction) -/
 theorem match_preservation
@@ -543,7 +533,8 @@ theorem match_preservation
     (h_arms : cMatchArmsToP arms = some parms) :
     cExprToPExpr (.match_ scrutinee arms ty)
       = some (.match_ ps parms) := by
-  simp [cExprToPExpr, h_scrut, h_arms]
+  simp only [cExprToPExpr] at *
+  simp [cExprToPExprImpl, h_scrut, h_arms]
 
 /-! ## R-18: `while_flat_preservation` (extraction)
 
@@ -560,7 +551,8 @@ theorem while_flat_preservation
     (h_updates : cAssignBodyToUpdates body = some updates) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_ pc updates pCont) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_updates]
+  simp only [cStmtsToPExprK, cExprToPExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_updates]
 
 /-! ## R-20: `while_step_preservation` (extraction)
 
@@ -586,7 +578,8 @@ theorem while_step_preservation
     (h_step : cStmtsToStepExpr [] body = some stepE) :
     cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
       = some (.while_step pc (extractCarried body) stepE pCont) := by
-  simp [cStmtsToPExprK, h_esc, h_cond, h_rest, h_not_flat, h_step]
+  simp only [cStmtsToPExprK, cExprToPExpr, cStmtsToStepExpr] at *
+  simp [cStmtsToPExprKImpl, h_esc, h_cond, h_rest, h_not_flat, h_step]
 
 /-! ## Eval-side compositional reductions (closing the remaining gaps)
 

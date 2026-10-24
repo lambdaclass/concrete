@@ -230,6 +230,34 @@ else
   ok "no CoeFun on FnTable (every application names its namespace)"
 fi
 
+echo "=== the extraction rules exist once (bug 219) ==="
+# The public extractors `cExprToPExpr` / `cStmtsToPExprK` used to repeat the arms of the
+# implementation (`cExprToPExprImpl` / `cStmtsToPExprKImpl`) for the ProofSoundness theorems. Only
+# the implementation runs, so a theorem or a mutation aimed at a copy is about code nothing
+# executes: mutation 31 (bug 061 restored in the copy) survived.
+#
+# The probe reads the elaborated environment, not the source text:
+#   * each public name's value eta-reduces to its implementation's constant (a bare delegation),
+#     and neither carries @[implemented_by] or a @[csimp] replacement (which would make the
+#     compiled code differ from the definition);
+#   * `PExpr.applyVar` (the bug-061 rule) is CONSTRUCTED at exactly one place, once, in
+#     cExprToPExprImpl, across every definition of Concrete.Proof.ProofCore and every Concrete
+#     definition the extractor can reach in any module, private ones included. Only executable positions count (binder
+#     types, type and proof arguments are skipped, so a pattern or a `match h :` equation does
+#     not); a function and its compiled `_unsafe_rec` copy are one site, and a `_mutual` body must
+#     be fully accounted for by its members' copies;
+#   * controls: a wrapper with an arm, an @[implemented_by] redirection, reachable helpers named
+#     like generated code, nested under the extractor's namespace or private (mangled names), and a
+#     `match h :` pattern.
+SC_OUT="$(lake env lean scripts/tests/fixtures/single_copy/probe.lean 2>&1)"; SC_RC=$?
+SC_OK="$(grep -c '^OK ' <<<"$SC_OUT")"
+while IFS= read -r line; do
+  case "$line" in OK\ *) ok "${line#OK }" ;; FAIL\ *) no "${line#FAIL }" ;; esac
+done <<<"$SC_OUT"
+if [ "$SC_RC" -ne 0 ] || [ "$SC_OK" -ne 8 ] || grep -q '^FAIL ' <<<"$SC_OUT"; then
+  no "single-copy probe: rc=$SC_RC, $SC_OK of 8 checks OK: $(grep -m2 -E 'error|FAIL' <<<"$SC_OUT" | cut -c1-300)"
+fi
+
 echo
 echo "PROOFCORE-CALLABLE-IDENTITY: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
