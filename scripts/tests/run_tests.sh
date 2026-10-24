@@ -8450,6 +8450,18 @@ for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_preceden
         FAIL=$((FAIL + 1))
     fi
 done
+# The enclosing module's `enum Result` is not in the nested scope. Front end and interpreter only:
+# the native build meets bug 227 (Lower looks enums up by spelling), pinned in check_example_outputs.
+r217_src="$TESTDIR/regress_217_enclosing_type_not_in_scope.con"
+r217_core_rc=0; $COMPILER "$r217_src" --emit-core >/dev/null 2>&1 || r217_core_rc=$?
+r217_interp=$($COMPILER "$r217_src" --interp 2>&1 || true)
+if [ "$r217_core_rc" = 0 ] && [ "$r217_interp" = "42" ]; then
+    echo "  ok  bug 217: an enclosing enum Result does not hide the builtin in a submodule (front end accepts; --interp 42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 217: regress_217_enclosing_type_not_in_scope: --emit-core rc $r217_core_rc, --interp '$r217_interp' (want 0, 42)"
+    FAIL=$((FAIL + 1))
+fi
 r217_dir=$(mktemp -d)
 cp -R tests/regressions/bug217_resolve_skips_nested_submodules/project/. "$r217_dir/"
 r217_out=$(cd "$r217_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r217_rc=0 || r217_rc=$?

@@ -1,11 +1,13 @@
-// Bug 217 (Codex review): inside a nested submodule a sibling module's type wins over an enclosing
-// module's own type of the same name, as in Check and Elab. The first version of the submodule walk
-// searched the enclosing module's declarations first, so `E` named `outer`'s `E { A }` and `E::B`
-// was refused (E0103). Exits 42 natively and under --interp.
+// Bug 217 (Codex reviews): inside a nested submodule a sibling module's type wins over an
+// enclosing module's own type and over a child module's type of the same name, as in Check and
+// Elab. The first versions of the submodule walk searched the enclosing module's declarations,
+// then the child's, first, so `E` named `outer`'s `E { A }` or `leaf`'s `E { C }` and `E::B` was
+// refused (E0103). Exits 42 natively and under --interp.
 mod outer {
     enum Copy E { A }
     mod shapes { pub enum Copy E { B } }
     mod inner {
+        mod leaf { pub enum Copy E { C } }
         pub fn h() -> Int {
             let e: E = E::B;
             match e {

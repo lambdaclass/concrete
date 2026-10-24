@@ -1,0 +1,21 @@
+// Bug 227 (OPEN): a user `enum Result` in an enclosing module and the builtin `Result<T, E>` used in
+// its nested submodule. Resolve, Check and Elab give `inner` the builtin (the user enum is not in
+// its scope) and `--interp` returns 42, but Lower looks the enum up by its spelled name in one
+// program-wide list and finds the user's: E0602 "variant 'Ok' not found in enum 'Result'".
+mod outer {
+    enum Copy Result { A }
+    mod inner {
+        pub fn h(r: Result<i32, i32>) -> Int {
+            match r {
+                Result::Ok { value } => { return value as Int; },
+                Result::Err { error } => { return error as Int; },
+            }
+        }
+        pub fn k() -> Int { return h(Result::<i32, i32>::Ok { value: 42 }); }
+    }
+    pub fn g() -> Int { return inner::k(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

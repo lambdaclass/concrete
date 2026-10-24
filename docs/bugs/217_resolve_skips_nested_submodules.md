@@ -53,33 +53,40 @@ submodule recursively, its diagnostics stamped with the submodule's source file 
 (`externEffectsCheck`, bug 113; `capParamNamesCheck`, bug 188) now cover one module each, so every
 rule of `resolveModule` runs once per module of the tree.
 
-A submodule's scope is its imports and its own declarations (with its children's qualified names,
-`buildGlobalScopeFromSummary`), then its sibling modules' structs, enums and public methods (what
-Check's `checkSubmodules` and Elab inject), then its enclosing module's chain. The sibling types come
-before the enclosing module's own declarations, as in Check and Elab: the Codex review's witness was
-an `enum E { A }` in `outer` and an `enum E { B }` in its submodule `shapes`, where `E::B` in
-`outer.inner` was refused (E0103) by the first version. Two choices keep the walk from refusing a program Check and Elab accept:
+A submodule's symbol scope is the environment Check's `checkSubmodules` / `checkModule` give it, in
+the same precedence:
 
-- The imports are resolved by the rule Check and Elab apply to a submodule (`resolveImports`, through
-  `submoduleImportScope`), not by Resolve's top-level `summaryImports`, which is stricter about
-  privacy. When they do not resolve, Resolve leaves the submodule to Check, which refuses it
-  (E0284/E0285) and does not descend past it either. (`std.string` imports the non-`pub` externs of
-  `std.libc`, which `summaryImports` refuses with E0111 and `resolveImports` admits: bug 226.)
-- The chain is rooted at the top-level module's own scope (`ShallowResult.moduleScopes` and the new
-  `moduleTypes`), not at the program-wide first-wins `globalScope`, which holds every module's
-  submodule declarations unqualified. Rooted at `globalScope` (this fix's first version),
-  `regress_202_project_let_else`'s non-generic
-  `enum Result` answered `Result<T, E>` inside `std.option` (E0113): bug 096's shape, one level down.
+1. its imports, resolved by the rule Check and Elab apply to a submodule (`resolveImports`, through
+   `submoduleImportScope`), not by Resolve's top-level `summaryImports`, which is stricter about
+   privacy (`std.string` imports the non-`pub` externs of `std.libc`, which `summaryImports` refuses
+   with E0111 and `resolveImports` admits: bug 226). When they do not resolve, Resolve leaves the
+   submodule to Check, which refuses it (E0284/E0285) and does not descend past it either;
+2. its own declarations, with its children's functions and foreign bindings by qualified name
+   (`leaf_two`), but not its children's types or constants;
+3. the structs, enums and public methods of the modules declared beside it (Check and Elab inject
+   these).
 
-The submodule scope is still a superset of Check's in one direction (an enclosing module's own
-declarations are visible to Resolve); a name only Resolve admits is refused by Check, as before.
+Nothing of an enclosing module is in it, and nothing of the program-wide first-wins `globalScope`.
+Each of those was tried and refused accepted programs: rooted at `globalScope` (the first version),
+`regress_202_project_let_else`'s non-generic `enum Result` answered `Result<T, E>` inside
+`std.option` (E0113, bug 096's shape one level down); with the enclosing module's declarations
+searched first (the second), an enclosing `enum E { A }` hid a sibling's `enum E { B }` (E0103,
+Codex review r1), and with the children's types included, a child's `E` did the same, and an
+enclosing non-generic `enum Result` hid the builtin (E0113, Codex review r2).
+
+Known type names, which carry no arity or fields and so cannot answer a lookup wrongly, are still a
+superset: the submodule's own and its children's, its imports', its siblings', and its enclosing
+module's. A type name Resolve admits there and Check does not is refused by Check, as before.
 
 Regression legs in `run_tests.sh`: `error_217_nested_cast_unknown_type.con` (E0108),
 `error_217_nested_undeclared_name.con` (E0100, was E0201), `error_217_nested_annotation_unknown_type.con`
 (E0108, was E0220), `error_217_module_after_main_cast.con` (E0108, was the backend panic), each
 asserting `error[resolve]`; `regress_217_nested_submodule_scope.con` (a nested submodule using its
 constant, a sibling's type and an import: 42 natively and under `--interp`),
-`regress_217_sibling_type_precedence.con` (the review's witness: 42 on both); and a project build of
+`regress_217_sibling_type_precedence.con` (the r1 and r2 witnesses: a sibling's `E` over the
+enclosing module's and a child's; 42 on both), `regress_217_enclosing_type_not_in_scope.con` (the r2
+`Result` witness: the front end accepts it, `--emit-core` succeeds, and `--interp` returns 42; the
+native build meets bug 227 in Lower and is pinned there); and a project build of
 `tests/regressions/bug217_resolve_skips_nested_submodules/project`, whose `src/util.con` must be
 refused with resolve E0108 at `src/util.con:5:13`. Every std module now goes through Resolve in every
 project build and the whole suite is the control that the walk refuses nothing it accepted.

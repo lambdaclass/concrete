@@ -1,0 +1,22 @@
+// Bug 217 (Codex review r2): an enclosing module's own declarations are not in a nested
+// submodule's scope (Check's environment for it has none of them), so an enclosing
+// non-generic `enum Result` does not hide the builtin `Result<T, E>` there. The second version of
+// the submodule walk searched the enclosing module's declarations and refused `Result<i32, i32>`
+// (E0113: 'Result' takes 0 type arguments). Exits 42 natively and under --interp.
+mod outer {
+    enum Copy Result { A }
+    mod inner {
+        pub fn h(r: Result<i32, i32>) -> Int {
+            match r {
+                Result::Ok { value } => { return value as Int; },
+                Result::Err { error } => { return error as Int; },
+            }
+        }
+        pub fn k() -> Int { return h(Result::<i32, i32>::Ok { value: 42 }); }
+    }
+    pub fn g() -> Int { return inner::k(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

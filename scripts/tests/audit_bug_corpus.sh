@@ -140,7 +140,7 @@ declare -A BUG_TEST_MAP=(
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 217: Resolve walks every nested submodule (E0108 / E0100 at resolve; the project leg in
   # run_tests.sh builds tests/regressions/bug217_resolve_skips_nested_submodules/project).
-  [217]="error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con regress_217_nested_submodule_scope.con regress_217_sibling_type_precedence.con"
+  [217]="error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con regress_217_nested_submodule_scope.con regress_217_sibling_type_precedence.con regress_217_enclosing_type_not_in_scope.con"
   # Bug 215: an unknown type in a cast or a type-argument list (E0108).
   [215]="error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con"
   # Bug 213: an arm after an unguarded catch-all arm (SSA verifier natively).
@@ -249,6 +249,7 @@ declare -A BUG_TEST_MAP=(
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
   [219]="FIXED 2026-10-23 -- mutation 31 was anchored on the proof-only cExprToPExpr wrapper and survived. Regression vehicle is the mutation harness (family 31 KILLED), not a tests/programs fixture"
+  [227]="OPEN -- a user enum Result in one module captures the builtin Result in another: Lower.variantIndex looks enums up by spelling program-wide (nested submodule: E0602), and a top-level module's Resolve scope falls back to the first-wins globalScope (E0113); reproducers tests/regressions/bug227_user_result_captures_builtin_in_other_module/repro.con and repro_toplevel.con, found by the Codex review of bug 217 2026-10-24; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails)"
   [226]="OPEN -- a submodule may import a private function or extern of another module (FileSummary.resolveImports, used by Check and Elab for submodules, admits every function), while a top-level module importing it is E0111; fixing it needs a visibility for std's imports of std.libc's non-pub bindings; reproducer tests/regressions/bug226_submodule_imports_private_function/repro.con, found by bug 217's fix 2026-10-24; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)"
   [216]="OPEN -- a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused (needs the OWN-10 scope decision); reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)"
   [209]="FIXED 2026-10-23 -- a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture"
