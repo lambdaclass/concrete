@@ -79,15 +79,17 @@ def sites (c : Name) (scope : List Name) : MetaM (List (Name × Nat) × List Str
       problems := s!"{m}: {k} constructions, but its members' compiled copies account for {expected}" :: problems
   return (per.toList, problems)
 
-/-- Every definition under `pfx` reachable from `roots` through the values of definitions (and
-    each one's compiled `_unsafe_rec` copy). -/
+/-- Every definition declared under `pfx` (private ones included) reachable from `roots` through
+    the values of definitions (and each one's compiled `_unsafe_rec` copy). -/
 partial def reachable (pfx : Name) (roots : List Name) : MetaM (List Name) := do
   let env ← getEnv
   let rec go (todo : List Name) (seen : Std.HashSet Name) : Std.HashSet Name :=
     match todo with
     | [] => seen
     | n :: rest =>
-      if seen.contains n || !pfx.isPrefixOf n || (env.find? n).isNone then go rest seen else
+      -- a private name is mangled (`_private.<module>.0.<name>`): test the name it was declared as
+      let declared := (privateToUserName? n).getD n
+      if seen.contains n || !pfx.isPrefixOf declared || (env.find? n).isNone then go rest seen else
       let next := match env.find? n with
         | some (.defnInfo d) => d.value.getUsedConstants.toList
         | _ => []
@@ -109,7 +111,10 @@ def copyImpl (e : CExpr) : Option Proof.PExpr := cExprToPExprImpl e
     the extractor's own namespace. Both are reached from `extractor`. -/
 def hidden_mutual_helper (b : String) : Proof.PExpr := Concrete.Proof.PExpr.applyVar b []
 def extractor._extra (b : String) : Proof.PExpr := .applyVar b []
-def extractor (b : String) : List Proof.PExpr := [hidden_mutual_helper b, extractor._extra b]
+/-- A PRIVATE helper: its name is mangled, so a prefix test on the raw name would miss it. -/
+private def privHelper (b : String) : Proof.PExpr := .applyVar b []
+def extractor (b : String) : List Proof.PExpr :=
+  [hidden_mutual_helper b, extractor._extra b, privHelper b]
 /-- Patterns, including a `match h :` equation, are not constructions. -/
 def patternOnly (e : Proof.PExpr) : String :=
   match _h : e with
@@ -145,8 +150,10 @@ open SingleCopyProbe in
     "CONTROL: an @[implemented_by] redirection is refused"
   let creach ← reachable `SingleCopyProbe.Control [``Control.extractor]
   let (ctl, _) ← sites ctor creach
-  let ctlSorted := ctl.toArray.qsort (fun a b => a.1.toString < b.1.toString) |>.toList
-  say (ctlSorted == [(``Control.extractor._extra, 1), (``Control.hidden_mutual_helper, 1)])
-    s!"CONTROL: reachable helpers are found, whatever their names (found {ctlSorted})"
+  let ctlNames := (ctl.map fun (n, k) => ((privateToUserName? n).getD n, k)).toArray.qsort
+    (fun a b => a.1.toString < b.1.toString) |>.toList
+  say (ctlNames == [(``Control.extractor._extra, 1), (``Control.hidden_mutual_helper, 1),
+                    (``Control.privHelper, 1)])
+    s!"CONTROL: reachable helpers are found, whatever their names, private ones included (found {ctlNames})"
   let (pat, _) ← sites ctor [``Control.patternOnly]
   say pat.isEmpty s!"CONTROL: a `match h :` pattern is not a construction (found {pat})"

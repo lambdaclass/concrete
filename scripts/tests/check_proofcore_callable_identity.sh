@@ -242,12 +242,13 @@ echo "=== the extraction rules exist once (bug 219) ==="
 #     compiled code differ from the definition);
 #   * `PExpr.applyVar` (the bug-061 rule) is CONSTRUCTED at exactly one place, once, in
 #     cExprToPExprImpl, across every definition of Concrete.Proof.ProofCore and every Concrete
-#     definition the extractor can reach in any module. Only executable positions count (binder
+#     definition the extractor can reach in any module, private ones included. Only executable positions count (binder
 #     types, type and proof arguments are skipped, so a pattern or a `match h :` equation does
 #     not); a function and its compiled `_unsafe_rec` copy are one site, and a `_mutual` body must
 #     be fully accounted for by its members' copies;
 #   * controls: a wrapper with an arm, an @[implemented_by] redirection, reachable helpers named
-#     like generated code or nested under the extractor's namespace, and a `match h :` pattern.
+#     like generated code, nested under the extractor's namespace or private (mangled names), and a
+#     `match h :` pattern.
 SC_OUT="$(lake env lean scripts/tests/fixtures/single_copy/probe.lean 2>&1)"; SC_RC=$?
 SC_OK="$(grep -c '^OK ' <<<"$SC_OUT")"
 while IFS= read -r line; do
