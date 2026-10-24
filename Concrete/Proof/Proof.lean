@@ -127,6 +127,11 @@ inductive PBinOp where
       Today `evalBinOp` supports `bitand 32 false` only.  Other
       widths are append-only follow-ups. -/
   | bitand (width : Nat) (signed : Bool)
+  /-- Saturating addition / subtraction at a width (2026-10-23): the mathematical result clamped to
+      the type's range, as `saturating_add` / `saturating_sub` mean (ARITH-4,
+      `IntArith.saturateToType`, the `llvm.{s,u}{add,sub}.sat` intrinsics). Never stuck. -/
+  | addsat (width : Nat) (signed : Bool)
+  | subsat (width : Nat) (signed : Bool)
   /-- Logical right shift at a specific width.
 
       Forced by HMAC-SHA256's `sigma` functions
@@ -933,6 +938,12 @@ theorem wrapInt_unsigned_of_lt (w : Nat) (n : Int) (h0 : 0 ≤ n) (hlt : n < 2 ^
   wrapInt_unsigned_of_lt w _ (by omega) (by exact_mod_cast x.isLt)
 
 /-- Evaluate a binary operation on two values. -/
+/-- The range clamp of `saturating_*` at `w` bits, signed or not. -/
+def satClamp (w : Nat) (signed : Bool) (n : Int) : Int :=
+  let (lo, hi) : Int × Int :=
+    if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1) else (0, (2 : Int) ^ w - 1)
+  if n < lo then lo else if n > hi then hi else n
+
 def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   match op, lhs, rhs with
   | .add, .int a, .int b => some (.int (a + b))
@@ -1012,6 +1023,37 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .bitor 32 false, .int a, .int b =>
     some (.int (Int.ofNat
       ((BitVec.ofInt 32 a) ||| (BitVec.ofInt 32 b)).toNat))
+  -- 2026-10-23: the operators the language specification's examples used beyond the forced widths,
+  -- each defined on the w-bit pattern as ARITH-3 / ARITH-4 state them (and as `IntArith`, the
+  -- interpreter's reference, computes them), INDEPENDENTLY of IntArith so the comparison checks
+  -- one against the other.
+  --   division at a width other than 32: truncating; stuck (a trap) on a zero divisor and, signed,
+  --   on MIN / -1, whose quotient is not representable.
+  | .div w true, .int a, .int b =>
+    if b = 0 ∨ (a = -((2 : Int) ^ (w - 1)) ∧ b = -1) then none
+    else some (.int (BitVec.toInt (BitVec.sdiv (BitVec.ofInt w a) (BitVec.ofInt w b))))
+  | .div w false, .int a, .int b =>
+    if b = 0 then none
+    else some (.int (Int.ofNat (BitVec.udiv (BitVec.ofInt w a) (BitVec.ofInt w b)).toNat))
+  --   left shift at a width other than 32: stuck when the count is negative or at least the width;
+  --   otherwise the bits shifted out are discarded and the pattern read at the type's signedness
+  --   (`100 << 1` at `i8` is -56).
+  | .shl w s, .int a, .int b =>
+    if b < 0 ∨ b ≥ Int.ofNat w then none
+    else
+      let r := (BitVec.ofInt w a) <<< b.toNat
+      some (.int (if s then r.toInt else Int.ofNat r.toNat))
+  --   bitwise and at a width other than u32: the and of the two w-bit patterns.
+  | .bitand w s, .int a, .int b =>
+    let r := (BitVec.ofInt w a) &&& (BitVec.ofInt w b)
+    some (.int (if s then r.toInt else Int.ofNat r.toNat))
+  --   wrapping addition at a width other than u32: modulo 2^w, read at the type's signedness.
+  | .addw w s, .int a, .int b =>
+    let r := (BitVec.ofInt w a) + (BitVec.ofInt w b)
+    some (.int (if s then r.toInt else Int.ofNat r.toNat))
+  --   saturating addition and subtraction: clamped to the type's range.
+  | .addsat w s, .int a, .int b => some (.int (satClamp w s (a + b)))
+  | .subsat w s, .int a, .int b => some (.int (satClamp w s (a - b)))
   -- Other widths intentionally unmodeled — extraction refuses to
   -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
   -- reaching eval signals a bug (or a future extension yet to

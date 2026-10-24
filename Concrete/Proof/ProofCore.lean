@@ -651,6 +651,9 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   -- (the proof discharges the no-overflow side condition); modeling it as `addw`
   -- would be unsound — it would certify wrapping the runtime never performs.
   | .wrappingAdd, .u32 => some (.addw 32 false)
+  | .wrappingAdd, ty => (IntArith.intBitWidth ty).map fun (w, s) => .addw w s
+  | .saturatingAdd, ty => (IntArith.intBitWidth ty).map fun (w, s) => .addsat w s
+  | .saturatingSub, ty => (IntArith.intBitWidth ty).map fun (w, s) => .subsat w s
   | .add, _ => some .add                 -- Int/i32/u32 checked add: mathematical
   | .sub, _ => some .sub
   | .mul, _ => some .mul
@@ -659,7 +662,8 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .mod, _ => none  -- other widths await multi-width extension
   | .div, .i32 => some (.div 32 true)
   | .div, .u32 => some (.div 32 false)
-  | .div, _ => none  -- other widths await multi-width extension
+  -- every other integer width (2026-10-23, `evalBinOp`'s generic `.div w s`)
+  | .div, ty => (IntArith.intBitWidth ty).map fun (w, s) => .div w s
   | .bitxor, .i32 => some (.bitxor 32 true)
   | .bitxor, .u32 => some (.bitxor 32 false)
   | .bitxor, .u8 => some (.bitxor 8 false)
@@ -668,11 +672,11 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .bitor, .u32 => some (.bitor 32 false)
   | .bitor, _ => none
   | .bitand, .u32 => some (.bitand 32 false)
-  | .bitand, _ => none
+  | .bitand, ty => (IntArith.intBitWidth ty).map fun (w, s) => .bitand w s
   | .shr, .u32 => some (.shr 32 false)
   | .shr, _ => none
   | .shl, .u32 => some (.shl 32 false)
-  | .shl, _ => none
+  | .shl, ty => (IntArith.intBitWidth ty).map fun (w, s) => .shl w s
   | .eq, _  => some .eq
   | .neq, _ => some .ne
   | .lt, _  => some .lt
@@ -904,6 +908,26 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b => some (.lit (.bool b))
   | .ident name _ => some (.var name)
+  -- `&&` and `||` SHORT-CIRCUIT: the right operand runs only when it decides the result, so they
+  -- are conditionals, not operators on two values (2026-10-23).
+  | .binOp .and_ lhs rhs _ => do
+    let pl ← cExprToPExprImpl lhs
+    let pr ← cExprToPExprImpl rhs
+    some (.ifThenElse pl pr (.lit (.bool false)))
+  | .binOp .or_ lhs rhs _ => do
+    let pl ← cExprToPExprImpl lhs
+    let pr ← cExprToPExprImpl rhs
+    some (.ifThenElse pl (.lit (.bool true)) pr)
+  -- Unary minus on an integer is `0 - x`, checked like every `-` (ARITH-3): the model's `sub` is
+  -- mathematical, so at MIN it has a value where the runtime traps (`partial`), as for `-`. `!b`
+  -- is the conditional `if b then false else true`. `~x` stays unmodelled.
+  | .unaryOp .neg e ty => do
+    if !IntArith.isIntTy ty then none
+    let pe ← cExprToPExprImpl e
+    some (.binOp .sub (.lit (.int 0)) pe)
+  | .unaryOp .not_ e _ => do
+    let pe ← cExprToPExprImpl e
+    some (.ifThenElse pe (.lit (.bool false)) (.lit (.bool true)))
   | .binOp op lhs rhs _ => do
     -- Pass operand type (from lhs.ty) — for width-sensitive ops
     -- (mod, bitxor) this picks the right typed PBinOp; for
@@ -1517,6 +1541,8 @@ private partial def identifyUnsupportedExpr : CExpr → List String
     (if isFloatTy targetTy then [floatReason] else []) ++ identifyUnsupportedExpr inner
   | .fnRef .. => ["function reference"]
   | .allocCall .. => ["alloc call"]
+  | .unaryOp .neg e ty => (if IntArith.isIntTy ty then [] else ["unary operator"]) ++ identifyUnsupportedExpr e
+  | .unaryOp .not_ e _ => identifyUnsupportedExpr e
   | .unaryOp .. => ["unary operator"]
   | .binOp op lhs rhs ty =>
     -- A float-typed result means float arithmetic — unprovable (no float
@@ -1524,9 +1550,11 @@ private partial def identifyUnsupportedExpr : CExpr → List String
     let floatUnsup := if isFloatTy ty || isFloatTy (CExpr.ty lhs) then [floatReason] else []
     -- Pass operand type so width-sensitive ops (mod/bitxor) flag
     -- unsupported widths precisely instead of conflating with op support.
-    let opUnsup := match binOpToPBinOp op (CExpr.ty lhs) with
-      | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
-      | some _ => []
+    let opUnsup := match op with
+      | .and_ | .or_ => []   -- extracted as conditionals
+      | _ => match binOpToPBinOp op (CExpr.ty lhs) with
+        | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
+        | some _ => []
     floatUnsup ++ opUnsup ++ identifyUnsupportedExpr lhs ++ identifyUnsupportedExpr rhs
   | .call _ _ args _ =>
     args.foldl (fun acc a => acc ++ identifyUnsupportedExpr a) []
