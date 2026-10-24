@@ -18,7 +18,7 @@ This document defines the narrow Concrete-to-Lean proof pressure set: 6 function
 | 3 | `compute_checksum` | stale | stale-repair target | Registry has fingerprint from before `+ 1` was added to the body. Body changed, proof outdated. |
 | 4 | `format_result` | ineligible | intentionally excluded | Has `with(Console)` capability. Pure functions only are proof-eligible. |
 | 5 | `clamp_value` | missing | pure extractable, no spec | Uses only extractable constructs (arithmetic, if-else). No registry entry. |
-| 6 | `classify_range` | blocked | unsupported construct | Pure, eligible, but uses struct field access (`b.lo`, `b.hi`) which the extraction pipeline does not support. |
+| 6 | `classify_range` | blocked | unsupported construct | Pure, eligible, but uses integer remainder at `Int` (`%`), which the model does not admit (field access and division did once; both extract now). |
 
 ## Why these 6
 
@@ -26,7 +26,7 @@ This document defines the narrow Concrete-to-Lean proof pressure set: 6 function
 - **stale**: `compute_checksum` simulates the realistic case of a body edit after proof registration. The old fingerprint is `key * message + salt`; the current body is `key * message + salt + 1`.
 - **ineligible**: `format_result` has Console capability. This is the intentional exclusion case — I/O code is outside the proof boundary by design.
 - **missing**: `clamp_value` is pure and extractable but nobody wrote a spec/proof yet. This is the "next proof to write" case.
-- **blocked**: `classify_range` is pure and eligible but uses struct field access, which the extraction pipeline does not yet support. This is the "extraction needs work" case — intentionally kept as a first-class pressure target, not an accident.
+- **blocked**: `classify_range` is pure and eligible but uses integer remainder at `Int`, which the model does not yet admit. This is the "extraction needs work" case — intentionally kept as a first-class pressure target, not an accident.
 
 ## Expected report output
 
