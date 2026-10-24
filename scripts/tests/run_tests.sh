@@ -8406,7 +8406,8 @@ run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
 # Bug 228: the interpreter's loops drop each iteration's bindings, so a loop is linear in its
 # iteration count (200000 iterations did not finish in 60 s on main). Binary 42; --interp 42 in 20 s.
 run_ok "$TESTDIR/regress_228_interp_loop_env.con" 42
-r228_interp=$(timeout 20 $COMPILER "$TESTDIR/regress_228_interp_loop_env.con" --interp 2>&1 || true)
+# bounded_run, not GNU `timeout` (absent on macOS runners); a timeout is INCOMPLETE, not a pass.
+r228_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_228_interp_loop_env.con" --interp 2>&1 || true)
 if [ "$r228_interp" = "42" ]; then
     echo "  ok  bug 228: a 200000-iteration loop runs under --interp within 20 s (42)"
     PASS=$((PASS + 1))
