@@ -256,7 +256,7 @@ printf '%s\n' 'import Concrete' 'open Concrete' \
   'example : copyE = cExprToPExprImpl := rfl' > "$TMP/single_copy_control.lean"
 if CTOUT="$(lake env lean "$TMP/single_copy_control.lean" 2>&1)"; then
   no "CONTROL: rfl accepted a wrapper with an arm of its own, so the delegation check is vacuous"
-elif grep -qE 'type mismatch|not definitionally equal|The rfl tactic|failed' <<<"$CTOUT"; then
+elif grep -qiE 'type mismatch|not definitionally equal|The rfl tactic' <<<"$CTOUT"; then
   ok "CONTROL: rfl refuses a wrapper with a copied (extensionally equal) arm"
 else
   no "CONTROL: the copied-arm probe failed for another reason: $(grep -m2 error <<<"$CTOUT" | cut -c1-300)"
