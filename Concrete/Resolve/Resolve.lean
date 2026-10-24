@@ -767,8 +767,10 @@ private def submoduleImportScope (summaryTable : List (String × FileSummary)) (
     cast target there reached the backend.
 
     A submodule's scope is its imports and its own declarations (with its children's qualified
-    names), searched before its enclosing module's chain, which is how its parent's and
-    siblings' names reach it; its known types extend the enclosing chain the same way. The chain
+    names), then its sibling modules' structs, enums and public methods (what Check's
+    `checkSubmodules` and Elab inject, in that precedence: a sibling's `E` wins over an enclosing
+    module's own `E`), then its enclosing module's chain; its known types extend the enclosing
+    chain the same way. The chain
     is rooted at the top-level module's OWN scope (`ShallowResult.moduleScopes`/`moduleTypes`),
     not at the program-wide first-wins `globalScope`: that map holds every module's submodule
     declarations unqualified, so a user's non-generic `enum Result` would answer `Result<T, E>`
@@ -780,6 +782,10 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
     (traitMethods : List (String × List String)) (traitImpls_ : List (String × String))
     : Diagnostics :=
   let errs := resolveModule m scope knownTypes traitMethods traitImpls_
+  let siblingSyms : List (String × SymKind) := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ s.structs.map (fun sd => (sd.name, SymKind.struct sd))
+      ++ s.enums.map (fun ed => (ed.name, SymKind.enum ed))
+      ++ implSigsToSymbols (s.implMethodSigs.filter fun (name, _) => s.publicNames.contains name)) []
   m.submodules.foldl (fun acc sub =>
     match submoduleImportScope summaryTable sub with
     | none => acc
@@ -788,7 +794,7 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
         | some (_, s) => s
         | none => buildFileSummary sub
       let (declScope, declTypes) := buildGlobalScopeFromSummary subSummary
-      let subSyms := impSyms ++ declScope.symbols ++ ownSyms
+      let subSyms := impSyms ++ declScope.symbols ++ siblingSyms ++ ownSyms
       let subTypes := declTypes ++ impTys ++ ownTypes
       let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
         subTypes subSyms subTypes traitMethods traitImpls_

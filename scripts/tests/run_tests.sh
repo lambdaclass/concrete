@@ -8439,15 +8439,17 @@ run_err "$TESTDIR/error_217_nested_cast_unknown_type.con" "error[resolve]: (E010
 run_err "$TESTDIR/error_217_nested_undeclared_name.con" "error[resolve]: (E0100)"
 run_err "$TESTDIR/error_217_nested_annotation_unknown_type.con" "error[resolve]: (E0108)"
 run_err "$TESTDIR/error_217_module_after_main_cast.con" "error[resolve]: (E0108)"
-run_ok "$TESTDIR/regress_217_nested_submodule_scope.con" 42
-r217_interp=$($COMPILER "$TESTDIR/regress_217_nested_submodule_scope.con" --interp 2>&1 || true)
-if [ "$r217_interp" = "42" ]; then
-    echo "  ok  bug 217: a nested submodule's scope — interp == binary (42)"
-    PASS=$((PASS + 1))
-else
-    echo "FAIL  bug 217: regress_217_nested_submodule_scope --interp gave '$r217_interp', want 42"
-    FAIL=$((FAIL + 1))
-fi
+for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_precedence; do
+    run_ok "$TESTDIR/$r217.con" 42
+    r217_interp=$($COMPILER "$TESTDIR/$r217.con" --interp 2>&1 || true)
+    if [ "$r217_interp" = "42" ]; then
+        echo "  ok  bug 217: $r217 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 217: $r217 --interp gave '$r217_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 r217_dir=$(mktemp -d)
 cp -R tests/regressions/bug217_resolve_skips_nested_submodules/project/. "$r217_dir/"
 r217_out=$(cd "$r217_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r217_rc=0 || r217_rc=$?

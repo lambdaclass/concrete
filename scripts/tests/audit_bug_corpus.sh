@@ -140,7 +140,7 @@ declare -A BUG_TEST_MAP=(
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 217: Resolve walks every nested submodule (E0108 / E0100 at resolve; the project leg in
   # run_tests.sh builds tests/regressions/bug217_resolve_skips_nested_submodules/project).
-  [217]="error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con regress_217_nested_submodule_scope.con"
+  [217]="error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con regress_217_nested_submodule_scope.con regress_217_sibling_type_precedence.con"
   # Bug 215: an unknown type in a cast or a type-argument list (E0108).
   [215]="error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con"
   # Bug 213: an arm after an unguarded catch-all arm (SSA verifier natively).

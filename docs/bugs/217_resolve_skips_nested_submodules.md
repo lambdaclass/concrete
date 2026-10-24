@@ -54,8 +54,11 @@ submodule recursively, its diagnostics stamped with the submodule's source file 
 rule of `resolveModule` runs once per module of the tree.
 
 A submodule's scope is its imports and its own declarations (with its children's qualified names,
-`buildGlobalScopeFromSummary`), searched before its enclosing module's chain, which is how sibling
-modules' types reach it. Two choices keep the walk from refusing a program Check and Elab accept:
+`buildGlobalScopeFromSummary`), then its sibling modules' structs, enums and public methods (what
+Check's `checkSubmodules` and Elab inject), then its enclosing module's chain. The sibling types come
+before the enclosing module's own declarations, as in Check and Elab: the Codex review's witness was
+an `enum E { A }` in `outer` and an `enum E { B }` in its submodule `shapes`, where `E::B` in
+`outer.inner` was refused (E0103) by the first version. Two choices keep the walk from refusing a program Check and Elab accept:
 
 - The imports are resolved by the rule Check and Elab apply to a submodule (`resolveImports`, through
   `submoduleImportScope`), not by Resolve's top-level `summaryImports`, which is stricter about
@@ -75,7 +78,8 @@ Regression legs in `run_tests.sh`: `error_217_nested_cast_unknown_type.con` (E01
 `error_217_nested_undeclared_name.con` (E0100, was E0201), `error_217_nested_annotation_unknown_type.con`
 (E0108, was E0220), `error_217_module_after_main_cast.con` (E0108, was the backend panic), each
 asserting `error[resolve]`; `regress_217_nested_submodule_scope.con` (a nested submodule using its
-constant, a sibling's type and an import: 42 natively and under `--interp`); and a project build of
+constant, a sibling's type and an import: 42 natively and under `--interp`),
+`regress_217_sibling_type_precedence.con` (the review's witness: 42 on both); and a project build of
 `tests/regressions/bug217_resolve_skips_nested_submodules/project`, whose `src/util.con` must be
 refused with resolve E0108 at `src/util.con:5:13`. Every std module now goes through Resolve in every
 project build and the whole suite is the control that the walk refuses nothing it accepted.
