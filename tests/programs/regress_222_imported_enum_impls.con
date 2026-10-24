@@ -1,6 +1,6 @@
 // Bug 222 regression: an imported enum brings its impl blocks and trait impls. The struct and
 // newtype import paths each restated "the impls of this type travel with it" and the enum paths
-// (direct import and the transitive closure) omitted it, so outside its module every trait bound
+// (direct import and the transitive closure) omitted it, so outside its module every bound needing a trait impl
 // on the enum was E0241 (its method calls resolved through the callee table either way). Every
 // imported type kind now takes its impls from one helper (`typeImplsOf` in Resolve/FileSummary.lean).
 mod m {

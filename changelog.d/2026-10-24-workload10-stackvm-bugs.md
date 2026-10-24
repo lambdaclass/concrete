@@ -13,7 +13,7 @@ under `--interp`. The workload found bugs 222, 223 (open), 224, 225 and 228 and 
 ### An Imported Enum Brings Its Impls (bug 222, 2026-10-24)
 
 The struct and newtype import paths each selected the imported type's impl blocks and trait
-impls; the enum paths (by name and through the transitive closure) did not, so every trait bound
+impls; the enum paths (by name and through the transitive closure) did not, so every bound needing a trait impl
 on an imported enum was refused (E0241) outside its module. One helper now selects what travels
 with an imported type, for every type kind. Pinned by `regress_222_imported_enum_impls.con`.
 

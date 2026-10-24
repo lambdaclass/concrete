@@ -3,10 +3,12 @@
 **Status:** FIXED (branch `wip/workload-stackvm-2`)
 **Found:** 2026-10-23, by Phase 7 workload 10 (`examples/stackvm`): `codec` encodes the
 instruction vector with `isa.encode_all<T: Encode + Copy>(&p.code, ..)`, and `Instr` is an enum.
-**Severity:** loud. A valid program was refused: every trait bound on an imported enum failed
+**Severity:** loud. A valid program was refused: every bound needing a trait impl on an imported enum failed
 outside the enum's module (E0241), so a generic helper over the enum, a `Vec` of a linear enum
 with a `Destroy` impl (`v.drop()` needs `T: Destroy`) and a call such as `kill<T: Destroy>(x)`
 could not be written in another module. Structs and newtypes were not affected.
+A `Copy` or `Destroy` bound on a `Copy` enum was satisfied all along: `Copy` is read from the
+declaration, which was imported, and a `Copy` type satisfies `Destroy`.
 
 ## Reproducer
 
