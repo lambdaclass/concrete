@@ -1,0 +1,7 @@
+// Bug 231 (Codex review): a union keeps no bounds on its type parameters, so the parser dropped
+// them unread. They are refused at parse instead.
+union U<T: NoSuchTrait> { a: i64, b: i64 }
+
+fn main() -> Int {
+    return 42;
+}

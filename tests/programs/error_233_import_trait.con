@@ -1,0 +1,17 @@
+// Bug 233: a `pub trait` is in the module's public names but traits are module-local and cannot be
+// imported (TRAIT spec); the import was refused as "'Show' is not public in module 'a'". Now
+// refused at Resolve with the reason (E0126).
+mod a {
+    pub trait Show { fn show(&self) -> i64; }
+}
+
+mod b {
+    import a.{Show};
+    pub fn g() -> i64 { return 42; }
+}
+
+import b.{g};
+
+fn main() -> Int {
+    return g() as Int;
+}

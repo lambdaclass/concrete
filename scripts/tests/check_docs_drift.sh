@@ -251,9 +251,12 @@ bug_neg empty_cell "old='\tunrecorded\t134\t'; assert s.count(old)==1; s=s.repla
 # and "0 consecutive", true only while the last counting batch was not quiet, so recording a quiet
 # batch (the event the signal exists to count) failed this gate.
 bug_copy
-python3 -I "$BGEN" --write --root "$BTMP" >/dev/null 2>&1 || true
-STREAK0="$(sed -n 's/.*signal (exit 2m): \([0-9][0-9]*\) consecutive.*/\1/p' "$BTMP/ROADMAP.md" | awk 'NR==1')"
-case "$STREAK0" in ''|*[!0-9]*) no "the discovery signal's current streak could not be read from the regenerated dashboard"; STREAK0=-99 ;; esac
+rm -f "$BTMP/ROADMAP.md.gen"
+STREAK0=""
+if python3 -I "$BGEN" --root "$BTMP" > "$BTMP/ROADMAP.md.gen" 2>/dev/null; then
+  STREAK0="$(sed -n 's/.*signal (exit 2m): \([0-9][0-9]*\) consecutive.*/\1/p' "$BTMP/ROADMAP.md.gen" | awk 'NR==1')"
+fi
+case "$STREAK0" in ''|*[!0-9]*) no "the discovery signal's current streak could not be generated from the record (baseline for the controls below)"; STREAK0=-99 ;; esac
 # Positive control: a new quiet counting batch, regenerated, passes and moves the signal by one.
 bug_copy
 printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"

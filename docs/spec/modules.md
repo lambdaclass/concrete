@@ -56,7 +56,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0110 (resolve), E0111 (resolve), E0284 (check), E0285 (check), E0418 (elab), E0419 (elab)
+- Codes: E0110 (resolve), E0111 (resolve), E0126 (resolve), E0284 (check), E0285 (check), E0323 (check), E0418 (elab), E0419 (elab), E0423 (elab)
 - Status: enforced
 - Enforced by: Concrete.Pipeline.resolve
 - Semantics: none

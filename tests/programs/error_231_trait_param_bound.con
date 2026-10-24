@@ -1,0 +1,7 @@
+// Bug 231 (Codex review): a trait declaration keeps no bounds on its type parameters, so the parser
+// dropped them unread (`NoSuchTrait` reached no pass). They are refused at parse instead.
+trait Tr<T: NoSuchTrait> { fn get(&self) -> i64; }
+
+fn main() -> Int {
+    return 42;
+}

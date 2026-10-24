@@ -25,8 +25,9 @@ is 0, i.e. while the last eligible counting batch was not quiet.
 
 ## Fix
 
-The gate first regenerates the unmodified copy and reads its streak (`STREAK0`, failing closed when
-it cannot be read), then expects `STREAK0 + 1` after a quiet batch and `STREAK0` after each token
+The gate first generates the dashboard from the unmodified record and reads its streak (`STREAK0`;
+a failed generation or an unreadable streak is a failure, and the controls then cannot match), then
+expects `STREAK0 + 1` after a quiet batch and `STREAK0` after each token
 batch. The gate's own run is the regression leg: with this branch's record (a quiet batch last) the
 controls pass, and they still fail if a token batch moves the signal or a quiet one does not.
 

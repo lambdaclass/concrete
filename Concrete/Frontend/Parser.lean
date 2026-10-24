@@ -1974,7 +1974,13 @@ partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan
   expect .trait_
   let name ← expectIdent
-  let (typeParams, _typeBounds) ← parseTypeParams
+  let boundsSp ← peekSpan
+  let (typeParams, typeBounds) ← parseTypeParams
+  -- Bug 231 (Codex review): `TraitDef` keeps no bounds, so they were parsed and dropped, and no
+  -- pass ever saw the trait names they wrote. Refuse rather than erase (as bug 091 does for
+  -- generic trait methods).
+  if !typeBounds.isEmpty then
+    throwParse s!"bounds on a trait's type parameters are not supported: '{name}' bounds {", ".intercalate (typeBounds.map (·.1))}" (span := some boundsSp)
   expect .lbrace
   let mut methods : List FnSigDef := []
   let mut tk ← peek
@@ -2090,6 +2096,10 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     -- callable with no authority (Codex review of bug 188). Refused.
     if !capParams.isEmpty then
       throwParse s!"a bodiless declaration cannot take capability parameters ('{name}' declares {", ".intercalate capParams}): a foreign binding declares the concrete effects it exercises" (span := some sp)
+    -- Bug 231 (Codex review): `ExternFnDecl` keeps no type parameters or bounds, so a bound here
+    -- was dropped unread. Refuse rather than erase it.
+    if !typeBounds.isEmpty then
+      throwParse s!"a bodiless declaration cannot bound its type parameters ('{name}' bounds {", ".intercalate (typeBounds.map (·.1))}): nothing instantiates a declaration's bounds" (span := some sp)
     advance  -- consume ';'
     let declCaps : Option CapSet :=
       if wroteWith then some (match capSet with | .concrete [] => CapSet.empty | other => other)
@@ -2635,7 +2645,11 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             -- Parse union as a struct (all fields share memory)
             advance  -- consume 'union'
             let name ← expectIdent
-            let (typeParams, _typeBounds) ← parseTypeParams
+            let boundsSp ← peekSpan
+            let (typeParams, typeBounds) ← parseTypeParams
+            -- Bug 231 (Codex review): a union keeps no bounds; refuse rather than erase them.
+            if !typeBounds.isEmpty then
+              throwParse s!"bounds on a union's type parameters are not supported: '{name}' bounds {", ".intercalate (typeBounds.map (·.1))}" (span := some boundsSp)
             expect .lbrace
             let mut fields : List StructField := []
             let mut tk3 ← peek

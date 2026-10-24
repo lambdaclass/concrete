@@ -294,6 +294,28 @@ def importCode (pass : String) (unknownModule : Bool) : String :=
   | "elab", true => "E0418" | "elab", false => "E0419"
   | _, true => "E0110" | _, false => "E0111"
 
+/-- Bug 233: the kind of a public declaration of `summary` that no import binds, a trait or a
+    constant, if `name` is one. Every pass's public-name list (`publicNames`) holds them, so the
+    import rule fell through to "not public", which they are not. Traits are module-local and cannot
+    be imported (TRAIT spec); a constant cannot be imported yet, because Core names a constant by its
+    bare spelling (bug 132) and an imported one could not be told from the importer's own. -/
+def unimportableKind (summary : FileSummary) (name : String) : Option String :=
+  if summary.traits.any (fun t => t.isPublic && t.name == name) then some "trait"
+  else if summary.constants.any (fun c => c.isPublic && c.name == name) then some "constant"
+  else none
+
+/-- Bug 233: the refusal of an import naming a public trait or constant (`unimportableKind`). -/
+def unimportableMsg (kind symbol moduleName : String) : String :=
+  if kind == "trait" then
+    s!"'{symbol}' is a trait of module '{moduleName}', and a trait cannot be imported: traits are module-local"
+  else
+    s!"'{symbol}' is a constant of module '{moduleName}', and a constant cannot be imported yet: Core names a constant by its spelling, so an imported one could not be told from a constant of the same name in the importer (bug 233)"
+
+/-- Bug 233: the code of that refusal, by the pass that reports it (as `importCode`). -/
+def unimportableCode (pass : String) : String :=
+  match pass with
+  | "check" => "E0323" | "elab" => "E0423" | _ => "E0126"
+
 /-- Bug 222: what travels with an imported type declared as `name` in `summary`, whatever kind
     of declaration it is (struct, enum or newtype): its inherent impl blocks, its trait impls and
     the signatures of their public methods. The struct and newtype import paths each restated this
@@ -380,7 +402,10 @@ def resolveImports (imports : List ImportDecl)
                                  implBlocks := acc.implBlocks ++ newtypeImpls,
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }
-                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass false }]
+                | none =>
+                  match unimportableKind summary origName with
+                  | some kind => .error [{ severity := .error, message := unimportableMsg kind origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := unimportableCode pass }]
+                  | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass false }]
   -- Auto-include impl methods for builtin types (String, Vec, etc.) from all
   -- loaded modules, so methods like String.drop() work without explicit import.
   let builtinNames := builtinTypeNames

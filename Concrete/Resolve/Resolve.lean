@@ -66,6 +66,7 @@ inductive ResolveError where
   | importAliasIsIntrinsic (name : String) (alias : String)
   | capParamNamesCapability (owner : String) (param : String)
   | unknownBoundTrait (traitName : String) (param : String) (owner : String)
+  | unimportable (kind : String) (symbol : String) (moduleName : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -90,6 +91,7 @@ def ResolveError.message : ResolveError → String
     s!"foreign binding '{name}' cannot bind the C symbol '{symbol}': {reason}"
   | .capParamNamesCapability owner param =>
     s!"capability parameter '{param}' of '{owner}' is spelled like a capability: a capability variable entails only itself, so a parameter named '{param}' would stand for the real capability '{param}' without being granted it; rename the parameter"
+  | .unimportable kind symbol moduleName => unimportableMsg kind symbol moduleName
   | .unknownBoundTrait traitName param owner =>
     s!"unknown trait '{traitName}' in the bound on '{param}' of '{owner}': a bound names `Copy`, `Destroy` or a trait declared in this module (traits are module-local and cannot be imported)"
   | .importAliasIsIntrinsic name alias =>
@@ -199,6 +201,7 @@ def ResolveError.code : ResolveError → String
   | .importAliasIsIntrinsic _ _ => "E0120"
   | .capParamNamesCapability _ _ => "E0121"
   | .unknownBoundTrait _ _ _ => "E0125"
+  | .unimportable _ _ _ => "E0126"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -919,7 +922,10 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
         -- Look up the full module summary to get type info for imported symbols
         let modSummary := summaryTable.find? fun (n, _) => n == imp.moduleName
         imp.symbols.foldl (fun (errs, syms, tys) sym =>
-          if pubNames.contains sym.name then
+          -- Bug 233: a public trait or constant is in `pubNames` but no import binds it; it was
+          -- admitted here, bound nothing, and Check refused it as "not public".
+          let unimportable := modSummary.bind fun (_, ms) => unimportableKind ms sym.name
+          if pubNames.contains sym.name && unimportable.isNone then
             let localName := sym.effectiveName
             -- Try to bring the symbol into scope from the module summary
             match modSummary with
@@ -961,7 +967,11 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
                 (errs, (localName, SymKind.typeAlias ta.targetTy) :: syms, localName :: tys)
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
-          else (errs ++ [mkResolveDiag (.notPublicInModule sym.name imp.moduleName) (some imp.span)], syms, tys)
+          else
+            let err := match unimportable with
+              | some kind => ResolveError.unimportable kind sym.name imp.moduleName
+              | none => .notPublicInModule sym.name imp.moduleName
+            (errs ++ [mkResolveDiag err (some imp.span)], syms, tys)
         ) (errs, syms, tys)
     ) (errs, syms, tys)
   ) (([] : Diagnostics), ([] : List (String × SymKind)), ([] : List String))

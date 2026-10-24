@@ -1,14 +1,20 @@
 // Bug 231: the bounds Resolve now checks still admit every trait Check gives the module: `Copy`,
 // the builtin `Destroy` and the module's own traits, at top level and in a nested module, on
-// functions, generic structs, impl blocks and their methods. Exits 42 natively and under --interp.
+// functions, generic structs, impl blocks and a method's own type parameter. Exits 42 natively
+// and under --interp.
 trait Score { fn score(&self) -> i64; }
 struct Copy Pt { x: i64 }
 impl Score for Pt { fn score(&self) -> i64 { return self.x; } }
 struct Copy Wrap<T: Copy> { v: T }
 impl<T: Copy> Wrap<T> {
     fn get(&self) -> T { return self.v; }
+    fn plus<U: Score>(&self, u: &U) -> i64 { return u.score(); }
 }
 fn total<T: Score + Copy>(a: T, b: T) -> i64 { return a.score() + b.score(); }
+
+struct Tok { v: i64 }
+impl Destroy for Tok { fn destroy(&self) { } }
+fn finish<T: Destroy>(x: T) with(Alloc) { x.destroy(); }
 
 mod m {
     pub trait Weigh { fn weight(&self) -> i64; }
@@ -18,8 +24,10 @@ mod m {
     pub fn run() -> i64 { let w: W = W { n: 5 }; return heavy(&w); }
 }
 
-fn main() -> Int {
-    let w: Wrap<i64> = Wrap::<i64> { v: 12 };
+fn main() with(Alloc) -> Int {
+    let w: Wrap<i64> = Wrap::<i64> { v: 2 };
+    let p: Pt = Pt { x: 10 };
     let t: i64 = total(Pt { x: 10 }, Pt { x: 10 });
-    return (w.get() + t + m::run()) as Int;
+    finish(Tok { v: 1 });
+    return (w.get() + w.plus(&p) + t + m::run()) as Int;
 }

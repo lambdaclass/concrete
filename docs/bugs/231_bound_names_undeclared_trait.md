@@ -37,10 +37,18 @@ call-site test by spelling in a nested module whose own trait table does not con
 `Resolve.boundTraitsCheck`, run for every module of the tree (bug 217's walk), refuses a bound
 trait that is not `Copy`, the builtin `Destroy` or one of the module's own traits: exactly the
 traits Check gives that module (`allTraits`, plus `Copy`, which `checkTraitBounds` reads), since
-traits are module-local and cannot be imported (TRAIT spec). New code E0125 (MOD-1@1). Regression
-legs in `run_tests.sh`: the two `error_231_*.con` fixtures (`run_err … (E0125)`) and the positive
-control `regress_231_bounds_name_module_traits.con` (`Copy`, a module trait at top level and in a
-nested module, generic struct and impl bounds: `run_ok … 42` and `--interp` = 42).
+traits are module-local and cannot be imported (TRAIT spec). New code E0125 (MOD-1@1). Three
+declaration forms keep no bounds at all, so the parser dropped them before any pass could read them
+(Codex review): a trait's type parameters, a union's and a bodiless declaration's. Following bug
+091's "refuse rather than erase", the parser refuses a bound there.
+
+Regression legs in `run_tests.sh`: `error_231_unknown_bound_trait.con` (a bound on a struct, an
+enum, a newtype, a function, an impl block, a method's own parameter and a trait impl: seven E0125),
+`error_231_enclosing_trait_bound.con` (E0125), `error_231_trait_param_bound.con`,
+`error_231_union_param_bound.con` and `error_231_bodiless_decl_bound.con` (parse refusals), and the
+positive control `regress_231_bounds_name_module_traits.con` (`Copy`, `Destroy`, a module trait at
+top level and in a nested module, on functions, a generic struct, an impl block and a method's own
+parameter: `run_ok … 42` and `--interp` = 42).
 
 ## Structural cause
 

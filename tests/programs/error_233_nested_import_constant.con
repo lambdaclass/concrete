@@ -1,0 +1,15 @@
+// Bug 233: a nested submodule's import is checked by Check (Resolve leaves a submodule whose imports
+// do not resolve to it), which refused a public constant as "not public". Now refused with the
+// reason (E0323).
+mod m {
+    mod a { pub const X: i32 = 42; }
+    mod b {
+        import m.a.{X};
+        pub fn g() -> i32 { return X; }
+    }
+    pub fn h() -> i32 { return b::g(); }
+}
+
+fn main() -> Int {
+    return m::h() as Int;
+}

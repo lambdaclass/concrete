@@ -1,0 +1,7 @@
+// Bug 231 (Codex review): a bodiless declaration keeps no type parameters or bounds, so the parser
+// dropped a bound unread. It is refused at parse instead.
+trusted fn ext<T: NoSuchTrait>(x: i64) with() -> i64;
+
+fn main() -> Int {
+    return 42;
+}

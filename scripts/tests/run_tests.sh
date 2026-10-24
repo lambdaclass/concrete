@@ -8527,10 +8527,18 @@ done
 # spelling in a nested module. The positive control keeps every trait Check gives a module.
 run_err "$TESTDIR/error_231_unknown_bound_trait.con" "(E0125)"
 run_err "$TESTDIR/error_231_enclosing_trait_bound.con" "(E0125)"
+run_err "$TESTDIR/error_231_trait_param_bound.con" "bounds on a trait's type parameters are not supported"
+run_err "$TESTDIR/error_231_union_param_bound.con" "bounds on a union's type parameters are not supported"
+run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration cannot bound its type parameters"
+# Bug 233: an import of a public constant or trait, which no import binds, was refused as "not
+# public"; it is refused with the reason (E0126 at Resolve, E0323 for a nested submodule at Check).
+run_err "$TESTDIR/error_233_import_constant.con" "(E0126)"
+run_err "$TESTDIR/error_233_import_trait.con" "(E0126)"
+run_err "$TESTDIR/error_233_nested_import_constant.con" "(E0323)"
 run_ok "$TESTDIR/regress_231_bounds_name_module_traits.con" 42
 r231_interp=$($COMPILER "$TESTDIR/regress_231_bounds_name_module_traits.con" --interp 2>&1 || true)
 if [ "$r231_interp" = "42" ]; then
-    echo "  ok  bug 231: bounds on module traits, Copy and Destroy — interp == binary (42)"
+    echo "  ok  bug 231: bounds on module traits, Copy and Destroy (function, struct, impl, method) — interp == binary (42)"
     PASS=$((PASS + 1))
 else
     echo "FAIL  bug 231: regress_231_bounds_name_module_traits --interp gave '$r231_interp', want 42"

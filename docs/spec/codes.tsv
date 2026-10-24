@@ -28,6 +28,7 @@ E0122	rule	a `mod X;` module file not found (bug 206)
 E0123	rule	a module file loaded twice (a `mod` cycle or two declarations; bug 206)
 E0124	rule	a module file holds other than one module (bug 206)
 E0125	rule	unknown trait in a bound (bug 231)
+E0126	rule	import of a public trait or constant, which no import binds (bug 233)
 E0200	rule	Self outside impl block
 E0201	rule	undeclared variable
 E0202	rule	assignment to undeclared variable
@@ -109,6 +110,7 @@ E0282	rule	defer body must be a function call
 E0283	rule	reserved identifier
 E0284	rule	unknown module
 E0285	rule	symbol not public in module
+E0323	rule	import of a public trait or constant, which no import binds (bug 233)
 E0286	rule	fallible result discarded (must use)
 E0287	rule	non-Copy value discarded without consumption
 E0288	rule	wildcard would discard a non-Copy value
@@ -166,6 +168,7 @@ E0416	rule	empty array literal
 E0417	internal	submodule elaboration error
 E0418	rule	unknown module
 E0419	rule	symbol not public in module
+E0423	rule	import of a public trait or constant, which no import binds (bug 233)
 E0420	rule	ghost value used in runtime code
 E0421	rule	append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)
 E0422	internal	internal: a binder or function reached elaboration without its local binder table (R-0492; train 8 merge of bug 206 with R-0492 step 2)

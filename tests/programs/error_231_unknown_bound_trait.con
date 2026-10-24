@@ -2,10 +2,21 @@
 // module (traits are module-local and cannot be imported). Nothing resolved the names in a
 // bound, so a generic function bounded by an undeclared trait compiled when nothing called it,
 // and a call met only a misleading E0241 ("type 'i64' does not implement trait 'NoSuchTrait'").
-// Each declaration form carries a bound: Resolve refuses each with E0125.
+// Each declaration form below carries one: Resolve refuses each with E0125 (seven refusals).
 struct Holder<T: NoSuchTrait> { v: T }
+enum Choice<T: NoSuchTrait> { One { v: T }, Zero }
+newtype Tag<T: NoSuchTrait> = i64;
 
 fn id<A: NoSuchTrait>(a: A) -> A { return a; }
+
+struct Copy Cell<T> { v: T }
+impl<T: NoSuchTrait> Cell<T> {
+    fn get<U: NoSuchTrait>(&self, u: U) -> U { return u; }
+}
+
+trait Show { fn show(&self) -> i64; }
+struct Copy Box1<T> { v: T }
+impl<T: NoSuchTrait> Show for Box1<T> { fn show(&self) -> i64 { return 1; } }
 
 fn main() -> Int {
     return 42;
