@@ -86,6 +86,43 @@ for f in examples/stackvm/testdata/*.sasm; do
 done
 [ "$ntest" -ge 6 ] && ok "$ntest test programs checked" || no "only $ntest test programs found (want at least 6)"
 
+# 1b. Token edges: every operand form with digit strings of any length, signs, leading zeros,
+# the i64 bounds and non-ASCII bytes (which a diagnostic quotes byte for byte).
+mkdir -p "$TMP/edge"
+if ! python3 - "$TMP/edge" <<'EOF'
+import sys
+out = sys.argv[1]
+toks = [b"0" * 5000, b"0" * 4999 + b"7", b"1" + b"0" * 30, b"-0005", b"+5", b"-", b"",
+        b"9223372036854775807", b"-9223372036854775807", b"-9223372036854775808",
+        b"9223372036854775808", b"18446744073709551616", b"255", b"256", b"0255",
+        b"\xff", b"na\xefve", b"x" * 33, b"_" * 32, b"9x"]
+forms = [b"push %s\n    print", b"load %s", b"store %s", b"jmp %s", b"call %s"]
+k = 0
+for t in toks:
+    for f in forms:
+        prog = b"fn main 0 3\n    " + (f % t) + b"\n    push 0\n    ret\nend\n"
+        open("%s/edge_%03d.sasm" % (out, k), "wb").write(prog)
+        k += 1
+    open("%s/edge_%03d.sasm" % (out, k), "wb").write(b"fn " + t + b" 0 0\n    push 0\n    ret\nend\n")
+    k += 1
+EOF
+then
+  no "the token-edge generator failed"
+fi
+total=0; bad=0; failing=""
+for f in "$TMP"/edge/edge_*.sasm; do
+  [ -f "$f" ] || continue
+  total=$((total+1))
+  full "$f" "$(basename "$f" .sasm)" > "$TMP/full.log" || { bad=$((bad+1)); failing="$failing $(basename "$f")"; sed -n 1,6p "$TMP/full.log"; }
+done
+if [ "$total" -ne 120 ]; then
+  no "$total token-edge programs, want 120"
+elif [ $bad -eq 0 ]; then
+  ok "$total token-edge programs: exec, check, asm bytes, dis and run agree with the reference"
+else
+  no "$bad of $total token-edge programs disagree:$(echo "$failing" | cut -c1-200)"
+fi
+
 # 2. Generated programs (valid, and one mutation of each), with every command and the bytes.
 mkdir -p "$TMP/gen"
 if ! python3 "$GEN" "$TMP/gen" 20261024 "$NGEN"; then

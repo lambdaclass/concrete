@@ -16,7 +16,9 @@ compares it byte for byte with an independent Python implementation
 (`scripts/tests/lib/stackvm_ref.py`) on the six test programs, 120 seeded generated programs and a
 line-level mutation of each (`scripts/tests/lib/stackvm_gen.py`; every command, the assembled
 bytes, and `dis` and `run` of the reference's bytes), and 120 seeded corruptions of assembled
-files for the loader, plus five exit-code checks (17 checks, every input set counted; all agree). Ten `@run` cases
+files for the loader, 120 token-edge programs (digit strings of any length, signs, the i64
+bounds, non-ASCII bytes in every operand position), plus five exit-code checks (18 checks, every
+input set counted; all agree). Ten `@run` cases
 agree natively and under `--interp`.
 
 This log is input to the language-design negotiation in
