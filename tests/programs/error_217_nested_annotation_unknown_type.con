@@ -1,0 +1,14 @@
+// Bug 217: an unknown annotation type two modules deep is Resolve's E0108 (it was Check's E0220).
+mod outer {
+    mod inner {
+        pub fn h() -> Int {
+            let a: Nope = 7;
+            return 7;
+        }
+    }
+    pub fn g() -> Int { return inner::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

@@ -494,7 +494,7 @@ open_bug_reproducers() {
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
-217|bug217_resolve_skips_nested_submodules/repro.con|compile-fails|unknown named type 'Nope'
+226|bug226_submodule_imports_private_function/repro.con|compiles|
 TABLE
 }
 if [ -z "$ONLY" ]; then

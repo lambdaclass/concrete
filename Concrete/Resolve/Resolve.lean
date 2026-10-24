@@ -153,6 +153,10 @@ structure ShallowResult where
       variant was refused (E0103) when another module's `Shape`, registered
       first, had none. -/
   moduleScopes : List (String × List (String × SymKind)) := []
+  /-- Each top-level module's OWN known type names (its declarations, its submodules' and its
+      imports', with the builtins), without the other modules': the root of the type scope a
+      nested submodule extends (bug 217). -/
+  moduleTypes : List (String × List String) := []
   /-- The program's summary table, against which a nested submodule's imports are resolved in
       the body phase (bug 217). -/
   summaryTable : List (String × FileSummary) := []
@@ -758,14 +762,21 @@ private def submoduleImportScope (summaryTable : List (String × FileSummary)) (
     some (syms, tys)
 
 /-- Bug 217: resolve a module and, recursively, every nested submodule (inline `mod x { .. }`
-    and every `mod x;` file of a project, std included). A submodule's scope is its imports and
-    its own declarations (with its children's qualified names), searched before the enclosing
-    module's scope, which is how its parent's and siblings' names reach it; its known types
-    extend the enclosing module's the same way. Before this only the modules of the top-level
-    list were walked, so a submodule produced no Resolve diagnostics and an unknown cast target
-    there reached the backend. -/
+    and every `mod x;` file of a project, std included). Before this only the modules of the
+    top-level list were walked, so a submodule produced no Resolve diagnostics and an unknown
+    cast target there reached the backend.
+
+    A submodule's scope is its imports and its own declarations (with its children's qualified
+    names), searched before its enclosing module's chain, which is how its parent's and
+    siblings' names reach it; its known types extend the enclosing chain the same way. The chain
+    is rooted at the top-level module's OWN scope (`ShallowResult.moduleScopes`/`moduleTypes`),
+    not at the program-wide first-wins `globalScope`: that map holds every module's submodule
+    declarations unqualified, so a user's non-generic `enum Result` would answer `Result<T, E>`
+    inside `std.option` (bug 096's shape, one level down). `ownSyms`/`ownTypes` are the chain of
+    `m`, `scope`/`knownTypes` what `m`'s own bodies resolve against. -/
 private partial def resolveModuleTreeErrors (summaryTable : List (String × FileSummary))
     (m : Module) (summary : FileSummary) (scope : Scope) (knownTypes : List String)
+    (ownSyms : List (String × SymKind)) (ownTypes : List String)
     (traitMethods : List (String × List String)) (traitImpls_ : List (String × String))
     : Diagnostics :=
   let errs := resolveModule m scope knownTypes traitMethods traitImpls_
@@ -776,11 +787,11 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
       let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
         | some (_, s) => s
         | none => buildFileSummary sub
-      let (ownScope, ownTypes) := buildGlobalScopeFromSummary subSummary
-      let subScope := Scope.ofSymbols (impSyms ++ ownScope.symbols ++ scope.symbols)
-      let subTypes := ownTypes ++ impTys ++ knownTypes
-      let sErrs := resolveModuleTreeErrors summaryTable sub subSummary subScope subTypes
-        traitMethods traitImpls_
+      let (declScope, declTypes) := buildGlobalScopeFromSummary subSummary
+      let subSyms := impSyms ++ declScope.symbols ++ ownSyms
+      let subTypes := declTypes ++ impTys ++ ownTypes
+      let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
+        subTypes subSyms subTypes traitMethods traitImpls_
       acc ++ sErrs.stampFile sub.sourceFile) errs
 
 -- ============================================================
@@ -894,6 +905,8 @@ def resolveShallow (moduleSummaries : List FileSummary)
   let importedTypes := perModule.flatMap fun (_, (_, _, tys)) => tys
   let moduleScopes := perModule.map fun (s, (_, syms, _)) =>
     (s.name, syms ++ (buildGlobalScopeFromSummary s).1.symbols)
+  let moduleTypes := perModule.map fun (s, (_, _, tys)) =>
+    (s.name, tys ++ (buildGlobalScopeFromSummary s).2)
   let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes
   { globalScope := combinedScope
@@ -902,6 +915,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   , traitImpls := traitImpls_
   , errors := importErrors
   , moduleScopes := moduleScopes
+  , moduleTypes := moduleTypes
   , summaryTable := summaryTable }
 
 -- ============================================================
@@ -986,8 +1000,10 @@ def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (Li
     let summary := match shallow.summaryTable.lookup m.name with
       | some s => s
       | none => buildFileSummary m
+    let ownSyms := (shallow.moduleScopes.lookup m.name).getD (buildGlobalScopeFromSummary summary).1.symbols
+    let ownTypes := (shallow.moduleTypes.lookup m.name).getD (buildGlobalScopeFromSummary summary).2
     let mErrs := resolveModuleTreeErrors shallow.summaryTable m summary scope shallow.knownTypes
-      shallow.traitMethods shallow.traitImpls
+      ownSyms ownTypes shallow.traitMethods shallow.traitImpls
     let rm : ResolvedModule := { module := m, globalScope := scope }
     (acc ++ [rm], errs ++ mErrs)
   ) ([], [])

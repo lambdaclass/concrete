@@ -8431,6 +8431,35 @@ run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_turbofish_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_cast_field_spelling.con" "(E0108)"
 run_err "$TESTDIR/error_215_const_cast_unknown_type.con" "(E0108)"
+# Bug 217: Resolve walked only the modules of the top-level list, so a nested submodule (two
+# modules deep, a module written after `main`, every `mod x;` file of a project) produced no
+# Resolve diagnostics: the cast reached the backend (panic), and other name errors met Check's
+# codes. The scope fixture pins that the submodule walk admits what Check and Elab admit.
+run_err "$TESTDIR/error_217_nested_cast_unknown_type.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_nested_undeclared_name.con" "error[resolve]: (E0100)"
+run_err "$TESTDIR/error_217_nested_annotation_unknown_type.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_module_after_main_cast.con" "error[resolve]: (E0108)"
+run_ok "$TESTDIR/regress_217_nested_submodule_scope.con" 42
+r217_interp=$($COMPILER "$TESTDIR/regress_217_nested_submodule_scope.con" --interp 2>&1 || true)
+if [ "$r217_interp" = "42" ]; then
+    echo "  ok  bug 217: a nested submodule's scope — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 217: regress_217_nested_submodule_scope --interp gave '$r217_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+r217_dir=$(mktemp -d)
+cp -R tests/regressions/bug217_resolve_skips_nested_submodules/project/. "$r217_dir/"
+r217_out=$(cd "$r217_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r217_rc=0 || r217_rc=$?
+rm -rf "$r217_dir"
+if [ "$r217_rc" != 0 ] && grep -qF "src/util.con:5:13: error[resolve]: (E0108) unknown type 'Nope'" <<<"$r217_out"; then
+    echo "  ok  bug 217: a project's \`mod util;\` file is resolved (E0108 attributed to src/util.con)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 217: project build of tests/regressions/bug217_resolve_skips_nested_submodules/project (rc $r217_rc) did not refuse src/util.con with resolve E0108:"
+    printf '%s\n' "$r217_out" | awk 'NR<=3'
+    FAIL=$((FAIL + 1))
+fi
 # Bug 213: arms after an unguarded binding / `_` arm were lowered into a predecessor-less block
 # (E0703 natively); binary and --interp must agree on 42.
 run_ok "$TESTDIR/regress_213_arm_after_binding_arm.con" 42
