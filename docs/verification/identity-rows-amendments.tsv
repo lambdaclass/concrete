@@ -120,3 +120,10 @@ A	subject	examples/toml/src/main.con	toml_parser	mk_error_val	5f4b38b1661baf50fe
 A	subject	examples/toml/src/main.con	toml_parser	mk_int_val	01b92c1252786935f804796a6acd3bda	-	-	-
 A	subject	examples/toml/src/main.con	toml_parser	mk_string_val	cd034b129c3291822b2b9af2a729a2ad	-	-	-
 A	subject	examples/toml/src/main.con	toml_parser	mk_table_val	d9e39d7975905d8f510e882c45e41818	-	-	-
+#
+# 2026-10-24, model-ops (3f0e53e1, landed in train 13): division at Int is now modelled, so
+# examples/proof_pressure classify_range is rewritten to stay the blocked case through remainder at
+# Int: the midpoint (lo + hi) / 2 is written ((lo + hi) - (lo + hi) % 2) / 2, equal for every value.
+# Its source changed, so its implementation digest moves; its value and its blocked status do not.
+-	subject	examples/proof_pressure/src/main.con	main	classify_range	74db3623a4cf9aaf344e213fa4a75e35	-	-	-
++	subject	examples/proof_pressure/src/main.con	main	classify_range	7b5c569ae5cfd553a4f1e6fefb5462cb	-	-	-
