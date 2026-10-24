@@ -227,6 +227,7 @@ If you want the highest-leverage current research first:
 
 ## Meta And Long-Horizon
 
+- [meta/bend-roc-lessons.md](meta/bend-roc-lessons.md) — full Bend/Roc comparison, video topic map, proof/checking/runtime/GPU findings, authority boundaries, and 27 philosophy-filtered considerations; no adopted work or queue changes (`P2`, `Research`, 2026-10-24)
 - [meta/high-leverage-systems-ideas.md](meta/high-leverage-systems-ideas.md) — recurring high-value systems ideas (`P0`, `Open`)
 - [meta/ten-x-improvements.md](meta/ten-x-improvements.md) — the biggest long-term multipliers for Concrete (`P0`, `Open`)
 - [meta/competitive-gap-analysis.md](meta/competitive-gap-analysis.md) — what other systems languages still have and which gaps matter (`P1`, `Open`)

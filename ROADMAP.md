@@ -13557,3 +13557,30 @@ set has an unresolved function-pointer edge, naming it; a negative claim that de
 foreign binding names the assumption. Gate: a fixture pair in which the same helper is called through a resolved
 and through an unresolved function pointer yields `none` and `unknown` respectively, plus a
 positive control where a `Writer<{}>` helper may use no external authority.
+
+
+---
+
+## Later Considerations: Bend And Roc
+
+**Research only, recorded 2026-10-24. Not an execution queue, adopted design,
+release requirement, or extension of any task's acceptance criteria.**
+
+The [Bend/Roc research record](research/meta/bend-roc-lessons.md) preserves the
+full comparison, including the requested Roc video's timestamped discussion and
+links to source code, papers, benchmarks, articles, and Concrete's governing
+design documents. Its [27-item consideration register](research/meta/bend-roc-lessons.md#11-complete-consideration-register)
+covers proof/agent ergonomics, specification-preserving repair, checking-cost
+measurement, independent evidence accounting, transitive dependency and build-time
+authority, explicit buffer reuse, compiler optimization/validation, and bounded
+GPU research. Upstream measurements are reported, not independently reproduced.
+
+These are ideas to consider later under the existing
+[design policy](docs/project/DESIGN_POLICY.md),
+[value model](docs/language/VALUE_MODEL.md),
+[anti-features](docs/language/ANTI_FEATURES.md), and
+[evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md). No hidden
+runtime, implicit reference counting/copy-on-write, automatic GPU offload, new
+proof kernel, or compiler rewrite is authorized. A future adoption needs a real
+workload, a bounded investigation, and an explicit decision through the existing
+owner; the [current execution queue](#the-current-execution-queue) is unchanged.
