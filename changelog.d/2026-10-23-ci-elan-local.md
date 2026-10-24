@@ -7,3 +7,7 @@ persists and already held those toolchains. The `Cache the Lean toolchain (~/.el
 on GitHub-hosted runners only; on self-hosted runners lean-action and the 4.35 leg's
 `elan toolchain install` add a missing toolchain once. The `.lake/build` cache, which hands the Build
 job's output to every gate job, is unchanged.
+
+Branch health, which runs on every push to every branch (about 500 runs a day), moves to its own
+self-hosted pool, label `concrete-light` (two runners on concrete-ci-2). On CI's `concrete` pool those
+runs took 20-92 runner-minutes out of each train window, and labels give no priority.

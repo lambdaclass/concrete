@@ -26,8 +26,15 @@ runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED =
 - `Build + main tests (macOS)` stays on `macos-latest`. The Pages workflow (`book.yml`) stays on
   GitHub-hosted runners.
 
+**Two pools.** CI's jobs ask for the label `concrete`; branch health asks for `concrete-light`, a
+separate pool of small runners (two on concrete-ci-2, `LIGHT_RUNNERS` in the dotfiles host file).
+Branch health runs on every push to every branch, about 500 runs a day, and on the `concrete` pool
+those runs took 20-92 runner-minutes out of each train's window (measured 2026-10-24). Labels give
+no priority, so the only way to keep a train from queueing behind them is to not share the pool.
+A `concrete-light` runner carries only that label, so CI never lands on it either.
+
 A job routed to self-hosted waits until a runner with **all four** labels `self-hosted`, `linux`,
-`x64` and `concrete` is idle. If no runner is online, it waits (up to 24 hours) rather than falling
+`x64` and its pool label (`concrete`, or `concrete-light` for branch health) is idle. If no runner is online, it waits (up to 24 hours) rather than falling
 back to GitHub-hosted. So turn the variable off before taking the servers down.
 
 ### Switching it on and off
