@@ -8439,6 +8439,7 @@ run_err "$TESTDIR/error_217_nested_cast_unknown_type.con" "error[resolve]: (E010
 run_err "$TESTDIR/error_217_nested_undeclared_name.con" "error[resolve]: (E0100)"
 run_err "$TESTDIR/error_217_nested_annotation_unknown_type.con" "error[resolve]: (E0108)"
 run_err "$TESTDIR/error_217_module_after_main_cast.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_nested_enclosing_alias_cast.con" "error[resolve]: (E0108)"
 for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_precedence; do
     run_ok "$TESTDIR/$r217.con" 42
     r217_interp=$($COMPILER "$TESTDIR/$r217.con" --interp 2>&1 || true)
@@ -8454,7 +8455,7 @@ done
 # (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
 # each fixture has the top-level and the nested shape.
 for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_not_hide_builtin \
-            regress_229_child_newtype_known; do
+            regress_229_child_newtype_known regress_229_option_named_alias_or_struct; do
     run_ok "$TESTDIR/$r229.con" 42
     r229_interp=$($COMPILER "$TESTDIR/$r229.con" --interp 2>&1 || true)
     if [ "$r229_interp" = "42" ]; then

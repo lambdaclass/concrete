@@ -78,13 +78,16 @@ Three rules of Resolve's own scope also refused programs Check accepts, at top l
 through this walk, in submodules (Codex review r3): a function hid a same-named enum, a user
 `enum Option` hid the builtin, and a child's newtype was unknown. They are bug 229, fixed alongside.
 
-Known type names, which carry no arity or fields and so cannot answer a lookup wrongly, are still a
-superset: the submodule's own and its children's, its imports', its siblings', and its enclosing
-module's. A type name Resolve admits there and Check does not is refused by Check, as before.
+Its known type names are the same environment's: its own (with the builtins), its children's
+newtypes, its imports' and its siblings' structs and enums. Inheriting the enclosing module's (the
+third version) let `outer`'s `type Nope` pass a cast in `inner`, where Check cannot expand it, and
+the backend panicked again (Codex review r4; `error_217_nested_enclosing_alias_cast.con`). The same
+shape between top-level modules, whose known types are still program-wide, is bug 230.
 
 Regression legs in `run_tests.sh`: `error_217_nested_cast_unknown_type.con` (E0108),
 `error_217_nested_undeclared_name.con` (E0100, was E0201), `error_217_nested_annotation_unknown_type.con`
-(E0108, was E0220), `error_217_module_after_main_cast.con` (E0108, was the backend panic), each
+(E0108, was E0220), `error_217_module_after_main_cast.con` (E0108, was the backend panic),
+`error_217_nested_enclosing_alias_cast.con` (E0108, was the backend panic), each
 asserting `error[resolve]`; `regress_217_nested_submodule_scope.con` (a nested submodule using its
 constant, a sibling's type and an import: 42 natively and under `--interp`),
 `regress_217_sibling_type_precedence.con` (the r1 and r2 witnesses: a sibling's `E` over the

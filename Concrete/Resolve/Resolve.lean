@@ -219,13 +219,16 @@ private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.globalScope.symbolMap.contains name
 
 /-- The type declaration a name denotes in a type position (bug 229). Only the type namespace is
-    searched (local scopes hold values only), and `Option` is always the builtin: Check and Elab
-    put the builtin first and never withhold it (`BuiltinEnums.builtinEnums`), so a user
-    `enum Option` does not answer `Option<T>` or `Option::Some`. `Result` is the user's when one
-    is in scope (`hasUserResultEnum`), as there. -/
+    searched (local scopes hold values only). Among enums the builtin `Option` comes first: Check
+    and Elab put it ahead of every user enum and never withhold it (`BuiltinEnums.builtinEnums`),
+    so a user `enum Option` does not answer `Option<T>` or `Option::Some`. Only the enum table is
+    so ordered: a struct, alias or newtype named `Option` answers as itself, as in Check and Elab.
+    `Result` is the user's when one is in scope (`hasUserResultEnum`), as there. -/
 private def lookupTypeKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
-  if name == optionEnumName then some (.enum builtinOptionEnum)
-  else ctx.globalScope.typeMap.get? name
+  match ctx.globalScope.typeMap.get? name with
+  | some (.enum _) => if name == optionEnumName then some (.enum builtinOptionEnum)
+                      else ctx.globalScope.typeMap.get? name
+  | k => k
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
@@ -792,8 +795,8 @@ private def submoduleImportScope (summaryTable : List (String × FileSummary)) (
     an enclosing `enum E` or `enum Result` would otherwise answer, by first-wins lookup, where
     Check selects a sibling's `E` or the builtin `Result` (Codex reviews of this fix), and the
     program-wide `globalScope` would answer a user's non-generic `Result` inside `std.option`.
-    Known type names (no arity or fields, so they cannot answer a lookup wrongly) extend the
-    enclosing module's: a name Resolve then admits and Check does not is refused by Check. -/
+    Its known type names are the same environment's, with nothing of an enclosing module either:
+    a type name Resolve admits and Check cannot expand reaches the backend. -/
 private partial def resolveModuleTreeErrors (summaryTable : List (String × FileSummary))
     (m : Module) (summary : FileSummary) (scope : Scope) (knownTypes : List String)
     (traitMethods : List (String × List String)) (traitImpls_ : List (String × String))
@@ -813,7 +816,9 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
         | some (_, s) => s
         | none => buildFileSummary sub
       -- Its own declarations without its children's (Check's `summary.structs`/`enums`/...).
-      let (declScope, _) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
+      let (declScope, declTypes) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
+      let childNewtypes : List String := subSummary.submoduleSummaries.foldl
+        (fun acc (_, c) => acc ++ c.newtypes.map (·.name)) []
       -- Its children's functions and foreign bindings by qualified name (Check's `submoduleNames`).
       let childFns : List (String × SymKind) := subSummary.submoduleSummaries.foldl
         (fun acc (childName, c) => acc
@@ -824,8 +829,11 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
           -- and its children's newtypes, which Check's `allNewtypes` includes (bug 229).
           ++ c.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))) []
       let subSyms := impSyms ++ declScope.symbols ++ childFns ++ siblingSyms
-      let subTypes := (buildGlobalScopeFromSummary subSummary).2 ++ impTys ++ siblingTypes
-        ++ knownTypes
+      -- Its known types are the same environment's: its own (with the builtins), its children's
+      -- newtypes, its imports' and its siblings' (Codex review r4: inheriting the enclosing
+      -- module's let `outer`'s `type Nope` pass in `inner`, where Check cannot expand it, and the
+      -- cast reached the backend again).
+      let subTypes := declTypes ++ childNewtypes ++ impTys ++ siblingTypes
       let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
         subTypes traitMethods traitImpls_
       acc ++ sErrs.stampFile sub.sourceFile) errs

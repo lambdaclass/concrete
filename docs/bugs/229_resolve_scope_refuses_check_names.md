@@ -36,10 +36,14 @@ Expected and now observed: each exits 42 natively and under `--interp`.
 ## Fix
 
 `Scope` carries a `typeMap` (type declarations only, first wins), and type positions look up
-`lookupTypeKind`: the type namespace, with `Option` always the builtin. `lookupSymKind` is gone.
+`lookupTypeKind`: the type namespace, where an enum named `Option` is always the builtin (only the
+enum table is so ordered: a struct, alias or newtype named `Option` answers as itself, as in Check
+and Elab; the first version answered every `Option` with the builtin, Codex review r4).
+`lookupSymKind` is gone.
 `buildGlobalScopeFromSummary` registers children's newtypes (symbols and known types), and bug 217's
-submodule scope includes them. Regression legs in `run_tests.sh`: the three `regress_229_*.con`
-fixtures, `run_ok ... 42` and `--interp` = 42.
+submodule scope includes them. Regression legs in `run_tests.sh`: the four `regress_229_*.con`
+fixtures (`regress_229_option_named_alias_or_struct.con` the r4 witness), `run_ok ... 42` and
+`--interp` = 42.
 
 ## Structural cause
 
