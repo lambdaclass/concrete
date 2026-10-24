@@ -1,0 +1,94 @@
+; Recursive calls: factorial, Ackermann and mutual recursion.
+fn fact 1 1
+    load 0
+    push 1
+    gt
+    jz base
+    load 0
+    load 0
+    push 1
+    sub
+    call fact
+    mul
+    ret
+base:
+    push 1
+    ret
+end
+
+fn ack 2 2           ; ack(m, n)
+    load 0
+    jnz m_pos
+    load 1
+    push 1
+    add
+    ret
+m_pos:
+    load 1
+    jnz n_pos
+    load 0
+    push 1
+    sub
+    push 1
+    call ack
+    ret
+n_pos:
+    load 0
+    push 1
+    sub
+    load 0
+    load 1
+    push 1
+    sub
+    call ack
+    call ack
+    ret
+end
+
+fn is_even 1 1
+    load 0
+    jnz step
+    push 1
+    ret
+step:
+    load 0
+    push 1
+    sub
+    call is_odd
+    ret
+end
+
+fn is_odd 1 1
+    load 0
+    jnz step
+    push 0
+    ret
+step:
+    load 0
+    push 1
+    sub
+    call is_even
+    ret
+end
+
+fn main 0 0
+    push 20
+    call fact
+    print
+    push 2
+    push 3
+    call ack
+    print
+    push 3
+    push 3
+    call ack
+    print
+    push 77
+    call is_even
+    print
+    push 100
+    call is_odd
+    print
+    push 0
+    ret
+end

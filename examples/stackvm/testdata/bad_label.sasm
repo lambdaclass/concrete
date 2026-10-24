@@ -1,0 +1,7 @@
+fn main 0 1
+    push 1
+    jz nowhere
+    push 2
+    print
+    ret
+end

@@ -1,0 +1,332 @@
+// stackvm — the interpreter.
+//
+// One operand stack (at most 1024 values) shared by every frame, one locals
+// stack (each frame's NLOCALS slots, zeroed, the first NPARAMS taken from the
+// operand stack in order), and a frame stack (at most 256 frames). Arithmetic
+// is on i64; an overflow, a division by zero and i64::MIN / -1 are runtime
+// errors, as is underflow, falling off a function's end and running more than
+// 1,000,000 instructions. `ret` from `main` and `halt` end the program.
+mod vm {
+    import std.vec.{Vec};
+    import stackvm.isa.{Instr, Func, Program};
+    import stackvm.stack.{Stack};
+
+    pub struct Copy Frame {
+        func: u64,
+        ret_pc: u64,
+        base: u64,
+    }
+
+    pub struct VmError {
+        pub func: u64,
+        pub pc: u64,
+        pub msg: String,
+    }
+
+    pub struct Vm {
+        ops: Stack<i64>,
+        locals: Stack<i64>,
+        frames: Stack<Frame>,
+        func: u64,
+        base: u64,
+        pc: u64,
+        steps: u64,
+    }
+
+    const MAX_OPS: u64 = 1024;
+    const MAX_FRAMES: u64 = 256;
+    const MAX_STEPS: u64 = 1000000;
+    const I64_MAX: i64 = 9223372036854775807;
+    const I64_MIN: i64 = -9223372036854775807 - 1;
+
+    pub fn new_vm() -> Vm {
+        return Vm {
+            ops: Stack::<i64>::new(MAX_OPS),
+            locals: Stack::<i64>::new(1000000),
+            frames: Stack::<Frame>::new(MAX_FRAMES),
+            func: 0,
+            base: 0,
+            pc: 0,
+            steps: 0,
+        };
+    }
+
+    pub fn drop_vm(vm: Vm) with(Alloc) {
+        let Vm { ops, locals, frames, func, base, pc, steps } = vm;
+        ops.drop();
+        locals.drop();
+        frames.drop();
+    }
+
+    /// The outcome of one instruction.
+    enum Step {
+        Next,
+        Done,
+        Fail { msg: String },
+    }
+
+    fn fail(m: String) -> Step {
+        return Step::Fail { msg: m };
+    }
+
+    fn push(vm: &mut Vm, v: i64) with(Alloc) -> Step {
+        match vm.ops.push(v) {
+            Result::Ok { value } => { return Step::Next; },
+            Result::Err { error } => { return fail("stack overflow"); },
+        }
+    }
+
+    fn add_ok(a: i64, b: i64) -> bool {
+        if b > 0 { return a <= I64_MAX - b; }
+        return a >= I64_MIN - b;
+    }
+
+    fn sub_ok(a: i64, b: i64) -> bool {
+        if b < 0 { return a <= I64_MAX + b; }
+        return a >= I64_MIN + b;
+    }
+
+    fn mul_ok(a: i64, b: i64) -> bool {
+        if a == 0 || b == 0 { return true; }
+        if a > 0 {
+            if b > 0 { return a <= I64_MAX / b; }
+            return b >= I64_MIN / a;
+        }
+        if b > 0 { return a >= I64_MIN / b; }
+        return b >= I64_MAX / a;
+    }
+
+    /// Pops b then a, applies `op` (Add .. Gt), pushes the result.
+    fn binary(vm: &mut Vm, op: &Instr) with(Alloc) -> Step {
+        let b: i64 = match vm.ops.pop() {
+            Option::Some { value } => { value },
+            Option::None => { return fail("stack underflow"); },
+        };
+        let a: i64 = match vm.ops.pop() {
+            Option::Some { value } => { value },
+            Option::None => { return fail("stack underflow"); },
+        };
+        let r: i64 = match op {
+            Instr::Add => {
+                if !add_ok(a, b) { return fail("integer overflow"); }
+                a + b
+            },
+            Instr::Sub => {
+                if !sub_ok(a, b) { return fail("integer overflow"); }
+                a - b
+            },
+            Instr::Mul => {
+                if !mul_ok(a, b) { return fail("integer overflow"); }
+                a * b
+            },
+            Instr::Div => {
+                if b == 0 { return fail("division by zero"); }
+                if a == I64_MIN && b == -1 { return fail("integer overflow"); }
+                a / b
+            },
+            Instr::Mod => {
+                if b == 0 { return fail("division by zero"); }
+                if a == I64_MIN && b == -1 { return fail("integer overflow"); }
+                a % b
+            },
+            Instr::Eq => { if a == b { 1 } else { 0 } },
+            Instr::Lt => { if a < b { 1 } else { 0 } },
+            Instr::Gt => { if a > b { 1 } else { 0 } },
+            _ => { return fail("not a binary operation"); },
+        };
+        return push(vm, r);
+    }
+
+    fn pop1(vm: &mut Vm) -> Option<i64> {
+        return vm.ops.pop();
+    }
+
+    /// Executes `ins` (at `vm.pc`); moves `vm.pc` on.
+    fn exec(vm: &mut Vm, p: &Program, ins: &Instr) with(Alloc, Console) -> Step {
+        let next_pc: u64 = vm.pc + 1;
+        match ins {
+            Instr::Halt => { return Step::Done; },
+            Instr::Push { value } => {
+                vm.pc = next_pc;
+                return push(vm, *value);
+            },
+            Instr::Pop => {
+                if pop1(vm).is_none() { return fail("stack underflow"); }
+                vm.pc = next_pc;
+                return Step::Next;
+            },
+            Instr::Dup => {
+                let top: i64 = match vm.ops.peek() {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                vm.pc = next_pc;
+                return push(vm, top);
+            },
+            Instr::Swap => {
+                let b: Option<i64> = pop1(vm);
+                let a: Option<i64> = pop1(vm);
+                if a.is_none() || b.is_none() { return fail("stack underflow"); }
+                discard(push(vm, b.unwrap_or(0)));
+                vm.pc = next_pc;
+                return push(vm, a.unwrap_or(0));
+            },
+            Instr::Neg => {
+                let a: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                if a == I64_MIN { return fail("integer overflow"); }
+                vm.pc = next_pc;
+                return push(vm, 0 - a);
+            },
+            Instr::Not => {
+                let a: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                vm.pc = next_pc;
+                if a == 0 { return push(vm, 1); }
+                return push(vm, 0);
+            },
+            Instr::Jmp { target } => {
+                vm.pc = *target;
+                return Step::Next;
+            },
+            Instr::Jz { target } => {
+                let a: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                if a == 0 { vm.pc = *target; } else { vm.pc = next_pc; }
+                return Step::Next;
+            },
+            Instr::Jnz { target } => {
+                let a: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                if a != 0 { vm.pc = *target; } else { vm.pc = next_pc; }
+                return Step::Next;
+            },
+            Instr::Load { slot } => {
+                let v: i64 = vm.locals.at(vm.base + *slot);
+                vm.pc = next_pc;
+                return push(vm, v);
+            },
+            Instr::Store { slot } => {
+                let v: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                let at: u64 = vm.base + *slot;
+                vm.locals.set(at, v);
+                vm.pc = next_pc;
+                return Step::Next;
+            },
+            Instr::Call { func } => {
+                return call(vm, p, *func, next_pc);
+            },
+            Instr::Ret => {
+                let v: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                let fr: Frame = match vm.frames.pop() {
+                    Option::Some { value } => { value },
+                    Option::None => { return Step::Done; },
+                };
+                if vm.frames.is_empty() { return Step::Done; }
+                let caller: Frame = match vm.frames.peek() {
+                    Option::Some { value } => { value },
+                    Option::None => { return Step::Done; },
+                };
+                vm.locals.truncate(fr.base);
+                vm.func = caller.func;
+                vm.base = caller.base;
+                vm.pc = fr.ret_pc;
+                return push(vm, v);
+            },
+            Instr::Print => {
+                let v: i64 = match pop1(vm) {
+                    Option::Some { value } => { value },
+                    Option::None => { return fail("stack underflow"); },
+                };
+                print_int(v as Int);
+                print_char(10);
+                vm.pc = next_pc;
+                return Step::Next;
+            },
+            _ => { return binary_at(vm, ins, next_pc); },
+        }
+    }
+
+    fn binary_at(vm: &mut Vm, ins: &Instr, next_pc: u64) with(Alloc) -> Step {
+        let s: Step = binary(vm, ins);
+        match s {
+            Step::Next => { vm.pc = next_pc; return Step::Next; },
+            Step::Done => { return Step::Done; },
+            Step::Fail { msg } => { return Step::Fail { msg: msg }; },
+        }
+    }
+
+    /// Enters function `g`; its frame records `ret_pc`.
+    fn call(vm: &mut Vm, p: &Program, g: u64, ret_pc: u64) with(Alloc) -> Step {
+        let f: Func = p.funcs.get_unchecked(g);
+        if vm.ops.len() < f.nparams { return fail("stack underflow"); }
+        if vm.frames.len() >= MAX_FRAMES { return fail("call stack overflow"); }
+        let base: u64 = vm.locals.len();
+        let mut k: u64 = 0;
+        while k < f.nlocals {
+            discard(vm.locals.push(0));
+            k = k + 1;
+        }
+        let mut j: u64 = f.nparams;
+        while j > 0 {
+            j = j - 1;
+            let v: i64 = vm.ops.pop().unwrap_or(0);
+            vm.locals.set(base + j, v);
+        }
+        discard(vm.frames.push(Frame { func: g, ret_pc: ret_pc, base: base }));
+        vm.func = g;
+        vm.base = base;
+        vm.pc = f.entry;
+        return Step::Next;
+    }
+
+    /// Runs `main` (function `main_idx`) to completion.
+    pub fn run(p: &Program, main_idx: u64) with(Alloc, Console) -> Result<u64, VmError> {
+        let mut vm: Vm = new_vm();
+        defer drop_vm(vm);
+        discard(call(&mut vm, p, main_idx, 0));
+        return loop_run(&mut vm, p);
+    }
+
+    fn vm_error(func: u64, pc: u64, msg: String) -> Result<u64, VmError> {
+        return Result::<u64, VmError>::Err { error: VmError { func: func, pc: pc, msg: msg } };
+    }
+
+    /// Errors name the function and pc of the instruction that failed (before it
+    /// moved anything).
+    fn loop_run(vm: &mut Vm, p: &Program) with(Alloc, Console) -> Result<u64, VmError> {
+        while true {
+            let f: Func = p.funcs.get_unchecked(vm.func);
+            let cur_func: u64 = vm.func;
+            let cur_pc: u64 = vm.pc;
+            if cur_pc >= f.entry + f.len {
+                return vm_error(cur_func, cur_pc, "fell off the end of the function");
+            }
+            if vm.steps >= MAX_STEPS {
+                return vm_error(cur_func, cur_pc, "step limit exceeded");
+            }
+            vm.steps = vm.steps + 1;
+            let ins: Instr = p.code.get_unchecked(cur_pc);
+            match exec(vm, p, &ins) {
+                Step::Next => {},
+                Step::Done => { return Result::<u64, VmError>::Ok { value: vm.steps }; },
+                Step::Fail { msg } => { return vm_error(cur_func, cur_pc, msg); },
+            }
+        }
+        return Result::<u64, VmError>::Ok { value: vm.steps };
+    }
+}

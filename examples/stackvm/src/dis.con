@@ -1,0 +1,78 @@
+// stackvm — the disassembler: a Program as a listing.
+//   fn NAME params=P locals=L
+//     AAAA  MNEMONIC [OPERAND]      AAAA: the absolute index, 4 digits, zero-padded
+//   end
+// Jump operands print as 4-digit indices, call operands as the callee's name.
+mod dis {
+    import std.vec.{Vec};
+    import std.fmt.{pad_left};
+    import stackvm.isa.{Instr, Func, Program, mnemonic};
+    import stackvm.names.{name_at};
+
+    /// How a value appears in a listing.
+    pub trait Render {
+        fn render(&self, p: &Program, out: &mut String) with(Alloc);
+    }
+
+    fn push_index(out: &mut String, v: u64) with(Alloc) {
+        let mut digits: String = String::new();
+        digits.append_int(v as Int);
+        let padded: String = pad_left(&digits, 4, '0');
+        digits.drop();
+        out.append(&padded);
+        padded.drop();
+    }
+
+    impl Render for Instr {
+        fn render(&self, p: &Program, out: &mut String) with(Alloc) {
+            let m: String = mnemonic(self);
+            out.append(&m);
+            m.drop();
+            match self {
+                Instr::Push { value } => { out.push_char(' '); out.append_int(*value as Int); },
+                Instr::Jmp { target } => { out.push_char(' '); push_index(out, *target); },
+                Instr::Jz { target } => { out.push_char(' '); push_index(out, *target); },
+                Instr::Jnz { target } => { out.push_char(' '); push_index(out, *target); },
+                Instr::Load { slot } => { out.push_char(' '); out.append_int(*slot as Int); },
+                Instr::Store { slot } => { out.push_char(' '); out.append_int(*slot as Int); },
+                Instr::Call { func } => {
+                    out.push_char(' ');
+                    let callee: String = name_at(&p.names, *func);
+                    out.append(&callee);
+                    callee.drop();
+                },
+                _ => {},
+            }
+        }
+    }
+
+    pub fn disassemble(p: &Program) with(Alloc) -> String {
+        let mut out: String = String::new();
+        let mut f: u64 = 0;
+        while f < p.funcs.len() {
+            let fi: Func = p.funcs.get_unchecked(f);
+            out.append(&"fn ");
+            let name: String = name_at(&p.names, f);
+            out.append(&name);
+            name.drop();
+            out.append(&" params=");
+            out.append_int(fi.nparams as Int);
+            out.append(&" locals=");
+            out.append_int(fi.nlocals as Int);
+            out.push_char('\n');
+            let mut pc: u64 = fi.entry;
+            while pc < fi.entry + fi.len {
+                out.append(&"  ");
+                push_index(&mut out, pc);
+                out.append(&"  ");
+                let ins: Instr = p.code.get_unchecked(pc);
+                ins.render(p, &mut out);
+                out.push_char('\n');
+                pc = pc + 1;
+            }
+            out.append(&"end\n");
+            f = f + 1;
+        }
+        return out;
+    }
+}

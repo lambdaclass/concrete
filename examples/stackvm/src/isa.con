@@ -1,0 +1,186 @@
+// stackvm — the instruction set, the program representation and its encoding.
+mod isa {
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+
+    /// One instruction. Jump targets are absolute code indices; `Call` names a
+    /// function by its index in the function table.
+    pub enum Copy Instr {
+        Halt,
+        Push { value: i64 },
+        Pop,
+        Dup,
+        Swap,
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Mod,
+        Neg,
+        Eq,
+        Lt,
+        Gt,
+        Not,
+        Jmp { target: u64 },
+        Jz { target: u64 },
+        Jnz { target: u64 },
+        Load { slot: u64 },
+        Store { slot: u64 },
+        Call { func: u64 },
+        Ret,
+        Print,
+    }
+
+    /// A function: its code is `code[entry .. entry + len)`.
+    pub struct Copy Func {
+        pub entry: u64,
+        pub len: u64,
+        pub nparams: u64,
+        pub nlocals: u64,
+    }
+
+    /// An assembled or loaded program. Owns its code, function table and names.
+    pub struct Program {
+        pub code: Vec<Instr>,
+        pub funcs: Vec<Func>,
+        pub names: Vec<String>,
+    }
+
+    pub fn empty_program() -> Program {
+        return Program { code: Vec::<Instr>::new(), funcs: Vec::<Func>::new(), names: Vec::<String>::new() };
+    }
+
+    pub fn drop_program(p: Program) with(Alloc) {
+        let Program { code, funcs, names } = p;
+        code.drop();
+        funcs.drop();
+        names.drop();
+    }
+
+    /// The opcode byte of an instruction (the bytecode format's first byte).
+    pub fn opcode(i: &Instr) -> u8 {
+        match i {
+            Instr::Halt => { return 0; },
+            Instr::Push { value } => { return 1; },
+            Instr::Pop => { return 2; },
+            Instr::Dup => { return 3; },
+            Instr::Swap => { return 4; },
+            Instr::Add => { return 5; },
+            Instr::Sub => { return 6; },
+            Instr::Mul => { return 7; },
+            Instr::Div => { return 8; },
+            Instr::Mod => { return 9; },
+            Instr::Neg => { return 10; },
+            Instr::Eq => { return 11; },
+            Instr::Lt => { return 12; },
+            Instr::Gt => { return 13; },
+            Instr::Not => { return 14; },
+            Instr::Jmp { target } => { return 15; },
+            Instr::Jz { target } => { return 16; },
+            Instr::Jnz { target } => { return 17; },
+            Instr::Load { slot } => { return 18; },
+            Instr::Store { slot } => { return 19; },
+            Instr::Call { func } => { return 20; },
+            Instr::Ret => { return 21; },
+            Instr::Print => { return 22; },
+        }
+    }
+
+    pub fn mnemonic(i: &Instr) -> String {
+        match i {
+            Instr::Halt => { return "halt"; },
+            Instr::Push { value } => { return "push"; },
+            Instr::Pop => { return "pop"; },
+            Instr::Dup => { return "dup"; },
+            Instr::Swap => { return "swap"; },
+            Instr::Add => { return "add"; },
+            Instr::Sub => { return "sub"; },
+            Instr::Mul => { return "mul"; },
+            Instr::Div => { return "div"; },
+            Instr::Mod => { return "mod"; },
+            Instr::Neg => { return "neg"; },
+            Instr::Eq => { return "eq"; },
+            Instr::Lt => { return "lt"; },
+            Instr::Gt => { return "gt"; },
+            Instr::Not => { return "not"; },
+            Instr::Jmp { target } => { return "jmp"; },
+            Instr::Jz { target } => { return "jz"; },
+            Instr::Jnz { target } => { return "jnz"; },
+            Instr::Load { slot } => { return "load"; },
+            Instr::Store { slot } => { return "store"; },
+            Instr::Call { func } => { return "call"; },
+            Instr::Ret => { return "ret"; },
+            Instr::Print => { return "print"; },
+        }
+    }
+
+    /// The jump target of a jump, if `i` is one.
+    pub fn jump_target(i: &Instr) -> Option<u64> {
+        match i {
+            Instr::Jmp { target } => { return Option::<u64>::Some { value: *target }; },
+            Instr::Jz { target } => { return Option::<u64>::Some { value: *target }; },
+            Instr::Jnz { target } => { return Option::<u64>::Some { value: *target }; },
+            _ => { return Option::<u64>::None; },
+        }
+    }
+
+    /// The same jump with another target; any other instruction unchanged.
+    pub fn retarget(i: Instr, t: u64) -> Instr {
+        match i {
+            Instr::Jmp { target } => { return Instr::Jmp { target: t }; },
+            Instr::Jz { target } => { return Instr::Jz { target: t }; },
+            Instr::Jnz { target } => { return Instr::Jnz { target: t }; },
+            _ => { return i; },
+        }
+    }
+
+    pub fn push_le(out: &mut Bytes, v: u64, n: u64) with(Alloc) {
+        let mut x: u64 = v;
+        let mut k: u64 = 0;
+        while k < n {
+            out.push((x & 255) as u8);
+            x = x >> 8;
+            k = k + 1;
+        }
+    }
+
+    /// Serialization into the bytecode format.
+    pub trait Encode {
+        fn encode(&self, out: &mut Bytes) with(Alloc);
+    }
+
+    impl Encode for Instr {
+        fn encode(&self, out: &mut Bytes) with(Alloc) {
+            out.push(opcode(self));
+            match self {
+                Instr::Push { value } => { push_le(out, *value as u64, 8); },
+                Instr::Jmp { target } => { push_le(out, *target, 4); },
+                Instr::Jz { target } => { push_le(out, *target, 4); },
+                Instr::Jnz { target } => { push_le(out, *target, 4); },
+                Instr::Load { slot } => { push_le(out, *slot, 1); },
+                Instr::Store { slot } => { push_le(out, *slot, 1); },
+                Instr::Call { func } => { push_le(out, *func, 4); },
+                _ => {},
+            }
+        }
+    }
+
+    impl Encode for Func {
+        fn encode(&self, out: &mut Bytes) with(Alloc) {
+            push_le(out, self.entry, 4);
+            push_le(out, self.len, 4);
+            push_le(out, self.nparams, 1);
+            push_le(out, self.nlocals, 1);
+        }
+    }
+
+    /// Encodes every element of `xs`, in order.
+    pub fn encode_all<T: Encode + Copy>(xs: &Vec<T>, out: &mut Bytes) with(Alloc) {
+        let mut i: u64 = 0;
+        while i < xs.len() {
+            let x: T = xs.get_unchecked(i);
+            x.encode(out);
+            i = i + 1;
+        }
+    }
+}

@@ -1,0 +1,450 @@
+// stackvm — the assembler: assembly text to a Program.
+//
+// A line is tokens separated by spaces, tabs or CRs; `;` starts a comment.
+//   fn NAME NPARAMS NLOCALS   begin a function (NPARAMS <= NLOCALS <= 255)
+//   end                       end it
+//   NAME:                     a label, local to the function, at the next instruction
+//   push INT | jmp L | jz L | jnz L | load N | store N | call NAME
+//   pop dup swap add sub mul div mod neg eq lt gt not ret print halt
+// Errors are reported at the first failing line, checked in this order: each
+// line as read; at `end`, a label with no instruction after it, then the first
+// undefined label (in reference order), then an empty function; after the last
+// line, a function with no `end`, the first undefined function (in call order),
+// then a missing or parameterized `main`.
+mod asm {
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+    import std.parse.{parse_int, parse_uint};
+    import stackvm.isa.{Instr, Func, Program, empty_program, drop_program, retarget};
+    import stackvm.names.{valid_name_bytes, find_name, name_at};
+    import stackvm.stack.{Stack};
+
+    pub struct AsmError {
+        pub line: u64,
+        pub msg: String,
+    }
+
+    // A reference resolved later: a label (a jump at `at`) or a function (a call at `at`).
+    struct Fixup {
+        name: String,
+        at: u64,
+        line: u64,
+    }
+
+    impl Destroy for Fixup {
+        fn destroy(&self) with(Alloc) {
+            self.name.destroy();
+        }
+    }
+
+    struct Copy Toks {
+        n: u64,
+        s: [u64; 4],
+        e: [u64; 4],
+    }
+
+    struct Asm {
+        prog: Program,
+        labels: Vec<String>,
+        lpos: Vec<u64>,
+        llines: Vec<u64>,
+        jumps: Stack<Fixup>,
+        calls: Stack<Fixup>,
+        in_fn: bool,
+        fn_line: u64,
+        entry: u64,
+        nparams: u64,
+        nlocals: u64,
+    }
+
+    fn drop_asm(a: Asm) with(Alloc) {
+        let Asm { prog, labels, lpos, llines, jumps, calls, in_fn, fn_line, entry, nparams, nlocals } = a;
+        drop_program(prog);
+        labels.drop();
+        lpos.drop();
+        llines.drop();
+        jumps.drop();
+        calls.drop();
+    }
+
+    fn fail(a: Asm, line: u64, msg: String) with(Alloc) -> Result<Program, AsmError> {
+        drop_asm(a);
+        return Result::<Program, AsmError>::Err { error: AsmError { line: line, msg: msg } };
+    }
+
+    fn is_sep(c: u8) -> bool {
+        return c == 32 || c == 9 || c == 13;
+    }
+
+    fn tokenize(src: &Bytes, ls: u64, le: u64) -> Toks {
+        let mut t: Toks = Toks { n: 0, s: [0; 4], e: [0; 4] };
+        let mut i: u64 = ls;
+        while i < le {
+            let c: u8 = src.get_unchecked(i);
+            if c == 59 { break; }
+            if is_sep(c) {
+                i = i + 1;
+                continue;
+            }
+            let st: u64 = i;
+            while i < le && !is_sep(src.get_unchecked(i)) && src.get_unchecked(i) != 59 {
+                i = i + 1;
+            }
+            if t.n < 4 {
+                t.s[t.n] = st;
+                t.e[t.n] = i;
+            }
+            t.n = t.n + 1;
+        }
+        return t;
+    }
+
+    fn tok_string(src: &Bytes, s: u64, e: u64) with(Alloc) -> String {
+        let mut out: String = String::new();
+        let mut i: u64 = s;
+        while i < e {
+            out.push_char(src.get_unchecked(i) as char);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    fn tok_is(src: &Bytes, t: &Toks, k: u64, lit: &String) -> bool {
+        let s: u64 = t.s[k];
+        let e: u64 = t.e[k];
+        if e - s != lit.len() { return false; }
+        let mut i: u64 = 0;
+        while i < lit.len() {
+            if src.get_unchecked(s + i) != lit.get_unchecked(i) as u8 { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /// `prefix` + 'token' + `suffix`.
+    fn quoted(prefix: String, src: &Bytes, s: u64, e: u64, suffix: String) with(Alloc) -> String {
+        let mut m: String = prefix;
+        m.push_char('\'');
+        let tok: String = tok_string(src, s, e);
+        m.append(&tok);
+        tok.drop();
+        m.push_char('\'');
+        m.append(&suffix);
+        suffix.drop();
+        return m;
+    }
+
+    fn quoted_name(prefix: String, name: &String, suffix: String) with(Alloc) -> String {
+        let mut m: String = prefix;
+        m.push_char('\'');
+        m.append(name);
+        m.push_char('\'');
+        m.append(&suffix);
+        suffix.drop();
+        return m;
+    }
+
+    fn simple_instr(src: &Bytes, t: &Toks) -> Option<Instr> {
+        if tok_is(src, t, 0, &"halt") { return Option::<Instr>::Some { value: Instr::Halt }; }
+        if tok_is(src, t, 0, &"pop") { return Option::<Instr>::Some { value: Instr::Pop }; }
+        if tok_is(src, t, 0, &"dup") { return Option::<Instr>::Some { value: Instr::Dup }; }
+        if tok_is(src, t, 0, &"swap") { return Option::<Instr>::Some { value: Instr::Swap }; }
+        if tok_is(src, t, 0, &"add") { return Option::<Instr>::Some { value: Instr::Add }; }
+        if tok_is(src, t, 0, &"sub") { return Option::<Instr>::Some { value: Instr::Sub }; }
+        if tok_is(src, t, 0, &"mul") { return Option::<Instr>::Some { value: Instr::Mul }; }
+        if tok_is(src, t, 0, &"div") { return Option::<Instr>::Some { value: Instr::Div }; }
+        if tok_is(src, t, 0, &"mod") { return Option::<Instr>::Some { value: Instr::Mod }; }
+        if tok_is(src, t, 0, &"neg") { return Option::<Instr>::Some { value: Instr::Neg }; }
+        if tok_is(src, t, 0, &"eq") { return Option::<Instr>::Some { value: Instr::Eq }; }
+        if tok_is(src, t, 0, &"lt") { return Option::<Instr>::Some { value: Instr::Lt }; }
+        if tok_is(src, t, 0, &"gt") { return Option::<Instr>::Some { value: Instr::Gt }; }
+        if tok_is(src, t, 0, &"not") { return Option::<Instr>::Some { value: Instr::Not }; }
+        if tok_is(src, t, 0, &"ret") { return Option::<Instr>::Some { value: Instr::Ret }; }
+        if tok_is(src, t, 0, &"print") { return Option::<Instr>::Some { value: Instr::Print }; }
+        return Option::<Instr>::None;
+    }
+
+    // 0 none, 1 push, 2 jmp, 3 jz, 4 jnz, 5 load, 6 store, 7 call
+    fn operand_kind(src: &Bytes, t: &Toks) -> u64 {
+        if tok_is(src, t, 0, &"push") { return 1; }
+        if tok_is(src, t, 0, &"jmp") { return 2; }
+        if tok_is(src, t, 0, &"jz") { return 3; }
+        if tok_is(src, t, 0, &"jnz") { return 4; }
+        if tok_is(src, t, 0, &"load") { return 5; }
+        if tok_is(src, t, 0, &"store") { return 6; }
+        if tok_is(src, t, 0, &"call") { return 7; }
+        return 0;
+    }
+
+    fn parse_small(src: &Bytes, s: u64, e: u64) with(Alloc) -> Option<u64> {
+        let txt: String = tok_string(src, s, e);
+        let v: Option<u64> = parse_uint(&txt);
+        txt.drop();
+        match v {
+            Option::Some { value } => {
+                if value > 255 { return Option::<u64>::None; }
+                return Option::<u64>::Some { value: value };
+            },
+            Option::None => { return Option::<u64>::None; },
+        }
+    }
+
+    /// The earliest unresolved fixup's line and name, after resolving every
+    /// fixup of `fx` against `names` / `pos` (a jump) or the function table
+    /// (a call). Consumes the worklist.
+    fn resolve(a: &mut Asm, is_call: bool) with(Alloc) -> Option<AsmError> {
+        let mut bad_at: u64 = 0;
+        let mut bad: Option<AsmError> = Option::<AsmError>::None;
+        let mut going: bool = true;
+        while going {
+            let next: Option<Fixup> = if is_call { a.calls.pop() } else { a.jumps.pop() };
+            match next {
+                Option::None => { going = false; },
+                Option::Some { value } => {
+                    let Fixup { name, at, line } = value;
+                    let found: Option<u64> = if is_call { find_name(&a.prog.names, &name) } else { find_name(&a.labels, &name) };
+                    match found {
+                        Option::Some { value: idx } => {
+                            if is_call {
+                                a.prog.code.set_unchecked(at, Instr::Call { func: idx });
+                            } else {
+                                let old: Instr = a.prog.code.get_unchecked(at);
+                                let target: u64 = a.lpos.get_unchecked(idx);
+                                a.prog.code.set_unchecked(at, retarget(old, target));
+                            }
+                            name.drop();
+                        },
+                        Option::None => {
+                            // Popping runs in reverse, so the last miss seen is the earliest.
+                            let what: String = if is_call { "undefined function " } else { "undefined label " };
+                            let m: String = quoted_name(what, &name, "");
+                            name.drop();
+                            match bad {
+                                Option::Some { value: old } => {
+                                    let AsmError { line: l0, msg: m0 } = old;
+                                    m0.drop();
+                                },
+                                Option::None => {},
+                            }
+                            bad = Option::<AsmError>::Some { value: AsmError { line: line, msg: m } };
+                            bad_at = at;
+                        },
+                    }
+                },
+            }
+        }
+        discard(bad_at);
+        return bad;
+    }
+
+    fn new_asm() -> Asm {
+        return Asm {
+            prog: empty_program(),
+            labels: Vec::<String>::new(),
+            lpos: Vec::<u64>::new(),
+            llines: Vec::<u64>::new(),
+            jumps: Stack::<Fixup>::new(1000000),
+            calls: Stack::<Fixup>::new(1000000),
+            in_fn: false,
+            fn_line: 0,
+            entry: 0,
+            nparams: 0,
+            nlocals: 0,
+        };
+    }
+
+    fn push_fixup(st: &mut Stack<Fixup>, f: Fixup) with(Alloc) {
+        match st.push(f) {
+            Result::Ok { value } => { discard(value); },
+            Result::Err { error } => {
+                let Fixup { name, at, line } = error;
+                name.drop();
+            },
+        }
+    }
+
+    pub fn assemble(src: &Bytes) with(Alloc) -> Result<Program, AsmError> {
+        let mut a: Asm = new_asm();
+        let n: u64 = src.len();
+        let mut ls: u64 = 0;
+        let mut line: u64 = 0;
+        while ls <= n {
+            let mut le: u64 = ls;
+            while le < n && src.get_unchecked(le) != 10 { le = le + 1; }
+            line = line + 1;
+            let t: Toks = tokenize(src, ls, le);
+            ls = le + 1;
+            if t.n == 0 { continue; }
+            let s0: u64 = t.s[0];
+            let e0: u64 = t.e[0];
+            if tok_is(src, &t, 0, &"fn") {
+                if a.in_fn { return fail(a, line, "nested fn"); }
+                if t.n != 4 { return fail(a, line, "bad fn header"); }
+                if !valid_name_bytes(src, t.s[1], t.e[1]) {
+                    return fail(a, line, quoted("bad name ", src, t.s[1], t.e[1], ""));
+                }
+                let np: Option<u64> = parse_small(src, t.s[2], t.e[2]);
+                let nl: Option<u64> = parse_small(src, t.s[3], t.e[3]);
+                let nparams: u64 = np.unwrap_or(256);
+                let nlocals: u64 = nl.unwrap_or(256);
+                if nparams > 255 || nlocals > 255 || nparams > nlocals {
+                    return fail(a, line, "bad fn header");
+                }
+                let name: String = tok_string(src, t.s[1], t.e[1]);
+                if find_name(&a.prog.names, &name).is_some() {
+                    let m: String = quoted_name("duplicate function ", &name, "");
+                    name.drop();
+                    return fail(a, line, m);
+                }
+                a.prog.names.push(name);
+                a.in_fn = true;
+                a.fn_line = line;
+                a.entry = a.prog.code.len();
+                a.nparams = nparams;
+                a.nlocals = nlocals;
+                continue;
+            }
+            if tok_is(src, &t, 0, &"end") {
+                if !a.in_fn { return fail(a, line, "end outside a function"); }
+                if t.n != 1 { return fail(a, line, "unexpected operand"); }
+                let mut k: u64 = 0;
+                while k < a.labels.len() {
+                    if a.lpos.get_unchecked(k) == a.prog.code.len() {
+                        let lname: String = name_at(&a.labels, k);
+                        let m: String = quoted_name("label ", &lname, " has no instruction");
+                        lname.drop();
+                        let at_line: u64 = a.llines.get_unchecked(k);
+                        return fail(a, at_line, m);
+                    }
+                    k = k + 1;
+                }
+                match resolve(&mut a, false) {
+                    Option::Some { value } => {
+                        let AsmError { line: bl, msg } = value;
+                        return fail(a, bl, msg);
+                    },
+                    Option::None => {},
+                }
+                let len: u64 = a.prog.code.len() - a.entry;
+                if len == 0 {
+                    let fname: String = name_at(&a.prog.names, a.prog.names.len() - 1);
+                    let m: String = quoted_name("empty function ", &fname, "");
+                    fname.drop();
+                    return fail(a, line, m);
+                }
+                a.prog.funcs.push(Func { entry: a.entry, len: len, nparams: a.nparams, nlocals: a.nlocals });
+                a.labels.clear();
+                a.lpos.clear();
+                a.llines.clear();
+                a.in_fn = false;
+                continue;
+            }
+            if !a.in_fn { return fail(a, line, "instruction outside a function"); }
+            if src.get_unchecked(e0 - 1) == 58 {
+                if t.n != 1 { return fail(a, line, "unexpected operand"); }
+                if !valid_name_bytes(src, s0, e0 - 1) {
+                    return fail(a, line, quoted("bad name ", src, s0, e0 - 1, ""));
+                }
+                let lname: String = tok_string(src, s0, e0 - 1);
+                if find_name(&a.labels, &lname).is_some() {
+                    let m: String = quoted_name("duplicate label ", &lname, "");
+                    lname.drop();
+                    return fail(a, line, m);
+                }
+                a.labels.push(lname);
+                let here: u64 = a.prog.code.len();
+                a.lpos.push(here);
+                a.llines.push(line);
+                continue;
+            }
+            match simple_instr(src, &t) {
+                Option::Some { value } => {
+                    if t.n != 1 { return fail(a, line, "unexpected operand"); }
+                    a.prog.code.push(value);
+                    continue;
+                },
+                Option::None => {},
+            }
+            let kind: u64 = operand_kind(src, &t);
+            if kind == 0 {
+                return fail(a, line, quoted("unknown instruction ", src, s0, e0, ""));
+            }
+            if t.n == 1 { return fail(a, line, "expected operand"); }
+            if t.n > 2 { return fail(a, line, "unexpected operand"); }
+            let s1: u64 = t.s[1];
+            let e1: u64 = t.e[1];
+            let at: u64 = a.prog.code.len();
+            if kind == 1 {
+                let txt: String = tok_string(src, s1, e1);
+                let v: Option<i64> = parse_int(&txt);
+                txt.drop();
+                match v {
+                    Option::Some { value } => { a.prog.code.push(Instr::Push { value: value }); },
+                    Option::None => { return fail(a, line, quoted("bad integer ", src, s1, e1, "")); },
+                }
+            } else if kind == 5 || kind == 6 {
+                match parse_small(src, s1, e1) {
+                    Option::Some { value } => {
+                        if value >= a.nlocals {
+                            return fail(a, line, quoted("slot out of range ", src, s1, e1, ""));
+                        }
+                        if kind == 5 {
+                            a.prog.code.push(Instr::Load { slot: value });
+                        } else {
+                            a.prog.code.push(Instr::Store { slot: value });
+                        }
+                    },
+                    Option::None => { return fail(a, line, quoted("bad slot ", src, s1, e1, "")); },
+                }
+            } else {
+                if !valid_name_bytes(src, s1, e1) {
+                    return fail(a, line, quoted("bad name ", src, s1, e1, ""));
+                }
+                let fx: Fixup = Fixup { name: tok_string(src, s1, e1), at: at, line: line };
+                if kind == 2 { a.prog.code.push(Instr::Jmp { target: 0 }); }
+                if kind == 3 { a.prog.code.push(Instr::Jz { target: 0 }); }
+                if kind == 4 { a.prog.code.push(Instr::Jnz { target: 0 }); }
+                if kind == 7 {
+                    a.prog.code.push(Instr::Call { func: 0 });
+                    push_fixup(&mut a.calls, fx);
+                } else {
+                    push_fixup(&mut a.jumps, fx);
+                }
+            }
+        }
+        if a.in_fn {
+            let fname: String = name_at(&a.prog.names, a.prog.names.len() - 1);
+            let m: String = quoted_name("fn ", &fname, " has no end");
+            fname.drop();
+            let fl: u64 = a.fn_line;
+            return fail(a, fl, m);
+        }
+        match resolve(&mut a, true) {
+            Option::Some { value } => {
+                let AsmError { line: bl, msg } = value;
+                return fail(a, bl, msg);
+            },
+            Option::None => {},
+        }
+        let main_name: String = "main";
+        let found: Option<u64> = find_name(&a.prog.names, &main_name);
+        main_name.drop();
+        match found {
+            Option::None => { return fail(a, 0, "no function 'main'"); },
+            Option::Some { value } => {
+                let mf: Func = a.prog.funcs.get_unchecked(value);
+                if mf.nparams != 0 {
+                    // the header line of main is not kept per function: report line 0
+                    return fail(a, 0, "main takes no parameters");
+                }
+            },
+        }
+        let Asm { prog, labels, lpos, llines, jumps, calls, in_fn, fn_line, entry, nparams, nlocals } = a;
+        labels.drop();
+        lpos.drop();
+        llines.drop();
+        jumps.drop();
+        calls.drop();
+        return Result::<Program, AsmError>::Ok { value: prog };
+    }
+}

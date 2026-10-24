@@ -1,0 +1,229 @@
+// stackvm — WORKLOAD 10 (P7: a language implementation: assembler, bytecode,
+// verifier, interpreter, disassembler).
+// Usage:
+//   stackvm asm <in.sasm> <out.svm>   assemble to a bytecode file
+//   stackvm dis <in.svm>              disassemble a bytecode file
+//   stackvm run <in.svm>              load, verify and run a bytecode file
+//   stackvm exec <in.sasm>            assemble and run, in memory
+//   stackvm check <in.sasm>           assemble, encode, load back, compare listings
+// The assembly language is specified in asm.con, the bytecode file in codec.con,
+// the machine in vm.con and the listing in dis.con. Every output is specified
+// closely enough that scripts/tests/check_stackvm_differential.sh compares it
+// byte for byte with an independent Python implementation
+// (scripts/tests/lib/stackvm_ref.py).
+// Diagnostics (stderr): "asm error: line N: MSG" (or "asm error: MSG" for a
+// whole-program error), "load error: MSG", "runtime error: in 'F' at PC: MSG".
+// Exit codes (13t): 0 ok, 1 bad input (unreadable, asm, load or runtime error), 2 usage.
+mod stackvm {
+    mod stack;
+    mod names;
+    mod isa;
+    mod asm;
+    mod codec;
+    mod dis;
+    mod vm;
+
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+    import std.args.{count, get};
+    import std.fs.{read_file, write_file, FsError};
+    import std.io.{print, eprintln};
+    import isa.{Program, Func, drop_program};
+    import asm.{assemble, AsmError};
+    import codec.{encode_program, load, LoadError, load_error_text};
+    import dis.{disassemble};
+    import vm.{run, VmError};
+    import names.{find_name, name_at};
+
+    fn drop_bytes(b: Bytes) with(Alloc) { b.drop(); }
+    fn drop_string(s: String) with(Alloc) { s.drop(); }
+
+    fn fail(msg: String) with(Console, Alloc) -> u8 {
+        eprintln(&msg);
+        msg.drop();
+        return 1;
+    }
+
+    fn usage() with(Console, Alloc) -> u8 {
+        let u: String = "usage: stackvm asm <in.sasm> <out.svm> | dis <in.svm> | run <in.svm> | exec <in.sasm> | check <in.sasm>";
+        eprintln(&u);
+        u.drop();
+        return 2;
+    }
+
+    fn load_file(path: &String) with(File, Alloc) -> Option<Bytes> {
+        match read_file(path) {
+            Result::Ok { value } => { return Option::<Bytes>::Some { value: value }; },
+            Result::Err { error } => { discard(error); return Option::<Bytes>::None; },
+        }
+    }
+
+    fn report_asm(e: AsmError) with(Console, Alloc) -> u8 {
+        let AsmError { line, msg } = e;
+        let mut m: String = "asm error: ";
+        if line > 0 {
+            m.append(&"line ");
+            m.append_int(line as Int);
+            m.append(&": ");
+        }
+        m.append(&msg);
+        msg.drop();
+        return fail(m);
+    }
+
+    fn report_load(e: LoadError) with(Console, Alloc) -> u8 {
+        let msg: String = load_error_text(e);
+        let mut m: String = "load error: ";
+        m.append(&msg);
+        msg.drop();
+        return fail(m);
+    }
+
+    fn main_index(p: &Program) with(Alloc) -> u64 {
+        let main_name: String = "main";
+        defer drop_string(main_name);
+        return find_name(&p.names, &main_name).unwrap_or(0);
+    }
+
+    fn execute(p: &Program) with(Std) -> u8 {
+        match run(p, main_index(p)) {
+            Result::Ok { value } => { discard(value); return 0; },
+            Result::Err { error } => {
+                let VmError { func, pc, msg } = error;
+                let mut m: String = "runtime error: in '";
+                let fname: String = name_at(&p.names, func);
+                m.append(&fname);
+                fname.drop();
+                m.append(&"' at ");
+                m.append_int(pc as Int);
+                m.append(&": ");
+                m.append(&msg);
+                msg.drop();
+                return fail(m);
+            },
+        }
+    }
+
+    fn summary(p: &Program, prefix: String) with(Alloc) -> String {
+        let mut m: String = prefix;
+        m.append_int(p.funcs.len() as Int);
+        m.append(&" functions, ");
+        m.append_int(p.code.len() as Int);
+        m.append(&" instructions");
+        return m;
+    }
+
+    fn cmd_asm(inp: &String, outp: &String) with(Std) -> u8 {
+        let src: Bytes = match load_file(inp) {
+            Option::None => { return fail("stackvm: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        defer drop_bytes(src);
+        let p: Program = match assemble(&src) {
+            Result::Err { error } => { return report_asm(error); },
+            Result::Ok { value } => { value },
+        };
+        defer drop_program(p);
+        let bytes: Bytes = encode_program(&p);
+        defer drop_bytes(bytes);
+        match write_file(outp, &bytes) {
+            Result::Err { error } => { discard(error); return fail("stackvm: cannot write output"); },
+            Result::Ok { value } => { discard(value); },
+        }
+        let line: String = summary(&p, "assembled ");
+        println_owned(line);
+        return 0;
+    }
+
+    fn println_owned(s: String) with(Console, Alloc) {
+        print(&s);
+        print(&"\n");
+        s.drop();
+    }
+
+    fn with_loaded(inp: &String, mode: u64) with(Std) -> u8 {
+        let raw: Bytes = match load_file(inp) {
+            Option::None => { return fail("stackvm: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        defer drop_bytes(raw);
+        let p: Program = match load(&raw) {
+            Result::Err { error } => { return report_load(error); },
+            Result::Ok { value } => { value },
+        };
+        defer drop_program(p);
+        if mode == 0 {
+            let listing: String = disassemble(&p);
+            print(&listing);
+            listing.drop();
+            return 0;
+        }
+        return execute(&p);
+    }
+
+    fn cmd_exec(inp: &String) with(Std) -> u8 {
+        let src: Bytes = match load_file(inp) {
+            Option::None => { return fail("stackvm: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        defer drop_bytes(src);
+        let p: Program = match assemble(&src) {
+            Result::Err { error } => { return report_asm(error); },
+            Result::Ok { value } => { value },
+        };
+        defer drop_program(p);
+        return execute(&p);
+    }
+
+    fn cmd_check(inp: &String) with(Std) -> u8 {
+        let src: Bytes = match load_file(inp) {
+            Option::None => { return fail("stackvm: cannot read input"); },
+            Option::Some { value } => { value },
+        };
+        defer drop_bytes(src);
+        let p: Program = match assemble(&src) {
+            Result::Err { error } => { return report_asm(error); },
+            Result::Ok { value } => { value },
+        };
+        defer drop_program(p);
+        let bytes: Bytes = encode_program(&p);
+        defer drop_bytes(bytes);
+        let back: Program = match load(&bytes) {
+            Result::Err { error } => { return report_load(error); },
+            Result::Ok { value } => { value },
+        };
+        defer drop_program(back);
+        let a: String = disassemble(&p);
+        let b: String = disassemble(&back);
+        let same: bool = a.eq(&b);
+        a.drop();
+        b.drop();
+        if !same { return fail("stackvm: round trip changed the program"); }
+        let mut line: String = summary(&p, "ok ");
+        line.append(&", ");
+        line.append_int(bytes.len() as Int);
+        line.append(&" bytes");
+        println_owned(line);
+        return 0;
+    }
+
+    fn main() with(Std) -> u8 {
+        let n: Int = count();
+        if n < 3 { return usage(); }
+        let cmd: String = get(1);
+        defer drop_string(cmd);
+        let a1: String = get(2);
+        defer drop_string(a1);
+        if n == 4 && cmd.eq(&"asm") {
+            let a2: String = get(3);
+            defer drop_string(a2);
+            return cmd_asm(&a1, &a2);
+        }
+        if n != 3 { return usage(); }
+        if cmd.eq(&"dis") { return with_loaded(&a1, 0); }
+        if cmd.eq(&"run") { return with_loaded(&a1, 1); }
+        if cmd.eq(&"exec") { return cmd_exec(&a1); }
+        if cmd.eq(&"check") { return cmd_check(&a1); }
+        return usage();
+    }
+}

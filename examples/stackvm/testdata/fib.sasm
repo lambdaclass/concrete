@@ -1,0 +1,73 @@
+; Recursive and iterative Fibonacci.
+fn fib 1 1          ; fib(n) = n < 2 ? n : fib(n-1) + fib(n-2)
+    load 0
+    push 2
+    lt
+    jz recurse
+    load 0
+    ret
+recurse:
+    load 0
+    push 1
+    sub
+    call fib
+    load 0
+    push 2
+    sub
+    call fib
+    add
+    ret
+end
+
+fn fib_iter 1 4     ; locals: n, a, b, i
+    push 0
+    store 1
+    push 1
+    store 2
+    push 0
+    store 3
+loop:
+    load 3
+    load 0
+    lt
+    jz done
+    load 1
+    load 2
+    dup
+    store 1
+    add
+    store 2
+    load 3
+    push 1
+    add
+    store 3
+    jmp loop
+done:
+    load 1
+    ret
+end
+
+fn main 0 1
+    push 0
+    store 0
+next:
+    load 0
+    call fib
+    print
+    load 0
+    push 1
+    add
+    dup
+    store 0
+    push 16
+    lt
+    jnz next
+    push 20
+    call fib
+    print
+    push 90
+    call fib_iter
+    print
+    push 0
+    ret
+end

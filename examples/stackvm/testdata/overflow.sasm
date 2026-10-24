@@ -1,0 +1,28 @@
+; factorial(21) does not fit an i64: a runtime error after the prints.
+fn fact 1 1
+    load 0
+    push 1
+    gt
+    jz base
+    load 0
+    load 0
+    push 1
+    sub
+    call fact
+    mul
+    ret
+base:
+    push 1
+    ret
+end
+
+fn main 0 0
+    push 20
+    call fact
+    print
+    push 21
+    call fact
+    print
+    push 0
+    ret
+end

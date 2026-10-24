@@ -1,0 +1,54 @@
+// stackvm — names (functions and labels): [A-Za-z_][A-Za-z0-9_]*, at most 32 bytes.
+mod names {
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+
+    fn is_alpha(c: u8) -> bool {
+        return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95;
+    }
+
+    fn is_digit(c: u8) -> bool {
+        return c >= 48 && c <= 57;
+    }
+
+    /// Whether `b[start..end)` is a valid name.
+    pub fn valid_name_bytes(b: &Bytes, start: u64, end: u64) -> bool {
+        if end <= start || end - start > 32 { return false; }
+        if !is_alpha(b.get_unchecked(start)) { return false; }
+        let mut i: u64 = start + 1;
+        while i < end {
+            let c: u8 = b.get_unchecked(i);
+            if !is_alpha(c) && !is_digit(c) { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    fn eq_cb(want: &String, s: &String) -> bool {
+        return want.eq(s);
+    }
+
+    /// The index of `name` in `names`, if present.
+    pub fn find_name(names: &Vec<String>, name: &String) -> Option<u64> {
+        let mut i: u64 = 0;
+        while i < names.len() {
+            let hit: bool = names.with_at(i, name, eq_cb).unwrap_or(false);
+            if hit { return Option::<u64>::Some { value: i }; }
+            i = i + 1;
+        }
+        return Option::<u64>::None;
+    }
+
+    fn clone_cb(unused: &u64, s: &String) with(Alloc) -> String {
+        return s.clone();
+    }
+
+    /// An owned copy of `names[i]` (empty when out of range).
+    pub fn name_at(names: &Vec<String>, i: u64) with(Alloc) -> String {
+        let z: u64 = 0;
+        match names.with_at(i, &z, clone_cb) {
+            Option::Some { value } => { return value; },
+            Option::None => { return String::new(); },
+        }
+    }
+}

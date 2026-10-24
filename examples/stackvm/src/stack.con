@@ -1,0 +1,72 @@
+// stackvm — a bounded stack, generic over its element type.
+//
+// Bare `T` (kind Any): `push` and `pop` move elements in and out, so the same
+// type serves the VM's i64 operand stack, its Copy call frames, and the
+// assembler's linear fixup worklist (which owns Strings). Reading in place
+// needs `T: Copy`; dropping the whole stack needs `T: Destroy`.
+mod stack {
+    import std.vec.{Vec};
+
+    pub struct Stack<T> {
+        items: Vec<T>,
+        limit: u64,
+    }
+
+    impl<T> Stack<T> {
+        pub fn new(limit: u64) -> Stack<T> {
+            return Stack::<T> { items: Vec::<T>::new(), limit: limit };
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.items.len();
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.items.len() == 0;
+        }
+
+        /// Pushes `v`, or hands it back when the stack is full.
+        pub fn push(&mut self, v: T) with(Alloc) -> Result<u64, T> {
+            if self.items.len() >= self.limit {
+                return Result::<u64, T>::Err { error: v };
+            }
+            self.items.push(v);
+            return Result::<u64, T>::Ok { value: self.items.len() };
+        }
+
+        pub fn pop(&mut self) -> Option<T> {
+            return self.items.pop();
+        }
+    }
+
+    impl<T: Copy> Stack<T> {
+        pub fn peek(&self) -> Option<T> {
+            let n: u64 = self.items.len();
+            if n == 0 { return Option::<T>::None; }
+            return Option::<T>::Some { value: self.items.get_unchecked(n - 1) };
+        }
+
+        /// The element at `at` (0 = bottom); the caller keeps `at < len()`.
+        pub fn at(&self, at: u64) -> T {
+            return self.items.get_unchecked(at);
+        }
+
+        pub fn set(&mut self, at: u64, v: T) {
+            self.items.set_unchecked(at, v);
+        }
+
+        /// Pops elements until `len() == n`.
+        pub fn truncate(&mut self, n: u64) {
+            while self.items.len() > n {
+                discard(self.items.pop());
+            }
+        }
+    }
+
+    impl<T: Destroy> Stack<T> {
+        pub fn drop(self) with(Alloc) {
+            let Stack { items, limit } = self;
+            items.drop();
+        }
+    }
+}

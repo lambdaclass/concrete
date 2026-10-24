@@ -1,0 +1,93 @@
+; Loops with locals: the sum of squares, a GCD and a countdown with a nested loop.
+fn sum_squares 1 3   ; n, i, acc
+    push 1
+    store 1
+    push 0
+    store 2
+top:
+    load 1
+    load 0
+    gt
+    jnz out
+    load 1
+    dup
+    mul
+    load 2
+    add
+    store 2
+    load 1
+    push 1
+    add
+    store 1
+    jmp top
+out:
+    load 2
+    ret
+end
+
+fn gcd 2 3           ; a, b, t
+again:
+    load 1
+    jz finish
+    load 0
+    load 1
+    mod
+    store 2
+    load 1
+    store 0
+    load 2
+    store 1
+    jmp again
+finish:
+    load 0
+    ret
+end
+
+fn main 0 2
+    push 100
+    call sum_squares
+    print
+    push 1071
+    push 462
+    call gcd
+    print
+    push -48
+    push 18
+    call gcd
+    print
+    push 3
+    store 0
+outer:
+    load 0
+    jz end_outer
+    load 0
+    store 1
+inner:
+    load 1
+    print
+    load 1
+    push 1
+    sub
+    dup
+    store 1
+    jnz inner
+    load 0
+    push 1
+    sub
+    store 0
+    jmp outer
+end_outer:
+    push -7
+    push 2
+    div
+    print
+    push -7
+    push 2
+    mod
+    print
+    push 5
+    neg
+    not
+    print
+    halt
+end

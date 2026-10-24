@@ -1,0 +1,274 @@
+// stackvm — the bytecode file: encoding, decoding and load-time verification.
+//
+// Layout (little-endian): "SVM1" | u32 nfuncs | nfuncs x (u32 entry, u32 len,
+// u8 nparams, u8 nlocals, u8 namelen, name bytes) | u32 ncode | ncode x
+// (u8 opcode, operand: push i64 (8 bytes), jmp/jz/jnz u32 target, load/store
+// u8 slot, call u32 function index, none otherwise).
+mod codec {
+    import std.bytes.{Bytes};
+    import std.vec.{Vec};
+    import stackvm.isa.{Instr, Func, Program, Encode, encode_all, push_le, empty_program, drop_program, jump_target};
+    import stackvm.names.{valid_name_bytes, find_name, name_at};
+
+    pub fn encode_program(p: &Program) with(Alloc) -> Bytes {
+        let mut out: Bytes = Bytes::new();
+        out.push(83); out.push(86); out.push(77); out.push(49);   // "SVM1"
+        push_le(&mut out, p.funcs.len(), 4);
+        let mut i: u64 = 0;
+        while i < p.funcs.len() {
+            let f: Func = p.funcs.get_unchecked(i);
+            f.encode(&mut out);
+            push_name(p, i, &mut out);
+            i = i + 1;
+        }
+        push_le(&mut out, p.code.len(), 4);
+        encode_all(&p.code, &mut out);
+        return out;
+    }
+
+    fn push_name(p: &Program, i: u64, out: &mut Bytes) with(Alloc) {
+        // FRICTION: a Vec<String> element is reached only by a scoped callback or by
+        // copying it out (name_at); this copies.
+        let copy: String = name_at(&p.names, i);
+        push_le(out, copy.len(), 1);
+        let mut k: u64 = 0;
+        while k < copy.len() {
+            out.push(copy.get_unchecked(k) as u8);
+            k = k + 1;
+        }
+        copy.drop();
+    }
+
+    pub struct LoadError {
+        msg: String,
+    }
+
+    fn load_err(msg: String) -> Result<Program, LoadError> {
+        return Result::<Program, LoadError>::Err { error: LoadError { msg: msg } };
+    }
+
+    pub fn load_error_text(e: LoadError) -> String {
+        let LoadError { msg } = e;
+        return msg;
+    }
+
+    struct Copy Reader {
+        pos: u64,
+        ok: bool,
+    }
+
+    fn rd(b: &Bytes, r: &mut Reader, n: u64) -> u64 {
+        if !r.ok || r.pos + n > b.len() {
+            r.ok = false;
+            return 0;
+        }
+        let mut v: u64 = 0;
+        let mut k: u64 = 0;
+        while k < n {
+            v = v | ((b.get_unchecked(r.pos + k) as u64) << (8 * k));
+            k = k + 1;
+        }
+        r.pos = r.pos + n;
+        return v;
+    }
+
+    fn decode_instr(op: u64, b: &Bytes, r: &mut Reader) -> Option<Instr> {
+        if op == 0 { return Option::<Instr>::Some { value: Instr::Halt }; }
+        if op == 1 {
+            let raw: u64 = rd(b, r, 8);
+            return Option::<Instr>::Some { value: Instr::Push { value: raw as i64 } };
+        }
+        if op == 2 { return Option::<Instr>::Some { value: Instr::Pop }; }
+        if op == 3 { return Option::<Instr>::Some { value: Instr::Dup }; }
+        if op == 4 { return Option::<Instr>::Some { value: Instr::Swap }; }
+        if op == 5 { return Option::<Instr>::Some { value: Instr::Add }; }
+        if op == 6 { return Option::<Instr>::Some { value: Instr::Sub }; }
+        if op == 7 { return Option::<Instr>::Some { value: Instr::Mul }; }
+        if op == 8 { return Option::<Instr>::Some { value: Instr::Div }; }
+        if op == 9 { return Option::<Instr>::Some { value: Instr::Mod }; }
+        if op == 10 { return Option::<Instr>::Some { value: Instr::Neg }; }
+        if op == 11 { return Option::<Instr>::Some { value: Instr::Eq }; }
+        if op == 12 { return Option::<Instr>::Some { value: Instr::Lt }; }
+        if op == 13 { return Option::<Instr>::Some { value: Instr::Gt }; }
+        if op == 14 { return Option::<Instr>::Some { value: Instr::Not }; }
+        if op == 15 { return Option::<Instr>::Some { value: Instr::Jmp { target: rd(b, r, 4) } }; }
+        if op == 16 { return Option::<Instr>::Some { value: Instr::Jz { target: rd(b, r, 4) } }; }
+        if op == 17 { return Option::<Instr>::Some { value: Instr::Jnz { target: rd(b, r, 4) } }; }
+        if op == 18 { return Option::<Instr>::Some { value: Instr::Load { slot: rd(b, r, 1) } }; }
+        if op == 19 { return Option::<Instr>::Some { value: Instr::Store { slot: rd(b, r, 1) } }; }
+        if op == 20 { return Option::<Instr>::Some { value: Instr::Call { func: rd(b, r, 4) } }; }
+        if op == 21 { return Option::<Instr>::Some { value: Instr::Ret }; }
+        if op == 22 { return Option::<Instr>::Some { value: Instr::Print }; }
+        return Option::<Instr>::None;
+    }
+
+    fn at_text(prefix: String, at: u64) with(Alloc) -> String {
+        let mut s: String = prefix;
+        s.append_int(at as Int);
+        return s;
+    }
+
+    /// Decodes and verifies a bytecode file. Checks, in order: the header and
+    /// every record (bad magic, truncated, bad function name, bad function
+    /// table, unknown opcode, trailing bytes), the function table tiling the
+    /// code, distinct names, every instruction's operand against its function
+    /// (jump out of function, bad slot, bad call), and `main`.
+    pub fn load(b: &Bytes) with(Alloc) -> Result<Program, LoadError> {
+        if b.len() < 4 || b.get_unchecked(0) != 83 || b.get_unchecked(1) != 86
+            || b.get_unchecked(2) != 77 || b.get_unchecked(3) != 49 {
+            return load_err("bad magic");
+        }
+        let mut r: Reader = Reader { pos: 4, ok: true };
+        let mut p: Program = empty_program();
+        let nfuncs: u64 = rd(b, &mut r, 4);
+        let mut i: u64 = 0;
+        while r.ok && i < nfuncs {
+            let entry: u64 = rd(b, &mut r, 4);
+            let len: u64 = rd(b, &mut r, 4);
+            let nparams: u64 = rd(b, &mut r, 1);
+            let nlocals: u64 = rd(b, &mut r, 1);
+            let nlen: u64 = rd(b, &mut r, 1);
+            if !r.ok { break; }
+            if r.pos + nlen > b.len() { r.ok = false; break; }
+            if !valid_name_bytes(b, r.pos, r.pos + nlen) {
+                drop_program(p);
+                return load_err("bad function name");
+            }
+            let mut name: String = String::new();
+            let mut k: u64 = 0;
+            while k < nlen {
+                name.push_char(b.get_unchecked(r.pos + k) as char);
+                k = k + 1;
+            }
+            r.pos = r.pos + nlen;
+            if nlocals < nparams {
+                name.drop();
+                drop_program(p);
+                return load_err("bad function table");
+            }
+            p.funcs.push(Func { entry: entry, len: len, nparams: nparams, nlocals: nlocals });
+            p.names.push(name);
+            i = i + 1;
+        }
+        let ncode: u64 = rd(b, &mut r, 4);
+        let mut c: u64 = 0;
+        while r.ok && c < ncode {
+            let op: u64 = rd(b, &mut r, 1);
+            if !r.ok { break; }
+            match decode_instr(op, b, &mut r) {
+                Option::None => {
+                    let mut m: String = "unknown opcode ";
+                    m.append_int(op as Int);
+                    drop_program(p);
+                    return load_err(at_text(append_str(m, " at "), c));
+                },
+                Option::Some { value } => { p.code.push(value); },
+            }
+            c = c + 1;
+        }
+        if !r.ok {
+            drop_program(p);
+            return load_err("truncated");
+        }
+        if r.pos != b.len() {
+            drop_program(p);
+            return load_err("trailing bytes");
+        }
+        // The function table tiles the code, in order, with no empty function.
+        let mut next: u64 = 0;
+        let mut f: u64 = 0;
+        while f < p.funcs.len() {
+            let fi: Func = p.funcs.get_unchecked(f);
+            if fi.entry != next || fi.len == 0 {
+                drop_program(p);
+                return load_err("bad function table");
+            }
+            next = next + fi.len;
+            f = f + 1;
+        }
+        if next != p.code.len() {
+            drop_program(p);
+            return load_err("bad function table");
+        }
+        if has_duplicate_name(&p) {
+            drop_program(p);
+            return load_err("duplicate function name");
+        }
+        // Operands against their function.
+        f = 0;
+        while f < p.funcs.len() {
+            let fi: Func = p.funcs.get_unchecked(f);
+            let mut pc: u64 = fi.entry;
+            while pc < fi.entry + fi.len {
+                let ins: Instr = p.code.get_unchecked(pc);
+                match jump_target(&ins) {
+                    Option::Some { value } => {
+                        if value < fi.entry || value >= fi.entry + fi.len {
+                            drop_program(p);
+                            return load_err(at_text("jump out of function at ", pc));
+                        }
+                    },
+                    Option::None => {},
+                }
+                match ins {
+                    Instr::Load { slot } => {
+                        if slot >= fi.nlocals { drop_program(p); return load_err(at_text("bad slot at ", pc)); }
+                    },
+                    Instr::Store { slot } => {
+                        if slot >= fi.nlocals { drop_program(p); return load_err(at_text("bad slot at ", pc)); }
+                    },
+                    Instr::Call { func } => {
+                        if func >= p.funcs.len() { drop_program(p); return load_err(at_text("bad call at ", pc)); }
+                    },
+                    _ => {},
+                }
+                pc = pc + 1;
+            }
+            f = f + 1;
+        }
+        let main_name: String = "main";
+        let found: Option<u64> = find_name(&p.names, &main_name);
+        main_name.drop();
+        match found {
+            Option::None => { drop_program(p); return load_err("no function 'main'"); },
+            Option::Some { value } => {
+                if p.funcs.get_unchecked(value).nparams != 0 {
+                    drop_program(p);
+                    return load_err("main takes no parameters");
+                }
+            },
+        }
+        return Result::<Program, LoadError>::Ok { value: p };
+    }
+
+    fn append_str(s: String, tail: String) with(Alloc) -> String {
+        let mut out: String = s;
+        out.append(&tail);
+        tail.drop();
+        return out;
+    }
+
+    fn has_duplicate_name(p: &Program) with(Alloc) -> bool {
+        let mut i: u64 = 0;
+        while i < p.names.len() {
+            let mut j: u64 = i + 1;
+            while j < p.names.len() {
+                if names_equal(&p.names, i, j) { return true; }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn names_equal(names: &Vec<String>, i: u64, j: u64) with(Alloc) -> bool {
+        let a: String = name_at(names, i);
+        let same: bool = names.with_at(j, &a, eq_cb).unwrap_or(false);
+        a.drop();
+        return same;
+    }
+
+    fn eq_cb(a: &String, b: &String) -> bool {
+        return a.eq(b);
+    }
+}
