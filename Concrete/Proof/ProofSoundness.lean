@@ -238,7 +238,12 @@ theorem binop_preservation
     (h_rhs : cExprToPExpr rhs = some pr) :
     cExprToPExpr (.binOp op lhs rhs ty) = some (.binOp pop pl pr) := by
   simp only [cExprToPExpr] at *
-  simp [cExprToPExprImpl, h_op, h_lhs, h_rhs]
+  -- `&&` and `||` extract as conditionals (short-circuit), but `binOpToPBinOp` maps neither,
+  -- so `h_op` excludes them; every other operator reaches the general `.binOp` arm.
+  cases op
+  case and_ => simp [binOpToPBinOp] at h_op
+  case or_ => simp [binOpToPBinOp] at h_op
+  all_goals simp [cExprToPExprImpl, h_op, h_lhs, h_rhs]
 
 /-! ## R-04: eval-side compositional reduction
 

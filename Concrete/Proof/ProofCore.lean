@@ -1301,9 +1301,9 @@ def cMatchArmToPK (k : Proof.PExpr) : CMatchArm → Option (Proof.PMatchPat × P
     let pbody ← cStmtsToPExprKImpl body (some k)
     some (.litPat v, pbody)
   | .varArm binding _bindTy none body => do
-    if pexprMentions binding k || !cBranchComposes body k then none
+    if pexprMentions binding.name k || !cBranchComposes body k then none
     let pbody ← cStmtsToPExprKImpl body (some k)
-    some (.varPat binding, pbody)
+    some (.varPat binding.name, pbody)
   | _ => none
 
 def cMatchArmsToPK (k : Proof.PExpr) :
