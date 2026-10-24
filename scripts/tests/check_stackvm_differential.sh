@@ -137,7 +137,7 @@ for kind in gen mut; do
     if ! full "$f" "$(basename "$f" .sasm)" > "$TMP/full.log"; then
       bad=$((bad+1)); failing="$failing $(basename "$f")"; sed -n 1,6p "$TMP/full.log"
     fi
-    [ -f "$TMP/$(basename "$f" .sasm).ref.svm" ] && nasm=$((nasm+1))
+    [ "$kind" = gen ] && [ -f "$TMP/$(basename "$f" .sasm).ref.svm" ] && nasm=$((nasm+1))
   done
   if [ "$total" -ne "$NGEN" ]; then
     no "$total generated $kind programs, want $NGEN"
@@ -147,9 +147,9 @@ for kind in gen mut; do
     no "$bad of $total generated $kind programs disagree:$(echo "$failing" | cut -c1-200)"
   fi
 done
-# The valid programs must actually assemble (else the bytes, dis and run legs compared nothing).
-[ "$nasm" -ge "$NGEN" ] && ok "$nasm generated programs assembled (bytes, dis and run compared)" \
-  || no "only $nasm generated programs assembled, want at least $NGEN"
+# Every valid program must assemble (else the bytes, dis and run legs compared nothing for it).
+[ "$nasm" -eq "$NGEN" ] && ok "all $nasm valid generated programs assembled (bytes, dis and run compared)" \
+  || no "$nasm of $NGEN valid generated programs assembled"
 
 # 3. Loader: seeded corruptions of assembled files (bytes flipped, truncated, extended).
 if ! python3 - "$TMP" "$NCORRUPT" <<'EOF'
