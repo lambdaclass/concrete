@@ -129,7 +129,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 221: a call's explicit type-argument list of the wrong length (E0322).
   [221]="error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con"
   # Bug 220: a radix prefix with no digits (E0001).
-  [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con regress_220_radix_literals.con"
+  [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 215: an unknown type in a cast or a type-argument list (E0108).

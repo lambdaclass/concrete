@@ -3,7 +3,7 @@
 **Status:** FIXED (branch `wip/diffhunt-1023`)
 **Found:** 2026-10-23, by the diagnostics probes of the post-R-0492 differential hunt.
 **Severity:** silent acceptance of a malformed program. `return 0x;` compiled and returned 0 on both
-backends; `0b2` lexed as `0` followed by `b2`.
+backends; `0b2` lexed as the integer tokens `0` and `2` (the `b` was consumed), a parse error only by accident.
 
 ## Reproducer
 
@@ -26,10 +26,17 @@ digit at all yielded the literal 0.
 
 ## Fix
 
-The radix prefix is consumed only when a digit of its radix follows; otherwise the lexer emits a
-lexical error (`a \`0x\` literal needs at least one hexadecimal digit`, E0001 at `parse`). Pinned by
-`error_220_empty_hex_literal.con` and `error_220_empty_binary_literal.con` (`run_err ... (E0001)`)
-and `regress_220_radix_literals.con` (203: every prefix and both letter cases still lex).
+After a leading `0`, a radix letter starts a radix literal only when a digit of that radix follows;
+otherwise the lexer consumes the letter and emits a lexical error (`a \`0x\` literal needs at least
+one hexadecimal digit`, E0001 at `parse`). Pinned by `error_220_empty_hex_literal.con`,
+`error_220_empty_binary_literal.con` and `error_220_empty_octal_literal.con`, whose `run_err` legs
+assert the lexical message (the Codex review: `0b2` was already E0001 before the fix, so the code
+alone did not detect a regression), and `regress_220_radix_literals.con` (203: every prefix and both
+letter cases still lex).
+
+Not covered: the browser compiler bundled with the site (`site/static/compiler/`) is a Wasm build
+of an older compiler and still accepts a bare prefix until the site bundle is rebuilt; the editor
+grammar (`editor/`) highlights its own literal shapes and was not changed.
 
 ## Structural cause
 
@@ -39,5 +46,6 @@ against the grammar for the empty case.
 
 ## Structural owner
 
-R-0498 (S3, exit 2l: every rule has an enforcing site); the grammar-conformance gate
-(`check_grammar*.sh`) is where a negative literal corpus would hold it.
+R-0498 (S3, exit 2l: every rule has an enforcing site). No gate checks the lexer against the
+grammar's token descriptions (the EBNF's `INT` is a comment that `scripts/check_ll1.*` skips); a
+negative lexical corpus run against the lexer is the proposed holder.

@@ -8372,8 +8372,10 @@ run_err "$TESTDIR/error_221_fn_pointer_type_argument.con" "(E0322)"
 run_err "$TESTDIR/error_221_bound_method_type_argument.con" "(E0322)"
 run_ok "$TESTDIR/regress_221_exact_type_arguments.con" 42
 # Bug 220: `0x` / `0b` / `0o` with no digit lexed as 0; now a lexical error.
-run_err "$TESTDIR/error_220_empty_hex_literal.con" "(E0001)"
-run_err "$TESTDIR/error_220_empty_binary_literal.con" "(E0001)"
+# The message is asserted, not only E0001: `0b2` was already a parse error before the fix.
+run_err "$TESTDIR/error_220_empty_hex_literal.con" "a \`0x\` literal needs at least one hexadecimal digit"
+run_err "$TESTDIR/error_220_empty_binary_literal.con" "a \`0b\` literal needs at least one binary digit"
+run_err "$TESTDIR/error_220_empty_octal_literal.con" "a \`0o\` literal needs at least one octal digit"
 run_ok "$TESTDIR/regress_220_radix_literals.con" 203
 # Bug 218: two declarations of one name in a module (MOD-3) were accepted (the first silently won,
 # or llvm-as failed); refused with E0299. A type and a value may share a spelling.

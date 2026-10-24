@@ -1,0 +1,5 @@
+// Bug 220: a bare `0o` lexed as the literal 0. Expected: a lexical error (E0001).
+fn main() -> Int {
+    let x: Int = 0o;
+    return x;
+}
