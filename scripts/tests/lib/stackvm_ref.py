@@ -61,6 +61,9 @@ def q(t):
     return "'" + t.decode("latin-1") + "'"
 
 
+MAX_FIXUPS = 1000000   # unresolved references per worklist (a function's jumps; all calls)
+
+
 def assemble(src):
     p = Program()
     in_fn = False
@@ -148,7 +151,10 @@ def assemble(src):
         else:
             if not valid_name(t1):
                 raise Fail(lineno, "bad name " + q(t1))
-            (calls if m == "call" else jumps).append((t1, len(p.code), lineno))
+            work = calls if m == "call" else jumps
+            if len(work) >= MAX_FIXUPS:
+                raise Fail(lineno, "too many references")
+            work.append((t1, len(p.code), lineno))
             p.code.append([m, 0])
     if in_fn:
         raise Fail(fn_line, "fn " + q(p.names[-1]) + " has no end")

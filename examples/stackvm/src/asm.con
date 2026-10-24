@@ -7,7 +7,8 @@
 //   push INT | jmp L | jz L | jnz L | load N | store N | call NAME
 //   pop dup swap add sub mul div mod neg eq lt gt not ret print halt
 // Errors are reported at the first failing line, checked in this order: each
-// line as read; at `end`, a label with no instruction after it, then the first
+// line as read (a jump or call beyond 1,000,000 unresolved references in its
+// worklist is "too many references"); at `end`, a label with no instruction after it, then the first
 // undefined label (in reference order), then an empty function; after the last
 // line, a function with no `end`, the first undefined function (in call order),
 // then a missing or parameterized `main`.
@@ -39,6 +40,9 @@ mod asm {
             self.name.destroy();
         }
     }
+
+    // At most this many unresolved references per worklist (a function's jumps; all calls).
+    const MAX_FIXUPS: u64 = 1000000;
 
     struct Copy Toks {
         n: u64,
@@ -246,8 +250,8 @@ mod asm {
             labels: Vec::<String>::new(),
             lpos: Vec::<u64>::new(),
             llines: Vec::<u64>::new(),
-            jumps: Stack::<Fixup>::new(1000000),
-            calls: Stack::<Fixup>::new(1000000),
+            jumps: Stack::<Fixup>::new(MAX_FIXUPS),
+            calls: Stack::<Fixup>::new(MAX_FIXUPS),
             in_fn: false,
             fn_line: 0,
             entry: 0,
@@ -256,12 +260,14 @@ mod asm {
         };
     }
 
-    fn push_fixup(st: &mut Stack<Fixup>, f: Fixup) with(Alloc) {
+    /// Queues `f`; false when the worklist is full (MAX_FIXUPS entries), and `f` is dropped.
+    fn push_fixup(st: &mut Stack<Fixup>, f: Fixup) with(Alloc) -> bool {
         match st.push(f) {
-            Result::Ok { value } => { discard(value); },
+            Result::Ok { value } => { discard(value); return true; },
             Result::Err { error } => {
                 let Fixup { name, at, line } = error;
                 name.drop();
+                return false;
             },
         }
     }
@@ -410,12 +416,13 @@ mod asm {
                 if kind == 2 { a.prog.code.push(Instr::Jmp { target: 0 }); }
                 if kind == 3 { a.prog.code.push(Instr::Jz { target: 0 }); }
                 if kind == 4 { a.prog.code.push(Instr::Jnz { target: 0 }); }
-                if kind == 7 {
+                let queued: bool = if kind == 7 {
                     a.prog.code.push(Instr::Call { func: 0 });
-                    push_fixup(&mut a.calls, fx);
+                    push_fixup(&mut a.calls, fx)
                 } else {
-                    push_fixup(&mut a.jumps, fx);
-                }
+                    push_fixup(&mut a.jumps, fx)
+                };
+                if !queued { return fail(a, line, "too many references"); }
             }
         }
         if a.in_fn {

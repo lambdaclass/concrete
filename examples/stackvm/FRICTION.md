@@ -14,8 +14,9 @@ Every output (the assembled bytes, the listing, the program's output, the diagno
 the exit code) is specified closely enough that `scripts/tests/check_stackvm_differential.sh`
 compares it byte for byte with an independent Python implementation
 (`scripts/tests/lib/stackvm_ref.py`) on the six test programs, 120 seeded generated programs and a
-line-level mutation of each (`scripts/tests/lib/stackvm_gen.py`), and 120 seeded corruptions of
-assembled files for the loader, plus five exit-code checks (15 checks; all agree). Ten `@run` cases
+line-level mutation of each (`scripts/tests/lib/stackvm_gen.py`; every command, the assembled
+bytes, and `dis` and `run` of the reference's bytes), and 120 seeded corruptions of assembled
+files for the loader, plus five exit-code checks (17 checks, every input set counted; all agree). Ten `@run` cases
 agree natively and under `--interp`.
 
 This log is input to the language-design negotiation in

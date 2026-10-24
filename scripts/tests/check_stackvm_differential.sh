@@ -2,10 +2,12 @@
 # Phase 7 workload 10 gate: stackvm (assembler, bytecode codec and verifier, interpreter,
 # disassembler) must agree byte for byte with an independent Python implementation of the same
 # specifications (scripts/tests/lib/stackvm_ref.py) on every output a run has: the assembled
-# file, the listing, the program's output, the diagnostic on stderr and the exit code. Inputs:
-# the example's test programs, seeded generated programs (scripts/tests/lib/stackvm_gen.py, valid
-# ones and one line-level mutation of each), and seeded corruptions of assembled files for the
-# loader. Plus the 13t exit codes.
+# file, the listing, the program's output (stdout), the diagnostic (stderr) and the exit code,
+# each compared on its own. Inputs: the example's test programs, seeded generated programs
+# (scripts/tests/lib/stackvm_gen.py, valid ones and one line-level mutation of each), and seeded
+# corruptions of assembled files for the loader. Every input set is counted before it is used, so
+# a generator that wrote nothing fails the gate instead of passing it vacuously. Plus the 13t exit
+# codes.
 set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
@@ -15,6 +17,8 @@ C="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$C" ] || { echo "error: build first" >&2; exit 2; }
 REF="$ROOT_DIR/scripts/tests/lib/stackvm_ref.py"
 GEN="$ROOT_DIR/scripts/tests/lib/stackvm_gen.py"
+NGEN=120        # generated programs, and as many mutations
+NCORRUPT=40     # corruptions per assembled test program
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -24,59 +28,100 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
   && ok "stackvm builds" || { no "stackvm build failed"; echo "STACKVM: PASS=$PASS FAIL=$FAIL"; exit 1; }
 B="$ROOT_DIR/examples/stackvm/stackvm"
 
-# One observation: stdout, stderr and exit code of a command, as one file.
-observe(){ local out="$1"; shift; "$@" > "$out.o" 2> "$out.e"; echo "rc=$?" > "$out.rc"; cat "$out.o" "$out.e" "$out.rc" > "$out"; }
+# One observation of a command: <out>.o (stdout), <out>.e (stderr), <out>.rc (exit code).
+observe(){ local out="$1"; shift; "$@" > "$out.o" 2> "$out.e"; echo "$?" > "$out.rc"; }
+
+# same <a> <b>: two observations agree stream by stream (stdout, stderr and exit code separately,
+# so a diagnostic printed to the wrong stream is a disagreement).
+same(){
+  local s bad=0
+  for s in o e rc; do
+    if ! cmp -s "$1.$s" "$2.$s"; then
+      bad=1
+      echo "      $(case $s in o) echo stdout;; e) echo stderr;; rc) echo "exit code";; esac) differs:"
+      diff "$2.$s" "$1.$s" | head -4 | sed 's/^/        /'
+    fi
+  done
+  return $bad
+}
 
 # agree <label> <args...>: the binary and the reference give the same observation.
 agree(){
   local label="$1"; shift
   observe "$TMP/ours" "$B" "$@"
   observe "$TMP/want" python3 "$REF" "$@"
-  if cmp -s "$TMP/ours" "$TMP/want"; then return 0; fi
-  echo "    $label differs:"; diff "$TMP/want" "$TMP/ours" | head -6 | sed 's/^/      /'
+  same "$TMP/ours" "$TMP/want" && return 0
+  echo "    $label ($*) disagrees"
   return 1
 }
 
-# 1. The test programs: every command, plus the assembled bytes.
-for f in examples/stackvm/testdata/*.sasm; do
-  n=$(basename "$f" .sasm); bad=0
-  agree "$n exec" exec "$f" || bad=1
-  agree "$n check" check "$f" || bad=1
-  observe "$TMP/ours" "$B" asm "$f" "$TMP/$n.ours.svm"
-  observe "$TMP/want" python3 "$REF" asm "$f" "$TMP/$n.ref.svm"
-  cmp -s "$TMP/ours" "$TMP/want" || { echo "    $n asm differs"; diff "$TMP/want" "$TMP/ours" | head -4; bad=1; }
-  if [ -f "$TMP/$n.ref.svm" ]; then
-    cmp -s "$TMP/$n.ref.svm" "$TMP/$n.ours.svm" || { echo "    $n: assembled bytes differ"; bad=1; }
-    agree "$n dis" dis "$TMP/$n.ref.svm" || bad=1
-    agree "$n run" run "$TMP/$n.ref.svm" || bad=1
+# full <file> <tag>: exec and check, asm (its observation and the bytes written), and dis and run
+# of the reference's bytes when it wrote any. Prints nothing on agreement.
+full(){
+  local f="$1" tag="$2" bad=0
+  agree "$tag exec" exec "$f" || bad=1
+  agree "$tag check" check "$f" || bad=1
+  rm -f "$TMP/$tag.ours.svm" "$TMP/$tag.ref.svm"
+  observe "$TMP/ours" "$B" asm "$f" "$TMP/$tag.ours.svm"
+  observe "$TMP/want" python3 "$REF" asm "$f" "$TMP/$tag.ref.svm"
+  same "$TMP/ours" "$TMP/want" || { echo "    $tag asm disagrees"; bad=1; }
+  if [ -f "$TMP/$tag.ref.svm" ] || [ -f "$TMP/$tag.ours.svm" ]; then
+    cmp -s "$TMP/$tag.ref.svm" "$TMP/$tag.ours.svm" || { echo "    $tag: assembled bytes differ"; bad=1; }
+    if [ -f "$TMP/$tag.ref.svm" ]; then
+      agree "$tag dis" dis "$TMP/$tag.ref.svm" || bad=1
+      agree "$tag run" run "$TMP/$tag.ref.svm" || bad=1
+    fi
   fi
-  [ $bad -eq 0 ] && ok "testdata/$n.sasm: exec, check, asm bytes, dis and run agree with the reference" \
+  return $bad
+}
+
+# 1. The test programs: every command, plus the assembled bytes.
+ntest=0
+for f in examples/stackvm/testdata/*.sasm; do
+  [ -f "$f" ] || continue
+  ntest=$((ntest+1))
+  n=$(basename "$f" .sasm)
+  full "$f" "$n" && ok "testdata/$n.sasm: exec, check, asm bytes, dis and run agree with the reference" \
     || no "testdata/$n.sasm disagrees with the reference"
 done
+[ "$ntest" -ge 6 ] && ok "$ntest test programs checked" || no "only $ntest test programs found (want at least 6)"
 
-# 2. Generated programs (valid, and one mutation of each).
+# 2. Generated programs (valid, and one mutation of each), with every command and the bytes.
 mkdir -p "$TMP/gen"
-python3 "$GEN" "$TMP/gen" 20261024 120
+if ! python3 "$GEN" "$TMP/gen" 20261024 "$NGEN"; then
+  no "the program generator failed"
+fi
+nasm=0
 for kind in gen mut; do
   total=0; bad=0; failing=""
   for f in "$TMP"/gen/${kind}_*.sasm; do
+    [ -f "$f" ] || continue
     total=$((total+1))
-    if ! agree "$(basename "$f")" exec "$f" >/dev/null || ! agree "$(basename "$f")" check "$f" >/dev/null; then
-      bad=$((bad+1)); failing="$failing $(basename "$f")"
+    if ! full "$f" "$(basename "$f" .sasm)" > "$TMP/full.log"; then
+      bad=$((bad+1)); failing="$failing $(basename "$f")"; sed -n 1,6p "$TMP/full.log"
     fi
+    [ -f "$TMP/$(basename "$f" .sasm).ref.svm" ] && nasm=$((nasm+1))
   done
-  [ $bad -eq 0 ] && ok "$total generated $kind programs: exec and check agree with the reference" \
-    || no "$bad of $total generated $kind programs disagree:$(echo "$failing" | cut -c1-200)"
+  if [ "$total" -ne "$NGEN" ]; then
+    no "$total generated $kind programs, want $NGEN"
+  elif [ $bad -eq 0 ]; then
+    ok "$total generated $kind programs: exec, check, asm bytes, dis and run agree with the reference"
+  else
+    no "$bad of $total generated $kind programs disagree:$(echo "$failing" | cut -c1-200)"
+  fi
 done
+# The valid programs must actually assemble (else the bytes, dis and run legs compared nothing).
+[ "$nasm" -ge "$NGEN" ] && ok "$nasm generated programs assembled (bytes, dis and run compared)" \
+  || no "only $nasm generated programs assembled, want at least $NGEN"
 
 # 3. Loader: seeded corruptions of assembled files (bytes flipped, truncated, extended).
-python3 - "$TMP" "$REF" <<'EOF'
-import random, subprocess, sys
-tmp, ref = sys.argv[1], sys.argv[2]
+if ! python3 - "$TMP" "$NCORRUPT" <<'EOF'
+import random, sys
+tmp, n = sys.argv[1], int(sys.argv[2])
 r = random.Random(7)
 for src in ["fib", "loop", "recurse"]:
     good = open("%s/%s.ref.svm" % (tmp, src), "rb").read()
-    for k in range(40):
+    for k in range(n):
         b = bytearray(good)
         m = r.randrange(4)
         if m == 0:
@@ -89,14 +134,23 @@ for src in ["fib", "loop", "recurse"]:
             i = r.randrange(4, min(len(b), 80)); b[i] ^= 1 << r.randrange(8)
         open("%s/bad_%s_%02d.svm" % (tmp, src, k), "wb").write(bytes(b))
 EOF
+then
+  no "the corruption generator failed"
+fi
 total=0; bad=0; failing=""
 for f in "$TMP"/bad_*.svm; do
+  [ -f "$f" ] || continue
   total=$((total+1))
   agree "$(basename "$f")" run "$f" >/dev/null && agree "$(basename "$f")" dis "$f" >/dev/null \
     || { bad=$((bad+1)); failing="$failing $(basename "$f")"; }
 done
-[ $bad -eq 0 ] && ok "$total corrupted bytecode files: run and dis agree with the reference" \
-  || no "$bad of $total corrupted files disagree:$(echo "$failing" | cut -c1-200)"
+if [ "$total" -ne $((3 * NCORRUPT)) ]; then
+  no "$total corrupted bytecode files, want $((3 * NCORRUPT))"
+elif [ $bad -eq 0 ]; then
+  ok "$total corrupted bytecode files: run and dis agree with the reference"
+else
+  no "$bad of $total corrupted files disagree:$(echo "$failing" | cut -c1-200)"
+fi
 
 # 4. 13t exit codes.
 "$B" >/dev/null 2>&1;                          [ $? -eq 2 ] && ok "no args -> 2"            || no "no-args rc"

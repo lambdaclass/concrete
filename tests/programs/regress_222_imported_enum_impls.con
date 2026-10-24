@@ -97,11 +97,13 @@ mod m {
     }
 
     mod closure {
-        import m.shapes.{Tile, rect_tile};
+        // `Shape` is not named here: it arrives through `Tile.shape` (the transitive closure),
+        // and `total`'s `T: Area` bound is checked against it (E0241 before the fix).
+        import m.shapes.{Tile, rect_tile, total};
 
         pub fn run_tile() -> i64 {
             let t: Tile = rect_tile(3, 7, 2);
-            return t.shape.area() + t.count + 1;                    // 21 + 2 + 1
+            return total(&t.shape) + t.count + 1;                    // 21 + 2 + 1
         }
     }
 
