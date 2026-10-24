@@ -1,8 +1,8 @@
 // Bug 222 regression: an imported enum brings its impl blocks and trait impls. The struct and
 // newtype import paths each restated "the impls of this type travel with it" and the enum paths
-// (direct import and the transitive closure) omitted it, so outside its module an enum's methods
-// were E0264 and its trait bounds E0241. Every imported type kind now takes its impls from one
-// helper (`typeImplsOf` in Resolve/FileSummary.lean).
+// (direct import and the transitive closure) omitted it, so outside its module every trait bound
+// on the enum was E0241 (its method calls resolved through the callee table either way). Every
+// imported type kind now takes its impls from one helper (`typeImplsOf` in Resolve/FileSummary.lean).
 mod m {
     mod shapes {
         pub trait Area {
@@ -75,7 +75,7 @@ mod m {
         import m.shapes.{Shape, total};
 
         pub fn run() -> i64 {
-            let a: Shape = Shape::square(3);                  // static method (E0264 before)
+            let a: Shape = Shape::square(3);                  // static method
             let b: Shape = Shape::Rect { w: 2, h: 4 };
             let e: Shape = Shape::Empty;
             let mut r: i64 = a.area() + total(&b);            // trait method 9, bound 8

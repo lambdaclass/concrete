@@ -297,8 +297,9 @@ def importCode (pass : String) (unknownModule : Bool) : String :=
 /-- Bug 222: what travels with an imported type declared as `name` in `summary`, whatever kind
     of declaration it is (struct, enum or newtype): its inherent impl blocks, its trait impls and
     the signatures of their public methods. The struct and newtype import paths each restated this
-    selection and the enum paths omitted it, so an imported enum's methods were E0264 and its trait
-    bounds E0241 outside its module. Every type import now takes its impls from here. -/
+    selection and the enum paths omitted it, so every trait bound on an imported enum was E0241
+    outside its module (its method calls resolved through the callee table regardless). Every
+    type import now takes its impls from here. -/
 private def typeImplsOf (summary : FileSummary) (name : String) :
     List ImplBlock × List ImplTraitBlock × List (String × FnSummary) :=
   let impls := summary.implBlocks.filter fun ib => ib.typeName == name
