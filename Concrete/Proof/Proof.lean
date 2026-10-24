@@ -592,7 +592,7 @@ private def lpx (tag s : String) : String := tag ++ toString s.length ++ ":" ++ 
 
     Explicit, not `toString (repr op)`. `repr` is derived FORMATTING and can change
     with a Lean version or printer setting; an identity digest may not rest on
-    that. EIGHT constructors carry width and signedness, and both are semantic —
+    that. TEN constructors carry width and signedness, and both are semantic —
     wrapping or dividing at 8 bits is not the same operation as at 32, signed is
     not unsigned. A first draft dropped them and would have collided. -/
 def pbinOpCanonical : PBinOp → String
@@ -607,6 +607,8 @@ def pbinOpCanonical : PBinOp → String
   | .bitand w sg => wtag "band" w sg
   | .shr w sg => wtag "shr" w sg
   | .shl w sg => wtag "shl" w sg
+  | .addsat w sg => wtag "addsat" w sg
+  | .subsat w sg => wtag "subsat" w sg
 where
   wtag (t : String) (w : Nat) (sg : Bool) : String :=
     s!"{t}:{w}:{if sg then "s" else "u"}"
@@ -937,12 +939,13 @@ theorem wrapInt_unsigned_of_lt (w : Nat) (n : Int) (h0 : 0 ≤ n) (hlt : n < 2 ^
     wrapInt w false (x.toNat : Int) = x.toNat :=
   wrapInt_unsigned_of_lt w _ (by omega) (by exact_mod_cast x.isLt)
 
-/-- Evaluate a binary operation on two values. -/
 /-- The range clamp of `saturating_*` at `w` bits, signed or not. -/
 def satClamp (w : Nat) (signed : Bool) (n : Int) : Int :=
   let (lo, hi) : Int × Int :=
     if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1) else (0, (2 : Int) ^ w - 1)
   if n < lo then lo else if n > hi then hi else n
+
+/-- Evaluate a binary operation on two values. -/
 
 def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   match op, lhs, rhs with
