@@ -12,6 +12,11 @@ fn both(a: bool, b: bool) -> bool { return a && b; }
 fn either(a: bool, b: bool) -> bool { return a || b; }
 fn negi8(a: i8) -> i8 { return -a; }
 fn notb(a: bool) -> bool { return !a; }
+// MIN / -1 is not representable: both sides are stuck (the model) or abort (the runtime)
+fn divneg(a: Int) -> Int { return a / -1; }
+// short circuit: with `a` false (or true for ||) the division by zero is never evaluated
+fn scand(a: bool, n: Int) -> bool { return a && 10 / n > 1; }
+fn scor(a: bool, n: Int) -> bool { return a || 10 / n > 1; }
 
 fn main() -> Int {
     return divi(84, 2) - 42;

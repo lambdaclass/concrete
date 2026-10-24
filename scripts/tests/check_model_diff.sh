@@ -230,7 +230,7 @@ grep -qP '^agree\tmain\.state\tunclaimed\t\(0\)\tmodel=100\truntime=100$' "$TMP/
 echo ""
 echo "=== O: the operators added on 2026-10-23 — one function per class, each compared and perturbed ==="
 OF="tests/regressions/model_diff_operators/repro.con"
-OPS="divi shl8 shli8 shli andi wadd8 sadd8 ssub8 both either negi8 notb"
+OPS="divi shl8 shli8 shli andi wadd8 sadd8 ssub8 both either negi8 notb divneg scand scor"
 "$BIN" "$OF" --report model-diff > "$TMP/o" 2>&1; orc=$?
 [ "$orc" -eq 0 ] && ok "O: the report succeeds on the operator fixture" || no "O: the report failed (exit $orc)"
 grep -qE '^MISMATCH' "$TMP/o" && no "O: a mismatch: $(grep -m3 '^MISMATCH' "$TMP/o" | tr '\t' ' ' | tr '\n' '|')" \
@@ -248,13 +248,20 @@ opin agree ssub8 "-128, 1" -128 -128 "clamps at the minimum"
 opin ERROR shl8 "1, 8" — trap "a count of the width traps on both sides"
 opin ERROR divi "1, 0" — trap "a zero divisor traps on both sides"
 opin partial negi8 "-128" 128 trap "-MIN: the model's subtraction is mathematical"
+opin ERROR divneg "-9223372036854775808" — trap "MIN / -1 is not representable"
+opin agree scand "false, 0" false false "&& does not evaluate its right operand"
+opin agree scor "true, 0" true true "|| does not evaluate its right operand"
+opin ERROR scand "true, 0" — trap "&& evaluates its right operand when the left is true"
 # perturbing each class's function turns its compared rows, and only its rows, into MISMATCH
 for fn in $OPS; do
   CONCRETE_MODEL_DIFF_PERTURB="main.$fn" "$BIN" "$OF" --report model-diff > "$TMP/op" 2>&1
   mine="$(grep -cP "^MISMATCH\tmain\.$fn\t" "$TMP/op" || true)"
+  was="$(grep -cP "^agree\tmain\.$fn\t" "$TMP/o" || true)"
   others="$(grep -P '^MISMATCH\t' "$TMP/op" | grep -cvP "\tmain\.$fn\t" || true)"
-  [ "$mine" -gt 0 ] && [ "$others" -eq 0 ] && ok "O: perturbing $fn reads MISMATCH on its rows only ($mine)" \
-    || no "O: perturbing $fn: $mine own MISMATCH rows, $others others"
+  # every row that agreed must now disagree, and no other function's row may
+  [ "$mine" -gt 0 ] && [ "$mine" -eq "$was" ] && [ "$others" -eq 0 ] \
+    && ok "O: perturbing $fn turns all $was of its agreeing rows into MISMATCH, and only those" \
+    || no "O: perturbing $fn: $mine MISMATCH rows of $was agreeing, $others others"
 done
 
 echo ""
