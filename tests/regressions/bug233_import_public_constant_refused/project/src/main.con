@@ -1,0 +1,6 @@
+mod cfg;
+mod user;
+
+fn main() -> Int {
+    return user::get();
+}

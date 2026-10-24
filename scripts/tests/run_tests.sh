@@ -8535,6 +8535,36 @@ run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration can
 run_err "$TESTDIR/error_233_import_constant.con" "(E0126)"
 run_err "$TESTDIR/error_233_import_trait.con" "(E0126)"
 run_err "$TESTDIR/error_233_nested_import_constant.con" "(E0323)"
+run_ok "$TESTDIR/regress_233_shared_spelling_import.con" 42
+r233_interp=$($COMPILER "$TESTDIR/regress_233_shared_spelling_import.con" --interp 2>&1 || true)
+if [ "$r233_interp" = "42" ]; then
+    echo "  ok  bug 233: a function sharing a constant's or trait's spelling is still imported — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 233: regress_233_shared_spelling_import --interp gave '$r233_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+r233_dir=$(mktemp -d)
+cp -R tests/regressions/bug233_import_public_constant_refused/project/. "$r233_dir/"
+r233_out=$(cd "$r233_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r233_rc=0 || r233_rc=$?
+rm -rf "$r233_dir"
+if [ "$r233_rc" != 0 ] && grep -qF "src/user.con:3:1: error[check]: (E0323) 'BASE' is a constant of module 'cfg'" <<<"$r233_out"; then
+    echo "  ok  bug 233: a project's \`mod user;\` file importing a sibling file's constant is refused with the reason (E0323)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 233: project build of tests/regressions/bug233_import_public_constant_refused/project (rc $r233_rc) did not refuse src/user.con with check E0323:"
+    printf '%s\n' "$r233_out" | awk 'NR<=3'
+    FAIL=$((FAIL + 1))
+fi
+# Bug 231: each of the seven bound positions in the fixture is refused, not only the first.
+r231_n=$($COMPILER "$TESTDIR/error_231_unknown_bound_trait.con" --emit-core 2>&1 | grep -cF '(E0125)' || true)
+if [ "$r231_n" = "7" ]; then
+    echo "  ok  bug 231: all seven bound positions refused (E0125 x7)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 231: error_231_unknown_bound_trait gave $r231_n E0125 refusals, want 7"
+    FAIL=$((FAIL + 1))
+fi
 run_ok "$TESTDIR/regress_231_bounds_name_module_traits.con" 42
 r231_interp=$($COMPILER "$TESTDIR/regress_231_bounds_name_module_traits.con" --interp 2>&1 || true)
 if [ "$r231_interp" = "42" ]; then

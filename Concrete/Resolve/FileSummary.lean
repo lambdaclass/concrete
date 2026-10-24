@@ -298,9 +298,18 @@ def importCode (pass : String) (unknownModule : Bool) : String :=
     constant, if `name` is one. Every pass's public-name list (`publicNames`) holds them, so the
     import rule fell through to "not public", which they are not. Traits are module-local and cannot
     be imported (TRAIT spec); a constant cannot be imported yet, because Core names a constant by its
-    bare spelling (bug 132) and an imported one could not be told from the importer's own. -/
+    bare spelling (bug 132) and an imported one could not be told from the importer's own.
+    `none` whenever the name also names a declaration the import rule binds (`resolveImports`:
+    a function, a foreign binding, a struct, an enum, a public alias or newtype): callables,
+    constants and types are separate namespaces (MOD-3), so `pub const F` beside `pub fn F` leaves
+    `import m.{F}` the function's import (Codex review). -/
 def unimportableKind (summary : FileSummary) (name : String) : Option String :=
-  if summary.traits.any (fun t => t.isPublic && t.name == name) then some "trait"
+  let bindable := (summary.functions ++ summary.externFnSigs).any (fun (n, _) => n == name)
+    || summary.structs.any (·.name == name) || summary.enums.any (·.name == name)
+    || summary.typeAliases.any (fun ta => ta.isPublic && ta.name == name)
+    || summary.newtypes.any (fun nt => nt.isPublic && nt.name == name)
+  if bindable then none
+  else if summary.traits.any (fun t => t.isPublic && t.name == name) then some "trait"
   else if summary.constants.any (fun c => c.isPublic && c.name == name) then some "constant"
   else none
 

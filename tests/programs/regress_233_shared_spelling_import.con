@@ -1,0 +1,16 @@
+// Bug 233 (Codex review): callables, constants and types are separate namespaces (MOD-3), so a
+// public function sharing its spelling with a public constant or trait is still imported by that
+// spelling: the refusal of an unimportable constant or trait applies only when the name binds
+// nothing else. Exits 42 natively and under --interp.
+mod a {
+    pub const F: Int = 0;
+    pub fn F() -> Int { return 40; }
+    pub trait G { fn g(&self) -> Int; }
+    pub fn G() -> Int { return 2; }
+}
+
+import a.{F, G};
+
+fn main() -> Int {
+    return F() + G();
+}

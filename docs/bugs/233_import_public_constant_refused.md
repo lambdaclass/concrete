@@ -39,8 +39,15 @@ of one name for that reason).
 
 `FileSummary.unimportableKind` names a public trait or constant, and both import rules refuse it
 with the reason: Resolve (E0126, top-level modules), Check (E0323) and Elab (E0423) through
-`resolveImports`. Traits stay unimportable by design, so that half is fixed; the constant half is
-open. Regression legs in `run_tests.sh`: the three `error_233_*.con` fixtures (`run_err` on the code).
+`resolveImports`. The refusal applies only when the name binds nothing the import rule binds:
+callables, constants and types are separate namespaces (MOD-3), so `pub fn F` beside `pub const F`
+is still imported as the function (Codex review). Elab's E0423 is defense in depth (Check refuses
+first). Traits stay unimportable by design, so that half is fixed; the constant half is open.
+Regression legs in `run_tests.sh`: the three `error_233_*.con` fixtures (`run_err` on the code),
+`regress_233_shared_spelling_import.con` (a function and a constant, and a function and a trait, of
+one spelling: `run_ok … 42` and `--interp` = 42) and the project
+`tests/regressions/bug233_import_public_constant_refused/project` (a `mod user;` file importing a
+`mod cfg;` file's constant: E0323 attributed to `src/user.con`).
 
 ## Structural cause
 

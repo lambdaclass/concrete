@@ -1,0 +1,2 @@
+// Bug 233: a public constant of a `mod cfg;` file.
+pub const BASE: Int = 42;

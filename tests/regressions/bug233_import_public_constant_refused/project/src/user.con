@@ -1,0 +1,7 @@
+// Bug 233: a `mod user;` file importing its sibling file's public constant: refused with the reason
+// (E0323, the submodule import rule), not as "not public".
+import cfg.{BASE};
+
+pub fn get() -> Int {
+    return BASE;
+}
