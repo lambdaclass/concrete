@@ -1,0 +1,19 @@
+// Bug 228 regression: the interpreter carried each loop iteration's bindings into the next, so its
+// environment grew by every `let` of every iteration and each lookup of an outer variable walked
+// them all (quadratic in the iteration count). 200000 iterations with three body bindings each
+// did not finish in 60 s under --interp on main; they now take under a second. run_tests.sh runs it under --interp with a
+// 20 s budget and requires the binary and the interpreter to agree on 42.
+mod m {
+    pub fn main() -> i64 {
+        let mut i: i64 = 0;
+        let mut acc: i64 = 0;
+        while i < 200000 {
+            let a: i64 = i % 7;
+            let b: i64 = a * 2;
+            let c: i64 = b - a;
+            acc = (acc + c) % 1000;
+            i = i + 1;
+        }
+        return acc - 952;
+    }
+}

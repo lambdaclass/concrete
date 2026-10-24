@@ -3282,7 +3282,7 @@ partial def evalStmtsD (cx : Ctx) (env : Env)
 partial def evalStmts (cx : Ctx) (env : Env) (stmts : List CStmt) : IM (Env × Flow) :=
   evalStmtsD cx env [] stmts
 
-/-- Bug 226: `baseLen` is the environment's length when the loop was entered. Each iteration's
+/-- Bug 228: `baseLen` is the environment's length when the loop was entered. Each iteration's
     bindings (the body's `let`s, the condition's temporaries) are dropped before the next
     iteration and when the loop ends, as `evalWhileExpr` already did at its end. They used to be
     carried into the next iteration, so the environment grew by every binding of every iteration

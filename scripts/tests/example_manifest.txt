@@ -243,6 +243,14 @@ examples/snippets/while_if_false.con compile
 examples/snippets/while_loop.con compile
 examples/source_maps/capability_at_line.con expected-error
 examples/source_maps/obligation_located.con compile
+examples/stackvm/src/asm.con project-build
+examples/stackvm/src/codec.con project-build
+examples/stackvm/src/dis.con project-build
+examples/stackvm/src/isa.con project-build
+examples/stackvm/src/main.con project-build
+examples/stackvm/src/names.con project-build
+examples/stackvm/src/stack.con project-build
+examples/stackvm/src/vm.con project-build
 examples/tar_list/src/main.con project-build
 examples/tcpserve/src/main.con project-build
 examples/wordfreq/src/main.con project-build
@@ -449,6 +457,21 @@ examples/rocksdb_kv/rocksdb/src/lib.con project-lib
 @run examples/lzpack/ compress_rle exit=0 ret=0 interp=yes oracle=interp -- c -r testdata/sample.txt out.lzp
 @run examples/lzpack/ decompress exit=0 ret=0 interp=yes oracle=interp -- d testdata/sample.lzp out.txt
 @run examples/lzpack/ corrupt exit=1 ret=1 interp=yes oracle=interp stdout=empty -- d testdata/corrupt.lzp out.txt
+# stackvm (Phase 7 workload 10). The interpreter keeps written files in memory, so `asm` compares
+# the printed summary; check_stackvm_differential.sh owns the written bytes, stderr and the
+# generated and corrupted inputs (against an independent Python implementation). fib.sasm runs
+# about a minute under --interp, so the exec cases use the other programs; `check` and `asm`
+# still take fib through the assembler, encoder and loader.
+@run examples/stackvm/ loop exit=0 ret=0 interp=yes oracle=interp -- exec testdata/loop.sasm
+@run examples/stackvm/ recurse exit=0 ret=0 interp=yes oracle=interp -- exec testdata/recurse.sasm
+@run examples/stackvm/ deep exit=1 ret=1 interp=yes oracle=interp stdout=empty -- exec testdata/deep.sasm
+@run examples/stackvm/ overflow exit=1 ret=1 interp=yes oracle=interp -- exec testdata/overflow.sasm
+@run examples/stackvm/ bad_label exit=1 ret=1 interp=yes oracle=interp stdout=empty -- exec testdata/bad_label.sasm
+@run examples/stackvm/ check exit=0 ret=0 interp=yes oracle=interp -- check testdata/fib.sasm
+@run examples/stackvm/ asm exit=0 ret=0 interp=yes oracle=interp -- asm testdata/fib.sasm out.svm
+@run examples/stackvm/ run exit=0 ret=0 interp=yes oracle=interp -- run testdata/loop.svm
+@run examples/stackvm/ dis exit=0 ret=0 interp=yes oracle=interp -- dis testdata/loop.svm
+@run examples/stackvm/ usage exit=2 ret=2 interp=yes oracle=interp stdout=empty
 @run examples/packet/ packet exit=0 ret=0 interp=yes oracle=interp
 @run examples/patterns/byte_ranges/ byte_ranges exit=0 ret=0 interp=yes oracle=interp
 @run examples/png_chunks/ tiny exit=0 ret=0 interp=yes oracle=interp -- testdata/tiny.png

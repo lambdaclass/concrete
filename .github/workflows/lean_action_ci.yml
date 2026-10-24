@@ -1284,6 +1284,9 @@ jobs:
       - name: "Workload 9: lzpack streams byte-identical to an independent encoder + cross-decode + corrupt streams + exit codes"
         run: bash scripts/tests/check_lzpack_differential.sh
 
+      - name: "Workload 10: stackvm agrees byte for byte with an independent Python implementation (test, generated, mutated, corrupted programs) + exit codes"
+        run: bash scripts/tests/check_stackvm_differential.sh
+
       - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
         run: bash scripts/tests/check_pass_hashes.sh
 

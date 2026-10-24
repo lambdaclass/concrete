@@ -1,0 +1,83 @@
+fn sum_squares params=1 locals=3
+  0000  push 1
+  0001  store 1
+  0002  push 0
+  0003  store 2
+  0004  load 1
+  0005  load 0
+  0006  gt
+  0007  jnz 0019
+  0008  load 1
+  0009  dup
+  0010  mul
+  0011  load 2
+  0012  add
+  0013  store 2
+  0014  load 1
+  0015  push 1
+  0016  add
+  0017  store 1
+  0018  jmp 0004
+  0019  load 2
+  0020  ret
+end
+fn gcd params=2 locals=3
+  0021  load 1
+  0022  jz 0032
+  0023  load 0
+  0024  load 1
+  0025  mod
+  0026  store 2
+  0027  load 1
+  0028  store 0
+  0029  load 2
+  0030  store 1
+  0031  jmp 0021
+  0032  load 0
+  0033  ret
+end
+fn main params=0 locals=2
+  0034  push 100
+  0035  call sum_squares
+  0036  print
+  0037  push 1071
+  0038  push 462
+  0039  call gcd
+  0040  print
+  0041  push -48
+  0042  push 18
+  0043  call gcd
+  0044  print
+  0045  push 3
+  0046  store 0
+  0047  load 0
+  0048  jz 0064
+  0049  load 0
+  0050  store 1
+  0051  load 1
+  0052  print
+  0053  load 1
+  0054  push 1
+  0055  sub
+  0056  dup
+  0057  store 1
+  0058  jnz 0051
+  0059  load 0
+  0060  push 1
+  0061  sub
+  0062  store 0
+  0063  jmp 0047
+  0064  push -7
+  0065  push 2
+  0066  div
+  0067  print
+  0068  push -7
+  0069  push 2
+  0070  mod
+  0071  print
+  0072  push 5
+  0073  neg
+  0074  not
+  0075  print
+  0076  halt
+end

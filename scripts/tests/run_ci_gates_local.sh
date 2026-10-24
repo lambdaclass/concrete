@@ -212,7 +212,8 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   (check_tightening_rules.sh: every reproducer of the 2026-10-23 tightening batch on both
 #   consumers, the gate its eighteen mutation families name). 268 + 0 + 1 + 1 = 270.
 # 270 -> 271: check_lzpack_differential.sh (Phase 7 workload 9, wip/workload-lzpack).
-EXPECTED_GATE_COMMANDS=271
+# 271 -> 272: check_stackvm_differential.sh (Phase 7 workload 10, wip/workload-stackvm-2).
+EXPECTED_GATE_COMMANDS=272
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

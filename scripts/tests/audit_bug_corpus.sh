@@ -132,6 +132,8 @@ declare -A BUG_TEST_MAP=(
   [212]="error_212_const_in_if_head.con"
   # Bug 214: two leaking returns gave two identical E0208 refusals; each now names its return.
   [214]="error_214_two_returns_leak.con"
+  # Bug 228: interpreter loops linear in their iteration count (run_tests.sh: --interp within 20 s).
+  [228]="regress_228_interp_loop_env.con"
   # Bug 225: a refused bound names a builtin type and the call's position (run_tests.sh checks lines 12 and 14).
   [225]="error_225_bound_names_builtin_type.con"
   # Bug 224: a failed `let mut` keeps its mutability in recovery (run_tests.sh: E0217 at line 14 only).

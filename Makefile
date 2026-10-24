@@ -495,6 +495,9 @@ test-wordfreq: build ## P7 workload 6: wordfreq byte-identical to C-locale tr|so
 test-lzpack: build ## P7 workload 9: lzpack LZSS/RLE streams byte-identical to an independent Python encoder, cross-decoding, corrupt-stream exit codes, 13t exit codes
 	$(NIX_DEVELOP) bash ./scripts/tests/check_lzpack_differential.sh
 
+test-stackvm: build ## P7 workload 10: stackvm assembler/codec/verifier/VM/disassembler byte-identical to an independent Python implementation (test, generated, mutated and corrupted programs), 13t exit codes
+	$(NIX_DEVELOP) bash ./scripts/tests/check_stackvm_differential.sh
+
 test-httpget: build ## P7 workload 7: httpget over loopback TCP byte-identical to served file (text+binary) + curl cross-check + 13t exit codes
 	$(NIX_DEVELOP) bash ./scripts/tests/check_httpget_differential.sh
 
