@@ -138,12 +138,22 @@ names for six drops), and the pattern has no rest form (`let S { a, .. } = s;` i
 
 ### E. Casts (T-CAST: lossless only, decided, not yet implemented)
 
-22 casts: 14 `as Int` (counts and operands passed to `append_int` / `print_int`), 3 `as u8`
-(masked bytes, `(x & 255) as u8`), 2 `as u64`, 2 `as char`, and `raw as i64` in the decoder,
-which reinterprets a `u64` read little-endian as a two's-complement `i64` (`push -1` must
-round-trip). Under lossless-only `as` that last one needs a named bit-cast; it is the one cast
-whose meaning matters, and today it is spelled like the others. The `as Int` conversions are noise
-either way.
+22 casts. Under lossless-only `as`, only three stay as written: `u8 as u64` in the decoder's
+byte reader and the two `u8 as char` (byte to character) in the token and name readers. The rest
+need a named conversion:
+
+- 12 `u64 as Int` (counts, indices and operands for `append_int`): `u64` to `i64` is not lossless
+  as a type, though no value here comes near 2^63; two more, `i64 as Int`, are identities.
+- 3 narrowing to `u8`: `(x & 255) as u8` in `push_le`, masked and provably in range, and two
+  `char as u8` reading back a `String` the program built from bytes.
+- 2 reinterpretations between `i64` and `u64`: `*value as u64` in the encoder writes a `push`
+  operand as its two's-complement bits, and `raw as i64` in the decoder reads them back
+  (`push -1` must round-trip). These are the casts whose meaning matters, a bit-cast in both
+  directions, and today they are spelled like the others.
+
+*Helps:* the two reinterpretations would be named as what they are. *Hurts:* fourteen conversions
+for printing a count, and a masked byte that is in range by construction, need named operations
+too.
 
 ### F. Arithmetic (T-ARITH)
 

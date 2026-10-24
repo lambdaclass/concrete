@@ -102,7 +102,8 @@ def mutate(r, lines):
     elif k == 4:
         toks = lines[i].split()
         if toks:
-            toks[-1] = r.choice(["999", "-", "9x", "Lnope", "_ok", "", "300", "-9223372036854775808"])
+            toks[-1] = r.choice(["999", "-", "9x", "Lnope", "_ok", "", "300", "-9223372036854775808",
+                                 "0" * 5000, "1" + "0" * 30, "-0005", "+5", "\u00ff", "na\u00efve"])
             lines[i] = " ".join(toks)
     else:
         lines.insert(i, r.choice(["bogus", "fn", "end", "lbl:", "push", "jmp", "fn main 0 0",
@@ -115,9 +116,9 @@ def main():
     r = random.Random(seed)
     for i in range(n):
         lines = program(r)
-        with open("%s/gen_%03d.sasm" % (out, i), "w") as fh:
+        with open("%s/gen_%03d.sasm" % (out, i), "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
-        with open("%s/mut_%03d.sasm" % (out, i), "w") as fh:
+        with open("%s/mut_%03d.sasm" % (out, i), "w", encoding="utf-8") as fh:
             fh.write("\n".join(mutate(r, lines)) + "\n")
 
 

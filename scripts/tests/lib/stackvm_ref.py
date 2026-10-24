@@ -38,17 +38,24 @@ class Program:
         self.names = []   # bytes
 
 
+def digits_value(d):
+    # The value of a digit string of any length (leading zeros allowed): Python's int() refuses
+    # more than 4300 digits, and anything past 20 significant digits is out of range anyway.
+    d = d.lstrip(b"0")
+    return 0 if not d else (int(d) if len(d) <= 20 else 1 << 64)
+
+
 def parse_uint(t):
     if not re.fullmatch(rb"[0-9]+", t):
         return None
-    v = int(t)
+    v = digits_value(t)
     return v if v < (1 << 64) else None
 
 
 def parse_int(t):
     if not re.fullmatch(rb"-?[0-9]+", t):
         return None
-    v = int(t)
+    v = -digits_value(t[1:]) if t.startswith(b"-") else digits_value(t)
     return v if -I64_MAX <= v <= I64_MAX else None
 
 
@@ -438,6 +445,10 @@ def summary(p, prefix):
 
 
 def main(argv):
+    # Tokens are bytes and diagnostics quote them byte for byte (the Concrete program's strings
+    # are bytes): latin-1 maps each decoded character back to its byte.
+    sys.stdout.reconfigure(encoding="latin-1")
+    sys.stderr.reconfigure(encoding="latin-1")
     usage = ("usage: stackvm asm <in.sasm> <out.svm> | dis <in.svm> | run <in.svm> | "
              "exec <in.sasm> | check <in.sasm>")
     cmd = argv[1] if len(argv) > 1 else ""
