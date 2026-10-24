@@ -23,6 +23,11 @@ pattern = r"""run_ok\s+"([^"]+)"\s+("([^"]*(?:\n[^"]*)*?)"|(\S+))([ \t]+(\d+))?"
 resdir = sys.argv[1]
 for i, m in enumerate(re.finditer(pattern, content)):
     path = m.group(1).replace("$TESTDIR/", "tests/programs/")
+    # A scraped path must be literal: a shell variable here (a run_ok inside a loop) would
+    # become a program name that does not exist. Refuse the corpus rather than guess.
+    if "$" in path:
+        sys.exit(f"test_ssa.sh: run_ok path {m.group(1)!r} in run_tests.sh is not literal; "
+                 "write one run_ok per program so the SSA scraper sees it")
     if m.group(3) is not None:
         expected = m.group(3)
     else:
@@ -37,7 +42,7 @@ for i, m in enumerate(re.finditer(pattern, content)):
         f.write(path + "\n")
         f.write(rc + "\n")
         f.write(expected)
-' "$RESDIR"
+' "$RESDIR" || { echo "FAIL: could not extract the run_ok corpus from run_tests.sh"; exit 1; }
 
 for spec in "$RESDIR"/test_*.spec; do
     [ -f "$spec" ] || continue

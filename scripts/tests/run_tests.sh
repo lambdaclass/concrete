@@ -8487,8 +8487,11 @@ run_err "$TESTDIR/error_217_nested_undeclared_name.con" "error[resolve]: (E0100)
 run_err "$TESTDIR/error_217_nested_annotation_unknown_type.con" "error[resolve]: (E0108)"
 run_err "$TESTDIR/error_217_module_after_main_cast.con" "error[resolve]: (E0108)"
 run_err "$TESTDIR/error_217_nested_enclosing_alias_cast.con" "error[resolve]: (E0108)"
+# One literal run_ok per program: test_ssa.sh scrapes run_ok calls textually, so a loop variable
+# in the path would reach it unexpanded.
+run_ok "$TESTDIR/regress_217_nested_submodule_scope.con" 42
+run_ok "$TESTDIR/regress_217_sibling_type_precedence.con" 42
 for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_precedence; do
-    run_ok "$TESTDIR/$r217.con" 42
     r217_interp=$($COMPILER "$TESTDIR/$r217.con" --interp 2>&1 || true)
     if [ "$r217_interp" = "42" ]; then
         echo "  ok  bug 217: $r217 — interp == binary (42)"
@@ -8501,10 +8504,14 @@ done
 # Bug 229: Resolve's module scope refused what Check admits: a function hid a same-named enum
 # (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
 # each fixture has the top-level and the nested shape.
+run_ok "$TESTDIR/regress_229_value_does_not_hide_type.con" 42
+run_ok "$TESTDIR/regress_229_user_option_does_not_hide_builtin.con" 42
+run_ok "$TESTDIR/regress_229_child_newtype_known.con" 42
+run_ok "$TESTDIR/regress_229_option_named_alias_or_struct.con" 42
+run_ok "$TESTDIR/regress_229_alias_and_enum_literal_precedence.con" 42
 for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_not_hide_builtin \
             regress_229_child_newtype_known regress_229_option_named_alias_or_struct \
             regress_229_alias_and_enum_literal_precedence; do
-    run_ok "$TESTDIR/$r229.con" 42
     r229_interp=$($COMPILER "$TESTDIR/$r229.con" --interp 2>&1 || true)
     if [ "$r229_interp" = "42" ]; then
         echo "  ok  bug 229: $r229 — interp == binary (42)"
