@@ -667,9 +667,9 @@ gate_for_last "scripts/tests/check_fnptr_values.sh"
 # Restores bug 061 exactly: `.applyVar` collapses back into `.call`, so a
 # parameter named `f` and a definition named `f` become the same node and the
 # evaluator resolves the parameter through the global function table.
-# The anchor is the arm of `cExprToPExprImpl`, the extractor the compiler RUNS. The non-partial
-# wrapper `cExprToPExpr` repeats the arm, but only the ProofSoundness theorems read the wrapper,
-# so a mutation there changes nothing any gate executes (it survived when anchored there).
+# The anchor is the arm of `cExprToPExprImpl`, the only copy of the rule (bug 219). It used to sit
+# on a proof-only wrapper that repeated the arm, where it changed nothing any gate executes and
+# survived; the wrapper is now a bare delegation.
 MUT_FILE+=("Concrete/Proof/ProofCore.lean")
 MUT_OLD+=("    some (.applyVar binding.name pargs)
   | .ifExpr cond thenBranch elseBranch _ => do")

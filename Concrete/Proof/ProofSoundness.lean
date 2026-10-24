@@ -107,10 +107,10 @@ def evalSourceLetStep (env : Env) (name : String) (vv : PVal)
     `evalBinOp pop vl vr`.  Stated as a partial
     "given-the-pieces" lookup rather than a recursive
     source-eval function because the recursion for
-    not-yet-discharged constructs (call, structLit, ...) goes
-    through `cExprToPExprImpl`'s partial-def shape — building
-    a full recursive source semantics now would re-create the
-    same `partial def` opacity problem on the source side.
+    not-yet-discharged constructs (call, structLit, ...) would
+    need a full recursive source semantics. (Written when
+    `cExprToPExprImpl` was a `partial def`; that opacity is
+    gone, the source-side semantics is still future work.)
 
     R-04 uses this to state the source-side conclusion as a
     compositional fact: "given operand values, the binop step

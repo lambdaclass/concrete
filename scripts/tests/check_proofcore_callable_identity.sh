@@ -234,54 +234,65 @@ echo "=== the extraction rules exist once (bug 219) ==="
 # The public extractors `cExprToPExpr` / `cStmtsToPExprK` used to repeat the arms of the
 # implementation (`cExprToPExprImpl` / `cStmtsToPExprKImpl`) for the ProofSoundness theorems. Only
 # the implementation runs, so a theorem or a mutation aimed at a copy is about code nothing
-# executes: mutation 31 (bug 061 restored in the copy) survived. Each public name must be a bare
-# delegation, and exactly one site may build `.applyVar`.
-# single_copy <file>: prints one line per violation, nothing when the file is clean.
-single_copy() {
+# executes: mutation 31 (bug 061 restored in the copy) survived.
+#
+# DELEGATION is checked by the kernel, not by reading text: each public name must be
+# DEFINITIONALLY the implementation (`rfl`). The implementation is a well-founded definition, so a
+# definition with arms of its own, a delegation with another argument, or extra code is not
+# definitionally equal to it even when it agrees on every input. The control shows `rfl` refuses a
+# copy that is extensionally equal.
+printf '%s\n' 'import Concrete' 'open Concrete' \
+  'example : cExprToPExpr = cExprToPExprImpl := rfl' \
+  'example : cStmtsToPExprK = cStmtsToPExprKImpl := rfl' > "$TMP/single_copy.lean"
+if SCOUT="$(lake env lean "$TMP/single_copy.lean" 2>&1)"; then
+  ok "cExprToPExpr and cStmtsToPExprK are definitionally their implementations (no copy of an arm)"
+else
+  no "a public extractor is not definitionally its implementation: $(grep -m2 error <<<"$SCOUT" | cut -c1-300)"
+fi
+printf '%s\n' 'import Concrete' 'open Concrete' \
+  'def copyE : CExpr → Option Proof.PExpr' \
+  '  | .intLit n _ => some (.lit (.int n))' \
+  '  | e => cExprToPExprImpl e' \
+  'example : copyE = cExprToPExprImpl := rfl' > "$TMP/single_copy_control.lean"
+if CTOUT="$(lake env lean "$TMP/single_copy_control.lean" 2>&1)"; then
+  no "CONTROL: rfl accepted a wrapper with an arm of its own, so the delegation check is vacuous"
+elif grep -qE 'type mismatch|not definitionally equal|The rfl tactic|failed' <<<"$CTOUT"; then
+  ok "CONTROL: rfl refuses a wrapper with a copied (extensionally equal) arm"
+else
+  no "CONTROL: the copied-arm probe failed for another reason: $(grep -m2 error <<<"$CTOUT" | cut -c1-300)"
+fi
+
+# CONSTRUCTION SITES of `.applyVar`, the bug-061 rule: exactly one, in `cExprToPExprImpl`. Comments
+# are stripped first, every spelling of the constructor counts (`.applyVar`, `PExpr.applyVar`,
+# `Proof.PExpr.applyVar`), and a PATTERN (`| .applyVar ...`) is not a construction.
+applyvar_sites() {
   python3 -I - "$1" <<'PY'
 import re, sys
 src = open(sys.argv[1]).read()
-bad = []
-for name, impl in (("cExprToPExpr", "cExprToPExprImpl"), ("cStmtsToPExprK", "cStmtsToPExprKImpl")):
-    defs = [m.start() for m in re.finditer(r"^def %s\b" % name, src, re.M)]
-    if len(defs) != 1:
-        bad.append("%s is defined %d times" % (name, len(defs))); continue
-    # the definition runs to the next top-level item (a blank line followed by a non-indented line)
-    body = re.split(r"\n\s*\n(?=\S)", src[defs[0]:], maxsplit=1)[0]
-    if re.search(r"^\s*\|", body, re.M):
-        bad.append("%s has match arms of its own (a second copy of %s's rules)" % (name, impl))
-    if not re.search(r":=\s*%s\b" % impl, body):
-        bad.append("%s does not delegate to %s" % (name, impl))
-n = len(re.findall(r"some \(\.applyVar\b", src))
-if n != 1:
-    bad.append("%d sites build .applyVar (expected exactly 1, in cExprToPExprImpl)" % n)
-print("\n".join(bad))
+src = re.sub(r"/-.*?-/", " ", src, flags=re.S)        # block comments and docstrings
+src = re.sub(r"--[^\n]*", " ", src)                   # line comments
+n = 0
+for m in re.finditer(r"(?:\bProof\.)?(?:\bPExpr)?\.applyVar\b", src):
+    before = src[:m.start()].rstrip()
+    if before.endswith("|"):
+        continue                                       # a match pattern
+    n += 1
+print(n)
 PY
 }
-SC="$(single_copy Concrete/Proof/ProofCore.lean)"
-if [ -z "$SC" ]; then
-  ok "cExprToPExpr and cStmtsToPExprK are bare delegations; one site builds .applyVar"
-else
-  no "a second copy of the extraction rules: $(tr '\n' ';' <<<"$SC")"
-fi
-# Controls: the check sees a copied arm and a second .applyVar site.
-python3 -I - Concrete/Proof/ProofCore.lean "$TMP/copy_arm.lean" "$TMP/copy_site.lean" <<'PY'
+NSITES="$(applyvar_sites Concrete/Proof/ProofCore.lean)"
+if [ "$NSITES" = "1" ]; then ok "exactly one site builds .applyVar"
+else no "$NSITES sites build .applyVar (expected exactly 1, in cExprToPExprImpl)"; fi
+python3 -I - Concrete/Proof/ProofCore.lean "$TMP/extra_site.lean" "$TMP/comment_only.lean" <<'PY'
 import sys
 src = open(sys.argv[1]).read()
-old = "def cExprToPExpr (e : CExpr) : Option Proof.PExpr := cExprToPExprImpl e\n"
-assert old in src, "control anchor moved"
-arm = ("def cExprToPExpr : CExpr \u2192 Option Proof.PExpr\n"
-       "  | .call (.indirect binding) _ args _ => do\n"
-       "    let pargs \u2190 cExprListToPExpr args\n"
-       "    some (.applyVar binding.name pargs)\n"
-       "  | e => cExprToPExprImpl e\n")
-open(sys.argv[2], "w").write(src.replace(old, arm))
-open(sys.argv[3], "w").write(src + "\n-- control\ndef extra (b : String) : Option Proof.PExpr := some (.applyVar b [])\n")
+open(sys.argv[2], "w").write(src + "\ndef extra (b : String) : Option Proof.PExpr := some (Proof.PExpr.applyVar b [])\n")
+open(sys.argv[3], "w").write(src + "\n-- some (.applyVar b []) in a comment\n/- and some (.applyVar b []) in a block -/\n")
 PY
-if [ -n "$(single_copy "$TMP/copy_arm.lean")" ]; then ok "CONTROL: a wrapper arm copying the bug-061 rule is detected"
-else no "CONTROL: a copied wrapper arm went unnoticed"; fi
-if [ -n "$(single_copy "$TMP/copy_site.lean")" ]; then ok "CONTROL: a second .applyVar construction site is detected"
-else no "CONTROL: a second .applyVar site went unnoticed"; fi
+[ "$(applyvar_sites "$TMP/extra_site.lean")" = "2" ] && ok "CONTROL: a second site, qualified differently, is counted" \
+  || no "CONTROL: a qualified second .applyVar site went uncounted"
+[ "$(applyvar_sites "$TMP/comment_only.lean")" = "1" ] && ok "CONTROL: a mention in a comment is not a site" \
+  || no "CONTROL: a comment was counted as a construction site"
 
 echo
 echo "PROOFCORE-CALLABLE-IDENTITY: PASS=$PASS FAIL=$FAIL"
