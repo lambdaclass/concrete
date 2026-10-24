@@ -494,7 +494,7 @@ open_bug_reproducers() {
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
-223|bug223_aliased_import_distinct_type/repro.con|compile-fails|(E0264) no method 'mk' on type 'Q'
+223|bug223_aliased_import_distinct_type/repro.con|compile-fails|(E0106) unknown static method 'Q::mk'
 226|bug226_submodule_imports_private_function/repro.con|compiles|
 227|bug227_user_result_captures_builtin_in_other_module/repro.con|compile-fails|variant 'Ok' not found in enum 'Result'
 227|bug227_user_result_captures_builtin_in_other_module/repro_toplevel.con|compile-fails|'Result' takes 0 type arguments, but 2 were given

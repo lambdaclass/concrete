@@ -37,6 +37,13 @@ mod m {
 Observed on main `408880cb` and on this branch: E0264 (twice) and E0220. The same program without
 `as Q` returns 42. The same holds for an aliased enum. Expected: 42.
 
+Since bug 217's fix (Resolve walks every submodule against Check's per-submodule scope, landed with
+this record in landing train 15), the first refusal is Resolve's: `error[resolve]: (E0106) unknown
+static method 'Q::mk'`. It is the same defect one pass earlier: Resolve checks a static call by
+the mangled spelling `Q_mk` (`Resolve.resolveExpr`, `.staticMethodCall`), and the impl registered
+only `P_mk`. Before bug 217's fix Resolve never visited `user`, a nested submodule, so Check's E0264
+was the first diagnostic. Check's E0264 and E0220 remain behind it.
+
 ## Cause
 
 Bug 069 made an aliased import register the type's declaration under the importer's spelling
@@ -65,5 +72,7 @@ with, so a second spelling of one declaration is a second type.
 R-0492 (S5 `DefId`), applied to the front end by R-0514: the inherited obligation "Aliased
 imported method (E0264)" (merged through R-0008) already requires that the identity migration
 resolve this and add an exact alias-method fixture. The reproducer is pinned as an open bug by
-`check_example_outputs.sh` (open-bug reproducers, compile-fails, E0264), which fails when it starts
-compiling, so the fix updates this record.
+`check_example_outputs.sh` (open-bug reproducers, compile-fails, Resolve's E0106 since train 15),
+which fails when it starts compiling or fails differently, so the fix updates this record. The fix
+covers both passes: Resolve's static-method lookup and Check's method table key on the declaration,
+not the spelling.
