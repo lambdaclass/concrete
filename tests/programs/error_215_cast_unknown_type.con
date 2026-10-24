@@ -1,0 +1,7 @@
+// Bug 215: a cast to a type nothing declares. `--interp` printed 7 and the binary's backend panicked
+// (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`). Expected: E0108.
+fn main() -> Int {
+    let a: i32 = 7;
+    let b: Int = (a as Nope) as Int;
+    return b;
+}

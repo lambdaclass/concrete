@@ -1,0 +1,6 @@
+// Bug 220: `0b` followed by a non-binary digit lexed as the tokens `0` and `2` (the `b` consumed).
+// Expected: the lexical error naming the missing binary digit (E0001).
+fn main() -> Int {
+    let x: Int = 0b2;
+    return x;
+}

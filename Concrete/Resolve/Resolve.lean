@@ -318,6 +318,12 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
     checkTyDeep ctx retTy span
   | _ => ctx
 
+/-- Bug 215: a type written inside an expression (a cast target, a type-argument list) names
+    known types like every other written type. Resolve walked only the expression parts, so
+    `x as Nope` reached the backend (an `EmitSSA` panic) and `f::<[Nope; 3]>()` compiled. -/
+private def checkWrittenTys (ctx : ResolveCtx) (tys : List Ty) (sp : Span) : ResolveCtx :=
+  tys.foldl (fun ctx ty => checkTyDeep ctx ty (some sp)) ctx
+
 -- ============================================================
 -- Walk expressions and statements
 -- ============================================================
@@ -333,19 +339,22 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _ => ctx
   | .binOp _ _ lhs rhs => resolveExpr (resolveExpr ctx lhs) rhs
   | .unaryOp _ _ operand => resolveExpr ctx operand
-  | .call sp fn _typeArgs args =>
+  | .call sp fn typeArgs args =>
     let ctx := if lookupName ctx fn || isKnownBuiltinFn fn then ctx
                else addError ctx (.unknownFunction fn) (some sp)
+    let ctx := checkWrittenTys ctx typeArgs sp
     args.foldl resolveExpr ctx
   | .paren _ inner => resolveExpr ctx inner
   | .structLit sp name typeArgs fields base =>
     let ctx := if isKnownType ctx name then
                  (if typeArgs.isEmpty then ctx else checkTypeArgCount ctx name typeArgs.length (some sp))
                else addError ctx (.unknownStructType name) (some sp)
+    let ctx := checkWrittenTys ctx typeArgs sp
     let ctx := fields.foldl (fun ctx (_, e) => resolveExpr ctx e) ctx
     match base with | some b => resolveExpr ctx b | none => ctx
   | .fieldAccess _ obj _ => resolveExpr ctx obj
-  | .enumLit sp enumName variant _typeArgs fields =>
+  | .enumLit sp enumName variant typeArgs fields =>
+    let ctx := checkWrittenTys ctx typeArgs sp
     let ctx := match lookupSymKind ctx enumName with
       | some (.enum def_) =>
         if def_.variants.any (fun v => v.name == variant) then ctx
@@ -386,12 +395,14 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
     resolveExpr ctx inner
   | .arrayLit _ elems => elems.foldl resolveExpr ctx
   | .arrayIndex _ arr idx => resolveExpr (resolveExpr ctx arr) idx
-  | .cast _ inner _ => resolveExpr ctx inner
-  | .methodCall _ obj _ _ args =>
+  | .cast sp inner targetTy => checkTyDeep (resolveExpr ctx inner) targetTy (some sp)
+  | .methodCall sp obj _ typeArgs args =>
     -- Keep skipping method name validation (needs type info to resolve receiver)
+    let ctx := checkWrittenTys ctx typeArgs sp
     let ctx := resolveExpr ctx obj
     args.foldl resolveExpr ctx
-  | .staticMethodCall sp typeName method _ args =>
+  | .staticMethodCall sp typeName method typeArgs args =>
+    let ctx := checkWrittenTys ctx typeArgs sp
     let mangledName := s!"{typeName}_{method}"
     let ctx := if lookupName ctx mangledName then ctx
                else addError ctx (.unknownStaticMethod typeName method) (some sp)
@@ -712,7 +723,14 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
+  -- Bug 215 (Codex review): a constant's declared type and initializer are written types and
+  -- an expression like any function body's; the initializer was never walked, so
+  -- `const X: Int = (7 as Nope) as Int` reached the backend.
+  let constErrors := m.constants.foldl (fun acc c =>
+    let ctx := checkTyDeep externCtx0 c.ty (some c.span)
+    acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
+    ++ constErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 
 -- ============================================================

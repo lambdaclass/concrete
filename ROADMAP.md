@@ -105,7 +105,8 @@ a link failure, an interpreter refusal or an unrejected leak.
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 4 | 1 | 054, 077, 114, 122 |
-| 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
+| 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
+| 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 217 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
@@ -113,7 +114,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 6 | 0 | 027, 049, 054, 058, 064, 077 |
+| no exit names it | 8 | 0 | 027, 049, 054, 058, 064, 077, 216, 217 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|

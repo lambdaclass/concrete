@@ -1,0 +1,10 @@
+// Bug 210: arithmetic on a newtype operand (TYPE-6@1: a newtype is not a numeric type). `--interp`
+// returned 7; the binary failed in llvm-as. Expected: E0501.
+newtype Meters = i32;
+
+fn main() -> Int {
+    let a: Meters = Meters(3);
+    let b: Meters = Meters(4);
+    let c: Meters = a + b;
+    return c.0 as Int;
+}

@@ -1,0 +1,9 @@
+// Bug 218: two type aliases of one name in a module (MOD-3): accepted, the first silently winning.
+// Expected: E0299.
+type A = Int;
+type A = i32;
+
+fn main() -> Int {
+    let x: A = 3;
+    return x as Int;
+}

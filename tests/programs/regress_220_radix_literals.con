@@ -1,0 +1,5 @@
+// Bug 220: radix literals with digits are unchanged. 0x1F + 0b101 + 0o7 + 0XaB - 0B11 - 0O10 = 31 +
+// 5 + 7 + 171 - 3 - 8 = 203. Expected: 203.
+fn main() -> Int {
+    return 0x1F + 0b101 + 0o7 + 0XaB - 0B11 - 0O10;
+}

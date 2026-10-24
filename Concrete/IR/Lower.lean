@@ -1194,7 +1194,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       emit (.cast tagVal (.reg tagRaw .i32) .int)
 
       -- Generate comparison chain
+      -- Bug 213: an arm after an unguarded binding (or `_`) arm can never be selected, and
+      -- the block it would be lowered into has no predecessor (the binding arm branches
+      -- unconditionally), so uses of earlier values there failed SSA verification (E0703).
+      -- The source admits such arms (PAT-3 refuses only a repeated variant); they are not
+      -- lowered.
+      let mut catchAllSeen := false
       for (idx, arm) in enumerate arms do
+        if catchAllSeen then continue
+        if let .varArm _ _ none _ := arm then catchAllSeen := true
         -- Restore vars to pre-match state for each arm
         let st ← getState
         setState { st with vars := preMatchVars }
@@ -1310,7 +1318,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.load d scrVal t)
           pure (.reg d t)
         | _ => pure scrVal
+      -- Bug 213: an arm after an unguarded binding (or `_`) arm can never be selected, and
+      -- the block it would be lowered into has no predecessor (the binding arm branches
+      -- unconditionally), so uses of earlier values there failed SSA verification (E0703).
+      -- The source admits such arms (PAT-3 refuses only a repeated variant); they are not
+      -- lowered.
+      let mut catchAllSeen := false
       for (idx, arm) in enumerate arms do
+        if catchAllSeen then continue
+        if let .varArm _ _ none _ := arm then catchAllSeen := true
         -- Restore vars to pre-match state for each arm
         let st ← getState
         setState { st with vars := preMatchVars }

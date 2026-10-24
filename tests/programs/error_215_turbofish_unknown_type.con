@@ -1,0 +1,7 @@
+// Bug 215: an unknown type in a type-argument list the body never uses: both backends ran it.
+// Expected: E0108.
+fn sz<T>() -> Int { return 1; }
+
+fn main() -> Int {
+    return sz::<[Nope; 3]>();
+}

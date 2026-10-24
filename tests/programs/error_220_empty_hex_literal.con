@@ -1,0 +1,5 @@
+// Bug 220: `0x` with no hexadecimal digit lexed as the literal 0 (both backends returned 0; the
+// grammar's INT is `0x hex`). Expected: a lexical error, E0001.
+fn main() -> Int {
+    return 0x;
+}

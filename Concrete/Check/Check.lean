@@ -1301,6 +1301,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let fnPtrVar ← lookupUse csp fnName
     match fnPtrVar.map (fun (p : LocalRef × VarInfo) => p.2.ty) with
     | some (.fn_ paramTys fnPtrCapSet fnPtrRetTy) =>
+      -- Bug 221 (Codex review): a function pointer has no type parameters.
+      if !typeArgs.isEmpty then
+        throwCheck (.callTypeArgCount s!"function pointer '{fnName}'" 0 typeArgs.length) (some e.getSpan)
       -- Calling through a function pointer exercises the authority its type
       -- declares: the caller must hold the fn type's capability set, exactly
       -- as for a direct call. Without this, a function with no `with(...)`
@@ -1330,6 +1333,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     | _ =>
     match ← lookupFn fnName with
     | some sig =>
+      -- Bug 221: an explicit type-argument list names every type parameter (none are dropped,
+      -- none are left unbound).
+      if !typeArgs.isEmpty && !sig.typeParamsUnrecorded && typeArgs.length != sig.typeParams.length then
+        throwCheck (.callTypeArgCount s!"function '{fnName}'" sig.typeParams.length typeArgs.length) (some e.getSpan)
       -- Infer type arguments if not explicitly provided
       let inferredTypeArgs ← do
         if !typeArgs.isEmpty || sig.typeParams.isEmpty then
@@ -2195,6 +2202,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Check if this is a type variable with trait bounds
       match innerTy with
       | .typeVar n =>
+        -- Bug 221 (Codex review): a trait method has no type parameters of its own.
+        if !typeArgs.isEmpty then
+          throwCheck (.callTypeArgCount s!"trait method '{methodName}'" 0 typeArgs.length) (some e.getSpan)
         let env ← getEnv
         let bounds := (env.currentTypeBounds.find? fun (name, _) => name == n).map Prod.snd |>.getD []
         -- The method's bound trait: exactly one, or a refusal (TRAIT-6, bug 186). The first bound
@@ -2270,6 +2280,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => []
       let implTypeParams := sig.typeParams.take objTypeArgs.length
       let methodTypeParams := sig.typeParams.drop objTypeArgs.length
+      if !typeArgs.isEmpty && typeArgs.length != methodTypeParams.length then
+        throwCheck (.callTypeArgCount s!"method '{methodName}'" methodTypeParams.length typeArgs.length) (some e.getSpan)
       let implMapping := implTypeParams.zip objTypeArgs
       -- Infer the method's own type params + cap params from argument types
       -- (mirrors free-fn inference), so capability-polymorphic methods work
@@ -3685,10 +3697,49 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
+/-- Bug 218 (MOD-3): a module binds each name to at most one DECLARATION too, not only one per
+    import. Two functions `f` reached `llvm-as` as a redefinition (`--interp` refused the call),
+    two structs `S` or a struct and an enum `S` compiled with the first declaration silently
+    winning, and two aliases `A` likewise. Callables (functions, `extern` declarations),
+    constants and types (structs, enums, newtypes, aliases, traits) are separate namespaces: a
+    struct and a function may share a spelling, and so may a constant and a function
+    (`subject_const_fn_collision.con`, the R-0004 witness, relies on it). Two `extern`
+    declarations of one name are left to the link-name rule (E0118), which judges whether they
+    bind one C symbol. -/
+def declarationCollisions (m : Module) : Diagnostics :=
+  let callables : List (String × String × Span) :=
+    m.functions.map (fun f => (f.name, "a function", f.span))
+      ++ m.externFns.map (fun e => (e.name, "an extern declaration", e.span))
+  let constants : List (String × String × Span) :=
+    m.constants.map (fun c => (c.name, "a constant", c.span))
+  let types : List (String × String × Span) :=
+    m.structs.map (fun d => (d.name, "a struct", d.span))
+      ++ m.enums.map (fun d => (d.name, "an enum", d.span))
+      ++ m.newtypes.map (fun d => (d.name, "a newtype", d.span))
+      ++ m.typeAliases.map (fun d => (d.name, "a type alias", d.span))
+      ++ m.traits.map (fun d => (d.name, "a trait", d.span))
+  -- Report the LATER declaration of a pair: in source order where the parser recorded spans
+  -- (constants and aliases carry none and keep declaration order).
+  let dupes := fun (decls0 : List (String × String × Span)) =>
+    let decls := (decls0.toArray.qsort (fun a b =>
+      a.2.2.line < b.2.2.line || (a.2.2.line == b.2.2.line && a.2.2.col < b.2.2.col))).toList
+    let (_, errs) := decls.foldl (fun (seen, errs) (n, kind, sp) =>
+      match seen.lookup n with
+      | some (otherKind, otherSp) =>
+        if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
+        else
+          let e := CheckError.declarationCollision n kind otherKind otherSp.line
+          let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
+                                  span := (if sp.line == 0 then none else some sp), hint := e.hint, code := e.code }
+          (seen, errs ++ [d])
+      | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
+    errs
+  dupes callables ++ dupes constants ++ dupes types
+
 -- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
-  let collisions := importBindingCollisions m imports
+  let collisions := declarationCollisions m ++ importBindingCollisions m imports
   if !collisions.isEmpty then .error collisions else
   -- Bug 111: the entry wrapper calls `main` with no arguments, so `main` may not declare
   -- parameters (MAIN_EXIT_MODEL.md, decision of 2026-10-21). Every module-level `main` is

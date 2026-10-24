@@ -132,6 +132,20 @@ declare -A BUG_TEST_MAP=(
   [212]="error_212_const_in_if_head.con"
   # Bug 214: two leaking returns gave two identical E0208 refusals; each now names its return.
   [214]="error_214_two_returns_leak.con"
+  # Bug 221: a call's explicit type-argument list of the wrong length (E0322).
+  [221]="error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con"
+  # Bug 220: a radix prefix with no digits (E0001).
+  [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con"
+  # Bug 218: two declarations of one name in a module (E0299, MOD-3).
+  [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
+  # Bug 215: an unknown type in a cast or a type-argument list (E0108).
+  [215]="error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con"
+  # Bug 213: an arm after an unguarded catch-all arm (SSA verifier natively).
+  [213]="regress_213_arm_after_binding_arm.con"
+  # Bug 211: generic arithmetic instantiated at a non-numeric type (E0501, post-mono).
+  [211]="error_211_generic_add_struct.con error_211_generic_mul_enum.con error_211_generic_rhs_struct.con error_211_generic_mixed_width.con regress_211_generic_add_numeric.con"
+  # Bug 210: arithmetic on a struct, enum or newtype operand (E0501).
+  [210]="error_210_struct_arith.con error_210_enum_arith.con error_210_newtype_arith.con error_210_struct_minus_literal.con error_210_child_module_arith.con error_210_child_module_newtype_arith.con"
   # Bug 202: a project's `let … else` reached Check undesugared (the project loop builds and runs it).
   # Also check_local_identity.sh leg R.
   [202]="regress_202_project_let_else/src/main.con"
@@ -232,6 +246,8 @@ declare -A BUG_TEST_MAP=(
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
   [219]="FIXED 2026-10-23 -- mutation 31 was anchored on the proof-only cExprToPExpr wrapper and survived. Regression vehicle is the mutation harness (family 31 KILLED), not a tests/programs fixture"
+  [217]="OPEN -- Resolve does not walk bodies in nested submodules, so a cast to an unknown type two modules deep reaches the backend (panic) and other name errors there get Check's codes; reproducer tests/regressions/bug217_resolve_skips_nested_submodules/repro.con, found by the Codex review of bug 215 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails)"
+  [216]="OPEN -- a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused (needs the OWN-10 scope decision); reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)"
   [209]="FIXED 2026-10-23 -- a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture"
   [207]="FIXED 2026-10-23 -- check_binder_refs.sh aborted before its verdict on a failed assertion. Regression vehicle is the mutation harness (families 55-57 KILLED), not a tests/programs fixture"
   [106]="FIXED 2026-10-20 -- model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture"

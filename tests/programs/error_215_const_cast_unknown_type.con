@@ -1,0 +1,7 @@
+// Bug 215 (Codex review): a constant's initializer casts to an unknown type. Resolve never walked
+// constant initializers (`--interp` printed 7; the backend panicked). Expected: E0108.
+const X: Int = (7 as Nope) as Int;
+
+fn main() -> Int {
+    return X;
+}

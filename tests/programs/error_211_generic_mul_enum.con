@@ -1,0 +1,10 @@
+// Bug 211: a generic `*` instantiated at an enum (`--interp` stopped at run time).
+// Expected: E0501 (post-mono).
+enum Copy E { A {}, B {} }
+
+fn mul<T: Copy>(a: T, b: T) -> T { return a * b; }
+
+fn main() -> Int {
+    let e: E = mul::<E>(E::A {}, E::B {});
+    return 0;
+}

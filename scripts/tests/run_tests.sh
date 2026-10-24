@@ -1985,7 +1985,7 @@ run_err "$TESTDIR/error_123_const_initializer_borrow.con" "(E0302)"
 run_ok  "$TESTDIR/regress_123_const_initializer_hygiene.con" "43" 0
 run_err "$TESTDIR/error_123_const_initializer_array_borrow.con" "(E0302)"
 run_err "$TESTDIR/error_123_const_initializer_mut_arg.con" "(E0302)"
-run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0201)"
+run_err "$TESTDIR/error_123_const_initializer_elab_error.con" "(E0100)"
 # Bug 132: constants are flattened by bare name: two modules defining one name are refused at the use.
 run_err "$TESTDIR/error_132_const_name_collision.con" "(E0602)"
 run_ok  "$TESTDIR/regress_123_local_shadows_const_other_type.con" "1" 0
@@ -8395,6 +8395,68 @@ run_err "$TESTDIR/error_195_let_else_falls_through.con" "(E0308)"
 # Bug 197: a variant pattern without a field list dropped a non-Copy payload.
 run_err "$TESTDIR/error_197_variant_pattern_drops_payload.con" "(E0288)"
 run_ok "$TESTDIR/regress_197_variant_pattern_ignores_copy.con" 42
+# Bug 210: arithmetic on a struct, enum or newtype operand compiled (CoreCheck read every named
+# type as a type parameter); TYPE-6 refuses it with E0501.
+run_err "$TESTDIR/error_210_struct_arith.con" "(E0501)"
+run_err "$TESTDIR/error_210_enum_arith.con" "(E0501)"
+run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
+run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
+run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
+run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 221: a call's explicit type-argument list of the wrong length was zipped (extras dropped).
+run_err "$TESTDIR/error_221_extra_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_type_argument_to_plain_fn.con" "(E0322)"
+run_err "$TESTDIR/error_221_method_extra_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_short_type_argument_list.con" "(E0322)"
+run_err "$TESTDIR/error_221_fn_pointer_type_argument.con" "(E0322)"
+run_err "$TESTDIR/error_221_bound_method_type_argument.con" "(E0322)"
+run_ok "$TESTDIR/regress_221_exact_type_arguments.con" 42
+# Bug 220: `0x` / `0b` / `0o` with no digit lexed as 0; now a lexical error.
+# The message is asserted, not only E0001: `0b2` was already a parse error before the fix.
+run_err "$TESTDIR/error_220_empty_hex_literal.con" "a \`0x\` literal needs at least one hexadecimal digit"
+run_err "$TESTDIR/error_220_empty_binary_literal.con" "a \`0b\` literal needs at least one binary digit"
+run_err "$TESTDIR/error_220_empty_octal_literal.con" "a \`0o\` literal needs at least one octal digit"
+run_ok "$TESTDIR/regress_220_radix_literals.con" 203
+# Bug 218: two declarations of one name in a module (MOD-3) were accepted (the first silently won,
+# or llvm-as failed); refused with E0299. A type and a value may share a spelling.
+run_err "$TESTDIR/error_218_duplicate_function.con" "(E0299)"
+run_err "$TESTDIR/error_218_duplicate_struct.con" "(E0299)"
+run_err "$TESTDIR/error_218_struct_and_enum.con" "(E0299)"
+run_err "$TESTDIR/error_218_duplicate_constant.con" "(E0299)"
+run_err "$TESTDIR/error_218_duplicate_alias.con" "(E0299)"
+run_ok "$TESTDIR/regress_218_type_and_value_namespaces.con" 42
+# Bug 215: an unknown type written in a cast or a type-argument list (backend panic / silent
+# acceptance before); Resolve refuses it with E0108.
+run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"
+run_err "$TESTDIR/error_215_turbofish_unknown_type.con" "(E0108)"
+run_err "$TESTDIR/error_215_cast_field_spelling.con" "(E0108)"
+run_err "$TESTDIR/error_215_const_cast_unknown_type.con" "(E0108)"
+# Bug 213: arms after an unguarded binding / `_` arm were lowered into a predecessor-less block
+# (E0703 natively); binary and --interp must agree on 42.
+run_ok "$TESTDIR/regress_213_arm_after_binding_arm.con" 42
+r213_interp=$($COMPILER "$TESTDIR/regress_213_arm_after_binding_arm.con" --interp 2>&1 || true)
+if [ "$r213_interp" = "42" ]; then
+    echo "  ok  bug 213: arms after a catch-all are not lowered — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 213: interp gave '$r213_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 211: a generic operator instantiated at a struct or enum reached the backend; the post-Mono
+# operator check refuses it (E0501) and admits numeric instances (binary and --interp agree on 42).
+run_err "$TESTDIR/error_211_generic_add_struct.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_mul_enum.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_rhs_struct.con" "(E0501)"
+run_err "$TESTDIR/error_211_generic_mixed_width.con" "(E0501)"
+run_ok "$TESTDIR/regress_211_generic_add_numeric.con" 42
+r211_interp=$($COMPILER "$TESTDIR/regress_211_generic_add_numeric.con" --interp 2>&1 || true)
+if [ "$r211_interp" = "42" ]; then
+    echo "  ok  bug 211: numeric generic instances are admitted — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 211: interp gave '$r211_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 196: a match arm whose pattern does not fit the scrutinee (panic / SSA verifier before).
 run_err "$TESTDIR/error_196_other_enum_variant.con" "(E0309)"
 run_err "$TESTDIR/error_196_range_over_enum.con" "(E0309)"

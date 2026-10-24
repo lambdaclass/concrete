@@ -1,0 +1,8 @@
+// Bug 211 (Codex review): a generic `+` whose instance mixes widths (`Int` plus `i32`). Expected:
+// E0501 (post-mono).
+fn addw<T: Copy>(a: Int, b: T) -> Int { return a + b; }
+
+fn main() -> Int {
+    let b: i32 = 2;
+    return addw::<i32>(40, b);
+}

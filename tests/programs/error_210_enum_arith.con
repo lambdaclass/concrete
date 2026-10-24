@@ -1,0 +1,8 @@
+// Bug 210: arithmetic on an enum operand (TYPE-6@1). It compiled and ran natively. Expected: E0501.
+enum Copy E { A {}, B {} }
+
+fn main() -> Int {
+    let e: E = E::A {};
+    let f: E = e * e;
+    return 0;
+}

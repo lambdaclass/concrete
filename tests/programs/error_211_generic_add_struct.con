@@ -1,0 +1,12 @@
+// Bug 211: a generic `+` instantiated at a struct. CoreCheck defers a type parameter's operator to
+// the instance, and no post-Mono check existed: llvm-as rejected the call (`ptr` vs `i64`) and
+// `--interp` stopped at run time. Expected: E0501 (post-mono).
+struct Copy P { x: i32 }
+
+fn add<T: Copy>(a: T, b: T) -> T { return a + b; }
+
+fn main() -> Int {
+    let p: P = P { x: 1 };
+    let q: P = add::<P>(p, p);
+    return q.x as Int;
+}

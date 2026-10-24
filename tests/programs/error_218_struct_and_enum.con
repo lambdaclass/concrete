@@ -1,0 +1,8 @@
+// Bug 218: a struct and an enum of one name (MOD-3: types share one namespace). Accepted silently.
+// Expected: E0299.
+enum Copy E { A {} }
+struct Copy E { a: Int }
+
+fn main() -> Int {
+    return 0;
+}

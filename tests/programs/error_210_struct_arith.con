@@ -1,0 +1,8 @@
+// Bug 210: arithmetic on a struct operand (TYPE-6@1). It compiled and ran natively. Expected: E0501.
+struct Copy P { x: i32 }
+
+fn main() -> Int {
+    let p: P = P { x: 1 };
+    let q: P = p + p;
+    return q.x as Int;
+}

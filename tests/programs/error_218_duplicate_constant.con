@@ -1,0 +1,8 @@
+// Bug 218: two constants of one name in a module (MOD-3). The binary failed at `lower` (E0602, "defined
+// by more than one module"); `--interp` refused the use. Expected: E0299.
+const X: Int = 1;
+const X: Int = 2;
+
+fn main() -> Int {
+    return X;
+}

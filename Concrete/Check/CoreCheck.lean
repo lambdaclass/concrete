@@ -41,6 +41,15 @@ structure CoreCheckEnv where
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
+  /-- Every struct, enum and newtype the PROGRAM declares (all modules, all submodules), so a
+      value of a type declared in another module (`child::make()`) is still a declared nominal
+      type to the operator and cast rules (bug 210). `structDefs`/`enumDefs`/`newtypes` are the
+      current module's. -/
+  programTypeNames : List String := []
+  programNewtypes : List NewtypeDef := []
+  /-- The current function's type parameters: a `named` spelling of one is a parameter even when
+      some module declares a type of that name. -/
+  currentTypeParams : List String := []
   -- R-0492 step 4: keyed by binding identity (a compiler temporary by its Core name)
   vars : List (LocalKey × Ty)
   currentCapSet : CapSet
@@ -393,6 +402,30 @@ private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) :
   let env ← getEnv
   return env.enumDefs.find? fun ed => ed.name == name
 
+/-- Whether CoreCheck must leave a type's operator and cast rules to the instantiation: a type
+    parameter (`typeVar`), or a `named` type that is not a declared struct, enum or newtype (a
+    parameter Core still spells as a name). A declared nominal type is CONCRETE and is held to
+    TYPE-6 and the cast table here, whichever module declares it. The one predicate every operator
+    and cast rule reads (bug 210: the operator rules kept their own copy that read every `named`
+    type as a parameter, so `p + p` on a struct, `e * e` on an enum and `m + m` on a newtype were
+    accepted). -/
+private def isOpaqueOperandTy (env : CoreCheckEnv) (t : Ty) : Bool :=
+  match t with
+  | .typeVar _ => true
+  | .named n =>
+    env.currentTypeParams.contains n
+    || !(env.structDefs.any (fun sd => sd.name == n)
+      || env.enumDefs.any (fun ed => ed.name == n)
+      || env.newtypes.any (fun nt => nt.name == n)
+      || env.programTypeNames.contains n)
+  | _ => false
+
+/-- A newtype declaration by name: the current module's first, then the program's. -/
+private def findNewtype (env : CoreCheckEnv) (n : String) : Option NewtypeDef :=
+  match env.newtypes.find? fun nt => nt.name == n with
+  | some nt => some nt
+  | none => env.programNewtypes.find? fun nt => nt.name == n
+
 /-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
     built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
     `<cap C>`) reaches Core spelled as a concrete name `C`, so an unknown name is a parameter
@@ -553,7 +586,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         if !Capabilities.capsAllowUnsafeOp env.inTrusted env.currentCapSet then
           addCCError (.missingCapability "ptr_arith" "Unsafe" "")
       else
-        let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+        let hasTypeVar := isOpaqueOperandTy (← getEnv)
         if !isNumeric lTy && !hasTypeVar lTy then
           addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
         -- Operands must agree EXACTLY (width and signedness): a mixed-width
@@ -565,7 +598,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     | .saturatingAdd | .saturatingSub | .saturatingMul =>
       -- Explicit wrapping/saturating arithmetic is INTEGER-ONLY (no
       -- float/bool/char/ptr) and operands must share the type. ROADMAP #10 Stage 2.
-      let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+      let hasTypeVar := isOpaqueOperandTy (← getEnv)
       if !isInteger lTy && !hasTypeVar lTy then
         addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
       if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
@@ -583,7 +616,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         addCCError (.bitwiseOnNonInteger (toString (repr lTy)))
       -- Bitwise/shift operands previously had NO agreement check at all and
       -- mixed widths escaped to SSA-verify (E0715).
-      let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
+      let hasTypeVar := isOpaqueOperandTy (← getEnv)
       if !binOpOperandsAgree lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
         addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
 
@@ -860,14 +893,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- must not get a free pass. The historical broad skip on `.named _` was
     -- a loophole that made every newtype-involving cast accepted.
     let env ← getEnv
-    let isKnownConcrete := fun (n : String) =>
-      env.structDefs.any (fun sd => sd.name == n)
-        || env.enumDefs.any (fun ed => ed.name == n)
-        || env.newtypes.any (fun nt => nt.name == n)
-    let hasTypeVar := fun (t : Ty) => match t with
-      | .typeVar _ => true
-      | .named n => !isKnownConcrete n
-      | _ => false
+    let hasTypeVar := isOpaqueOperandTy env
     -- Newtype wrap/unwrap: Elab inserts a `.cast` at the newtype constructor
     -- and at `.0` field access to carry the wrapper name through type-level
     -- without changing the runtime representation. Allow those — and ONLY
@@ -882,11 +908,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- and incorrect). The single-step rule is the precise match.
     let oneStepInner := fun (t : Ty) => match t with
       | .named n =>
-        match env.newtypes.find? fun nt => nt.name == n with
+        match findNewtype env n with
         | some nt => some nt.innerTy
         | none => none
       | .generic n args _ =>
-        match env.newtypes.find? fun nt => nt.name == n with
+        match findNewtype env n with
         | some nt =>
           let mapping := nt.typeParams.zip args
           some (Layout.ntSubstTy mapping nt.innerTy)
@@ -1379,6 +1405,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
   setEnv { env with
     currentFnName' := f.name
+    currentTypeParams := f.typeParams
     vars := f.paramKeys.zip (f.params.map (·.2))
     -- The DECLARED set, deliberately: the header is what callers rely on. A trusted
     -- body's discharge of a callee's `Unsafe` (extern calls included since R-0484)
@@ -1409,6 +1436,9 @@ private partial def collectAllStructs (m : CModule) : List CStructDef :=
 
 private partial def collectAllEnums (m : CModule) : List CEnumDef :=
   m.enums ++ m.submodules.foldl (fun acc s => acc ++ collectAllEnums s) []
+
+private partial def collectAllNewtypes (m : CModule) : List NewtypeDef :=
+  m.newtypes ++ m.submodules.foldl (fun acc s => acc ++ collectAllNewtypes s) []
 
 /-- Every function and extern signature in a module TREE, keyed by the flattened
     name a caller actually emits (`mod sink { fn shout }` is called as
@@ -1458,7 +1488,7 @@ private def collectAllFnSigs (m : CModule)
   collectAllFnSigsAux "" m
 
 partial def ccCheckModule (m : CModule)
-    (allStructs : List CStructDef) (allEnums : List CEnumDef)
+    (allStructs : List CStructDef) (allEnums : List CEnumDef) (allNewtypes : List NewtypeDef)
     -- REQUIRED, with no default. A default of `[]` would mean "no signatures
     -- known", which this checker reads as "these calls require nothing" — the
     -- exact defect being fixed, left as a footgun for the next caller. Omitting
@@ -1481,6 +1511,8 @@ partial def ccCheckModule (m : CModule)
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
+    programTypeNames := allStructs.map (·.name) ++ allEnums.map (·.name) ++ allNewtypes.map (·.name)
+    programNewtypes := allNewtypes
     vars := []
     currentCapSet := .empty
     currentRetTy := .unit
@@ -1497,7 +1529,7 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let (subErrors, subEdges, subAttrs) := m.submodules.foldl (fun (accD, accE, accA) sub =>
-    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allFnSigs
+    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs
     (accD ++ Diagnostics.stampFile (subD.map fun d =>
        { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile,
      accE ++ subE, accA ++ subA)
@@ -1510,9 +1542,10 @@ partial def ccCheckModule (m : CModule)
 def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
   let allErrors := modules.foldl (fun acc m =>
-    acc ++ (ccCheckModule m allStructs allEnums allFnSigs).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
+    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -1523,8 +1556,9 @@ def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
 def coreTrustEdges (modules : List CModule) : List TrustEdge × List TrustFnAttr :=
   let allStructs := modules.foldl (fun acc m => acc ++ collectAllStructs m) []
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
-  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allFnSigs)
+  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs)
   (TrustEdge.canonical (results.foldl (fun acc r => acc ++ r.2.1) []),
    results.foldl (fun acc r => acc ++ r.2.2) [])
 

@@ -1,0 +1,12 @@
+// Bug 210 (Codex review): arithmetic on a newtype declared in another module (`--interp` returned 6,
+// llvm-as failed). Expected: E0501.
+mod child {
+    pub newtype M = i32;
+    pub fn make() -> M { return M(3); }
+    pub fn un(m: M) -> i32 { return m.0; }
+}
+
+fn main() -> Int {
+    let q: i32 = child::un(child::make() + child::make());
+    return q as Int;
+}

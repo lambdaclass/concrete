@@ -1,0 +1,8 @@
+// Bug 210: a struct minus an integer literal (the fuzz farm's crash-d8cc80fc873e shape; the binary
+// failed in the SSA verifier, E0715). Expected: E0501.
+struct Copy P { x: i32, y: i32 }
+
+fn main() -> Int {
+    let s: P = P { x: 1, y: 1 } - 1;
+    return s.x as Int;
+}

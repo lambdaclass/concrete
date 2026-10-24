@@ -1,0 +1,9 @@
+// Bug 211: the post-Mono operator check admits numeric instances (i32, u8, Int). Expected: 42.
+fn add<T: Copy>(a: T, b: T) -> T { return a + b; }
+
+fn main() -> Int {
+    let a: i32 = add::<i32>(10, 12);
+    let b: u8 = add::<u8>(7, 3);
+    let c: Int = add::<Int>(5, 5);
+    return (a as Int) + (b as Int) + c;
+}

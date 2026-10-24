@@ -1,0 +1,10 @@
+// Bug 211 (Codex review): the type parameter on the RIGHT of `+`, instantiated at a struct. CoreCheck
+// defers the operand agreement when either side is a parameter. Expected: E0501 (post-mono).
+struct Copy P { x: i32 }
+
+fn addr<T: Copy>(a: Int, b: T) -> Int { return a + b; }
+
+fn main() -> Int {
+    let p: P = P { x: 1 };
+    return addr::<P>(1, p);
+}

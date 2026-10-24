@@ -1,0 +1,13 @@
+// Bug 221: exact and omitted type-argument lists are unchanged. Expected: 42.
+fn first<A: Copy, B: Copy>(x: A, y: B) -> A { return x; }
+
+struct Copy S { v: Int }
+
+impl S {
+    fn m<T>(&self, x: T) -> T { return x; }
+}
+
+fn main() -> Int {
+    let s: S = S { v: 1 };
+    return first::<Int, u8>(30, 2) + first(4, true) + s.m::<Int>(7) + s.m(1);
+}
