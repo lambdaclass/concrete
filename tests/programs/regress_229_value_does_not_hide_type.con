@@ -1,0 +1,20 @@
+// Bug 229: types and values are separate namespaces (MOD-3), but Resolve looked a type up in one
+// first-wins map, so a function `E` registered before `enum E` made `E::A` "not an enum" (E0104),
+// in a top-level module (refused on main) and, since bug 217's walk, in a nested one. Check and
+// Elab accept both. Exits 42 natively and under --interp.
+mod a {
+    enum Copy E { A }
+    fn E() -> Int { return 0; }
+    pub fn top() -> Int { let e: E = E::A; match e { E::A => { return 20 + E(); }, } }
+
+    mod inner {
+        enum Copy F { B }
+        fn F() -> Int { return 2; }
+        pub fn nested() -> Int { let f: F = F::B; match f { F::B => { return 20 + F(); }, } }
+    }
+    pub fn g() -> Int { return top() + inner::nested(); }
+}
+
+fn main() -> Int {
+    return a::g();
+}

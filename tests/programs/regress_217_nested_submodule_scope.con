@@ -1,0 +1,25 @@
+// Bug 217: the scope Resolve gives a nested submodule admits what Check and Elab admit: its own
+// declarations (a constant), a sibling module's type named without an import (`Pt`, through the
+// enclosing module's scope) and its imports (`six`). Exits 42 natively and under
+// --interp. (A call into its own child, `leaf::two()`, would meet bug 077.)
+mod outer {
+    mod shapes {
+        pub struct Copy Pt { pub x: i32, pub y: i32 }
+        pub fn six() -> i32 { return 6; }
+    }
+
+    mod inner {
+        import shapes.{six};
+        const TWO: i32 = 2;
+        pub fn h() -> Int {
+            let p: Pt = Pt { x: 30, y: 4 };
+            let n: i32 = p.x + p.y + six() + TWO;
+            return n as Int;
+        }
+    }
+    pub fn g() -> Int { return inner::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

@@ -1,0 +1,6 @@
+// Bug 217: a `mod util;` file is a submodule of the project's main module; Resolve never
+// walked it, so this cast reached the backend. Expected: E0108 attributed to src/util.con.
+pub fn g() -> Int {
+    let a: i32 = 7;
+    return (a as Nope) as Int;
+}

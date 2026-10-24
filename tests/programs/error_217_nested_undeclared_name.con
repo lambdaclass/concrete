@@ -1,0 +1,13 @@
+// Bug 217: an undeclared name two modules deep is Resolve's E0100 (it was Check's E0201).
+mod outer {
+    mod inner {
+        pub fn h() -> Int {
+            return missing_name;
+        }
+    }
+    pub fn g() -> Int { return inner::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

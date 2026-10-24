@@ -8478,6 +8478,66 @@ run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_turbofish_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_cast_field_spelling.con" "(E0108)"
 run_err "$TESTDIR/error_215_const_cast_unknown_type.con" "(E0108)"
+# Bug 217: Resolve walked only the modules of the top-level list, so a nested submodule (two
+# modules deep, a module written after `main`, every `mod x;` file of a project) produced no
+# Resolve diagnostics: the cast reached the backend (panic), and other name errors met Check's
+# codes. The scope fixture pins that the submodule walk admits what Check and Elab admit.
+run_err "$TESTDIR/error_217_nested_cast_unknown_type.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_nested_undeclared_name.con" "error[resolve]: (E0100)"
+run_err "$TESTDIR/error_217_nested_annotation_unknown_type.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_module_after_main_cast.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_217_nested_enclosing_alias_cast.con" "error[resolve]: (E0108)"
+for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_precedence; do
+    run_ok "$TESTDIR/$r217.con" 42
+    r217_interp=$($COMPILER "$TESTDIR/$r217.con" --interp 2>&1 || true)
+    if [ "$r217_interp" = "42" ]; then
+        echo "  ok  bug 217: $r217 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 217: $r217 --interp gave '$r217_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# Bug 229: Resolve's module scope refused what Check admits: a function hid a same-named enum
+# (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
+# each fixture has the top-level and the nested shape.
+for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_not_hide_builtin \
+            regress_229_child_newtype_known regress_229_option_named_alias_or_struct \
+            regress_229_alias_and_enum_literal_precedence; do
+    run_ok "$TESTDIR/$r229.con" 42
+    r229_interp=$($COMPILER "$TESTDIR/$r229.con" --interp 2>&1 || true)
+    if [ "$r229_interp" = "42" ]; then
+        echo "  ok  bug 229: $r229 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 229: $r229 --interp gave '$r229_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# The enclosing module's `enum Result` is not in the nested scope. Front end and interpreter only:
+# the native build meets bug 227 (Lower looks enums up by spelling), pinned in check_example_outputs.
+r217_src="$TESTDIR/regress_217_enclosing_type_not_in_scope.con"
+r217_core_rc=0; $COMPILER "$r217_src" --emit-core >/dev/null 2>&1 || r217_core_rc=$?
+r217_interp=$($COMPILER "$r217_src" --interp 2>&1 || true)
+if [ "$r217_core_rc" = 0 ] && [ "$r217_interp" = "42" ]; then
+    echo "  ok  bug 217: an enclosing enum Result does not hide the builtin in a submodule (front end accepts; --interp 42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 217: regress_217_enclosing_type_not_in_scope: --emit-core rc $r217_core_rc, --interp '$r217_interp' (want 0, 42)"
+    FAIL=$((FAIL + 1))
+fi
+r217_dir=$(mktemp -d)
+cp -R tests/regressions/bug217_resolve_skips_nested_submodules/project/. "$r217_dir/"
+r217_out=$(cd "$r217_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r217_rc=0 || r217_rc=$?
+rm -rf "$r217_dir"
+if [ "$r217_rc" != 0 ] && grep -qF "src/util.con:5:13: error[resolve]: (E0108) unknown type 'Nope'" <<<"$r217_out"; then
+    echo "  ok  bug 217: a project's \`mod util;\` file is resolved (E0108 attributed to src/util.con)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 217: project build of tests/regressions/bug217_resolve_skips_nested_submodules/project (rc $r217_rc) did not refuse src/util.con with resolve E0108:"
+    printf '%s\n' "$r217_out" | awk 'NR<=3'
+    FAIL=$((FAIL + 1))
+fi
 # Bug 213: arms after an unguarded binding / `_` arm were lowered into a predecessor-less block
 # (E0703 natively); binary and --interp must agree on 42.
 run_ok "$TESTDIR/regress_213_arm_after_binding_arm.con" 42

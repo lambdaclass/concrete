@@ -1,0 +1,19 @@
+// Bug 229: a child module's newtype is in Check's environment for its parent (`allNewtypes`), but
+// Resolve's known types listed the child's structs, enums, aliases and traits and not its newtypes,
+// so `N` was an unknown type (E0108), in a top-level module (refused on main) and, since bug 217's
+// walk, in a nested one. Exits 42 natively and under --interp.
+mod a {
+    mod leaf { pub newtype N = i32; }
+    pub fn top(x: N) -> N { return x; }
+
+    mod inner {
+        mod leaf2 { pub newtype M = i32; }
+        pub fn nested(x: M) -> M { return x; }
+        pub fn v() -> Int { return 21; }
+    }
+    pub fn g() -> Int { return 21 + inner::v(); }
+}
+
+fn main() -> Int {
+    return a::g();
+}

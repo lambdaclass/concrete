@@ -1,0 +1,5 @@
+mod util;
+
+fn main() -> Int {
+    return util::g();
+}

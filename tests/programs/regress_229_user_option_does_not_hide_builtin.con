@@ -1,0 +1,23 @@
+// Bug 229: Check and Elab always give `Option` the builtin meaning (BuiltinEnums: the builtin is
+// never withheld), but Resolve let a user `enum Option` answer `Option<i32>` (E0113: takes 0 type
+// arguments), in a top-level module (refused on main) and, since bug 217's walk, in a nested one.
+// Exits 42 natively and under --interp.
+mod a {
+    enum Copy Option { A }
+    pub fn top(x: Option<i32>) -> Int {
+        match x { Option::Some { value } => { return value as Int; }, Option::None => { return 0; }, }
+    }
+
+    mod inner {
+        enum Copy Option { B }
+        pub fn nested(x: Option<i32>) -> Int {
+            match x { Option::Some { value } => { return value as Int; }, Option::None => { return 0; }, }
+        }
+        pub fn call() -> Int { return nested(Option::<i32>::Some { value: 21 }); }
+    }
+    pub fn g() -> Int { return top(Option::<i32>::Some { value: 21 }) + inner::call(); }
+}
+
+fn main() -> Int {
+    return a::g();
+}

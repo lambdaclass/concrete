@@ -1,0 +1,18 @@
+// Bug 217 (Codex review r4): a nested submodule's known types are Check's environment for it, with
+// nothing of the enclosing module. When they extended the enclosing module's, `outer`'s alias
+// `Nope` passed Resolve inside `inner`, where Check cannot expand it, and the cast reached the
+// backend (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`) as before the fix. Expected: E0108.
+mod outer {
+    type Nope = i32;
+    mod inner {
+        pub fn h() -> Int {
+            let a: i32 = 7;
+            return (a as Nope) as Int;
+        }
+    }
+    pub fn g() -> Int { return inner::h(); }
+}
+
+fn main() -> Int {
+    return outer::g();
+}

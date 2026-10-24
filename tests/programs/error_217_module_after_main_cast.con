@@ -1,0 +1,12 @@
+// Bug 217: a module declared after `main` is a submodule of the main module, so even one
+// level deep it was not walked: the cast reached the backend (panic) unless the module came first.
+fn main() -> Int {
+    return outer::g();
+}
+
+mod outer {
+    pub fn g() -> Int {
+        let a: i32 = 7;
+        return (a as Nope) as Int;
+    }
+}

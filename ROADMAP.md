@@ -106,8 +106,8 @@ a link failure, an interpreter refusal or an unrejected leak.
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 223 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
-| 11. Absence read as a fact (fail-open defaults) | 3 | 0 | 049, 058, 217 |
-| 12. One fact kept in two places | 1 | 0 | 064 |
+| 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
+| 12. One fact kept in two places | 3 | 0 | 064, 226, 230 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |

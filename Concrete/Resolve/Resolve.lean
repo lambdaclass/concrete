@@ -3,6 +3,7 @@ import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Token
 import Concrete.Resolve.FileSummary
+import Concrete.Resolve.BuiltinEnums
 import Concrete.Resolve.Intrinsic
 import Concrete.Backend.Symbols
 
@@ -105,13 +106,27 @@ structure Scope where
       module of N mutually-referencing functions (`--emit-core` alone was O(N²)).
       Built at scope-assembly time (bounded), read O(1) per reference. -/
   symbolMap : Std.HashMap String SymKind := ∅
+  /-- name → every TYPE declaration of that name (struct, enum, trait, alias, newtype), in scope
+      order. Types and values are separate namespaces (MOD-3; bug 218's
+      `regress_218_type_and_value_namespaces`), so a type lookup must not meet a function or
+      constant of the same spelling, which `symbolMap` returns when it was registered first; and
+      Check and Elab consult aliases, structs and enums in separate tables, so which declaration
+      answers depends on the position, not on scope order alone (bug 229). -/
+  typeKinds : Std.HashMap String (Array SymKind) := ∅
 
-/-- Build a `Scope` from a symbol list, materializing the O(1) lookup map (first
+/-- A declaration in the type namespace. -/
+def SymKind.isType : SymKind → Bool
+  | .struct _ | .enum _ | .trait _ | .typeAlias _ | .newtype _ => true
+  | _ => false
+
+/-- Build a `Scope` from a symbol list, materializing the O(1) lookup maps (first
     occurrence wins, matching `find?`). Use instead of `{ symbols := … }` so every
     scope carries a consistent map. -/
 def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
   { symbols := symbols,
-    symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅ }
+    symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅,
+    typeKinds := symbols.foldl (fun m (n, k) =>
+      if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
 
 structure ResolvedModule where
   module : Module
@@ -153,6 +168,9 @@ structure ShallowResult where
       variant was refused (E0103) when another module's `Shape`, registered
       first, had none. -/
   moduleScopes : List (String × List (String × SymKind)) := []
+  /-- The program's summary table, against which a nested submodule's imports are resolved in
+      the body phase (bug 217). -/
+  summaryTable : List (String × FileSummary) := []
 
 def ResolveError.code : ResolveError → String
   | .undeclaredVariable _ => "E0100"
@@ -201,9 +219,40 @@ private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   -- Check global scope (O(1) via symbolMap)
   ctx.globalScope.symbolMap.contains name
 
-private def lookupSymKind (ctx : ResolveCtx) (name : String) : Option SymKind :=
-  (ctx.localScopes.findSome? (fun scope => scope.find? (fun (n, _) => n == name) |>.map (·.2)))
-  <|> (ctx.globalScope.symbolMap.get? name)
+/-- The builtin enum a name denotes in an enum table, as `BuiltinEnums.builtinEnums` orders it
+    for Check and Elab: `Option` comes before every user enum and is never withheld; `Result` is
+    the builtin unless a user enum of that name is in scope (`hasUserResultEnum`). -/
+private def builtinEnumFor (name : String) (userEnumInScope : Bool) : Option EnumDef :=
+  if name == optionEnumName then some builtinOptionEnum
+  else if name == resultEnumName && !userEnumInScope then some builtinResultEnum
+  else none
+
+/-- The declaration a WRITTEN type name denotes (an annotation, a signature, a type argument), in
+    Check's order (bug 229): an alias is expanded first (`closeAliasMap` runs before any struct or
+    enum lookup), then the struct, enum or newtype; among enums the builtin `Option` comes first.
+    Only the type namespace is searched (local scopes hold values only). -/
+private def lookupWrittenType (ctx : ResolveCtx) (name : String) : Option SymKind :=
+  let ks := ctx.globalScope.typeKinds.getD name #[]
+  match ks.find? (fun k => match k with | .typeAlias _ => true | _ => false) with
+  | some k => some k
+  | none =>
+    let userEnum := ks.any fun k => match k with | .enum _ => true | _ => false
+    let first : Option SymKind := ks[0]?
+    match first, builtinEnumFor name userEnum with
+    | some (SymKind.enum _), some b => some (SymKind.enum b)
+    | k, _ => k
+
+/-- The enum an enum literal or pattern head `E::V` names, from the enum table as Check and Elab
+    build it (builtins first, then the scope's enums), whatever else of that name is declared: a
+    `type Option = i32` does not hide the builtin's `Option::Some` (bug 229, Codex review r5).
+    `some` of a non-enum when the name is declared only as another type (E0104). -/
+private def lookupEnumForLiteral (ctx : ResolveCtx) (name : String) : Option SymKind :=
+  let ks := ctx.globalScope.typeKinds.getD name #[]
+  let userEnum := ks.find? fun k => match k with | .enum _ => true | _ => false
+  let first : Option SymKind := ks[0]?
+  match builtinEnumFor name userEnum.isSome with
+  | some b => some (SymKind.enum b)
+  | none => userEnum <|> first
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
@@ -222,12 +271,13 @@ private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
 /-- How many type arguments a generic type name takes, when that is known.
 
     The declaration wins over the builtin table, because a program may define its own
-    `Result`/`Option` (`hasUserResultEnum`). `none` means "not known here" — an imported
+    `Result` (`hasUserResultEnum`); an enum named `Option` is always the builtin
+    (`lookupWrittenType`). `none` means "not known here" — an imported
     or otherwise unresolved name — and the arity check is skipped rather than guessed:
     rejecting a valid program is a different bug, not a safer one. -/
 private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupSymKind ctx name with
+  match lookupWrittenType ctx name with
   | some (.struct d) => some d.capParams.length
   | some (.enum _) | some (.newtype _) => some 0
   -- A type declared under the name (an alias, a trait) is not the builtin. A value binding is
@@ -239,7 +289,7 @@ private def declaredCapArity (ctx : ResolveCtx) (name : String) : Option Nat :=
 
 private def declaredTypeArity (ctx : ResolveCtx) (name : String) : Option Nat :=
   if ctx.typeParams.contains name then none else
-  match lookupSymKind ctx name with
+  match lookupWrittenType ctx name with
   | some (.struct d) => some d.typeParams.length
   | some (.enum d) => some d.typeParams.length
   | some (.newtype d) => some d.typeParams.length
@@ -355,7 +405,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .fieldAccess _ obj _ => resolveExpr ctx obj
   | .enumLit sp enumName variant typeArgs fields =>
     let ctx := checkWrittenTys ctx typeArgs sp
-    let ctx := match lookupSymKind ctx enumName with
+    let ctx := match lookupEnumForLiteral ctx enumName with
       | some (.enum def_) =>
         if def_.variants.any (fun v => v.name == variant) then ctx
         else addError ctx (.unknownEnumVariant variant enumName) (some sp)
@@ -545,6 +595,7 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.enums.map fun e => (e.name, SymKind.enum e))
     ++ (subS.externFns.map fun ef => (s!"{subName}_{ef.name}", SymKind.externFn ef.params ef.retTy))
     ++ (subS.constants.map fun c => (c.name, SymKind.const c.ty))
+    ++ (subS.newtypes.map fun nt => (nt.name, SymKind.newtype nt))
     ++ (implSigsToSymbols (subS.implMethodSigs.filter fun (name, _) =>
         subS.publicNames.contains name))
   ) []
@@ -554,6 +605,8 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.enums.map (·.name))
     ++ (subS.typeAliases.map (·.name))
     ++ (subS.traits.map (·.name))
+    -- Bug 229: a child's newtype is in Check's environment (`allNewtypes`), so it is a known type.
+    ++ (subS.newtypes.map (·.name))
   ) []
   (Scope.ofSymbols symbols, types)
 
@@ -637,11 +690,11 @@ def isCompilerIntrinsic (ef : ExternFnDecl) : Bool :=
   | some v => v == ef.name && (resolveIntrinsic v).isSome && ef.linkName.isNone
   | none => false
 
-/-- R-0484 R3 over a module and every nested submodule (bug 113). A `#[intrinsic]`
+/-- R-0484 R3 over one module (the body walk visits every nested submodule: bugs 113, 217). A `#[intrinsic]`
     declaration is not a foreign binding (the compiler implements it, no C code stands behind
     it), so R3 does not apply to it; std.mem's `sizeof`/`alignof` are the instances, and they
     reach this walk because std's modules are submodules in a project build. -/
-private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+private def externEffectsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   let ctx := m.externFns.foldl (fun ctx ef =>
     let sym := ef.linkName.getD ef.name
     if isCompilerIntrinsic ef then ctx else
@@ -668,13 +721,12 @@ private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : Resolve
       else ctx) ctx
   -- An import renamed to a compiler intrinsic's name would be compiled as the intrinsic: an
   -- imported foreign binding (`import c.{abs as sizeof}`) would never reach C (Codex review).
-  let ctx := m.imports.foldl (fun ctx imp =>
+  m.imports.foldl (fun ctx imp =>
     imp.symbols.foldl (fun ctx sym =>
       match sym.alias with
       | some a => if a != sym.name && (resolveIntrinsic a).isSome
                   then addError ctx (.importAliasIsIntrinsic sym.name a) (some imp.span) else ctx
       | none => ctx) ctx) ctx
-  m.submodules.foldl (fun ctx sub => externEffectsCheck sub ctx) ctx
 
 /-- Bug 188: a capability parameter may not be spelled like a capability (a built-in
     capability, `Std`, or one of the module's capability aliases). Inside a fn-pointer
@@ -682,8 +734,8 @@ private partial def externEffectsCheck (m : Module) (ctx : ResolveCtx) : Resolve
     entailment rule (`Capabilities.missingCaps`) matches a requirement against the
     caller's variables by name, so `fn f<cap Unsafe>(..) with(Unsafe)` would hold the
     real `Unsafe` without being granted it. Keeping the two namespaces disjoint is what
-    makes name matching sound. Descends into nested submodules, like the extern walk. -/
-private partial def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+    makes name matching sound. Over one module; the body walk visits every submodule. -/
+private def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   let aliases := m.capAliases.map (·.name)
   let check (owner : String) (params : List String) (sp : Span) (ctx : ResolveCtx) : ResolveCtx :=
     params.foldl (fun ctx p =>
@@ -694,14 +746,14 @@ private partial def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : Resolve
   let ctx := m.implBlocks.foldl (fun ctx ib =>
     let ctx := check ib.typeName ib.capParams ib.span ctx
     ib.methods.foldl (fun ctx f => check s!"{ib.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
-  let ctx := m.traitImpls.foldl (fun ctx ti =>
+  m.traitImpls.foldl (fun ctx ti =>
     ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
-  m.submodules.foldl (fun ctx sub => capParamNamesCheck sub ctx) ctx
 
-/-- Resolve all names in a module's function bodies. -/
+/-- Resolve all names in one module's declarations and bodies (not its submodules: see
+    `resolveModuleTreeErrors`). -/
 private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
     (traitMethods : List (String × List String))
-    (traitImpls_ : List (String × String)) : ResolvedModule × Diagnostics :=
+    (traitImpls_ : List (String × String)) : Diagnostics :=
   -- Validate type-alias targets (unknown target types, recursive aliases)
   let aliasErrors := resolveTypeAliases m globalScope knownTypes
   -- Check top-level functions
@@ -716,9 +768,9 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     acc ++ ti.methods.foldl (fun acc method =>
       acc ++ resolveFnBody globalScope knownTypes method (some ti.typeName) ti.typeParams traitMethods traitImpls_) []) []
   -- R-0484 R3: every foreign binding declares its effects, and a known-effectful
-  -- symbol may not be declared effect-free. The rule covers EVERY module: the walk
-  -- descends into nested submodules (bug 113: it read only `m.externFns`, so an
-  -- undeclared `extern fn` inside `mod t { mod ffi { .. } }` was accepted).
+  -- symbol may not be declared effect-free. The rule covers EVERY module because
+  -- `resolveModuleTreeErrors` visits every nested submodule (bug 113: it read only
+  -- `m.externFns`, so an undeclared `extern fn` inside `mod t { mod ffi { .. } }` was accepted).
   let externCtx0 : ResolveCtx :=
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
@@ -731,47 +783,98 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
     ++ constErrors
-  ({ module := m, globalScope := globalScope }, allErrors)
+  allErrors
+
+/-- The names a nested submodule's imports bring into its scope, by the rule Check and Elab
+    apply to that submodule (`resolveImports`), so the Resolve walk admits exactly the imports the
+    later passes admit. `none` when the imports do not resolve: Check reports that refusal for a
+    submodule (`checkSubmodules`, E0284/E0285) and does not descend past it, and Resolve, whose
+    scope for the submodule would be incomplete, leaves it to Check the same way. -/
+private def submoduleImportScope (summaryTable : List (String × FileSummary)) (sub : Module)
+    : Option (List (String × SymKind) × List String) :=
+  match resolveImports sub.imports summaryTable (fun _ => "") (fun _ _ => "") with
+  | .error _ => none
+  | .ok ri =>
+    let syms : List (String × SymKind) :=
+      ri.functions.map (fun (n, fs) =>
+        (n, SymKind.fn (fs.params.map fun (pn, ty) => { name := pn, ty := ty }) fs.retTy))
+      ++ ri.structs.map (fun sd => (sd.name, SymKind.struct sd))
+      ++ ri.enums.map (fun ed => (ed.name, SymKind.enum ed))
+      ++ ri.typeAliases.map (fun (n, ty) => (n, SymKind.typeAlias ty))
+      ++ ri.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))
+      ++ implSigsToSymbols ri.implMethodSigs
+    let tys := ri.structs.map (·.name) ++ ri.enums.map (·.name) ++ ri.typeAliases.map (·.1)
+      ++ ri.newtypes.map (·.name)
+    some (syms, tys)
+
+/-- Bug 217: resolve a module and, recursively, every nested submodule (inline `mod x { .. }`
+    and every `mod x;` file of a project, std included). Before this only the modules of the
+    top-level list were walked, so a submodule produced no Resolve diagnostics and an unknown
+    cast target there reached the backend.
+
+    A submodule's symbol scope is the environment Check's `checkSubmodules`/`checkModule` give it,
+    in the same precedence: its imports (`submoduleImportScope`); its own declarations, with its
+    children's functions and foreign bindings by qualified name (`leaf_two`) and its children's
+    newtypes but not their other types or constants; then the structs, enums and public methods of the modules
+    declared beside it (which Check and Elab inject). Nothing of an enclosing module is in it:
+    an enclosing `enum E` or `enum Result` would otherwise answer, by first-wins lookup, where
+    Check selects a sibling's `E` or the builtin `Result` (Codex reviews of this fix), and the
+    program-wide `globalScope` would answer a user's non-generic `Result` inside `std.option`.
+    Its known type names are the same environment's, with nothing of an enclosing module either:
+    a type name Resolve admits and Check cannot expand reaches the backend. -/
+private partial def resolveModuleTreeErrors (summaryTable : List (String × FileSummary))
+    (m : Module) (summary : FileSummary) (scope : Scope) (knownTypes : List String)
+    (traitMethods : List (String × List String)) (traitImpls_ : List (String × String))
+    : Diagnostics :=
+  let errs := resolveModule m scope knownTypes traitMethods traitImpls_
+  let siblingSyms : List (String × SymKind) := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ s.structs.map (fun sd => (sd.name, SymKind.struct sd))
+      ++ s.enums.map (fun ed => (ed.name, SymKind.enum ed))
+      ++ implSigsToSymbols (s.implMethodSigs.filter fun (name, _) => s.publicNames.contains name)) []
+  let siblingTypes : List String := summary.submoduleSummaries.foldl (fun acc (_, s) =>
+    acc ++ s.structs.map (·.name) ++ s.enums.map (·.name)) []
+  m.submodules.foldl (fun acc sub =>
+    match submoduleImportScope summaryTable sub with
+    | none => acc
+    | some (impSyms, impTys) =>
+      let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
+        | some (_, s) => s
+        | none => buildFileSummary sub
+      -- Its own declarations without its children's (Check's `summary.structs`/`enums`/...).
+      let (declScope, declTypes) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
+      let childNewtypes : List String := subSummary.submoduleSummaries.foldl
+        (fun acc (_, c) => acc ++ c.newtypes.map (·.name)) []
+      -- Its children's functions and foreign bindings by qualified name (Check's `submoduleNames`).
+      let childFns : List (String × SymKind) := subSummary.submoduleSummaries.foldl
+        (fun acc (childName, c) => acc
+          ++ c.functions.map (fun (n, fs) => (s!"{childName}_{n}",
+              SymKind.fn (fs.params.map fun (pn, ty) => { name := pn, ty := ty }) fs.retTy))
+          ++ c.externFns.map (fun ef => (s!"{childName}_{ef.name}",
+              SymKind.externFn ef.params ef.retTy))
+          -- and its children's newtypes, which Check's `allNewtypes` includes (bug 229).
+          ++ c.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))) []
+      let subSyms := impSyms ++ declScope.symbols ++ childFns ++ siblingSyms
+      -- Its known types are the same environment's: its own (with the builtins), its children's
+      -- newtypes, its imports' and its siblings' (Codex review r4: inheriting the enclosing
+      -- module's let `outer`'s `type Nope` pass in `inner`, where Check cannot expand it, and the
+      -- cast reached the backend again).
+      let subTypes := declTypes ++ childNewtypes ++ impTys ++ siblingTypes
+      let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
+        subTypes traitMethods traitImpls_
+      acc ++ sErrs.stampFile sub.sourceFile) errs
 
 -- ============================================================
 -- Shallow (declaration-level) resolution
 -- ============================================================
 
-/-- Perform declaration-level resolution: build global scope, collect trait info,
-    validate imports, and check trait impl completeness. Works entirely from FileSummary artifacts. -/
-def resolveShallow (moduleSummaries : List FileSummary)
-    (summaryTable : List (String × FileSummary) := []) : ShallowResult :=
-  -- Build combined global scope from all module summaries
-  let (combinedScope, combinedTypes) := moduleSummaries.foldl (fun (scope, types) s =>
-    let (sScope, sTypes) := buildGlobalScopeFromSummary s
-    (Scope.ofSymbols (scope.symbols ++ sScope.symbols), types ++ sTypes)
-  ) (Scope.ofSymbols [], ([] : List String))
-  -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
-  -- so that B can use A::fn() syntax (parsed as A_fn).
-  let siblingQualified : List (String × SymKind) := moduleSummaries.foldl (fun acc s =>
-    if s.name == "main" then acc
-    else
-      let qualFns : List (String × SymKind) :=
-        (s.functions.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
-          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
-      let qualExterns : List (String × SymKind) :=
-        (s.externFns.filter fun ef => s.publicNames.contains ef.name).map fun ef =>
-          (s.name ++ "_" ++ ef.name, SymKind.externFn ef.params ef.retTy)
-      let qualImpls : List (String × SymKind) :=
-        (s.implMethodSigs.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
-          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
-      acc ++ qualFns ++ qualExterns ++ qualImpls
-  ) []
-  let combinedScope : Scope := Scope.ofSymbols (combinedScope.symbols ++ siblingQualified)
-  -- Collect trait methods and trait impls from all summaries
-  let traitMethods := moduleSummaries.foldl (fun acc s =>
-    acc ++ s.traits.map fun t => (t.name, t.methods.map (·.name))) []
-  let traitImpls_ := moduleSummaries.foldl (fun acc s =>
-    acc ++ s.traitImpls.map fun ti => (ti.typeName, ti.traitName)) []
-  -- Build per-module export tables (public symbols only) from summaryTable
+/-- One module's imports, validated against the summary table (E0110 unknown module, E0111
+    not public), with the symbols and type names they bring into its scope. For each
+    top-level module; a nested submodule's imports go through `submoduleImportScope`. -/
+private def summaryImports (summaryTable : List (String × FileSummary)) (s : FileSummary)
+    : Diagnostics × List (String × SymKind) × List String :=
   let fullExportTable := summaryTable.map fun (n, s) => (n, s.publicNames)
   -- Validate imports from summaries and add imported symbols to scope
-  let importsOf := fun (s : FileSummary) => [s].foldl (fun (errs, syms, tys) s =>
+  [s].foldl (fun (errs, syms, tys) s =>
     s.imports.foldl (fun (errs, syms, tys) imp =>
       match fullExportTable.find? (fun (n, _) => n == imp.moduleName) with
       | none =>
@@ -832,6 +935,39 @@ def resolveShallow (moduleSummaries : List FileSummary)
         ) (errs, syms, tys)
     ) (errs, syms, tys)
   ) (([] : Diagnostics), ([] : List (String × SymKind)), ([] : List String))
+
+/-- Perform declaration-level resolution: build global scope, collect trait info,
+    validate imports, and check trait impl completeness. Works entirely from FileSummary artifacts. -/
+def resolveShallow (moduleSummaries : List FileSummary)
+    (summaryTable : List (String × FileSummary) := []) : ShallowResult :=
+  -- Build combined global scope from all module summaries
+  let (combinedScope, combinedTypes) := moduleSummaries.foldl (fun (scope, types) s =>
+    let (sScope, sTypes) := buildGlobalScopeFromSummary s
+    (Scope.ofSymbols (scope.symbols ++ sScope.symbols), types ++ sTypes)
+  ) (Scope.ofSymbols [], ([] : List String))
+  -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
+  -- so that B can use A::fn() syntax (parsed as A_fn).
+  let siblingQualified : List (String × SymKind) := moduleSummaries.foldl (fun acc s =>
+    if s.name == "main" then acc
+    else
+      let qualFns : List (String × SymKind) :=
+        (s.functions.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
+          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+      let qualExterns : List (String × SymKind) :=
+        (s.externFns.filter fun ef => s.publicNames.contains ef.name).map fun ef =>
+          (s.name ++ "_" ++ ef.name, SymKind.externFn ef.params ef.retTy)
+      let qualImpls : List (String × SymKind) :=
+        (s.implMethodSigs.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
+          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+      acc ++ qualFns ++ qualExterns ++ qualImpls
+  ) []
+  let combinedScope : Scope := Scope.ofSymbols (combinedScope.symbols ++ siblingQualified)
+  -- Collect trait methods and trait impls from all summaries
+  let traitMethods := moduleSummaries.foldl (fun acc s =>
+    acc ++ s.traits.map fun t => (t.name, t.methods.map (·.name))) []
+  let traitImpls_ := moduleSummaries.foldl (fun acc s =>
+    acc ++ s.traitImpls.map fun ti => (ti.typeName, ti.traitName)) []
+  let importsOf := summaryImports summaryTable
   let perModule := moduleSummaries.map fun s => (s, importsOf s)
   let importErrors := perModule.flatMap fun (_, (e, _, _)) => e
   let importedSymbols := perModule.flatMap fun (_, (_, syms, _)) => syms
@@ -845,7 +981,8 @@ def resolveShallow (moduleSummaries : List FileSummary)
   , traitMethods := traitMethods
   , traitImpls := traitImpls_
   , errors := importErrors
-  , moduleScopes := moduleScopes }
+  , moduleScopes := moduleScopes
+  , summaryTable := summaryTable }
 
 -- ============================================================
 -- Body-level resolution
@@ -926,7 +1063,12 @@ def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (Li
     let scope := match shallow.moduleScopes.lookup m.name with
       | some own => Scope.ofSymbols (own ++ shallow.globalScope.symbols)
       | none => shallow.globalScope
-    let (rm, mErrs) := resolveModule m scope shallow.knownTypes shallow.traitMethods shallow.traitImpls
+    let summary := match shallow.summaryTable.lookup m.name with
+      | some s => s
+      | none => buildFileSummary m
+    let mErrs := resolveModuleTreeErrors shallow.summaryTable m summary scope shallow.knownTypes
+      shallow.traitMethods shallow.traitImpls
+    let rm : ResolvedModule := { module := m, globalScope := scope }
     (acc ++ [rm], errs ++ mErrs)
   ) ([], [])
   (resolved, shallow.errors ++ bodyErrors ++ exportErrors modules ++ linkNameConflicts modules)

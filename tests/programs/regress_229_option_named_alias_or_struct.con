@@ -1,0 +1,17 @@
+// Bug 229 (Codex review r4): only the enum table puts the builtin Option first. A type alias or a
+// struct named Option answers as itself in Resolve, as in Check and Elab; the first version of
+// the fix answered every Option with the builtin enum, refusing `let x: Option` for
+// `type Option = i32` (E0113) and `Option<i32, i32>` for a two-parameter struct. Exits 42.
+mod a {
+    type Option = i32;
+    pub fn f() -> Int { let x: Option = 40; return x as Int; }
+}
+
+mod b {
+    struct Copy Option<A, B> { a: A, b: B }
+    pub fn f() -> Int { let o: Option<i32, i32> = Option::<i32, i32> { a: 1, b: 1 }; return (o.a + o.b) as Int; }
+}
+
+fn main() -> Int {
+    return a::f() + b::f();
+}
