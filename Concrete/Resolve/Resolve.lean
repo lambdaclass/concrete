@@ -65,6 +65,7 @@ inductive ResolveError where
   | invalidExport (name : String) (symbol : String) (reason : String)
   | importAliasIsIntrinsic (name : String) (alias : String)
   | capParamNamesCapability (owner : String) (param : String)
+  | unknownBoundTrait (traitName : String) (param : String) (owner : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -89,6 +90,8 @@ def ResolveError.message : ResolveError → String
     s!"foreign binding '{name}' cannot bind the C symbol '{symbol}': {reason}"
   | .capParamNamesCapability owner param =>
     s!"capability parameter '{param}' of '{owner}' is spelled like a capability: a capability variable entails only itself, so a parameter named '{param}' would stand for the real capability '{param}' without being granted it; rename the parameter"
+  | .unknownBoundTrait traitName param owner =>
+    s!"unknown trait '{traitName}' in the bound on '{param}' of '{owner}': a bound names `Copy`, `Destroy` or a trait declared in this module (traits are module-local and cannot be imported)"
   | .importAliasIsIntrinsic name alias =>
     s!"'{name}' may not be imported as '{alias}': '{alias}' is the name of a compiler intrinsic, so a call spelled '{alias}' is compiled as the intrinsic and never reaches '{name}'"
   | .invalidExport name symbol reason =>
@@ -195,6 +198,7 @@ def ResolveError.code : ResolveError → String
   | .invalidExport _ _ _ => "E0119"
   | .importAliasIsIntrinsic _ _ => "E0120"
   | .capParamNamesCapability _ _ => "E0121"
+  | .unknownBoundTrait _ _ _ => "E0125"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -749,6 +753,31 @@ private def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   m.traitImpls.foldl (fun ctx ti =>
     ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
 
+/-- Bug 231: every trait a bound names resolves (MOD-1). The traits a module's bounds may name are
+    the ones Check gives that module (`allTraits`: the builtin `Destroy` and the module's own
+    traits, with `Copy` read by `checkTraitBounds`); traits are module-local and cannot be imported
+    (TRAIT spec). Nothing checked the names, so a bound on an undeclared trait was accepted: a
+    generic function nobody called compiled, and a bound naming an enclosing module's trait in a
+    nested module was satisfied by spelling at the call while its methods were unknown in the body. -/
+private def boundTraitsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+  let known : List String := "Copy" :: destroyTraitName :: m.traits.map (·.name)
+  let check (owner : String) (bounds : List (String × List String)) (sp : Span) (ctx : ResolveCtx)
+      : ResolveCtx :=
+    bounds.foldl (fun ctx (param, traits) =>
+      traits.foldl (fun ctx tr =>
+        if known.contains tr then ctx
+        else addError ctx (.unknownBoundTrait tr param owner) (some sp)) ctx) ctx
+  let ctx := m.functions.foldl (fun ctx f => check f.name f.typeBounds f.span ctx) ctx
+  let ctx := m.structs.foldl (fun ctx sd => check sd.name sd.typeBounds sd.span ctx) ctx
+  let ctx := m.enums.foldl (fun ctx ed => check ed.name ed.typeBounds ed.span ctx) ctx
+  let ctx := m.newtypes.foldl (fun ctx nt => check nt.name nt.typeBounds nt.span ctx) ctx
+  let ctx := m.implBlocks.foldl (fun ctx ib =>
+    let ctx := check ib.typeName ib.typeBounds ib.span ctx
+    ib.methods.foldl (fun ctx f => check s!"{ib.typeName}::{f.name}" f.typeBounds f.span ctx) ctx) ctx
+  m.traitImpls.foldl (fun ctx ti =>
+    let ctx := check s!"impl {ti.traitName} for {ti.typeName}" ti.typeBounds ti.span ctx
+    ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.typeBounds f.span ctx) ctx) ctx
+
 /-- Resolve all names in one module's declarations and bodies (not its submodules: see
     `resolveModuleTreeErrors`). -/
 private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
@@ -775,6 +804,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
+  let boundErrors := (boundTraitsCheck m externCtx0).errors
   -- Bug 215 (Codex review): a constant's declared type and initializer are written types and
   -- an expression like any function body's; the initializer was never walked, so
   -- `const X: Int = (7 as Nope) as Int` reached the backend.
@@ -782,7 +812,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     let ctx := checkTyDeep externCtx0 c.ty (some c.span)
     acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
-    ++ constErrors
+    ++ boundErrors ++ constErrors
   allErrors
 
 /-- The names a nested submodule's imports bring into its scope, by the rule Check and Elab

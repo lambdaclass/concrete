@@ -1,0 +1,17 @@
+// Bug 231: an enclosing module's trait is not in a nested module's scope (Check gives the nested
+// module only its own traits and the builtin `Destroy`), so a bound there naming it is refused
+// (E0125). It used to be accepted: the call site checked the bound by spelling and the program
+// ran, while a method call through the same bound in the nested body was E0265 ("no method").
+mod lib {
+    pub trait Acc { fn get(&self) -> i64; }
+    pub struct Copy S { pub t: i64 }
+    impl Acc for S { fn get(&self) -> i64 { return self.t; } }
+    mod deep {
+        pub fn pass<A: Acc>(a: A) -> A { return a; }
+    }
+    pub fn g() -> i64 { let s: S = S { t: 42 }; let r: S = deep::pass(s); return r.t; }
+}
+
+fn main() -> Int {
+    return lib::g() as Int;
+}

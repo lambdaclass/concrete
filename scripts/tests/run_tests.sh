@@ -8522,6 +8522,20 @@ for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_no
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 231: a bound names `Copy`, `Destroy` or a trait of its module (MOD-1, E0125); no bound name
+# was resolved, so an undeclared trait compiled and an enclosing module's trait was satisfied by
+# spelling in a nested module. The positive control keeps every trait Check gives a module.
+run_err "$TESTDIR/error_231_unknown_bound_trait.con" "(E0125)"
+run_err "$TESTDIR/error_231_enclosing_trait_bound.con" "(E0125)"
+run_ok "$TESTDIR/regress_231_bounds_name_module_traits.con" 42
+r231_interp=$($COMPILER "$TESTDIR/regress_231_bounds_name_module_traits.con" --interp 2>&1 || true)
+if [ "$r231_interp" = "42" ]; then
+    echo "  ok  bug 231: bounds on module traits, Copy and Destroy — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 231: regress_231_bounds_name_module_traits --interp gave '$r231_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # The enclosing module's `enum Result` is not in the nested scope. Front end and interpreter only:
 # the native build meets bug 227 (Lower looks enums up by spelling), pinned in check_example_outputs.
 r217_src="$TESTDIR/regress_217_enclosing_type_not_in_scope.con"

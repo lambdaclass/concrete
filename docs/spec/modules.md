@@ -23,7 +23,7 @@ work starts. The design record is
 
 - Kind: refusal
 - Uses: none
-- Codes: E0100 (resolve), E0101 (resolve), E0102 (resolve), E0103 (resolve), E0104 (resolve), E0105 (resolve), E0106 (resolve), E0107 (resolve), E0108 (resolve), E0109 (resolve), E0112 (resolve), E0200 (check), E0201 (check), E0202 (check), E0263 (check), E0267 (check)
+- Codes: E0100 (resolve), E0101 (resolve), E0102 (resolve), E0103 (resolve), E0104 (resolve), E0105 (resolve), E0106 (resolve), E0107 (resolve), E0108 (resolve), E0109 (resolve), E0112 (resolve), E0125 (resolve), E0200 (check), E0201 (check), E0202 (check), E0263 (check), E0267 (check)
 - Status: enforced
 - Enforced by: Concrete.Pipeline.resolve
 - Semantics: none

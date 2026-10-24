@@ -1,0 +1,12 @@
+// Bug 231: a bound must name a trait (MOD-1): `Copy`, `Destroy` or a trait declared in the
+// module (traits are module-local and cannot be imported). Nothing resolved the names in a
+// bound, so a generic function bounded by an undeclared trait compiled when nothing called it,
+// and a call met only a misleading E0241 ("type 'i64' does not implement trait 'NoSuchTrait'").
+// Each declaration form carries a bound: Resolve refuses each with E0125.
+struct Holder<T: NoSuchTrait> { v: T }
+
+fn id<A: NoSuchTrait>(a: A) -> A { return a; }
+
+fn main() -> Int {
+    return 42;
+}

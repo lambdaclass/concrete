@@ -6291,6 +6291,7 @@ def diagnosticCodesReport : String :=
     entry "E0122" "resolve" "error" "a `mod X;` module file not found (bug 206)",
     entry "E0123" "resolve" "error" "a module file loaded twice (a `mod` cycle or two declarations; bug 206)",
     entry "E0124" "resolve" "error" "a module file holds other than one module (bug 206)",
+    entry "E0125" "resolve" "error" "unknown trait in a bound (bug 231)",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",

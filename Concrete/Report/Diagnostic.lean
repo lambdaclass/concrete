@@ -103,7 +103,7 @@ def codeRuleTag : String → Option String
   | "E0283" => some "SYN-3@1"
   -- docs/spec/modules.md
   | "E0100" | "E0101" | "E0102" | "E0103" | "E0104" | "E0105" | "E0106" | "E0107" | "E0108"
-  | "E0109" | "E0112" | "E0200" | "E0201" | "E0202" | "E0263" | "E0267" => some "MOD-1@1"
+  | "E0109" | "E0112" | "E0125" | "E0200" | "E0201" | "E0202" | "E0263" | "E0267" => some "MOD-1@1"
   | "E0110" | "E0111" | "E0284" | "E0285" | "E0418" | "E0419" => some "MOD-2@1"
   | "E0299" | "E0120" | "E0578" => some "MOD-3@2"
   -- docs/spec/trusted.md and docs/spec/ffi.md
