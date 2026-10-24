@@ -1,0 +1,17 @@
+// Bug 225 regression: a refused trait bound names the type it refused and the call that needed
+// it. The Copy check rendered every type that is not a named type as `<type>`, and no E0241 had a
+// source position. Expected: E0241 naming `String`, at the call on line 12 and the method call on
+// line 14.
+mod m {
+    struct Copy W<T> { v: T }
+    impl<T: Copy> W<T> {
+        fn get(&self) -> T { return self.v; }
+    }
+    fn dup<T: Copy>(x: T) -> T { return x; }
+    pub fn main() -> i64 {
+        let t: String = dup("ab");
+        let w: W<String> = W::<String> { v: "cd" };
+        let u: String = w.get();
+        return 0;
+    }
+}

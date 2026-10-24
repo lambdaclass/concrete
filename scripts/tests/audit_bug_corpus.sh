@@ -132,6 +132,12 @@ declare -A BUG_TEST_MAP=(
   [212]="error_212_const_in_if_head.con"
   # Bug 214: two leaking returns gave two identical E0208 refusals; each now names its return.
   [214]="error_214_two_returns_leak.con"
+  # Bug 225: a refused bound names a builtin type and the call's position (run_tests.sh checks lines 12 and 14).
+  [225]="error_225_bound_names_builtin_type.con"
+  # Bug 224: a failed `let mut` keeps its mutability in recovery (run_tests.sh: E0217 at line 14 only).
+  [224]="error_224_failed_let_keeps_mutability.con"
+  # Bug 222: an imported enum brings its impls (run_tests.sh also compares --interp with the binary).
+  [222]="regress_222_imported_enum_impls.con"
   # Bug 221: a call's explicit type-argument list of the wrong length (E0322).
   [221]="error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con"
   # Bug 220: a radix prefix with no digits (E0001).
@@ -246,6 +252,7 @@ declare -A BUG_TEST_MAP=(
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
   [219]="FIXED 2026-10-23 -- mutation 31 was anchored on the proof-only cExprToPExpr wrapper and survived. Regression vehicle is the mutation harness (family 31 KILLED), not a tests/programs fixture"
+  [223]="OPEN -- an imported type under an alias is a different type (no methods, E0264; the original's values do not match, E0220); owner R-0492/R-0514 identity migration; reproducer tests/regressions/bug223_aliased_import_distinct_type/repro.con, found by the Phase 7 workload 10 probes 2026-10-24; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails)"
   [217]="OPEN -- Resolve does not walk bodies in nested submodules, so a cast to an unknown type two modules deep reaches the backend (panic) and other name errors there get Check's codes; reproducer tests/regressions/bug217_resolve_skips_nested_submodules/repro.con, found by the Codex review of bug 215 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails)"
   [216]="OPEN -- a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused (needs the OWN-10 scope decision); reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)"
   [209]="FIXED 2026-10-23 -- a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture"

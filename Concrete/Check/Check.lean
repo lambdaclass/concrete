@@ -1365,7 +1365,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       refuseNestedRefInstantiation s!"generic function '{fnName}'" mapping (sig.params.map (·.2)) sig.retTy
       -- Check trait bounds
       if !sig.typeBounds.isEmpty then
-        checkTraitBounds sig.typeBounds mapping s!"generic function '{fnName}'"
+        checkTraitBounds sig.typeBounds mapping s!"generic function '{fnName}'" (some e.getSpan)
       let paramTypes := sig.params.map fun (n, t) => (n, substTy mapping t)
       let retTy := substTy mapping sig.retTy
       -- Resolve capability variables from argument types
@@ -3137,14 +3137,16 @@ partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
       -- so later statements referencing it don't cascade spurious errors.
       setEnv envBefore
       match stmt with
-      | .letDecl ldSp name _ ty _ _ =>
+      | .letDecl ldSp name mutable ty _ _ =>
         let placeholderTy := ty.getD .placeholder
         -- A declared type addVar itself rejects (E0239) would throw from the
         -- recovery path and drop the diagnostics already accumulated.
         let placeholderTy := if tyHoldsRefInAggregate placeholderTy then .placeholder else placeholderTy
-        -- recovery only: a binder the walk did not mint (`let _`) gets no binding
+        -- recovery only: a binder the walk did not mint (`let _`) gets no binding.
+        -- Bug 224: the binding keeps the declaration's mutability; recovering a `let mut`
+        -- as immutable gave every later assignment to it a false E0217.
         if let some id := (← getEnv).locals.binderAt? (.site (SiteKey.ofSpan ldSp) name) then
-          addVar { id, name } placeholderTy false
+          addVar { id, name } placeholderTy mutable
       | _ => pure ()
   if !accumulated.isEmpty then
     throw accumulated

@@ -1,0 +1,115 @@
+// Bug 222 regression: an imported enum brings its impl blocks and trait impls. The struct and
+// newtype import paths each restated "the impls of this type travel with it" and the enum paths
+// (direct import and the transitive closure) omitted it, so outside its module an enum's methods
+// were E0264 and its trait bounds E0241. Every imported type kind now takes its impls from one
+// helper (`typeImplsOf` in Resolve/FileSummary.lean).
+mod m {
+    mod shapes {
+        pub trait Area {
+            fn area(&self) -> i64;
+        }
+
+        pub enum Copy Shape {
+            Square { side: i64 },
+            Rect { w: i64, h: i64 },
+            Empty,
+        }
+
+        impl Shape {
+            pub fn square(side: i64) -> Shape { return Shape::Square { side: side }; }
+            pub fn is_empty(&self) -> bool {
+                match self {
+                    Shape::Empty => { return true; },
+                    _ => { return false; },
+                }
+            }
+        }
+
+        impl Area for Shape {
+            pub fn area(&self) -> i64 {
+                match self {
+                    Shape::Square { side } => { return *side * *side; },
+                    Shape::Rect { w, h } => { return *w * *h; },
+                    Shape::Empty => { return 0; },
+                }
+            }
+        }
+
+        // A struct whose field is the enum: importing only the struct pulls the enum in through
+        // the transitive closure, and the enum's impls must come with it there too.
+        pub struct Copy Tile {
+            pub shape: Shape,
+            pub count: i64,
+        }
+
+        // Traits are module-local (TRAIT spec: they cannot be imported), so a bound on one is
+        // written in its module; the call below, from another module, checks the imported
+        // enum against it (E0241 before the fix).
+        pub fn total<T: Area>(x: &T) -> i64 { return x.area(); }
+
+        // A linear enum whose Destroy impl adds `step` to a counter: a Destroy bound on it
+        // (E0241 before the fix) and the destructor actually running are both observed.
+        pub enum Ticket { Add { cell: *mut u64, step: u64 } }
+
+        impl Destroy for Ticket {
+            trusted fn destroy(&self) {
+                match self {
+                    Ticket::Add { cell, step } => {
+                        let p: *mut u64 = *cell;
+                        *p = *p + *step;
+                    },
+                }
+            }
+        }
+
+        pub fn kill<T: Destroy>(x: T) with(Alloc) { x.destroy(); }
+
+        pub trusted fn read(p: *mut u64) -> u64 { return *p; }
+
+        pub fn rect_tile(w: i64, h: i64, n: i64) -> Tile {
+            return Tile { shape: Shape::Rect { w: w, h: h }, count: n };
+        }
+    }
+
+    mod user {
+        import m.shapes.{Shape, total};
+
+        pub fn run() -> i64 {
+            let a: Shape = Shape::square(3);                  // static method (E0264 before)
+            let b: Shape = Shape::Rect { w: 2, h: 4 };
+            let e: Shape = Shape::Empty;
+            let mut r: i64 = a.area() + total(&b);            // trait method 9, bound 8
+            if e.is_empty() { r = r + 1; }                    // inherent method
+            return r;                                         // 18
+        }
+    }
+
+    mod tickets {
+        import m.shapes.{Ticket, kill, read};
+
+        pub fn run_tickets() with(Alloc, Unsafe) -> i64 {
+            let mut c: u64 = 0;
+            let cell: *mut u64 = &mut c as *mut u64;
+            kill(Ticket::Add { cell: cell, step: 5 });
+            kill(Ticket::Add { cell: cell, step: 7 });
+            return read(cell) as i64;                         // 12
+        }
+    }
+
+    mod closure {
+        import m.shapes.{Tile, rect_tile};
+
+        pub fn run_tile() -> i64 {
+            let t: Tile = rect_tile(3, 7, 2);
+            return t.shape.area() + t.count + 1;                    // 21 + 2 + 1
+        }
+    }
+
+    import user.{run};
+    import closure.{run_tile};
+    import tickets.{run_tickets};
+
+    pub fn main() with(Std, Unsafe) -> i64 {
+        return run() + run_tile() + run_tickets() - 12;    // 18 + 24 + 12 - 12 = 42
+    }
+}

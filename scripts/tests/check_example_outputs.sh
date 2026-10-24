@@ -495,6 +495,7 @@ open_bug_reproducers() {
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 217|bug217_resolve_skips_nested_submodules/repro.con|compile-fails|unknown named type 'Nope'
+223|bug223_aliased_import_distinct_type/repro.con|compile-fails|(E0264) no method 'mk' on type 'Q'
 TABLE
 }
 if [ -z "$ONLY" ]; then

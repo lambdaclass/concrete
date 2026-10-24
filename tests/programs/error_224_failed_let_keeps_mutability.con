@@ -1,0 +1,17 @@
+// Bug 224 regression: a `let` whose initializer fails to check is recovered as a binding so later
+// statements do not cascade, and the recovered binding keeps the declaration's mutability. It was
+// always recovered as immutable, so the assignment to `r` below got a false E0217 next to the
+// real E0241. Expected: E0241 for each initializer, and E0217 only for `q`, which is not `mut`.
+mod m {
+    trait A { fn a(&self) -> i64; }
+    struct Copy S { v: i64 }
+    fn need<T: A>(x: &T) -> i64 { return 1; }
+    pub fn main() -> i64 {
+        let s: S = S { v: 1 };
+        let mut r: i64 = need(&s);
+        r = r + 1;
+        let q: i64 = need(&s);
+        q = 2;
+        return r + q;
+    }
+}

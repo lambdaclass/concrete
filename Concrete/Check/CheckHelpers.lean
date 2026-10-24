@@ -1079,8 +1079,16 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     soundness gap). -/
 -- spec: TRAIT-10 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
-    (context : String) : CheckM Unit := do
+    (context : String) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
+  -- Bug 225: one rendering of the type a refused bound names, and every refusal at the call.
+  -- The Copy branch kept its own rendering, which printed every builtin type as `<type>`, and
+  -- no branch passed a position, so an E0241 named no line.
+  let boundSubject : Ty → String := fun
+    | .named n | .generic n _ _ | .typeVar n => n
+    | t => tyToString t
+  let refuse (tn traitName : String) : CheckM Unit :=
+    throwCheck (.traitBoundNotSatisfied tn traitName context) span
   for (paramName, requiredTraits) in bounds do
     match mapping.lookup paramName with
     | some concreteType0 =>
@@ -1107,8 +1115,7 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
       for traitName in requiredTraits do
         if traitName == "Copy" then
           if !(← isCopyType concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | _ => "<type>"
-            throwCheck (.traitBoundNotSatisfied tn "Copy" context)
+            refuse (boundSubject concreteType) "Copy"
         else if traitName == "Destroy" then
           -- H18 drop-glue: a `Destroy` BOUND means "destroyable" — satisfied by
           -- Copy (trivial destruction; mono elides the T_destroy call), by an
@@ -1148,26 +1155,25 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
               | .heap _ | .heapArray _ | .refMut _ => return false
               | _ => return true  -- remaining shapes are Copy (handled above)
           if !(← destroyable 8 concreteType) then
-            let tn := match concreteType with | .named n => n | .generic n _ _ => n | .typeVar n => n | t => tyToString t
-            throwCheck (.traitBoundNotSatisfied tn "Destroy" context)
+            refuse (boundSubject concreteType) "Destroy"
         else
           match concreteType with
           | .named tn | .generic tn _ _ =>
             if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
-              throwCheck (.traitBoundNotSatisfied tn traitName context)
+              refuse tn traitName
           | .typeVar n =>
             -- caller's own type param: satisfied if the caller declares the
             -- same trait bound on it
             let callerBounds := (env.currentTypeBounds.find? fun (bn, _) => bn == n).map Prod.snd |>.getD []
             if !callerBounds.contains traitName then
-              throwCheck (.traitBoundNotSatisfied n traitName context)
+              refuse n traitName
           | t =>
             -- Bug 204: a primitive (or any other unnamed) type argument needs an impl too. An
             -- impl of a primitive names it by any spelling of its canonical type (`Int`/`i64`,
             -- the TRAIT-D1 reading), so the impl's head is compared canonically. This arm
             -- skipped the check, and the missing method surfaced only in the backend.
             if !(env.traitImpls.any fun (tn, tr) => tr == traitName && tyCanonical (tyFromName tn) == tyCanonical t) then
-              throwCheck (.traitBoundNotSatisfied (tyToString t) traitName context)
+              refuse (boundSubject t) traitName
     | none => pure ()
 
 /-- Infer a method's OWN type params and capability params from its argument
@@ -1203,7 +1209,7 @@ partial def inferMethodParamAndRetTys
   -- value accessor uncallable on a non-Copy container — closing the
   -- decorative-impl-bound soundness gap.
   if !sig.typeBounds.isEmpty then
-    checkTraitBounds sig.typeBounds fullMapping s!"method '{callName}'"
+    checkTraitBounds sig.typeBounds fullMapping s!"method '{callName}'" (some sp)
   -- References are second-class: a type parameter instantiated to a reference
   -- may not occur in the return type (else `m<R>(...) -> Option<R>` with R=&V is
   -- a generic backdoor to returning a reference). VALUE_MODEL.md.

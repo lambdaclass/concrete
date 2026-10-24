@@ -8403,6 +8403,42 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241
+# outside its module, directly imported and through the transitive closure); binary and --interp
+# must agree on 42.
+run_ok "$TESTDIR/regress_222_imported_enum_impls.con" 42
+r222_interp=$($COMPILER "$TESTDIR/regress_222_imported_enum_impls.con" --interp 2>&1 || true)
+if [ "$r222_interp" = "42" ]; then
+    echo "  ok  bug 222: an imported enum's impls travel with it — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 222: interp gave '$r222_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 224: a `let` whose initializer fails is recovered with the declaration's mutability, so the
+# assignment to the `let mut` (line 12) gets no E0217 and the one to the plain `let` (line 14) does.
+run_err "$TESTDIR/error_224_failed_let_keeps_mutability.con" "(E0241)"
+r224_out=$($COMPILER "$TESTDIR/error_224_failed_let_keeps_mutability.con" --emit-llvm 2>&1 >/dev/null || true)
+if ! grep -q ':12:[0-9]*: error\[check\]: (E0217)' <<<"$r224_out" \
+   && grep -q ':14:[0-9]*: error\[check\]: (E0217)' <<<"$r224_out"; then
+    echo "  ok  bug 224: a recovered let keeps its mutability (E0217 at line 14 only)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 224: E0217 lines are $(grep -o ':[0-9]*:[0-9]*: error\[check\]: (E0217)' <<<"$r224_out" | tr '\n' ' '), want line 14 only"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 225: a refused bound names a builtin type as itself and carries the call's position.
+run_err "$TESTDIR/error_225_bound_names_builtin_type.con" "type 'String' does not implement trait 'Copy' required by generic function 'dup'"
+r225_out=$($COMPILER "$TESTDIR/error_225_bound_names_builtin_type.con" --emit-llvm 2>&1 >/dev/null || true)
+if grep -q ":12:[0-9]*: error\[check\]: (E0241) type 'String' .* generic function 'dup'" <<<"$r225_out" \
+   && grep -q ":14:[0-9]*: error\[check\]: (E0241) type 'String' .* method 'get'" <<<"$r225_out" \
+   && ! grep -q "<type>" <<<"$r225_out"; then
+    echo "  ok  bug 225: E0241 names String at the call (lines 12 and 14)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 225: E0241 does not name String at lines 12 and 14: $(grep 'E0241' <<<"$r225_out" | head -2)"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 221: a call's explicit type-argument list of the wrong length was zipped (extras dropped).
 run_err "$TESTDIR/error_221_extra_type_argument.con" "(E0322)"
 run_err "$TESTDIR/error_221_type_argument_to_plain_fn.con" "(E0322)"

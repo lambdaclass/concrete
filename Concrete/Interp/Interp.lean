@@ -3148,7 +3148,7 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
     | .cont l => return (env, .cont l)
 
   | .while_ cond body label step =>
-    evalWhile cx env cond body step cx.loopFuel label
+    evalWhile cx env.length env cond body step cx.loopFuel label
 
   | .fieldAssign obj field value => do
     let (env, newVal) ← evalExprVal cx env value
@@ -3282,7 +3282,15 @@ partial def evalStmtsD (cx : Ctx) (env : Env)
 partial def evalStmts (cx : Ctx) (env : Env) (stmts : List CStmt) : IM (Env × Flow) :=
   evalStmtsD cx env [] stmts
 
-partial def evalWhile (cx : Ctx) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : IM (Env × Flow) := do
+/-- Bug 226: `baseLen` is the environment's length when the loop was entered. Each iteration's
+    bindings (the body's `let`s, the condition's temporaries) are dropped before the next
+    iteration and when the loop ends, as `evalWhileExpr` already did at its end. They used to be
+    carried into the next iteration, so the environment grew by every binding of every iteration
+    and each lookup or assignment of an outer variable walked all of them: a loop's cost was
+    quadratic in its iteration count. Assignments to outer variables update entries below
+    `baseLen`, which are kept. -/
+partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : IM (Env × Flow) := do
+  let restore := fun (e : Env) => e.drop (e.length - baseLen)
   if fuel == 0 then fail s!"{loopBudgetExhausted} (iteration limit reached)"
   else
     -- A `break`/`continue` escaping from the CONDITION belongs to this loop (Lower installs the
@@ -3294,38 +3302,38 @@ partial def evalWhile (cx : Ctx) (env : Env) (cond : CExpr) (body : List CStmt) 
         | e => throw e
     match condR with
     | .inr (env', .brk bv l) =>
-      if l == none || l == loopLabel then return (env', .val .unit) else return (env', .brk bv l)
+      if l == none || l == loopLabel then return (restore env', .val .unit) else return (restore env', .brk bv l)
     | .inr (env', .cont l) =>
       if l == none || l == loopLabel then
         let (stepEnv, _) ← evalStmts cx env' step
-        evalWhile cx stepEnv cond body step (fuel - 1) loopLabel
-      else return (env', .cont l)
-    | .inr (env', f) => return (env', f)
+        evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
+      else return (restore env', .cont l)
+    | .inr (env', f) => return (restore env', f)
     | .inl (env, cv) =>
     match cv with
-    | .bool false => return (env, .val .unit)
+    | .bool false => return (restore env, .val .unit)
     | .bool true =>
       let (bodyEnv, flow) ← evalStmts cx env body
       match flow with
-      | .ret v => return (bodyEnv, .ret v)
+      | .ret v => return (restore bodyEnv, .ret v)
       | .brk bv brkLabel =>
         -- Caught here only if bare (`none`) or targeting THIS loop's label;
         -- otherwise re-propagate so the targeted outer loop breaks.
-        if brkLabel == none || brkLabel == loopLabel then return (bodyEnv, .val .unit)
-        else return (bodyEnv, .brk bv brkLabel)
+        if brkLabel == none || brkLabel == loopLabel then return (restore bodyEnv, .val .unit)
+        else return (restore bodyEnv, .brk bv brkLabel)
       | .val _ =>
         -- Step is already included in body (for-loop desugaring appends it).
         -- Only run step explicitly on continue (where body was cut short).
-        evalWhile cx bodyEnv cond body step (fuel - 1) loopLabel
+        evalWhile cx baseLen (restore bodyEnv) cond body step (fuel - 1) loopLabel
       | .cont contLabel =>
         if contLabel == none || contLabel == loopLabel then
           -- Continue skips the rest of body, so run step before looping.
           let (stepEnv, _) ← evalStmts cx bodyEnv step
-          evalWhile cx stepEnv cond body step (fuel - 1) loopLabel
+          evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
         else
           -- Continue targets an OUTER loop: this loop terminates and the signal
           -- propagates up (the outer loop runs its own next iteration).
-          return (bodyEnv, .cont contLabel)
+          return (restore bodyEnv, .cont contLabel)
     | _ => fail "interp: while condition is not a boolean"
 
 /-- `while cond { body } else { elseBody }` as a value-producing expression
