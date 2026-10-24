@@ -150,7 +150,7 @@ mod isa {
     }
 
     impl Encode for Instr {
-        fn encode(&self, out: &mut Bytes) with(Alloc) {
+        pub fn encode(&self, out: &mut Bytes) with(Alloc) {
             out.push(opcode(self));
             match self {
                 Instr::Push { value } => { push_le(out, *value as u64, 8); },
@@ -166,7 +166,7 @@ mod isa {
     }
 
     impl Encode for Func {
-        fn encode(&self, out: &mut Bytes) with(Alloc) {
+        pub fn encode(&self, out: &mut Bytes) with(Alloc) {
             push_le(out, self.entry, 4);
             push_le(out, self.len, 4);
             push_le(out, self.nparams, 1);

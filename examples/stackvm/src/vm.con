@@ -168,7 +168,13 @@ mod vm {
                 let b: Option<i64> = pop1(vm);
                 let a: Option<i64> = pop1(vm);
                 if a.is_none() || b.is_none() { return fail("stack underflow"); }
-                discard(push(vm, b.unwrap_or(0)));
+                // Two values were just popped, so neither push can overflow; the first
+                // push's Step still has to be taken apart (it is linear: Fail owns a String).
+                match push(vm, b.unwrap_or(0)) {
+                    Step::Fail { msg } => { return Step::Fail { msg: msg }; },
+                    Step::Next => {},
+                    Step::Done => {},
+                }
                 vm.pc = next_pc;
                 return push(vm, a.unwrap_or(0));
             },
@@ -301,7 +307,8 @@ mod vm {
         defer drop_vm(vm);
         match call(&mut vm, p, main_idx, 0) {
             Step::Fail { msg } => { msg.drop(); },
-            _ => {},
+            Step::Next => {},
+            Step::Done => {},
         }
         return loop_run(&mut vm, p);
     }
