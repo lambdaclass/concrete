@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 8** (1 silent, 1 loud, 6 filed before the discovery record) of 185 bug records.
+**Open bugs: 10** (1 silent, 3 loud, 6 filed before the discovery record) of 194 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -118,14 +118,14 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| interp-coverage: interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary | 2026-10-21 | unrecorded | 2 | 2 | 0 | found bugs |
 | fuzz: fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z | 2026-10-22 | 269145 programs | 1 | 1 | 0 | found bugs |
 | semantics: language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3 | 2026-10-23 | 47 programs | 2 | 2 | 0 | found bugs |
 | spec: language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews) | 2026-10-23 | 29 programs | 4 | 4 | 0 | found bugs |
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |
 | workload: Phase 7 workload 9 lzpack (LZSS + PackBits codec, CRC container) and nine probe programs on its shapes (fixed-array hash chains through &mut, ring buffer, Huffman tree, trait codecs, fn values in structs, shift and cast edges, nested linear Result/Option, borrow and defer forms), plus a 400-case corrupt-stream fuzz against a Python reference | 2026-10-23 | 10 programs | 2 | 0 | 2 | found bugs |
+| fuzz: fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus about 100 hand probes after R-0492 steps 1-3 (shadowing, fn-pointer locals, generics, match through references, defer exits, nested modules, diagnostics) | 2026-10-23 | 113 programs | 8 | 5 | 3 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 13 counting batches recorded. 35 attribution-only batches (reviews, follow-ons, CI, controls, development) found 47 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 14 counting batches recorded. 36 attribution-only batches (reviews, follow-ons, CI, controls, development) found 48 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
