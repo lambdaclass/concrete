@@ -8447,7 +8447,7 @@ if grep -q ":12:[0-9]*: error\[check\]: (E0241) type 'String' .* generic functio
     echo "  ok  bug 225: E0241 names String at the call (lines 12 and 14)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  bug 225: E0241 does not name String at lines 12 and 14: $(grep 'E0241' <<<"$r225_out" | head -2)"
+    echo "FAIL  bug 225: E0241 does not name String at lines 12 and 14: $(grep 'E0241' <<<"$r225_out" | awk "NR<=2")"
     FAIL=$((FAIL + 1))
 fi
 # Bug 221: a call's explicit type-argument list of the wrong length was zipped (extras dropped).
