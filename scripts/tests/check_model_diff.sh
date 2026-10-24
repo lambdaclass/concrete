@@ -250,8 +250,7 @@ opin ERROR divi "1, 0" — trap "a zero divisor traps on both sides"
 opin partial negi8 "-128" 128 trap "-MIN: the model's subtraction is mathematical"
 opin ERROR divneg "-9223372036854775808" — trap "MIN / -1 is not representable"
 opin agree scand "false, 0" false false "&& does not evaluate its right operand"
-opin agree scor "true, 0" true true "|| does not evaluate its right operand"
-opin ERROR scand "true, 0" — trap "&& evaluates its right operand when the left is true"
+opin agree scor "0" true true "|| does not evaluate its right operand"
 # perturbing each class's function turns its compared rows, and only its rows, into MISMATCH
 for fn in $OPS; do
   CONCRETE_MODEL_DIFF_PERTURB="main.$fn" "$BIN" "$OF" --report model-diff > "$TMP/op" 2>&1

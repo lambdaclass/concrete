@@ -14,9 +14,10 @@ fn negi8(a: i8) -> i8 { return -a; }
 fn notb(a: bool) -> bool { return !a; }
 // MIN / -1 is not representable: both sides are stuck (the model) or abort (the runtime)
 fn divneg(a: Int) -> Int { return a / -1; }
-// short circuit: with `a` false (or true for ||) the division by zero is never evaluated
+// short circuit: with `a` false the division by zero is never evaluated; with n == 0 it is
+// never evaluated either, since the left operand of || already decides
 fn scand(a: bool, n: Int) -> bool { return a && 10 / n > 1; }
-fn scor(a: bool, n: Int) -> bool { return a || 10 / n > 1; }
+fn scor(n: Int) -> bool { return n == 0 || 10 / n > 1; }
 
 fn main() -> Int {
     return divi(84, 2) - 42;
