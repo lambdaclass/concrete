@@ -152,8 +152,11 @@ open SingleCopyProbe in
   let (ctl, _) ← sites ctor creach
   let ctlNames := (ctl.map fun (n, k) => ((privateToUserName? n).getD n, k)).toArray.qsort
     (fun a b => a.1.toString < b.1.toString) |>.toList
-  say (ctlNames == [(``Control.extractor._extra, 1), (``Control.hidden_mutual_helper, 1),
-                    (``Control.privHelper, 1)])
+  -- compared as declared names (a double-backtick name of a private declaration resolves to its
+  -- mangled form)
+  say ((ctlNames.map fun (n, k) => (n.toString, k)) ==
+        [("SingleCopyProbe.Control.extractor._extra", 1), ("SingleCopyProbe.Control.hidden_mutual_helper", 1),
+         ("SingleCopyProbe.Control.privHelper", 1)])
     s!"CONTROL: reachable helpers are found, whatever their names, private ones included (found {ctlNames})"
   let (pat, _) ← sites ctor [``Control.patternOnly]
   say pat.isEmpty s!"CONTROL: a `match h :` pattern is not a construction (found {pat})"
