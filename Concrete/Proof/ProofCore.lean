@@ -658,6 +658,9 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   -- (the proof discharges the no-overflow side condition); modeling it as `addw`
   -- would be unsound — it would certify wrapping the runtime never performs.
   | .wrappingAdd, .u32 => some (.addw 32 false)
+  | .wrappingAdd, ty => (IntArith.intBitWidth ty).map fun (w, s) => .addw w s
+  | .saturatingAdd, ty => (IntArith.intBitWidth ty).map fun (w, s) => .addsat w s
+  | .saturatingSub, ty => (IntArith.intBitWidth ty).map fun (w, s) => .subsat w s
   | .add, _ => some .add                 -- Int/i32/u32 checked add: mathematical
   | .sub, _ => some .sub
   | .mul, _ => some .mul
@@ -666,7 +669,8 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .mod, _ => none  -- other widths await multi-width extension
   | .div, .i32 => some (.div 32 true)
   | .div, .u32 => some (.div 32 false)
-  | .div, _ => none  -- other widths await multi-width extension
+  -- every other integer width (2026-10-23, `evalBinOp`'s generic `.div w s`)
+  | .div, ty => (IntArith.intBitWidth ty).map fun (w, s) => .div w s
   | .bitxor, .i32 => some (.bitxor 32 true)
   | .bitxor, .u32 => some (.bitxor 32 false)
   | .bitxor, .u8 => some (.bitxor 8 false)
@@ -675,11 +679,11 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .bitor, .u32 => some (.bitor 32 false)
   | .bitor, _ => none
   | .bitand, .u32 => some (.bitand 32 false)
-  | .bitand, _ => none
+  | .bitand, ty => (IntArith.intBitWidth ty).map fun (w, s) => .bitand w s
   | .shr, .u32 => some (.shr 32 false)
   | .shr, _ => none
   | .shl, .u32 => some (.shl 32 false)
-  | .shl, _ => none
+  | .shl, ty => (IntArith.intBitWidth ty).map fun (w, s) => .shl w s
   | .eq, _  => some .eq
   | .neq, _ => some .ne
   | .lt, _  => some .lt
@@ -853,6 +857,37 @@ def cStmtsLetsAtEnd (declared : List String) : List CStmt → List String
   | (.expr e _) :: rest => if cExprDiverges e then [] else cStmtsLetsAtEnd declared rest
   | _ :: rest => cStmtsLetsAtEnd declared rest
 
+mutual
+/-- Does a statement list assign a local anywhere, nested bodies included? A VALUE-position body (an
+    `if` expression's branch, a `match` expression's arm) is extracted with no continuation, so an
+    assignment in it would rebind the name only inside the extracted body and its effect on the code
+    after the expression would be lost: such a body is refused (Codex review of the 2026-10-23
+    state-model extension, which admitted assignments outside loops). Conservative: any assignment
+    counts, even to a local declared inside the body. It looks at the body's statements (and the
+    `if`/`match` expressions they hold directly); an `if` expression nested deeper, in an operand or
+    an argument, is guarded when the extractor reaches it, which it always does: every extracted
+    expression is extracted whole, a discarded statement value included. -/
+partial def cStmtsAssign (ss : List CStmt) : Bool := ss.any cStmtAssigns
+
+partial def cStmtAssigns : CStmt → Bool
+  | .assign .. | .arrayIndexAssign .. | .fieldAssign .. | .derefAssign .. => true
+  | .ifElse c t e => cExprAssigns c || cStmtsAssign t || (match e with | some b => cStmtsAssign b | none => false)
+  | .while_ c b _ s => cExprAssigns c || cStmtsAssign b || cStmtsAssign s
+  | .borrowIn _ _ _ _ _ b => cStmtsAssign b
+  | .letDecl _ _ _ v => cExprAssigns v
+  | .expr v _ => cExprAssigns v
+  | .defer v => cExprAssigns v
+  | .return_ (some v) _ => cExprAssigns v
+  | .break_ (some v) _ => cExprAssigns v
+  | _ => false
+
+partial def cExprAssigns : CExpr → Bool
+  | .ifExpr c t e _ => cExprAssigns c || cStmtsAssign t || cStmtsAssign e
+  | .match_ s arms _ => cExprAssigns s || arms.any fun
+    | .enumArm _ _ _ _ b | .litArm _ _ b | .varArm _ _ _ b | .rangeArm _ _ _ _ b => cStmtsAssign b
+  | _ => false
+end
+
 /-- May `branch` be composed with the continuation `k` (already extracted)? Only when none of the
     branch's own `let`s that reach its end is mentioned by `k` — then nesting `k` inside them changes
     nothing. A fresh local nothing after the branch names stays extractable. -/
@@ -880,6 +915,26 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b => some (.lit (.bool b))
   | .ident name _ => some (.var name.name)
+  -- `&&` and `||` SHORT-CIRCUIT: the right operand runs only when it decides the result, so they
+  -- are conditionals, not operators on two values (2026-10-23).
+  | .binOp .and_ lhs rhs _ => do
+    let pl ← cExprToPExprImpl lhs
+    let pr ← cExprToPExprImpl rhs
+    some (.ifThenElse pl pr (.lit (.bool false)))
+  | .binOp .or_ lhs rhs _ => do
+    let pl ← cExprToPExprImpl lhs
+    let pr ← cExprToPExprImpl rhs
+    some (.ifThenElse pl (.lit (.bool true)) pr)
+  -- Unary minus on an integer is `0 - x`, checked like every `-` (ARITH-3): the model's `sub` is
+  -- mathematical, so at MIN it has a value where the runtime traps (`partial`), as for `-`. `!b`
+  -- is the conditional `if b then false else true`. `~x` stays unmodelled.
+  | .unaryOp .neg e ty => do
+    if !IntArith.isIntTy ty then none
+    let pe ← cExprToPExprImpl e
+    some (.binOp .sub (.lit (.int 0)) pe)
+  | .unaryOp .not_ e _ => do
+    let pe ← cExprToPExprImpl e
+    some (.ifThenElse pe (.lit (.bool false)) (.lit (.bool true)))
   | .binOp op lhs rhs _ => do
     -- Pass operand type (from lhs.ty) — for width-sensitive ops
     -- (mod, bitxor) this picks the right typed PBinOp; for
@@ -907,6 +962,7 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pargs ← cExprListToPExpr args
     some (.applyVar binding.name pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
+    if cStmtsAssign thenBranch || cStmtsAssign elseBranch then none
     let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
     let pe ← cStmtsToPExpr elseBranch
@@ -944,6 +1000,7 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
   -- A guarded arm is not modelled in the proof path (V1); like range patterns,
   -- it makes the function non-proof-extractable (disclosed in identifyUnsupported).
   | .enumArm enumName variant bindings none body => do
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.enumPat enumName variant (bindings.map (·.1.name)), pbody)
   | .litArm value none body => do
@@ -954,9 +1011,11 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     let v ← match pval with
       | .lit v => some v
       | _ => none
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.litPat v, pbody)
   | .varArm binding _bindTy none body => do
+    if cStmtsAssign body then none   -- a value-position body (see `cStmtsAssign`)
     let pbody ← cStmtsToPExpr body
     some (.varPat binding.name, pbody)
   | .enumArm _ _ _ (some _) _ | .litArm _ (some _) _ | .varArm _ _ (some _) _ => none
@@ -987,12 +1046,44 @@ def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExp
   -- it as the value (`if c { id(x); } return 7;` modeled as `if c then id(x) else 7`) was wrong.
   -- A pure discard is rejected by the checker (E0294), so what remains is a call or a control-flow
   -- expression with effects the model cannot see; it falls through to the refusal below.
-  | [.expr e true], _ => if cExprTailOk e then cExprToPExprImpl e else none
+  | [.expr e true], none => if cExprTailOk e then cExprToPExprImpl e else none
+  -- A trailing value of a branch that has a continuation is a statement's discarded value: an `if`
+  -- or `match` STATEMENT's arm ends in a value, and control goes on to the code after it (Codex
+  -- review of the 2026-10-23 extension: `match n { 0 => 1, _ => 2, } return 42;` modelled 1 or 2).
+  -- The value is not evaluated: a trap in it makes the model's answer partial, as any trap does.
+  -- It must still EXTRACT: extraction is what applies the guards to everything nested in it (an
+  -- `if` expression whose branch assigns is refused there), and skipping it let such an
+  -- assignment be dropped from the model (Codex review, round 2).
+  | [.expr e true], some kk => do
+    if !cExprNoEscape e then none
+    let _ ← cExprToPExprImpl e
+    some kk
   -- A discarded `match`/`if` whose every arm returns is the function's exit, so its arms' values
   -- are the result and the continuation is unreachable.
   | [.expr e false], _ =>
     if cExprDiverges e && cExprTailOk e then cExprToPExprImpl e else none
+  -- A `match` STATEMENT followed by more code: each arm falls through to that code, as an `if`
+  -- statement's branches do (`.ifElse ... :: rest` below). Its arms are extracted with the
+  -- continuation; one that returns ignores it.
+  | (.expr (.match_ scrutinee arms _) false) :: rest, k => do
+    if !cExprNoEscape scrutinee then none
+    let ps ← cExprToPExprImpl scrutinee
+    let pkRest ← cStmtsToPExprKImpl rest k
+    let parms ← cMatchArmsToPK pkRest arms
+    some (.match_ ps parms)
   | (.letDecl name _ _ val) :: rest, k => do
+    if !cExprNoEscape val then none
+    let pv ← cExprToPExprImpl val
+    let pb ← cStmtsToPExprKImpl rest k
+    some (.letIn name.name pv pb)
+  -- A scalar or value assignment `x = e` outside a loop: the functional state model
+  -- (docs/verification/PROVABLE_V1.md, "Statements And State") rebinds the name, as a loop body's
+  -- assignment already does in `cStmtsToStepExprK`. The continuation `rest` reads the new binding.
+  -- Inside a branch the continuation is the branch's own `k`, built from the code after the `if`,
+  -- so each path carries its own value of `x` into it. SCOPE-1 guarantees `x` names one binding
+  -- (no shadowing), and `cBranchComposes` (bug 101) still refuses a branch whose `let` the
+  -- continuation names.
+  | (.assign name val) :: rest, k => do
     if !cExprNoEscape val then none
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
@@ -1201,6 +1292,39 @@ def cMatchArmsToP :
   | arm :: rest => do
     let parm ← cMatchArmToP arm
     let prest ← cMatchArmsToP rest
+    some (parm :: prest)
+
+/-- An arm of a `match` STATEMENT, whose body falls through to the code after the match: the
+    body is extracted with that continuation `k`, as an `if` statement's branches are. Refused when
+    the arm's pattern binds a name `k` reads (the binding would capture it), or when the body's
+    `let`s do (bug 101, `cBranchComposes`). Guards and range patterns are refused as in
+    `cMatchArmToP`. -/
+def cMatchArmToPK (k : Proof.PExpr) : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
+  | .enumArm enumName variant bindings none body => do
+    let names := bindings.map (·.1.name)
+    if names.any (pexprMentions · k) || !cBranchComposes body k then none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.enumPat enumName variant names, pbody)
+  | .litArm value none body => do
+    if !cBranchComposes body k then none
+    let pval ← cExprToPExprImpl value
+    let v ← match pval with
+      | .lit v => some v
+      | _ => none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.litPat v, pbody)
+  | .varArm binding _bindTy none body => do
+    if pexprMentions binding k || !cBranchComposes body k then none
+    let pbody ← cStmtsToPExprKImpl body (some k)
+    some (.varPat binding, pbody)
+  | _ => none
+
+def cMatchArmsToPK (k : Proof.PExpr) :
+    List CMatchArm → Option (List (Proof.PMatchPat × Proof.PExpr))
+  | [] => some []
+  | arm :: rest => do
+    let parm ← cMatchArmToPK k arm
+    let prest ← cMatchArmsToPK k rest
     some (parm :: prest)
 
 /-- Helper: try flat-assign extraction over a while body.
@@ -1424,6 +1548,8 @@ private partial def identifyUnsupportedExpr : CExpr → List String
     (if isFloatTy targetTy then [floatReason] else []) ++ identifyUnsupportedExpr inner
   | .fnRef .. => ["function reference"]
   | .allocCall .. => ["alloc call"]
+  | .unaryOp .neg e ty => (if IntArith.isIntTy ty then [] else ["unary operator"]) ++ identifyUnsupportedExpr e
+  | .unaryOp .not_ e _ => identifyUnsupportedExpr e
   | .unaryOp .. => ["unary operator"]
   | .binOp op lhs rhs ty =>
     -- A float-typed result means float arithmetic — unprovable (no float
@@ -1431,13 +1557,18 @@ private partial def identifyUnsupportedExpr : CExpr → List String
     let floatUnsup := if isFloatTy ty || isFloatTy (CExpr.ty lhs) then [floatReason] else []
     -- Pass operand type so width-sensitive ops (mod/bitxor) flag
     -- unsupported widths precisely instead of conflating with op support.
-    let opUnsup := match binOpToPBinOp op (CExpr.ty lhs) with
-      | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
-      | some _ => []
+    let opUnsup := match op with
+      | .and_ | .or_ => []   -- extracted as conditionals
+      | _ => match binOpToPBinOp op (CExpr.ty lhs) with
+        | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
+        | some _ => []
     floatUnsup ++ opUnsup ++ identifyUnsupportedExpr lhs ++ identifyUnsupportedExpr rhs
   | .call _ _ args _ =>
     args.foldl (fun acc a => acc ++ identifyUnsupportedExpr a) []
   | .ifExpr cond thenBr elseBr _ =>
+    -- An `if` EXPRESSION's branch extracts with no continuation, so an assignment in it would be
+    -- lost; the extractor refuses it (`cStmtsAssign`), and this names why.
+    (if cStmtsAssign thenBr || cStmtsAssign elseBr then ["mutable assignment in an if expression's branch"] else []) ++
     identifyUnsupportedExpr cond ++
     thenBr.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) [] ++
     elseBr.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
@@ -1512,7 +1643,6 @@ def identifyUnsupported (body : List CStmt) : List String :=
     | .continue_ .. => some "continue"
     | .defer .. => some "defer"
     | .borrowIn .. => some "borrow region"
-    | .assign .. => some "mutable assignment"
     | _ => none
   let exprKinds := body.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
   (structural ++ stmtKinds ++ exprKinds).eraseDups

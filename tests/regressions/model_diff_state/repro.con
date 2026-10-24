@@ -1,0 +1,46 @@
+// The functional state model outside loops (2026-10-23): assignments rebind, a match statement's
+// arms continue to the code after it, and the two counterexamples of its review must not mismatch.
+
+// an assignment inside an `if` EXPRESSION's branch escapes it: refused by the extractor
+fn escapes(c: bool) -> Int {
+    let mut x: Int = 0;
+    let y: Int = if c { x = 5; 1 } else { 2 };
+    return x + y;
+}
+
+// a match statement whose arms end in values: the values are discarded, the code after runs
+fn armvalue(n: Int) -> Int {
+    match n {
+        0 => 1,
+        _ => 2,
+    }
+    return 42;
+}
+
+// assignments in a branch and after it, and a match statement that assigns
+fn state(n: Int) -> Int {
+    let mut acc: Int = n;
+    if acc > 10 {
+        acc = acc - 10;
+    }
+    acc = acc + 1;
+    match acc {
+        1 => { acc = 100; },
+        _ => {}
+    }
+    return acc;
+}
+
+fn main() -> Int {
+    return escapes(true) + armvalue(0) + state(0) - 141;
+}
+
+// the round-2 counterexample: an assigning if-expression inside a DISCARDED arm value
+fn discarded(n: Int, c: bool) -> Int {
+    let mut x: Int = 0;
+    match n {
+        0 => (if c { x = 5; 1 } else { 2 }) + 0,
+        _ => 0,
+    }
+    return x;
+}

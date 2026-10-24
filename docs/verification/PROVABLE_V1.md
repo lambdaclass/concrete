@@ -88,7 +88,11 @@ The current `ProvableV1` ProofCore expression surface is:
 | bitxor / bitor | Supported for currently forced widths: `i32`, `u32`, `u8` as applicable. |
 | bitand | Supported at `u32` (unsigned view), forced by HMAC-SHA256's `Ch`/`Maj`. Other widths are append-only follow-ups. |
 | shr (logical right shift) | Supported at `u32` (unsigned view, models LLVM `lshr`), forced by HMAC-SHA256's `sigma` functions and `rotr`. Other widths / arithmetic `ashr` are append-only follow-ups. |
-| shl (left shift) | Supported at `u32` (unsigned view, TRUNCATES to width, models LLVM `shl`), forced by HMAC-SHA256's `rotr`. Other widths are append-only follow-ups. |
+| shl (left shift) | Supported at `u32` (unsigned view, TRUNCATES to width, models LLVM `shl`), forced by HMAC-SHA256's `rotr`. Since 2026-10-23 at every other integer width too, as ARITH-3 states it: a count that is negative or at least the width is stuck (the runtime aborts), and otherwise the bits shifted out are discarded and the pattern read at the type's signedness. |
+| `div`, `bitand`, wrapping add at other widths | Since 2026-10-23 at every integer width: `div` truncates and is stuck on a zero divisor and, signed, on `MIN / -1`; `bitand` is the and of the two w-bit patterns; wrapping add is modulo 2^w read at the type's signedness (ARITH-3, ARITH-4). |
+| saturating add / sub (`addsat`, `subsat`) | Since 2026-10-23, at every integer width: the mathematical result clamped to the type's range (ARITH-4). |
+| `&&`, `\|\|` | Since 2026-10-23, as conditionals (`if a then b else false`, `if a then true else b`), so the right operand is evaluated only when it decides the result, as at runtime. |
+| unary `-`, `!` | Since 2026-10-23: `-x` on an integer is `0 - x` (mathematical, so at `MIN` the model has a value where the runtime aborts, as for `-`); `!b` is `if b then false else true`. `~x` is not admitted. |
 | let bindings | Supported. |
 | if/then/else and early-return fall-through shape | Supported. |
 | non-recursive direct calls | Supported when FnTable-complete. |
@@ -100,6 +104,13 @@ The current `ProvableV1` ProofCore expression surface is:
 | array functional update | Supported via `arraySet`; out of bounds evaluates to `none`. |
 | bounded flat-assignment while loops | Supported through `while_` with fuel in the proof evaluator and boundedness checked by profile tooling. Loop bodies may rebind scalars AND write array elements (`arr[i] = v`, modelled as `arraySet`); R-27. |
 | richer loop body with Cont/Break | Supported through `while_step` and the `LoopStep` enum encoding. |
+
+Where the model has a value and the runtime aborts, the comparison reads `partial` and a proof is a
+partial-correctness claim (the trap is the separate obligation). That is the case for the
+mathematical `+`, `-`, `*` and unary `-`, and for two forced-width cases written before the general
+ones: `div 32 true` at `MIN / -1` and `shl 32 false` with a count of at least 32. The other
+operators added on 2026-10-23 (division, shifts, bitwise and, wrapping and saturating add/sub at the
+other widths) are stuck exactly where the runtime aborts.
 
 Excluded from `ProvableV1` until explicitly added:
 
@@ -125,6 +136,10 @@ division, remainder and bitwise operators; `Bytes` reads), with their exact refu
 small functional state model:
 
 - local `let` bindings become `letIn`
+- an assignment `x = e` outside a loop rebinds `x` for the code after it (`letIn x e rest`), and a
+  branch that assigns carries its own value of `x` into that code (2026-10-23)
+- a `match` statement followed by more code extracts with that code as each arm's continuation, as
+  an `if` statement does; an arm whose pattern binds a name that code reads is refused (2026-10-23)
 - loop-carried variable updates become environment rebinding
 - array assignment becomes `arraySet` plus rebinding of the array name
 - richer loop exits use `LoopStep::Cont` / `LoopStep::Break`

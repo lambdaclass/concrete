@@ -13,7 +13,7 @@
 #      named, reasoned all-ERROR functions;
 #   V  every row's verdict is RE-DERIVED here from its model/runtime columns;
 #   N  the negative control: CONCRETE_MODEL_DIFF_PERTURB changes one function's MODEL value before the
-#      PRODUCTION comparator sees it, and every row of that function must read MISMATCH (and only its
+#      PRODUCTION comparator sees it (an entry point's too, since entry points are compared), and every row of that function must read MISMATCH (and only its
 #      rows). The corpus agrees everywhere, so V alone cannot show the comparator compares;
 #   B  scalar coverage: a nullary function is compared on the empty tuple, bool parameters on false
 #      and true (never an integer), and `b as bool` stays a bool on both sides;
@@ -27,6 +27,12 @@
 #   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
 #      agree, each pinned to its runtime value; a branch- or body-local `let` named by what follows its
 #      scope (bug 101) is not extracted, while a local nothing after it names still is.
+#   O  the operators added on 2026-10-23 (division, shifts, bitwise and at every width, wrapping
+#      and saturating add/sub, short-circuit && / ||, unary - and !): one function each, every one
+#      compared, edge cases pinned, and each perturbed;
+#   M  the state model outside loops (2026-10-23): assignments rebind, a match statement's arms
+#      continue to the code after it, an if-expression branch that assigns is refused, and a
+#      statement arm's value is discarded (the two counterexamples of its review);
 #   T  the bug 086 fixture: a discarded `e;` or a return out of a non-tail expression is not
 #      extracted; a tail match/if whose arms return agrees.
 #
@@ -99,14 +105,23 @@ UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | 
 # legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
 # at all; only the functions named here may be, each for a stated reason, and each must still be all
 # ERROR (so an entry cannot outlive its reason silently).
-ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer std.time.time_test_duration_from_millis "
+ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer error_conventions.main project.main proven_oob.main proven_div_zero.main "
 #   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
 #   cn.violation      is ratio(10, 0): the same trap, nullary;
 #   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
 #                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement);
 #   calls.middle, calls.outer (proof_patterns/composition_deep_trust) call the `trusted fn leaf`, which
 #                     deliberately has no model: the model is stuck on every input by design;
-#   std.time.time_test_duration_from_millis  is a nullary std test whose callee has no model.
+#   (std.time.time_test_duration_from_millis left this list on 2026-10-23: its callee's division at
+#   Int is modelled now, so it is compared.)
+# Entry points are compared too (an entry point whose only exclusion from proof is being `main`):
+#   error_conventions.main  matches on the Result its callee returns: the model is stuck there;
+#   project.main      calls functions imported from other files of the project, which the in-process
+#                     interpreter call does not resolve, so the runtime side traps (a harness gap, as
+#                     for scope.accumulate; `--interp` itself returns 18);
+#   proven_oob.main   (known_holes/proven_oob_index) indexes out of bounds on purpose: the runtime
+#                     traps and the model has no value;
+#   proven_div_zero.main  divides by zero on purpose (a known-hole example): both sides trap.
 # Each entry must still be compared on nothing, so an entry cannot outlive its reason silently.
 ERR="$(grep -c '^ERROR' "$TMP/rows" || true)"
 NOVAL=""
@@ -125,7 +140,7 @@ for fn in $ALL_ERROR_OK; do
   { [ -z "$r" ] || grep -qE '^(agree|MISMATCH)' <<<"$r"; } && STALE="$STALE $fn"
 done
 [ -z "$NOVAL" ] && [ -z "$STALE" ] \
-  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the 6 named ones has a compared value" \
+  && ok "C: $ERR inputs compared nothing (both sides failed), and every eligible function outside the $(wc -w <<<"$ALL_ERROR_OK" | tr -d ' ') named ones has a compared value" \
   || no "C: functions compared on nothing:${NOVAL:- none}; stale all-ERROR entries:${STALE:- none}"
 MM="$(grep -c '^MISMATCH' "$TMP/rows" || true)"
 [ "$MM" -eq 0 ] && ok "C: no input where the model and the runtime produce different values" \
@@ -174,6 +189,79 @@ CONCRETE_MODEL_DIFF_PERTURB=main.flip "$BIN" "$BF" --report model-diff > "$TMP/n
 grep -qP '^MISMATCH\tmain\.flip\tunclaimed\t\(true\)\tmodel=true\truntime=false$' "$TMP/nb" \
   && ok "N: a perturbed bool result reads MISMATCH (flip(true): model=true runtime=false)" \
   || no "N: the perturbed bool row: $(grep -P 'flip\t' "$TMP/nb" | tr '\t' ' ' | tr '\n' '|')"
+
+# The entry point (compared since an entry point whose only exclusion from proof is being main
+# is extracted for this report): it agrees, and perturbing ITS model value reads MISMATCH.
+EF="tests/regressions/model_diff_entry_point/repro.con"
+"$BIN" "$EF" --report model-diff > "$TMP/ne" 2>&1
+grep -qP '^agree\tmain\.main\tunclaimed\t\(\)\tmodel=42\truntime=42$' "$TMP/ne" \
+  && ok "N: the entry point main() is 42 in the model and at runtime" \
+  || no "N: the entry point row: $(grep -P '\tmain\.main\t' "$TMP/ne" | tr '\t' ' ' | tr '\n' '|')"
+CONCRETE_MODEL_DIFF_PERTURB=main.main "$BIN" "$EF" --report model-diff > "$TMP/nep" 2>&1
+grep -qP '^MISMATCH\tmain\.main\tunclaimed\t\(\)\tmodel=43\truntime=42$' "$TMP/nep" \
+  && ok "N: a perturbed entry point reads MISMATCH (main(): model=43 runtime=42)" \
+  || no "N: the perturbed entry point row: $(grep -P '\tmain\.main\t' "$TMP/nep" | tr '\t' ' ' | tr '\n' '|')"
+
+echo ""
+echo "=== M: the functional state model outside loops — assignments and match statements ==="
+MF="tests/regressions/model_diff_state/repro.con"
+"$BIN" "$MF" --report model-diff > "$TMP/m" 2>&1
+"$BIN" "$MF" --report extraction > "$TMP/mx" 2>&1; mxrc=$?
+grep -qE '^MISMATCH' "$TMP/m" && no "M: a mismatch: $(grep -m2 '^MISMATCH' "$TMP/m" | tr '\t' ' ' | tr '\n' '|')" \
+  || ok "M: no mismatch on the state fixture"
+# an assignment inside an if EXPRESSION would be lost: the extractor refuses the function, and
+# the report must succeed and list escapes with a status that is not `extracted`
+for fn in escapes discarded; do
+esc_status="$(grep -A1 -E "^\\s*main\\.$fn" "$TMP/mx" | grep -oE 'status: .*' | head -1)"
+if [ "$mxrc" -eq 0 ] && [ -n "$esc_status" ] && [ "$esc_status" != "status: extracted" ]; then
+  ok "M: $fn is listed and not extracted ($esc_status)"
+else no "M: $fn: report exit $mxrc, ${esc_status:-no entry} (its branch assignment would be lost)"; fi
+done
+for fn in armvalue state; do
+  r="$(grep -P "\tmain\.$fn\t" "$TMP/m")"
+  if [ -n "$r" ] && ! grep -qv '^agree' <<<"$r"; then ok "M: every input of $fn agrees ($(grep -c . <<<"$r"))"
+  else no "M: $fn: $(grep -v '^agree' <<<"$r" | head -2 | tr '\t' ' ' | tr '\n' '|')"; fi
+done
+grep -qP '^agree\tmain\.armvalue\tunclaimed\t\(0\)\tmodel=42\truntime=42$' "$TMP/m" \
+  && ok "M: armvalue(0) is 42: the arm's value is discarded" || no "M: armvalue(0): $(grep -P 'armvalue\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
+grep -qP '^agree\tmain\.state\tunclaimed\t\(0\)\tmodel=100\truntime=100$' "$TMP/m" \
+  && ok "M: state(0) is 100: the match statement's assignment reaches the return" || no "M: state(0): $(grep -P 'state\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
+
+echo ""
+echo "=== O: the operators added on 2026-10-23 — one function per class, each compared and perturbed ==="
+OF="tests/regressions/model_diff_operators/repro.con"
+OPS="divi shl8 shli8 shli andi wadd8 sadd8 ssub8 both either negi8 notb divneg scand scor"
+"$BIN" "$OF" --report model-diff > "$TMP/o" 2>&1; orc=$?
+[ "$orc" -eq 0 ] && ok "O: the report succeeds on the operator fixture" || no "O: the report failed (exit $orc)"
+grep -qE '^MISMATCH' "$TMP/o" && no "O: a mismatch: $(grep -m3 '^MISMATCH' "$TMP/o" | tr '\t' ' ' | tr '\n' '|')" \
+  || ok "O: no mismatch on any operator"
+for fn in $OPS; do
+  grep -qP "^agree\tmain\.$fn\t" "$TMP/o" && ok "O: $fn is compared ($(grep -cP "^agree\tmain\.$fn\t" "$TMP/o") agreeing inputs)" \
+    || no "O: $fn has no agreeing input: $(grep -P "\tmain\.$fn\t" "$TMP/o" | head -2 | tr '\t' ' ' | tr '\n' '|')"
+done
+opin(){ grep -qP "^$1\tmain\.$2\tunclaimed\t\($3\)\tmodel=$4\truntime=$5\$" "$TMP/o" \
+  && ok "O: $2($3): model=$4 runtime=$5 ($6)" || no "O: $2($3) should read model=$4 runtime=$5 ($6): $(grep -P "\tmain\.$2\t.*\($3\)" "$TMP/o" | tr '\t' ' ')"; }
+opin agree shli8 "127, 1" -2 -2 "the bits shifted out are discarded, read signed"
+opin agree wadd8 "255, 1" 0 0 "wraps modulo 256"
+opin agree sadd8 "255, 1" 255 255 "clamps at the maximum"
+opin agree ssub8 "-128, 1" -128 -128 "clamps at the minimum"
+opin ERROR shl8 "1, 8" — trap "a count of the width traps on both sides"
+opin ERROR divi "1, 0" — trap "a zero divisor traps on both sides"
+opin partial negi8 "-128" 128 trap "-MIN: the model's subtraction is mathematical"
+opin ERROR divneg "-9223372036854775808" — trap "MIN / -1 is not representable"
+opin agree scand "false, 0" false false "&& does not evaluate its right operand"
+opin agree scor "0" true true "|| does not evaluate its right operand"
+# perturbing each class's function turns its compared rows, and only its rows, into MISMATCH
+for fn in $OPS; do
+  CONCRETE_MODEL_DIFF_PERTURB="main.$fn" "$BIN" "$OF" --report model-diff > "$TMP/op" 2>&1
+  mine="$(grep -cP "^MISMATCH\tmain\.$fn\t" "$TMP/op" || true)"
+  was="$(grep -cP "^agree\tmain\.$fn\t" "$TMP/o" || true)"
+  others="$(grep -P '^MISMATCH\t' "$TMP/op" | grep -cvP "\tmain\.$fn\t" || true)"
+  # every row that agreed must now disagree, and no other function's row may
+  [ "$mine" -gt 0 ] && [ "$mine" -eq "$was" ] && [ "$others" -eq 0 ] \
+    && ok "O: perturbing $fn turns all $was of its agreeing rows into MISMATCH, and only those" \
+    || no "O: perturbing $fn: $mine MISMATCH rows of $was agreeing, $others others"
+done
 
 echo ""
 echo "=== B: scalar coverage — nullary, bool and mixed signatures ==="

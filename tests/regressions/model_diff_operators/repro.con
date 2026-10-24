@@ -1,0 +1,24 @@
+// The operators the ProofCore model gained on 2026-10-23, one function per class, compared with the
+// interpreter on boundary inputs (check_model_diff.sh leg O). Semantics: ARITH-3 and ARITH-4.
+fn divi(a: Int, b: Int) -> Int { return a / b; }
+fn shl8(a: u8, b: u8) -> u8 { return a << b; }
+fn shli8(a: i8, b: i8) -> i8 { return a << b; }
+fn shli(a: Int, b: Int) -> Int { return a << b; }
+fn andi(a: Int, b: Int) -> Int { return a & b; }
+fn wadd8(a: u8, b: u8) -> u8 { return wrapping_add(a, b); }
+fn sadd8(a: u8, b: u8) -> u8 { return saturating_add(a, b); }
+fn ssub8(a: i8, b: i8) -> i8 { return saturating_sub(a, b); }
+fn both(a: bool, b: bool) -> bool { return a && b; }
+fn either(a: bool, b: bool) -> bool { return a || b; }
+fn negi8(a: i8) -> i8 { return -a; }
+fn notb(a: bool) -> bool { return !a; }
+// MIN / -1 is not representable: both sides are stuck (the model) or abort (the runtime)
+fn divneg(a: Int) -> Int { return a / -1; }
+// short circuit: with `a` false the division by zero is never evaluated; with n == 0 it is
+// never evaluated either, since the left operand of || already decides
+fn scand(a: bool, n: Int) -> bool { return a && 10 / n > 1; }
+fn scor(n: Int) -> bool { return n == 0 || 10 / n > 1; }
+
+fn main() -> Int {
+    return divi(84, 2) - 42;
+}

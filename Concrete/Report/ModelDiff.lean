@@ -104,13 +104,40 @@ def modelDiffPerturb : Option String → Option String
   | some v => some (match v.toInt? with | some n => toString (n + 1) | none => v ++ "'")
   | none => none
 
-/-- One function's rows, or none when its signature is not scalar-to-scalar. -/
+/-- What the report compares: a function, its parameter names and its extracted body. A proof entry
+    is one; so is an entry point (below). -/
+structure ModelDiffSubject where
+  qualName : String
+  fn       : CFnDef
+  params   : List String
+  body     : Proof.PExpr
+  claimed  : Bool
+
+def ModelDiffSubject.ofEntry? (e : ProofCoreEntry) : Option ModelDiffSubject :=
+  if !modelDiffEligible e then none else
+  e.extracted.map fun body =>
+    { qualName := e.qualName, fn := e.fn, params := e.params, body, claimed := e.spec.isSome }
+
+/-- An entry point compared against the model. `main` is excluded from PROOF ("is entry point
+    (main)"), which keeps it out of the entries the report used to read, so a program whose only
+    behaviour is in `main` was never compared. Being the entry point says nothing about what the
+    body computes, so a `main` whose ONLY exclusion is that one, with a scalar signature, is
+    extracted here, for this comparison alone: proof eligibility, obligations and evidence are
+    unchanged. Anything else that excludes it (capabilities, loops, allocation, FFI, recursion,
+    trust) keeps it out, as it keeps any function out of the extraction. -/
+def modelDiffEntryPoints (pc : ProofCore) : List ModelDiffSubject :=
+  pc.excluded.filterMap fun x =>
+    if x.eligibility.sourceReasons == ["is entry point (main)"] && x.eligibility.profileReasons.isEmpty
+       && x.fn.params.all (isScalar ·.2) && isScalar x.fn.retTy then
+      (cStmtsToPExpr x.fn.body).map fun body =>
+        { qualName := x.qualName, fn := x.fn, params := x.fn.params.map Prod.fst
+        , body := normalizePExpr body, claimed := false }
+    else none
+
+/-- One subject's rows. -/
 def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
-    (perturb : Option String) (e : ProofCoreEntry) : List ModelDiffRow :=
-  match e.extracted with
-  | none => []
-  | some body =>
-    if !modelDiffEligible e then [] else
+    (perturb : Option String) (e : ModelDiffSubject) : List ModelDiffRow :=
+    let body := e.body
     let tys := e.fn.params.map (·.2)
     let table := modelDiffTable pc
     (modelDiffInputs tys).map fun args =>
@@ -137,7 +164,7 @@ def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
         | .ok (.int n _) => some (toString n)
         | .ok (.bool b) => some (toString b)
         | _ => none
-      { fn := e.qualName, claimed := e.spec.isSome, inputs := args
+      { fn := e.qualName, claimed := e.claimed, inputs := args
       , model := model.getD "—", runtime := if exhausted then "exhausted" else runtime.getD "trap"
       , verdict := if exhausted then "exhausted" else modelDiffVerdict model runtime }
 
@@ -145,7 +172,8 @@ def modelDiffRows (pc : ProofCore) (modules : List CModule) (perturb : Option St
     List ModelDiffRow :=
   let fns := Interp.collectFns modules
   let enums := Interp.collectEnums modules
-  pc.entries.flatMap (modelDiffOf pc fns enums perturb)
+  ((pc.entries.filterMap ModelDiffSubject.ofEntry?) ++ modelDiffEntryPoints pc).flatMap
+    (modelDiffOf pc fns enums perturb)
 
 /-- `--report model-diff`: one line per (function, input), then one `MODEL-DIFF-ELIGIBLE` line per
     compared function (so a gate can require that each has rows), then a summary. -/
@@ -156,6 +184,7 @@ def modelDiffReport (pc : ProofCore) (modules : List CModule) (perturb : Option 
     s!"{r.verdict}\t{r.fn}\t{if r.claimed then "claimed" else "unclaimed"}\t({", ".intercalate (r.inputs.map (·.render))})\tmodel={r.model}\truntime={r.runtime}"
   let count := fun (v : String) => (rows.filter (·.verdict == v)).length
   let eligible := (pc.entries.filter modelDiffEligible).map (·.qualName)
+    ++ (modelDiffEntryPoints pc).map (·.qualName)
   let fnsChecked := (rows.map (·.fn)).eraseDups.length
   String.intercalate "\n" (rows.map line) ++
     String.join (eligible.map fun f => s!"\nMODEL-DIFF-ELIGIBLE\t{f}") ++

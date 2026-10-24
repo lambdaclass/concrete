@@ -9772,11 +9772,11 @@ fi
 # (Field access became extractable in e2ab5eef, so the blocker was repointed at
 #  integer division `/` in commit 8a53c3db — no PBinOp.div, durably unmodeled.
 #  The function still reads the Bounds struct, now as a supported construct.)
-if grep <<<"$pp_ext" -A5 "classify_range" | grep -q "Concrete.BinOp.div"; then
-    echo "  ok  pressure-ext: classify_range blocked by integer division"
+if grep <<<"$pp_ext" -A5 "classify_range" | grep -q "Concrete.BinOp.mod"; then
+    echo "  ok  pressure-ext: classify_range blocked by integer remainder at Int"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL pressure-ext: classify_range should cite integer division as blocker"
+    echo "  FAIL pressure-ext: classify_range should cite integer remainder at Int as blocker"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -10254,11 +10254,11 @@ fi
 # 71. Blocked: integer division named in unsupported
 # (struct literal became extractable in e2ab5eef; repointed at integer division,
 #  which has no PBinOp.div and stays durably unmodeled — see fixture header.)
-if grep <<<"$blocked_ps" -A8 "uses_div" | grep -q "Concrete.BinOp.div"; then
-    echo "  ok  blocked-pressure: integer division named in unsupported"
+if grep <<<"$blocked_ps" -A8 "uses_rem" | grep -q "Concrete.BinOp.mod"; then
+    echo "  ok  blocked-pressure: integer remainder at Int named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL blocked-pressure: integer division should be named in unsupported"
+    echo "  FAIL blocked-pressure: integer remainder at Int should be named in unsupported"
     evidence_fail=$((evidence_fail + 1))
 fi
 

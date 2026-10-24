@@ -42,9 +42,11 @@ fn uses_match(c: Choice) -> Int {
 }
 
 fn uses_mut(x: Int) -> Int {
+    // A straight-line assignment extracts (the functional state model, 2026-10-23); one inside
+    // an `if` expression's branch does not, since its effect would be lost.
     let mut result: Int = x;
-    result = result + 1;
-    return result;
+    let y: Int = if x > 0 { result = result + 1; 1 } else { 0 };
+    return result + y;
 }
 
 pub fn main() -> Int {
