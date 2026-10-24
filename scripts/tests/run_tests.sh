@@ -8418,7 +8418,7 @@ fi
 # Bug 234: the interpreter's calls cost the call-stack depth (its environment's length was walked at
 # every call, branch, arm and borrow); a depth-100000 recursion must finish under --interp in 20 s.
 run_ok "$TESTDIR/regress_234_interp_deep_recursion.con" 42
-r234_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_234_interp_deep_recursion.con" --interp 2>&1 || true)
+r234_interp=$(bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_234_interp_deep_recursion.con" --interp 2>&1 || true)
 if [ "$r234_interp" = "42" ]; then
     echo "  ok  bug 234: a depth-100000 recursion runs under --interp within 20 s (42)"
     PASS=$((PASS + 1))
@@ -8429,7 +8429,7 @@ fi
 # Bug 235: an array element read under --interp walked the whole array; 400000 reads of a
 # 10000-element array must finish under --interp in 20 s.
 run_ok "$TESTDIR/regress_235_interp_array_read.con" 42
-r235_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_235_interp_array_read.con" --interp 2>&1 || true)
+r235_interp=$(bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_235_interp_array_read.con" --interp 2>&1 || true)
 if [ "$r235_interp" = "42" ]; then
     echo "  ok  bug 235: 400000 array reads run under --interp within 20 s (42)"
     PASS=$((PASS + 1))
@@ -8439,8 +8439,8 @@ else
 fi
 # Bug 236: Elab appended an array literal's elements one by one; [7; 200000] must elaborate and run
 # under --interp within 20 s each (not compiled natively: the backend's cost is bug 027's).
-r236_rc=0; bounded_run 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --emit-core >/dev/null 2>&1 || r236_rc=$?
-r236_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --interp 2>&1 || true)
+r236_rc=0; bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --emit-core >/dev/null 2>&1 || r236_rc=$?
+r236_interp=$(bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --interp 2>&1 || true)
 if [ "$r236_rc" = 0 ] && [ "$r236_interp" = "42" ]; then
     echo "  ok  bug 236: a 200000-element array literal elaborates and runs under --interp within 20 s (42)"
     PASS=$((PASS + 1))

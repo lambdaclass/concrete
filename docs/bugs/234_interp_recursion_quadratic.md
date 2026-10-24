@@ -39,7 +39,7 @@ stack. Bug 228 trimmed loop iterations the same way, so its fix did not reach ca
 count, dropping a scope subtracts, and `Env.length` reads it in O(1). Lookups and updates are the
 same list walks as before over `items`; nothing else about the environment changed. Pinned by
 `regress_234_interp_deep_recursion.con` (`run_ok … 42`, and `--interp` = 42 within 20 s under
-`bounded_run`).
+`bounded_run -r 20`, so its retry is 20 s too).
 
 ## Structural cause
 

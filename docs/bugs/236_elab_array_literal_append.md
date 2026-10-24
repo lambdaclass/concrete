@@ -24,7 +24,7 @@ list had not.
 
 The elements are prepended and the list reversed once, as the evidence list already was. Pinned by
 `regress_236_array_repeat_literal.con`: `run_tests.sh` elaborates it (`--emit-core`) and runs it
-under `--interp` (42) within 20 s each under `bounded_run`. The literal is not compiled natively in
+under `--interp` (42) within 20 s each under `bounded_run -r 20` (retry included). The literal is not compiled natively in
 the suite: the backend's cost for a literal of that size is bug 027's.
 
 ## Structural cause

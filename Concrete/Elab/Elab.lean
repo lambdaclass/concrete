@@ -1259,7 +1259,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let cFirst := cFirstEv.core
       let elemTy := cFirst.ty
       -- Prepended and reversed once: appending in a loop is quadratic, and the ratchet
-      -- has caught that three times in this arc already. Bug 235: the elements were still
+      -- has caught that three times in this arc already. Bug 236: the elements were still
       -- appended (`cElems ++ [cE]`), so `[v; 40000]` (expanded to 40000 elements by the
       -- parser) took 4 s in Elab.
       let mut cElemsRev : List CExpr := [cFirst]

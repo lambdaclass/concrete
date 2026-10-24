@@ -25,7 +25,7 @@ copy and walk per read. It was written so for the R-0460 theorems
 against it and proved by `simp` from the same hypotheses (their statements are unchanged), and the
 list lookup and its two lemmas, now unused, are removed. Pinned by
 `regress_235_interp_array_read.con` (`run_ok … 42`, and `--interp` = 42 within 20 s under
-`bounded_run`). An element WRITE under `--interp` still copies the array (the environment holds the
+`bounded_run -r 20`: the retry has the same budget, below the 35 s the defect takes). An element WRITE under `--interp` still copies the array (the environment holds the
 old value while `Array.set` runs), linear per write; that is the environment design R-0422 owns, not
 this bug.
 
