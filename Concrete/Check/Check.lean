@@ -1329,7 +1329,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     | some sig =>
       -- Bug 221: an explicit type-argument list names every type parameter (none are dropped,
       -- none are left unbound).
-      if !typeArgs.isEmpty && typeArgs.length != sig.typeParams.length then
+      if !typeArgs.isEmpty && !sig.typeParamsUnrecorded && typeArgs.length != sig.typeParams.length then
         throwCheck (.callTypeArgCount s!"function '{fnName}'" sig.typeParams.length typeArgs.length) (some e.getSpan)
       -- Infer type arguments if not explicitly provided
       let inferredTypeArgs ← do

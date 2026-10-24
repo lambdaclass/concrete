@@ -47,6 +47,10 @@ structure FnSummary where
   typeBounds : List (String × List String) := []
   capParams : List String := []
   capSet : CapSet := .empty
+  /-- A bodiless declaration (`extern`, `#[intrinsic]`): the parser keeps no type-parameter list
+      for one, so `typeParams` is empty because it was not recorded, not because there are none
+      (`sizeof<T>`). Bug 221's arity check skips such a callee. -/
+  typeParamsUnrecorded : Bool := false
   deriving Repr
 
 structure FileSummary where
@@ -220,6 +224,7 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
       params := ef.params.map fun p => (p.name, p.ty)
       retTy := ef.retTy
       capSet := capSet
+      typeParamsUnrecorded := true
     }
     (ef.name, resolveAliasesInSig aliasMap sig)
   let implMethodSigs := (implBlocksToMethodSummaries m.implBlocks

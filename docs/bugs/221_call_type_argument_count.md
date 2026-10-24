@@ -36,7 +36,10 @@ trait bound whose explicit type-argument list is not exactly as long as the call
 parameters (a method's own, after the receiver's; none for a function pointer or a trait method;
 the last two added after the Codex review) is refused with E0322 (TYPE-9, new code). An omitted
 list is still inferred. Pinned by six `error_221_*.con` fixtures (`run_err ... (E0322)`) and `regress_221_exact_type_arguments.con` (42: exact and omitted lists).
-Static method calls (`Type::f::<..>`) are not covered: their type-argument list may also carry the
+A bodiless declaration (`extern`, `#[intrinsic]` such as std's `sizeof<T>`) is not checked: the
+parser keeps no type-parameter list for one, so its summary marks the count unrecorded
+(`FnSummary.typeParamsUnrecorded`) rather than reading it as zero (the full suite found the
+`sizeof::<T>()` false refusal). Static method calls (`Type::f::<..>`) are not covered either: their type-argument list may also carry the
 impl's arguments, and which reading is meant is not specified.
 
 ## Structural cause
