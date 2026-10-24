@@ -27,6 +27,9 @@
 #   S  the bug 085 fixture: loop bodies with sequential assigns, fall-through ifs and early returns
 #      agree, each pinned to its runtime value; a branch- or body-local `let` named by what follows its
 #      scope (bug 101) is not extracted, while a local nothing after it names still is.
+#   O  the operators added on 2026-10-23 (division, shifts, bitwise and at every width, wrapping
+#      and saturating add/sub, short-circuit && / ||, unary - and !): one function each, every one
+#      compared, edge cases pinned, and each perturbed;
 #   M  the state model outside loops (2026-10-23): assignments rebind, a match statement's arms
 #      continue to the code after it, an if-expression branch that assigns is refused, and a
 #      statement arm's value is discarded (the two counterexamples of its review);
@@ -102,21 +105,23 @@ UNCOVERED="$(comm -23 <(sort -u "$TMP/elig") <(cut -f2 "$TMP/rows" | sort -u) | 
 # legitimately refuse (a zero divisor). A function ALL of whose rows are ERROR was compared on nothing
 # at all; only the functions named here may be, each for a stated reason, and each must still be all
 # ERROR (so an entry cannot outlive its reason silently).
-ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer std.time.time_test_duration_from_millis error_conventions.main project.main proven_oob.main "
+ALL_ERROR_OK=" cv.divzero_const cn.violation scope.accumulate calls.middle calls.outer error_conventions.main project.main proven_oob.main proven_div_zero.main "
 #   cv.divzero_const  divides by a constant zero: traps on every input, and the model has no value;
 #   cn.violation      is ratio(10, 0): the same trap, nullary;
 #   scope.accumulate  reads the module constant LIMIT, which the in-process interpreter call does not
 #                     bind, so the runtime side cannot evaluate it (a harness gap, not agreement);
 #   calls.middle, calls.outer (proof_patterns/composition_deep_trust) call the `trusted fn leaf`, which
 #                     deliberately has no model: the model is stuck on every input by design;
-#   std.time.time_test_duration_from_millis  is a nullary std test whose callee has no model.
+#   (std.time.time_test_duration_from_millis left this list on 2026-10-23: its callee's division at
+#   Int is modelled now, so it is compared.)
 # Entry points are compared too (an entry point whose only exclusion from proof is being `main`):
 #   error_conventions.main  matches on the Result its callee returns: the model is stuck there;
 #   project.main      calls functions imported from other files of the project, which the in-process
 #                     interpreter call does not resolve, so the runtime side traps (a harness gap, as
 #                     for scope.accumulate; `--interp` itself returns 18);
 #   proven_oob.main   (known_holes/proven_oob_index) indexes out of bounds on purpose: the runtime
-#                     traps and the model has no value.
+#                     traps and the model has no value;
+#   proven_div_zero.main  divides by zero on purpose (a known-hole example): both sides trap.
 # Each entry must still be compared on nothing, so an entry cannot outlive its reason silently.
 ERR="$(grep -c '^ERROR' "$TMP/rows" || true)"
 NOVAL=""
@@ -221,6 +226,36 @@ grep -qP '^agree\tmain\.armvalue\tunclaimed\t\(0\)\tmodel=42\truntime=42$' "$TMP
   && ok "M: armvalue(0) is 42: the arm's value is discarded" || no "M: armvalue(0): $(grep -P 'armvalue\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
 grep -qP '^agree\tmain\.state\tunclaimed\t\(0\)\tmodel=100\truntime=100$' "$TMP/m" \
   && ok "M: state(0) is 100: the match statement's assignment reaches the return" || no "M: state(0): $(grep -P 'state\t.*\(0\)' "$TMP/m" | tr '\t' ' ')"
+
+echo ""
+echo "=== O: the operators added on 2026-10-23 — one function per class, each compared and perturbed ==="
+OF="tests/regressions/model_diff_operators/repro.con"
+OPS="divi shl8 shli8 shli andi wadd8 sadd8 ssub8 both either negi8 notb"
+"$BIN" "$OF" --report model-diff > "$TMP/o" 2>&1; orc=$?
+[ "$orc" -eq 0 ] && ok "O: the report succeeds on the operator fixture" || no "O: the report failed (exit $orc)"
+grep -qE '^MISMATCH' "$TMP/o" && no "O: a mismatch: $(grep -m3 '^MISMATCH' "$TMP/o" | tr '\t' ' ' | tr '\n' '|')" \
+  || ok "O: no mismatch on any operator"
+for fn in $OPS; do
+  grep -qP "^agree\tmain\.$fn\t" "$TMP/o" && ok "O: $fn is compared ($(grep -cP "^agree\tmain\.$fn\t" "$TMP/o") agreeing inputs)" \
+    || no "O: $fn has no agreeing input: $(grep -P "\tmain\.$fn\t" "$TMP/o" | head -2 | tr '\t' ' ' | tr '\n' '|')"
+done
+opin(){ grep -qP "^$1\tmain\.$2\tunclaimed\t\($3\)\tmodel=$4\truntime=$5\$" "$TMP/o" \
+  && ok "O: $2($3): model=$4 runtime=$5 ($6)" || no "O: $2($3) should read model=$4 runtime=$5 ($6): $(grep -P "\tmain\.$2\t.*\($3\)" "$TMP/o" | tr '\t' ' ')"; }
+opin agree shli8 "127, 1" -2 -2 "the bits shifted out are discarded, read signed"
+opin agree wadd8 "255, 1" 0 0 "wraps modulo 256"
+opin agree sadd8 "255, 1" 255 255 "clamps at the maximum"
+opin agree ssub8 "-128, 1" -128 -128 "clamps at the minimum"
+opin ERROR shl8 "1, 8" — trap "a count of the width traps on both sides"
+opin ERROR divi "1, 0" — trap "a zero divisor traps on both sides"
+opin partial negi8 "-128" 128 trap "-MIN: the model's subtraction is mathematical"
+# perturbing each class's function turns its compared rows, and only its rows, into MISMATCH
+for fn in $OPS; do
+  CONCRETE_MODEL_DIFF_PERTURB="main.$fn" "$BIN" "$OF" --report model-diff > "$TMP/op" 2>&1
+  mine="$(grep -cP "^MISMATCH\tmain\.$fn\t" "$TMP/op" || true)"
+  others="$(grep -P '^MISMATCH\t' "$TMP/op" | grep -cvP "\tmain\.$fn\t" || true)"
+  [ "$mine" -gt 0 ] && [ "$others" -eq 0 ] && ok "O: perturbing $fn reads MISMATCH on its rows only ($mine)" \
+    || no "O: perturbing $fn: $mine own MISMATCH rows, $others others"
+done
 
 echo ""
 echo "=== B: scalar coverage — nullary, bool and mixed signatures ==="
