@@ -243,7 +243,7 @@ LEAN
 callprobe "an indirect call through an undefined register is refused" "rejected:" '(.reg "nowhere" (.fn_ [] (.concrete []) .int))'
 # A `.fnRef` target is a GLOBAL, so it must NOT be reported as an undefined
 # register — otherwise the fix would trade one false verdict for another.
-callprobe "an indirect call through a fnRef global is accepted" "clean" '(.fnRef "bad" (.fn_ [] (.concrete []) .int))'
+callprobe "an indirect call through a fnRef global is accepted" "clean" '(.fnRef "bad" (.fn_ [] (.concrete []) .int) .free)'
 
 echo "=== the string encodings are gone, not merely unused ==="
 # Structural, because every check above passes for a fix that keeps the

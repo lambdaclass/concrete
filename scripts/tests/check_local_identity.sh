@@ -78,7 +78,7 @@ def keys (f : CFnDef) : List LocalKey := f.paramKeys
 def h (a : CLocal) : UInt64 := hash a.name
 def lt (a b : CLocal) : Bool := compare a.name b.name == .lt
 def sameC : Callee → Callee → Bool
-  | .direct a, .direct b => a == b
+  | .direct a _, .direct b _ => a == b
   | .indirect a, .indirect b => a.key == b.key
   | _, _ => false' > "$TMP/P9.lean"
 if POUT="$(lake env lean "$TMP/P9.lean" 2>&1)"; then ok "P9: the explicit forms of F9 - F13 (.name, .key, hash/compare of the spelling, a Callee match) elaborate"
