@@ -147,7 +147,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 247: a function value written as an identifier reaches what it names (run_tests.sh reads --report caps).
-  [247]="regress_247_function_value_reaches_foreign.con regress_247_free_value_beside_unrelated_extern.con"
+  [247]="regress_247_function_value_reaches_foreign.con regress_247_free_value_beside_unrelated_extern.con regress_247_free_call_beside_unrelated_extern.con"
   # Bug 241: a parent's call of its child's respelled type's method keeps a spelling the child defines (run_tests.sh compares --interp).
   [241]="regress_241_parent_calls_child_respelled_method.con regress_241_parent_names_child_respelled_method.con"
   # Bug 240: a trait in a type position is refused at Resolve (E0108); bounds, impls and shadowing type parameters still admitted.

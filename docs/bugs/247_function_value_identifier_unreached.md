@@ -31,7 +31,10 @@ global function used as a value; a local of function type carries its `LocalId`)
 A free function value names a foreign binding only when its function binds the spelling to one
 (`foreignCalls`) or no program definition answers it, so a value of the program's own `target`
 beside an unrelated extern `target` assumes nothing
-(`regress_247_free_value_beside_unrelated_extern.con`, Codex review r16).
+(`regress_247_free_value_beside_unrelated_extern.con`, Codex review r16). The same holds for a
+free CALL, which the summary also resolved against every module's foreign bindings independently
+of program definitions (pre-existing; `regress_247_free_call_beside_unrelated_extern.con`, Codex
+review r20).
 
 ## Structural cause
 

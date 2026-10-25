@@ -8817,6 +8817,11 @@ fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42
+run_ok "$TESTDIR/regress_247_free_call_beside_unrelated_extern.con" 42
+check_report_multi "$TESTDIR/regress_247_free_call_beside_unrelated_extern.con" assumptions \
+    "bug 247: a free call names the program's function, not an unrelated extern" \
+    "bug 247: --report assumptions attributes an unrelated extern to a free call" \
+    '"fn":"main.run","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
 check_report_multi "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" assumptions \
     "bug 247: a free function value names the program's function, not an unrelated extern" \
     "bug 247: --report assumptions attributes an unrelated extern to a free function value" \
@@ -8867,6 +8872,7 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_223_method_core_name_taken \
             regress_239_trusted_extern_beside_method_edge \
             regress_239_imported_trusted_extern_beside_trusted_method \
+            regress_247_free_call_beside_unrelated_extern \
             regress_239_imported_extern_alias_beside_method_arity regress_239_extern_alias_assumption_not_method \
             regress_239_extern_call_not_trusted_by_method regress_247_free_value_beside_unrelated_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
