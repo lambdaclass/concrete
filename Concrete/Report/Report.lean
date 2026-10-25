@@ -339,8 +339,7 @@ private def proofExclusionReasons (externNames : List String) (f : CFnDef) : Lis
   let reasons := if f.isTrusted then reasons ++ ["trusted boundary"] else reasons
   -- 3. Calls extern functions
   -- Only a free call can reach a foreign binding (bugs 238 – 239).
-  let callees := collectFreeCallsStmts f.body |>.eraseDups
-  let externCalls := callees.filter fun c => externNames.contains c
+  let externCalls := externCallsIn externNames f
   let reasons := if !externCalls.isEmpty then
     reasons ++ [s!"calls extern: {", ".intercalate externCalls}"]
   else reasons
@@ -445,7 +444,7 @@ private partial def effectsForModule
     -- call included, reaches one transitively, which the closure records for this function's
     -- qualified name over the namespace-aware call graph (Codex review r9).
     let crossesFfi := externNames.contains qualName
-      || (collectFreeCallsStmts f.body).any fun c => externNames.contains c
+      || !(externCallsIn externNames f).isEmpty
     let loopClass := classifyLoops f.body
     -- Evidence level: enforced if passes all 5 predictable gates
     let (concreteCaps, _) := f.capSet.normalize
@@ -905,7 +904,7 @@ partial def checkPredictableModule
       else []
     -- 4. FFI — point at the extern call
     -- Only a free call can reach a foreign binding (bugs 238 – 239).
-    let directExtern := (collectFreeCallsStmts f.body).eraseDups.filter fun c => externNames.contains c
+    let directExtern := externCallsIn externNames f
     -- Transitively through a method call (Codex review r9): the closure holds this function.
     let methodCalls := ((collectCalleesStmts f.body).filterMap fun c => match c with
       | .direct n .method => some n

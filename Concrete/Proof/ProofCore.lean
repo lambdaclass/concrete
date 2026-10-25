@@ -3267,7 +3267,7 @@ private def assessEligibility
     | some (_, .none, _) => "none"
     | none => "unclassified"  -- function missing from SCC analysis
   -- Only a free call can reach a foreign binding (bugs 238 – 239).
-  let crossesFfi := (collectFreeCallsStmts f.body).any fun c => externNames.contains c
+  let crossesFfi := !(externCallsIn externNames f).isEmpty
   let loopClass := classifyLoops f.body
   -- Float arithmetic has no active proof profile (ProvableV1 is integer/bool
   -- only). A float param, return, or body op must NOT extract — otherwise float

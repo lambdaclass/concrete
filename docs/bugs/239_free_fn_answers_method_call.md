@@ -135,6 +135,10 @@ the declaration-collision check compared only free functions, externs and consta
   summary matches a function's foreign spellings by their normalization too, so an extern import
   alias does not also reach a trusted method of the declared name
   (`regress_239_extern_alias_assumption_not_method.con`).
+- Codex review r21: an extern call, for the effects, predictable, proof-eligibility, exclusion,
+  trust-boundary and unsafe reports, is a free call its function's resolver bound to a foreign
+  declaration (`foreignBoundCalls`), not any call spelled like some extern of the program
+  (`regress_239_free_call_not_extern_report.con`; pre-existing).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

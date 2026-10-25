@@ -76,6 +76,23 @@ end
 def collectCallsExpr (e : CExpr) : List String := (collectCalleesExpr e).filterMap (·.directName?)
 def collectCallsStmts (ss : List CStmt) : List String := (collectCalleesStmts ss).filterMap (·.directName?)
 
+/-- The free direct calls of a function that its resolver bound to a foreign declaration
+    (`foreignCalls`, not a runtime helper), with that declaration (bugs 238 – 239, Codex review
+    r21): the only calls that are extern calls. A free call of a program function is none,
+    whatever extern elsewhere shares its spelling. -/
+def foreignBoundCalls (f : CFnDef) : List (String × String) :=
+  ((collectCalleesStmts f.body).filterMap fun c => match c with
+    | .direct n .free =>
+      match f.foreignCalls.lookup n with
+      | some d => if d.startsWith "_C$rt." then none else some (n, d)
+      | none => none
+    | _ => none).eraseDups
+
+/-- The extern calls of a function, by the spelling written, among `externNames`. -/
+def externCallsIn (externNames : List String) (f : CFnDef) : List String :=
+  (foreignBoundCalls f).filterMap fun (n, d) =>
+    if externNames.contains n || externNames.contains d then some n else none
+
 /-- The FREE direct calls of a body (`CallSpace.free`, bugs 238 – 239): the only calls a foreign
     binding of the spelling can answer, so the ones an "is this an extern call?" test reads. -/
 def collectFreeCallsStmts (ss : List CStmt) : List String :=
