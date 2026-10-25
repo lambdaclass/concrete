@@ -52,6 +52,7 @@ the gate's watchdog turns a long run into a FAIL) is owned by R-0460.
 | 16. Artifacts at paths no run owns | 179 (the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source), 191 (test scratch files at fixed `/tmp` names, owned by the first user on a shared host), 209 (a read-only review's git left the caller's `index.lock` behind) | the compile driver's private-intermediate rule (`privateIntermediate` in `Main.lean`) and the test runner's scratch directory (`CONCRETE_TEST_TMPDIR`, `Main.runTestBinary`); no roadmap stage yet |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 026, 027, 178 (a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk), 228 (the interpreter's environment, an association list, kept every loop iteration's bindings), 235 (an interpreter array read converted the array to a list per read), 236 (Elab appended an array literal's elements one at a time), 234 (the same environment's length, a scope's restore point and a reference's frame, recomputed by a walk at every call, branch, arm and borrow) | R-0422 (compiler throughput queue, complexity envelopes); ROADMAP #5 (Lower builder) and R-0504 (S12 validators) for the lowering and verification halves |
 | 18. Pipeline artifacts not bound to their payload | 180 (a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified) | R-0497 (S5 sealed, payload-bound artifacts; slice 1 landed with 180's fix) |
+| 19. A mention read as a use (tool facts inferred from where a name is spelled) | 237 (the impact selector counted a script name in a keyed array's note text as a call) | R-0513 (impact gate selection: a name judged by its shell context, each text context pinned by a control) |
 
 ## 1. Declaration identity by spelled name, not a resolved `DefId`
 
@@ -437,3 +438,24 @@ is `UnverifiedSSA`, which `emit` does not accept.
 
 **Owner.** R-0497 (S5, artifact half). `check_pipeline_artifacts.sh` refuses forgery, payload
 replacement and diagnostic bypass by elaboration.
+
+## 19. A mention read as a use
+
+**Bugs.** 237 (the impact gate selector counted a script name in a keyed array's value, a
+bug-corpus note, as a call, so the corpus runners appeared to run some forty gates and read
+`docs/`, and a docs-only diff selected 19 gate commands).
+
+**Design cause.** Repository tools derive facts about scripts (which gates a script runs, which
+files it reads, whether a gate is reachable from the workflow) from where a name is spelled,
+judged line by line with regular expressions. A name in text (a note, a reason, a message) and a
+name a command uses look alike to such a scan. Each context was taught separately as it bit:
+grep and echo lines, heredoc bodies, the whole-suite drivers, the gate-registration walk ("a
+mention is not an invocation"), and now keyed array values.
+
+**Structural fix.** Judge a name by its shell context: a word in command position or under an
+interpreter is a run, an argument is a read, a data value is nothing unless the script executes
+it. Every context treated as text has a positive and a negative control, and a misjudgment falls
+to over-selection (a dependency kept), never to a dropped one.
+
+**Owner.** R-0513 (impact gate selection); the controls are the "text is not a call" legs of
+`check_gate_selection.sh`.
