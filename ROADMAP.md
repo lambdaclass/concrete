@@ -3281,6 +3281,11 @@ environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Che
 `check_local_identity.sh`, plus mutation family 98. The slice found bug 202: project builds
 skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
 `VariantIdx`; contract expressions; `ElabVerify`.
+**Slice 6 (2026-10-25, branch `wip/r0492-decl-identity`):** declaration identity for module-level
+types and constants, design in [DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md).
+Steps 1 – 2 landed: one type environment per module in Resolve (bug 230 fixed) and Core spells a
+user `Result` apart from the builtin (bug 227 fixed). Steps 3 (`TypeId` in Check, bug 223) and 4
+(`ConstId` through imports, bug 233) remain.
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration

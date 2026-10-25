@@ -66,7 +66,11 @@ binding when the definer binds no user `Result`, so a builtin `Result` field of 
 became the importer's enum and the copies disagreed (E0299); a definer with no user `Result` in
 scope (declared or imported) now means the builtin (`regress_227_imported_field_builtin_result.con`);
 only an imported TYPE counts, since a function imported as `Result` is in the value namespace
-(round 3, `regress_227_value_import_named_result.con`).
+(round 3, `regress_227_value_import_named_result.con`). Round 4 noted the one acceptance change
+beyond the record: a module declaring both `enum Result` and a type named `<module>_Result` is now
+refused with bug 096's E0299 ("its module-qualified Core spelling is also another type's"), the
+refusal every respelled type already has; such a program compiled before only while neither type
+was used.
 That review also found two silent wrong-code cases in the method spellings TypeSpelling makes, both
 present on main before this fix and not specific to `Result` (open questions in this slice's
 report): a free function spelled like a respelled method's Core name (`outer_a_P_get`) captures

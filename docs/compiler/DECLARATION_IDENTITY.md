@@ -1,6 +1,7 @@
 # Declaration identity for module-level types and constants (R-0492 slice 6)
 
-Status: design note, 2026-10-25. Owner: R-0492 (S5 identities in
+Status: design note, 2026-10-25; steps 1 and 2 landed on `wip/r0492-decl-identity` (bugs 230 and
+227 fixed), steps 3 and 4 open. Owner: R-0492 (S5 identities in
 [VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)), applied to the shared front end by R-0514. Slices
 1 – 5 gave every local binder a `LocalId` (S5 slice contracts 2 – 5). This slice starts the `DefId`
 half for the declarations a module names by spelling: structs, enums, newtypes, aliases and
