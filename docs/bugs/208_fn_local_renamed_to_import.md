@@ -15,6 +15,8 @@ global function's name. The defect itself is bug 050's recorded "remaining gap".
 **Severity:** silent wrong code. A call through a fn-typed local reached a different function, and
 the binary and `--interp` agreed on the wrong answer, so differential testing could not see it.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/scope.md SCOPE-3 requires the innermost binding; import renaming replaced a function-valued parameter with a global, producing 141 instead of 42.
+
 ## Reproducer
 
 `tests/programs/regress_208_fn_local_named_like_import.con`:

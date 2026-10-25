@@ -15,6 +15,8 @@ returns at once natively and did not finish in 60 s under `--interp`.
 differential checks, could not run a deep recursion: the time per call grew with the depth of the
 call stack.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP R-0422 performance defect: repeated List.length traversals made recursion quadratic in depth; 0be0684f replaces traversal with a stored count.
+
 ## Reproducer
 
 `tests/programs/regress_234_interp_deep_recursion.con`: a recursion of depth 100000 whose frames

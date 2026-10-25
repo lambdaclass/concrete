@@ -18,6 +18,8 @@ eligibility and reported as a trusted boundary. A method added to such a block l
 nobody. No program behaved wrongly at run time because of it; the defect is that the trusted base
 was larger than anything declared.
 
+Codex review 2026-10-25: NOT CONFIRMED — intended behaviour: docs/spec/trusted.md TRUST-5 explicitly authorizes trusted impl; block-wide trust was declared, and replacing it with per-method trust changes policy.
+
 ## Observed
 
 ```

@@ -17,6 +17,8 @@ fields); a struct and an enum `E` and two type aliases `A` were accepted. Two fu
 `--interp` refused the call; two constants `X` failed at `lower` (E0602) with a message about two
 modules.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-3 forbids duplicate declarations within a namespace; absent collision checks silently selected the first struct. Cross-namespace reuse is separate.
+
 ## Reproducer
 
 `tests/programs/error_218_duplicate_struct.con`:

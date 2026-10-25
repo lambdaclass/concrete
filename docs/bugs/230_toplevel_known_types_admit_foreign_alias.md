@@ -12,6 +12,8 @@ silent: no
 nested submodule was closed there; between top-level modules it remains.
 **Severity:** a crash. The backend panics (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`).
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-1/MOD-2 exclude an unimported foreign alias; program-wide known types admitted it and caused a backend panic, independently of cast-policy OD11.
+
 ## Reproducer
 
 `tests/programs/error_230_toplevel_foreign_alias_cast.con` (the former

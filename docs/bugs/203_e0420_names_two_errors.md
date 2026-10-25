@@ -15,6 +15,8 @@ an unsupported type, so the specification's one-code-one-rule mapping (S6) could
 the `append()` / `print()` refusal carried no code at all from Check, and Elab's copy of it the
 ghost-read code, so neither said which rule refused the program.
 
+Confirmed real by Codex review, 2026-10-25: Check omitted the code; Elab mislabeled TYPE-10 failures as CON-4’s E0420, violating docs/spec/README.md’s diagnostic mapping contract; rejection itself was correct.
+
 ## Reproducer
 
 ```con pseudocode

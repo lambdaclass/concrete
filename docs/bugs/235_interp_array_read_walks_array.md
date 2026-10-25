@@ -14,6 +14,8 @@ reading a 40000-element array took 20 s under `--interp` (after bug 236's share 
 **Severity:** loud (performance). Every `a[i]` under `--interp`, the oracle of the differential
 checks, cost the array's length.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP R-0422 performance defect: every indexed read materialized and traversed an array-sized list; 2f6720da uses direct indexing without changing bounds semantics.
+
 ## Reproducer
 
 `tests/programs/regress_235_interp_array_read.con`: 400000 reads of a 10000-element array. The

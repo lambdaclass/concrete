@@ -13,6 +13,8 @@ exit: 0b
 **Severity:** silent acceptance of a malformed program. `return 0x;` compiled and returned 0 on both
 backends; `0b2` lexed as the integer tokens `0` and `2` (the `b` was consumed), a parse error only by accident.
 
+Confirmed real by Codex review, 2026-10-25: SYN-1 and grammar/concrete.ebnf require radix digits; the lexer returned its zero accumulator for empty prefixes. The separate 0b2 case already failed parsing.
+
 ## Reproducer
 
 `tests/programs/error_220_empty_hex_literal.con`:

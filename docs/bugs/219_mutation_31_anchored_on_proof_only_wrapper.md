@@ -16,6 +16,8 @@ which restores bug 061 (a parameter application extracted as a definition call),
 that `check_proofcore_callable_identity.sh` guards the extractor, because the code it mutated never
 ran.
 
+Confirmed real by Codex review, 2026-10-25: Mutation 31 changed an unexecuted wrapper, defeating ROADMAP.md’s demonstrated-enforcement requirement; SURVIVED did not establish a compiler regression.
+
 ## Reproducer
 
 ```

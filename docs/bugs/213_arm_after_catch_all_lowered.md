@@ -15,6 +15,8 @@ differential hunt.
 **Severity:** loud. The binary failed in the SSA verifier (E0703, "use of %t3 defined in
 non-dominating block 'entry'") while `--interp` ran the program.
 
+Codex review 2026-10-25: NOT CONFIRMED — pending owner decision OD18/exit 2n: the SSA failure is reproducible from the diff, but whether this unreachable-arm program should execute or be refused remains undecided.
+
 ## Reproducer
 
 `tests/programs/regress_213_arm_after_binding_arm.con` reduces to:

@@ -15,6 +15,8 @@ on a correct record.
 signal exists to count, failed the docs-drift gate and so the fast surface gates and the pre-push
 hook.
 
+Confirmed real by Codex review, 2026-10-25: Literal streak expectations rejected legitimate quiet batches, contradicting ROADMAP.md exit 2m’s counting rule and exit 2d’s prohibition on incidental count pins.
+
 ## Reproducer
 
 On main `9622f7e0`, append a quiet counting batch to `docs/bugs/discovery.tsv` (`2026-10-24 hunt

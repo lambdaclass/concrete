@@ -17,6 +17,8 @@ could not be written in another module. Structs and newtypes were not affected.
 A `Copy` or `Destroy` bound on a `Copy` enum was satisfied all along: `Copy` is read from the
 declaration, which was imported, and a `Copy` type satisfies `Destroy`.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/traits.md TRAIT-10 recognizes existing impls as satisfying bounds; enum imports dropped those impls and falsely rejected valid calls. Ordinary methods already resolved.
+
 ## Reproducer
 
 `tests/programs/regress_222_imported_enum_impls.con` (an enum with an inherent impl and a trait

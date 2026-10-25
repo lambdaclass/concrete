@@ -17,6 +17,8 @@ same day.
 `trusted` does not relax linearity, and this shape contradicted them. A double free with no
 diagnostic.
 
+Codex review 2026-10-25: NOT CONFIRMED — pending owner decision OD13/exit 2n: TRUST-7’s explicit raw ownership transfer rule remains proposed; a double free inside trusted code alone cannot establish compiler fault.
+
 ## Reproducer
 
 `tests/programs/error_rawdup_trusted_deref.con`:

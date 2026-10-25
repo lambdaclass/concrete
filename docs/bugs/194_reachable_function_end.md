@@ -17,6 +17,8 @@ closed but past every compiler check; `--interp` ran it and returned whatever th
 produced, so the two consumers disagreed. It is recorded as silent: one consumer ran a program the
 language refuses, with no diagnostic.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/statements.md STMT-9 forbids reachable non-Unit function ends; checkFn lacked that check, allowing missing results to reach lowering.
+
 ## Reproducer
 
 ```con pseudocode

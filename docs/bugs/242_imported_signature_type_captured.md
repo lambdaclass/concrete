@@ -12,6 +12,8 @@ silent: no
 type beside a local type of the definition's spelling.
 **Severity:** loud. A valid program is refused; the probes found no wrong code.
 
+Confirmed real by Codex review, 2026-10-25: MOD-1 (docs/spec/modules.md): import closure captured the importer’s local type with a different declaration from an imported signature.
+
 ## Reproducer
 
 `tests/programs/regress_242_imported_signature_type.con` (the former

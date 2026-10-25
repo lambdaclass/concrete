@@ -16,6 +16,8 @@ the pattern lists no fields), then probed on both consumers
 `E` whose variant `A` carries a non-Copy payload compiled, and the payload vanished without being
 consumed: the leak the linear rules exist to refuse (OWN-5).
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/ownership.md OWN-5 forbids discarding linear payloads; empty binder lists bypassed disposal checks. Ignoring Copy fields is valid.
+
 ## Reproducer
 
 ```con pseudocode

@@ -12,6 +12,8 @@ silent: no
 importable type kind.
 **Severity:** loud. A valid program is refused.
 
+Confirmed real by Codex review, 2026-10-25: MOD-1 (docs/spec/modules.md): an explicit newtype import alias bound no declaration because resolveImports retained the original name.
+
 ## Reproducer
 
 `tests/programs/regress_243_aliased_newtype_import.con` (the former

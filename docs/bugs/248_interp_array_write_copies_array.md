@@ -14,6 +14,8 @@ filed 2026-10-25.
 `a[i] = v`, `s.f[i] = v`, write through `&mut`, `vec_push`, `vec_set` and `vec_pop` cost the
 length of the array or Vec it changed.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP R-0422 performance defect: retaining the old array forced whole-array copies on individual updates; 0026f7b0 removes that accidental sharing.
+
 ## Reproducer
 
 `tests/programs/regress_248_interp_array_write.con`: 100000 writes each into a local array, through

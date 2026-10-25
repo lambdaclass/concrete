@@ -13,6 +13,8 @@ silent: no
 **Severity:** loud (performance). Every explicit array literal (`[e1, e2, …]`) cost the square of
 its length to parse, for the binary, `--interp` and every report.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP exit 2o requires near-linear parsing; repeated prefix copying made explicit literals quadratic. The small fixture checks semantics; generated literals check scaling.
+
 ## Reproducer
 
 A literal of 40000 explicit elements (`let a: [i64; 40000] = [7, 7, …];`): parsing alone took
