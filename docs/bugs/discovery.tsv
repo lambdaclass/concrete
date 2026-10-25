@@ -83,3 +83,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-25	development	operating the pre-push hook on the dev host (a gate run killed mid-run left orphaned gate processes and a repository lock that refused every later run)	unrecorded	244	-
 2026-10-25	review	orchestrator review of documentation links on main 032d8e12 (stale roadmap anchors in a research note; correct changelog fragment links reported broken)	unrecorded	252	-
 2026-10-25	development	bug 027 measurement (array literals of 1000 to 200000 elements, repeated and explicit, natively and per stage), the interpreter array-write note of bug 235's record, and bug 248's regression program compiled natively	unrecorded	248,249,250	-
+2026-10-25	development	long-function measurement per front-end stage (1000 to 80000 statements: flat assignments, long if/while bodies, chained lets, lets interleaved with if/while/match reading an early binding; stage probe linked against the compiler)	unrecorded	255,256,257,258,259,260,261	-

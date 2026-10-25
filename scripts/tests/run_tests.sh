@@ -8527,6 +8527,7 @@ run_err "$TESTDIR/error_258_branch_disagreement_order.con" "(E0212) linear varia
 run_err "$TESTDIR/error_258_block_leak_order.con" "(E0208) linear variable 'second' was never consumed"
 run_ok "$TESTDIR/regress_259_binder_positions.con" 42
 run_ok "$TESTDIR/regress_260_elabverify_scopes.con" 42
+run_ok "$TESTDIR/regress_261_corecheck_far_reads.con" 42
 r255_gen() {  # r255_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"

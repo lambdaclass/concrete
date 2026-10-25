@@ -1,0 +1,31 @@
+// Bug 261 regression: CoreCheck looked up every reference to a local in a list of the bindings
+// introduced so far, so a function whose statements read an early binding took time n² to
+// validate. Its bindings are now maps by identity and by Core name. This fixture pins what the
+// lookups must keep answering: a binding read far below its declaration and inside blocks, arm
+// binders of one spelling in sibling arms (alpha-renamed Core names), a binding visible again
+// after an arm or block that bound others, and a parameter. run_tests.sh also validates generated
+// functions reading one early binding 20000 times within a time bound.
+enum Opt {
+    Some { value: i64 },
+    None,
+}
+
+fn pick(o: Opt, d: i64) -> i64 {
+    match o {
+        Opt::Some { value } => { return value + d; },
+        Opt::None => { return d; },
+    }
+}
+
+fn main() -> Int {
+    let early: i64 = 2;
+    let mut t: i64 = 0;
+    let a1: i64 = early + 1;
+    if a1 > early { t = t + early; }
+    let a2: i64 = a1 + early;
+    while t < a2 { t = t + early; }
+    let a3: i64 = pick(Opt::Some { value: a2 }, early);
+    match a3 { 7 => { t = t + early; }, _ => { t = t + 100; }, }
+    // a1 = 3, a2 = 5; t: 2 -> 4 -> 6; a3 = 7; t = 8; 8 + 7 + 5 + 3 + 2 * 2 + 15 = 42
+    return (t + a3 + a2 + a1 + early * 2 + 15) as Int;
+}

@@ -147,6 +147,14 @@ declare -A BUG_TEST_MAP=(
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 250: native in-loop writes into large aggregates compile in linear time (suite: within 20 s).
+  # Bugs 255-261: long functions pass the front end in near-linear time (suite: generated functions within 10 s).
+  [255]="regress_255_block_statement_order.con"
+  [256]="regress_256_local_table_lookups.con"
+  [257]="regress_257_scope_visibility.con error_257_read_after_block.con error_257_rebind_visible.con"
+  [258]="regress_258_checker_binding_states.con error_258_branch_disagreement_order.con error_258_block_leak_order.con"
+  [259]="regress_259_binder_positions.con"
+  [260]="regress_260_elabverify_scopes.con"
+  [261]="regress_261_corecheck_far_reads.con"
   [250]="regress_250_native_array_writes.con"
   # Bug 249: an explicit array literal parses in linear time (suite: a generated literal within 20 s).
   [249]="regress_249_explicit_array_literal.con"
