@@ -23,6 +23,5 @@ roadmap gates read Completed Task headings from that view.
 carries a stamp, and only `--fold` and `--restamp` write it. Use `--restamp` only to accept a
 deliberate correction to an old entry.
 
-The stamp is written by the one-time ledger migration (`scripts/gen/migrate_ledgers.sh`). Until
-that migration runs on main, CHANGELOG.md has no stamp, `--check` reports it as not migrated and
-`--fold` refuses to run, so fragments accumulate here.
+The stamp was written by the one-time ledger migration (`scripts/gen/migrate_ledgers.sh`,
+2026-10-25); `--fold` refuses an unstamped or hand-edited CHANGELOG.md.

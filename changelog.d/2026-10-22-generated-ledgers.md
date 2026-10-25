@@ -15,5 +15,6 @@ The generators and gates that give each fact one owner have landed:
   negative controls.
 
 Changelog fragments have been in use since. The one-time migration itself
-(`scripts/gen/migrate_ledgers.sh`) has not yet run on main, so the bug lists are still kept by hand
-and this file is not yet stamped.
+(`scripts/gen/migrate_ledgers.sh`) ran on 2026-10-25: every bug record carries its ledger block, the
+views are generated, the gate count became `scripts/tests/ci_gate_inventory.txt`, this file is
+stamped, and the 61 fragments pending since 2026-10-23 were folded in.
