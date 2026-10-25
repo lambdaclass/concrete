@@ -44,6 +44,11 @@ pushed=""
 # 15-minute gate run per backup would make that impossible. The WIP tier still refuses
 # conflict markers in what it publishes. It is decided from stdin alone, before any fallback:
 # a by-hand run (no stdin) or any ref outside wip/* — including a deletion — takes the full gates.
+# DELETING a wip/* ref publishes nothing, so it is the same tier: a push of only wip/* updates and
+# deletions takes the backup check. Before this, a deletion matched no tier, fell through to the
+# by-hand fallback and ran the full gates on whatever was checked out (~20 minutes) — long enough
+# that GitHub dropped the push connection and the ref was never deleted, though the hook passed
+# (twice, 2026-10-25). Deleting main, ci/* or any other ref still takes the full gates.
 #
 # REVIEW-NOTES TIER (R-0544). scripts/review/review.sh pushes its verdict as a git note under
 # refs/notes/concrete-review (and the findings under refs/notes/concrete-review-findings). A notes
@@ -58,12 +63,15 @@ pushed=""
 # (and the deletion of a reservation); anything else pushed there is refused.
 # Both no-code tiers (review notes, reservations) may be pushed together or alongside wip/*; a push
 # that also targets any other ref takes the full gates.
-wip_refs=0; other_refs=0; wip_shas=""; review_note_refs=0; res_refs=0; res_bad=""
+wip_refs=0; wip_dels=0; other_refs=0; wip_shas=""; review_note_refs=0; res_refs=0; res_bad=""
 EMPTY_TREE="$(git hash-object -t tree /dev/null)"
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${_remoteref:-}" in
-    refs/heads/wip/*) case "$localsha" in *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;; esac ;;
+    refs/heads/wip/*) case "$localsha" in
+                        *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
+                        *) wip_dels=$((wip_dels+1)) ;;
+                      esac ;;
     refs/notes/concrete-review|refs/notes/concrete-review-findings)
       case "$localsha" in
         *[!0]*) review_note_refs=$((review_note_refs+1)); continue ;;
@@ -94,11 +102,11 @@ while read -r _localref localsha _remoteref remotesha; do
   fi
 done
 [ -z "$res_bad" ] || { echo "pre-push (reservation tier): only a parentless empty-tree commit may be pushed to refs/bug-reservations/NNN:$res_bad — refusing"; exit 1; }
-if [ "$res_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
+if [ "$res_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$wip_dels" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
   echo "pre-push: bug-number reservation — no code published, no gates"
   exit 0
 fi
-if [ "$wip_refs" -gt 0 ] && [ "$other_refs" -eq 0 ]; then
+if [ $((wip_refs + wip_dels)) -gt 0 ] && [ "$other_refs" -eq 0 ]; then
   bad=""
   for sha in $wip_shas; do
     rc=0; git grep -qE '^(<{7}|>{7}|\|{7})( |$)|^={7}$' "$sha" -- . >/dev/null 2>&1 || rc=$?
@@ -109,10 +117,10 @@ if [ "$wip_refs" -gt 0 ] && [ "$other_refs" -eq 0 ]; then
     esac
   done
   [ -z "$bad" ] || { echo "pre-push (wip tier): conflict markers in$bad — refusing"; exit 1; }
-  echo "pre-push: wip/* backup push — conflict-marker check only; full gates run on ci/* and main"
+  echo "pre-push: wip/* backup push ($wip_refs update(s), $wip_dels deletion(s)) — conflict-marker check only; full gates run on ci/* and main"
   exit 0
 fi
-if [ "$review_note_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
+if [ "$review_note_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$wip_dels" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
   echo "pre-push: review-notes push (refs/notes/concrete-review*) — no source tree, no gates"
   exit 0
 fi
