@@ -13,6 +13,7 @@ exit: 0b
 `70bcdeb6` and on the train-17 candidate `593dc100`.
 **Severity:** silent wrong code. `p.get()` ran an unrelated free function, natively and under
 `--interp` alike, so the differential check could not see it.
+**Confirmed real by Codex review, 2026-10-25:** the base's spelling-based lookup lets an unrelated free function capture the resolved method's caller-side name, violating MOD-1 and the declaration-identity invariant.
 
 ## Reproducer
 

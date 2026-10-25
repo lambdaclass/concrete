@@ -12,6 +12,7 @@ silent: no
 candidate `593dc100`.
 **Severity:** loud. The native build failed on an undefined LLVM symbol and `--interp` stopped with
 "undefined function 'a_P_get'".
+**Confirmed real by Codex review, 2026-10-25:** the parent's cross-module rename changes `P_get` to `a_P_get` before type respelling can preserve the imported method's identity, leaving a valid method call targeting an undefined symbol.
 
 ## Reproducer
 

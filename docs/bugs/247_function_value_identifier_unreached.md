@@ -13,6 +13,7 @@ exit: 0b
 candidate `593dc100`.
 **Severity:** silent (a false claim). `--report caps` called a function "(no external authority)"
 with a complete call graph although the function value it returns reaches a foreign binding.
+**Confirmed real by Codex review, 2026-10-25:** Elab produces a function-typed identifier that `collectFnValueRefsExpr` ignored, contradicting the base's explicit R-0484 R10 requirement to follow function values to foreign assumptions.
 
 ## Reproducer
 

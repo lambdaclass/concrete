@@ -11,6 +11,7 @@ silent: no
 **Found:** 2026-10-25, during the R-0492 slice 6 identity work, reproduced on main `70bcdeb6` and
 on the train-17 candidate `593dc100`.
 **Severity:** crash (native build); `--interp` ran the program.
+**Confirmed real by Codex review, 2026-10-25:** Resolve accepts a trait declaration as a concrete type although TYPE-2 already excludes trait-object types, so the refusal enforces an existing rule independently of cast semantics or pending trait decisions.
 
 ## Reproducer
 

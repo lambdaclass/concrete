@@ -13,6 +13,7 @@ exit: 0b
 `70bcdeb6` and on the train-17 candidate `593dc100`.
 **Severity:** silent wrong code. `p.get()` was checked, compiled and interpreted as a call of the
 module's free function `P_get`, by value, without the receiver borrow.
+**Confirmed real by Codex review, 2026-10-25:** shared spelling-based lookup and renaming conflate free functions with methods; refusing the same-module duplicate with E0299 enforces existing MOD-3 and bug 082's callable namespace, not a new language decision.
 
 ## Reproducer
 
