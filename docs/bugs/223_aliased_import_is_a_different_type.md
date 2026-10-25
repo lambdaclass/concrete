@@ -1,6 +1,6 @@
 # Bug 223 — an imported type under an alias is a different type
 
-**Status:** OPEN
+**Status:** FIXED (2026-10-25, R-0492 step 3, branch `wip/r0492-steps34`)
 **Found:** 2026-10-24, while checking bug 222's fix on the import paths (probe programs on the
 alias form of each import, Phase 7 workload 10).
 **Severity:** loud. A valid program is refused; nothing miscompiles. `import m.{P as Q}` gives
@@ -9,7 +9,8 @@ any function of `m`, does not have type `Q`.
 
 ## Reproducer
 
-`tests/regressions/bug223_aliased_import_distinct_type/repro.con`:
+`tests/programs/regress_223_aliased_struct_methods.con` (the former
+`tests/regressions/bug223_aliased_import_distinct_type/repro.con`):
 
 ```con
 mod m {
@@ -57,10 +58,41 @@ type identity the checker uses.
 
 ## Fix
 
-Not fixed. Rebasing the impl lists onto the alias at the import would make `Q::mk` resolve but
-leave `make(2): P` unequal to `Q`; renaming every type inside imported signatures would be a third
-copy of "which spelling is this type". The fix is to compare and look up types by their declaration
-identity, which is the identity migration below.
+R-0492 step 3 ([DECLARATION_IDENTITY.md](../compiler/DECLARATION_IDENTITY.md)). The declaration a
+spelling denotes is its `TypeId` (`typeIdOfSpelling` over a module's struct, enum and newtype
+tables, where an aliased import binds the local spelling to the imported declaration), and the
+passes compare and look up by it:
+
+- `buildFileSummary` stamps every impl block whose target the module declares
+  (`targetDefinedIn`) and every impl method's signature with its `MethodKey`, the target's
+  `TypeId` and the method's name (`FnSummary.methodOf`). An import carries both unchanged.
+- One lookup, `methodByIdentity`, selects a method by that key; Resolve's static-method check,
+  Check's method and static calls (and the shared argument-type peek, `PeekCtx.method`) and Elab's
+  method elaboration ask it first, then the mangled spelling (an impl on a builtin or on an
+  imported type carries no key). `Q::mk` therefore reaches `P_mk`, and Core calls the definition's
+  method exactly as it does without the alias. Core calls a method by that mangled spelling, so
+  where it names another callable of the module (a free function `P_mk`), Check refuses the call
+  (E0299) instead of selecting one declaration while the backends call the other (Codex review).
+- Check compares types with `Ty.sameByIdentity` (assignment and argument agreement, `if` and
+  `match` branch agreement, break values, a variant pattern's enum, an enum literal's type-argument
+  hint, a struct literal's capability hint), capability parameters are read off generic heads
+  that name one declaration (`inferCapBindings`'s `sameHead`), and a trait bound is satisfied
+  through `traitImplIds`, the trait impls by target identity.
+- The import closure binds the definition spelling an impl method's `Self` stands for, so a
+  `-> Self` result (`P` after `resolveImplMethodSigs`) and the alias meet by identity.
+
+Regression legs in `run_tests.sh`: `regress_223_aliased_struct_methods.con` (the reproducer),
+`regress_223_aliased_enum.con` (an aliased enum: literals, patterns, a method, branch agreement),
+`regress_223_aliased_generic_and_bound.con` (an aliased generic struct and a top-level module, a
+trait bound satisfied through the alias) and `regress_223_aliased_destroy_impl.con` (an aliased
+linear type's `Destroy` bound and method), `regress_223_aliased_self_result.con` and
+`regress_223_aliased_cap_params.con`, each `run_ok … 42` and `--interp` = 42, and
+`error_223_method_core_name_taken.con` (E0299).
+
+Not in this fix: an imported signature still names a type by its definition's spelling, which the
+importer reads in its own environment, so an importer declaring its own type of that spelling
+captures it (bug 242). Newtypes are imported under their own name only (`import m.{N as M}` binds
+no `M`).
 
 ## Structural cause
 
@@ -70,9 +102,6 @@ with, so a second spelling of one declaration is a second type.
 ## Structural owner
 
 R-0492 (S5 `DefId`), applied to the front end by R-0514: the inherited obligation "Aliased
-imported method (E0264)" (merged through R-0008) already requires that the identity migration
-resolve this and add an exact alias-method fixture. The reproducer is pinned as an open bug by
-`check_example_outputs.sh` (open-bug reproducers, compile-fails, Resolve's E0106 since train 15),
-which fails when it starts compiling or fails differently, so the fix updates this record. The fix
-covers both passes: Resolve's static-method lookup and Check's method table key on the declaration,
-not the spelling.
+imported method (E0264)" (merged through R-0008) is met by this fix and its alias-method fixture.
+Check and Elab still build their own environments from the same import artifact
+(`ResolvedImports`); one shared environment carrying identities is R-0514's.

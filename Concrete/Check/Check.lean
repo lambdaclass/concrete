@@ -947,7 +947,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let envM ← getEnv
     setEnv { envM with inFnExitingBranch := envBefore.inFnExitingBranch }
     -- Both branches must agree on type
-    if thenTy != elseTy && thenTy != .never && elseTy != .never then
+    if !(← sameTy thenTy elseTy) && thenTy != .never && elseTy != .never then
       throwCheck (.ifBranchTypeMismatch (tyToString thenTy) (tyToString elseTy)) (some e.getSpan)
     let ifTy := if thenTy == .never then elseTy else thenTy
     refuseRefValuedBranch "an `if` expression" ifTy (some e.getSpan)
@@ -1428,7 +1428,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               -- argument is only peeked here; it is checked, once, below.
               if (tyCapNames pTy).any sig.capParams.contains then
                 let argTy ← peekExprType arg
-                for (k, v) in inferCapBindings sig.capParams pTy argTy do
+                for (k, v) in inferCapBindings sig.capParams pTy argTy (sameTypeName (← getEnv).typeIdOf) do
                   if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
           -- Resolve the cap-poly signature against the bindings (shared with the
           -- method-call path: Capabilities.resolveCaps). Error carries the cap
@@ -1506,9 +1506,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Each field expression is checked exactly once — the ones used for inference
       -- here, the rest below — so linearity is never counted twice.
       let capParams := sd.capParams
+      let envH ← getEnv
       let hintCaps : Option (List CapSet) := match hint with
         | some (.generic hn _ hc) =>
-          if hn == name && !capParams.isEmpty && hc.length == capParams.length then some hc else none
+          if sameTypeName envH.typeIdOf hn name && !capParams.isEmpty && hc.length == capParams.length then some hc else none
         | _ => none
       let mut capMap : List (String × CapSet) := []
       let mut prechecked : List (String × Ty) := []
@@ -1523,7 +1524,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 let exprTy ← checkExpr fexpr none
                 prechecked := (sf.name, exprTy) :: prechecked
                 let raw ← resolveType (substTy mapping sf.ty)
-                for (k, v) in inferCapBindings capParams raw exprTy do
+                for (k, v) in inferCapBindings capParams raw exprTy (sameTypeName (← getEnv).typeIdOf) do
                   if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
               | none => pure ()
           for c in capParams do
@@ -1663,9 +1664,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     match ← lookupEnum enumName with
     | some ed =>
       -- Infer type args from hint if not explicitly provided
+      let envT ← getEnv
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
-        | some (.generic n args _) => if n == enumName then args else []
+        | some (.generic n args _) => if sameTypeName envT.typeIdOf n enumName then args else []
         | _ => []
       else typeArgs
       let mapping := ed.typeParams.zip effectiveTypeArgs
@@ -1744,7 +1746,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | .mk armSp armEnum armVariant patBinds guard body => do
             -- Bug 196 (PAT-3): the arm names a variant of THIS enum. CoreCheck's wrong-enum check
             -- (E0531) runs after Elab, which met the foreign variant first; `get!` here panicked.
-            if armEnum != "" && armEnum != enumName then
+            if armEnum != "" && !sameTypeName (← getEnv).typeIdOf armEnum enumName then
               throwCheck (.patternDoesNotFit s!"the variant pattern `{armEnum}::{armVariant}`" (tyToString innerTyR)) (some e.getSpan)
             let some ev := ed.variants.find? fun v => v.name == armVariant
               | throwCheck (.unknownVariant armVariant enumName) (some e.getSpan)
@@ -1862,7 +1864,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             matchResultTy := armTy
             firstArmDone := true
           else
-            if armTy != matchResultTy && armTy != .never && matchResultTy != .never then
+            if !(← sameTy armTy matchResultTy) && armTy != .never && matchResultTy != .never then
               throwCheck (.matchArmTypeMismatch (tyToString matchResultTy) (tyToString armTy)) (some e.getSpan)
             if matchResultTy == .never then matchResultTy := armTy
           let envAfterArm ← getEnv
@@ -2005,7 +2007,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           matchResultTy := armTy
           firstArmDone := true
         else
-          if armTy != matchResultTy && armTy != .never && matchResultTy != .never then
+          if !(← sameTy armTy matchResultTy) && armTy != .never && matchResultTy != .never then
             throwCheck (.matchArmTypeMismatch (tyToString matchResultTy) (tyToString armTy)) (some e.getSpan)
           if matchResultTy == .never then matchResultTy := armTy
         let envAfterArm ← getEnv
@@ -2260,9 +2262,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           return retTy
       | _ => throwCheck .methodCallOnNonNamedType (some e.getSpan)
     else
-    let mangledName := typeName ++ "_" ++ methodName
-    match ← lookupFn mangledName with
-    | some sig =>
+    match ← lookupMethod typeName methodName (some e.getSpan) with
+    | some (_, sig) =>
       -- E0293: the auto-borrowed receiver counts as a borrow of the receiver
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
       -- alias the container through the context and must reject
@@ -2271,7 +2272,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       checkCallBorrowConflicts parts (some e.getSpan)
       checkCallRootReads ((← receiverMutLoanRoot (selfKindOfParams sig.params) obj) ++ (← argMutLoanRoots args)) (obj :: args) (some e.getSpan)
       let isDestroyImplCall := methodName == destroyMethodName &&
-        (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName)
+        (← getEnv).hasTraitImpl typeName destroyTraitName
       if !isDestroyImplCall then
         checkImplicitReceiverBorrow (selfKindOfParams sig.params) obj objTy methodName (some e.getSpan)
       -- Build type mapping from object's generic type args + explicit call typeArgs
@@ -2300,7 +2301,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- A concrete call of a type's Destroy impl is the same public destruction as the
       -- bound call: it consumes (bug 091 round 3).
       if methodName == destroyMethodName &&
-          (← getEnv).traitImpls.any (fun (t, tr) => t == typeName && tr == destroyTraitName) then
+          (← getEnv).hasTraitImpl typeName destroyTraitName then
         consumeDestroyReceiver obj objTy innerTy (some e.getSpan)
       else
         consumeReceiver (selfKindOfParams sig.params) obj objTy innerTy methodName (some e.getSpan)
@@ -2311,10 +2312,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let parts ← argBorrowParts args
     checkCallBorrowConflicts parts (some e.getSpan)
     checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
-    let mangledName := typeName ++ "_" ++ methodName
-    checkDirectDestroyImplUse mangledName (some e.getSpan)
-    match ← lookupFn mangledName with
-    | some sig =>
+    match ← lookupMethod typeName methodName (some e.getSpan) with
+    | some (mangledName, sig) =>
+      checkDirectDestroyImplUse mangledName (some e.getSpan)
       let mapping := sig.typeParams.zip typeArgs
       for (pName, pTy) in mapping do
         if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
@@ -3014,7 +3014,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       match env2.loopBreakTy with
       | none => setEnv { env2 with loopBreakTy := some valTy }
       | some prevTy =>
-        if prevTy != valTy then
+        if !(← sameTy prevTy valTy) then
           throwCheck (.breakTypeMismatch (tyToString valTy) (tyToString prevTy)) (some stmt.getSpan)
     | none => pure ()
     -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
@@ -3589,7 +3589,19 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
   let syms : List (String × String × String × Span) := m.imports.flatMap fun imp =>
     imp.symbols.map fun sym => (sym.effectiveName, imp.moduleName, sym.name, imp.span)
   let fnSyms := syms.filter fun (local_, _, _, _) => importedFnNames.contains local_
-  let vsLocal : Diagnostics := fnSyms.filterMap fun (local_, modName, orig, sp) =>
+  -- R-0492 step 4 (bug 233): an imported constant beside a constant of this module of the same
+  -- spelling would bind one name twice in the value namespace.
+  let importedConstNames := imports.constants.map (·.localName)
+  let localConstNames := m.constants.map (·.name)
+  let vsLocalConst : Diagnostics := (syms.filter fun (local_, _, _, _) =>
+      importedConstNames.contains local_).filterMap fun (local_, modName, orig, sp) =>
+    if localConstNames.contains local_ then
+      let e := CheckError.importBindingCollision local_
+        s!"is also a constant defined in this module (import of '{modName}.{orig}')"
+      some { severity := .error, message := e.message, pass := "check", span := some sp,
+             hint := e.hint, code := e.code }
+    else none
+  let vsLocal : Diagnostics := vsLocalConst ++ fnSyms.filterMap fun (local_, modName, orig, sp) =>
     if localFnNames.contains local_ then
       let what := if methodNames.contains local_ then "an impl method defined in this module"
         else "a function defined in this module"
@@ -3820,7 +3832,9 @@ def checkModule (m : Module) (summary : FileSummary)
   -- Transitively close so chains (`type B = A; type A = i32`) resolve in one lookup.
   let typeAliasMap : List (String × Ty) := closeAliasMap (imports.typeAliases ++ localTypeAliases)
   -- Build constants map
-  let constantsMap : List (String × Ty) := m.constants.map fun c => (c.name, c.ty)
+  let constantsMap : List (String × Ty) := m.constants.map (fun c => (c.name, c.ty))
+    -- R-0492 step 4 (bug 233): imported constants, under the importer's spelling
+    ++ imports.constants.map fun c => (c.localName, c.ty)
   -- Build trait impl pairs for bound checking
   let traitImplPairs : List (String × String) := allTraitImpls.map fun tb => (tb.typeName, tb.traitName)
   -- Collect newtypes from module, submodules, and imports.
@@ -3839,10 +3853,18 @@ def checkModule (m : Module) (summary : FileSummary)
   let localStructDefs := m.structs
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.structs) []
   let localStructNamesList := localStructDefs.map (fun sd => sd.name)
+  -- R-0492 step 3: each trait impl by its target's identity: an imported impl carries it
+  -- (`targetDefinedIn`), a local one names its target in this module's environment.
+  let traitImplIds : List (TypeId × String) := allTraitImpls.filterMap fun tb =>
+    let tid := match tb.targetTypeId? with
+      | some t => some t
+      | none => typeIdOfSpelling allStructs allEnums allNewtypes tb.typeName
+    tid.map (·, tb.traitName)
   let initEnv : TypeEnv :=
     { vars := [], structs := allStructs, enums := allEnums, functions := allSigs,
       fnNames := allNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
-      traitImpls := traitImplPairs, allFnSummarys := fnSigPairs, newtypes := allNewtypes,
+      traitImpls := traitImplPairs, traitImplIds := traitImplIds,
+      allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
       localStructNames := localStructNamesList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.

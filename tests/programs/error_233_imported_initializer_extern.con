@@ -1,0 +1,10 @@
+// Bug 233 (R-0492 step 4, Codex review): the hazard the refusal prevents. `cfg`'s initializer calls
+// its foreign `abs`; inlined in `main`, whose own `fn abs` returns 7, the call would bind to that
+// function. Refused by Lower and by --interp alike.
+mod cfg {
+    trusted extern fn abs(x: i32) with() -> i32;
+    pub const X: i32 = abs(-42);
+}
+import cfg.{X};
+fn abs(x: i32) -> i32 { return 7; }
+fn main() -> Int { return X as Int; }

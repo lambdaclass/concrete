@@ -1,0 +1,10 @@
+// Bug 246 (FIXED): an alias chain that crosses imports: `b` exports `M = N` with `N` imported from
+// `a`. The target is expanded through what `b` can see (its own and its imported aliases), so `M`
+// arrives as `i32`. Returns 42.
+mod a { pub type N = i32; }
+mod b {
+    import a.{N};
+    pub type M = N;
+}
+import b.{M};
+fn main() -> Int { let x: M = 42; return x as Int; }

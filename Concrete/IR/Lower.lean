@@ -6,6 +6,8 @@ import Concrete.Resolve.Intrinsic
 import Concrete.Report.Diagnostic
 import Concrete.Backend.Symbols
 import Concrete.Semantics.BindingMode
+import Concrete.Resolve.TypeId
+import Concrete.Proof.CallCollect
 
 namespace Concrete
 
@@ -77,6 +79,10 @@ structure LowerState where
   newtypes : List NewtypeDef := []
   loopStack : List LoopInfo
   constants : List (String × Ty × CExpr) := []
+  /-- R-0492 step 4 (bug 233): every module constant of the program by its imported Core spelling
+      (`ConstId.coreName`, `cfg::BASE`), with the constants of its defining module's tree, the
+      scope its initializer is lowered in (the scope its own module's functions see). -/
+  importedConstants : List (String × CExpr × List (String × Ty × CExpr)) := []
   /-- Names of user/Core-defined functions in the program. A call to a
       DEFINED function is never an intrinsic — intrinsic identity is
       by-resolution, not by raw name (audit 2026-07-16: user fns named
@@ -564,7 +570,8 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
     -- that renumbered every later temporary, golden ssa/cap_basic).
     let st ← getState
     let isLocal := (st.vars.lookup name.key).isSome || st.promotedAllocas.any fun (n, _, _) => n == name.key
-    if !isLocal && (st.constants.any fun (n, _, _) => n == name.name) then
+    if !isLocal && ((st.constants.any fun (n, _, _) => n == name.name)
+        || st.importedConstants.any fun (n, _, _) => n == name.name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
     match varTy with
     -- arrays are already stack-allocated: the array SVal is its storage
@@ -864,6 +871,25 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
                                    inConstInit := saved.inConstInit }
         return v
       | none =>
+        -- R-0492 step 4 (bug 233): an imported constant, by its identity's Core spelling. Its
+        -- initializer is module-scope code of the DEFINING module: lowered with that module's
+        -- constants in scope (a constant it names is that module's), and hygienic as above.
+        match s.importedConstants.find? fun (n, _, _) => n == name.name with
+        | some (_, constExpr, scope) =>
+          -- the initializer and every constant it reaches, in the scope it is inlined in
+          let lookup : String → Option CExpr := fun n =>
+            match scope.find? (·.1 == n) with
+            | some (_, _, e) => some e
+            | none => (s.importedConstants.find? (·.1 == n)).map (·.2.1)
+          if initReachesCallable lookup (scope.length + s.importedConstants.length + 1) constExpr then
+            throwLower s!"imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
+          let saved ← getState
+          set { saved with vars := [], promotedAllocas := [], inConstInit := true, constants := scope }
+          let v ← lowerExpr constExpr
+          modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas,
+                                     inConstInit := saved.inConstInit, constants := saved.constants }
+          return v
+        | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with
         | .fn_ _ _ _ => return .fnRef name.name ty
@@ -2367,7 +2393,9 @@ end
 def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDef)
     (constants : List (String × Ty × CExpr) := [])
     (newtypes : List NewtypeDef := [])
-    (definedFns : List String := []) : Except Diagnostics (SFnDef × List (String × String)) :=
+    (definedFns : List String := [])
+    (importedConstants : List (String × CExpr × List (String × Ty × CExpr)) := [])
+    : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
     blocksRev := []
     currentLabel := "entry"
@@ -2381,6 +2409,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     newtypes := newtypes
     loopStack := []
     constants := constants
+    importedConstants := importedConstants
     definedFns := definedFns
     scopeStack := [{ kind := .function }]
   }
@@ -2441,6 +2470,13 @@ private partial def collectAllConstants (m : CModule) : List (String × Ty × CE
   let own := m.constants
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllConstants s) []
   own ++ sub
+
+/-- R-0492 step 4 (bug 233): the constants of the tree `m`, whose path is `path`, by their imported
+    Core spelling (`ConstId.coreNameAt`), each with `scope`, the constants of its top-level tree. -/
+private partial def importedConstantsOf (scope : List (String × Ty × CExpr)) (path : String)
+    (m : CModule) : List (String × CExpr × List (String × Ty × CExpr)) :=
+  m.constants.map (fun (n, _, e) => (ConstId.coreNameAt path n, e, scope))
+    ++ m.submodules.flatMap fun sub => importedConstantsOf scope (path ++ "." ++ sub.name) sub
 
 private partial def collectAllExterns (m : CModule) : List (String × List (String × Ty) × Ty) :=
   let own := m.externFns.map fun (n, ps, rt, _) => (n, ps, rt)
@@ -2511,13 +2547,15 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   let allEnums := ownEnums ++ extEnums
   let allExterns := collectAllExterns m
   let allConstants := collectAllConstants m
+  let importedConstants := (if program.isEmpty then [m] else program).flatMap fun pm =>
+    importedConstantsOf (collectAllConstants pm) pm.name pm
   let allNewtypes := ownNewtypes ++ extNewtypes
   -- Skip generic functions (non-empty typeParams); only their monomorphized
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty
   let definedFnNames := allFunctionsWithPath.map fun (f, _) => f.name
   let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
-    match lowerFn f allStructs allEnums allConstants allNewtypes definedFnNames with
+    match lowerFn f allStructs allEnums allConstants allNewtypes definedFnNames importedConstants with
     | .ok (sfn, lits) => .ok (acc ++ [({ sfn with modulePath := path }, lits)])
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
   -- Build deduplicated globals list (by string value)

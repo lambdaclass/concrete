@@ -1,0 +1,11 @@
+// Bug 233 (R-0492 step 4, Codex review): the inlining refusal follows constants. `X` names only the
+// private `PRIVATE`, whose initializer calls `cfg`'s foreign `abs`; inlined in `main`, beside its
+// own `fn abs`, that call would bind to the wrong function. Refused by Lower and by --interp alike.
+mod cfg {
+    trusted extern fn abs(x: i32) with() -> i32;
+    const PRIVATE: i32 = abs(-42);
+    pub const X: i32 = PRIVATE;
+}
+import cfg.{X};
+fn abs(x: i32) -> i32 { return 7; }
+fn main() -> Int { return X as Int; }

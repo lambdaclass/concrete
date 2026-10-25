@@ -1,0 +1,7 @@
+// Bug 246 (FIXED): an imported public alias whose target is another alias of its module (`pub type
+// N = M` with a private `type M = i32`) arrived as `M`, a type the importer cannot name, so a
+// value of the alias was refused (E0220). The target is expanded through the exporter's aliases
+// at the import. Returns 42.
+mod types { type M = i32; pub type N = M; }
+import types.{N};
+fn main() -> Int { let x: N = 42; return x as Int; }

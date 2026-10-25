@@ -1,0 +1,13 @@
+// Bug 233 (FIXED, R-0492 step 4): MOD-2 lets a `pub` declaration cross a module boundary by
+// import. An import of a `pub const` was refused (E0285 "not public", then E0126 while contained);
+// it now binds the constant's identity (`ConstId`), Core references it as `cfg::BASE`, and Lower and
+// the interpreter inline its initializer from the defining module. Returns 42.
+mod cfg {
+    pub const BASE: i32 = 42;
+}
+
+import cfg.{BASE};
+
+fn main() -> Int {
+    return BASE as Int;
+}

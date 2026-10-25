@@ -235,4 +235,62 @@ partial def hasIndirectCallStmts (ss : List CStmt) : Bool :=
   ss.any hasIndirectCallStmt
 end
 
+/-! ### Code a constant initializer reaches
+
+R-0492 step 4 (bug 233): an imported constant's initializer is inlined where it is used, outside
+the module that elaborated it. Its constants are found there by identity, but a callee or a
+function value is still a spelling resolved in the USING function's context (its foreign
+bindings, its module's call aliases), which may bind it to something else. Such an initializer
+is not inlined across modules until callables carry their `DefId` (a later R-0492 step).
+
+`viaConst n` answers for a non-function `.ident n`: whether `n` is a constant whose own
+initializer reaches code (the caller follows constants, Codex review); a local is answered `false`
+or conservatively `true`. -/
+mutual
+partial def mentionsCallableExpr (viaConst : String → Bool) (e : CExpr) : Bool :=
+  let go := mentionsCallableExpr viaConst
+  match e with
+  | .call _ _ _ _ | .fnRef _ _ => true
+  | .ident _ (.fn_ _ _ _) => true
+  | .ident n _ => viaConst n.name
+  | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => go l || go r
+  | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ => go x
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.any fun (_, v) => go v
+  | .arrayLit es _ => es.any go
+  | .match_ scrut arms _ => go scrut || arms.any (mentionsCallableArm viaConst)
+  | .ifExpr c t el _ => go c || mentionsCallableStmts viaConst t || mentionsCallableStmts viaConst el
+  | _ => false
+
+partial def mentionsCallableArm (viaConst : String → Bool) (arm : CMatchArm) : Bool :=
+  let go := mentionsCallableExpr viaConst
+  match arm with
+  | .enumArm _ _ _ g body | .varArm _ _ g body =>
+    (g.map go).getD false || mentionsCallableStmts viaConst body
+  | .litArm v g body => go v || (g.map go).getD false || mentionsCallableStmts viaConst body
+  | .rangeArm lo hi _ g body =>
+    go lo || go hi || (g.map go).getD false || mentionsCallableStmts viaConst body
+
+partial def mentionsCallableStmts (viaConst : String → Bool) (ss : List CStmt) : Bool :=
+  let go := mentionsCallableExpr viaConst
+  let gs := mentionsCallableStmts viaConst
+  ss.any fun s => match s with
+    | .letDecl _ _ _ v | .assign _ v | .expr v _ | .defer v => go v
+    | .return_ v _ | .break_ v _ => (v.map go).getD false
+    | .continue_ _ => false
+    | .ifElse c t el => go c || gs t || (el.map gs).getD false
+    | .while_ c body _ step => go c || gs body || gs step
+    | .fieldAssign o _ v | .derefAssign o v => go o || go v
+    | .arrayIndexAssign a i v => go a || go i || go v
+    | .borrowIn _ _ _ _ _ body => gs body
+end
+
+/-- An initializer reaches code: it calls or names a function, or names a constant (found by
+    `lookup`, the inlining scope's table) whose initializer does, transitively. `fuel` bounds the
+    walk over constants; exhausted, the answer is the conservative `true`. -/
+def initReachesCallable (lookup : String → Option CExpr) : Nat → CExpr → Bool
+  | 0, _ => true
+  | fuel + 1, e => mentionsCallableExpr (fun n => match lookup n with
+      | some init => initReachesCallable lookup fuel init
+      | none => false) e
+
 end Concrete

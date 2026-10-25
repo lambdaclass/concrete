@@ -1,5 +1,5 @@
-// Bug 233: a `mod user;` file importing its sibling file's public constant: refused with the reason
-// (E0323, the submodule import rule), not as "not public".
+// Bug 233 (FIXED, R-0492 step 4): a `mod user;` file importing its sibling file's public constant
+// (refused as "not public", then with E0323 while contained). The program exits 42.
 import cfg.{BASE};
 
 pub fn get() -> Int {

@@ -78,3 +78,5 @@ date	kind	probe	effort	bugs	silent
 2026-10-24	hunt	differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp	60 programs	231,233,234,235,236	-
 2026-10-24	development	recording the differential hunt batch (check_docs_drift.sh discovery-signal controls)	unrecorded	232	-
 2026-10-24	ci	train 16 CI: the gate-selection gate's docs-only precision control failed after a bug-corpus note named a gate script	unrecorded	237	-
+2026-10-25	development	R-0492 step 3 (bug 223's fix): probes of the alias form of each importable type kind beside local types (struct, enum, generic, Destroy, newtype; a local type of the definition's spelling)	8 programs	242,243	-
+2026-10-25	review	Codex reviews rounds 2-3 of R-0492 steps 3-4 (an imported initializer calling another module's function under --interp; constant types through imported aliases)	unrecorded	245,246	-
