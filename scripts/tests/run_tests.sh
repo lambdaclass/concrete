@@ -8568,8 +8568,10 @@ run_ok "$TESTDIR/regress_227_toplevel_builtin_result.con" 42
 # by name met the user's (E0602); a user `Result` is now spelled by its module.
 run_ok "$TESTDIR/regress_227_nested_builtin_result.con" 42
 run_ok "$TESTDIR/regress_227_user_result_methods_beside_builtin.con" 42
+run_ok "$TESTDIR/regress_227_child_result_beside_builtin.con" 42
 for r230 in regress_230_toplevel_type_environment regress_227_toplevel_builtin_result \
-            regress_227_nested_builtin_result regress_227_user_result_methods_beside_builtin; do
+            regress_227_nested_builtin_result regress_227_user_result_methods_beside_builtin \
+            regress_227_child_result_beside_builtin; do
     r230_interp=$($COMPILER "$TESTDIR/$r230.con" --interp 2>&1 || true)
     if [ "$r230_interp" = "42" ]; then
         echo "  ok  bugs 230/227: $r230 — interp == binary (42)"

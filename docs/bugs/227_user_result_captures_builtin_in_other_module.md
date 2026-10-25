@@ -56,12 +56,17 @@ R-0492 slice 6 ([DECLARATION_IDENTITY.md](../compiler/DECLARATION_IDENTITY.md)),
   cannot attribute (E0299) no longer fires when every candidate type's module is known and none
   declares the method: a std impl of the builtin (`Result_is_ok`) beside a user `enum Result` in a
   project keeps its name (found by `regress_202_project_let_else`). A user `Option` is not
-  respelled: the builtin is never withheld, so the spelling never means the user's.
+  respelled: the builtin is never withheld, so the spelling never means the user's. The Codex review
+found that a module binding `Result` to the builtin could still take a child's respelled spelling
+from the child's signature (`inherited` skipped only spellings the module renames, and the builtin
+keeps its name); a spelling the module binds itself is no longer inherited
+(`regress_227_child_result_beside_builtin.con`).
 
 Regression legs in `run_tests.sh`: `regress_227_nested_builtin_result.con`,
 `regress_227_toplevel_builtin_result.con` and `regress_227_user_result_methods_beside_builtin.con`
 (a user `Result` with a method used in its module beside the builtin in a nested and another
-top-level module), each `run_ok … 42` and `--interp` = 42. Bug 217's witness
+top-level module) and `regress_227_child_result_beside_builtin.con` (a child's `Result` in its
+signature beside the builtin in the parent), each `run_ok … 42` and `--interp` = 42. Bug 217's witness
 `regress_217_enclosing_type_not_in_scope.con` now builds natively: its `run_tests.sh` leg runs the
 binary, and `check_enum_union_layout.sh` no longer lists it in `OPEN_BUG_REJECTED`.
 

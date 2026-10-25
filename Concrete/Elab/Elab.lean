@@ -3413,7 +3413,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
          what, strict)
   let foreignNames := (foreignReqs.map (·.1)).eraseDups
   let inherited : List (String × String) := foreignNames.filterMap fun n =>
-    if ownSpellings.any (·.1 == n) then none else
+    -- A spelling this module binds itself is not inherited, also when it binds it to a declaration
+    -- that keeps its name (the builtin `Result`, an identity `ownSpellings` omits): a child's
+    -- signature naming the child's own `Result` must not respell the builtin here (bug 227).
+    if spellingCandidates.any (·.1 == n) then none else
     -- the explicit imports' agreed binding, else the visible declarations' agreed binding
     let strictCs := ((foreignReqs.filter fun r => r.1 == n && r.2.2.2).map (·.2.1)).eraseDups
     let allCs := ((foreignReqs.filter (·.1 == n)).map (·.2.1)).eraseDups
