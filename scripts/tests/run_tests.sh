@@ -8798,6 +8798,22 @@ for r251 in regress_251_generic_reads_defining_tree_constant:40 \
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 253: construction and field rights are judged by the declaration's identity, so a child type
+# sharing an imported type's spelling grants nothing.
+run_err "$TESTDIR/error_253_child_newtype_decoy.con" "(E0296)"
+run_err "$TESTDIR/error_253_aliased_newtype_decoy.con" "(E0296)"
+run_err "$TESTDIR/error_253_child_struct_decoy_literal.con" "(E0297)"
+run_err "$TESTDIR/error_253_child_struct_decoy_field_read.con" "(E0298)"
+run_err "$TESTDIR/error_253_child_struct_decoy_field_write.con" "(E0298)"
+run_ok "$TESTDIR/regress_253_local_rights_beside_imports.con" 42
+r253_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_253_local_rights_beside_imports.con" --interp 2>&1 || true)
+if [ "$r253_interp" = "42" ]; then
+    echo "  ok  bug 253: regress_253_local_rights_beside_imports — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 253: regress_253_local_rights_beside_imports --interp gave '$r253_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 231: each of the seven bound positions in the fixture is refused, not only the first.
 r231_n=$($COMPILER "$TESTDIR/error_231_unknown_bound_trait.con" --emit-core 2>&1 | grep -cF '(E0125)' || true)
 if [ "$r231_n" = "7" ]; then

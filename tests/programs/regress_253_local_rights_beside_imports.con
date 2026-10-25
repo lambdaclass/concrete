@@ -1,0 +1,18 @@
+// Bug 253 (fixed): the positive control. A module beside aliased and plain imports still constructs
+// its own newtype and struct and reads their private fields. Binary and --interp return 42.
+mod outer {
+    mod m { pub newtype N = i64; pub struct Copy P { v: i64 } pub fn mk() -> P { return P { v: 0 }; } }
+    mod user {
+        newtype K = i64;
+        struct Copy R { w: i64 }
+        import m.{N as M, P, mk};
+        pub fn run() -> i64 {
+            let a: K = K(30);
+            let r: R = R { w: 12 };
+            let p: P = mk();
+            return a.0 + r.w;
+        }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

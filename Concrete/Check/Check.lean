@@ -966,7 +966,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- constructor fn (e.g. try_new) — this is what makes smart-constructor
       -- invariants (NonZeroU32's non-zero property) load-bearing rather
       -- than advisory.
-      if !(← getEnv).localNewtypeNames.contains fnName then
+      if !(← getEnv).newtypeIsLocal nt then
         throwCheck (.newtypeConstructPrivate fnName) (some e.getSpan)
       if args.length != 1 then throwCheck (.newtypeCtorShape fnName "takes exactly 1 argument") (some e.getSpan)
       if !typeArgs.isEmpty then throwCheck (.newtypeCtorShape fnName "does not take type arguments") (some e.getSpan)
@@ -1495,7 +1495,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- 0b slice 2: a struct literal on a NON-local struct is allowed only
       -- if every field is `pub` (a private field can't be initialized from
       -- another module, so its representation can't be forged).
-      if !(← getEnv).localStructNames.contains name then
+      if !(← getEnv).structIsLocal sd then
         match sd.fields.find? (fun sf => !sf.isPublic) with
         | some priv => throwCheck (.structLiteralPrivateField name priv.name) (some e.getSpan)
         | none => pure ()
@@ -1645,7 +1645,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- 0b slice 2: reading a PRIVATE field of a non-local struct is
           -- rejected (the `b.len` cross-module leak). Same-module reads and
           -- `pub` fields are fine.
-          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+          if !f.isPublic && !(← getEnv).structIsLocal sd then
             throwCheck (.fieldAccessPrivate structName field) (some e.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           -- R-0484: the field's type at THIS instantiation — `s.f` on a `&Sink<Console>`
@@ -2739,7 +2739,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | some f =>
           -- 0b slice 2: WRITING a private field of a non-local struct is
           -- rejected (the `b.len = 999` cross-module forge).
-          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+          if !f.isPublic && !(← getEnv).structIsLocal sd then
             throwCheck (.fieldAccessPrivate structName field) (some stmt.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           -- R-0484: assignment compares against the field's type at this instantiation.
@@ -3853,6 +3853,10 @@ def checkModule (m : Module) (summary : FileSummary)
   let localStructDefs := m.structs
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.structs) []
   let localStructNamesList := localStructDefs.map (fun sd => sd.name)
+  -- Bug 253: the same declarations by identity, as the summaries stamped them.
+  let childSummaries := summary.submoduleSummaries.map (·.2)
+  let localNewtypeIdList := (summary.newtypes ++ childSummaries.flatMap (·.newtypes)).filterMap (·.typeId?)
+  let localStructIdList := (summary.structs ++ childSummaries.flatMap (·.structs)).filterMap (·.typeId?)
   -- R-0492 step 3: each trait impl by its target's identity: an imported impl carries it
   -- (`targetDefinedIn`), a local one names its target in this module's environment.
   let traitImplIds : List (TypeId × String) := allTraitImpls.filterMap fun tb =>
@@ -3866,7 +3870,8 @@ def checkModule (m : Module) (summary : FileSummary)
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
-      localStructNames := localStructNamesList }
+      localStructNames := localStructNamesList,
+      localNewtypeIds := localNewtypeIdList, localStructIds := localStructIdList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.
   -- Reserved name check stays here because reserved names conflict with builtins in Check.
   let reservedNameCheck := m.functions.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc f =>

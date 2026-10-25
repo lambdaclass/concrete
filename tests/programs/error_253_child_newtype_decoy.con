@@ -1,0 +1,13 @@
+// Bug 253 (fixed): `user` imports `m`'s newtype `N` and has a child declaring its own private
+// `N`. Construction rights were judged by spelling (`N` is among the newtypes defined here), so
+// `N(42)`, which resolves to the imported `m.N`, was admitted outside `m`. Judged by identity: E0296.
+mod outer {
+    mod m { pub newtype N = i64; pub fn ok() -> i64 { return 1; } }
+    mod user {
+        mod decoy { newtype N = i64; }
+        import m.{N};
+        pub fn run() -> i64 { let x: N = N(42); return x.0; }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

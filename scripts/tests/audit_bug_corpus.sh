@@ -173,6 +173,8 @@ declare -A BUG_TEST_MAP=(
   # Bug 223: an import alias of a type names the declaration (methods, trait impls, values of the
   # defining module); run_tests.sh compares --interp with the binary.
   [223]="regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con"
+  # Bug 253: construction and field rights by declaration identity (decoy child types).
+  [253]="error_253_child_newtype_decoy.con error_253_aliased_newtype_decoy.con error_253_child_struct_decoy_literal.con error_253_child_struct_decoy_field_read.con error_253_child_struct_decoy_field_write.con regress_253_local_rights_beside_imports.con"
   # Bug 251: a generic's specialization reads its defining tree's constants (native and --interp).
   [251]="regress_251_generic_reads_defining_tree_constant.con regress_251_generic_constant_absent_in_instantiating_tree.con regress_251_nested_generic_constants.con"
   # Bug 243: an aliased newtype import is the newtype (methods, values, generics, nested trees).
