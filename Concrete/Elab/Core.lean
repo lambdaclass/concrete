@@ -224,6 +224,12 @@ structure CFnDef where
       spelling (FFI.md "Symbol Names"). Copied with the body by Mono, so a specialization
       keeps its generic's bindings. An emission fact; no identity or digest reads it. -/
   foreignCalls : List (String × String) := []
+  /-- Bug 251: the top-level module whose tree defines this function's source, when Mono places a
+      copy of it elsewhere. Mono stamps it on every generic template, so a specialization, which
+      Mono emits into the tree that first instantiates it, keeps it; Lower resolves a bare
+      constant spelling of the body in that tree's constants (`CModule.treeConstants`), the
+      constants the body was written against. `none` for every other function: its own tree. -/
+  constTree : Option String := none
 
 /-- The keys a function's parameters bind under (R-0492 step 4): their identities when Elab
     recorded them, their names otherwise (a synthesized function). Every backend binds parameters

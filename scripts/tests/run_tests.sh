@@ -8769,6 +8769,35 @@ for r245 in regress_245_toplevel_private_constants regress_245_nested_private_co
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 245 (Codex review): --report model-diff samples each tree's function in that tree's constants.
+r245_md=$(bounded_run 60 -- $COMPILER "$TESTDIR/regress_245_toplevel_private_constants.con" --report model-diff 2>&1 || true)
+if grep -qF "agree	a.ga	unclaimed	()	model=40	runtime=40" <<<"$r245_md" \
+   && grep -qF "agree	b.gb	unclaimed	()	model=2	runtime=2" <<<"$r245_md"; then
+    echo "  ok  bug 245: model-diff compares each tree's private constant (a.ga 40, b.gb 2)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 245: model-diff of regress_245_toplevel_private_constants did not agree on a.ga and b.gb:"
+    printf '%s\n' "$r245_md" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+# Bug 251: a generic's specialization reads its defining tree's constants, wherever Mono emits it.
+run_ok "$TESTDIR/regress_251_generic_reads_defining_tree_constant.con" 40
+run_ok "$TESTDIR/regress_251_generic_constant_absent_in_instantiating_tree.con" 40
+run_ok "$TESTDIR/regress_251_nested_generic_constants.con" 42
+for r251 in regress_251_generic_reads_defining_tree_constant:40 \
+            regress_251_generic_constant_absent_in_instantiating_tree:40 \
+            regress_251_nested_generic_constants:42; do
+    r251_f=${r251%%:*}; r251_want=${r251##*:}
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r251_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r251_f.con" --interp 2>&1 || true)
+    if [ "$r251_interp" = "$r251_want" ]; then
+        echo "  ok  bug 251: $r251_f — interp == binary ($r251_want)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 251: $r251_f --interp gave '$r251_interp', want $r251_want"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 231: each of the seven bound positions in the fixture is refused, not only the first.
 r231_n=$($COMPILER "$TESTDIR/error_231_unknown_bound_trait.con" --emit-core 2>&1 | grep -cF '(E0125)' || true)
 if [ "$r231_n" = "7" ]; then

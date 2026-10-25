@@ -1,0 +1,9 @@
+// Bug 251 (fixed): as regress_251_generic_reads_defining_tree_constant, with no `K` in the
+// instantiating tree: the specialization's `K` was an undefined register (E0704, SSA verifier).
+// Binary and --interp return 40.
+mod a {
+    const K: Int = 40;
+    pub fn get<T: Copy>(x: T) -> Int { return K; }
+}
+import a.{get};
+fn main() -> Int { return get::<Int>(0); }

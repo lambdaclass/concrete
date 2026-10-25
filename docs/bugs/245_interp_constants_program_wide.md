@@ -33,9 +33,19 @@ for two constants of one spelling within a tree, in both backends. A context wit
 report harness) keeps the program-wide table, and an imported constant's initializer is still
 evaluated in its defining tree's constants (bug 233).
 
+`--report model-diff` had the same program-wide lookup (Codex review): its sampled calls ran in a
+context with no definition table, so every call ran with no scope. They now run in the
+interpreter's program context (`Interp.mkCtx`, as `--interp` runs them), and the model binds the
+constants of the subject's own tree.
+
+A generic function's specialization, lowered in the tree that instantiates it, read that tree's
+constants natively, so the scoping here left the interpreter right and the binary wrong for it: bug
+251, fixed with this one.
+
 Regression legs in `run_tests.sh`: `regress_245_toplevel_private_constants.con` (the reproducer)
 and `regress_245_nested_private_constants.con` (three trees each with a private `K`, one with a
-nested module reading its own constant), each `run_ok … 42` and `--interp` = 42.
+nested module reading its own constant), each `run_ok … 42` and `--interp` = 42, and the
+reproducer's `--report model-diff` rows (`a.ga` and `b.gb` agree, 40 and 2).
 
 ## Structural cause
 

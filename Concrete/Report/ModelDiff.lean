@@ -162,8 +162,7 @@ def modelDiffConstEnv (table : Proof.FnTable) (consts : List (String × CExpr)) 
   go (unique.length + 1) ([], Proof.Env.empty)
 
 /-- One subject's rows. -/
-def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
-    (consts : List (String × CExpr)) (constEnv : Proof.Env)
+def modelDiffOf (pc : ProofCore) (cx : Interp.Ctx) (constEnv : Proof.Env)
     (perturb : Option String) (e : ModelDiffSubject) : List ModelDiffRow :=
     let body := e.body
     let tys := e.fn.params.map (·.2)
@@ -183,7 +182,7 @@ def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
       -- The runtime side runs under a loop budget (bug 106): a sampled boundary input can make
       -- a loop run 2^63 times, which hung the report. Running out is its own outcome,
       -- `exhausted` — compared nothing, never a trap and never agreement.
-      let result := Interp.evalClosed { fns, enums, consts, loopFuel := modelDiffRuntimeBudget } call
+      let result := Interp.evalClosed cx call
       let exhausted := match result with
         | .error msg => msg.startsWith Interp.loopBudgetExhausted
         | _ => false
@@ -198,12 +197,19 @@ def modelDiffOf (pc : ProofCore) (fns : List CFnDef) (enums : List CEnumDef)
 
 def modelDiffRows (pc : ProofCore) (modules : List CModule) (perturb : Option String := none) :
     List ModelDiffRow :=
-  let fns := Interp.collectFns modules
-  let enums := Interp.collectEnums modules
-  let consts := Interp.collectConsts modules
-  let constEnv := modelDiffConstEnv (modelDiffTable pc) consts
-  ((pc.entries.filterMap ModelDiffSubject.ofEntry?) ++ modelDiffEntryPoints pc).flatMap
-    (modelDiffOf pc fns enums consts constEnv perturb)
+  -- Bug 245 (Codex review): the runtime side is the program's interpreter context (`mkCtx`, as
+  -- `--interp` runs it), so a sampled call resolves its callees and its constants in the tree of
+  -- the definition it reaches, and the model binds the constants of that same tree.
+  let cx := { Interp.mkCtx modules with loopFuel := modelDiffRuntimeBudget }
+  let table := modelDiffTable pc
+  let programEnv := modelDiffConstEnv table (Interp.collectConsts modules)
+  let treeEnvs : Array Proof.Env := cx.treeConsts.map (modelDiffConstEnv table)
+  let constEnvOf : ModelDiffSubject → Proof.Env := fun e =>
+    match ((cx.defs.filter (·.1.name == e.fn.name)).map (·.2)).eraseDups with
+    | [i] => treeEnvs[i]?.getD programEnv
+    | _ => programEnv
+  ((pc.entries.filterMap ModelDiffSubject.ofEntry?) ++ modelDiffEntryPoints pc).flatMap fun e =>
+    modelDiffOf pc cx (constEnvOf e) perturb e
 
 /-- `--report model-diff`: one line per (function, input), then one `MODEL-DIFF-ELIGIBLE` line per
     compared function (so a gate can require that each has rows), then a summary. -/

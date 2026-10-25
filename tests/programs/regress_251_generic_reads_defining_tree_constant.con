@@ -1,0 +1,11 @@
+// Bug 251 (fixed): a generic function of `a` reads `a`'s private `K`. Mono emitted its
+// specialization into the tree that instantiated it (main's), and Lower resolved the bare `K`
+// there, so the binary returned main's `K` (2) where --interp returned 40. A specialization keeps
+// its generic's tree (`CFnDef.constTree`). Binary and --interp return 40.
+mod a {
+    const K: Int = 40;
+    pub fn get<T: Copy>(x: T) -> Int { return K; }
+}
+import a.{get};
+const K: Int = 2;
+fn main() -> Int { return get::<Int>(0); }
