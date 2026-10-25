@@ -125,7 +125,9 @@ the declaration-collision check compared only free functions, externs and consta
 - Codex review r16: a method value never inlines a module constant of its spelling, in Lower or
   the interpreter (`regress_239_method_value_beside_constant.con`: E0602 natively, a refusal under
   `--interp`, before), and a free call is not made a trusted-call edge by a trusted method's Core
-  name (`regress_239_extern_call_not_trusted_by_method.con`).
+  name (`regress_239_extern_call_not_trusted_by_method.con`); a free call's trust is its own
+  declaration's, so a trusted extern keeps its trusted-call edge beside a method of its spelling
+  (`regress_239_trusted_extern_beside_method_edge.con`, Codex review r17).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

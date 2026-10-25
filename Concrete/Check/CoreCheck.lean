@@ -53,6 +53,8 @@ structure CoreCheckEnv where
       function binds to a foreign declaration (`currentForeign`) is decided against that
       declaration, never against a method sharing the spelling. -/
   ownExterns : List (String × CapSet × List (String × Ty) × Ty) := []
+  /-- The module's own `trusted extern` names (Codex review r17). -/
+  ownTrustedExterns : List String := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -715,9 +717,14 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     | none =>
       -- A free call is trusted by a trusted free function or extern of its spelling, never by a
       -- trusted method's Core name (Codex review r16).
-      let methodNamed := envE.methodSigs.any (·.1 == fn)
-      if envE.trustedNames.contains fn && !(space == .method && externHere)
-          && !(space == .free && methodNamed) then
+      -- A free call's trust is its own declaration's: the module's extern of the spelling when
+      -- there is one, else a trusted free function or imported extern; a trusted METHOD of the
+      -- spelling neither confers nor withholds it (Codex reviews r16, r17).
+      let trustedMethodNamed := envE.methodSigs.any fun (n, _, _, t) => n == fn && t
+      let freeTrusted := envE.ownTrustedExterns.contains fn
+        || (envE.trustedNames.contains fn && !trustedMethodNamed)
+      if (space == .free && freeTrusted)
+          || (space == .method && envE.trustedNames.contains fn && !externHere) then
         addTrustEdge .callsTrusted fn
     if space == .free && externHere then addTrustEdge .callsFFI fn
     -- Check capability discipline: a method call against the method table first; a method of
@@ -1583,6 +1590,7 @@ partial def ccCheckModule (m : CModule)
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
     methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
     ownExterns := externSigs
+    ownTrustedExterns := (m.externFns.filter fun (_, _, _, t) => t).map (·.1)
     methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
     aliases := allAliases
     structDefs := m.structs
