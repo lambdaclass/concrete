@@ -1,0 +1,21 @@
+// Bug 230 (FIXED): `a` and `b` are top-level modules (`main` written last). `b` names `a`'s alias
+// `Nope` in a cast without importing it. Resolve's known types for a top-level module were every
+// module's (`ShallowResult.knownTypes`), so it admitted `Nope`; Check's environment for `b` has no
+// such alias and kept the cast target as written, and the backend panicked
+// (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`). A top-level module's type environment is now
+// its own declarations and its imports (R-0492 slice 6, `moduleTypeEnvironment`): E0108.
+mod a {
+    pub type Nope = i32;
+    pub fn z() -> Int { return 0; }
+}
+
+mod b {
+    pub fn h() -> Int {
+        let x: i32 = 7;
+        return (x as Nope) as Int;
+    }
+}
+
+fn main() -> Int {
+    return b::h();
+}

@@ -1,0 +1,29 @@
+// Bug 230 (FIXED), positive control: what a top-level module's type environment still holds after
+// it stopped being program-wide. `b` writes an imported alias in a cast and an annotation, a type
+// reached only through an imported function's signature (the import closure, bug 096), its own
+// struct, and its child's newtype (Check's `allNewtypes`). Expected: 42, natively and --interp.
+mod a {
+    pub type Wide = i64;
+    pub struct Copy Pair { pub l: i64, pub r: i64 }
+    pub fn pair(l: i64, r: i64) -> Pair { return Pair { l: l, r: r }; }
+}
+
+mod b {
+    import a.{Wide, pair};
+    mod inner {
+        pub newtype Meters = i64;
+    }
+    struct Copy Own { pub v: i64 }
+    fn keep(m: Meters) -> Meters { return m; }
+    pub fn h() -> Int {
+        let x: i32 = 30;
+        let w: Wide = x as Wide;
+        let p: Pair = pair(w, 8);
+        let o: Own = Own { v: 4 };
+        return (p.l + p.r + o.v) as Int;
+    }
+}
+
+fn main() -> Int {
+    return b::h();
+}

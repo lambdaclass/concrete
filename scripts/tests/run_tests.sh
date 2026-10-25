@@ -8555,6 +8555,25 @@ for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_no
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 230: a top-level module's known types were program-wide (and held its children's aliases), so
+# a cast to another module's alias passed Resolve and the backend panicked; E0108 now. The positive
+# control keeps what the environment holds: an imported alias, the import closure, own types and a
+# child's newtype. Bug 227's top-level shape (another module's `enum Result` hid the builtin, E0113)
+# was fixed by the same change.
+run_err "$TESTDIR/error_230_toplevel_foreign_alias_cast.con" "error[resolve]: (E0108)"
+run_err "$TESTDIR/error_230_parent_names_child_alias.con" "error[resolve]: (E0108)"
+run_ok "$TESTDIR/regress_230_toplevel_type_environment.con" 42
+run_ok "$TESTDIR/regress_227_toplevel_builtin_result.con" 42
+for r230 in regress_230_toplevel_type_environment regress_227_toplevel_builtin_result; do
+    r230_interp=$($COMPILER "$TESTDIR/$r230.con" --interp 2>&1 || true)
+    if [ "$r230_interp" = "42" ]; then
+        echo "  ok  bugs 230/227: $r230 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bugs 230/227: $r230 --interp gave '$r230_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 231: a bound names `Copy`, `Destroy` or a trait of its module (MOD-1, E0125); no bound name
 # was resolved, so an undeclared trait compiled and an enclosing module's trait was satisfied by
 # spelling in a nested module. The positive control keeps every trait Check gives a module.

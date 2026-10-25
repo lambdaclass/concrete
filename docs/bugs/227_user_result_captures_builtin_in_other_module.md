@@ -1,6 +1,6 @@
 # Bug 227 — a user `enum Result` in one module captures the builtin `Result` in another
 
-**Status:** OPEN
+**Status:** OPEN (the top-level half fixed 2026-10-25 with bug 230; the nested half open)
 **Found:** 2026-10-24, by the Codex review of bug 217's fix (its witness of an enclosing
 `enum Result` hiding the builtin inside a nested submodule), widened by probes.
 **Severity:** a valid program is refused, at a stage that depends on where the modules sit. No
@@ -14,9 +14,11 @@ declares `enum Copy Result { A }`; its submodule `inner` takes and builds a buil
 the native build fails in Lower, `(E0602) Lower.variantIndex: variant 'Ok' not found in enum
 'Result'`. Expected: 42 natively.
 
-`repro_toplevel.con`: the same with `a` and `b` top-level modules (`main` written last). Observed:
-Resolve refuses `b`'s `Result<i32, i32>`, `(E0113) 'Result' takes 0 type arguments, but 2 were
-given`. Expected: 42.
+`repro_toplevel.con`, now `tests/programs/regress_227_toplevel_builtin_result.con`: the same with
+`a` and `b` top-level modules (`main` written last). Observed: Resolve refused `b`'s
+`Result<i32, i32>`, `(E0113) 'Result' takes 0 type arguments, but 2 were given`. Expected: 42.
+Fixed by bug 230's fix (R-0492 slice 6: a top-level module's type namespace is its own environment
+and its imports, not the program-wide scope); `run_tests.sh` runs it natively and `--interp` (42).
 
 The bug 217 witness `tests/programs/regress_217_enclosing_type_not_in_scope.con` is the nested
 shape: `run_tests.sh` checks it through `--emit-core` and `--interp` only, and

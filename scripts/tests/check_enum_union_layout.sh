@@ -115,6 +115,7 @@ fi
 KNOWN_122="tests/programs/let_else.con Result size
 tests/programs/let_else.con Result align
 tests/programs/match_expr_linear.con Result size
+tests/programs/regress_227_toplevel_builtin_result.con Result size
 tests/programs/regress_229_user_option_does_not_hide_builtin.con Option size
 tests/programs/regress_229_user_option_does_not_hide_builtin.con Option align
 tests/programs/test_defer_result_nested.con Result size

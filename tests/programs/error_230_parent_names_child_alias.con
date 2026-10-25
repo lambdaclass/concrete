@@ -1,0 +1,18 @@
+// Bug 230 (FIXED), the parent shape: a top-level module's known types included its children's
+// structs, enums, aliases and traits (`buildGlobalScopeFromSummary`), while Check's environment for
+// it holds its own declarations, its imports and its children's newtypes only. The cast to the
+// child's alias `Al` passed Resolve, Check kept it as written, and the backend panicked
+// (`EmitSSA.tyToLLVMTy: unknown named type 'Al'`). Expected: E0108.
+mod a {
+    mod inner {
+        pub type Al = i32;
+    }
+    pub fn z() -> Int {
+        let x: i32 = 3;
+        return (x as Al) as Int;
+    }
+}
+
+fn main() -> Int {
+    return a::z();
+}
