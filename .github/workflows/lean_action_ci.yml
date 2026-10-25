@@ -129,7 +129,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -190,7 +193,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -254,7 +260,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -365,7 +374,10 @@ jobs:
           path: ~/.cache/concrete-ext
           key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/tests/external_checker.pins', 'lean-toolchain') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -437,7 +449,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -552,7 +567,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -674,7 +692,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -733,7 +754,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -800,7 +824,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -978,7 +1005,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1390,7 +1420,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1488,7 +1521,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1569,7 +1605,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1743,7 +1782,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1862,7 +1904,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1917,7 +1962,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -1985,7 +2033,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -2058,7 +2109,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
@@ -2133,7 +2187,10 @@ jobs:
           path: .lake/build
           key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
       - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.elan
