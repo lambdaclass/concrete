@@ -3935,6 +3935,41 @@ start as soon as S7 and S8 exist.
 
 **Exit:** proved for the full checked subset; S8's hunt finds nothing the theorem does not exclude.
 
+**Proof-library reuse decision (2026-10-23; research within R-0507).** Before building custom
+ownership-proof automation for V2's downward borrows and V3's owned heap, run one bounded
+comparison against ordinary Lean proofs over the same Concrete Core semantics. Start once the
+relevant S7 semantics and S8 rules exist; this does not block V1 or the shared-compiler migrations.
+The output is a reuse/adapt/reject decision for specific modules, not a new verifier project or a
+commitment to adopt a framework. Stop after the representative proof comparison; expand only if
+it exposes a concrete missing obligation in this task.
+
+Candidate shortlist, based on a source/documentation survey (not integration tests):
+
+| Candidate | Code or technique to evaluate | Concrete use and boundary |
+| --- | --- | --- |
+| [Iris-Lean](https://github.com/leanprover-community/iris-lean/tree/3f808f5542f14e3a621734a9da92b81a6f74651a/Iris/Iris) | `BI`, `ProofMode`, `Instances/Classical`, and `Algebra/{Excl,Frac,Auth}.lean`; evaluate generic `ProgramLogic` only if needed | First reuse candidate: ownership contexts, framing, exclusive and shared permissions. The proof interface supports a custom logic; HeapLang's allocation/load/store/free proofs are examples, not proofs of Concrete operations. |
+| [Loom](https://github.com/verse-lab/loom/tree/78928abc9054b31d0bea85985496490baae95244/Loom/MonadAlgebras) and [Velvet](https://github.com/verse-lab/velvet) | Loom's `WP/Basic.lean` and `WP/Gen.lean`, effect instances; Velvet's integration of specifications and proof automation | Compare compositional weakest-precondition automation only where it fits Core's effects. A shallow embedding needs a proved connection to Core; adopting its language or solver verdicts is not this task's exit. |
+| [Aeneas](https://github.com/AeneasVerif/aeneas/tree/74aabd52f77001cf9eaad51b4f4b867a7dc6b111) | Ownership-guided functional reasoning; Lean backend's scalar specifications, including `backends/lean/Aeneas/Std/Scalar/CheckedOps/Add.lean` | Check whether Concrete's restricted borrows permit simpler value-based proofs before paying for a general heap logic. Learn from operation-specific specification lemmas; importing Rust translations or scalar types does not establish Concrete semantics. |
+| [RustBelt](https://plv.mpi-sws.org/rustbelt/) | Semantic ownership/borrowing interpretations and obligations for unsafe abstractions | Design reference for the proof boundary, not a Lean dependency or a reason to add Rust lifetimes or concurrency. |
+
+**Useful-result test.** Prove one scoped mutable-borrow update and restoration of the owner's
+permissions, including preservation of an unrelated place, both with ordinary Lean and the most
+promising reusable component. At V3, extend the example to owned allocation and explicit destruction.
+Account for every resource on normal completion and the normative trap/divergence behavior;
+exclusive ownership alone does not prove exactly-once consumption. Standard affine Iris assertions
+may be discarded, so resource conservation must be an explicit proved obligation (or use a suitable
+non-affine logic). Keep a double-owner counterexample and an omitted-cleanup counterexample that
+the claimed invariant actually excludes. Match Concrete's checked arithmetic and failure behavior.
+
+Record the exact imports and upstream revisions, license, Lean compatibility, proof and adapter
+size, build/check time, and the cost of updating both proofs after one semantic change. Inspect
+the resulting theorem's transitive axioms: no `sorryAx` or unclassified oracle may establish the
+claim. Reuse wins only if the complete adapter plus proof demonstrably reduces work or maintenance
+without weakening the theorem; otherwise retain plain Lean and record the rejection. Any adopted
+library stays a pinned proof-side dependency, with no new compiler/Wasm runtime requirement.
+Concrete semantics, ghost erasure and compiler refinement remain separate obligations. No dependency,
+language change, soundness claim or change to the execution queue is authorized by this survey alone.
+
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
