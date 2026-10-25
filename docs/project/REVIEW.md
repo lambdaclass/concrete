@@ -5,10 +5,10 @@ Status: stable reference (R-0544)
 Every branch is reviewed by `scripts/review/review.sh` before it lands. The
 script picks the diff, splits it, runs the reviewer, records the verdict as a
 git note on the reviewed commit, and enforces the round cap.
-`scripts/review/verify.sh` reads that note. It is the interface for the landing
-tools in `scripts/land/` ([LANDING.md](LANDING.md)): a branch is ready to land only
-when its head carries a clean review note, and the landing bot carries a clean
-verdict across a conflict-free rebase.
+`scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
+([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
+ready to land only when its head carries a clean review note, and the landing bot carries
+a clean verdict across a conflict-free rebase.
 
 ## Why one script
 
