@@ -1,0 +1,43 @@
+// Bug 227 (FIXED), positive control: a user `enum Result` with its own method, used in its module,
+// beside the builtin `Result<T, E>` in a nested submodule and in another top-level module. Core
+// spells the user's type and its method by the module (`a_Result`, `a_Result_get`) and the builtin
+// keeps its name, so Lower's enum lookup by Core name meets the right one in each module.
+// Expected: 42, natively and --interp.
+mod a {
+    enum Copy Result { A { v: i32 }, B }
+    impl Result {
+        pub fn get(&self) -> i32 {
+            match self {
+                Result::A { v } => { return *v; },
+                Result::B => { return 0; },
+            }
+        }
+    }
+    mod inner {
+        pub fn unwrap(r: Result<i32, bool>) -> i32 {
+            match r {
+                Result::Ok { value } => { return value; },
+                Result::Err { error } => { if error { return 1; } return 2; },
+            }
+        }
+        pub fn ten() -> i32 { return unwrap(Result::<i32, bool>::Ok { value: 10 }); }
+    }
+    pub fn own() -> i32 {
+        let r: Result = Result::A { v: 20 };
+        return r.get() + inner::ten();
+    }
+}
+
+mod b {
+    pub fn twelve() -> i32 {
+        let r: Result<i32, i32> = Result::<i32, i32>::Err { error: 12 };
+        match r {
+            Result::Ok { value } => { return value; },
+            Result::Err { error } => { return error; },
+        }
+    }
+}
+
+fn main() -> Int {
+    return (a::own() + b::twelve()) as Int;
+}

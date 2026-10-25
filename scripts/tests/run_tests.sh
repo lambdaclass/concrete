@@ -8564,7 +8564,12 @@ run_err "$TESTDIR/error_230_toplevel_foreign_alias_cast.con" "error[resolve]: (E
 run_err "$TESTDIR/error_230_parent_names_child_alias.con" "error[resolve]: (E0108)"
 run_ok "$TESTDIR/regress_230_toplevel_type_environment.con" 42
 run_ok "$TESTDIR/regress_227_toplevel_builtin_result.con" 42
-for r230 in regress_230_toplevel_type_environment regress_227_toplevel_builtin_result; do
+# Bug 227's nested half: Core spelled a user `Result` and the builtin alike, and Lower's enum lookup
+# by name met the user's (E0602); a user `Result` is now spelled by its module.
+run_ok "$TESTDIR/regress_227_nested_builtin_result.con" 42
+run_ok "$TESTDIR/regress_227_user_result_methods_beside_builtin.con" 42
+for r230 in regress_230_toplevel_type_environment regress_227_toplevel_builtin_result \
+            regress_227_nested_builtin_result regress_227_user_result_methods_beside_builtin; do
     r230_interp=$($COMPILER "$TESTDIR/$r230.con" --interp 2>&1 || true)
     if [ "$r230_interp" = "42" ]; then
         echo "  ok  bugs 230/227: $r230 — interp == binary (42)"
@@ -8626,8 +8631,9 @@ else
     echo "FAIL  bug 231: regress_231_bounds_name_module_traits --interp gave '$r231_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
-# The enclosing module's `enum Result` is not in the nested scope. Front end and interpreter only:
-# the native build meets bug 227 (Lower looks enums up by spelling), pinned in check_example_outputs.
+# The enclosing module's `enum Result` is not in the nested scope. Since bug 227's fix the native
+# build agrees (Core spells the user's enum `outer_Result`).
+run_ok "$TESTDIR/regress_217_enclosing_type_not_in_scope.con" 42
 r217_src="$TESTDIR/regress_217_enclosing_type_not_in_scope.con"
 r217_core_rc=0; $COMPILER "$r217_src" --emit-core >/dev/null 2>&1 || r217_core_rc=$?
 r217_interp=$($COMPILER "$r217_src" --interp 2>&1 || true)

@@ -3350,8 +3350,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
     closure.structs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
     ++ closure.enums.map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
     ++ closure.newtypes.map (fun nt => (nt.name, nt.name, nt.definedIn))
-  let methodOwner : String → Bool → Option (String × String × String × String) := fun n byLocal =>
-    let cands := (if byLocal then localOwners else closureOwners).filterMap fun (ln, dn, di) =>
+  let methodOwnerCands : String → Bool → List (String × String × String × String) := fun n byLocal =>
+    (if byLocal then localOwners else closureOwners).filterMap fun (ln, dn, di) =>
       let sp := if byLocal then ln else dn
       if dn.isEmpty || !n.startsWith (sp ++ "_") then none else
       let rest := (n.drop (sp.length + 1)).toString
@@ -3362,6 +3362,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
            || d.traitImpls.any (fun tb => tb.typeName == dn && tb.methods.any (·.name == rest))
         then some (ln, dn, di, rest) else none
       | none => none
+  let methodOwner : String → Bool → Option (String × String × String × String) := fun n byLocal =>
+    let cands := methodOwnerCands n byLocal
     -- one DECLARATION (two local spellings of it, `P` and an alias `Q`, are one owner)
     match (cands.map fun (_, dn, di, rest) => (dn, di, rest)).eraseDups with
     | [_] => cands.head?
@@ -3446,9 +3448,17 @@ partial def elabModule (m : Module) (summary : FileSummary)
     | none => n
   -- A method spelling that a respelled type may own, whose owner is not identified exactly,
   -- would keep a name another module's method may also have: refused.
+  -- A spelling is unresolved when its owner cannot be identified: two declarations own it, or a
+  -- respelled type it may belong to has no summary to ask. When every such type's defining module
+  -- is known and none declares the method, it is no respelled type's method (an impl of a builtin
+  -- enum's, `Result_is_ok` beside a user `enum Result`: bug 227) and keeps its name.
+  let ownerUnknowable := fun (n : String) =>
+    (methodOwnerCands n true).length ≥ 2
+    || localOwners.any fun (ln, dn, di) =>
+      ambiguousTypes.contains dn && n.startsWith (ln ++ "_") && (defSummary di).isNone
   let unresolvedMethods : Diagnostics := (methodNames.filter fun n =>
       (localMethodRenames.lookup n).isNone && (methodOwner n true).isNone
-      && localOwners.any fun (ln, dn, _) => ambiguousTypes.contains dn && n.startsWith (ln ++ "_")).eraseDups.map fun n =>
+      && ownerUnknowable n).eraseDups.map fun n =>
     { severity := .error, pass := "elab", span := none, code := "E0299"
       message := s!"method '{n}' belongs to a type several modules declare, and Elab cannot tell which type's method it is; Core cannot spell it (bug 096)"
       hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
@@ -3695,15 +3705,39 @@ partial def collectTypeDecls (s : FileSummary) : List (String × String) :=
   ++ s.newtypes.map (fun nt => (nt.name, nt.definedIn))
   ++ s.submoduleSummaries.flatMap (fun (_, sub) => collectTypeDecls sub)
 
+/-- Bug 227 (R-0492 slice 6 step 2): the compiler-provided `Result` is a declaration too
+    (`TypeId.builtin`), so a user type spelled `Result` is ambiguous with it whenever some module
+    of the program can name the builtin, that is unless every module of the program declares its
+    own type of that name (a module's own or imported `Result` withholds the builtin,
+    `builtinEnums`). Such a user declaration is then spelled by its module in Core
+    (`outer_Result`), and the builtin keeps its name, so a consumer that finds an enum by its Core
+    name (`Lower.variantIndex`) cannot meet the user's where the builtin is meant.
+    Over-approximating (a module that imports a user `Result` also counts as one that could see
+    the builtin) only respells a declaration that did not need it, which TypeSpelling makes
+    consistent everywhere. A user `Option` never means `Option` (the builtin is never withheld),
+    so it is left to bug 122's layout pins. -/
+partial def everyModuleDeclaresType (n : String) (s : FileSummary) : Bool :=
+  (s.structs.any (·.name == n) || s.enums.any (·.name == n) || s.newtypes.any (·.name == n))
+    && s.submoduleSummaries.all fun (_, c) => everyModuleDeclaresType n c
+
+def shadowsVisibleBuiltinEnum (tops : List (String × FileSummary)) (n : String) : Bool :=
+  n == resultEnumName
+    && tops.any (fun (_, s) => (collectTypeDecls s).any (·.1 == n))
+    && !tops.all fun (_, s) => everyModuleDeclaresType n s
+
 /-- Bug 096: type names declared by two or more modules of the program. A name the
     compiler itself knows (`builtinTypeNames`, and the std collections Lower, EmitSSA and
-    the interpreter special-case by spelling) is never respelled: those consumers would no
-    longer recognize it. A collision on such a name stays under bug 052's refusals. -/
+    the interpreter special-case by spelling) is never respelled for a collision between user
+    declarations: those consumers would no longer recognize it. A collision on such a name stays
+    under bug 052's refusals. A user declaration of a builtin enum's name is ambiguous with the
+    builtin (`shadowsVisibleBuiltinEnum`): it is respelled, and the builtin is not. -/
 def ambiguousTypeNames (tops : List (String × FileSummary)) : List String :=
   let compilerKnown := "HashMap" :: "HashSet" :: "BinaryHeap" :: builtinTypeNames
   let decls := (tops.flatMap fun (_, s) => collectTypeDecls s).eraseDups
   let names := (decls.map (·.1)).eraseDups
-  names.filter fun n => !compilerKnown.contains n && (decls.filter (·.1 == n)).length ≥ 2
+  names.filter fun n =>
+    (!compilerKnown.contains n && (decls.filter (·.1 == n)).length ≥ 2)
+    || shadowsVisibleBuiltinEnum tops n
 
 /-- Every Core function name of a module tree. -/
 partial def coreFnNamesDeep (cm : CModule) : List String :=

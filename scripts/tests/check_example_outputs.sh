@@ -496,7 +496,6 @@ open_bug_reproducers() {
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 223|bug223_aliased_import_distinct_type/repro.con|compile-fails|(E0106) unknown static method 'Q::mk'
 226|bug226_submodule_imports_private_function/repro.con|compiles|
-227|bug227_user_result_captures_builtin_in_other_module/repro.con|compile-fails|variant 'Ok' not found in enum 'Result'
 TABLE
 }
 if [ -z "$ONLY" ]; then

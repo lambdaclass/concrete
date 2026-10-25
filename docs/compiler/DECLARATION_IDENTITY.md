@@ -8,7 +8,7 @@ constants.
 
 ## Problem
 
-Four open bugs have one cause: a module-level declaration is found again by its spelling, in tables
+Four bugs, open when this slice started, have one cause: a module-level declaration is found again by its spelling, in tables
 whose scope differs from pass to pass (structural classes 1 and 12).
 
 | Bug | Spelling join | Symptom |

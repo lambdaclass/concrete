@@ -42,8 +42,10 @@ program writes is the builtin (Check never withholds it), so the user enums are 
 nothing runs wrong; the two entries are pinned with the others. Bug 227's top-level fixture
 `tests/programs/regress_227_toplevel_builtin_result.con` (2026-10-25) declares `enum Copy Result { A }`
 in one top-level module and uses the builtin `Result<i32, i32>` in another: the report sizes the user
-enum 4 and `%enum.Result` is the canonical 8-byte union; the user enum is never built, and the entry
-is pinned with the others.
+enum 4 and `%enum.Result` was the canonical 8-byte union; the user enum is never built, and the entry
+was pinned with the others until bug 227's fix (the same day) spelled the user enum `a_Result` in
+Core, which gives it its own LLVM type. A user `Result` in a program whose every module declares
+one keeps the name `Result`, so the single-module entries above remain.
 
 ## Expected
 
