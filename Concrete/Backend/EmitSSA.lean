@@ -387,14 +387,17 @@ private def externSymbol (s : EmitSSAState) (name : String) : String :=
     definition (FFI.md "Symbol Names"): the module's own extern binds the foreign symbol;
     otherwise a Concrete definition binds its mangled (or exported) symbol; anything else
     is foreign (an imported extern, a runtime builtin renamed at assembly, a C symbol). -/
-private def directSymbol (s : EmitSSAState) (fn : String) : String × Bool :=
+private def directSymbol (s : EmitSSAState) (fn : String) (space : CallSpace := .free) : String × Bool :=
+  -- A method call names a program method (bugs 238 – 239): the foreign spellings of this body
+  -- and the module's externs are free names, and never bind it.
+  let foreignBinding := if space == .method then none else s.currentForeign.lookup fn
   -- The resolver's verdict for this body first: an own or imported extern.
-  match s.currentForeign.lookup fn with
+  match foreignBinding with
   | some decl =>
     -- A runtime helper binding already names its reserved symbol.
     if decl.startsWith "_C$rt." then (decl, false) else (externSymbol s decl, false)
   | none =>
-  if s.moduleExterns.contains fn then (externSymbol s fn, false)
+  if space == .free && s.moduleExterns.contains fn then (externSymbol s fn, false)
   else
     let pre := resolveAliasedName s fn
     match s.fnSymbols.get? pre with
@@ -838,8 +841,11 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- Previously every one of them read a string that might have been a
     -- `%`-prefixed register, and each had to be careful not to.
     let directName : Option String := match callee with
-      | .direct n => some n
+      | .direct n _ => some n
       | .indirect _ | .foreign _ => none
+    let directSpace : CallSpace := match callee with
+      | .direct _ sp => sp
+      | _ => .free
     -- Intercept vec sized operations for per-element-size dispatch
     match (match directName with
            | some fn => resolveVecCall s fn args retTy
@@ -895,7 +901,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- extern elsewhere shares its spelling (the definition has its own mangled symbol).
     -- An imported alias of an extern (`import c.{take as alias}`) is foreign by the resolver's
     -- binding (`currentForeign`), not by its spelling, and must get the C ABI too.
-    let isExternCall := match directName with
+    let isExternCall := if directSpace == .method then false else match directName with
       | some fn =>
         ((match s.currentForeign.lookup fn with
           | some d => !d.startsWith "_C$rt."
@@ -988,7 +994,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       | .indirect target => svalToOperand s target
       -- A C runtime symbol the compiler chose: never a Concrete definition (bug 129).
       | .foreign sym => .global sym
-      | .direct fn =>
+      | .direct fn space =>
         -- A fn-typed parameter, or a register loaded from memory (fnTypeRegs),
         -- is still a call THROUGH a value even though it is spelled as a bare
         -- symbol here.
@@ -998,7 +1004,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
           .reg fn
         else
           -- Resolve aliased imports to the definition, then to its link symbol.
-          .global (directSymbol s fn).1
+          .global (directSymbol s fn space).1
     -- For extern calls returning small repr(C) structs: call returns i64,
     -- store through pointer so downstream code sees the struct correctly.
     -- Downstream code expects dst to be a pointer (pass-by-ptr for structs).

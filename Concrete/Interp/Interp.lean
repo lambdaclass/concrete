@@ -2340,7 +2340,9 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- recorded in foreignCalls too, while an `#[intrinsic]`-attributed `extern fn abs` is not an
     -- intrinsic spelling and stays foreign).
     let foreign : Option String := match callee with
-      | .direct name _ =>
+      -- A method call names a program method (bugs 238 – 239): foreign spellings are free names.
+      | .direct _ .method => none
+      | .direct name .free =>
         (cx.foreign.lookup name).filter fun decl =>
           decl.startsWith runtimeHelperPrefix || (cx.externs.contains decl && (resolveIntrinsic name).isNone)
       | .indirect binding => match envGetLocal env binding.key with

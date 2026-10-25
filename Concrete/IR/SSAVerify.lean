@@ -192,7 +192,7 @@ private def instUses : SInst → List String
   | .call _ callee args _ =>
     let argRegs := args.foldl (fun acc a => acc ++ svalRegs a) []
     match callee with
-    | .direct _ | .foreign _ => argRegs
+    | .direct _ _ | .foreign _ => argRegs
     | .indirect target => svalRegs target ++ argRegs
   | .alloca _ _ => []
   | .load _ ptr _ => svalRegs ptr
@@ -506,7 +506,7 @@ private def checkPhiTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 private def checkCallArity (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   b.insts.foldl (fun ctx inst =>
     match inst with
-    | .call _ (.direct fn) args _ =>
+    | .call _ (.direct fn _) args _ =>
       match ctx.fnSigs.get? fn with
       | some (paramTys, _) =>
         if args.length != paramTys.length then

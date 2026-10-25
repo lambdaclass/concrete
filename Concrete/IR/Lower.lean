@@ -188,7 +188,7 @@ private def arrayLenOfTy : Ty → Option Nat
     is still used for the GEP. -/
 private def emitBoundsCheck (idxVal : SVal) (len : Nat) : LowerM Unit := do
   let idxI64 ← coerceVal idxVal .int "boundsidx."
-  emit (.call none (.direct "__cc_bounds_check") [idxI64, .intConst (Int.ofNat len) .int] .unit)
+  emit (.call none (.direct "__cc_bounds_check" .free) [idxI64, .intConst (Int.ofNat len) .int] .unit)
 
 /-- Emit an alloca that will be hoisted to the function entry block.
     This prevents dynamic stack growth when allocas occur inside loops. -/
@@ -1050,7 +1050,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- For runtime registers, prefix with "%" to mark as indirect call target.
     let callTarget : SCallee ← do
       match callee with
-      | .direct name _ => pure (.direct name)
+      | .direct name sp => pure (.direct name sp)
       -- The helper's reserved `_C$rt.` symbol, which no Concrete definition can take (bug 165).
       | .runtime helper => pure (.foreign (Symbols.runtimeFn helper))
       | .indirect binding =>
@@ -1058,7 +1058,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- Devirtualization: the binding holds a statically-known function, so
         -- this becomes a direct call. It is now a decision about a VALUE's
         -- constructor, not a string prefix a later pass has to re-parse.
-        | some (.fnRef fnName (.fn_ _ _ _)) => pure (.direct fnName)
+        | some (.fnRef fnName (.fn_ _ _ _)) => pure (.direct fnName .free)
         | some (v@(.reg _ (.fn_ _ _ _))) => pure (.indirect v)
         | _ =>
           -- The call form says this callee is a fn-typed binding, so failing to

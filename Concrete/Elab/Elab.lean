@@ -4156,18 +4156,19 @@ partial def renameBodiesDeep (rn : CoreRename) (cm : CModule) : CModule :=
     therefore captured the method call, natively and in the interpreter.
 
     A method reference (a method call, or a free-spelled method name: `P_get(&p)`, the value
-    `let f = P_get;`) whose spelling a free function of the program defines is respelled by the
-    method it names: the targets of its linker aliases that are method definitions, which must be
-    exactly one and not the spelling itself (a method and a free function DEFINED under one name
-    are two definitions Core cannot tell apart); anything else is refused (E0299) rather than
-    guessed. Other method references keep their spelling, so the proof fingerprints over them do
+    `let f = P_get;`, in a function body or a constant initializer) whose spelling a free function
+    of the program defines is respelled by the method it names: the targets of its linker aliases
+    that are method definitions, which must be exactly one and a spelling no free function takes;
+    anything else is refused (E0299) rather than guessed. A call needs no repair against a foreign
+    binding: the interpreter and emission bind a spelling to one only for a free call
+    (`CallSpace`). A method value does, since a function reference carries no namespace. Other method references keep their spelling, so the proof fingerprints over them do
     not move. -/
 def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModule) :=
   let defs := cms.flatMap coreFnsDeep
-  -- A foreign binding is a free-namespace definition too: consumers bind a spelling to it
-  -- before any program definition (`foreignCalls`), so it captures a method call as surely
-  -- (Codex review r2).
-  let freeDefs := (defs.filter (!·.isMethod)).map (·.name) ++ (cms.flatMap coreExternsDeep).map (·.name)
+  -- For a CALL, program definitions only: a foreign binding, under its declared name or a spelling
+  -- a function binds to it (`foreignCalls`), is consulted by the interpreter and emission for a
+  -- FREE call alone (`CallSpace`), so it cannot capture a method call (Codex reviews r2, r3).
+  let freeDefs := (defs.filter (!·.isMethod)).map (·.name)
   let methodDefs := (defs.filter (·.isMethod)).map (·.name)
   let aliases := cms.flatMap coreAliasesDeep
   -- Constant initializers too: Lower inlines one at each use, after this pass (Codex review r2).
@@ -4175,21 +4176,32 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   let methodCalls : List String := ((defs.flatMap fun f => (collectCalleesStmts f.body).filterMap
       fun c => match c with | .direct n .method => some n | _ => none)
     ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
-      fun c => match c with | .direct n .method => some n | _ => none)
-    ++ defs.flatMap (fun f => methodValuesStmts f.body)
-    ++ consts.flatMap methodValuesExpr).eraseDups
-  let taken := methodCalls.filter freeDefs.contains
+      fun c => match c with | .direct n .method => some n | _ => none)).eraseDups
+  -- A method VALUE is emitted as a function reference, which carries no namespace: a foreign
+  -- binding of its spelling (an extern, or a spelling a function binds to one) would capture it,
+  -- so for values those spellings are taken too.
+  let methodValues : List String :=
+    (defs.flatMap (fun f => methodValuesStmts f.body) ++ consts.flatMap methodValuesExpr).eraseDups
+  let foreignSpellings := (cms.flatMap coreExternsDeep).map (·.name)
+    ++ defs.flatMap (fun f => f.foreignCalls.map (·.1))
+  let takenBy := fun (n : String) =>
+    freeDefs.contains n || (methodValues.contains n && foreignSpellings.contains n)
+  let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>
     let hop1 := (aliases.filter (·.1 == n)).map (·.2)
     let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
     ((if methodDefs.contains n then [n] else []) ++ (hop1 ++ hop2).filter methodDefs.contains).eraseDups
   let resolved := taken.map fun n => (n, targetsOf n)
-  let bad := resolved.filter fun (n, ts) => ts.length != 1 || ts == [n]
+  -- The new spelling must itself be the method's alone: taken by nothing a reference of this
+  -- kind could reach instead.
+  let bad := resolved.filter fun (n, ts) => match ts with
+    | [t] => freeDefs.contains t || (methodValues.contains n && foreignSpellings.contains t)
+    | _ => true
   if !bad.isEmpty then
     .error (bad.map fun (n, ts) =>
       { severity := .error, pass := "elab", span := none, code := "E0299"
-        message := s!"the method reference spelled '{n}' is also the Core name of a free function, and no other spelling identifies the method it names ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
+        message := s!"the method reference spelled '{n}' is also the Core name of a free function or (for a method value) a foreign binding, and the method it names has no spelling that is its alone ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
         hint := some "rename the free function. Tracking: docs/bugs/238_method_call_captured_by_free_fn_of_its_spelling.md" })
   else
   let respelt := resolved.filterMap fun (n, ts) => ts.head?.map (n, ·)

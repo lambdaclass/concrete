@@ -45,7 +45,10 @@ phi down to a known function left a dangling `%if.phi.N` in the emitted call
 substitution, use-collection and verification reach it the same way they reach
 every other one. -/
 inductive SCallee where
-  | direct (name : String)
+  /-- A call of a program definition (or an import alias of one) by name, in the namespace its
+      Core call was resolved in (`CallSpace`, bugs 238 – 239): a `method` call is never bound to
+      a foreign spelling of the function (`foreignCalls`), which only free names can denote. -/
+  | direct (name : String) (space : CallSpace)
   | indirect (target : SVal)
   /-- A call to a C library symbol the COMPILER chose (`malloc` for `alloc`, `free`),
       by its link name. Never resolved against Concrete definitions: a user `fn malloc`
@@ -209,14 +212,14 @@ private def ppSInst (inst : SInst) : String :=
     -- A direct symbol keeps its `@` sigil; an indirect target prints as the
     -- operand it is, so `%r` and `@f` are visibly different in the dump.
     let calleeStr := match callee with
-      | .direct name => s!"@{name}"
+      | .direct name _ => s!"@{name}"
       | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  %{dst} = call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
   | .call none callee args retTy =>
     let argsStr := args.map fun a => s!"{ssaTyToStr a.ty} {ppSVal a}"
     let calleeStr := match callee with
-      | .direct name => s!"@{name}"
+      | .direct name _ => s!"@{name}"
       | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"

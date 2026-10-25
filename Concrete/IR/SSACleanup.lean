@@ -65,7 +65,7 @@ private def replaceRegInInst (inst : SInst) (oldReg : String) (replacement : SVa
     -- left the dead `%name` in place and the backend emitted a call through an
     -- undefined value (bug 056).
     let callee' := match callee with
-      | .direct name => .direct name
+      | .direct name sp => .direct name sp
       | .foreign name => .foreign name
       | .indirect target => .indirect (r target)
     .call dst callee' (args.map r) retTy
@@ -179,7 +179,7 @@ private def instUses : SInst → List String
     -- that produces it; `svalUses` also answers `[]` for a `.fnRef`, which is a
     -- global and needs nothing kept alive.
     match callee with
-    | .direct _ | .foreign _ => argUses
+    | .direct _ _ | .foreign _ => argUses
     | .indirect target => svalUses target ++ argUses
   | .alloca _ _ => []
   | .load _ ptr _ => svalUses ptr

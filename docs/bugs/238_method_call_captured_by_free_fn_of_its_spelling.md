@@ -25,8 +25,14 @@ call `P_get(&p)` and as a value `let f: fn(&P) -> i32 = P_get;`, which Core resp
 `regress_238_method_call_in_constant.con` (the method call in a constant's initializer, which
 Lower inlines at each use; before: 99) and `regress_238_extern_takes_method_spelling.con` (a
 foreign binding `#[link_name = "abs"] extern fn outer_a_P_get`, which consumers bind before any
-program definition; before: the method call ran `abs`, 99). The last two were found by the Codex
-review of the first version of this fix.
+program definition; before: the method call ran `abs`, 99). Codex reviews of this fix found these
+two and three more foreign-binding shapes:
+`regress_238_imported_extern_alias_takes_method_spelling.con` (an extern imported under the
+alias `P_get`, the definition name of the imported `P`'s method; before: 99),
+`regress_238_method_definition_name_taken_by_extern.con` (foreign bindings under both the call's
+spelling and the method's definition name; before: 99) and
+`regress_238_method_value_spelled_like_extern.con` (a method value spelled like a foreign binding;
+before: refused as a foreign function value, E0588).
 
 ## Cause
 
@@ -46,12 +52,20 @@ A Core reference to a function now carries the namespace it was resolved in (bug
 call `Callee.direct name space`, a function value `CLocal.space`, with `CallSpace.free | .method`.
 A free-spelled name that Check resolved to a method by its definition name is `method` too. Elab's
 last spelling pass, `spellMethodCallsApart`, finds every method reference (in function bodies and
-constant initializers) whose spelling a free function or a foreign binding of the program defines and respells it by the method it names: the targets of its linker
-aliases that are method definitions (`CFnDef.isMethod`), which must be exactly one and not the
-spelling itself, else E0299 ("Core cannot tell them apart"). Other method references keep their
-spelling, so no proof fingerprint over them moves.
+constant initializers) whose spelling a free function of the program defines and respells it by
+the method it names: the targets of its linker aliases that are method definitions
+(`CFnDef.isMethod`), which must be exactly one and a spelling no free function takes, else E0299
+("Core cannot tell them apart"). Other method references keep their spelling, so no proof
+fingerprint over them moves.
 
-Regression legs in `run_tests.sh`: the six fixtures above, `run_ok … 42` and `--interp` = 42.
+A foreign binding is bound by spelling in the interpreter and in emission (`foreignCalls`, a
+module's externs) before any program definition. Those lookups now apply to a free call only
+(`SCallee.direct name space` carries the namespace through Lower; `EmitSSA.directSymbol`, the
+interpreter's call path), so no foreign binding answers a method call. A function reference
+carries no namespace, so a method value whose spelling a foreign binding takes is respelled by
+`spellMethodCallsApart` too.
+
+Regression legs in `run_tests.sh`: the nine fixtures above, `run_ok … 42` and `--interp` = 42.
 
 ## Structural cause
 
