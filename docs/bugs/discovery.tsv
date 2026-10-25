@@ -78,3 +78,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-24	hunt	differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp	60 programs	231,233,234,235,236	-
 2026-10-24	development	recording the differential hunt batch (check_docs_drift.sh discovery-signal controls)	unrecorded	232	-
 2026-10-24	ci	train 16 CI: the gate-selection gate's docs-only precision control failed after a bug-corpus note named a gate script	unrecorded	237	-
+2026-10-25	development	operating the pre-push hook on the dev host (a gate run killed mid-run left orphaned gate processes and a repository lock that refused every later run)	unrecorded	244	-

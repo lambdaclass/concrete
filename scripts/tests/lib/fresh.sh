@@ -44,13 +44,101 @@ _FRESH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # one supported platform is not a lock, it is a platform-specific outage.
 #
 # NO EXIT TRAP, deliberately. Gates set their own `trap ... EXIT`/`ERR`, and installing one here
-# would silently clobber theirs — replacing a concurrency bug with a reporting bug. Instead the lock
-# records its owner's PID and a later run RECLAIMS it when that PID is gone, so a killed run heals
-# the lock instead of wedging the repository.
+# would silently clobber theirs — replacing a concurrency bug with a reporting bug. Release is composed
+# into the gate's own traps instead (see `trap()` below).
+#
+# A KILLED RUN IS RECLAIMED BY ITS PROCESS GROUP, NEVER BY ITS CREATOR'S PID (bug 244). A run started
+# through scripts/tests/lib/gate_session.py is the whole of one session's process group, and the lock
+# records that group (`pgid=`). The lease is over when the kernel reports no member of the group,
+# nor of any group a deliberate escaper registered under `groups/` — not when the creator is gone,
+# which is the unsafe rule this file once had (see "HELD" below). A lock with no recorded group is
+# still recovered only by hand.
 #
 # RE-ENTRANT within one run: a runner that holds the lock exports `CONCRETE_GATE_LOCK`, and the
 # gates it invokes inherit it rather than deadlocking against their own parent.
 _GATE_LOCK_DIR="$_FRESH_ROOT/.gate.lock"
+
+# THE GATE SESSION THIS PROCESS BELONGS TO, if any (bug 244). gate_session.py exports
+# CONCRETE_GATE_SESSION=<pgid> into the group it creates. The value is believed only when the kernel
+# agrees that this process is in that group, so an inherited or forged value records nothing.
+_gate_lock_session_pgid() {
+  local want="${CONCRETE_GATE_SESSION:-}" got
+  case "$want" in ''|*[!0-9]*) return 1 ;; esac
+  got="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')" || return 1
+  [ -n "$got" ] && [ "$got" = "$want" ] || return 1
+  printf '%s' "$got"
+}
+
+# IS THE RUN THAT HOLDS A LOCK OVER? Prints `gone`, `alive:<evidence>` or `unprovable:<reason>`, and
+# only `gone` permits a reclaim.
+#
+# `gone` means: the owner record names a session group, ps produced a snapshot of this machine (it
+# contains the asking process), and no process in that snapshot belongs to that group — nor, where ps
+# reports session ids (Linux), to that session — nor to any group registered under `groups/` by a
+# launcher that deliberately leaves the session (run_campaign_child.py), and the creator pid is not
+# alive. Everything that cannot be shown is `unprovable`, never `gone`: no group recorded (a lock taken
+# outside a gate session), a launch registered as pending (its group was never recorded), an unreadable
+# owner, a failed ps. A reused pid or pgid can only make a finished run look alive, which refuses.
+_gate_lock_lease_state() {
+  local dir="$1" owner pid pg groups="" g ps_out n live=""
+  [ -f "$dir/owner" ] || { echo "unprovable:no-owner-record"; return 0; }
+  owner="$(cat "$dir/owner" 2>/dev/null)" || { echo "unprovable:owner-unreadable"; return 0; }
+  pid="$(printf '%s\n' "$owner" | sed -n 's/^pid=//p' | head -1)"
+  pg="$(printf '%s\n' "$owner" | sed -n 's/^pgid=//p' | head -1)"
+  case "$pid" in ''|*[!0-9]*) echo "unprovable:no-creator-pid"; return 0 ;; esac
+  case "$pg" in ''|*[!0-9]*) echo "unprovable:no-session-recorded"; return 0 ;; esac
+  [ "$pg" -gt 1 ] || { echo "unprovable:bad-session($pg)"; return 0; }
+  if [ -d "$dir/groups" ]; then
+    for g in "$dir"/groups/*; do
+      [ -e "$g" ] || continue
+      case "${g##*/}" in
+        pending.*) echo "unprovable:escaper-launch-unrecorded(${g##*/})"; return 0 ;;
+        *[!0-9]*) echo "unprovable:bad-group-entry(${g##*/})"; return 0 ;;
+      esac
+      groups="$groups ${g##*/}"
+    done
+  fi
+  ps_out="$(ps -A -o pid=,pgid=,sid= 2>/dev/null)" || ps_out="$(ps -A -o pid=,pgid= 2>/dev/null)" \
+    || { echo "unprovable:ps-failed"; return 0; }
+  printf '%s\n' "$ps_out" | awk -v me="$$" '$1 == me { f = 1 } END { exit f ? 0 : 1 }' \
+    || { echo "unprovable:ps-snapshot-incomplete"; return 0; }
+  for g in $pg $groups; do
+    n="$(printf '%s\n' "$ps_out" | awk -v g="$g" '{ for (i = 2; i <= NF; i++) if ($i == g) { c++; break } } END { print c + 0 }')"
+    [ "$n" = "0" ] || live="$live group $g has $n live member(s);"
+  done
+  kill -0 "$pid" 2>/dev/null && live="$live creator $pid is alive;"
+  if [ -n "$live" ]; then echo "alive:${live# }"; else echo "gone"; fi
+}
+
+# RECLAIM A LOCK WHOSE RUN IS PROVABLY OVER (bug 244), and nothing else. The judgment and the removal
+# happen under a second `mkdir` mutex: without it two runs could each judge the same lock stale, and
+# the later one would delete the fresh lock the earlier one had just taken. A mutex stranded by a kill
+# inside this function (no children, a few milliseconds) makes reclaim refuse, with its path in the
+# message; it never makes reclaim proceed.
+_gate_lock_reclaim_stale() {
+  local mutex="$_GATE_LOCK_DIR.reclaim" desc
+  _GATE_LOCK_LEASE=""
+  [ -d "$_GATE_LOCK_DIR" ] || return 1
+  case "$_GATE_LOCK_DIR" in */.gate.lock) ;; *) return 1 ;; esac
+  if ! mkdir "$mutex" 2>/dev/null; then
+    _GATE_LOCK_LEASE="unprovable:another reclaim holds $mutex (if no run is starting, remove it)"
+    return 1
+  fi
+  _GATE_LOCK_LEASE="$(_gate_lock_lease_state "$_GATE_LOCK_DIR")"
+  if [ "$_GATE_LOCK_LEASE" != "gone" ]; then
+    rmdir "$mutex" 2>/dev/null
+    return 1
+  fi
+  desc="$(tr '\n' ' ' < "$_GATE_LOCK_DIR/owner" 2>/dev/null)"
+  if ! rm -rf "$_GATE_LOCK_DIR" 2>/dev/null || [ -d "$_GATE_LOCK_DIR" ]; then
+    rmdir "$mutex" 2>/dev/null
+    _GATE_LOCK_LEASE="unprovable:could not remove the stale lock"
+    return 1
+  fi
+  rmdir "$mutex" 2>/dev/null
+  echo "note: reclaimed the repository lock of a finished run (${desc% }): no process of its session remains" >&2
+  return 0
+}
 
 _gate_lock_acquire() {
   # Already held by an ancestor of this process: one run, one lock.
@@ -111,13 +199,25 @@ _gate_lock_acquire() {
   fi
 
   local owner_pid owner_desc
+  # A LOCK WHOSE RECORDED SESSION IS PROVABLY EMPTY IS RECLAIMED, and only then (bug 244).
+  local _took=0
   if mkdir "$_GATE_LOCK_DIR" 2>/dev/null; then
+    _took=1
+  elif _gate_lock_reclaim_stale && mkdir "$_GATE_LOCK_DIR" 2>/dev/null; then
+    _took=1
+  fi
+  if [ "$_took" = "1" ]; then
     # THE OWNER RECORD IS PART OF ACQUISITION, not best-effort metadata. This was `|| true`, so a
     # failed write left a lock directory with no owner while acquisition reported SUCCESS — after
     # which every re-entrant child REJECTED the exported token (its owner check cannot match), and
     # test_mutation.sh counted those refusals as mutation kills. A lease nobody can verify is not a
     # lease, so the directory is removed and acquisition fails.
-    if ! printf 'pid=%s\ncmd=%s\n' "$$" "${0##*/}" > "$_GATE_LOCK_DIR/owner" 2>/dev/null; then
+    # `pgid=` only when this process belongs to a gate session's group: that line is what makes a
+    # later automatic reclaim possible, so it is never written on a guess.
+    local _pg _pgline=""
+    _pg="$(_gate_lock_session_pgid)" && _pgline="pgid=$_pg
+"
+    if ! printf 'pid=%s\ncmd=%s\n%s' "$$" "${0##*/}" "$_pgline" > "$_GATE_LOCK_DIR/owner" 2>/dev/null; then
       rmdir "$_GATE_LOCK_DIR" 2>/dev/null || rm -rf "$_GATE_LOCK_DIR" 2>/dev/null || true
       echo "GATE-PRECONDITION-FAILED: lock-owner-unrecordable" >&2
       echo "error: took the lock directory but could not record its owner — releasing it." >&2
@@ -155,13 +255,13 @@ _gate_lock_acquire() {
   # lock on that basis and ran alongside it. Nothing was corrupted only because both parties happened
   # to work in disposable copies. The mechanism defeats the lock's entire purpose.
   #
-  # PID liveness cannot be repaired into a safe signal here. The creator is the wrong process to
-  # probe, PIDs are reused, and there is no portable way to prove a whole lease is gone — process
-  # groups do not survive the shells this runs under, and `flock` is absent on macOS.
-  #
-  # So the policy is fail-closed: refuse, and require an explicit human recovery step. A stale lock
-  # costs one command to clear; a wrongly reclaimed one costs a verdict about an artifact that never
-  # existed, and costs it silently.
+  # PID liveness cannot be repaired into a safe signal. The creator is the wrong process to probe and
+  # PIDs are reused. What CAN be proven is that a whole process group is empty — but only for a group
+  # that is the run, which the shells this runs under never create. gate_session.py creates one, and
+  # `_gate_lock_reclaim_stale` above reclaims on exactly that proof (bug 244). Everything else is
+  # fail-closed as before: refuse, and require an explicit human recovery step. A stale lock costs one
+  # command to clear; a wrongly reclaimed one costs a verdict about an artifact that never existed,
+  # and costs it silently.
   owner_pid="$(sed -n 's/^pid=//p' "$_GATE_LOCK_DIR/owner" 2>/dev/null || true)"
   owner_desc="$(tr '\n' ' ' < "$_GATE_LOCK_DIR/owner" 2>/dev/null || true)"
   local liveness="unknown"
@@ -177,10 +277,16 @@ _gate_lock_acquire() {
   echo "REPOSITORY BUSY — refusing to run this gate." >&2
   echo "  Lock holder: ${owner_desc:-unknown owner} (creator pid ${owner_pid:-?} is $liveness)" >&2
   echo "  Gate-like processes currently running: ${live_gates:-0}" >&2
+  echo "  Recorded session: ${_GATE_LOCK_LEASE:-not examined}" >&2
   echo "" >&2
   echo "  Gates share one .lake tree and one binary. Running alongside a rebuild yields a verdict" >&2
   echo "  about an artifact that never existed, which is worse than no verdict at all." >&2
-  if [ "$liveness" = "dead" ]; then
+  if [ "${_GATE_LOCK_LEASE%%:*}" = "alive" ]; then
+    echo "" >&2
+    echo "  Processes of the run that holds this lock are still alive, so the tree is NOT free even if" >&2
+    echo "  its creator is gone. The lock is reclaimed automatically once none of them remains:" >&2
+    echo "  wait for them, or stop them." >&2
+  elif [ "$liveness" = "dead" ]; then
     echo "" >&2
     echo "  The recorded creator is gone, but that does NOT mean the tree is free: children that" >&2
     echo "  inherited this lock outlive their creator, and reclaiming on a dead PID has already" >&2

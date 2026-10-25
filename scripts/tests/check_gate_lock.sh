@@ -582,6 +582,217 @@ awk '/^_gate_lock_release\(\)/,/^}/' "$LIB" | grep -q '/proc' \
   && no "the RELEASE path reads /proc — it would behave differently on macOS" \
   || ok "the release path requires no /proc"
 
+echo ""
+echo "=== a killed run cannot wedge the tree (bug 244) ==="
+# THE DEFECT. Killing a gate run killed one process: its gates, the compilers they ran and the harness
+# copies they worked in were reparented to init and kept going, and the lock then refused every later
+# run — rightly, since a dead creator says nothing about its children — until someone deleted it by
+# hand. The run is now one process group (scripts/tests/lib/gate_session.py) and the lock records
+# that group, so: a signal to the runner ends every descendant; the lock is reclaimed automatically
+# once the kernel reports the group empty; and it is still REFUSED while any member is alive.
+#
+# Every probe below runs in a sandbox. The runner sandbox is a throwaway git repository holding the
+# real runner and libraries, a stub `lake` and a dummy gate; its sessions are started with the
+# enclosing session's marker removed, so each is a session of its own, and each is killed here.
+GS="$ROOT_DIR/scripts/tests/lib/gate_session.py"
+_sbprobe() { # dir -> ACQUIRED|REFUSED, stderr in $TMP/err; never inherits a lock or a session
+  ( cd "$1" && env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION bash -c \
+      'source scripts/tests/lib/fresh.sh; _gate_lock_acquire && echo ACQUIRED || echo REFUSED' 2>"$TMP/err" )
+}
+_alive_any() { local f p; for f in "$@"; do p="$(cat "$f" 2>/dev/null)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null && return 0; done; return 1; }
+_wait_dead() { local i; for i in $(seq 1 100); do _alive_any "$@" || return 0; sleep 0.2; done; return 1; }
+_wait_file() { local i; for i in $(seq 1 150); do [ -s "$1" ] && return 0; sleep 0.2; done; return 1; }
+_dead_pid() { sh -c 'exit 0' & local p=$!; wait "$p" 2>/dev/null; echo "$p"; }
+# A live process group of its own, standing in for a run's surviving children.
+_live_group() { # pidfile
+  # Started from a subshell, so it is not this shell's job and its death is not announced.
+  ( python3 -c 'import os,sys,time; os.setsid(); open(sys.argv[1],"w").write(str(os.getpid())); time.sleep(60)' "$1" & )
+  _wait_file "$1"
+}
+LIVE_PIDS=""
+_bug244_cleanup() { local p; for p in $LIVE_PIDS; do kill -KILL -- "-$p" 2>/dev/null; kill -KILL "$p" 2>/dev/null; done; }
+trap '_bug244_cleanup; rm -rf "${TMP:?}"' EXIT
+
+if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$GS" ]; then
+  no "python3 or $GS is missing; a killed run would strand its children again"
+else
+
+# --- the record: a group is written only when the kernel agrees ---
+_clear
+_mkprobe rec.sh 'source scripts/tests/lib/fresh.sh
+_gate_lock_acquire || exit 9
+cp .gate.lock/owner rec.owner'
+rm -f "$SB/rec.owner"
+( cd "$SB" && env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION python3 "$GS" -- bash rec.sh >/dev/null 2>&1 )
+grep -q '^pgid=[0-9][0-9]*$' "$SB/rec.owner" 2>/dev/null \
+  && ok "a lock taken inside a gate session records the session's process group" \
+  || no "a lock taken inside a gate session records no group ($(tr '\n' ' ' < "$SB/rec.owner" 2>/dev/null)) — nothing could ever prove its run over"
+rm -f "$SB/rec.owner"
+( cd "$SB" && env -u CONCRETE_GATE_LOCK CONCRETE_GATE_SESSION=1 bash rec.sh >/dev/null 2>&1 )
+if [ -f "$SB/rec.owner" ] && ! grep -q '^pgid=' "$SB/rec.owner"; then
+  ok "a forged or inherited session marker the kernel does not confirm records no group"
+else
+  no "an unconfirmed CONCRETE_GATE_SESSION was recorded as the lock's group — a reclaim could follow a lie"
+fi
+_clear
+
+# --- the rule: dead creator + live group refuses; empty group reclaims ---
+_live_group "$TMP/g1.pid" || no "could not start a live process group for the controls"
+G1="$(cat "$TMP/g1.pid" 2>/dev/null)"; LIVE_PIDS="$LIVE_PIDS $G1"
+DEAD="$(_dead_pid)"
+mkdir -p "$SB/.gate.lock"; printf 'pid=%s\ncmd=killed_runner.sh\npgid=%s\n' "$DEAD" "$G1" > "$SB/.gate.lock/owner"
+R="$(_sbprobe "$SB")"
+if [ "$R" = "REFUSED" ] && grep -q 'still alive' "$TMP/err"; then
+  ok "a dead creator whose group still has a live member is REFUSED, and the refusal says why"
+else
+  no "a dead creator with a live group was $R — that hands the tree to a run while the old one's children work it"
+fi
+kill -KILL -- "-$G1" 2>/dev/null; _wait_dead "$TMP/g1.pid"
+R="$(_sbprobe "$SB")"
+if [ "$R" = "ACQUIRED" ] && grep -q 'reclaimed the repository lock' "$TMP/err"; then
+  ok "once no member of the recorded group remains, the next run reclaims the lock with no manual step"
+else
+  no "a provably finished run's lock was $R — a killed run still wedges the tree"
+fi
+_clear
+
+# --- a group registered by a launcher that leaves the session keeps the lock ---
+_live_group "$TMP/g2.pid"; G2="$(cat "$TMP/g2.pid" 2>/dev/null)"; LIVE_PIDS="$LIVE_PIDS $G2"
+mkdir -p "$SB/.gate.lock/groups"; printf 'pid=%s\ncmd=x\npgid=%s\n' "$DEAD" "$DEAD" > "$SB/.gate.lock/owner"
+: > "$SB/.gate.lock/groups/$G2"
+[ "$(_sbprobe "$SB")" = "REFUSED" ] \
+  && ok "a live group registered under groups/ (a campaign that left the session) keeps the lock" \
+  || no "a registered escaper group was ignored — the 2026-08-20 incident, reachable again"
+kill -KILL -- "-$G2" 2>/dev/null; _wait_dead "$TMP/g2.pid"
+rm -f "$SB/.gate.lock/groups/$G2"; : > "$SB/.gate.lock/groups/pending.$DEAD"
+[ "$(_sbprobe "$SB")" = "REFUSED" ] \
+  && ok "a launch registered as pending (its group never recorded) is unprovable and refused" \
+  || no "a pending launch was reclaimed — its child may be running unrecorded"
+_clear
+mkdir -p "$SB/.gate.lock"; printf 'pid=%s\ncmd=x\npgid=%s\n' "$DEAD" "$DEAD" > "$SB/.gate.lock/owner"
+mkdir -p "$SB/.gate.lock.reclaim"
+[ "$(_sbprobe "$SB")" = "REFUSED" ] \
+  && ok "a reclaim mutex held by someone else refuses rather than racing it" \
+  || no "reclaim proceeded under another reclaimer's mutex"
+rm -rf "$SB/.gate.lock.reclaim"; _clear
+
+# --- the escaping launcher registers its group, then removes it ---
+mkdir -p "$SB/.gate.lock"; printf 'pid=%s\ncmd=holder\n' "$$" > "$SB/.gate.lock/owner"
+CONCRETE_GATE_LOCK="$$:$SB/.gate.lock" python3 "$ROOT_DIR/scripts/tests/lib/run_campaign_child.py" \
+  --report "$TMP/launch.rep" --run-id "GL-$$" -- sh -c 'ls "$1"' _ "$SB/.gate.lock/groups" > "$TMP/launch.ls" 2>/dev/null
+if grep -qE '^[0-9]+$' "$TMP/launch.ls" && ! grep -q '^pending' "$TMP/launch.ls"; then
+  ok "run_campaign_child.py registers the group it creates in the lock before the child works"
+else
+  no "run_campaign_child.py did not register its group ($(tr '\n' ' ' < "$TMP/launch.ls")) — a reclaim could not see its child"
+fi
+[ -z "$(ls "$SB/.gate.lock/groups" 2>/dev/null)" ] \
+  && ok "...and removes the registration once its group is empty" \
+  || no "run_campaign_child.py left a registration behind ($(ls "$SB/.gate.lock/groups"))"
+_clear
+
+# --- the real runner, killed ---
+RSB="$TMP/runner-sb"; MARK="$TMP/mark"; mkdir -p "$RSB/scripts/tests/lib" "$RSB/.github/workflows" \
+  "$RSB/.lake/build/bin" "$RSB/Concrete" "$TMP/bin" "$MARK"
+cp scripts/tests/run_ci_gates_local.sh "$RSB/scripts/tests/"
+cp scripts/tests/lib/*.sh scripts/tests/lib/*.py "$RSB/scripts/tests/lib/"
+cp .github/workflows/lean_action_ci.yml "$RSB/.github/workflows/"
+[ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$RSB/scripts/tests/"
+cp .gitignore "$RSB/"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/lake"; chmod +x "$TMP/bin/lake"
+printf '#!/bin/sh\nexit 0\n' > "$RSB/.lake/build/bin/concrete"; chmod +x "$RSB/.lake/build/bin/concrete"
+printf 'def buildIdentity : String := "%s"\n' 0123456789abcdef0123456789abcdef > "$RSB/Concrete/BuildIdentity.lean"
+# The long gate: a backgrounded grandchild, and one that IGNORES SIGTERM, so the escalation is tested too.
+cat > "$RSB/scripts/tests/check_dummy_long.sh" <<'DUMMY'
+echo $$ > "$DUMMY_MARK/gate.pid"
+( sleep 60 & echo $! > "$DUMMY_MARK/child.pid"; wait ) &
+bash -c 'trap "" TERM; sleep 60' & echo $! > "$DUMMY_MARK/stubborn.pid"
+sleep 0.3; echo ready > "$DUMMY_MARK/ready"
+wait
+DUMMY
+printf 'echo quick\n' > "$RSB/scripts/tests/check_dummy_quick.sh"
+( cd "$RSB" && git init -q && git add -A && git -c user.email=gate@local -c user.name=gate commit -qm sandbox ) >/dev/null 2>&1
+_runner() { # out first-cmd -> starts the runner in the background as a fresh top-level run; sets RPID
+  ( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
+      CONCRETE_GATE_SESSION_GRACE=2 DUMMY_MARK="$MARK" JOBS=1 \
+      bash scripts/tests/run_ci_gates_local.sh --first "$2" >"$1" 2>&1 ) &
+  RPID=$!; LIVE_PIDS="$LIVE_PIDS $RPID"
+}
+_survivors() { echo "$MARK/gate.pid" "$MARK/child.pid" "$MARK/stubborn.pid"; }
+_reset_marks() { rm -f "${MARK:?}/gate.pid" "${MARK:?}/child.pid" "${MARK:?}/stubborn.pid" "${MARK:?}/ready"; rm -rf "${RSB:?}/.gate.lock"; }
+
+for SIG in TERM INT; do
+  _reset_marks
+  _runner "$TMP/run.$SIG" "bash scripts/tests/check_dummy_long.sh"
+  if ! _wait_file "$MARK/ready"; then
+    no "SIG$SIG: the sandbox runner never started its gate ($(tail -3 "$TMP/run.$SIG" | tr '\n' ' '))"; kill -KILL "$RPID" 2>/dev/null; continue
+  fi
+  grep -q '^pgid=' "$RSB/.gate.lock/owner" 2>/dev/null \
+    && ok "SIG$SIG: the running runner's lock records its session group" \
+    || no "SIG$SIG: the runner's lock records no group ($(tr '\n' ' ' < "$RSB/.gate.lock/owner" 2>/dev/null))"
+  kill -"$SIG" "$RPID"
+  # BOUNDED. A runner that waits out its gates before exiting would make every check below pass by
+  # waiting for the sleeps to end, so it must be gone within seconds of the signal.
+  for _ in $(seq 1 75); do kill -0 "$RPID" 2>/dev/null || break; sleep 0.2; done
+  if kill -0 "$RPID" 2>/dev/null; then
+    no "SIG$SIG: the runner was still running 15 s after the signal"; kill -KILL "$RPID" 2>/dev/null
+  else
+    ok "SIG$SIG: the runner exits promptly"
+  fi
+  wait "$RPID" 2>/dev/null
+  # shellcheck disable=SC2046
+  if _wait_dead $(_survivors); then
+    ok "SIG$SIG to the runner ends every descendant, including one that ignores SIGTERM"
+  else
+    no "SIG$SIG to the runner left descendants alive — orphans keep working the tree"
+    for f in $(_survivors); do kill -KILL "$(cat "$f" 2>/dev/null)" 2>/dev/null; done
+  fi
+  [ ! -d "$RSB/.gate.lock" ] \
+    && ok "SIG$SIG: the killed run left no lock behind" \
+    || no "SIG$SIG: the killed run left its lock ($(tr '\n' ' ' < "$RSB/.gate.lock/owner" 2>/dev/null))"
+  _runner "$TMP/next.$SIG" "bash scripts/tests/check_dummy_quick.sh"; wait "$RPID" 2>/dev/null
+  if grep -q 'PASS=1 FAIL=0' "$TMP/next.$SIG" && ! grep -q 'REPOSITORY BUSY' "$TMP/next.$SIG"; then
+    ok "SIG$SIG: the next run acquires the lock and runs, with no manual recovery"
+  else
+    no "SIG$SIG: the next run did not run ($(grep -m2 -E 'BUSY|PASS=|error' "$TMP/next.$SIG" | tr '\n' ' '))"
+  fi
+done
+
+# --- the safety property, on the real runner: inherited children alive => refuse ---
+# Stopping the launcher, the session leader and the runner before killing them removes everyone who
+# would clean up — the state a `kill -9` of the whole parent chain leaves: the creator is dead and the
+# gate it launched is still working the tree.
+_reset_marks
+_runner "$TMP/run.kill9" "bash scripts/tests/check_dummy_long.sh"
+if _wait_file "$MARK/ready"; then
+  RPG="$(sed -n 's/^pgid=//p' "$RSB/.gate.lock/owner" 2>/dev/null)"; ROWN="$(sed -n 's/^pid=//p' "$RSB/.gate.lock/owner" 2>/dev/null)"
+  LIVE_PIDS="$LIVE_PIDS $RPG"
+  kill -STOP "$RPID" "$RPG" "$ROWN" 2>/dev/null
+  kill -KILL "$RPID" "$RPG" "$ROWN" 2>/dev/null; wait "$RPID" 2>/dev/null
+  sleep 0.5
+  if _alive_any "$MARK/gate.pid" && ! kill -0 "$ROWN" 2>/dev/null; then
+    R="$(_sbprobe "$RSB")"
+    if [ "$R" = "REFUSED" ] && grep -q 'still alive' "$TMP/err"; then
+      ok "creator SIGKILLed with its gate still running: the next run is REFUSED"
+    else
+      no "creator dead but its gate alive, and the next run was $R — the tree was handed over while worked"
+    fi
+    kill -KILL -- "-$RPG" 2>/dev/null
+    # shellcheck disable=SC2046
+    _wait_dead $(_survivors) || no "the stranded group could not be killed for the control"
+    R="$(_sbprobe "$RSB")"
+    [ "$R" = "ACQUIRED" ] \
+      && ok "...and once the last member is gone, the next run reclaims the lock by itself" \
+      || no "...but after the last member exited the lock still refused ($R) — a wedge"
+  else
+    no "the SIGKILL control did not reach its state (gate alive, creator dead); it proves nothing"
+  fi
+else
+  no "the SIGKILL control's runner never started its gate"
+fi
+_clear
+
+fi
+
 echo "=== the real repository lock was not touched ==="
 # COMPARED AGAINST A SNAPSHOT TAKEN BEFORE ANY PROBE RAN. Both branches of this used to call `ok`, so
 # the assertion could not fail — it would have reported success even if this gate had deleted or
