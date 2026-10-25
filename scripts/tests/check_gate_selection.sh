@@ -314,6 +314,14 @@ get_gate() {
 gate=$(get_gate k)
 "$gate" --plan
 EOF
+leg funcout2 run "the same, for a function declared with the function keyword" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+function get_gate {
+  printf '%s\n' "${M[$1]}"
+}
+gate=$(get_gate k)
+"$gate" --plan
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

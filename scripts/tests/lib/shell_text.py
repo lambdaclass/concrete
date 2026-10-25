@@ -49,7 +49,7 @@ PURE_FILTERS = {"grep", "egrep", "fgrep", "cut", "tr", "sort", "uniq", "head", "
 # terminal or its own line's capture, so no print in such a script is TEXT.
 COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
                              r"|\bexec\s+[0-9]*>(?!&)")
-FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+)?([A-Za-z_][\w-]*)\s*\(\)")
+FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+([A-Za-z_][\w-]*)|([A-Za-z_][\w-]*)\s*\(\))")
 AWK_UNSAFE_RE = re.compile(r"system|getline|\||>|ENVIRON")
 DECLARE_CMDS = {"local", "declare", "typeset", "readonly"}
 # Anywhere in a script these reach an array without spelling `$NAME`: a nameref, an indirect
@@ -368,7 +368,7 @@ def use_level(seeds, code_lines, elements, exec_re):
         return RUN
     pats, level, grew = set(seeds), TEXT, True
     parsed = [(line, simple_commands(line)) for line in code_lines]
-    funcs = {m.group(1) for line in code_lines for m in [FUNC_DEF_RE.match(line)] if m}
+    funcs = {m.group(1) or m.group(2) for line in code_lines for m in [FUNC_DEF_RE.match(line)] if m}
     prints_escape = any(COMPOUND_OUT_RE.search(line) or _open_subst(line) for line in code_lines) \
         or any(_command_name(cmd) in funcs and (cmd[-1] == ("|", "pipe")
                                                 or any(r == "redir" for _, r in cmd))
