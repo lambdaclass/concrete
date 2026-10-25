@@ -41,6 +41,10 @@ structure PeekCtx (m : Type → Type) where
   constant : String → m (Option Ty)
   /-- A callable's signature as seen from a call site. -/
   fnSig : String → m (Option FnSummary)
+  /-- A method's signature, by the receiver type's spelling and the method's name: found by the
+      type's declaration identity where it has one (`methodByIdentity`, R-0492 step 3, bug 223),
+      otherwise by the mangled spelling. -/
+  method : (typeName methodName : String) → m (Option FnSummary)
   /-- A callable's signature as seen from a function-reference expression. -/
   fnRefSig : String → m (Option FnSummary)
   /-- A struct definition. -/
@@ -186,7 +190,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | some sig => return (if sig.typeParams.isEmpty then sig.retTy else .placeholder)
       | none => return .placeholder
   | .staticMethodCall _ typeName methodName _ _ =>
-    match ← ctx.fnSig (mangledMethodName typeName methodName) with
+    match ← ctx.method typeName methodName with
     | some sig =>
       return (if sig.typeParams.isEmpty && sig.capParams.isEmpty then sig.retTy else .placeholder)
     | none => return .placeholder
@@ -212,7 +216,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
     | _ =>
       let typeName := tyName innerTy
       if typeName == "" then return .placeholder
-      match ← ctx.fnSig (mangledMethodName typeName methodName) with
+      match ← ctx.method typeName methodName with
       | some sig =>
         let objTypeArgs := match innerTy with | .generic _ targs _ => targs | _ => []
         if sig.typeParams.length != objTypeArgs.length then return .placeholder

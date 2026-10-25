@@ -1,0 +1,22 @@
+// Bug 223 (FIXED, R-0492 step 3): an aliased imported linear type keeps its Destroy impl: a Destroy bound is
+// satisfied through the alias and `b.destroy()` finds the impl's method. Returns 42.
+mod m {
+    mod res {
+        pub struct H { pub n: i64 }
+        impl Destroy for H { pub fn destroy(self) { let H { n } = self; } }
+        pub fn open(n: i64) -> H { return H { n: n }; }
+        pub fn kill<T: Destroy>(x: T) with(Alloc) { x.destroy(); }
+    }
+    mod user {
+        import m.res.{H as R, open, kill};
+        pub fn run() with(Alloc) -> i64 {
+            let a: R = open(1);
+            let b: R = R { n: 2 };
+            kill(a);
+            b.destroy();
+            return 42;
+        }
+    }
+    import user.{run};
+    pub fn main() with(Alloc) -> i64 { return run(); }
+}

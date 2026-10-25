@@ -39,7 +39,8 @@ inductive SymKind where
   | typeAlias (target : Ty)
   | externFn (params : List Param) (retTy : Ty)
   | const (ty : Ty)
-  | implMethod (typeName : String) (params : List Param) (retTy : Ty)
+  /-- `methodOf`: the declaration and method this is (`FnSummary.methodOf`, R-0492 step 3). -/
+  | implMethod (typeName : String) (params : List Param) (retTy : Ty) (methodOf : Option MethodKey)
   | newtype (def_ : NewtypeDef)
 
 inductive ResolveError where
@@ -275,6 +276,24 @@ private def lookupEnumForLiteral (ctx : ResolveCtx) (name : String) : Option Sym
   | some b => some (SymKind.enum b)
   | none => userEnum <|> first
 
+/-- R-0492 step 3: the type spelled `typeName` here has a method `method`, found by the type's
+    declaration identity as Check and Elab select it (`methodByIdentity`): `Q::mk` after
+    `import m.{P as Q}` names `P`'s `mk`, registered as `P_mk` (bug 223). -/
+private def hasMethodByIdentity (ctx : ResolveCtx) (typeName method : String) : Bool :=
+  let owner? : Option TypeId := if ctx.typeParams.contains typeName then none else
+    match lookupWrittenType ctx typeName with
+    | some (.struct sd) => sd.typeId?
+    | some (.enum ed) => ed.typeId?
+    | some (.newtype nt) => nt.typeId?
+    | _ => none
+  match owner? with
+  | none => false
+  | some owner =>
+    let key : MethodKey := { owner, method }
+    ctx.globalScope.symbols.any fun (_, k) => match k with
+      | .implMethod _ _ _ (some k') => k' == key
+      | _ => false
+
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
 
@@ -475,7 +494,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .staticMethodCall sp typeName method typeArgs args =>
     let ctx := checkWrittenTys ctx typeArgs sp
     let mangledName := s!"{typeName}_{method}"
-    let ctx := if lookupName ctx mangledName then ctx
+    let ctx := if lookupName ctx mangledName || hasMethodByIdentity ctx typeName method then ctx
                else addError ctx (.unknownStaticMethod typeName method) (some sp)
     args.foldl resolveExpr ctx
   | .fnRef sp name =>
@@ -575,7 +594,7 @@ private def implSigsToSymbols (sigs : List (String × FnSummary)) : List (String
       | t :: _ => t
       | [] => mangledName
     (mangledName, SymKind.implMethod typeName
-      (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+      (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy fs.methodOf)
 
 /-- Register all top-level definitions from a FileSummary into a scope. -/
 private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String :=

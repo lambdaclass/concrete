@@ -408,6 +408,38 @@ def lookupFn (name : String) : CheckM (Option FnSummary) := do
   | some idx => return listGetIdx env.functions idx
   | none => return none
 
+/-- R-0492 step 3: the declaration a type spelling denotes in the module being checked
+    (`typeIdOfSpelling` over its environment); a type parameter of the function denotes none. -/
+def TypeEnv.typeIdOf (env : TypeEnv) (name : String) : Option TypeId :=
+  if env.currentTypeParams.contains name then none
+  else typeIdOfSpelling env.structs env.enums env.newtypes name
+
+/-- R-0492 step 3: type equality in the module being checked, by declaration identity
+    (`Ty.sameByIdentity`): an import alias and the definition's spelling are one type (bug 223). -/
+def sameTy (a b : Ty) : CheckM Bool := do
+  if a == b then return true
+  return Ty.sameByIdentity (← getEnv).typeIdOf a b
+
+/-- R-0492 step 3: the type spelled `typeName` here has an impl of `traitName`: by the target's
+    declaration identity (`traitImplIds`), or, for a target with none, by spelling. -/
+def TypeEnv.hasTraitImpl (env : TypeEnv) (typeName traitName : String) : Bool :=
+  env.traitImpls.any (fun (t, tr) => t == typeName && tr == traitName)
+    || (match env.typeIdOf typeName with
+        | some tid => env.traitImplIds.any fun (t, tr) => t == tid && tr == traitName
+        | none => false)
+
+/-- R-0492 step 3: the method `methodName` of the type spelled `typeName`, as its mangled name and
+    signature. A type with a declaration identity finds it by that identity
+    (`methodByIdentity`), so an import alias `Q` of `P` finds `P_mk` (bug 223); a method no
+    stamped impl declares (an impl on a builtin or an imported type) is found by its spelling. -/
+def lookupMethod (typeName methodName : String) : CheckM (Option (String × FnSummary)) := do
+  let env ← getEnv
+  if let some owner := env.typeIdOf typeName then
+    if let some r := methodByIdentity env.allFnSummarys { owner, method := methodName } then
+      return some r
+  let mangled := mangledMethodName typeName methodName
+  return (← lookupFn mangled).map (mangled, ·)
+
 /-- Normalize a type for comparison (normalize empty capsets in fn types). -/
 def normalizeTyForCmp : Ty → Ty
   | .fn_ params capSet retTy =>
@@ -441,7 +473,7 @@ def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) 
   -- Normalize fn types (empty capsets) and try again
   let expectedN := normalizeTyForCmp expectedR
   let actualN := normalizeTyForCmp actualR
-  if expectedN == actualN then return ()
+  if ← sameTy expectedN actualN then return ()
   -- .string is compatible with .named "String"
   else if (expectedR == .string && actualR == .named "String")
        || (expectedR == .named "String" && actualR == .string) then return ()
@@ -1011,6 +1043,7 @@ def checkPeekCtx : PeekCtx CheckM where
   var sp name := do return ((← lookupUse sp name).map (·.2.ty))
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFn name
+  method t m := do return (← lookupMethod t m).map (·.2)
   fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
   struct name := lookupStruct name
   newtype name := lookupNewtype name
@@ -1136,9 +1169,9 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
               if ← isCopyType t then return true
               else match t with
               | .named tn =>
-                return env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy"
+                return env.hasTraitImpl tn "Destroy"
               | .generic tn args _ =>
-                if env.traitImpls.any fun (ty, tr) => ty == tn && tr == "Destroy" then
+                if env.hasTraitImpl tn "Destroy" then
                   args.allM (destroyable fuel)
                 else return false
               | .typeVar n =>
@@ -1159,7 +1192,7 @@ partial def checkTraitBounds (bounds : List (String × List String)) (mapping : 
         else
           match concreteType with
           | .named tn | .generic tn _ _ =>
-            if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
+            if !(env.hasTraitImpl tn traitName) then
               refuse tn traitName
           | .typeVar n =>
             -- caller's own type param: satisfied if the caller declares the

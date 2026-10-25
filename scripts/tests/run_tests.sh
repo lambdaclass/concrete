@@ -8592,6 +8592,25 @@ run_err "$TESTDIR/error_231_enclosing_trait_bound.con" "(E0125)"
 run_err "$TESTDIR/error_231_trait_param_bound.con" "bounds on a trait's type parameters are not supported"
 run_err "$TESTDIR/error_231_union_param_bound.con" "bounds on a union's type parameters are not supported"
 run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration cannot bound its type parameters"
+# Bug 223 (R-0492 step 3): an import alias names the imported declaration. Types are compared, and
+# their methods and trait impls looked up, by declaration identity in Resolve, Check and Elab, so
+# `import m.{P as Q}` is `P`: its methods (inherent, trait, Destroy), the values `m` returns, its
+# enum literals and patterns, and a bound satisfied through the alias. Binary and --interp agree.
+run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro.con" 42
+run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_enum.con" 42
+run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_generic_bound.con" 42
+run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_destroy.con" 42
+for r223 in repro repro_enum repro_generic_bound repro_destroy; do
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r223_interp=$(bounded_run 20 -- $COMPILER "tests/regressions/bug223_aliased_import_distinct_type/$r223.con" --interp 2>&1 || true)
+    if [ "$r223_interp" = "42" ]; then
+        echo "  ok  bug 223: $r223 — an aliased imported type is the type, interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 223: $r223 --interp gave '$r223_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 233: an import of a public constant or trait, which no import binds, was refused as "not
 # public"; it is refused with the reason (E0126 at Resolve, E0323 for a nested submodule at Check).
 run_err "$TESTDIR/error_233_import_constant.con" "(E0126)"

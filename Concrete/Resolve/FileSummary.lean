@@ -2,6 +2,7 @@ import Concrete.Frontend.AST
 import Concrete.Resolve.Shared
 import Concrete.Resolve.Intrinsic
 import Concrete.Report.Diagnostic
+import Concrete.Resolve.TypeId
 
 namespace Concrete
 
@@ -51,6 +52,11 @@ structure FnSummary where
       for one, so `typeParams` is empty because it was not recorded, not because there are none
       (`sizeof<T>`). Bug 221's arity check skips such a callee. -/
   typeParamsUnrecorded : Bool := false
+  /-- R-0492 step 3: for an impl method, the declaration it is a method of and its name, stamped
+      by `buildFileSummary` when the impl's target is declared beside it. Its mangled name
+      (`P_mk`) spells the target as its defining module does; an importer that spells the type
+      `Q` finds the method by this key (`methodByIdentity`, bug 223). -/
+  methodOf : Option MethodKey := none
   deriving Repr
 
 structure FileSummary where
@@ -107,7 +113,8 @@ def implBlocksToMethodSummaries (blocks : List ImplBlock) : List (String × FnSu
          typeParams := ib.typeParams ++ f.typeParams
          typeBounds := ib.typeBounds ++ f.typeBounds
          capParams := f.capParams
-         capSet := f.capSet })
+         capSet := f.capSet
+         methodOf := ib.targetTypeId?.map fun owner => { owner, method := f.name } })
   ) []
 
 /-- Extract impl method summaries from trait impl blocks with Self preserved (unresolved). -/
@@ -120,8 +127,18 @@ def traitImplBlocksToMethodSummaries (blocks : List ImplTraitBlock) : List (Stri
          typeParams := tb.typeParams ++ f.typeParams
          typeBounds := f.typeBounds
          capParams := f.capParams
-         capSet := f.capSet })
+         capSet := f.capSet
+         methodOf := tb.targetTypeId?.map fun owner => { owner, method := f.name } })
   ) []
+
+/-- R-0492 step 3: the method `key` among `sigs`, a pass's impl-method table, as its mangled
+    name and signature. The one lookup Resolve, Check and Elab make for a method of a type that
+    has an identity, so a spelling of the type that is not its definition's (an import alias)
+    finds its methods (bug 223). `none` when no stamped method matches: the method of an impl
+    on a builtin or an imported type is found by its spelling. -/
+def methodByIdentity (sigs : List (String × FnSummary)) (key : MethodKey) :
+    Option (String × FnSummary) :=
+  sigs.find? fun (_, sig) => sig.methodOf == some key
 
 /-- Resolve Self in impl method signatures using the concrete impl type from blocks. -/
 def resolveImplMethodSigs
@@ -177,6 +194,12 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
   let thisDefinitionPath := if definitionPath.isEmpty then m.name else definitionPath
   -- Build alias map for resolving type aliases in signatures
   let aliasMap := m.typeAliases.map fun ta => (ta.name, ta.targetTy)
+  -- R-0492 step 3: an impl whose target this module declares names that declaration.
+  let declaresType (n : String) : Bool :=
+    m.structs.any (·.name == n) || m.enums.any (·.name == n) || m.newtypes.any (·.name == n)
+  let stampIn (n : String) : String := if declaresType n then thisDefinitionPath else ""
+  let implBlocks := m.implBlocks.map fun ib => { ib with targetDefinedIn := stampIn ib.typeName }
+  let traitImpls := m.traitImpls.map fun tb => { tb with targetDefinedIn := stampIn tb.typeName }
   let functions := m.functions.map fun f =>
     let (name, sig) := fnDefToSummary f
     (name, resolveAliasesInSig aliasMap sig)
@@ -227,8 +250,8 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
       typeParamsUnrecorded := true
     }
     (ef.name, resolveAliasesInSig aliasMap sig)
-  let implMethodSigs := (implBlocksToMethodSummaries m.implBlocks
-                     ++ traitImplBlocksToMethodSummaries m.traitImpls).map fun (n, sig) =>
+  let implMethodSigs := (implBlocksToMethodSummaries implBlocks
+                     ++ traitImplBlocksToMethodSummaries traitImpls).map fun (n, sig) =>
                      (n, resolveAliasesInSig aliasMap sig)
   { name := m.name
     functions := functions
@@ -238,8 +261,8 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
       { sd with definedIn := thisDefinitionPath, definitionName := sd.name })
     enums := m.enums.map (fun ed =>
       { ed with definedIn := thisDefinitionPath, definitionName := ed.name })
-    implBlocks := m.implBlocks
-    traitImpls := m.traitImpls
+    implBlocks := implBlocks
+    traitImpls := traitImpls
     publicNames := publicNames
     traits := m.traits
     constants := m.constants.map fun c => { name := c.name, ty := c.ty, isPublic := c.isPublic }

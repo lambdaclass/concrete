@@ -439,6 +439,20 @@ private def lookupStruct (name : String) : ElabM (Option StructDef) := do
   let env ← getEnv
   return env.structs.find? fun sd => sd.name == name
 
+/-- R-0492 step 3: the method `methodName` of the type spelled `typeName`, as its mangled name
+    and signature, selected as Check selects it (`lookupMethod`): by the type's declaration
+    identity where it has one, so `Q` of `import m.{P as Q}` reaches `P_mk` and Core calls the
+    definition's method exactly as it does without the alias (bug 223); otherwise by spelling. -/
+private def lookupMethodE (typeName methodName : String) : ElabM (Option (String × FnSummary)) := do
+  let env ← getEnv
+  let owner? := if env.currentTypeParams.contains typeName then none
+    else typeIdOfSpelling env.structs env.enums env.newtypes typeName
+  if let some owner := owner? then
+    if let some r := methodByIdentity env.fnSigs { owner, method := methodName } then
+      return some r
+  let mangled := mangledMethodName typeName methodName
+  return (← lookupFnSig mangled).map (mangled, ·)
+
 private def lookupEnum (name : String) : ElabM (Option EnumDef) := do
   let env ← getEnv
   return env.enums.find? fun ed => ed.name == name
@@ -621,6 +635,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   var sp name := lookupVar sp name
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFnSig name
+  method t m := do return (← lookupMethodE t m).map (·.2)
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
   struct name := lookupStruct name
   newtype name := do return (← getEnv).newtypes.find? fun nt => nt.name == name
@@ -970,9 +985,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     match ← lookupEnum enumName with
     | some ed =>
       let typeArgs ← typeArgs.mapM resolveTypeE
+      let envT ← getEnv
+      let idOf : String → Option TypeId := fun n =>
+        if envT.currentTypeParams.contains n then none
+        else typeIdOfSpelling envT.structs envT.enums envT.newtypes n
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
-        | some (.generic n args _) => if n == enumName then args else []
+        | some (.generic n args _) => if sameTypeName idOf n enumName then args else []
         | some (.named n) => if n == enumName then [] else []
         | _ => []
       else typeArgs
@@ -1382,9 +1401,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
             Proof.evTraitMethodOnTypeParam
       | _ => throwElab .methodCallOnNonNamedType (some e.getSpan)
     else
-      let mangledName := mangledMethodName typeName methodName
-      match ← lookupFnSig mangledName with
-      | some sig =>
+      match ← lookupMethodE typeName methodName with
+      | some (mangledName, sig) =>
         let objTypeArgs := match innerTy with | .generic _ args _ => args | _ => []
         let implTypeParams := sig.typeParams.take objTypeArgs.length
         let methodTypeParams := sig.typeParams.drop objTypeArgs.length
@@ -1449,9 +1467,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | none => throwElab (.noMethodOnType methodName typeName) (some e.getSpan)
 
   | .staticMethodCall _ typeName methodName typeArgs args =>
-    let mangledName := mangledMethodName typeName methodName
-    match ← lookupFnSig mangledName with
-    | some sig =>
+    match ← lookupMethodE typeName methodName with
+    | some (mangledName, sig) =>
       let mapping := sig.typeParams.zip typeArgs
       let paramTypes := sig.params.map fun (_, t) => substTy mapping t
       let retTy := substTy mapping sig.retTy
