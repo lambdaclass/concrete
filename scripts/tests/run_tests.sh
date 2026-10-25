@@ -8752,7 +8752,7 @@ check_report_multi "$TESTDIR/regress_239_method_cap_explained_past_free_alias.co
     "Console    <- declared"
 run_ok "$TESTDIR/regress_239_method_spelled_like_free_op.con" 42
 r239_alloc2=$(cached_output "$TESTDIR/regress_239_method_spelled_like_free_op.con" "--report alloc")
-if grep -q "main" <<<"$r239_alloc2" && ! grep -q "frees: vec_free" <<<"$r239_alloc2"; then
+if grep -q "No allocation activity found." <<<"$r239_alloc2"; then
     echo "  ok  bug 239: a method spelled like a freeing intrinsic frees nothing in --report alloc"
     PASS=$((PASS + 1))
 else
