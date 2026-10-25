@@ -10,7 +10,7 @@ Part 2 proves it, and the plan states, per bug class, what "no bugs" means at th
 The plan is delivered as proved vertical slices rather than layer by layer: V1 (scalars, control,
 calls, checked arithmetic, an output event) is to be carried through every stage to native AArch64
 with its own compiler-correctness theorem, as a `verified` profile beside the existing compiler
-(R-0511), and V2 – V7 grow it. The current evidence layer, where bugs 079 – 101 lived, receives
+(R-0511), and V2 – V7 grow it. The current evidence layer receives
 soundness, compatibility and security maintenance only, with no new semantic claim mechanisms, and
 is to be retired claim by claim onto compiler-generated Core statements
 (R-0512). The native AArch64 code generation of the `verified` profile is to be the separately
