@@ -87,7 +87,12 @@ the declaration-collision check compared only free functions, externs and consta
   "calls extern: P_get"); Codex review r8: the predictable profile, the effects report and the
   unsafe report do the same (before: "calls extern (P_get)", "ffi: yes", and a method caller
   listed as relying on an extern), and the assumption summary follows a method value to the
-  method alone (`regress_239_method_value_no_foreign_assumption.con`).
+  method alone (`regress_239_method_value_no_foreign_assumption.con`). Codex review r9: those
+  reports still count FFI reached THROUGH a method call, from the namespace-aware call graph's
+  closure (`regress_239_method_call_reaches_ffi_report.con`; the r8 version had lost it), and Lower
+  never takes a method call for a compiler intrinsic of its spelling
+  (`regress_239_method_spelled_like_intrinsic.con`: a method spelled `read_owned` defined in another
+  module was lowered as the intrinsic load, 7 natively for 42 under `--interp`, before the fix).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

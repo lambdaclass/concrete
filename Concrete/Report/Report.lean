@@ -441,8 +441,11 @@ private partial def effectsForModule
         let others := members.filter (· != qualName)
         s!"mutual: {", ".intercalate others}"
       | _ => "none"
-    -- Only a free call can reach a foreign binding (bugs 238 – 239).
-    let crossesFfi := (collectFreeCallsStmts f.body).any fun c => externNames.contains c
+    -- Only a free call can reach a foreign binding directly (bugs 238 – 239); any call, a method
+    -- call included, reaches one transitively, which the closure records for this function's
+    -- qualified name over the namespace-aware call graph (Codex review r9).
+    let crossesFfi := externNames.contains qualName
+      || (collectFreeCallsStmts f.body).any fun c => externNames.contains c
     let loopClass := classifyLoops f.body
     -- Evidence level: enforced if passes all 5 predictable gates
     let (concreteCaps, _) := f.capSet.normalize
@@ -902,7 +905,16 @@ partial def checkPredictableModule
       else []
     -- 4. FFI — point at the extern call
     -- Only a free call can reach a foreign binding (bugs 238 – 239).
-    let externCalls := (collectFreeCallsStmts f.body).eraseDups.filter fun c => externNames.contains c
+    let directExtern := (collectFreeCallsStmts f.body).eraseDups.filter fun c => externNames.contains c
+    -- Transitively through a method call (Codex review r9): the closure holds this function.
+    let methodCalls := ((collectCalleesStmts f.body).filterMap fun c => match c with
+      | .direct n .method => some n
+      | _ => none).eraseDups
+    let externCalls := if !directExtern.isEmpty then directExtern
+      else if externNames.contains qualName then
+        (let named := methodCalls.filter externNames.contains
+         if named.isEmpty then methodCalls else named)
+      else []
     let ffiSpan := findCallSpan externCalls astBody
     let ffiViolLoc := mkViolLoc ffiSpan
     let ffiViolations := if externCalls.isEmpty then []

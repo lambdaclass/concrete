@@ -954,7 +954,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let st ← getState
     let intrinsic := match callee with
       | .indirect _ => none
-      | .direct fn _ => if st.definedFns.contains fn then none else resolveIntrinsic fn
+      -- A method call names a program method its type's method table resolved (bugs 238 – 239,
+      -- Codex review r9: a method spelled `read_owned` in another module was lowered as the
+      -- intrinsic); compiler intrinsics are free calls.
+      | .direct _ .method => none
+      | .direct fn .free => if st.definedFns.contains fn then none else resolveIntrinsic fn
       -- A compiler-generated runtime call is its helper whatever the program defines (bug 165).
       | .runtime helper => resolveIntrinsic helper
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants

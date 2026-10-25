@@ -8676,6 +8676,21 @@ check_report_multi "$TESTDIR/regress_239_nested_method_beside_extern.con" unsafe
     "bug 239: --report unsafe counts a method caller as relying on an extern of its spelling" \
     "relied on by: (no caller in this module)"
 run_ok "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" 42
+run_ok "$TESTDIR/regress_239_method_spelled_like_intrinsic.con" 42
+run_ok "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" 42
+check_report_multi "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" effects \
+    "bug 239: --report effects keeps FFI reached through a method call" \
+    "bug 239: --report effects lost the FFI a method call reaches" \
+    "ffi: yes  trusted: no  evidence: reported"
+r239_pred2=$(cached_output "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" "--check predictable")
+if grep -q "run — calls extern" <<<"$r239_pred2"; then
+    echo "  ok  bug 239: the predictable profile refuses FFI reached through a method call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable accepted FFI reached through a method call:"
+    printf '%s\n' "$r239_pred2" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
 check_report_multi "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" assumptions \
     "bug 239: a method value reaches the method, not a foreign binding of its spelling" \
     "bug 239: --report assumptions attributes a foreign binding to a method value" \
@@ -8715,7 +8730,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern \
             regress_238_method_value_beside_extern_of_other_arity regress_239_nested_method_beside_extern \
             regress_239_respelled_method_beside_extern_types regress_239_method_call_not_an_extern_call_report \
-            regress_247_function_value_reaches_foreign regress_239_method_value_no_foreign_assumption; do
+            regress_247_function_value_reaches_foreign regress_239_method_value_no_foreign_assumption \
+            regress_239_method_spelled_like_intrinsic regress_239_method_call_reaches_ffi_report; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
