@@ -1,0 +1,20 @@
+// Bug 239 (FIXED), Codex review r5: `user` calls the imported `P`'s static method `P::get()` and
+// defines a free function `P_get` (taking a function, so its body has an indirect call). Before
+// the fix Check bound `P::get()` to the free function (E0262, "expects 1 arguments, got 0"); with
+// the method table that is fixed, and the proof call graph and the assumption summary must also
+// resolve the method call to the method: `--report caps` reads `run` as reaching no indirect call.
+// Expected: 42, natively and --interp; `run : (no external authority)` in `--report caps`.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get() -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    fn P_get(f: fn() -> i32) -> i32 { return f(); }
+    pub fn run() -> i32 { return P::get(); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

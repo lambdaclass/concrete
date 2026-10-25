@@ -189,6 +189,16 @@ def isFreeCall (name : String) : Bool :=
   | some .free | some .destroy | some .vecFree | some .dropString => true
   | _ => false
 
+/-- The cleanup calls of a body (bugs 238 – 239, Codex review r14): free calls of a freeing
+    intrinsic or destructor spelling, and METHOD calls of a destructor (`T_destroy`, the typed
+    dispatch). An ordinary method spelled like a freeing intrinsic (`vec_free`) frees nothing. -/
+def cleanupCallsStmts (ss : List CStmt) : List String :=
+  ((collectCalleesStmts ss).filterMap fun c => match c with
+    | .direct n .free => if isFreeCall n then some n else none
+    | .direct n .method =>
+      if n.endsWith "_destroy" || n == destroyDispatchCallee then some n else none
+    | _ => none).eraseDups
+
 def returnsAllocation : Ty → Bool
   | .heap _ | .heapArray _ => true
   | .generic "Vec" _ _ => true
@@ -220,8 +230,13 @@ private partial def buildQualNameMap (m : CModule) (pfx : String := "")
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildQualNameMap sub qualPrefix) []
 
+/-- Every impl method's Core name in a module tree (bugs 238 – 239). -/
+private partial def allMethodDefNames (m : CModule) : List String :=
+  (m.functions.filter (·.isMethod)).map (·.name) ++ m.submodules.flatMap allMethodDefNames
+
 private partial def buildCallGraphModule (qualNameMap : List (String × String))
-    (aliases : List (String × String)) (m : CModule) (pfx : String := "") : CallGraph :=
+    (aliases : List (String × String)) (methodCoreNames : List String) (m : CModule)
+    (pfx : String := "") : CallGraph :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   -- Resolve a bare callee name to its qualified name.
   -- Prefer same-module match (qualPrefix.bare) over first global match.
@@ -232,9 +247,15 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
   -- rather than guessing. Codegen takes the FIRST alias in emission order; the graph takes an alias
   -- only when the spelling has exactly one target and that symbol is defined exactly once. Anything
   -- else stays bare and the closure refuses, rather than agreeing with codegen by luck.
-  let resolveCallee (bare : String) : String :=
+  -- A method call's aliases lead to methods only (bugs 238 – 239, Codex review r13): an import
+  -- alias of its spelling to a free function is no target of it.
+  let resolveCallee (bare : String) (isMethodCall : Bool := false) : String :=
     let sameModule := qualPrefix ++ "." ++ bare
-    if qualNameMap.any fun (_, q) => q == sameModule then sameModule
+    -- The same module's DEFINITION of that Core name, not merely a declaration whose SOURCE name
+    -- it is: a free `P_get` respelled `user_P_get` keeps the qualified name `user.P_get`, and a
+    -- method call spelled `P_get` (another module's method) is not a call of it (bugs 238 – 239,
+    -- Codex review r5).
+    if qualNameMap.any fun (b, q) => b == bare && q == sameModule then sameModule
     else match qualNameMap.find? fun (b, _) => b == bare with
     | some (_, qual) => qual
     | none =>
@@ -242,8 +263,10 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
       -- `#[intrinsic]` binding, so the alias pool can map the spelling onto that declaration and give
       -- a genuine `sizeof::<i32>()` an edge into std. The compiler resolves intrinsics itself; the
       -- intrinsic table is the one answer for these names, and aliases never override it.
-      if (resolveIntrinsic bare).isSome then bare else
-      match (aliases.filterMap fun (a, sym) => if a == bare then some sym else none).eraseDups with
+      -- A method call is never a compiler intrinsic of its spelling (bugs 238 – 239, Codex r10).
+      if !isMethodCall && (resolveIntrinsic bare).isSome then bare else
+      match (aliases.filterMap fun (a, sym) =>
+          if a == bare && (!isMethodCall || methodCoreNames.contains sym) then some sym else none).eraseDups with
       | [sym] =>
         match qualNameMap.filter fun (b, _) => b == sym with
         | [(_, qual)] => qual
@@ -255,12 +278,18 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
     -- name and never resolved against the program (a module's own `print_string` is another
     -- node); the capability chains of `--report authority` end at it as before.
     let callees := (collectCalleesStmts f.body).filterMap fun c => match c with
-      | .direct n => some (resolveCallee n)
+      -- A free call the function binds to a foreign declaration is that declaration, not a
+      -- program definition sharing its spelling (bugs 238 – 239, Codex review r6).
+      | .direct n .free =>
+        match f.foreignCalls.lookup n with
+        | some decl => if decl.startsWith "_C$rt." then some (resolveCallee n) else some decl
+        | none => some (resolveCallee n)
+      | .direct n .method => some (resolveCallee n true)
       | .runtime h => some h
       | .indirect _ => none
     (qualName, callees.eraseDups)
   fnEntries ++ m.submodules.foldl (fun acc sub =>
-    acc ++ buildCallGraphModule qualNameMap aliases sub qualPrefix) []
+    acc ++ buildCallGraphModule qualNameMap aliases methodCoreNames sub qualPrefix) []
 
 private partial def allLinkerAliases (m : CModule) : List (String × String) :=
   m.linkerAliases ++ m.submodules.foldl (fun acc sub => acc ++ allLinkerAliases sub) []
@@ -268,7 +297,8 @@ private partial def allLinkerAliases (m : CModule) : List (String × String) :=
 def buildCallGraph (modules : List CModule) : CallGraph :=
   let qualNameMap := modules.foldl (fun acc m => acc ++ buildQualNameMap m) []
   let aliases := modules.foldl (fun acc m => acc ++ allLinkerAliases m) []
-  modules.foldl (fun acc m => acc ++ buildCallGraphModule qualNameMap aliases m) []
+  let methodCoreNames := modules.flatMap allMethodDefNames
+  modules.foldl (fun acc m => acc ++ buildCallGraphModule qualNameMap aliases methodCoreNames m) []
 
 /-! ### Effect opacity (R-0484)
 
@@ -579,7 +609,7 @@ private partial def fingerprintExpr : CExpr → String
   | .ident name _ => s!"(var {stripAlpha name.name})"
   | .binOp op lhs rhs _ => s!"(binop {repr op} {fingerprintExpr lhs} {fingerprintExpr rhs})"
   | .unaryOp op inner _ => s!"(unary {repr op} {fingerprintExpr inner})"
-  | .call (.direct fn) _ args _ => s!"(call {fn} {fingerprintExprs args})"
+  | .call (.direct fn _) _ args _ => s!"(call {fn} {fingerprintExprs args})"
   -- Distinct prefix: a direct call and an indirect call through a same-named
   -- local are different programs, so they must not fingerprint alike.
   | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b.name} {fingerprintExprs args})"
@@ -930,7 +960,7 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pl ← cExprToPExprImpl lhs
     let pr ← cExprToPExprImpl rhs
     some (.binOp pop pl pr)
-  | .call (.direct fn) _ args _ => do
+  | .call (.direct fn _) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
   -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
@@ -3223,7 +3253,6 @@ private def assessEligibility
     | some (_, loc) => some loc
     | none => none
   let (concreteCaps, _) := f.capSet.normalize
-  let callees := collectCallsStmts f.body |>.eraseDups
   let sourceReasons : List String :=
     (if !f.capSet.isEmpty then
       [s!"has capabilities: {", ".intercalate concreteCaps}"] else []) ++
@@ -3231,13 +3260,14 @@ private def assessEligibility
     -- No separate "from trusted impl" reason: since bug 189 a method is trusted only by
     -- its own `trusted`, which "marked trusted" already reports.
     (if f.isEntryPoint then ["is entry point (main)"] else [])
-  let allocs := callees.filter isAllocCall
+  let allocs := (collectFreeCallsStmts f.body).eraseDups.filter isAllocCall
   let rec_ := match recMap.find? (fun (n, _, _) => n == qualName) with
     | some (_, .direct, _) => "direct"
     | some (_, .mutual, _) => "mutual"
     | some (_, .none, _) => "none"
     | none => "unclassified"  -- function missing from SCC analysis
-  let crossesFfi := callees.any fun c => externNames.contains c
+  -- Only a free call can reach a foreign binding (bugs 238 – 239).
+  let crossesFfi := !(externCallsIn externNames f).isEmpty
   let loopClass := classifyLoops f.body
   -- Float arithmetic has no active proof profile (ProvableV1 is integer/bool
   -- only). A float param, return, or body op must NOT extract — otherwise float

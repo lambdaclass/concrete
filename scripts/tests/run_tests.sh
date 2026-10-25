@@ -8710,6 +8710,315 @@ run_err "$TESTDIR/error_231_enclosing_trait_bound.con" "(E0125)"
 run_err "$TESTDIR/error_231_trait_param_bound.con" "bounds on a trait's type parameters are not supported"
 run_err "$TESTDIR/error_231_union_param_bound.con" "bounds on a union's type parameters are not supported"
 run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration cannot bound its type parameters"
+# Bugs 238 – 241: free functions and impl methods shared one spelled namespace. A method call is
+# resolved in the method table (Check, Elab) and carries its namespace in Core (`CallSpace`), so a
+# free function spelled like a method's definition name or call spelling no longer answers it
+# (238, 239: silent wrong code, 99 for 42); a free function beside its module's own method of that
+# definition name is MOD-3's E0299 (239); a trait in a type position is E0108 (240: an EmitSSA
+# panic); a parent's call of its child's respelled type's method keeps a spelling the child defines
+# (241: an undefined symbol).
+run_ok "$TESTDIR/regress_238_free_fn_spelled_like_method_call.con" 42
+run_ok "$TESTDIR/regress_238_other_module_free_fn_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_238_parent_free_fn_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_239_free_fn_beside_imported_method.con" 42
+run_err "$TESTDIR/error_239_method_call_answered_by_free_fn.con" "error[check]: (E0264) no method 'get' on type 'P'"
+run_err "$TESTDIR/error_239_free_fn_named_like_own_method.con" "error[check]: (E0299) a function named 'P_get' is also declared in this module as an impl method"
+run_err "$TESTDIR/error_240_trait_cast_target.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_struct_field.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_enum_payload.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_parameter.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_type_argument.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_let_annotation.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_ok "$TESTDIR/regress_240_trait_bounds_and_type_param_shadow.con" 42
+run_ok "$TESTDIR/regress_241_parent_calls_child_respelled_method.con" 42
+run_ok "$TESTDIR/regress_238_method_named_by_definition_name.con" 42
+run_ok "$TESTDIR/regress_238_method_call_in_constant.con" 42
+run_ok "$TESTDIR/regress_238_extern_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_238_imported_extern_alias_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_238_method_definition_name_taken_by_extern.con" 42
+run_ok "$TESTDIR/regress_238_method_value_spelled_like_extern.con" 42
+run_ok "$TESTDIR/regress_238_method_value_beside_unrelated_extern.con" 42
+run_ok "$TESTDIR/regress_239_method_call_beside_untrusted_extern.con" 42
+run_ok "$TESTDIR/regress_239_static_method_beside_free_fn_report.con" 42
+check_report_multi "$TESTDIR/regress_239_static_method_beside_free_fn_report.con" caps \
+    "bug 239: --report caps resolves a method call to the method, not a free function of its spelling" \
+    "bug 239: --report caps read the method call as the free function P_get (effects unknown)" \
+    "pub run : (no external authority)"
+run_ok "$TESTDIR/regress_239_method_call_beside_extern_of_other_arity.con" 42
+run_ok "$TESTDIR/regress_239_extern_call_beside_method_with_indirect_call.con" 42
+check_report_multi "$TESTDIR/regress_239_extern_call_beside_method_with_indirect_call.con" caps \
+    "bug 239: --report caps reads a free call bound to an extern as that extern, not a method of its spelling" \
+    "bug 239: --report caps followed an extern call into a method of its spelling (effects unknown)" \
+    "pub run : (no declared capability)"
+run_ok "$TESTDIR/regress_239_method_call_beside_trusted_extern.con" 42
+r239_edges=$(cached_output "$TESTDIR/regress_239_method_call_beside_trusted_extern.con" "--report trust-edges")
+if grep -q "^# totals:" <<<"$r239_edges" && ! grep -qE "^user[[:space:]]+run[[:space:]]" <<<"$r239_edges"; then
+    echo "  ok  bug 239: a method call is no trust edge of a foreign binding of its spelling"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges records a trust edge for user.run (a method call), or printed no report:"
+    printf '%s\n' "$r239_edges" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_238_method_value_beside_extern_of_other_arity.con" 42
+run_ok "$TESTDIR/regress_239_nested_method_beside_extern.con" 42
+run_ok "$TESTDIR/regress_239_respelled_method_beside_extern_types.con" 42
+run_ok "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" 42
+r239_proof=$(cached_output "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" "--report proof")
+if grep -q "module ffi" <<<"$r239_proof" && ! grep -q "calls extern: P_get" <<<"$r239_proof"; then
+    echo "  ok  bug 239: --report proof does not read a method call as an extern call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report proof reads the method call P_get() as an extern call (or printed no report)"
+    FAIL=$((FAIL + 1))
+fi
+# The predictable profile, the effects report and the unsafe report read only free calls as extern
+# calls (Codex review r8: before the fix `run` failed the profile, "calls extern (P_get)", the effects
+# report said "ffi: yes" and assumed `main.ffi.P_get`, and the unsafe report listed a method caller
+# as relying on an extern of the method's spelling).
+r239_pred=$(cached_output "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" "--check predictable")
+if grep -q "predictable profile: pass" <<<"$r239_pred"; then
+    echo "  ok  bug 239: the predictable profile does not read a method call as an extern call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable refused a method call as an extern call:"
+    printf '%s\n' "$r239_pred" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+check_report_multi "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" effects \
+    "bug 239: --report effects does not read a method call as crossing FFI" \
+    "bug 239: --report effects reads a method call as crossing FFI" \
+    "ffi: no  trusted: no  evidence: enforced"
+check_report_multi "$TESTDIR/regress_239_nested_method_beside_extern.con" unsafe \
+    "bug 239: --report unsafe does not count a method caller as relying on an extern of its spelling" \
+    "bug 239: --report unsafe counts a method caller as relying on an extern of its spelling" \
+    "relied on by: (no caller in this module)"
+run_ok "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" 42
+run_ok "$TESTDIR/regress_239_method_spelled_like_intrinsic.con" 42
+run_ok "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" 42
+check_report_multi "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" effects \
+    "bug 239: --report effects keeps FFI reached through a method call" \
+    "bug 239: --report effects lost the FFI a method call reaches" \
+    "ffi: yes  trusted: no  evidence: reported"
+r239_pred2=$(cached_output "$TESTDIR/regress_239_method_call_reaches_ffi_report.con" "--check predictable")
+if grep -q "run — calls extern" <<<"$r239_pred2"; then
+    echo "  ok  bug 239: the predictable profile refuses FFI reached through a method call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable accepted FFI reached through a method call:"
+    printf '%s\n' "$r239_pred2" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+check_report_multi "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" assumptions \
+    "bug 239: a method value reaches the method, not a foreign binding of its spelling" \
+    "bug 239: --report assumptions attributes a foreign binding to a method value" \
+    '"fn":"main.factory","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+# Codex review r10: a method call is no `Vec` operation, allocation intrinsic or proof-graph
+# intrinsic of its spelling, a free call bound to an extern supplies only the extern's capabilities
+# in explanations, and a method edge is not redirected by a free import alias of its spelling.
+run_ok "$TESTDIR/regress_239_method_spelled_like_vec_op.con" 42
+run_ok "$TESTDIR/regress_239_method_spelled_like_alloc_op.con" 42
+r239_pred3=$(cached_output "$TESTDIR/regress_239_method_spelled_like_alloc_op.con" "--check predictable")
+if grep -q "predictable profile: pass" <<<"$r239_pred3"; then
+    echo "  ok  bug 239: a method spelled like an allocation intrinsic is no allocation"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable read a method call as an allocation:"
+    printf '%s\n' "$r239_pred3" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_239_alias_spelled_method_reaches_ffi.con" 42
+check_report_multi "$TESTDIR/regress_239_alias_spelled_method_reaches_ffi.con" effects \
+    "bug 239: --report effects follows a method call spelled like an intrinsic to its FFI" \
+    "bug 239: --report effects lost FFI behind a method call spelled like an intrinsic" \
+    "ffi: yes"
+run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method_explained.con" 42
+check_report_multi "$TESTDIR/regress_239_extern_call_beside_capable_method_explained.con" caps \
+    "bug 239: --report caps does not explain an extern call by a method's capability" \
+    "bug 239: --report caps explains an extern call by a same-spelled method's capability" \
+    "Console    <- declared"
+run_ok "$TESTDIR/regress_239_method_edge_beside_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_edge_beside_free_alias.con" assumptions \
+    "bug 239: a method edge is not redirected by a free import alias of its spelling" \
+    "bug 239: --report assumptions redirected a method edge through a free import alias" \
+    '"fn":"user.run","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+run_ok "$TESTDIR/regress_238_free_alias_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_239_fn_parameter_spelled_like_method.con" 42
+run_ok "$TESTDIR/regress_238_extern_alias_takes_nested_method_spelling.con" 42
+run_ok "$TESTDIR/regress_238_unrelated_alias_beside_method.con" 42
+run_ok "$TESTDIR/regress_239_imported_extern_alias_beside_capable_method.con" 42
+run_ok "$TESTDIR/regress_239_method_ffi_beside_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_ffi_beside_free_alias.con" effects \
+    "bug 239: --report effects follows a method call past a free alias of its spelling to its FFI" \
+    "bug 239: --report effects lost FFI behind a method call whose spelling a free alias also takes" \
+    "ffi: yes"
+run_ok "$TESTDIR/regress_239_destructor_call_is_cleanup.con" 0
+r239_alloc=$(cached_output "$TESTDIR/regress_239_destructor_call_is_cleanup.con" "--report alloc")
+if grep -q "main" <<<"$r239_alloc" && ! grep -q "no matching free" <<<"$r239_alloc"; then
+    echo "  ok  bug 239: a destructor call counts as cleanup in --report alloc"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report alloc reports a destroyed allocation as unmatched:"
+    printf '%s\n' "$r239_alloc" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_239_method_value_type_agreement.con" 42
+run_ok "$TESTDIR/regress_239_method_cap_explained_past_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_cap_explained_past_free_alias.con" caps \
+    "bug 239: --report caps explains a method call by the method, not a free alias of its spelling" \
+    "bug 239: --report caps explains a method call by a free function its spelling's alias names" \
+    "Console    <- declared"
+run_ok "$TESTDIR/regress_239_method_spelled_like_free_op.con" 42
+r239_alloc2=$(cached_output "$TESTDIR/regress_239_method_spelled_like_free_op.con" "--report alloc")
+if grep -q "No allocation activity found." <<<"$r239_alloc2"; then
+    echo "  ok  bug 239: a method spelled like a freeing intrinsic frees nothing in --report alloc"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report alloc counts a method spelled like a freeing intrinsic as a free:"
+    printf '%s\n' "$r239_alloc2" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_238_method_value_both_spellings_taken_by_externs.con" 42
+run_ok "$TESTDIR/regress_239_method_value_beside_constant.con" 42
+run_ok "$TESTDIR/regress_239_extern_call_not_trusted_by_method.con" 42
+run_ok "$TESTDIR/regress_239_trusted_extern_beside_method_edge.con" 42
+run_ok "$TESTDIR/regress_239_imported_trusted_extern_beside_trusted_method.con" 42
+run_ok "$TESTDIR/regress_239_imported_extern_alias_beside_method_arity.con" 42
+run_ok "$TESTDIR/regress_239_untrusted_extern_beside_trusted_extern.con" 1
+r239_edges5=$(cached_output "$TESTDIR/regress_239_untrusted_extern_beside_trusted_extern.con" "--report trust-edges")
+if grep -qE "call[[:space:]]+calls-ffi[[:space:]]+f" <<<"$r239_edges5" && ! grep -qE "call[[:space:]]+calls-trusted[[:space:]]+f" <<<"$r239_edges5"; then
+    echo "  ok  bug 239: an untrusted extern call is not trusted by another module's trusted extern of its name"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges for an untrusted extern beside another module's trusted one:"
+    printf '%s\n' "$r239_edges5" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_239_extern_alias_assumption_not_method.con" 42
+run_ok "$TESTDIR/regress_239_free_call_not_extern_report.con" 42
+run_ok "$TESTDIR/regress_239_free_call_reaches_ffi_predictable.con" 42
+r239_pred4=$(cached_output "$TESTDIR/regress_239_free_call_reaches_ffi_predictable.con" "--check predictable")
+if grep -q "main — calls extern" <<<"$r239_pred4" && grep -q "run — calls extern" <<<"$r239_pred4"; then
+    echo "  ok  bug 239: the predictable profile refuses FFI reached through a free call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable missed FFI reached through a free call:"
+    printf '%s\n' "$r239_pred4" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+check_report_multi "$TESTDIR/regress_239_free_call_not_extern_report.con" effects \
+    "bug 239: --report effects does not read a free call of a program function as an extern call" \
+    "bug 239: --report effects reads a free call as crossing FFI because an unrelated extern shares its name" \
+    "ffi: no  trusted: no  evidence: enforced"
+r239_asm=$(cached_output "$TESTDIR/regress_239_extern_alias_assumption_not_method.con" "--report assumptions")
+r239_kinds=$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(sorted(a["kind"] for f in d["functions"] if f["fn"].endswith("user_run") for a in f["assumes"])))' <<<"$r239_asm" 2>/dev/null || true)
+if [ "$r239_kinds" = "foreign-binding" ]; then
+    echo "  ok  bug 239: an extern import alias reaches its declaration, not a trusted method of its name"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report assumptions for an extern import alias beside a trusted method:"
+    printf '%s\n' "$r239_asm" | cut -c1-300 | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+r239_edges4=$(cached_output "$TESTDIR/regress_239_imported_trusted_extern_beside_trusted_method.con" "--report trust-edges")
+if grep -qE "main[[:space:]]+calls-trusted[[:space:]]+defs_P_get" <<<"$r239_edges4"; then
+    echo "  ok  bug 239: an imported trusted extern call is trusted by its declaration beside a trusted method"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges lost an imported trusted extern's edge:"
+    printf '%s\n' "$r239_edges4" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+r239_edges3=$(cached_output "$TESTDIR/regress_239_trusted_extern_beside_method_edge.con" "--report trust-edges")
+if grep -qE "run[[:space:]]+calls-trusted[[:space:]]+defs_P_get" <<<"$r239_edges3" && grep -qE "run[[:space:]]+calls-ffi[[:space:]]+defs_P_get" <<<"$r239_edges3"; then
+    echo "  ok  bug 239: a trusted extern call keeps its trust edge beside a method of its spelling"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges lost a trusted extern's edge beside a method of its spelling:"
+    printf '%s\n' "$r239_edges3" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+r239_edges2=$(cached_output "$TESTDIR/regress_239_extern_call_not_trusted_by_method.con" "--report trust-edges")
+if grep -qE "run[[:space:]]+calls-ffi[[:space:]]+defs_P_get" <<<"$r239_edges2" && ! grep -qE "run[[:space:]]+calls-trusted" <<<"$r239_edges2"; then
+    echo "  ok  bug 239: an extern call is not trusted by a trusted method of its spelling"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges for an extern call beside a trusted method of its spelling:"
+    printf '%s\n' "$r239_edges2" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
+# Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
+run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
+run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42
+run_ok "$TESTDIR/regress_247_free_call_beside_unrelated_extern.con" 42
+check_report_multi "$TESTDIR/regress_247_free_call_beside_unrelated_extern.con" assumptions \
+    "bug 247: a free call names the program's function, not an unrelated extern" \
+    "bug 247: --report assumptions attributes an unrelated extern to a free call" \
+    '"fn":"main.run","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+check_report_multi "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" assumptions \
+    "bug 247: a free function value names the program's function, not an unrelated extern" \
+    "bug 247: --report assumptions attributes an unrelated extern to a free function value" \
+    '"fn":"main.factory","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
+    "bug 247: --report caps follows a function value to the foreign binding it reaches" \
+    "bug 247: --report caps reports a function returning a value that reaches abs as having no assumption" \
+    "also assumes main.abs honest"
+run_ok "$TESTDIR/regress_239_extern_call_beside_generic_method.con" 99
+run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method.con" 99
+for r239 in regress_239_extern_call_beside_generic_method regress_239_extern_call_beside_capable_method; do
+    r239_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r239.con" --interp 2>&1 || true)
+    if [ "$r239_interp" = "99" ]; then
+        echo "  ok  bug 239: $r239 — interp == binary (99)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 239: $r239 --interp gave '$r239_interp', want 99"
+        FAIL=$((FAIL + 1))
+    fi
+done
+run_err "$TESTDIR/error_240_trait_in_trait_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_in_extern_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_ok "$TESTDIR/regress_239_parent_method_beside_child_free_fn.con" 42
+run_ok "$TESTDIR/regress_241_parent_names_child_respelled_method.con" 42
+# bounded_run, not GNU `timeout` (absent on macOS runners); a timeout is INCOMPLETE, not a pass.
+for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_module_free_fn_takes_method_spelling \
+            regress_238_parent_free_fn_takes_method_spelling regress_239_free_fn_beside_imported_method \
+            regress_240_trait_bounds_and_type_param_shadow regress_241_parent_calls_child_respelled_method \
+            regress_238_method_named_by_definition_name regress_239_parent_method_beside_child_free_fn \
+            regress_241_parent_names_child_respelled_method regress_238_method_call_in_constant \
+            regress_238_extern_takes_method_spelling regress_238_imported_extern_alias_takes_method_spelling \
+            regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern \
+            regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern \
+            regress_239_static_method_beside_free_fn_report regress_239_method_call_beside_extern_of_other_arity \
+            regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern \
+            regress_238_method_value_beside_extern_of_other_arity regress_239_nested_method_beside_extern \
+            regress_239_respelled_method_beside_extern_types regress_239_method_call_not_an_extern_call_report \
+            regress_247_function_value_reaches_foreign regress_239_method_value_no_foreign_assumption \
+            regress_239_method_spelled_like_intrinsic regress_239_method_call_reaches_ffi_report \
+            regress_239_method_spelled_like_vec_op regress_239_method_spelled_like_alloc_op \
+            regress_239_alias_spelled_method_reaches_ffi regress_239_extern_call_beside_capable_method_explained \
+            regress_239_method_edge_beside_free_alias regress_238_free_alias_takes_method_spelling \
+            regress_239_fn_parameter_spelled_like_method regress_238_extern_alias_takes_nested_method_spelling \
+            regress_238_unrelated_alias_beside_method regress_239_imported_extern_alias_beside_capable_method \
+            regress_239_method_ffi_beside_free_alias regress_239_method_value_type_agreement \
+            regress_239_method_cap_explained_past_free_alias regress_239_method_spelled_like_free_op \
+            regress_238_method_value_both_spellings_taken_by_externs regress_239_method_value_beside_constant \
+            regress_223_method_core_name_taken \
+            regress_239_trusted_extern_beside_method_edge \
+            regress_239_imported_trusted_extern_beside_trusted_method \
+            regress_247_free_call_beside_unrelated_extern \
+            regress_239_free_call_not_extern_report \
+            regress_239_free_call_reaches_ffi_predictable \
+            regress_239_imported_extern_alias_beside_method_arity regress_239_extern_alias_assumption_not_method \
+            regress_239_extern_call_not_trusted_by_method regress_247_free_value_beside_unrelated_extern; do
+    r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
+    if [ "$r238_interp" = "42" ]; then
+        echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bugs 238-241: $r238 --interp gave '$r238_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 223 (R-0492 step 3): an import alias names the imported declaration. Types are compared, and
 # their methods and trait impls looked up, by declaration identity in Resolve, Check and Elab, so
 # `import m.{P as Q}` is `P`: its methods (inherent, trait, Destroy), the values `m` returns, its
@@ -8720,7 +9029,9 @@ run_ok "$TESTDIR/regress_223_aliased_generic_and_bound.con" 42
 run_ok "$TESTDIR/regress_223_aliased_destroy_impl.con" 42
 run_ok "$TESTDIR/regress_223_aliased_self_result.con" 42
 run_ok "$TESTDIR/regress_223_aliased_cap_params.con" 42
-run_err "$TESTDIR/error_223_method_core_name_taken.con" "(E0299)"
+# Bugs 238 – 239 lift the containment: the method call is a METHOD call in Core and reaches the
+# method, beside a free function of its mangled name.
+run_ok "$TESTDIR/regress_223_method_core_name_taken.con" 42
 for r223 in regress_223_aliased_struct_methods regress_223_aliased_enum \
             regress_223_aliased_generic_and_bound regress_223_aliased_destroy_impl \
             regress_223_aliased_self_result regress_223_aliased_cap_params; do
@@ -8828,7 +9139,16 @@ run_ok "$TESTDIR/regress_242_struct_beside_other_import.con" 42
 run_ok "$TESTDIR/regress_242_two_modules_signatures.con" 42
 run_ok "$TESTDIR/regress_242_alias_target_closure.con" 42
 run_ok "$TESTDIR/regress_242_child_newtype_from_child_function.con" 42
-run_err "$TESTDIR/error_242_two_imported_methods_one_core_name.con" "(E0299)"
+# Since bugs 238 – 239 (method calls carry their namespace) the two methods are told apart.
+run_ok "$TESTDIR/regress_242_two_imported_methods_one_core_name.con" 42
+r242_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/regress_242_two_imported_methods_one_core_name.con" --interp 2>&1 || true)
+if [ "$r242_interp" = "42" ]; then
+    echo "  ok  bug 242: regress_242_two_imported_methods_one_core_name — interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 242: regress_242_two_imported_methods_one_core_name --interp gave '$r242_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 for r242 in regress_242_imported_signature_type \
             regress_242_toplevel_signature_type \
             regress_242_imported_enum_beside_own_enum \

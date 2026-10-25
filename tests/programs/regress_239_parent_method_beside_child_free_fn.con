@@ -1,0 +1,21 @@
+// Bug 239 (FIXED), the Codex r1 regression shape: `outer` names its own method `P::get` by its
+// definition name (`P_get()`, a call and a value) while its child `child` defines a free
+// function `P_get`. The parent's cross-module rename must not move the method reference to
+// `child_P_get` (it ran the child's function, 99).
+// Expected: 42 (21 + 21), natively and --interp.
+mod outer {
+    struct Copy P { v: i32 }
+    impl P {
+        pub fn get() -> i32 { return 21; }
+    }
+    mod child {
+        pub fn P_get() -> i32 { return 99; }
+    }
+    pub fn run() -> i32 {
+        let f: fn() -> i32 = P_get;
+        return P_get() + f();
+    }
+}
+fn main() -> Int {
+    return outer::run() as Int;
+}

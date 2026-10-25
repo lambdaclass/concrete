@@ -73,6 +73,8 @@ structure VerifyCtx where
   /-- Known function signatures: name → (paramTypes, returnType); the FIRST
       signature of a name wins, as the old `find?` over the list did. -/
   fnSigs : Std.HashMap String (List Ty × Ty)
+  /-- Impl methods' signatures (bugs 238 – 239): a method call is checked against these. -/
+  methodSigs : Std.HashMap String (List Ty × Ty) := ∅
   /-- Return type of the current function. -/
   retTy : Ty
   /-- Declaration span of the current function, so verifier errors point at
@@ -192,7 +194,7 @@ private def instUses : SInst → List String
   | .call _ callee args _ =>
     let argRegs := args.foldl (fun acc a => acc ++ svalRegs a) []
     match callee with
-    | .direct _ | .foreign _ => argRegs
+    | .direct _ _ | .foreign _ => argRegs
     | .indirect target => svalRegs target ++ argRegs
   | .alloca _ _ => []
   | .load _ ptr _ => svalRegs ptr
@@ -473,11 +475,13 @@ private def checkPhiNodes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
     | _ => ctx
   ) ctx
 
-/-- Build function signature map from module functions + extern declarations. -/
-private def buildFnSigs (modules : List SModule) : List (String × List Ty × Ty) :=
+/-- Build function signature map from module functions + extern declarations; `methods` selects
+    the method namespace (impl methods) or the free one (free functions and externs), so a call is
+    checked against a signature of its own namespace (bugs 238 – 239). -/
+private def buildFnSigs (modules : List SModule) (methods : Bool) : List (String × List Ty × Ty) :=
   modules.foldl (fun acc m =>
-    let fnSigs := m.functions.map fun f => (f.name, f.params.map (·.2), f.retTy)
-    let externSigs := m.externFns.map fun (name, params, retTy) =>
+    let fnSigs := (m.functions.filter (·.isMethod == methods)).map fun f => (f.name, f.params.map (·.2), f.retTy)
+    let externSigs := if methods then [] else m.externFns.map fun (name, params, retTy) =>
       (name, params.map (·.2), retTy)
     acc ++ fnSigs ++ externSigs) []
 
@@ -506,8 +510,8 @@ private def checkPhiTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 private def checkCallArity (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
   b.insts.foldl (fun ctx inst =>
     match inst with
-    | .call _ (.direct fn) args _ =>
-      match ctx.fnSigs.get? fn with
+    | .call _ (.direct fn space) args _ =>
+      match (if space == .method then ctx.methodSigs else ctx.fnSigs).get? fn with
       | some (paramTys, _) =>
         if args.length != paramTys.length then
           addSSAError ctx (.callArityMismatch b.label fn args.length paramTys.length)
@@ -564,7 +568,8 @@ private def checkBinOpTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 -- Function and module validation
 -- ============================================================
 
-private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
+private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty))
+    (methodSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
   if f.blocks.isEmpty then
     [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none, code := SSAVerifyError.code .functionHasNoBlocks }]
   else
@@ -590,6 +595,7 @@ private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) 
       firstDefBlock := firstDefBlock
       blocks := f.blocks
       fnSigs := fnSigs
+      methodSigs := methodSigs
       retTy := f.retTy
       declSpan := f.declSpan
       errors := []
@@ -607,15 +613,18 @@ private def verifyFn (f : SFnDef) (fnSigs : Std.HashMap String (List Ty × Ty)) 
     ) ctx
     ctx.errors
 
-private def verifyModule (m : SModule) (fnSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
-  m.functions.foldl (fun acc f => acc ++ verifyFn f fnSigs) []
+private def verifyModule (m : SModule) (fnSigs : Std.HashMap String (List Ty × Ty))
+    (methodSigs : Std.HashMap String (List Ty × Ty)) : Diagnostics :=
+  m.functions.foldl (fun acc f => acc ++ verifyFn f fnSigs methodSigs) []
 
 -- spec: PASS-9 (docs/spec/pipeline.md; this stage boundary)
 def ssaVerifyProgram (modules : List SModule) : Except Diagnostics Unit :=
   -- First signature of a name wins, as the old list `find?` did.
-  let fnSigs : Std.HashMap String (List Ty × Ty) := (buildFnSigs modules).foldl
-    (fun m (n, ps, r) => if m.contains n then m else m.insert n (ps, r)) ∅
-  let errors := modules.foldl (fun acc m => acc ++ verifyModule m fnSigs) []
+  let sigMap := fun (methods : Bool) => ((buildFnSigs modules methods).foldl
+    (fun m (n, ps, r) => if m.contains n then m else m.insert n (ps, r)) ∅ : Std.HashMap String (List Ty × Ty))
+  let fnSigs := sigMap false
+  let methodSigs := sigMap true
+  let errors := modules.foldl (fun acc m => acc ++ verifyModule m fnSigs methodSigs) []
   if errors.isEmpty then .ok ()
   else .error errors
 

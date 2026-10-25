@@ -1,7 +1,9 @@
 // Bug 242: two imported types of one spelling, each with a method `mk`, called as `M::mk` (the alias of
-// `m.P`) and `P::mk` (`q.P`). Each call names its own type's method, but Core still calls a method
-// by its mangled spelling, `P_mk` for both, so Check refuses the second (E0299, bug 223's
-// refusal) instead of letting one call reach the other's method.
+// `m.P`) and `P::mk` (`q.P`). Each call names its own type's method. When this was written Core
+// called a method by its mangled spelling, `P_mk` for both, so Check refused the second (E0299, bug
+// 223's refusal). Since bugs 238 – 239 a method call carries the method namespace and each type's
+// methods are spelled by their type (`m_P_mk`, `q_P_mk`): the program compiles and each call reaches
+// its own type's method. Expected: 42 (40 + 200 / 100), natively and --interp.
 mod m {
     pub struct Copy P { v: i64 }
     impl P { pub fn mk(x: i64) -> P { return P { v: x }; } pub fn get(self) -> i64 { return self.v; } }

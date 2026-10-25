@@ -1,0 +1,9 @@
+// Bug 239 (FIXED), Codex review r22: `main` reaches FFI through the free function `run`, which calls
+// a trusted extern. The predictable profile's FFI check cited only method calls when the closure
+// held the function, so `main` passed while `run` failed; FFI reached through any call is cited.
+// Expected: 42, natively and --interp; `--check predictable` refuses both `run` and `main`.
+trusted extern fn abs(x: i32) with() -> i32;
+fn run() -> i32 { return abs(-42); }
+fn main() -> Int {
+    return run() as Int;
+}

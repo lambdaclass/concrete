@@ -98,9 +98,9 @@ def monoReport (preMono postMono : List CModule) : String :=
 
 /-- Analyze allocation patterns in a single function. -/
 private def analyzeFnAlloc (f : CFnDef) : Option String :=
-  let callees := collectCallsStmts f.body |>.eraseDups
+  let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
   let allocs := callees.filter isAllocCall
-  let frees := callees.filter isFreeCall
+  let frees := cleanupCallsStmts f.body
   let defers := collectDefersStmts f.body
   -- Skip functions with no allocation activity
   if allocs.isEmpty && frees.isEmpty && defers.isEmpty then none
@@ -133,9 +133,9 @@ private partial def allocReportModule (m : CModule) (indent : String) : Option S
 /-- Count allocation-related functions across module tree. -/
 private partial def allocCounts (m : CModule) : Nat × Nat × Nat :=
   let fnResults := m.functions.map fun f =>
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
-    let frees := callees.filter isFreeCall
+    let frees := cleanupCallsStmts f.body
     let defers := collectDefersStmts f.body
     (allocs.isEmpty, frees.isEmpty, defers.isEmpty)
   let allocating := (fnResults.filter fun (a, _, _) => !a).length
@@ -338,8 +338,8 @@ private def proofExclusionReasons (externNames : List String) (f : CFnDef) : Lis
   -- 2. Is trusted
   let reasons := if f.isTrusted then reasons ++ ["trusted boundary"] else reasons
   -- 3. Calls extern functions
-  let callees := collectCallsStmts f.body |>.eraseDups
-  let externCalls := callees.filter fun c => externNames.contains c
+  -- Only a free call can reach a foreign binding (bugs 238 – 239).
+  let externCalls := externCallsIn externNames f
   let reasons := if !externCalls.isEmpty then
     reasons ++ [s!"calls extern: {", ".intercalate externCalls}"]
   else reasons
@@ -430,9 +430,9 @@ private partial def effectsForModule
   let fns := m.functions.map fun f =>
     let qualName := qualPrefix ++ "." ++ f.sourceName
     let isEffectOpaque := opaqueSet.contains qualName
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
-    let frees := callees.filter isFreeCall
+    let frees := cleanupCallsStmts f.body
     let defs := collectDefersStmts f.body
     let rec_ := match recMap.find? (fun (n, _, _) => n == qualName) with
       | some (_, .direct, _) => "direct"
@@ -440,7 +440,11 @@ private partial def effectsForModule
         let others := members.filter (· != qualName)
         s!"mutual: {", ".intercalate others}"
       | _ => "none"
-    let crossesFfi := callees.any fun c => externNames.contains c
+    -- Only a free call can reach a foreign binding directly (bugs 238 – 239); any call, a method
+    -- call included, reaches one transitively, which the closure records for this function's
+    -- qualified name over the namespace-aware call graph (Codex review r9).
+    let crossesFfi := externNames.contains qualName
+      || !(externCallsIn externNames f).isEmpty
     let loopClass := classifyLoops f.body
     -- Evidence level: enforced if passes all 5 predictable gates
     let (concreteCaps, _) := f.capSet.normalize
@@ -882,7 +886,7 @@ partial def checkPredictableModule
          , loc := fnLoc, violationLoc := loopViolLoc, violationSpan := loopSpan }]
       else []
     -- 3. Allocation — point at the allocating call
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
     let (fnCaps, _) := f.capSet.normalize
     let hasAllocCap := fnCaps.any (· == "Alloc")
@@ -899,7 +903,16 @@ partial def checkPredictableModule
          , loc := fnLoc, violationSpan := match entry with | some e => some e.fnSpan | none => none }]
       else []
     -- 4. FFI — point at the extern call
-    let externCalls := callees.filter fun c => externNames.contains c
+    -- Only a free call can reach a foreign binding (bugs 238 – 239).
+    let directExtern := externCallsIn externNames f
+    -- Transitively through any call, free or method (Codex reviews r9, r22): the closure over the
+    -- namespace-aware call graph holds this function; the callees named in the closure are cited.
+    let directCalls := collectCallsStmts f.body |>.eraseDups
+    let externCalls := if !directExtern.isEmpty then directExtern
+      else if externNames.contains qualName then
+        (let named := directCalls.filter externNames.contains
+         if named.isEmpty then directCalls else named)
+      else []
     let ffiSpan := findCallSpan externCalls astBody
     let ffiViolLoc := mkViolLoc ffiSpan
     let ffiViolations := if externCalls.isEmpty then []
@@ -5273,9 +5286,9 @@ def collectUnsafeFacts (modules : List CModule) : List Val :=
 open Json in
 /-- Convert a function's allocation info to a JSON fact. -/
 private def allocToFact (qualName : String) (f : CFnDef) : Option Val :=
-  let callees := collectCallsStmts f.body |>.eraseDups
+  let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
   let allocs := callees.filter isAllocCall
-  let frees := callees.filter isFreeCall
+  let frees := cleanupCallsStmts f.body
   let defers := collectDefersStmts f.body
   if allocs.isEmpty && frees.isEmpty && defers.isEmpty then none
   else
@@ -5857,9 +5870,9 @@ def auditQuery (modules : List CModule) (locMap : FnLocMap)
     let fnDef := fnLookup.find? (fun (n, _) => n == fnName)
     let allocInfo := match fnDef with
       | some (_, f) =>
-        let callees := collectCallsStmts f.body |>.eraseDups
+        let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
         let allocs := callees.filter isAllocCall
-        let frees := callees.filter isFreeCall
+        let frees := cleanupCallsStmts f.body
         let defers := collectDefersStmts f.body
         .obj [
           ("allocates", .arr (allocs.map .str)),

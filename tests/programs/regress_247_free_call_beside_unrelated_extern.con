@@ -1,0 +1,14 @@
+// Bug 247 (FIXED), Codex review r20: `run` calls the program's free function `target` while an
+// unrelated module declares an extern `target`. The assumption summary resolved the call against
+// foreign bindings independently of program definitions and attributed `ffi.target` to `run` and
+// `main`; a free call names a foreign binding only when its function binds the spelling to one.
+// Expected: 42, natively and --interp; `run` assumes nothing in `--report assumptions`.
+fn target(x: i32) -> i32 { return x; }
+mod ffi {
+    #[link_name = "abs"]
+    trusted extern fn target(x: i32) with() -> i32;
+}
+fn run() -> i32 { return target(42); }
+fn main() -> Int {
+    return run() as Int;
+}

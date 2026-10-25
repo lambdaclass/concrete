@@ -276,6 +276,10 @@ structure TypeEnv where
   enums : List EnumDef
   functions : List FnSummary
   fnNames : List (String × Nat)
+  /-- Bugs 238 – 239: the impl methods alone (`Type_method` → index into `functions`). A
+      receiver call and a `T::m()` call resolve here; `fnNames` (free functions first, then
+      methods by definition name) answers free-spelled names. -/
+  methodNames : List (String × Nat) := []
   loopDepth : Nat
   currentRetTy : Ty := .unit
   typeAliases : List (String × Ty) := []

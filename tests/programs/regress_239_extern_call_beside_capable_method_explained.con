@@ -1,0 +1,20 @@
+// Bug 239 (FIXED), Codex review r10: `user.run` declares `Console` and calls its own trusted
+// extern `P_get`, beside the root's method `P::get` (definition name `P_get`) that requires
+// `Console`. `--report caps` explained `run`'s `Console` as supplied by "calls P_get", borrowing
+// the method's capability; a free call bound to a foreign declaration is that extern, which
+// supplies nothing, so `Console` is declared.
+// Expected: 42, natively and --interp; `Console <- declared` for `run` in `--report caps`.
+struct Copy P { v: Int }
+impl P {
+    pub fn get(x: i32) with(Console) -> i32 { return 42; }
+}
+mod user {
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() with(Console) -> i32 {
+        return P_get(-42);
+    }
+}
+fn main() with(Console) -> Int {
+    return user::run() as Int;
+}

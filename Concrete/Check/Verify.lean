@@ -582,8 +582,10 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
       let hops := targets ++ targets.flatMap (aliasTargets.getD · [])
       hops.eraseDups.flatMap (byName.getD · [])
     | ds => ds
-  let required : String → Option (List String) := fun callee =>
-    match definitionsOf callee with
+  let required : String → CallSpace → Option (List String) := fun callee sp =>
+    let defs := definitionsOf callee
+    let inSpace := defs.filter fun d => d.isMethod == (sp == .method)
+    match (if inSpace.isEmpty then defs else inSpace) with
     | [] => none
     | d :: ds =>
       if !d.typeParams.isEmpty || ds.any (fun d' => d'.capSet.normalize != d.capSet.normalize) then none
@@ -593,8 +595,16 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
     match plainCaps f.capSet with
     | none => acc
     | some has =>
-      (collectCallsStmts f.body).eraseDups.foldl (fun acc callee =>
-        match required callee with
+      -- Per namespace (bugs 238 – 239): a free call its function binds to a foreign declaration
+      -- is that declaration (CoreCheck decides it), and otherwise each call is decided against
+      -- the definitions of its namespace, a method call against methods only.
+      let directs := ((collectCalleesStmts f.body).filterMap fun c => match c with
+        | .direct n sp => some (n, sp)
+        | _ => none).eraseDups
+      let decided := directs.filter fun (n, sp) =>
+        !(sp == .free && (f.foreignCalls.lookup n).any (fun d => !d.startsWith "_C$rt."))
+      decided.foldl (fun acc (callee, sp) =>
+        match required callee sp with
         | none => acc
         | some need =>
           let missing := need.filter (fun c => !has.contains c)

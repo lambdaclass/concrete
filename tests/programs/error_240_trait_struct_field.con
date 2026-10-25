@@ -1,0 +1,10 @@
+// Bug 240 (FIXED): a struct field naming a trait (no trait-object types, TYPE-2): E0108 at Resolve.
+// Before the fix the declaration passed Resolve unchecked; the native build printed a Layout panic
+// (`tyToLLVM: unknown named type 'Marker'`) and `--interp` returned 42.
+trait Marker {
+    fn tag(&self) -> i32;
+}
+struct Holder { m: Marker }
+fn main() -> Int {
+    return 42;
+}

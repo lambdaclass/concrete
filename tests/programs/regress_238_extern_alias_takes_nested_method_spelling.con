@@ -1,0 +1,22 @@
+// Bug 238 (FIXED), Codex review r12: the root imports `outer.defs`'s `P` (method `get`, defined as
+// `defs_P_get`, called by the spelling `P_get` through a linker alias) and an unrelated extern
+// under the alias `P_get`. Native emission followed the extern alias and called `abs` (99). Mono,
+// emission and the interpreter resolve a method call among methods only.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod defs {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return 42; }
+        }
+    }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn other(x: i32) with() -> i32;
+}
+import outer.defs.{P};
+import ffi.{other as P_get};
+fn main() -> Int {
+    return P::get(-99) as Int;
+}

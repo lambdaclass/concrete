@@ -1,0 +1,23 @@
+// Bug 238 (FIXED), Codex review r3: `user` imports a foreign binding under the alias `P_get`, the
+// spelling of the static method `P::get` of the imported `P`. The interpreter and native emission
+// bind a function's foreign spellings (`foreignCalls`) before any program definition, so the
+// method call ran `abs(-99)` (99). Every spelling bound to a foreign binding counts for the repair.
+// Expected: 42 (the method's 42, then `abs(-5) - 5`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(x: i32) -> i32 { return 42; }
+    }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn c_abs(x: i32) with() -> i32;
+}
+mod user {
+    import defs.{P};
+    import ffi.{c_abs as P_get};
+    pub fn run() -> i32 { return P::get(-99) + P_get(-5) - 5; }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

@@ -1,0 +1,16 @@
+// Bug 239 (FIXED), Codex review r17 control: a TRUSTED extern `defs_P_get` beside the nested
+// method `defs.P::get` (Core name `defs_P_get`). The extern call keeps both trust edges
+// (calls-ffi and calls-trusted); a method of the spelling neither confers nor withholds trust.
+// Expected: 42 (`abs(-42)`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(x: i32) -> i32 { return x; }
+    }
+}
+#[link_name = "abs"]
+trusted extern fn defs_P_get(x: i32) with() -> i32;
+fn run() -> i32 { return defs_P_get(-42); }
+fn main() -> Int {
+    return run() as Int;
+}

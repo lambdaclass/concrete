@@ -1,0 +1,9 @@
+// Bug 240 (FIXED): a type argument naming a trait: E0108 at Resolve.
+trait Marker {
+    fn tag(&self) -> i32;
+}
+fn id<T>(t: T) -> T { return t; }
+fn main() -> Int {
+    let x: i32 = 42;
+    return id::<Marker>(x) as Int;
+}

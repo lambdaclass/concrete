@@ -81,8 +81,28 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
   -- One walk, in source order (the explanation lists callees as written); deduplicated by spelling
   -- AND kind: a body calling both `print(7)` and a user `print_int` has two suppliers, the program
   -- function and the intrinsic (Codex review).
+  -- Per namespace (bugs 238 – 239, Codex review r10): a free call the function binds to a foreign
+  -- declaration is that extern, and a method call is a method, whatever else shares the spelling.
+  let keyed (key written : String) : Option (Option CapSupplier) :=
+    match lookup.find? (·.1 == key) with
+    | some (_, cs) => some (if Capabilities.capSetHas cs cap then some { callee := written, kind := "program" } else none)
+    | none => none
   let all := (collectCalleesStmts f.body).filterMap fun c => match c with
-    | .direct n => spelledSupplier n
+    | .direct n .free =>
+      match f.foreignCalls.lookup n with
+      | some d => if d.startsWith "_C$rt." then spelledSupplier n else (keyed (capKeyExtern d) n).getD none
+      | none => spelledSupplier n
+    | .direct n .method =>
+      -- the method of the spelling, else of any alias target that is a method; never a free
+      -- function an alias of the spelling leads to (Codex review r14)
+      let targets := n :: (aliases.filter (·.1 == n)).map (·.2)
+      match targets.findSome? fun t => keyed (capKeyMethod t) n with
+      | some r => r
+      | none =>
+        -- a method of another package (the summary's dependency index), else nothing
+        let ds := targets.flatMap fun t => (deps.getD t #[]).toList
+        let hits := ds.filter fun (_, cs) => Capabilities.capSetHas cs cap
+        if hits.isEmpty then none else some { callee := n, kind := "dependency", targets := hits.map (·.1) }
     | .runtime h => runtimeSupplier h
     | .indirect _ => none
   all.foldl (fun acc x => if acc.any (fun y => y.callee == x.callee && y.kind == x.kind) then acc else acc ++ [x]) []
@@ -392,7 +412,8 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef)
   -- Check for raw pointer operations in body
   let ops := if hasRawPtrOpsStmts f.body then ops ++ ["pointer dereference"] else ops
   -- Check for calls to extern functions
-  let externCalls := callees.filter fun c => externNames.contains c
+  -- Only a free call can reach a foreign binding (bugs 238 – 239).
+  let externCalls := externCallsIn externNames f
   let ops := if externCalls.isEmpty then ops
     else ops ++ externCalls.map fun c =>
       if intrinsicNames.contains c then s!"compiler intrinsic {c}" else s!"extern {c}"
@@ -452,7 +473,7 @@ partial def unsafeReportModule (externNames : List String)
       else lines ++ [s!"{indent}  Foreign effect declarations (audited assumptions):"] ++
         allExterns.foldl (fun acc (n, _, _, t) =>
           let dependents := (m.functions.filter fun f =>
-            (collectCallsStmts f.body).contains n).map (·.name)
+            (foreignBoundCalls f).any (fun (c, d) => c == n || d == n)).map (·.name)
           let kind := if t then "trusted extern (safe for every argument, audited)"
                       else "extern (callers need Unsafe; trusted bodies absorb it)"
           acc ++ [s!"{indent}    {n}: assumed to perform only {declaredOf n} — {kind}",

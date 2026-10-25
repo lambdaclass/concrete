@@ -1,0 +1,21 @@
+// Bug 239 (FIXED), Codex review r6: `user` calls the imported `P`'s method `P::get(-99)` beside its
+// own trusted foreign binding `P_get` (`abs`). Before the fix the native binary called `abs` (99)
+// while `--interp` ran the method (42), and `--report trust-edges` recorded `run` as calling the
+// trusted extern (calls-ffi and calls-trusted `P_get`). A method call reaches the method and is no
+// trust edge of a foreign binding.
+// Expected: 42, natively and --interp; no trust edge for `user.run`.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(x: i32) -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get(-99); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

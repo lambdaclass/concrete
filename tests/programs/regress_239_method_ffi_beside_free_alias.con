@@ -1,0 +1,24 @@
+// Bug 239 (FIXED), Codex review r13: `run` calls the nested `P::get` (definition `defs_P_get`,
+// whose body calls a trusted extern) while the root imports an unrelated function under the
+// alias `P_get`. The proof call graph required one alias target across both namespaces, left the
+// method call unresolved, and so `--report effects` read `run` as not crossing FFI; a method
+// call's aliases lead to methods only there too.
+// Expected: 42, natively and --interp; `run` crosses FFI in `--report effects`.
+mod outer {
+    mod defs {
+        trusted extern fn abs(x: i32) with() -> i32;
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return abs(x); }
+        }
+    }
+}
+mod other {
+    pub fn wrong(x: i32) -> i32 { return 99; }
+}
+import outer.defs.{P};
+import other.{wrong as P_get};
+fn run() -> i32 { return P::get(-42); }
+fn main() -> Int {
+    return run() as Int;
+}

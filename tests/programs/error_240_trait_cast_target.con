@@ -1,0 +1,11 @@
+// Bug 240 (FIXED): `x as Marker` with `Marker` a trait passed Resolve (a trait is in the type
+// namespace, and Resolve took every name there for a type), `--interp` returned 42, and the native
+// build panicked in EmitSSA ("unknown named type 'Marker'"). There are no trait-object types
+// (TYPE-2), so a trait in a type position names no type: E0108 at Resolve.
+trait Marker {
+    fn tag(&self) -> i32;
+}
+fn main() -> Int {
+    let x: i32 = 42;
+    return (x as Marker) as Int;
+}

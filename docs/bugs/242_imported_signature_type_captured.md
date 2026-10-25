@@ -1,8 +1,8 @@
 # Bug 242 — a type in an imported signature is captured by the importer's own type of that spelling
 
 <!-- bug-ledger
-summary: a type in an imported signature (`fn make() -> P`) was read in the importer's environment by its definition spelling, and the import closure's copy of `P` came first, so an importer's own `struct P` was unreachable (E0252 on its literal); likewise where another import binds the spelling. `resolveImports` respells a transported type whose spelling denotes another declaration in the importer to its identity (`m::shapes::P`) and binds that to the declaration; Elab spells a method found by identity through it. Found by the probes of bug 223's fix, 2026-10-25. Fixtures `regress_242_*`, `error_242_*`. Class 1.
-fixtures: regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con regress_242_alias_target_closure.con regress_242_child_newtype_from_child_function.con error_242_two_imported_methods_one_core_name.con
+summary: a type in an imported signature (`fn make() -> P`) was read in the importer's environment by its definition spelling, and the import closure's copy of `P` came first, so an importer's own `struct P` was unreachable (E0252 on its literal); likewise where another import binds the spelling. `resolveImports` respells a transported type whose spelling denotes another declaration in the importer to its identity (`m::shapes::P`) and binds that to the declaration; Elab spells a method found by identity through it. Found by the probes of bug 223's fix, 2026-10-25. Fixtures `regress_242_*`. Class 1.
+fixtures: regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con regress_242_alias_target_closure.con regress_242_child_newtype_from_child_function.con regress_242_two_imported_methods_one_core_name.con
 class: 1 — a type in an imported signature is a spelling the importer re-reads, so the importer's own type of that spelling is captured; fixed 2026-10-25: a transported type whose spelling denotes another declaration in the importer is respelled to its identity
 silent: no
 -->
@@ -60,9 +60,10 @@ twelve more `regress_242_*` (top-level modules, an enum result, a field type, an
 Self`, a constant's type, an alias target, a generic argument, an aliased newtype and struct beside
 another module's of the definition's spelling, two modules' signatures each naming their own `N`,
 an alias target that only the alias names, a child's newtype returned by the child's function),
-each `run_ok … 42` and `--interp` = 42; `error_242_two_imported_methods_one_core_name.con` (two
-imported types of one spelling both with `mk`: Core still calls a method by its mangled spelling,
-so Check refuses, E0299).
+each `run_ok … 42` and `--interp` = 42; `regress_242_two_imported_methods_one_core_name.con` (two
+imported types of one spelling both with `mk`; refused E0299 when this fix landed, since Core
+called both by the mangled spelling `P_mk`; `run_ok … 42` and `--interp` = 42 since bugs 238 – 239,
+see the note below).
 
 ## Structural cause
 
@@ -74,4 +75,12 @@ in whichever environment reads it, so a signature crossing a module boundary cha
 R-0492 (S5 `DefId`), applied to the front end by R-0514. The fix carries the identity in the one
 representation the passes share, a spelling no source can write, bound by import resolution, the
 one place all passes take imports from. `Ty` carrying a `TypeId` (and Core calling methods by
-`MethodKey`, which `error_242_two_imported_methods_one_core_name.con` still needs) remains R-0514's.
+`MethodKey`, R-0548, which the two-method fixture needed until bugs 238 – 239 gave method calls
+their own namespace and each type's methods their type's spelling) remains R-0514's.
+
+## Note (bugs 238 – 239)
+
+`error_242_two_imported_methods_one_core_name.con` was refused (E0299) because Core called both
+types' `mk` by the one mangled spelling `P_mk`. With method calls carrying their namespace and each
+type's methods spelled by their type, the two calls are told apart; the fixture is now
+`regress_242_two_imported_methods_one_core_name.con` (42, natively and under `--interp`).

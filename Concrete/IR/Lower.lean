@@ -194,7 +194,7 @@ private def arrayLenOfTy : Ty → Option Nat
     is still used for the GEP. -/
 private def emitBoundsCheck (idxVal : SVal) (len : Nat) : LowerM Unit := do
   let idxI64 ← coerceVal idxVal .int "boundsidx."
-  emit (.call none (.direct "__cc_bounds_check") [idxI64, .intConst (Int.ofNat len) .int] .unit)
+  emit (.call none (.direct "__cc_bounds_check" .free) [idxI64, .intConst (Int.ofNat len) .int] .unit)
 
 /-- Emit an alloca that will be hoisted to the function entry block.
     This prevents dynamic stack growth when allocas occur inside loops. -/
@@ -855,9 +855,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- Constants reach Lower flattened by bare name (Core carries no module path), so two
       -- modules defining one name are indistinguishable here: a submodule's `A` read the
       -- top-level `A`. Refused at the use rather than guessed (as Mono does for type names).
-      if (s.constants.filter fun (n, _, _) => n == name.name).length > 1 then
+      -- A method value names a method, never a constant of its spelling (bugs 238 – 239, Codex r16).
+      let consts := if name.space == .method then [] else s.constants
+      if (consts.filter fun (n, _, _) => n == name.name).length > 1 then
         throwLower s!"module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names; rename one of them"
-      match s.constants.find? fun (n, _, _) => n == name.name with
+      match consts.find? fun (n, _, _) => n == name.name with
       | some (_, _, constExpr) =>
         -- Hygiene (bug 123 review): the initializer is module-scope code. Inlined in the
         -- caller's environment, a local shadowing a constant it names captured it
@@ -892,7 +894,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with
-        | .fn_ _ _ _ => return .fnRef name.name ty
+        | .fn_ _ _ _ => return .fnRef name.name ty name.space
         | _ => return .reg name.name ty
 
   | .binOp op lhs rhs ty =>
@@ -980,7 +982,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let st ← getState
     let intrinsic := match callee with
       | .indirect _ => none
-      | .direct fn => if st.definedFns.contains fn then none else resolveIntrinsic fn
+      -- A method call names a program method its type's method table resolved (bugs 238 – 239,
+      -- Codex review r9: a method spelled `read_owned` in another module was lowered as the
+      -- intrinsic); compiler intrinsics are free calls.
+      | .direct _ .method => none
+      | .direct fn .free => if st.definedFns.contains fn then none else resolveIntrinsic fn
       -- A compiler-generated runtime call is its helper whatever the program defines (bug 165).
       | .runtime helper => resolveIntrinsic helper
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants
@@ -1076,7 +1082,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- For runtime registers, prefix with "%" to mark as indirect call target.
     let callTarget : SCallee ← do
       match callee with
-      | .direct name => pure (.direct name)
+      | .direct name sp => pure (.direct name sp)
       -- The helper's reserved `_C$rt.` symbol, which no Concrete definition can take (bug 165).
       | .runtime helper => pure (.foreign (Symbols.runtimeFn helper))
       | .indirect binding =>
@@ -1084,7 +1090,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- Devirtualization: the binding holds a statically-known function, so
         -- this becomes a direct call. It is now a decision about a VALUE's
         -- constructor, not a string prefix a later pass has to re-parse.
-        | some (.fnRef fnName (.fn_ _ _ _)) => pure (.direct fnName)
+        | some (.fnRef fnName (.fn_ _ _ _) sp) => pure (.direct fnName sp)
         | some (v@(.reg _ (.fn_ _ _ _))) => pure (.indirect v)
         | _ =>
           -- The call form says this callee is a fn-typed binding, so failing to
@@ -1683,7 +1689,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .reg dst targetTy
 
   | .fnRef name ty =>
-    return .fnRef name ty
+    return .fnRef name ty .free
 
   | .allocCall inner _allocExpr _ty =>
     lowerExpr inner
@@ -2561,6 +2567,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
       declSpan := f.declSpan
       exportName := f.exportName
       foreignCalls := f.foreignCalls
+      isMethod := f.isMethod
     }, finalState.stringLits)
   | ((.error e), _) => .error e
 

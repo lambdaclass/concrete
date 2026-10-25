@@ -1,0 +1,18 @@
+// Bug 239 (FIXED), Codex review r9: `defs`'s newtype `read` has a method `owned`, called from
+// `main` as `r.owned()`. Its Core spelling `read_owned` is also a compiler intrinsic's, and Lower
+// recognised an intrinsic for any call spelling no function of the module being lowered defines,
+// so the method call became the intrinsic (a load through `&r`: 7) while `--interp` ran the method
+// (42). A method call names a program method; intrinsics are free calls.
+// Expected: 42, natively and --interp.
+mod defs {
+    pub newtype read = Int;
+    impl read {
+        pub fn owned(&self) -> Int { return 42; }
+    }
+    pub fn seven() -> read { return read(7); }
+}
+import defs.{read, seven};
+fn main() -> Int {
+    let r: read = seven();
+    return r.owned();
+}

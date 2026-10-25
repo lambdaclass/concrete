@@ -1,0 +1,29 @@
+// Bug 238 (FIXED), the method-value shape against a foreign binding: `c` binds `abs` as
+// `outer_a_P_get`, and names the respelled `outer_a_P`'s method `get` as a value
+// (`let f: fn(i32) -> i32 = P_get;`, which Core respells `outer_a_P_get`). Before the fix the
+// program was refused as a foreign function value (E0588, FFI-1), though the value is a method. A
+// method value carries its namespace, so no foreign binding of its spelling answers it.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return 42; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod c {
+    import outer.a.{P};
+    #[link_name = "abs"]
+    trusted extern fn outer_a_P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 {
+        let f: fn(i32) -> i32 = P_get;
+        return f(-99) + outer_a_P_get(-3) - 3;
+    }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

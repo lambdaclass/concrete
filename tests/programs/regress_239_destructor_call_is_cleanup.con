@@ -1,0 +1,18 @@
+// Bug 239 (FIXED), Codex review r13 (a regression in an earlier version of this fix): `destroy(r)`
+// is a method call of `Resource`'s destructor, which frees its heap field. The allocation reports
+// read cleanup from free calls only and reported `main` as allocating with no matching free;
+// cleanup is read from every call, a destructor being a method.
+// Expected: 0, natively and --interp; no "no matching free" warning in `--report alloc`.
+struct Resource { p: Heap<Int> }
+impl Destroy for Resource {
+    fn destroy(self) with(Alloc) {
+        let Resource { p } = self;
+        free(p);
+    }
+}
+fn main() with(Alloc) -> Int {
+    let p: Heap<Int> = alloc(42);
+    let r: Resource = Resource { p: p };
+    destroy(r);
+    return 0;
+}

@@ -6,7 +6,7 @@ spelling (or importing another module's) could not use it: `make(40).v` beside t
 `struct P` was E0252. Import resolution now respells such a type to its declaration's identity
 (`m::shapes::P`) and binds that spelling to the declaration, in every pass. Seven bug 096 fixtures
 change accordingly: three refused by Check (E0220) rather than by Core, four now valid. Pinned by
-`regress_242_*` (native and `--interp`) and `error_242_two_imported_methods_one_core_name.con`.
+`regress_242_*` (native and `--interp`) and `regress_242_two_imported_methods_one_core_name.con` (refused E0299 until bugs 238 – 239).
 
 ### The Interpreter Constructs and Unwraps a Newtype Over a Struct (bug 254, 2026-10-25)
 

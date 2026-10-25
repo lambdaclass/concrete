@@ -67,6 +67,26 @@ end CoreVars
 
 structure CoreCheckEnv where
   fnSigs : List (String × CapSet × List (String × Ty) × Ty)
+  /-- Bugs 238 – 239: every impl method of the program by its Core name, with its capabilities.
+      A method call (`CallSpace.method`) is decided against these first, never against a free
+      function or extern of the same spelling, which `fnSigs` lists before them. -/
+  methodCaps : List (String × CapSet) := []
+  /-- The same methods' signatures and whether each is `trusted` (Codex review r6): a method
+      call's arguments are checked against the method, and it is a trusted-call edge only when
+      the method is trusted, whatever a free function or extern of its spelling is. -/
+  methodSigs : List (String × List (String × Ty) × Ty × Bool) := []
+  /-- Every linker alias of the program (Codex review r7): a method call spelled by its caller
+      (`P_get` for a nested module's `inner_P_get`) reaches its method through one. -/
+  aliases : List (String × String) := []
+  /-- The module's own externs' signatures (bugs 238 – 239, Codex review r12): a free call the
+      function binds to a foreign declaration (`currentForeign`) is decided against that
+      declaration, never against a method sharing the spelling. -/
+  ownExterns : List (String × CapSet × List (String × Ty) × Ty) := []
+  /-- The module's own `trusted extern` names, and the program's (Codex reviews r17 – r19): a call
+      bound to an own extern is trusted by that extern alone; one bound to an imported extern by
+      the program's declaration of that name. -/
+  ownTrustedExterns : List String := []
+  allTrustedExterns : List String := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -597,7 +617,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !typesCompatible varTy ty && !isLenient varTy && !isLenient ty && !isRefCompat then
         addCCError (.typeMismatchVariable name.name (toString (repr varTy)) (toString (repr ty)))
     -- Not a local: a global function taken as a value (`let f = take_pair;`) when fn-typed.
-    | none => checkForeignFnValue name.name ty
+    -- A method value is never a foreign binding of its spelling (bugs 238 – 239, Codex r15).
+    | none => if name.space == .method then pure () else checkForeignFnValue name.name ty
 
   | .binOp op lhs rhs ty =>
     ccCheckExpr lhs
@@ -704,17 +725,64 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     for arg in args do
       ccCheckExpr arg
 
-  | .call (.direct fn) _typeArgs args _ty =>
+  | .call (.direct fn space) _typeArgs args _ty =>
     -- TRUST EDGES, emitted on the same visit as the capability decision below. A callee
     -- that is both (an `extern` declared `trusted`) yields both facts, because they are
     -- different questions: one is "audited", the other is "leaves the language".
     let envE ← getEnv
     -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
     -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
-    if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
-    if envE.externNames.contains fn then addTrustEdge .callsFFI fn
-    -- Check capability discipline
-    match ← lookupFnCaps fn with
+    -- A method call names a method (bugs 238 – 239): its definition by its spelling, else the one
+    -- method definition its linker aliases reach (a caller-side spelling, Codex review r7).
+    let methodName? : Option String := if space != .method then none else
+      if envE.methodSigs.any (·.1 == fn) then some fn else
+      let hop1 := (envE.aliases.filter (·.1 == fn)).map (·.2)
+      let hop2 := hop1.flatMap fun t => (envE.aliases.filter (·.1 == t)).map (·.2)
+      match ((hop1 ++ hop2).filter fun t => envE.methodSigs.any (·.1 == t)).eraseDups with
+      | [t] => some t
+      | _ => none
+    let methodSig? := methodName?.bind fun n => envE.methodSigs.find? (·.1 == n)
+    -- A method call never reaches an extern of its spelling.
+    let externHere := envE.externNames.contains fn
+    let foreignDecl? := if space == .free then
+      (envE.currentForeign.lookup fn).filter (!·.startsWith "_C$rt.") else none
+    match methodSig? with
+    | some (_, _, _, trusted) => if trusted then addTrustEdge .callsTrusted fn
+    | none =>
+      -- A free call is trusted by a trusted free function or extern of its spelling, never by a
+      -- trusted method's Core name (Codex review r16).
+      -- A free call's trust is its own declaration's: the module's extern of the spelling when
+      -- there is one, else a trusted free function or imported extern; a trusted METHOD of the
+      -- spelling neither confers nor withholds it (Codex reviews r16, r17).
+      let trustedMethodNamed := envE.methodSigs.any fun (n, _, _, t) => n == fn && t
+      -- A free call bound to a foreign declaration is trusted exactly when that declaration is a
+      -- trusted extern, own or imported (Codex review r18).
+      let freeTrusted := match foreignDecl? with
+        | some d =>
+          if envE.ownExterns.any (·.1 == d) then envE.ownTrustedExterns.contains d
+          else envE.allTrustedExterns.contains d
+        | none => envE.ownTrustedExterns.contains fn
+            || (envE.trustedNames.contains fn && !trustedMethodNamed)
+      if (space == .free && freeTrusted)
+          || (space == .method && envE.trustedNames.contains fn && !externHere) then
+        addTrustEdge .callsTrusted fn
+    if space == .free && externHere then addTrustEdge .callsFFI fn
+    -- Check capability discipline: a method call against the method table first; a method of
+    -- another package is in the imported requirements, keyed by the call's spelling.
+    -- A free call bound to a foreign declaration: an imported binding's requirement travels in
+    -- `importedCaps` under the local spelling, an own extern's is in `ownExterns`.
+    let foreignSig? := foreignDecl?.bind fun d => envE.ownExterns.find? (·.1 == d)
+    let calleeCaps? ← match foreignDecl?, foreignSig?, envE.importedCaps.lookup fn with
+      | some _, some (_, cs, _, _), _ => pure (some cs)
+      | some _, none, some cs => pure (some cs)
+      | some _, none, none => pure none
+      | _, _, _ =>
+      match space, methodName?.bind (fun n => envE.methodCaps.lookup n), envE.importedCaps.lookup fn with
+      | .method, some caps, _ => pure (some caps)
+      | .method, none, some caps => pure (some caps)
+      | .method, none, none => if externHere then pure none else lookupFnCaps fn
+      | _, _, _ => lookupFnCaps fn
+    match calleeCaps? with
     | some calleeCaps =>
       let env ← getEnv
       -- Same direct-call decision as Check (Capabilities.decideCall): CoreCheck
@@ -744,8 +812,18 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !capD.satisfied then
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
     | none => pure ()  -- builtin/extern: no recorded capability set
-    -- Check argument types
-    match ← lookupFnSig fn with
+    -- Check argument types: a method call against the method's own signature.
+    let sig? ← match methodSig?, foreignSig?, foreignDecl? with
+      | some (_, ps, r, _), _, _ => pure (some (ps, r))
+      | none, some (_, _, ps, r), _ => pure (some (ps, r))
+      -- an imported foreign binding: its signature is not in this unit's own table, and the
+      -- declared name may be a method's Core name elsewhere (Codex review r19); Check checked it
+      | none, none, some _ => pure none
+      | none, none, none =>
+      match methodSig? with
+      | some (_, ps, r, _) => pure (some (ps, r))
+      | none => if space == .method && externHere then pure none else lookupFnSig fn
+    match sig? with
     | some (params, _retTy) =>
       if args.length != params.length then
         addCCError (.argCountMismatch fn params.length args.length)
@@ -1512,6 +1590,20 @@ private partial def collectTrustNames (m : CModule) : List String × List String
     let (subT, subE) := collectTrustNames sub
     (accT ++ subT, accE ++ subE)) (hereT, here.2)
 
+/-- Every `trusted extern` name of a module tree (Codex review r18). -/
+private partial def collectAllTrustedExterns (m : CModule) : List String :=
+  (m.externFns.filter fun (_, _, _, t) => t).map (·.1) ++ m.submodules.flatMap collectAllTrustedExterns
+
+/-- Every linker alias of a module tree. -/
+private partial def collectAllAliases (m : CModule) : List (String × String) :=
+  m.linkerAliases ++ m.submodules.flatMap collectAllAliases
+
+/-- Every impl method of a module tree: capabilities, signature, trust (bugs 238 – 239). -/
+private partial def collectAllMethods (m : CModule)
+    : List (String × CapSet × List (String × Ty) × Ty × Bool) :=
+  (m.functions.filter (·.isMethod)).map (fun f => (f.name, f.capSet, f.params, f.retTy, f.isTrusted))
+  ++ m.submodules.flatMap collectAllMethods
+
 private def collectAllFnSigs (m : CModule)
     : List (String × CapSet × List (String × Ty) × Ty) :=
   collectAllFnSigsAux "" m
@@ -1523,6 +1615,9 @@ partial def ccCheckModule (m : CModule)
     -- exact defect being fixed, left as a footgun for the next caller. Omitting
     -- it is a compile error instead.
     (allFnSigs : List (String × CapSet × List (String × Ty) × Ty))
+    (allMethods : List (String × CapSet × List (String × Ty) × Ty × Bool))
+    (allAliases : List (String × String))
+    (allTrustedExterns : List String)
     : Diagnostics × List TrustEdge × List TrustFnAttr :=
   let declErrors := ccCheckModuleDecls m allStructs allEnums
   let trustNames := collectTrustNames m
@@ -1537,6 +1632,12 @@ partial def ccCheckModule (m : CModule)
     -- something elsewhere in the tree; the tree entries only ever add a
     -- requirement where there was none, never replace a nearer one.
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
+    methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
+    ownExterns := externSigs
+    ownTrustedExterns := (m.externFns.filter fun (_, _, _, t) => t).map (·.1)
+    allTrustedExterns := allTrustedExterns
+    methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
+    aliases := allAliases
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
@@ -1558,7 +1659,7 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let (subErrors, subEdges, subAttrs) := m.submodules.foldl (fun (accD, accE, accA) sub =>
-    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs
+    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs allMethods allAliases allTrustedExterns
     (accD ++ Diagnostics.stampFile (subD.map fun d =>
        { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile,
      accE ++ subE, accA ++ subA)
@@ -1573,8 +1674,11 @@ def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
+  let allMethods := modules.flatMap collectAllMethods
+  let allAliases := modules.flatMap collectAllAliases
+  let allTrustedExterns := modules.flatMap collectAllTrustedExterns
   let allErrors := modules.foldl (fun acc m =>
-    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
+    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods allAliases allTrustedExterns).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -1587,7 +1691,10 @@ def coreTrustEdges (modules : List CModule) : List TrustEdge × List TrustFnAttr
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
-  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs)
+  let allMethods := modules.flatMap collectAllMethods
+  let allAliases := modules.flatMap collectAllAliases
+  let allTrustedExterns := modules.flatMap collectAllTrustedExterns
+  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods allAliases allTrustedExterns)
   (TrustEdge.canonical (results.foldl (fun acc r => acc ++ r.2.1) []),
    results.foldl (fun acc r => acc ++ r.2.2) [])
 
