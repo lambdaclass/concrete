@@ -419,6 +419,10 @@ structure MonoState where
   ambiguousTypeNames : List String := []
   /-- Bug 096: every type name two modules declare and its respellings (`CModule.respelledTypes`). -/
   respelledTypes : List String := []
+  /-- The `foreignCalls` of the function being specialized (bugs 238 – 239): a free call of a
+      spelling bound to a foreign declaration is that declaration, never a program definition
+      (a generic method) that shares the spelling. -/
+  currentForeign : List (String × String) := []
 
 abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
@@ -553,6 +557,13 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
     return .call (.runtime helper) typeArgs args' ty
   | .call (.direct fn space) typeArgs args ty =>
     if fn == destroyDispatchCallee then return ← monoDestroyDispatch args ty
+    -- A free call the function's resolver bound to a foreign declaration names no program
+    -- definition, whatever shares its spelling (bugs 238 – 239; the interpreter and emission
+    -- apply the same binding). A compiler intrinsic spelling is still the compiler's.
+    if space == .free then
+      if let some decl := (← get).currentForeign.lookup fn then
+        if !decl.startsWith "_C$rt." && (resolveIntrinsic fn).isNone then
+          return .call (.direct fn space) typeArgs (← args.mapM monoExpr) ty
     if let some (c, m) := splitTraitDispatchSpelling fn then
       let st ← get
       let candidates := (st.traitImplMethods.filter fun (t, mm, _) => t == c && mm == m).map
@@ -861,7 +872,10 @@ private def monoFn (f : CFnDef) : MonoM CFnDef := do
   -- Skip generic functions; they are templates, not concrete code.
   -- Only their monomorphized specializations should be processed.
   if !f.typeParams.isEmpty then return f
+  let saved := (← get).currentForeign
+  modify fun st => { st with currentForeign := f.foreignCalls }
   let body' ← monoStmts f.body
+  modify fun st => { st with currentForeign := saved }
   return { f with body := body' }
 
 /-- Process the mono queue until empty. Each mono'd function may enqueue more. -/

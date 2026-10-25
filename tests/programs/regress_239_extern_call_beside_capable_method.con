@@ -1,0 +1,21 @@
+// Bug 239 (FIXED), Codex review r5: `user` calls its trusted, effect-free foreign binding `P_get`
+// while the imported `P`'s method `get` (definition name `P_get`) requires `Std`. The post-mono
+// capability verifier looked the call up among program definitions by spelling and refused `run`
+// (E0601); a free call bound to a foreign declaration is CoreCheck's decision, and a free call is
+// decided against free definitions only.
+// Expected: 99 (`abs(-99)`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(x: i32) with(Std) -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P_get(-99); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

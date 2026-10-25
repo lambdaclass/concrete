@@ -3052,7 +3052,15 @@ partial def elabModule (m : Module) (summary : FileSummary)
       -- AFTER imported functions, BEFORE intrinsics and builtins. A plain imported
       -- function must keep priority over a same-named impl method, and an impl method
       -- must not be shadowed by a builtin of the same mangled spelling.
-      | none => match importedMethodCallIds.lookup name with
+      --
+      -- A foreign binding of this module is a free function too, and a free-spelled name means
+      -- a free function before a method by its definition name, as Check resolves it (bugs
+      -- 238 – 239, Codex review r5: an imported type's method `P_get` took the identity of
+      -- the module's own `extern fn P_get`, so the binding was missing from `foreignCalls` and
+      -- the call ran the method).
+      | none =>
+        if m.externFns.any fun ef => ef.name == name then some (CallableId.ofExtern name) else
+        match importedMethodCallIds.lookup name with
         | some id => some id
         -- INTRINSICS BEFORE BUILTINS. Many names (`string_length` among them) appear
         -- in both tables, and builtins-first classified compiler intrinsics as

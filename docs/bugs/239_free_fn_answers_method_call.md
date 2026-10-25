@@ -54,6 +54,20 @@ the declaration-collision check compared only free functions, externs and consta
   extern listed under the same spelling first, and records no FFI trust edge for it (Codex review
   r4: an untrusted extern `P_get` beside `P::get(..)` made the method call require `Unsafe`,
   E0520; `regress_239_method_call_beside_untrusted_extern.con`).
+- The reverse direction, a free call answered by a method (Codex review r5): Elab's callee
+  resolver met an imported type's method `P_get` before the module's own `extern fn P_get`, so the
+  binding was missing from `foreignCalls` and Mono specialized the free call to a generic method of
+  that name (42 for `abs(-99)` = 99, natively and `--interp`), and the post-mono capability
+  verifier charged a free call bound to an extern for the method's capabilities (E0601). The
+  resolver now takes the module's foreign binding before a method; Mono (`MonoState.currentForeign`)
+  and the post-mono verifier bind a free call to the function's foreign binding and decide other
+  calls against definitions of their namespace (`regress_239_extern_call_beside_generic_method.con`,
+  `regress_239_extern_call_beside_capable_method.con`).
+- The proof call graph (`ProofCore`, same-module preference by Core name, not by source name) and
+  the assumption summary (method calls resolved to methods only) no longer read a method call as a
+  call of the module's free function of that spelling (a false "effects unknown" in
+  `--report caps`; `regress_239_static_method_beside_free_fn_report.con`, whose `P::get()` was
+  E0262 before the fix).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

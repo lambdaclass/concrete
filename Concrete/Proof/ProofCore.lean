@@ -234,7 +234,11 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
   -- else stays bare and the closure refuses, rather than agreeing with codegen by luck.
   let resolveCallee (bare : String) : String :=
     let sameModule := qualPrefix ++ "." ++ bare
-    if qualNameMap.any fun (_, q) => q == sameModule then sameModule
+    -- The same module's DEFINITION of that Core name, not merely a declaration whose SOURCE name
+    -- it is: a free `P_get` respelled `user_P_get` keeps the qualified name `user.P_get`, and a
+    -- method call spelled `P_get` (another module's method) is not a call of it (bugs 238 – 239,
+    -- Codex review r5).
+    if qualNameMap.any fun (b, q) => b == bare && q == sameModule then sameModule
     else match qualNameMap.find? fun (b, _) => b == bare with
     | some (_, qual) => qual
     | none =>

@@ -8621,6 +8621,23 @@ run_ok "$TESTDIR/regress_238_method_definition_name_taken_by_extern.con" 42
 run_ok "$TESTDIR/regress_238_method_value_spelled_like_extern.con" 42
 run_ok "$TESTDIR/regress_238_method_value_beside_unrelated_extern.con" 42
 run_ok "$TESTDIR/regress_239_method_call_beside_untrusted_extern.con" 42
+run_ok "$TESTDIR/regress_239_static_method_beside_free_fn_report.con" 42
+check_report_multi "$TESTDIR/regress_239_static_method_beside_free_fn_report.con" caps \
+    "bug 239: --report caps resolves a method call to the method, not a free function of its spelling" \
+    "bug 239: --report caps read the method call as the free function P_get (effects unknown)" \
+    "pub run : (no external authority)"
+run_ok "$TESTDIR/regress_239_extern_call_beside_generic_method.con" 99
+run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method.con" 99
+for r239 in regress_239_extern_call_beside_generic_method regress_239_extern_call_beside_capable_method; do
+    r239_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r239.con" --interp 2>&1 || true)
+    if [ "$r239_interp" = "99" ]; then
+        echo "  ok  bug 239: $r239 — interp == binary (99)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 239: $r239 --interp gave '$r239_interp', want 99"
+        FAIL=$((FAIL + 1))
+    fi
+done
 run_err "$TESTDIR/error_240_trait_in_trait_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
 run_err "$TESTDIR/error_240_trait_in_extern_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
 run_ok "$TESTDIR/regress_239_parent_method_beside_child_free_fn.con" 42
@@ -8633,7 +8650,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_241_parent_names_child_respelled_method regress_238_method_call_in_constant \
             regress_238_extern_takes_method_spelling regress_238_imported_extern_alias_takes_method_spelling \
             regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern \
-            regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern; do
+            regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern \
+            regress_239_static_method_beside_free_fn_report; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

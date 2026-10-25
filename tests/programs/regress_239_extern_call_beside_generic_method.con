@@ -1,0 +1,23 @@
+// Bug 239 (FIXED), Codex review r5, the inverse direction: `user` calls its foreign binding
+// `P_get` (C's `abs`) while the imported `P` has a GENERIC method `get`, definition name `P_get`.
+// Elab's callee resolver met the imported method before the module's own foreign binding, so the
+// binding was missing from the function's `foreignCalls`, and Mono looked the free call up among
+// program definitions by spelling and specialized it to the method: 42, natively and under
+// `--interp`. A free-spelled name resolves to the module's foreign binding before a method, and
+// Mono, the post-mono verifier and the backends bind a free call to it.
+// Expected: 99 (`abs(-99)`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get<T: Copy>(x: T) -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P_get(-99); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}
