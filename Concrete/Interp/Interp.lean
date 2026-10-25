@@ -187,6 +187,33 @@ def envGetLocal (env : Env) (name : LocalKey) : Option IVal := listGetLocal env.
 def envSetLocal (env : Env) (name : LocalKey) (val : IVal) : Env :=
   { env with items := listSetLocal env.items name val }
 
+/- Bug 248: TAKING a binding's value. An update of an array element (`a[i] = v`, `vec_push`) built
+   the new array while the environment still held the old one, so `Array.set` could not reuse it
+   and copied the whole array: every element write cost the array's length. A write now takes the
+   value out of its binding first (leaving `.unit` in the slot), updates it while it holds the only
+   reference, and writes it back, so the update is in place. The binding's contents are the same
+   before and after; only the sharing changes. -/
+
+private partial def listTakeLocal (l : List (LocalKey × IVal)) (name : LocalKey)
+    : Option IVal × List (LocalKey × IVal) :=
+  match l with
+  | [] => (none, [])
+  | (n, v) :: rest =>
+    if n == name then (some v, (n, .unit) :: rest)
+    else if n == frameMarker then (none, (n, v) :: rest)
+    else
+      let (r, rest') := listTakeLocal rest name
+      (r, (n, v) :: rest')
+
+/-- Take a name's value out of the current frame (as `envGetLocal` finds it), leaving `.unit` in
+    its slot, so the caller holds the only reference to it (bug 248). The environment is taken
+    apart first, so its binding list is not shared with it during the walk. -/
+def envTakeLocal (env : Env) (name : LocalKey) : Option IVal × Env :=
+  match env with
+  | { items, size } =>
+    let (r, items) := listTakeLocal items name
+    (r, { items, size })
+
 def defaultLoopFuel : Nat := 10000000
 def loopBudgetExhausted : String := "interp: loop budget exhausted"
 
@@ -1434,16 +1461,32 @@ partial def lookupPath (cx : Ctx) (env : Env) (p : RefPath) : IM IVal := do
   | none => fail s!"interp: ref path base '{p.baseName}' not in env"
   | some v => liftE (lookupAt v p.steps)
 
-private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal) : Except String IVal :=
+/-- `fields` with the value of the first field named `fname` taken out (`.unit` in its place),
+    and that value: the caller then holds the only reference to it (bug 248). -/
+private partial def takeField (fields : List (String × IVal)) (fname : String)
+    : Option IVal × List (String × IVal) :=
+  match fields with
+  | [] => (none, [])
+  | (n, v) :: rest =>
+    if n == fname then (some v, (n, .unit) :: rest)
+    else
+      let (r, rest') := takeField rest fname
+      (r, (n, v) :: rest')
+
+/-- Rewrite the part of `val` that `steps` names with `g` applied to it. Each step takes the part
+    out of its container before rewriting it, so an array that `val` holds only once is updated in
+    place rather than copied (bug 248: an element write cost the array's length). -/
+private partial def modifyAt (val : IVal) (steps : List RefStep) (g : IVal → Except String IVal)
+    : Except String IVal :=
   match steps with
-  | [] => .ok newVal
+  | [] => g val
   | .field fname :: rest =>
     match val with
     | .struct_ sname fields =>
-      match fields.find? (fun (n, _) => n == fname) with
-      | none => .error s!"interp: ref update field '{fname}' not found"
-      | some (_, fv) => do
-        let newFv ← updateAt fv rest newVal
+      match takeField fields fname with
+      | (none, _) => .error s!"interp: ref update field '{fname}' not found"
+      | (some fv, fields) => do
+        let newFv ← modifyAt fv rest g
         let newFields := fields.map fun (n, v) =>
           if n == fname then (n, newFv) else (n, v)
         return .struct_ sname newFields
@@ -1452,21 +1495,27 @@ private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal)
     match val with
     | .enum_ en vn fields =>
       if vn != variant then .error s!"interp: ref update payload of variant '{variant}' on '{vn}'" else
-      match fields.find? (fun (n, _) => n == fname) with
-      | none => .error s!"interp: ref update payload field '{fname}' not found"
-      | some (_, fv) => do
-        let newFv ← updateAt fv rest newVal
+      match takeField fields fname with
+      | (none, _) => .error s!"interp: ref update payload field '{fname}' not found"
+      | (some fv, fields) => do
+        let newFv ← modifyAt fv rest g
         return .enum_ en vn (fields.map fun (n, v) => if n == fname then (n, newFv) else (n, v))
     | _ => .error "interp: ref step .payload on non-enum (update)"
   | .index i :: rest =>
     match val with
     | .array elems elemTy size =>
-      if h : i < elems.size then do
-        let oldElem := elems[i]
-        let newElem ← updateAt oldElem rest newVal
-        return .array (elems.set i newElem) elemTy size
+      if i < elems.size then do
+        let oldElem := elems[i]!
+        let elems := elems.set! i .unit
+        let newElem ← modifyAt oldElem rest g
+        return .array (elems.set! i newElem) elemTy size
       else .error s!"interp: ref update index {i} out of bounds (size {elems.size})"
     | _ => .error "interp: ref step .index on non-array (update)"
+
+/-- Replace the part of `val` that `steps` names with `newVal`, in place where `val` is held once
+    (`modifyAt`). -/
+private def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal) : Except String IVal :=
+  modifyAt val steps fun _ => .ok newVal
 
 /-- Like envSet but only rewrites bindings at depth >= `skip` (counting
     from the head). Used so that a ref-update walks past intervening
@@ -1484,6 +1533,29 @@ private partial def listSetSkipping (l : List (LocalKey × IVal)) (skip : Nat) (
 private def envSetSkipping (env : Env) (skip : Nat) (name : LocalKey) (val : IVal) : Env :=
   { env with items := listSetSkipping env.items skip name val }
 
+/-- `listSetSkipping`'s binding taken out instead of replaced: its value, and the list with `.unit`
+    in its slot (bug 248). -/
+private partial def listTakeSkipping (l : List (LocalKey × IVal)) (skip : Nat) (name : LocalKey)
+    : Option IVal × List (LocalKey × IVal) :=
+  match l, skip with
+  | [], _ => (none, [])
+  | (n, v) :: rest, 0 =>
+    if n == name then (some v, (n, .unit) :: rest)
+    else
+      let (r, rest') := listTakeSkipping rest 0 name
+      (r, (n, v) :: rest')
+  | (n, v) :: rest, k + 1 =>
+    let (r, rest') := listTakeSkipping rest k name
+    (r, (n, v) :: rest')
+
+/-- Take out the binding `envSetSkipping` would rewrite, which is the one `envGet` finds in the
+    environment without its `skip` latest bindings (bug 248). -/
+private def envTakeSkipping (env : Env) (skip : Nat) (name : LocalKey) : Option IVal × Env :=
+  match env with
+  | { items, size } =>
+    let (r, items) := listTakeSkipping items skip name
+    (r, { items, size })
+
 /-- Store through a reference: into a binding (through its path), or into a heap cell. -/
 partial def updatePath (cx : Ctx) (env : Env) (p : RefPath) (newVal : IVal) : IM Env := do
   match p.heap with
@@ -1495,11 +1567,29 @@ partial def updatePath (cx : Ctx) (env : Env) (p : RefPath) (newVal : IVal) : IM
     return env
   | none =>
   let skip := if env.length >= p.frame then env.length - p.frame else 0
-  let view := envViewAtFrame env p.frame
-  match envGet view p.base with
-  | none => fail s!"interp: ref path base '{p.baseName}' not in env (update)"
-  | some baseVal => do
+  -- The binding `envGet` finds below the reference's frame, taken out so the update is in place
+  -- (bug 248).
+  match envTakeSkipping env skip p.base with
+  | (none, _) => fail s!"interp: ref path base '{p.baseName}' not in env (update)"
+  | (some baseVal, env) => do
     let newBase ← liftE (updateAt baseVal p.steps newVal)
+    return envSetSkipping env skip p.base newBase
+
+/-- Rewrite the value a reference names with `g`, in place where the environment holds it once
+    (bug 248): `updatePath p (g (lookupPath p))`, without the copy that reading the value out and
+    writing a new one back makes. The caller has read the value through `lookupPath` first, so its
+    path is known to resolve. -/
+partial def modifyPath (cx : Ctx) (env : Env) (p : RefPath) (g : IVal → Except String IVal) : IM Env := do
+  match p.heap with
+  | some _ =>
+    let v ← lookupPath cx env p
+    updatePath cx env p (← liftE (g v))
+  | none =>
+  let skip := if env.length >= p.frame then env.length - p.frame else 0
+  match envTakeSkipping env skip p.base with
+  | (none, _) => fail s!"interp: ref path base '{p.baseName}' not in env (update)"
+  | (some baseVal, env) => do
+    let newBase ← liftE (modifyAt baseVal p.steps g)
     return envSetSkipping env skip p.base newBase
 
 /-- The byte address `(block, offset)` a heap-rooted reference names: the root's offset plus
@@ -2662,9 +2752,11 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match vref with
         | .ref path => do
           match ← lookupPath cx env path with
-          | .array elems ety _ =>
-            let elems' := elems.push x
-            let env' ← updatePath cx env path (.array elems' ety elems'.size)
+          | .array _ _ _ =>
+            -- In place (bug 248): the vec is rewritten where it is held, not read out and copied.
+            let env' ← modifyPath cx env path fun
+              | .array elems ety _ => let elems' := elems.push x; .ok (.array elems' ety elems'.size)
+              | other => .ok other
             return (env', .val .unit)
           | _ => fail "interp: vec_push: receiver is not a vec"
         | _ => fail "interp: vec_push: first argument is not a mutable ref"
@@ -2683,11 +2775,15 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match vref, (← autoDeref cx env i) with
         | .ref path, .int idx _ => do
           match ← lookupPath cx env path with
-          | .array elems ety sz =>
-            if idx.toNat < elems.size then
-              let env' ← updatePath cx env path (.array (elems.set! idx.toNat x) ety sz)
+          | .array elems _ _ =>
+            let len := elems.size
+            if idx.toNat < len then
+              -- In place (bug 248).
+              let env' ← modifyPath cx env path fun
+                | .array elems ety sz => .ok (.array (elems.set! idx.toNat x) ety sz)
+                | other => .ok other
               return (env', .val .unit)
-            else fail s!"interp: vec_set: index {idx} out of bounds (len {elems.size})"
+            else fail s!"interp: vec_set: index {idx} out of bounds (len {len})"
           | _ => fail "interp: vec_set: receiver is not a vec"
         | _, _ => fail "interp: vec_set: bad arguments"
       | "vec_free", [_] => return (env, .val .unit)
@@ -2695,11 +2791,13 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         match vref with
         | .ref path => do
           match ← lookupPath cx env path with
-          | .array elems ety _ =>
+          | .array elems _ _ =>
             match elems.back? with
             | some x =>
-              let elems' := elems.pop
-              let env' ← updatePath cx env path (.array elems' ety elems'.size)
+              -- In place (bug 248).
+              let env' ← modifyPath cx env path fun
+                | .array elems ety _ => let elems' := elems.pop; .ok (.array elems' ety elems'.size)
+                | other => .ok other
               return (env', .val (.enum_ "Option" "Some" [("value", x)]))
             | none => return (env, .val (.enum_ "Option" "None" []))
           | _ => fail "interp: vec_pop: receiver is not a vec"
@@ -3202,14 +3300,16 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
     -- write in place — handles `o.i.v`, `a[i].x`, etc., not just `o.f`.
     let (env, root, steps) ← resolvePlaceSteps cx env obj
     let finalSteps := steps ++ [.field field]
-    match envGetLocal env root with
-    | some (.ref p) =>
+    -- The root's value is taken out of its binding, so the update is in place (bug 248).
+    match envTakeLocal env root with
+    | (some (.ref p), env) =>
+      let env := envSetLocal env root (.ref p)
       let env' ← updatePath cx env { p with steps := p.steps ++ finalSteps } newVal
       return (env', .val .unit)
-    | some baseVal =>
+    | (some baseVal, env) =>
       let newBase ← liftE <| updateAt baseVal finalSteps newVal
       return (envSetLocal env root newBase, .val .unit)
-    | none => fail s!"interp: field-assign place root '{root}' not in env"
+    | (none, _) => fail s!"interp: field-assign place root '{root}' not in env"
 
   | .arrayIndexAssign arr idx value => do
     let (env, newVal) ← evalExprVal cx env value
@@ -3224,14 +3324,17 @@ partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :
       if i < 0 then fail s!"interp: negative array index {i} on assignment"
       else
         let finalSteps := steps ++ [.index i.toNat]
-        match envGetLocal env root with
-        | some (.ref p) =>
+        -- The root's value is taken out of its binding, so the element write is in place instead
+        -- of a copy of the whole array (bug 248).
+        match envTakeLocal env root with
+        | (some (.ref p), env) =>
+          let env := envSetLocal env root (.ref p)
           let env' ← updatePath cx env { p with steps := p.steps ++ finalSteps } newVal
           return (env', .val .unit)
-        | some baseVal =>
+        | (some baseVal, env) =>
           let newBase ← liftE <| updateAt baseVal finalSteps newVal
           return (envSetLocal env root newBase, .val .unit)
-        | none => fail s!"interp: array-assign place root '{root}' not in env"
+        | (none, _) => fail s!"interp: array-assign place root '{root}' not in env"
     | _ => fail "interp: array index is not an integer"
 
   | .derefAssign target value => do

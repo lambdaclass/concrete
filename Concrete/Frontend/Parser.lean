@@ -763,13 +763,17 @@ partial def parsePrimary : ParseM Expr := do
           let csp ← peekSpan
           throwParse s!"expected integer count after ';' in array repeat, got {countTk}" (span := some csp)
       else
+        -- Elements accumulate in an Array and become the list once: appending each to the
+        -- list built so far copied it, quadratic in the literal's length (bug 027).
+        let mut rest : Array Expr := #[]
         while tk2 == .comma do
           advance
           tk2 ← peek
           if tk2 == .rbracket then break  -- trailing comma
           let e ← parseExpr
-          elems := elems ++ [e]
+          rest := rest.push e
           tk2 ← peek
+        elems := first :: rest.toList
     expect .rbracket
     return .arrayLit sp elems
   | .fn =>

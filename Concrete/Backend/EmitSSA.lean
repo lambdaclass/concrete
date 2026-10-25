@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 import Concrete.IR.SSA
 import Concrete.Elab.Core
 import Concrete.Semantics.IntArith
@@ -46,16 +47,19 @@ structure EmitSSAState where
   newtypes : List NewtypeDef := []
   stringLitCounter : Nat := 0
   localCounter : Nat := 0
-  /-- Registers known to be LLVM pointers (alloca/gep/struct params). -/
-  ptrRegs : List String := []
+  /-- Registers known to be LLVM pointers (alloca/gep/struct params). A set, queried per
+      operand: as a list, each query walked every pointer register defined so far in the
+      function, quadratic in the function's size (bug 027). -/
+  ptrRegs : Std.HashSet String := {}
   /-- Type names already emitted (for dedup across modules). -/
   emittedTypes : List String := []
   /-- String literal name → length (for building %struct.String at use sites). -/
   stringLengths : List (String × Nat) := []
   /-- Parameter names of the current function (for indirect call detection). -/
   fnParams : List (String × Ty) := []
-  /-- Registers holding function-pointer values loaded from memory (e.g. struct fields). -/
-  fnTypeRegs : List String := []
+  /-- Registers holding function-pointer values loaded from memory (e.g. struct fields).
+      A set for the same reason as `ptrRegs` (bug 027). -/
+  fnTypeRegs : Std.HashSet String := {}
   /-- Maps local alias name → original linker symbol for aliased imports. -/
   linkerAliases : List (String × String) := []
   /-- Distinct Vec element specs (elemSize, optionPayloadOffset) used in the program.
@@ -122,7 +126,7 @@ private def freshLocal (s : EmitSSAState) : EmitSSAState × String :=
   ({ s with localCounter := s.localCounter + 1 }, name)
 
 private def markPtr (s : EmitSSAState) (name : String) : EmitSSAState :=
-  { s with ptrRegs := name :: s.ptrRegs }
+  { s with ptrRegs := s.ptrRegs.insert name }
 
 private def isKnownPtr (s : EmitSSAState) (v : SVal) : Bool :=
   match v with
@@ -1023,7 +1027,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     let s := emitStructured s (.load dst (tyToLLVMTy s ty) ptrOp)
     -- Track registers that hold function pointers (loaded from struct fields etc.)
     match ty with
-    | .fn_ _ _ _ => { s with fnTypeRegs := s.fnTypeRegs ++ [dst] }
+    | .fn_ _ _ _ => { s with fnTypeRegs := s.fnTypeRegs.insert dst }
     | _ => s
   | .store val ptr =>
     let (s, ptrOp) := ensurePtrOp s ptr
@@ -1273,7 +1277,7 @@ private def emitSFnDef (s : EmitSSAState) (f : SFnDef) : EmitSSAState :=
   }
   let s := { s with moduleFunctions := s.moduleFunctions.push fnDef }
   -- Reset per-function state
-  { s with ptrRegs := [], fnParams := [], fnTypeRegs := [], currentBlocks := #[], currentInstrs := #[], entryAllocas := #[],
+  { s with ptrRegs := {}, fnParams := [], fnTypeRegs := {}, currentBlocks := #[], currentInstrs := #[], entryAllocas := #[],
            currentForeign := [] }
 
 -- ============================================================
