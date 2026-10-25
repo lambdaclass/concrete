@@ -90,3 +90,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-25	review	Codex reviews of the fixes of bugs 245 and 243 (a generic of another tree reading a private constant; a child type sharing an imported type spelling)	unrecorded	251,253	251,253
 2026-10-25	development	bug 242's fix: the bug 096 fixtures that became valid programs, run under --interp	unrecorded	254	-
 2026-10-25	development	the identity follow-up fixes of bugs 242 to 254: newtype construction probed across parent, child and sibling modules	unrecorded	262	-
+2026-10-25	development	R-0507 roadmap landing validation: fuzz-farm fake-compiler campaigns missed required cases under short wall-clock budgets, reproduced on standalone retry	unrecorded	263	-
