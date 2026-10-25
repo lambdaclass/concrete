@@ -1,0 +1,22 @@
+// Bug 258: with two linear bindings consumed on one branch only, the refusal names the one the
+// checker examines first (the newest binding), as it did when its bindings were a list.
+struct Resource {
+    value: i64,
+}
+
+fn consume(r: Resource) -> i64 {
+    let Resource { value } = r;
+    return value;
+}
+
+fn main() -> Int {
+    let older: Resource = Resource { value: 1 };
+    let newer: Resource = Resource { value: 2 };
+    let mut out: i64 = 0;
+    if out == 0 {
+        out = consume(older) + consume(newer);
+    } else {
+        out = 3;
+    }
+    return out as Int;
+}

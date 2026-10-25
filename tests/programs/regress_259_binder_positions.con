@@ -1,0 +1,40 @@
+// Bug 259 regression: Elab appended every binder to its lexical frame, rebuilt every frame with
+// tombstones at each block exit and searched a list of bound locals per use, so elaborating a
+// function of n bindings took time n². Frames are now kept as their shape and bound locals in a
+// map. This fixture elaborates the constructs whose binders take frame positions (parameters,
+// `let`s in nested blocks, match arm binders, loop bodies, borrow-block references, shadowing
+// arm binders renamed apart); the evidence positions themselves are pinned by the proof and
+// identity gates. run_tests.sh also elaborates generated functions of 80000 bindings within a
+// time bound.
+enum Shape {
+    Sq { side: i64 },
+    Rect { w: i64, h: i64 },
+}
+
+fn area(s: Shape) -> i64 {
+    match s {
+        Shape::Sq { side } => { return side * side; },
+        Shape::Rect { w, h } => { return w * h; },
+    }
+}
+
+fn main() -> Int {
+    let a: i64 = area(Shape::Sq { side: 3 });
+    let mut total: i64 = a;
+    if total > 0 {
+        let b: i64 = area(Shape::Rect { w: 2, h: 5 });
+        total = total + b;
+    }
+    let mut k: i64 = 0;
+    while k < 3 {
+        let c: i64 = k * 2;
+        total = total + c;
+        k = k + 1;
+    }
+    let mut cell: i64 = 1;
+    borrow mut cell as r in R {
+        *r = *r + total;
+    }
+    // 9 + 10 + (0 + 2 + 4) = 25; cell = 26; + 16 = 42
+    return (cell + 16) as Int;
+}

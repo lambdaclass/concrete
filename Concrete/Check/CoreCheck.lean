@@ -39,7 +39,7 @@ Declaration-level validation (on Core IR, not surface AST):
 
 /-- CoreCheck's local bindings: the type of each binding visible at this point, by binding
     identity (a compiler temporary by its Core name). Persistent maps, not a list searched per
-    reference (bug MMM-K): a lookup walked every binding introduced before it, so checking a
+    reference (bug 261): a lookup walked every binding introduced before it, so checking a
     function whose statements read an early binding took time n². A block restores the earlier
     map, which shares structure. A later binding of one key replaces the earlier (the list's
     first match was the newest). -/

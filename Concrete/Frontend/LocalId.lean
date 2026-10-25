@@ -70,7 +70,7 @@ structure LocalTable where
   binders : Array LocalBinder
   /-- Hash maps, not association lists: every binder and every use was a linear search of a
       list as long as the function, so a function of n statements was O(n^2) to resolve, check
-      and elaborate (bug NNN). Only looked up, never traversed, so order is not observable. -/
+      and elaborate (bug 256). Only looked up, never traversed, so order is not observable. -/
   bindersByKey : Std.HashMap BinderKey LocalId
   uses : Std.HashMap (SiteKey × String) LocalId
   conflicts : List String

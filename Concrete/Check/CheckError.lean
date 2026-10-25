@@ -96,7 +96,7 @@ structure VarInfo where
     binding registered again moves to the front). Iteration (`for`, `toList`) visits that order,
     so every check that walks the bindings, and the first refusal it reports, is what it was.
     A lookup, a registration and an update of one binding are logarithmic: the list was searched
-    per use and copied per binding, so a function of n bindings was O(n^2) to check (bug MMM-C).
+    per use and copied per binding, so a function of n bindings was O(n^2) to check (bug 258).
     Persistent maps, because the checker snapshots the environment at every branch and restores
     it. Keyed by the identity the binding is stored under (`VarInfo.uid`, equal to the key's id).
 

@@ -981,7 +981,7 @@ partial def parseBlock : ParseM (List Stmt) := do
 partial def parseExprBlock : ParseM (List Stmt) := do
   expect .lbrace
   -- An Array, converted once: the old per-statement `stmts ++ [stmt]` made a block of n
-  -- statements O(n^2) to parse (bug NNN).
+  -- statements O(n^2) to parse (bug 255).
   let mut stmts : Array Stmt := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
@@ -1049,7 +1049,7 @@ partial def parseExprBlock : ParseM (List Stmt) := do
 
 partial def parseStmtList : ParseM (List Stmt) := do
   -- An Array, converted once: the old per-statement `stmts ++ [stmt]` made a block of n
-  -- statements O(n^2) to parse (bug NNN).
+  -- statements O(n^2) to parse (bug 255).
   let mut stmts : Array Stmt := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do

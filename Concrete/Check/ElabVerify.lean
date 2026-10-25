@@ -33,7 +33,7 @@ private structure VB where
 /-- The visible binders, as the two questions the checks ask of them: the NEWEST visible binder
     carrying an identity, and the newest visible binder of a Core name. Persistent maps, because
     sibling scopes extend one chain independently; a list searched per binder and per reference
-    made a function of n bindings O(n^2) to verify (bug MMM-V). -/
+    made a function of n bindings O(n^2) to verify (bug 260). -/
 private structure Vis where
   byId : Std.TreeMap Nat VB compare := {}
   byName : Std.TreeMap String VB compare := {}

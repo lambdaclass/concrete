@@ -1,0 +1,43 @@
+// Bug 260 regression: ElabVerify searched a list of the visible binders per binder and per
+// reference, so verifying a function of n bindings took time n². The visible binders are now
+// persistent maps answering the same two questions (the newest binder of an identity, the newest
+// of a Core name). This fixture reaches every rule they serve: arm binders of one spelling in
+// sibling arms and in separate functions (renamed apart in Core), a nested match whose arm reads
+// the outer arm's binder, a reference far from its binding, and a borrow-block reference; a
+// verifier finding would be an internal error (E0422).
+enum Opt {
+    Some { value: i64 },
+    None,
+}
+
+fn unwrap_or(o: Opt, d: i64) -> i64 {
+    match o {
+        Opt::Some { value } => { return value; },
+        Opt::None => { return d; },
+    }
+}
+
+fn nested(o: Opt, p: Opt) -> i64 {
+    match o {
+        Opt::Some { value } => {
+            match p {
+                Opt::Some { v } => { return value + v * 10; },
+                Opt::None => { return 1; },
+            }
+        },
+        Opt::None => { return unwrap_or(p, 2); },
+    }
+}
+
+fn main() -> Int {
+    let far: i64 = 1;
+    let x1: i64 = unwrap_or(Opt::Some { value: 3 }, 0);
+    let x2: i64 = unwrap_or(Opt::None, 4);
+    let x3: i64 = nested(Opt::Some { value: 9 }, Opt::Some { value: 3 });
+    let mut cell: i64 = 0;
+    borrow mut cell as r in R {
+        *r = far;
+    }
+    // 3 + 4 + (9 + 30) + 1 + 1 - 6 = 42
+    return (x1 + x2 + x3 + cell + far - 6) as Int;
+}

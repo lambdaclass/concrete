@@ -48,7 +48,7 @@ private abbrev LocalsM := StateM LocalTable
     one a use names and a new binder collides with), and whether any visible binding of it is an
     `elabVar` (the `shadows` fact). These are the only questions the walk asks of the visible
     bindings, so they are kept as a persistent map from spelling to this summary instead of a
-    list searched per binder and per use, which made a function of n `let`s O(n^2) (bug MMM). A
+    list searched per binder and per use, which made a function of n `let`s O(n^2) (bug 257). A
     persistent tree, because sibling scopes extend one chain independently. -/
 private structure VisEntry where
   source : Option Visible := none

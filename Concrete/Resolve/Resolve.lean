@@ -156,7 +156,7 @@ structure ResolveCtx where
   globalScope : Scope
   /-- Stack of local scopes, innermost first. Each scope is a map, not a list searched per name:
       a lookup walked every binding of the enclosing scopes, so a function of n bindings read
-      far from their use was O(n^2) to resolve (bug MMM-R). -/
+      far from their use was O(n^2) to resolve (bug 257). -/
   localScopes : List (Std.TreeMap String SymKind compare)
   errors : Diagnostics
   /-- Known type names (structs, enums, type aliases, traits, type params). -/

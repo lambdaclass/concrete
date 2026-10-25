@@ -1,0 +1,51 @@
+// Bug 256 regression: the local binder table (which binding every use of a local name denotes)
+// was a pair of association lists searched per binder and per use, so resolving, checking and
+// elaborating a function of n statements took time n². This fixture pins the lookups the table
+// must keep answering: a use far from its binding, a binder reached twice (an or-pattern arm's
+// body is copied per alternative), arm binders, a `for` header binder, a borrow-block reference
+// and a destructuring `let`. run_tests.sh also resolves, checks and elaborates generated
+// functions of 80000 statements within a time bound.
+struct Pair {
+    l: i64,
+    r: i64,
+}
+
+enum Opt {
+    Some { v: i64 },
+    None,
+}
+
+fn classify(n: i64) -> i64 {
+    let mut out: i64 = 0;
+    match n {
+        0 | 1 => {
+            let small: i64 = 10;
+            out = small + n;
+        },
+        _ => {
+            let big: i64 = 20;
+            out = big;
+        },
+    }
+    return out;
+}
+
+fn main() -> Int {
+    let far: i64 = 5;
+    let mut acc: i64 = 0;
+    for (let mut i: i64 = 0; i < 3; i = i + 1) {
+        acc = acc + i;
+    }
+    let o: Opt = Opt::Some { v: 4 };
+    match o {
+        Opt::Some { v } => { acc = acc + v; },
+        Opt::None => { acc = acc + 100; },
+    }
+    let Pair { l, r } = Pair { l: 1, r: 2 };
+    let mut cell: i64 = 0;
+    borrow mut cell as c in C {
+        *c = l + r;
+    }
+    // classify(1) = 11, classify(9) = 20; acc = 3 + 4 = 7; cell = 3; far = 5 → 46 - 4 = 42
+    return (classify(1) + classify(9) + acc + cell + far - 4) as Int;
+}

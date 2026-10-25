@@ -40,7 +40,7 @@ No linearity checking, no borrow checking, no capability validation.
     resolved by spelling (the local walk decides which binding a use denotes), so the frames keep
     no spellings: recording them appended each binder to its frame and retired a block's binders
     by rebuilding every frame, which made a function of n bindings O(n^2) to elaborate (bug
-    MMM-E). -/
+    259). -/
 structure FrameShape where
   sizes : List Nat := []
   depth : Nat := 0
@@ -62,7 +62,7 @@ structure ElabEnv where
   -- bindings elaborated so far, keyed by identity. A use of a local name is resolved through
   -- the table at its position, never by searching for the spelling.
   locals : LocalTable := LocalTable.unresolved
-  -- A persistent map keyed by the identity's index, not a list searched per use (bug MMM-E):
+  -- A persistent map keyed by the identity's index, not a list searched per use (bug 259):
   -- a scope restore hands back an earlier map, so it must share structure, not copy.
   bound : Std.TreeMap Nat BoundLocal compare := {}
   structs : List StructDef
@@ -607,7 +607,7 @@ private def enterBlock : ElabM ElabEnv := getEnv
     and digests, are unchanged), and nothing can name them afterwards: since R-0492 step 2 no
     reference resolves by spelling, so a block's bindings cannot answer for a later use. The frame
     stack therefore needs no change here. (It used to keep spellings and retire the block's by
-    rebuilding every frame with tombstones, O(bindings) per block: bug MMM-E.) -/
+    rebuilding every frame with tombstones, O(bindings) per block: bug 259.) -/
 private def exitBlock (_saved : ElabEnv) : ElabM Unit := pure ()
 
 /-- Scope restore that keeps `freshBinder` MONOTONE: sibling and

@@ -8507,6 +8507,64 @@ else
     echo "FAIL  bug 250: native compile rc $r250_rc within 20 s, interp '$r250_interp' (want 0, 42)"
     FAIL=$((FAIL + 1))
 fi
+# Bugs 255-261: a function of many statements took time quadratic in its length in every front-end
+# stage (40000 `s = s + 1;` statements: 11 s to parse, 12-39 s to resolve, 9-11 s each to check
+# and elaborate; 40000 `let`s: over 3 minutes to resolve). Each stage kept per-function state in a
+# list searched or appended per statement: the parser's statement lists (255), the local binder
+# table (256), the resolver's visible bindings (257), the checker's bindings (258), Elab's binder
+# frames and bound locals (259), ElabVerify's visible binders (260) and CoreCheck's bindings (261).
+# The fixtures pin the behavior each new structure must keep; generated functions of 80000
+# statements, 80000 `let`s and 20000 `let`s each followed by an `if`, a `while` or a `match` that
+# reads a binding declared far above must parse, resolve, check and elaborate (`--emit-core`)
+# within 10 s each (retried once with 20 s). The old front end took minutes on each.
+run_ok "$TESTDIR/regress_255_block_statement_order.con" 42
+run_ok "$TESTDIR/regress_256_local_table_lookups.con" 42
+run_ok "$TESTDIR/regress_257_scope_visibility.con" 42
+run_err "$TESTDIR/error_257_read_after_block.con" "(E0100) undeclared variable 'inner'"
+run_err "$TESTDIR/error_257_rebind_visible.con" "(E0301) 'total' is already bound"
+run_ok "$TESTDIR/regress_258_checker_binding_states.con" 42
+run_err "$TESTDIR/error_258_branch_disagreement_order.con" "(E0212) linear variable 'newer' consumed in one branch"
+run_err "$TESTDIR/error_258_block_leak_order.con" "(E0208) linear variable 'second' was never consumed"
+run_ok "$TESTDIR/regress_259_binder_positions.con" 42
+run_ok "$TESTDIR/regress_260_elabverify_scopes.con" 42
+r255_gen() {  # r255_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
+    awk -v shape="$1" -v n="$2" 'BEGIN {
+        print "fn main() -> Int {"
+        if (shape == "flat") {
+            print "    let mut s: i64 = 0;"
+            for (i = 0; i < n; i++) print "    s = s + 1;"
+            print "    return (s % 7) as Int;"
+        } else {
+            print "    let s0: i64 = 0;"
+            print "    let mut t: i64 = 0;"
+            for (i = 1; i <= n; i++) {
+                printf "    let s%d: i64 = s%d + 1;\n", i, i - 1
+                if (shape == "if") printf "    if s%d > t { t = t + 1; }\n", i
+                if (shape == "while") printf "    while t < s%d { t = t + 1; }\n", i
+                if (shape == "match") printf "    match s%d { 0 => { t = t + 1; }, _ => { t = t + 2; }, }\n", i
+            }
+            printf "    return ((s%d + t) %% 7) as Int;\n", n
+        }
+        print "}"
+    }'
+}
+r255_bad=""
+for r255_case in "flat 80000" "lets 80000" "if 20000" "while 20000" "match 20000"; do
+    read -r r255_shape r255_n <<< "$r255_case"
+    r255_src="$TMPDIR/r255_${r255_shape}_$r255_n.con"
+    r255_gen "$r255_shape" "$r255_n" > "$r255_src"
+    r255_rc=0; bounded_run -r 20 10 -- $COMPILER "$r255_src" --emit-core >"$TMPDIR/r255_core.txt" 2>&1 || r255_rc=$?
+    if [ "$r255_rc" != 0 ] || ! grep -q "fn main" "$TMPDIR/r255_core.txt"; then
+        r255_bad="$r255_bad $r255_shape/$r255_n:rc=$r255_rc"
+    fi
+done
+if [ -z "$r255_bad" ]; then
+    echo "  ok  bugs 255-261: long functions (80000 statements, 80000 lets, 20000 lets with an if, a while or a match each) pass the front end within 10 s"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bugs 255-261: front end over a long function did not finish within 10 s (retry 20 s):$r255_bad"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241
 # outside its module, directly imported and through the transitive closure); binary and --interp
 # must agree on 42.
