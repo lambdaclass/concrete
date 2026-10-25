@@ -4164,12 +4164,20 @@ partial def renameBodiesDeep (rn : CoreRename) (cm : CModule) : CModule :=
     not move. -/
 def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModule) :=
   let defs := cms.flatMap coreFnsDeep
-  let freeDefs := (defs.filter (!·.isMethod)).map (·.name)
+  -- A foreign binding is a free-namespace definition too: consumers bind a spelling to it
+  -- before any program definition (`foreignCalls`), so it captures a method call as surely
+  -- (Codex review r2).
+  let freeDefs := (defs.filter (!·.isMethod)).map (·.name) ++ (cms.flatMap coreExternsDeep).map (·.name)
   let methodDefs := (defs.filter (·.isMethod)).map (·.name)
   let aliases := cms.flatMap coreAliasesDeep
+  -- Constant initializers too: Lower inlines one at each use, after this pass (Codex review r2).
+  let consts := (cms.flatMap coreConstsWithTypesDeep).map (·.2.2.2)
   let methodCalls : List String := ((defs.flatMap fun f => (collectCalleesStmts f.body).filterMap
       fun c => match c with | .direct n .method => some n | _ => none)
-    ++ defs.flatMap (fun f => methodValuesStmts f.body)).eraseDups
+    ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
+      fun c => match c with | .direct n .method => some n | _ => none)
+    ++ defs.flatMap (fun f => methodValuesStmts f.body)
+    ++ consts.flatMap methodValuesExpr).eraseDups
   let taken := methodCalls.filter freeDefs.contains
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>

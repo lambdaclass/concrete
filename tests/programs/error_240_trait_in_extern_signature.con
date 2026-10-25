@@ -1,0 +1,9 @@
+// Bug 240 (FIXED), Codex review r2: a foreign binding's signature naming a trait as a type: E0108
+// at Resolve (before: it reached the FFI-safety check).
+trait Marker {
+    fn tag(&self) -> i32;
+}
+trusted extern fn consume(x: Marker) with() -> i32;
+fn main() -> Int {
+    return 42;
+}

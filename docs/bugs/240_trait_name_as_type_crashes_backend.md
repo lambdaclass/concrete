@@ -17,6 +17,9 @@ on the train-17 candidate `593dc100`.
   `error_240_trait_let_annotation.con`: a parameter, a type argument and a `let` annotation. Before
   the fix they reached Check as an opaque linear type (E0208, "never consumed") or an unresolved
   type (E0220).
+- `error_240_trait_in_trait_signature.con` and `error_240_trait_in_extern_signature.con` (Codex
+  review r2): a trait method's parameter and a foreign binding's parameter. Before the fix the
+  first compiled (42) and the second reached the FFI-safety check (E0574).
 
 Expected and now observed: E0108 at Resolve, "'Marker' is a trait, not a type: there are no
 trait-object types (TYPE-2) …". `regress_240_trait_bounds_and_type_param_shadow.con` keeps a trait
@@ -36,8 +39,8 @@ constructor; a trait's spelling became `.named "Marker"`, which no struct, enum 
 the spelling to a trait and no type parameter shadows it), in every position it walks: signatures,
 annotations, cast targets, type arguments (bug 215's `checkWrittenTys`), aliases and constants.
 Resolve walks no declaration's own types through it (Check validates them), so
-`declTraitTypesCheck` applies the same test to struct fields, enum payloads and newtype
-representations. Code E0108 (MOD-1: the name denotes no type), with a TYPE-2 message. Not a
+`declTraitTypesCheck` applies the same test to struct fields, enum payloads, newtype
+representations, trait method signatures and foreign bindings' signatures. Code E0108 (MOD-1: the name denotes no type), with a TYPE-2 message. Not a
 cast-semantics change: no cast to a trait ever had a meaning.
 
 Regression legs in `run_tests.sh`: each refusal fixture (one position each) and the positive

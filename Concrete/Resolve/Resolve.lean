@@ -813,9 +813,10 @@ private partial def traitNamesInTy (ctx : ResolveCtx) : Ty → List String
   | _ => []
 
 /-- Bug 240: a declaration's own types (a struct's fields, an enum's payloads, a newtype's
-    representation) may not name a trait. Resolve walks these with no `checkTyDeep` (Check
-    validates them), so the trait half of TYPE-2 is enforced here; signatures, bodies, aliases
-    and constants already meet `checkTyDeep`. -/
+    representation, a trait method's signature, a foreign binding's signature) may not name a
+    trait. Resolve walks these with no `checkTyDeep` (Check validates them), so the trait half of
+    TYPE-2 is enforced here; function and impl-method signatures, bodies, aliases and constants
+    already meet `checkTyDeep`. -/
 private def declTraitTypesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   let check (params : List String) (ty : Ty) (sp : Span) (ctx : ResolveCtx) : ResolveCtx :=
     (traitNamesInTy { ctx with typeParams := params } ty).eraseDups.foldl
@@ -825,7 +826,16 @@ private def declTraitTypesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   let ctx := m.enums.foldl (fun ctx ed =>
     ed.variants.foldl (fun ctx v =>
       v.fields.foldl (fun ctx f => check ed.typeParams f.ty ed.span ctx) ctx) ctx) ctx
-  m.newtypes.foldl (fun ctx nt => check nt.typeParams nt.innerTy nt.span ctx) ctx
+  let ctx := m.newtypes.foldl (fun ctx nt => check nt.typeParams nt.innerTy nt.span ctx) ctx
+  -- A trait's method signatures and a foreign binding's signature are not walked by any
+  -- `resolveFnBody` either (Codex review r2).
+  let ctx := m.traits.foldl (fun ctx td =>
+    td.methods.foldl (fun ctx ms =>
+      let ctx := ms.params.foldl (fun ctx p => check td.typeParams p.ty td.span ctx) ctx
+      check td.typeParams ms.retTy td.span ctx) ctx) ctx
+  m.externFns.foldl (fun ctx ef =>
+    let ctx := ef.params.foldl (fun ctx p => check [] p.ty ef.span ctx) ctx
+    check [] ef.retTy ef.span ctx) ctx
 
 /-- Bug 231: every trait a bound names resolves (MOD-1). The traits a module's bounds may name are
     the ones Check gives that module (`allTraits`: the builtin `Destroy` and the module's own

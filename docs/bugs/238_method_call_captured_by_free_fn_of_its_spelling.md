@@ -21,7 +21,12 @@ because its signature disagreed; one that agreed would have run) and
 which imports its child's `P`; before the fix it failed to build, bug 241), and
 `regress_238_method_named_by_definition_name.con` (the method named by its definition name, as a
 call `P_get(&p)` and as a value `let f: fn(&P) -> i32 = P_get;`, which Core respells
-`outer_a_P_get` too; before the fix both ran the free function, 198 for 42).
+`outer_a_P_get` too; before the fix both ran the free function, 198 for 42),
+`regress_238_method_call_in_constant.con` (the method call in a constant's initializer, which
+Lower inlines at each use; before: 99) and `regress_238_extern_takes_method_spelling.con` (a
+foreign binding `#[link_name = "abs"] extern fn outer_a_P_get`, which consumers bind before any
+program definition; before: the method call ran `abs`, 99). The last two were found by the Codex
+review of the first version of this fix.
 
 ## Cause
 
@@ -40,13 +45,13 @@ found first, by name.
 A Core reference to a function now carries the namespace it was resolved in (bug 239): a direct
 call `Callee.direct name space`, a function value `CLocal.space`, with `CallSpace.free | .method`.
 A free-spelled name that Check resolved to a method by its definition name is `method` too. Elab's
-last spelling pass, `spellMethodCallsApart`, finds every method reference whose spelling a free
-function of the program defines and respells it by the method it names: the targets of its linker
+last spelling pass, `spellMethodCallsApart`, finds every method reference (in function bodies and
+constant initializers) whose spelling a free function or a foreign binding of the program defines and respells it by the method it names: the targets of its linker
 aliases that are method definitions (`CFnDef.isMethod`), which must be exactly one and not the
 spelling itself, else E0299 ("Core cannot tell them apart"). Other method references keep their
 spelling, so no proof fingerprint over them moves.
 
-Regression legs in `run_tests.sh`: the four fixtures above, `run_ok … 42` and `--interp` = 42.
+Regression legs in `run_tests.sh`: the six fixtures above, `run_ok … 42` and `--interp` = 42.
 
 ## Structural cause
 

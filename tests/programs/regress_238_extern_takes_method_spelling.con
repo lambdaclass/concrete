@@ -1,0 +1,25 @@
+// Bug 238 (FIXED), the foreign-binding shape (Codex review r2): `c` binds the C function `abs` as
+// `outer_a_P_get`, the spelling Core gives the call of the respelled `outer_a_P`'s method `get`.
+// Consumers bind a spelling to a foreign binding before any program definition, so the method
+// call would have run `abs`; a foreign binding counts as a free-namespace definition for the
+// repair. Expected: 42 (the method's 42, then `abs(-5) - 5`), natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return 42; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod c {
+    import outer.a.{P};
+    #[link_name = "abs"]
+    trusted extern fn outer_a_P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get(-99) + outer_a_P_get(-5) - 5; }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

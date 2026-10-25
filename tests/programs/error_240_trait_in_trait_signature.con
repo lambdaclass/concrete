@@ -1,0 +1,11 @@
+// Bug 240 (FIXED), Codex review r2: a trait method's signature naming a trait as a type: E0108
+// at Resolve (a trait's signatures are walked by no function body).
+trait Marker {
+    fn tag(&self) -> i32;
+}
+trait Consumer {
+    fn consume(&self, x: Marker) -> i32;
+}
+fn main() -> Int {
+    return 42;
+}

@@ -89,6 +89,29 @@ constant references; each is its own slice with its own byte-identity accounting
 - No new `String → identity` coercion: environments are built from summaries that carry the
   identity's components, never by parsing a spelling.
 
+## Methods and free functions (bugs 238 – 241)
+
+The review of step 2 found that callables had the same defect one namespace over: a method's
+definition name is `Type_method`, which a free function may also be named, and Check, Elab and Core
+kept both in one spelled namespace. A follow-up slice separates them without changing a spelling
+any accepted program relies on:
+
+- Check and Elab resolve a receiver call and a `T::m()` call in a method table alone (`lookupMethod`,
+  `lookupMethodSig`, `PeekCtx.methodSig`); a free-spelled name keeps its resolution (free functions
+  first, then a method by its definition name).
+- A Core reference to a function records the namespace it resolved in (`CallSpace`: on
+  `Callee.direct` for a call, on `CLocal.space` for a function value; `CFnDef.isMethod` for a
+  definition), and every Elab renaming renames each namespace by its own table.
+- `spellMethodCallsApart` respells a method reference whose spelling a free function defines by
+  the method it names, so below Elab the spelling alone still resolves. Other spellings do not move,
+  so no V1 fingerprint over a method call moves.
+- A free function spelled like its module's method definition name is MOD-3's E0299 (bug 082 put
+  method definition names in the module's callable namespace), and a trait in a type position is
+  E0108 (TYPE-2).
+
+The method tables are still keyed by the `Type_method` spelling; keying them by `MethodKey` is
+R-0548, and calls carrying the definition's identity is R-0492's callable `DefId` step.
+
 ## Not in this slice
 
 No pending language decision is encoded: visibility of std's libc bindings (bug 226), field writes
