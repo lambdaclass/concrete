@@ -176,7 +176,7 @@ declare -A BUG_TEST_MAP=(
   # Bug 253: construction and field rights by declaration identity (decoy child types).
   [253]="error_253_child_newtype_decoy.con error_253_aliased_newtype_decoy.con error_253_child_struct_decoy_literal.con error_253_child_struct_decoy_field_read.con error_253_child_struct_decoy_field_write.con regress_253_local_rights_beside_imports.con"
   # Bug 251: a generic's specialization reads its defining tree's constants (native and --interp).
-  [251]="regress_251_generic_reads_defining_tree_constant.con regress_251_generic_constant_absent_in_instantiating_tree.con regress_251_nested_generic_constants.con"
+  [251]="regress_251_generic_reads_defining_tree_constant.con regress_251_generic_constant_absent_in_instantiating_tree.con regress_251_nested_generic_constants.con regress_251_generic_calls_shadowed_intrinsic.con regress_251_generic_constant_calls_shadowed_intrinsic.con"
   # Bug 243: an aliased newtype import is the newtype (methods, values, generics, nested trees).
   [243]="regress_243_aliased_newtype_import.con regress_243_aliased_newtype_with_original.con regress_243_aliased_generic_newtype.con regress_243_nested_aliased_newtype.con"
   # Bug 245: two top-level trees' private constants of one spelling, native and --interp.
