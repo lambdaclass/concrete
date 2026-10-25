@@ -52,8 +52,8 @@ SPECIAL_VAR_RE = re.compile(r"(BASH_\w*|ENV|PATH|PROMPT_COMMAND|PS[0-4]|IFS|LD_\
 # script (`exec >file`) sent to a file or a pipe, a function's output captured, a substitution
 # spanning lines, a process substitution: a print inside it is not known to reach only the
 # terminal or its own line's capture, so no print in such a script is TEXT.
-COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
-                             r"|\bexec\s+[0-9]*>(?!&)|\bcoproc\b")
+COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>|&>|\|(?!\|))"
+                             r"|\bexec\b[^;|]*>|\bcoproc\b")
 FUNC_DEF_RE = re.compile(r"(?:^|[;&|{(\s])(?:function\s+([A-Za-z_][\w-]*)|([A-Za-z_][\w-]*)\s*\(\s*\))")
 # `${var:=word}` / `${var=word}`: an assignment made by an expansion.
 EXPANSION_ASSIGN_RE = re.compile(r"\$\{[A-Za-z_]\w*:?=")

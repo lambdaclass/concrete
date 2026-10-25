@@ -98,8 +98,10 @@ def _array_elements(name, elems):
             # A substitution runs at assignment. A value over several lines is code too: the
             # corpus notes are one line each, and a quote misread across lines must not turn the
             # code it swallowed into text.
-            code = "$(" in text or "`" in text or "\n" in text
-            out.append((text, "code" if code else (part, name)))
+            if "$(" in text or "`" in text:
+                out.append((text, "subst"))  # runs at assignment: a call, whatever it spells
+            else:
+                out.append((text, "code" if "\n" in text else (part, name)))
     return out
 
 
@@ -269,7 +271,7 @@ class Repo:
     @staticmethod
     def _map_levels(lines):
         """-> {(NAME, "key"|"value"): use level} for the keyed arrays of a script (KEYED ELEMENTS)."""
-        code = [l for l, k in lines if k == "code"]
+        code = [l for l, k in lines if k in ("code", "subst")]
         expanded = [l for l, k in lines if k == "xdata"]
         elements = [(k[1], k[0], l) for l, k in lines if isinstance(k, tuple)]
         levels = {}
@@ -314,7 +316,8 @@ class Repo:
             files |= f
             dirs |= d
             # An element judged RUN is a call whatever its text spells (a helper named grep-x.sh).
-            if isinstance(kind, tuple) or not (DATA_RE.search(line) and not EXEC_RE.search(line)):
+            if isinstance(kind, tuple) or kind == "subst" \
+                    or not (DATA_RE.search(line) and not EXEC_RE.search(line)):
                 runs |= {x for x in f if x.endswith(SCRIPT_EXT)}
         text = "\n".join(l for l, k in lines if not (isinstance(k, tuple) and level(k) == st.TEXT))
         if path.endswith(".py"):

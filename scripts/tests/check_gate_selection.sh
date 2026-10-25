@@ -413,6 +413,23 @@ declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 printf '%s\n' "${M[k]}" >&"$tmp"
 . "$tmp"
 EOF
+leg groupdup run "a group whose output is duplicated and redirected to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{
+  printf '%s\n' "${M[k]}"
+} 2>&1 >"$tmp"
+. "$tmp"
+EOF
+leg execout run "a value printed after exec sends output to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+exec &>"$tmp"
+printf '%s\n' "${M[k]}"
+EOF
+leg valsub run "a command substitution in a value runs at assignment, however its line reads" <<'EOF'
+declare -A M=(
+  [k]="$(scripts/tests/run_ci_gates_local.sh --plan | head -n 1)"
+)
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

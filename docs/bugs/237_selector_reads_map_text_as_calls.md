@@ -57,29 +57,31 @@ TEXT and READ are a short whitelist of plain forms; everything else is RUN:
   `alias`, `enable`, `export`, allexport, `coproc`, or a function named like a whitelisted command.
 
 A TEXT value names nothing; a READ value is a read and never a run; a RUN value is code, and every
-script it names is a run whatever its line spells. A key is at least a read. An element holding a command substitution, or spanning lines, is always code,
-and a literal whose closing parenthesis does not end the statement is left to the line rule, so
-a quote the reader misreads cannot turn the code after it into text. A literal with no keyed
-element (a list of gates to run) is judged line by line as before. The reader is not a complete
-shell parser (deliberately deferred arithmetic evaluation, for instance, is not modeled); what it
-treats as TEXT or READ is pinned by the controls below.
+script it names is a run whatever its line spells. A key is at least a read. An element holding a
+command substitution runs at assignment and is always a call; one spanning lines is always code, and
+a literal whose closing parenthesis does not end the statement is left to the line rule, so a quote
+the reader misreads cannot turn the code after it into text. A literal with no keyed element (a list
+of gates to run) is judged line by line as before. The reader is not a complete shell parser
+(deliberately deferred arithmetic evaluation, for instance, is not modeled); what it treats as TEXT
+or READ is pinned by the controls below.
 
 Effect, measured over the whole gate inventory (272 commands) on this branch's tree, old selector
-against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that
-reach the corpus audit lost the false edges (seven tracked files no longer select them, among them
+against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that reach
+the corpus audit lost the false edges (seven tracked files no longer select them, among them
 `scripts/review/*`, `.gitignore` and two docs); the selection for each of the seven fixtures in
 `tests/fixtures/gate_selection/` is unchanged. Of the repository's other keyed arrays, those used
 inside functions or in scripts that redirect compound output stay code. Regression legs in
-`check_gate_selection.sh` ("text is not a call", 42 legs): a note naming a gate is neither a run
-nor a read, nor is the directory it mentions, and a genuine invocation of the gate in the same file
-is a call; each RUN, READ and parser rule above has a fixture that would be judged TEXT if the rule
-were missing (values run through variables, other arrays, wrappers, namerefs, indirect expansion,
-`printf -v`, `read`, `REPLY`, `BASH_ENV`, shadowing functions, captured or redirected function and
-group output, `>&file`, readers writing files, filters that write files, unsafe or opaque `awk`,
-`rg`, `=~`, `${v:=...}`, expanded heredocs, mid-line function definitions, multi-line pipes,
-process substitutions; reads through readers, `printf -v`, file tests, test operators in variables,
-globs, unquoted expansions and keys; command substitution in keys; ANSI-C quotes and quotes inside `${...}`). The note
-and key legs fail against the previous selector.
+`check_gate_selection.sh` ("text is not a call", 45 legs): a note naming a gate is neither a run nor
+a read, nor is the directory it mentions, and a genuine invocation of the gate in the same file is a
+call; the RUN, READ and parser rules above have fixtures (values run through variables, other
+arrays, wrappers, namerefs, indirect expansion, `printf -v`, `read`, `REPLY`, `BASH_ENV`, shadowing
+functions, captured or redirected function and group output, `>&file`, readers writing files,
+filters that write files, unsafe or opaque `awk`, compound and `exec` output redirected through
+descriptor duplication, command substitutions in values, `rg`, `=~`, `${v:=...}`, expanded heredocs,
+mid-line function definitions, multi-line pipes, process substitutions; reads through readers,
+`printf -v`, file tests, test operators in variables, globs, unquoted expansions and keys; command
+substitution in keys; ANSI-C quotes and quotes inside `${...}`). The note and key legs fail against
+the previous selector.
 
 ## Structural cause
 
