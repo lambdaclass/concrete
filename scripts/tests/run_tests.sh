@@ -8695,6 +8695,35 @@ check_report_multi "$TESTDIR/regress_239_method_value_no_foreign_assumption.con"
     "bug 239: a method value reaches the method, not a foreign binding of its spelling" \
     "bug 239: --report assumptions attributes a foreign binding to a method value" \
     '"fn":"main.factory","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+# Codex review r10: a method call is no `Vec` operation, allocation intrinsic or proof-graph
+# intrinsic of its spelling, a free call bound to an extern supplies only the extern's capabilities
+# in explanations, and a method edge is not redirected by a free import alias of its spelling.
+run_ok "$TESTDIR/regress_239_method_spelled_like_vec_op.con" 42
+run_ok "$TESTDIR/regress_239_method_spelled_like_alloc_op.con" 42
+r239_pred3=$(cached_output "$TESTDIR/regress_239_method_spelled_like_alloc_op.con" "--check predictable")
+if grep -q "predictable profile: pass" <<<"$r239_pred3"; then
+    echo "  ok  bug 239: a method spelled like an allocation intrinsic is no allocation"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable read a method call as an allocation:"
+    printf '%s\n' "$r239_pred3" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_239_alias_spelled_method_reaches_ffi.con" 42
+check_report_multi "$TESTDIR/regress_239_alias_spelled_method_reaches_ffi.con" effects \
+    "bug 239: --report effects follows a method call spelled like an intrinsic to its FFI" \
+    "bug 239: --report effects lost FFI behind a method call spelled like an intrinsic" \
+    "ffi: yes"
+run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method_explained.con" 42
+check_report_multi "$TESTDIR/regress_239_extern_call_beside_capable_method_explained.con" caps \
+    "bug 239: --report caps does not explain an extern call by a method's capability" \
+    "bug 239: --report caps explains an extern call by a same-spelled method's capability" \
+    "Console    <- declared"
+run_ok "$TESTDIR/regress_239_method_edge_beside_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_edge_beside_free_alias.con" assumptions \
+    "bug 239: a method edge is not redirected by a free import alias of its spelling" \
+    "bug 239: --report assumptions redirected a method edge through a free import alias" \
+    '"fn":"user.run","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
@@ -8731,7 +8760,10 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_method_value_beside_extern_of_other_arity regress_239_nested_method_beside_extern \
             regress_239_respelled_method_beside_extern_types regress_239_method_call_not_an_extern_call_report \
             regress_247_function_value_reaches_foreign regress_239_method_value_no_foreign_assumption \
-            regress_239_method_spelled_like_intrinsic regress_239_method_call_reaches_ffi_report; do
+            regress_239_method_spelled_like_intrinsic regress_239_method_call_reaches_ffi_report \
+            regress_239_method_spelled_like_vec_op regress_239_method_spelled_like_alloc_op \
+            regress_239_alias_spelled_method_reaches_ffi regress_239_extern_call_beside_capable_method_explained \
+            regress_239_method_edge_beside_free_alias; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

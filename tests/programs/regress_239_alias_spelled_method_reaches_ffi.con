@@ -1,0 +1,22 @@
+// Bug 239 (FIXED), Codex review r10: a nested module's method `read::owned`, called from the root
+// as `r.owned()` (caller spelling `read_owned`, an intrinsic's), calls a trusted extern. The proof
+// call graph took the method call for the intrinsic and lost the edge, so `--report effects`
+// read `main` as `ffi: no`; a method call is never an intrinsic there either.
+// Expected: 42, natively and --interp; `main` crosses FFI in `--report effects`.
+mod outer {
+    mod defs {
+        trusted extern fn abs(x: i32) with() -> i32;
+        pub newtype read = Int;
+        impl read {
+            pub fn owned(&self) -> Int {
+                return abs(-42) as Int;
+            }
+        }
+        pub fn seven() -> read { return read(7); }
+    }
+}
+import outer.defs.{read, seven};
+fn main() -> Int {
+    let r: read = seven();
+    return r.owned();
+}

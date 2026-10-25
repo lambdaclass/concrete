@@ -98,7 +98,7 @@ def monoReport (preMono postMono : List CModule) : String :=
 
 /-- Analyze allocation patterns in a single function. -/
 private def analyzeFnAlloc (f : CFnDef) : Option String :=
-  let callees := collectCallsStmts f.body |>.eraseDups
+  let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
   let allocs := callees.filter isAllocCall
   let frees := callees.filter isFreeCall
   let defers := collectDefersStmts f.body
@@ -133,7 +133,7 @@ private partial def allocReportModule (m : CModule) (indent : String) : Option S
 /-- Count allocation-related functions across module tree. -/
 private partial def allocCounts (m : CModule) : Nat × Nat × Nat :=
   let fnResults := m.functions.map fun f =>
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
     let frees := callees.filter isFreeCall
     let defers := collectDefersStmts f.body
@@ -431,7 +431,7 @@ private partial def effectsForModule
   let fns := m.functions.map fun f =>
     let qualName := qualPrefix ++ "." ++ f.sourceName
     let isEffectOpaque := opaqueSet.contains qualName
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
     let frees := callees.filter isFreeCall
     let defs := collectDefersStmts f.body
@@ -887,7 +887,7 @@ partial def checkPredictableModule
          , loc := fnLoc, violationLoc := loopViolLoc, violationSpan := loopSpan }]
       else []
     -- 3. Allocation — point at the allocating call
-    let callees := collectCallsStmts f.body |>.eraseDups
+    let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
     let allocs := callees.filter isAllocCall
     let (fnCaps, _) := f.capSet.normalize
     let hasAllocCap := fnCaps.any (· == "Alloc")
@@ -5288,7 +5288,7 @@ def collectUnsafeFacts (modules : List CModule) : List Val :=
 open Json in
 /-- Convert a function's allocation info to a JSON fact. -/
 private def allocToFact (qualName : String) (f : CFnDef) : Option Val :=
-  let callees := collectCallsStmts f.body |>.eraseDups
+  let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
   let allocs := callees.filter isAllocCall
   let frees := callees.filter isFreeCall
   let defers := collectDefersStmts f.body
@@ -5872,7 +5872,7 @@ def auditQuery (modules : List CModule) (locMap : FnLocMap)
     let fnDef := fnLookup.find? (fun (n, _) => n == fnName)
     let allocInfo := match fnDef with
       | some (_, f) =>
-        let callees := collectCallsStmts f.body |>.eraseDups
+        let callees := collectFreeCallsStmts f.body |>.eraseDups  -- free calls: a method is no allocation intrinsic (bugs 238 – 239)
         let allocs := callees.filter isAllocCall
         let frees := callees.filter isFreeCall
         let defers := collectDefersStmts f.body

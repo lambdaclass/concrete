@@ -81,8 +81,24 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
   -- One walk, in source order (the explanation lists callees as written); deduplicated by spelling
   -- AND kind: a body calling both `print(7)` and a user `print_int` has two suppliers, the program
   -- function and the intrinsic (Codex review).
+  -- Per namespace (bugs 238 – 239, Codex review r10): a free call the function binds to a foreign
+  -- declaration is that extern, and a method call is a method, whatever else shares the spelling.
+  let keyed (key written : String) : Option (Option CapSupplier) :=
+    match lookup.find? (·.1 == key) with
+    | some (_, cs) => some (if Capabilities.capSetHas cs cap then some { callee := written, kind := "program" } else none)
+    | none => none
   let all := (collectCalleesStmts f.body).filterMap fun c => match c with
-    | .direct n _ => spelledSupplier n
+    | .direct n .free =>
+      match f.foreignCalls.lookup n with
+      | some d => if d.startsWith "_C$rt." then spelledSupplier n else (keyed (capKeyExtern d) n).getD none
+      | none => spelledSupplier n
+    | .direct n .method =>
+      let c := (aliases.lookup n).getD n
+      match keyed (capKeyMethod n) n with
+      | some r => r
+      | none => match keyed (capKeyMethod c) n with
+        | some r => r
+        | none => spelledSupplier n
     | .runtime h => runtimeSupplier h
     | .indirect _ => none
   all.foldl (fun acc x => if acc.any (fun y => y.callee == x.callee && y.kind == x.kind) then acc else acc ++ [x]) []

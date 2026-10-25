@@ -847,8 +847,10 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       | .direct _ sp => sp
       | _ => .free
     -- Intercept vec sized operations for per-element-size dispatch
+    -- A method call is a program method, never a runtime `Vec` operation of its spelling (bugs
+    -- 238 – 239, Codex review r10).
     match (match directName with
-           | some fn => resolveVecCall s fn args retTy
+           | some fn => if directSpace == CallSpace.method then none else resolveVecCall s fn args retTy
            | none => none) with
     | some (specFn, es, payOff) =>
       let s := recordVecElemSpec s es payOff
@@ -901,7 +903,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- extern elsewhere shares its spelling (the definition has its own mangled symbol).
     -- An imported alias of an extern (`import c.{take as alias}`) is foreign by the resolver's
     -- binding (`currentForeign`), not by its spelling, and must get the C ABI too.
-    let isExternCall := if directSpace == .method then false else match directName with
+    let isExternCall := if directSpace == CallSpace.method then false else match directName with
       | some fn =>
         ((match s.currentForeign.lookup fn with
           | some d => !d.startsWith "_C$rt."

@@ -93,6 +93,16 @@ the declaration-collision check compared only free functions, externs and consta
   never takes a method call for a compiler intrinsic of its spelling
   (`regress_239_method_spelled_like_intrinsic.con`: a method spelled `read_owned` defined in another
   module was lowered as the intrinsic load, 7 natively for 42 under `--interp`, before the fix).
+- Codex review r10: native emission never intercepts a method call as a runtime `Vec` operation
+  (`regress_239_method_spelled_like_vec_op.con`: a method spelled `vec_get` failed to build), the
+  allocation classification of the reports and the predictable profile reads free calls only
+  (`regress_239_method_spelled_like_alloc_op.con`), the proof call graph never takes a method call
+  for an intrinsic (`regress_239_alias_spelled_method_reaches_ffi.con`: 7 natively for 42 before,
+  and the FFI behind the call was lost), capability explanations resolve a free call bound to an
+  extern to that extern and a method call to the method (namespaced keys in `CapLookup`;
+  `regress_239_extern_call_beside_capable_method_explained.con`), and the assumption summary does
+  not redirect a method edge through a free import alias of its spelling
+  (`regress_239_method_edge_beside_free_alias.con`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

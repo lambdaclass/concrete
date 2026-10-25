@@ -1,0 +1,13 @@
+// Bug 239 (FIXED), Codex review r10: a newtype `vec` with a method `get`, called as `v.get()`:
+// its Core spelling `vec_get` is a runtime `Vec` operation's, and native emission intercepted the
+// method call as that operation (dropping it, an undefined result register, a build failure). A
+// method call is a program method.
+// Expected: 42, natively and --interp.
+newtype vec = Int;
+impl vec {
+    pub fn get(&self) -> Int { return 42; }
+}
+fn main() -> Int {
+    let v: vec = vec(0);
+    return v.get();
+}

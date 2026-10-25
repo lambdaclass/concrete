@@ -232,7 +232,7 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
   -- rather than guessing. Codegen takes the FIRST alias in emission order; the graph takes an alias
   -- only when the spelling has exactly one target and that symbol is defined exactly once. Anything
   -- else stays bare and the closure refuses, rather than agreeing with codegen by luck.
-  let resolveCallee (bare : String) : String :=
+  let resolveCallee (bare : String) (isMethodCall : Bool := false) : String :=
     let sameModule := qualPrefix ++ "." ++ bare
     -- The same module's DEFINITION of that Core name, not merely a declaration whose SOURCE name
     -- it is: a free `P_get` respelled `user_P_get` keeps the qualified name `user.P_get`, and a
@@ -246,7 +246,8 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
       -- `#[intrinsic]` binding, so the alias pool can map the spelling onto that declaration and give
       -- a genuine `sizeof::<i32>()` an edge into std. The compiler resolves intrinsics itself; the
       -- intrinsic table is the one answer for these names, and aliases never override it.
-      if (resolveIntrinsic bare).isSome then bare else
+      -- A method call is never a compiler intrinsic of its spelling (bugs 238 – 239, Codex r10).
+      if !isMethodCall && (resolveIntrinsic bare).isSome then bare else
       match (aliases.filterMap fun (a, sym) => if a == bare then some sym else none).eraseDups with
       | [sym] =>
         match qualNameMap.filter fun (b, _) => b == sym with
@@ -265,7 +266,7 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
         match f.foreignCalls.lookup n with
         | some decl => if decl.startsWith "_C$rt." then some (resolveCallee n) else some decl
         | none => some (resolveCallee n)
-      | .direct n .method => some (resolveCallee n)
+      | .direct n .method => some (resolveCallee n true)
       | .runtime h => some h
       | .indirect _ => none
     (qualName, callees.eraseDups)
@@ -3233,7 +3234,6 @@ private def assessEligibility
     | some (_, loc) => some loc
     | none => none
   let (concreteCaps, _) := f.capSet.normalize
-  let callees := collectCallsStmts f.body |>.eraseDups
   let sourceReasons : List String :=
     (if !f.capSet.isEmpty then
       [s!"has capabilities: {", ".intercalate concreteCaps}"] else []) ++
@@ -3241,7 +3241,7 @@ private def assessEligibility
     -- No separate "from trusted impl" reason: since bug 189 a method is trusted only by
     -- its own `trusted`, which "marked trusted" already reports.
     (if f.isEntryPoint then ["is entry point (main)"] else [])
-  let allocs := callees.filter isAllocCall
+  let allocs := (collectFreeCallsStmts f.body).eraseDups.filter isAllocCall
   let rec_ := match recMap.find? (fun (n, _, _) => n == qualName) with
     | some (_, .direct, _) => "direct"
     | some (_, .mutual, _) => "mutual"
