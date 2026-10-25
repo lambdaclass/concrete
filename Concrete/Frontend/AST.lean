@@ -552,6 +552,11 @@ structure ImplBlock where
       target is written bare. Recorded so trait coherence (E0593) can judge them: they were
       parsed and DROPPED, so `impl Name<i32>` silently meant every `Name<_>` (bug 186). -/
   targetArgs : Option (List Ty) := none
+  /-- R-0492 step 3: the defining module of the target type when the module holding this impl
+      declares it, stamped by `buildFileSummary` (with `typeName`, the target's `TypeId`). Empty
+      when the target is a builtin or a type the module imports; such an impl is matched by
+      spelling. -/
+  targetDefinedIn : String := ""
 
 structure TraitDef where
   name : String
@@ -573,6 +578,8 @@ structure ImplTraitBlock where
   /-- The type arguments written on the impl's target (`for Vec<T>`), `none` when bare. See
       `ImplBlock.targetArgs` (bug 186). -/
   targetArgs : Option (List Ty) := none
+  /-- R-0492 step 3: as `ImplBlock.targetDefinedIn`. -/
+  targetDefinedIn : String := ""
 
 structure Module where
   name : String

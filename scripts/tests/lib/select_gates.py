@@ -29,7 +29,9 @@ every edge is read out of the tree on each run:
      A Lean module outside that closure (proofs/, PipelineTest) selects only the Lean-running
      gates and the gates that name it.
   3. derived artifacts — the curated ALWAYS_IF table of gates_for_diff.py (one owner), for gates
-     that check a derivation of a whole tree without naming the changed file.
+     that check a derivation of a whole tree without naming the changed file; and its
+     EVERY_CHANGE list, cheap gates over the whole tree that any non-empty diff selects (a
+     selection that maps no file, so it never satisfies rule 4).
   4. FAIL-SAFE — a changed file that no rule maps and that is not known-inert documentation
      selects EVERY gate. "Nothing names it" must never read as "nothing can break".
 
@@ -426,6 +428,11 @@ def select(repo, inventory, changed, base=None):
             hit = True
         if not hit and not INERT_RE.search(ch):
             unmapped.append(ch)
+    if changed:  # selected, never mapped: these do not count against the fail-safe below
+        for g, why in gfd.EVERY_CHANGE:
+            for cmd in inventory:
+                if re.search(r"(^|[ /])" + re.escape(g) + r"( |$)", cmd):
+                    pick(cmd, f"any change: {why}")
     for ch in unmapped:  # FAIL-SAFE: an unmapped executable-looking change selects everything
         for cmd in inventory:
             pick(cmd, f"fail-safe: no rule maps {ch}")

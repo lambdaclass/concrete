@@ -176,8 +176,11 @@ where
     has beyond the pattern's own concrete names. Where the pattern has capability argument
     `C` (`Sink<C>`) and the actual has `Sink<Console>`, `C` is bound to `Console`. A
     parameter that cannot be read off is simply not bound: the caller decides whether
-    that is an error. -/
-partial def inferCapBindings (capParams : List String) (pattern actual : Ty) : List (String × CapSet) :=
+    that is an error. `sameHead` says whether two generic heads name one type: a pass with
+    a type environment passes the identity comparison (`sameTypeName`, R-0492 step 3), so an
+    import alias's `S<Console>` matches the defining module's `Sink<C>` (bug 223). -/
+partial def inferCapBindings (capParams : List String) (pattern actual : Ty)
+    (sameHead : String → String → Bool := (· == ·)) : List (String × CapSet) :=
   match pattern, actual with
   | .fn_ pps pcs pr, .fn_ aps acs ar =>
     let pNames := pcs.allNames
@@ -188,19 +191,19 @@ partial def inferCapBindings (capParams : List String) (pattern actual : Ty) : L
         let rest := acs.allNames.filter (fun n => !fixed.contains n)
         [(v, (if rest.isEmpty then CapSet.empty else CapSet.concrete rest).canonArg)]
       | _ => []
-    here ++ (pps.zip aps).flatMap (fun (p, a) => inferCapBindings capParams p a)
-         ++ inferCapBindings capParams pr ar
+    here ++ (pps.zip aps).flatMap (fun (p, a) => inferCapBindings capParams p a sameHead)
+         ++ inferCapBindings capParams pr ar sameHead
   | .generic pn pargs pcaps, .generic an aargs acaps =>
-    if pn != an then [] else
+    if !sameHead pn an then [] else
     let here := (pcaps.zip acaps).filterMap fun (pc, ac) =>
       match pc.allNames with
       | [v] => if capParams.contains v then some (v, ac.canonArg) else none
       | _ => none
-    here ++ (pargs.zip aargs).flatMap (fun (p, a) => inferCapBindings capParams p a)
-  | .ref p, .ref a | .refMut p, .refMut a | .ref p, .refMut a => inferCapBindings capParams p a
-  | .ptrMut p, .ptrMut a | .ptrConst p, .ptrConst a => inferCapBindings capParams p a
-  | .heap p, .heap a | .heapArray p, .heapArray a => inferCapBindings capParams p a
-  | .array p _, .array a _ => inferCapBindings capParams p a
+    here ++ (pargs.zip aargs).flatMap (fun (p, a) => inferCapBindings capParams p a sameHead)
+  | .ref p, .ref a | .refMut p, .refMut a | .ref p, .refMut a => inferCapBindings capParams p a sameHead
+  | .ptrMut p, .ptrMut a | .ptrConst p, .ptrConst a => inferCapBindings capParams p a sameHead
+  | .heap p, .heap a | .heapArray p, .heapArray a => inferCapBindings capParams p a sameHead
+  | .array p _, .array a _ => inferCapBindings capParams p a sameHead
   | _, _ => []
 
 /-- Infer generic type-argument bindings by structurally matching a parameter

@@ -1,0 +1,12 @@
+// Bug 233 (R-0492 step 4): a nested submodule imports a sibling's constant under an alias; its
+// initializer reads the defining module's private constant `K`. Returns 42.
+mod m {
+    mod a { const K: i32 = 40; pub const X: i32 = K + 2; }
+    mod b {
+        import m.a.{X as Y};
+        const J: i32 = 7;
+        pub fn g() -> i32 { return Y + J - 7; }
+    }
+    pub fn h() -> i32 { return b::g(); }
+}
+fn main() -> Int { return m::h() as Int; }

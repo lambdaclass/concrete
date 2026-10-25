@@ -1,0 +1,31 @@
+// Bug 223 (FIXED, R-0492 step 3): an aliased imported enum is the enum: its literals, patterns, methods, branch
+// agreement and the values its module's functions return all meet under the alias. Returns 42.
+mod m {
+    mod shapes {
+        pub enum Copy E { A { v: i64 }, B {} }
+        impl E {
+            pub fn val(&self) -> i64 {
+                match self { E::A { v } => { return *v; }, E::B => { return 0; } }
+            }
+        }
+        pub fn make(n: i64) -> E { return E::A { v: n }; }
+        pub trait Score { fn score(&self) -> i64; }
+        impl Score for E { fn score(&self) -> i64 { return 1; } }
+    }
+    mod user {
+        import m.shapes.{E as F, make};
+        pub fn pick(c: bool) -> F {
+            if c { return make(30); }
+            return F::B;
+        }
+        pub fn run() -> i64 {
+            let x: F = make(10);
+            let y: F = F::A { v: 1 };
+            let k: i64 = match pick(true) { F::A { v } => v, F::B => 0 };
+            let z: F = if k > 0 { make(0) } else { F::B };
+            return x.val() + y.val() + k + z.val() + 1;
+        }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

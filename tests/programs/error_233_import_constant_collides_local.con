@@ -1,0 +1,6 @@
+// Bug 233 (R-0492 step 4): an imported constant and a constant of the importing module of one
+// spelling would bind one name twice in the value namespace: refused (E0299), as for functions.
+mod cfg { pub const BASE: i32 = 42; }
+import cfg.{BASE};
+const BASE: i32 = 1;
+fn main() -> Int { return BASE as Int; }

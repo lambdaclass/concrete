@@ -1,0 +1,27 @@
+// Bug 223 (FIXED, R-0492 step 3): an aliased generic struct and an aliased struct in a top-level module: the
+// generic's static and by-value methods, its values from the defining module, and a trait bound
+// satisfied through the alias (the impl is keyed by the target's identity). Returns 42.
+mod a {
+    pub struct Box<T> { pub v: T }
+    impl<T> Box<T> {
+        pub fn mk(x: T) -> Box<T> { return Box::<T> { v: x }; }
+        pub fn take(self) -> T { let Box { v } = self; return v; }
+    }
+    pub fn boxed(n: i64) -> Box<i64> { return Box::<i64> { v: n }; }
+    pub trait Score { fn score(&self) -> i64; }
+    pub struct Copy S { pub s: i64 }
+    impl Score for S { fn score(&self) -> i64 { return self.s; } }
+    pub fn total<T: Score>(x: &T) -> i64 { return x.score(); }
+    pub fn mks(n: i64) -> S { return S { s: n }; }
+}
+import a.{Box as B, boxed, S as T2, total, mks};
+
+fn keep(b: B<i64>) -> i64 { return b.take(); }
+
+fn main() -> Int {
+    let x: B<i64> = B::<i64>::mk(10);
+    let y: B<i64> = boxed(20);
+    let s: T2 = mks(5);
+    let t: T2 = T2 { s: 7 };
+    return keep(x) + y.take() + total(&s) + total(&t);
+}

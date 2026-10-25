@@ -8,8 +8,8 @@ It includes the requested Roc video's timestamped discussion and links to the
 reviewed sources, benchmark scripts, code, and Concrete design references.
 
 The note filters every possible adaptation through Concrete's explicit ownership,
-authority, execution, and evidence philosophy. Its 27 considerations are exploratory;
-the [final roadmap research section](ROADMAP.md#later-considerations-bend-and-roc)
-only points to them. This records completed research, not shipped features or
-adopted implementation work. The current queue and existing task requirements
-are unchanged; upstream performance measurements were not independently reproduced.
+authority, execution, and evidence philosophy. Its 27 considerations remain research
+while the owner is deciding. The roadmap ends with [open research questions](ROADMAP.md#open-research-questions-bend-and-roc),
+not planned features or implementation tasks. This records completed research,
+not adopted work. The current queue and existing task requirements are unchanged;
+upstream performance measurements were not independently reproduced.

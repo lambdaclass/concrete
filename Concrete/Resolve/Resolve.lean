@@ -39,7 +39,8 @@ inductive SymKind where
   | typeAlias (target : Ty)
   | externFn (params : List Param) (retTy : Ty)
   | const (ty : Ty)
-  | implMethod (typeName : String) (params : List Param) (retTy : Ty)
+  /-- `methodOf`: the declaration and method this is (`FnSummary.methodOf`, R-0492 step 3). -/
+  | implMethod (typeName : String) (params : List Param) (retTy : Ty) (methodOf : Option MethodKey)
   | newtype (def_ : NewtypeDef)
 
 inductive ResolveError where
@@ -279,6 +280,24 @@ private def lookupEnumForLiteral (ctx : ResolveCtx) (name : String) : Option Sym
   | some b => some (SymKind.enum b)
   | none => userEnum <|> first
 
+/-- R-0492 step 3: the type spelled `typeName` here has a method `method`, found by the type's
+    declaration identity as Check and Elab select it (`methodByIdentity`): `Q::mk` after
+    `import m.{P as Q}` names `P`'s `mk`, registered as `P_mk` (bug 223). -/
+private def hasMethodByIdentity (ctx : ResolveCtx) (typeName method : String) : Bool :=
+  let owner? : Option TypeId := if ctx.typeParams.contains typeName then none else
+    match lookupWrittenType ctx typeName with
+    | some (.struct sd) => sd.typeId?
+    | some (.enum ed) => ed.typeId?
+    | some (.newtype nt) => nt.typeId?
+    | _ => none
+  match owner? with
+  | none => false
+  | some owner =>
+    let key : MethodKey := { owner, method }
+    ctx.globalScope.symbols.any fun (_, k) => match k with
+      | .implMethod _ _ _ (some k') => k' == key
+      | _ => false
+
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
 
@@ -494,7 +513,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   | .staticMethodCall sp typeName method typeArgs args =>
     let ctx := checkWrittenTys ctx typeArgs sp
     let mangledName := s!"{typeName}_{method}"
-    let ctx := if lookupName ctx mangledName then ctx
+    let ctx := if lookupName ctx mangledName || hasMethodByIdentity ctx typeName method then ctx
                else addError ctx (.unknownStaticMethod typeName method) (some sp)
     args.foldl resolveExpr ctx
   | .fnRef sp name =>
@@ -594,7 +613,7 @@ private def implSigsToSymbols (sigs : List (String × FnSummary)) : List (String
       | t :: _ => t
       | [] => mangledName
     (mangledName, SymKind.implMethod typeName
-      (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+      (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy fs.methodOf)
 
 /-- Register all top-level definitions from a FileSummary into a scope. -/
 private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String :=
@@ -917,6 +936,7 @@ private def importScope (summaryTable : List (String × FileSummary)) (imports :
       ++ ri.enums.map (fun ed => (ed.name, SymKind.enum ed))
       ++ ri.typeAliases.map (fun (n, ty) => (n, SymKind.typeAlias ty))
       ++ ri.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))
+      ++ ri.constants.map (fun c => (c.localName, SymKind.const c.ty))
       ++ implSigsToSymbols ri.implMethodSigs
     let tys := ri.structs.map (·.name) ++ ri.enums.map (·.name) ++ ri.typeAliases.map (·.1)
       ++ ri.newtypes.map (·.name)
@@ -1003,7 +1023,7 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
         -- Look up the full module summary to get type info for imported symbols
         let modSummary := summaryTable.find? fun (n, _) => n == imp.moduleName
         imp.symbols.foldl (fun (errs, syms, tys) sym =>
-          -- Bug 233: a public trait or constant is in `pubNames` but no import binds it; it was
+          -- Bug 233: a public trait is in `pubNames` but no import binds it; it was
           -- admitted here, bound nothing, and Check refused it as "not public".
           let unimportable := modSummary.bind fun (_, ms) => unimportableKind ms sym.name
           if pubNames.contains sym.name && unimportable.isNone then
@@ -1046,6 +1066,10 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
               match ms.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name with
               | some ta =>
                 (errs, (localName, SymKind.typeAlias ta.targetTy) :: syms, localName :: tys)
+              | none =>
+              -- R-0492 step 4 (bug 233): a public constant, as `resolveImports` binds it.
+              match ms.constants.find? fun c => c.isPublic && c.name == sym.name with
+              | some c => (errs, (localName, SymKind.const c.ty) :: syms, tys)
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
           else

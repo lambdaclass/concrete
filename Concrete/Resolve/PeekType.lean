@@ -41,6 +41,13 @@ structure PeekCtx (m : Type → Type) where
   constant : String → m (Option Ty)
   /-- A callable's signature as seen from a call site. -/
   fnSig : String → m (Option FnSummary)
+  /-- A method's signature, by the receiver type's spelling and the method's name: found by the
+      type's declaration identity where it has one (`methodByIdentity`, R-0492 step 3, bug 223),
+      otherwise by the mangled spelling. -/
+  method : (typeName methodName : String) → m (Option FnSummary)
+  /-- The declaration a type spelling denotes here (R-0492 step 3), for comparing type heads by
+      identity (`sameTypeName`). -/
+  typeIdOf : m (String → Option TypeId)
   /-- A callable's signature as seen from a function-reference expression. -/
   fnRefSig : String → m (Option FnSummary)
   /-- A method's signature by its definition name `Type_method`, from the method table alone
@@ -112,7 +119,8 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
             match fields.find? fun (fn, _) => fn == sf.name with
             | some (_, fe) =>
               let fty ← peekExprTypeIn ctx fe
-              for (k, v) in inferCapBindings sd.capParams (ctx.subst mapping sf.ty) fty do
+              for (k, v) in inferCapBindings sd.capParams (ctx.subst mapping sf.ty) fty
+                  (sameTypeName (← ctx.typeIdOf)) do
                 if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
             | none => pure ()
         return .generic name typeArgs (sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg)
@@ -189,10 +197,9 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | some sig => return (if sig.typeParams.isEmpty then sig.retTy else .placeholder)
       | none => return .placeholder
   | .staticMethodCall _ typeName methodName _ _ =>
-    let mangled := mangledMethodName typeName methodName
-    let sig? ← match ← ctx.methodSig mangled with
+    let sig? ← match ← ctx.method typeName methodName with
       | some sig => pure (some sig)
-      | none => ctx.fnSig mangled
+      | none => ctx.fnSig (mangledMethodName typeName methodName)
     match sig? with
     | some sig =>
       return (if sig.typeParams.isEmpty && sig.capParams.isEmpty then sig.retTy else .placeholder)
@@ -219,7 +226,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
     | _ =>
       let typeName := tyName innerTy
       if typeName == "" then return .placeholder
-      match ← ctx.methodSig (mangledMethodName typeName methodName) with
+      match ← ctx.method typeName methodName with
       | some sig =>
         let objTypeArgs := match innerTy with | .generic _ targs _ => targs | _ => []
         if sig.typeParams.length != objTypeArgs.length then return .placeholder
@@ -228,7 +235,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
           | some (_, .ref t) | some (_, .refMut t) => ctx.subst tyMap t
           | some (_, t) => ctx.subst tyMap t
           | none => .placeholder
-        let capBinds := inferCapBindings sig.capParams selfPat innerTy
+        let capBinds := inferCapBindings sig.capParams selfPat innerTy (sameTypeName (← ctx.typeIdOf))
         if !(sig.capParams.all fun c => capBinds.any (·.1 == c)) then return .placeholder
         return substCapNamesTy capBinds (ctx.subst tyMap sig.retTy)
       | none => return .placeholder

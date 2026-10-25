@@ -147,6 +147,9 @@ structure TypeEnv where
   -- state (reserved, reassigned) can hide the move. Transient, like rebindingVar.
   guardUids : List LocalId := []
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
+  -- R-0492 step 3: the same impls by the target's declaration identity, where it has one, so a
+  -- bound is satisfied for any spelling of the type (an import alias, bug 223).
+  traitImplIds : List (TypeId × String) := []
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
   newtypes : List NewtypeDef := []         -- all newtype definitions

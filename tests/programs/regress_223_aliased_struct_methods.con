@@ -1,9 +1,8 @@
-// Bug 223 (OPEN): an imported type under an alias is a different type. `Q` resolves to the
-// struct (bug 069) but has none of `P`'s methods (Resolve's E0106 `Q::mk`, since bug 217 walks
-// submodules; Check's E0264 behind it), and a `P` returned by the defining module is not a `Q`
-// (E0220). Without `as Q` the program returns 42. Owner: R-0492 / R-0514 (types compared and
-// looked up by declaration identity). Pinned by check_example_outputs.sh (open-bug reproducers,
-// compile-fails).
+// Bug 223 (FIXED, R-0492 step 3): an imported type under an alias was a different type. `Q`
+// resolved to the struct (bug 069) but had none of `P`'s methods (Resolve's E0106 `Q::mk`, Check's
+// E0264) and a `P` returned by the defining module was not a `Q` (E0220). Types are now compared,
+// and their methods looked up, by declaration identity (`TypeId`, `MethodKey`) in Resolve, Check
+// and Elab, so the alias names the same type. Returns 42, as it does without `as Q`.
 mod m {
     mod shapes {
         pub struct Copy P { pub v: i64 }

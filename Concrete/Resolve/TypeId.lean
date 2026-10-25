@@ -65,6 +65,16 @@ def ConstId.render (c : ConstId) : String :=
   "v1:const:" ++ "module" ++ toString c.defModule.length ++ ":" ++ c.defModule
     ++ "decl" ++ toString c.declName.length ++ ":" ++ c.declName
 
+/-- R-0492 step 4 (bug 233): the Core spelling of a reference to an IMPORTED constant: its defining
+    module path and its name joined by `::` (`cfg::BASE`, `m::a::X`). A module's own constants keep
+    their bare spelling. `::` is no identifier character, so no declaration or local of any module
+    can share this spelling, and Lower and the interpreter find the definition by it in the
+    program's table of constants (`ConstId.coreNameAt`), never in the importer's own tree. -/
+def ConstId.coreNameAt (defModule declName : String) : String :=
+  "::".intercalate (defModule.splitOn ".") ++ "::" ++ declName
+
+def ConstId.coreName (c : ConstId) : String := ConstId.coreNameAt c.defModule c.declName
+
 /-- A field is identified relative to the declaration that owns it. -/
 structure FieldId where
   owner : TypeId
@@ -99,5 +109,59 @@ def EnumDef.typeId? (ed : EnumDef) : Option TypeId :=
   | none =>
       if ed.definedIn.isEmpty || ed.definitionName.isEmpty then none
       else some (.user ed.definedIn ed.definitionName)
+
+/-- A newtype is imported under its own name, so its spelling is its definition name. -/
+def NewtypeDef.typeId? (nt : NewtypeDef) : Option TypeId :=
+  if nt.definedIn.isEmpty then none else some (.user nt.definedIn nt.name)
+
+/-- R-0492 step 3: the target of an impl block declared beside it (`targetDefinedIn`). -/
+def ImplBlock.targetTypeId? (ib : ImplBlock) : Option TypeId :=
+  if ib.targetDefinedIn.isEmpty then none else some (.user ib.targetDefinedIn ib.typeName)
+
+def ImplTraitBlock.targetTypeId? (tb : ImplTraitBlock) : Option TypeId :=
+  if tb.targetDefinedIn.isEmpty then none else some (.user tb.targetDefinedIn tb.typeName)
+
+/-- R-0492 step 3: the declaration a module's spelling `name` denotes, among the struct, enum and
+    newtype tables of that module's environment (Check's and Elab's: an import binds its local
+    spelling to the imported declaration, bug 069). `none` for a spelling that names no
+    declaration with an identity: a builtin type, a type variable, an alias (expanded first). -/
+def typeIdOfSpelling (structs : List StructDef) (enums : List EnumDef)
+    (newtypes : List NewtypeDef) (name : String) : Option TypeId :=
+  match structs.find? (·.name == name) with
+  | some sd => sd.typeId?
+  | none =>
+    match enums.find? (·.name == name) with
+    | some ed => ed.typeId?
+    | none => (newtypes.find? (·.name == name)).bind (·.typeId?)
+
+/-- R-0492 step 3: the method `method` of the type declaration `owner`, the key a method table
+    is searched by. An import alias of the type does not change it (bug 223). -/
+structure MethodKey where
+  owner  : TypeId
+  method : String
+deriving BEq, Repr
+
+/-- R-0492 step 3: two type spellings name one type when they are one spelling or denote one
+    declaration (`idOf`, the comparing module's environment). -/
+def sameTypeName (idOf : String → Option TypeId) (a b : String) : Bool :=
+  a == b || (match idOf a, idOf b with
+    | some x, some y => x == y
+    | _, _ => false)
+
+/-- R-0492 step 3: type equality by declaration identity. The two types agree in shape, and each
+    named head pair names one declaration (`sameTypeName`), so `import m.{P as Q}` makes `Q` and
+    the `P` of `m`'s signatures one type (bug 223). Every other position compares as `==`. -/
+partial def Ty.sameByIdentity (idOf : String → Option TypeId) : Ty → Ty → Bool
+  | .named a, .named b => sameTypeName idOf a b
+  | .generic a as cs, .generic b bs ds =>
+    sameTypeName idOf a b && cs == ds && as.length == bs.length
+      && (as.zip bs).all fun (x, y) => Ty.sameByIdentity idOf x y
+  | .ref a, .ref b | .refMut a, .refMut b | .ptrMut a, .ptrMut b | .ptrConst a, .ptrConst b
+  | .heap a, .heap b | .heapArray a, .heapArray b => Ty.sameByIdentity idOf a b
+  | .array a n, .array b k => n == k && Ty.sameByIdentity idOf a b
+  | .fn_ ps c r, .fn_ qs d t =>
+    c == d && ps.length == qs.length
+      && (ps.zip qs).all (fun (x, y) => Ty.sameByIdentity idOf x y) && Ty.sameByIdentity idOf r t
+  | a, b => a == b
 
 end Concrete

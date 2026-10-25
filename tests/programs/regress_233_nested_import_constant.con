@@ -1,6 +1,5 @@
-// Bug 233: a nested submodule's import is checked by Check (Resolve leaves a submodule whose imports
-// do not resolve to it), which refused a public constant as "not public". Now refused with the
-// reason (E0323).
+// Bug 233 (FIXED, R-0492 step 4): the constant import in a nested submodule, whose imports Check
+// validates (E0323 while contained). Returns 42.
 mod m {
     mod a { pub const X: i32 = 42; }
     mod b {

@@ -6307,7 +6307,7 @@ def diagnosticCodesReport : String :=
     entry "E0123" "resolve" "error" "a module file loaded twice (a `mod` cycle or two declarations; bug 206)",
     entry "E0124" "resolve" "error" "a module file holds other than one module (bug 206)",
     entry "E0125" "resolve" "error" "unknown trait in a bound (bug 231)",
-    entry "E0126" "resolve" "error" "import of a public trait or constant, which no import binds (bug 233)",
+    entry "E0126" "resolve" "error" "import of a public trait, which no import binds (traits are module-local; bug 233)",
     -- Check: name/variable/linearity (E0200–E0219)
     entry "E0200" "check" "error" "Self outside impl block",
     entry "E0201" "check" "error" "undeclared variable",
@@ -6395,7 +6395,7 @@ def diagnosticCodesReport : String :=
     entry "E0283" "check" "error" "reserved identifier",
     entry "E0284" "check" "error" "unknown module",
     entry "E0285" "check" "error" "symbol not public in module",
-    entry "E0323" "check" "error" "import of a public trait or constant, which no import binds (bug 233)",
+    entry "E0323" "check" "error" "import of a public trait, which no import binds (traits are module-local; bug 233)",
     -- Check: discard/linearity one-law (E0286–E0289, Phase 6 #13 + H6)
     entry "E0286" "check" "error" "fallible result discarded (must use)",
     entry "E0287" "check" "error" "non-Copy value discarded without consumption",
@@ -6457,7 +6457,7 @@ def diagnosticCodesReport : String :=
     entry "E0417" "elab" "error" "submodule elaboration error",
     entry "E0418" "elab" "error" "unknown module",
     entry "E0419" "elab" "error" "symbol not public in module",
-    entry "E0423" "elab" "error" "import of a public trait or constant, which no import binds (bug 233)",
+    entry "E0423" "elab" "error" "import of a public trait, which no import binds (traits are module-local; bug 233)",
     entry "E0421" "check" "error" "append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)",
     entry "E0420" "elab" "error" "ghost value used in runtime code",
     entry "E0422" "elab" "error" "internal: a binding-identity invariant failed at elaboration: a binder or function reached elaboration without its local binder table, or ElabVerify found Core whose binding identities and names disagree (R-0492 steps 2 and 3)",

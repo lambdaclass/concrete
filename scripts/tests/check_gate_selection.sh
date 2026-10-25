@@ -108,6 +108,18 @@ if select_fixture docs "$FIX/docs_only_92861f4e.paths"; then
   if [ -z "$heavy" ]; then ok "the docs-only diff selects no corpus runner"
   else no "the docs-only diff selects a corpus runner: $heavy"; fi
   sed 's/^/         /' "$TMPD/docs.sel"
+  # Bug 252: a docs-only diff can break a link or an anchor, and the link gate used to be selected
+  # by nothing at all.
+  must docs check_doc_links.sh
+fi
+# A Markdown file no gate names (a research note): the link gate is still selected, and selecting it
+# maps no file, so the fail-safe below is untouched. Assembled at run time, like the unmapped path.
+printf '%s/%s\n' research README.md > "$TMPD/research.paths"
+if select_fixture research "$TMPD/research.paths"; then
+  must research check_doc_links.sh
+  n="$(count research)"
+  if [ "$n" -le 3 ]; then ok "a research-note diff selects $n gate command(s)"
+  else no "a research-note diff selects $n gate commands (> 3)"; fi
 fi
 
 echo "=== rules: compiler, shared library, fail-safe ==="

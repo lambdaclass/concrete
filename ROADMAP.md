@@ -100,21 +100,21 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 215 bug records.
+**Open bugs: 13** (1 silent, 6 loud, 6 filed before the discovery record) of 221 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 223 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 7 | 1 | 054, 077, 114, 122, 242, 243, 245 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
-| 12. One fact kept in two places | 3 | 0 | 064, 226, 233 |
+| 12. One fact kept in two places | 2 | 0 | 064, 226 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 10 | 0 | 027, 049, 054, 058, 064, 077, 216, 223, 226, 233 |
+| no exit names it | 11 | 0 | 027, 049, 054, 058, 064, 077, 216, 226, 242, 243, 245 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
@@ -125,7 +125,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | workload: Phase 7 workload 10 stackvm (assembler, bytecode codec and load-time verifier, interpreter and disassembler over a 23-variant enum, a generic bounded stack, two traits and defer cleanup) with a differential gate against an independent Python implementation, and 25 probe programs on its shapes (imported enums with impls and trait bounds through each import path, import aliases, linear values in loops, Destroy impls, temporaries as receivers, borrow conflicts, diagnostics) | 2026-10-23 | 26 programs | 5 | 0 | 5 | found bugs |
 | hunt: differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp | 2026-10-24 | 60 programs | 5 | 0 | 5 | found bugs |
 
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 41 attribution-only batches (reviews, follow-ons, CI, controls, development) found 59 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 45 attribution-only batches (reviews, follow-ons, CI, controls, development) found 65 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -3284,8 +3284,12 @@ skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `Fi
 **Slice 6 (2026-10-25, branch `wip/r0492-decl-identity`):** declaration identity for module-level
 types and constants, design in [DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md).
 Steps 1 – 2 landed: one type environment per module in Resolve (bug 230 fixed) and Core spells a
-user `Result` apart from the builtin (bug 227 fixed). Steps 3 (`TypeId` in Check, bug 223) and 4
-(`ConstId` through imports, bug 233) remain.
+user `Result` apart from the builtin (bug 227 fixed). Step 3 landed on `wip/r0492-steps34`: types
+are compared, and methods and trait impls looked up, by `TypeId` in Resolve, Check and Elab (bug
+223 fixed; the inherited aliased-imported-method obligation is met by its fixtures). Step 4 landed
+there too: a public constant is imported by its `ConstId`, referenced in Core by its defining module
+(`cfg::BASE`) and inlined by Lower and the interpreter in that module's scope (bug 233 fixed). The
+probes filed bugs 242 (imported signature types read by spelling) and 243 (aliased newtype import).
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration
@@ -13566,26 +13570,31 @@ positive control where a `Writer<{}>` helper may use no external authority.
 
 ---
 
-## Later Considerations: Bend And Roc
+## Open Research Questions: Bend And Roc
 
-**Research only, recorded 2026-10-24. Not an execution queue, adopted design,
-release requirement, or extension of any task's acceptance criteria.**
+These questions remain undecided. They are not planned features, implementation
+tasks, priorities, release requirements, or changes to the current execution queue.
+The [research record](research/meta/bend-roc-lessons.md) contains the reviewed
+sources, video discussion, evidence limits, and full consideration register.
 
-The [Bend/Roc research record](research/meta/bend-roc-lessons.md) preserves the
-full comparison, including the requested Roc video's timestamped discussion and
-links to source code, papers, benchmarks, articles, and Concrete's governing
-design documents. Its [27-item consideration register](research/meta/bend-roc-lessons.md#11-complete-consideration-register)
-covers proof/agent ergonomics, specification-preserving repair, checking-cost
-measurement, independent evidence accounting, transitive dependency and build-time
-authority, explicit buffer reuse, compiler optimization/validation, and bounded
-GPU research. Upstream measurements are reported, not independently reproduced.
+- Could a required-claim inventory and fixed-specification repair workflow improve
+  verification without duplicating Concrete's existing evidence machinery?
+- Which compiler, elaboration, and proof-replay phases actually dominate feedback
+  time, and could smaller explicit obligations or reusable lemmas reduce that cost?
+- What additional restrictions, if any, would make transitive native trust and
+  dependency build-time authority clearer and enforceable?
+- Where would explicit consuming or mutating collection APIs reduce allocation
+  and copying while preserving ownership, scoped references, and cleanup semantics?
+- Which representation, callback-specialization, check-hoisting, or cache changes
+  would measured workloads justify, and how would their correctness be established?
+- Could fixed-specification, proof-preserving optimization improve an existing
+  workload when runtime, memory, and independent conformance are measured together?
+- Is there a real workload that justifies a restricted GPU experiment with explicit
+  buffers, transfers, synchronization, device eligibility, and failure behavior?
+- What evidence would justify adopting any of these ideas under Concrete's
+  [design policy](docs/project/DESIGN_POLICY.md),
+  [value model](docs/language/VALUE_MODEL.md), and
+  [evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md)?
 
-These are ideas to consider later under the existing
-[design policy](docs/project/DESIGN_POLICY.md),
-[value model](docs/language/VALUE_MODEL.md),
-[anti-features](docs/language/ANTI_FEATURES.md), and
-[evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md). No hidden
-runtime, implicit reference counting/copy-on-write, automatic GPU offload, new
-proof kernel, or compiler rewrite is authorized. A future adoption needs a real
-workload, a bounded investigation, and an explicit decision through the existing
-owner; the [current execution queue](#the-current-execution-queue) is unchanged.
+No adoption decision follows from listing these questions. The owner is still
+deciding; the [current execution queue](#the-current-execution-queue) is unchanged.

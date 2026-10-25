@@ -135,6 +135,12 @@ definition name, as a call and a value, beside a child's free function of that n
 cross-module rename must leave it alone; a regression Codex found in the first version of this
 fix), each `run_ok … 42` with `--interp` = 42.
 
+Merged with R-0492 step 3 (bug 223, main `1b69ed0e`): Check and Elab find a method by its type's
+declaration identity (`methodByIdentity`) and otherwise by its spelling in the method table alone.
+Step 3 had contained the capture by refusing a method whose Core name a free function takes
+(E0299, `error_223_method_core_name_taken.con`); with the method namespace in Core that refusal
+is lifted and the fixture is `regress_223_method_core_name_taken.con` (42).
+
 ## Structural cause
 
 Class 1 ("declaration identity by spelled name, not a resolved `DefId`"): free functions and impl

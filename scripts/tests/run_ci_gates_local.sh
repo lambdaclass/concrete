@@ -51,6 +51,40 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"
 
+# A RUN IS ONE PROCESS GROUP, AND THE GROUP IS WHAT A SIGNAL KILLS (bug 244).
+#
+# Killing this runner used to kill this runner: its backgrounded gates, the compilers they started and
+# the mutation harnesses copying the tree were reparented to init and kept working, and the repository
+# lock then refused every later run — correctly, since a dead creator proves nothing about its
+# children — until a human deleted it. So a real run re-executes itself under
+# scripts/tests/lib/gate_session.py, which makes it the whole of a new session's process group: a
+# SIGINT, SIGTERM or SIGHUP to the pid the caller started terminates every descendant, the launcher
+# sweeps the group until the kernel reports it empty, and the lock (which records the group) is
+# reclaimed on exactly that proof. --plan runs nothing and takes no lock, so it needs no session.
+#
+# NEVER A SECOND SESSION. A runner started inside a gate session (a gate exercising this runner) stays
+# in the enclosing group, or the outer run's sweep could no longer reach it. Without python3 there is
+# no session and a killed run needs the manual recovery it always did; that is said, not hidden.
+if [ -z "${CONCRETE_GATE_SESSION:-}" ]; then
+  _ci_plan_only=0
+  for _a in "$@"; do [ "$_a" = "--plan" ] && _ci_plan_only=1; done
+  if [ "$_ci_plan_only" = "0" ]; then
+    if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT_DIR/scripts/tests/lib/gate_session.py" ]; then
+      exec python3 "$ROOT_DIR/scripts/tests/lib/gate_session.py" -- \
+        bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" "$@"
+    fi
+    echo "warning: no python3 or gate_session.py — running without a gate session; a killed run" >&2
+    echo "         will leave its children running and the lock held until recovered by hand." >&2
+  fi
+fi
+# THIS RUNNER OWNS THE SESSION when the session's leader is its parent and it is in that group. Only
+# the owner signals the group: a nested runner that did would kill the run enclosing it.
+CI_SESSION_OWNER=0
+if [ -n "${CONCRETE_GATE_SESSION:-}" ] && [ "${CONCRETE_GATE_SESSION}" = "$PPID" ] \
+   && [ "$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')" = "$CONCRETE_GATE_SESSION" ]; then
+  CI_SESSION_OWNER=1
+fi
+
 # GATES RUN IN A CLEAN GIT ENVIRONMENT. Git exports GIT_DIR (and friends) into hooks, so a
 # gate run from pre-push inherited them, and every `git -C <other repo>` inside a gate read
 # THIS repository instead: check_external_checker.sh compared lean4export's pinned SHA with
@@ -213,7 +247,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   consumers, the gate its eighteen mutation families name). 268 + 0 + 1 + 1 = 270.
 # 270 -> 271: check_lzpack_differential.sh (Phase 7 workload 9, wip/workload-lzpack).
 # 271 -> 272: check_stackvm_differential.sh (Phase 7 workload 10, wip/workload-stackvm-2).
-EXPECTED_GATE_COMMANDS=272
+# 272 -> 273: check_doc_links.sh (bug 252, wip/doc-links-gate: the Markdown-link check, a Makefile
+#   target until then, becomes a workflow step).
+EXPECTED_GATE_COMMANDS=273
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of
@@ -411,6 +447,13 @@ source "$ROOT_DIR/scripts/tests/lib/fresh.sh" 2>/dev/null \
   || _ci_fresh_fail "could not load scripts/tests/lib/fresh.sh — refusing to run unlocked."
 command -v _gate_lock_acquire >/dev/null 2>&1 \
   || _ci_fresh_fail "fresh.sh loaded but _gate_lock_acquire is missing."
+# INSIDE A GATE SESSION THIS RUNNER NEVER RELEASES THE LOCK, on any path (bug 244). Every exit — a
+# refusal after a failed build as much as the end of a pass — may leave a process behind that is
+# still working the tree, and the lock is what keeps the next run off it. The session launcher sweeps
+# the group and then reclaims the lock on the kernel's word that the group is empty.
+if [ "$CI_SESSION_OWNER" = "1" ]; then
+  _gate_lock_release() { return 0; }
+fi
 
 # INVALIDATE THE COMPLETION ARTIFACT BEFORE ANYTHING CAN FAIL.
 #
@@ -646,7 +689,16 @@ START_MUT="$(snapshot_muttargets)"
 # fire on EVERY run instead, so the flag now means only what its name says: a signal arrived.
 RUN_INTERRUPTED=0
 REACHED_END=0
-trap 'RUN_INTERRUPTED=1' INT TERM HUP
+# AN INTERRUPTION STOPS THE WHOLE RUN, not just this shell (bug 244). The session owner signals its
+# group, so a signal sent to this process alone still reaches every gate; the guard keeps the signal
+# it sends itself from re-entering. Nothing new launches once the flag is set (see the loops below).
+_ci_on_signal() {
+  [ "$RUN_INTERRUPTED" = "1" ] && return 0
+  RUN_INTERRUPTED=1
+  [ "$CI_SESSION_OWNER" = "1" ] && kill -TERM -- "-$CONCRETE_GATE_SESSION" 2>/dev/null
+  return 0
+}
+trap '_ci_on_signal' INT TERM HUP
 
 # HOST TOOLS. A workflow command can need a tool only the CI image has (the Examples job runs
 # check_example_outputs.sh under EXAMPLE_VALGRIND=1, and macOS has no valgrind). The gate refuses to
@@ -709,7 +761,20 @@ run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
   local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}" _tmp
   _tmp="$GATE_OUT_TMP/seq.$RANDOM$RANDOM.log"
   _t0="$(_now)"
-  if eval "$1" >"$_tmp" 2>&1; then
+  # BACKGROUNDED AND WAITED FOR, so a signal is acted on now: bash defers a trap until a
+  # foreground command returns, and a gate can run for many minutes. After an interruption the gate is
+  # not waited for — it may ignore SIGTERM, and the session launcher escalates — and it counts as FAIL.
+  local _p _rc
+  if [ "$RUN_INTERRUPTED" = "1" ]; then
+    _timing_row "$_t0" "$(_now)" "$_st" FAIL "$1"
+    FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1 (not run: the run was interrupted)"; return 1
+  fi
+  eval "$1" >"$_tmp" 2>&1 &
+  _p=$!
+  wait "$_p"; _rc=$?
+  while [ "$RUN_INTERRUPTED" != "1" ] && kill -0 "$_p" 2>/dev/null; do wait "$_p"; _rc=$?; done
+  [ "$RUN_INTERRUPTED" = "1" ] && _rc=1
+  if [ "$_rc" = "0" ]; then
     PASS=$((PASS+1)); rm -f "$_tmp"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
   fi
   mv -f "$_tmp" "$_out" 2>/dev/null || cp -f "$_tmp" "$_out" 2>/dev/null
@@ -723,6 +788,7 @@ run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
 # and folding it into one pool must not turn that into a failure reported after minutes of other gates.
 STOPPED_EARLY=0
 for (( _i=0; _i<RUN_FIRST_N; _i++ )); do
+  [ "$RUN_INTERRUPTED" = "1" ] && { STOPPED_EARLY=1; break; }
   run_seq "${RUN_LIST[$_i]}" first || { STOPPED_EARLY=1; break; }
 done
 REST=("${RUN_LIST[@]:$RUN_FIRST_N}")
@@ -753,6 +819,7 @@ fi
 
 if [ "$JOBS" -le 1 ]; then
   for cmd in "${REST[@]}"; do
+    [ "$RUN_INTERRUPTED" = "1" ] && break
     run_seq "$cmd" || true
   done
 else
@@ -761,7 +828,8 @@ else
   idx=0
   for cmd in "${REST[@]}"; do
     # throttle to JOBS concurrent
-    while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
+    while [ "$RUN_INTERRUPTED" != "1" ] && [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
+    [ "$RUN_INTERRUPTED" = "1" ] && break
     idx=$((idx+1))
     # The pool's own output is kept on failure too (<name>.pool.log): a gate that fails only under
     # load is a defect in the gate, and the sequential recheck's output cannot show why it failed.
@@ -821,6 +889,59 @@ fi
 # and a gate can run for minutes, so a signal arriving mid-gate was routinely forgotten.
 REACHED_END=1
 
+# NOTHING THE GATES STARTED MAY OUTLIVE THEM UNACCOUNTED (bug 244). Inside a gate session every
+# process this pass started is a member of the session's group — except a campaign group registered
+# in the lock, which is swept too. Anything still alive here was left behind by a gate (or, after an
+# interruption, has not stopped yet): it is terminated (SIGTERM, the grace period, SIGKILL) BEFORE the
+# tree is reconciled, the summary written and the heavy slot released, and it blocks completion,
+# because a process still working the tree after its gate "passed" makes the verdict describe a tree
+# that kept changing. Listing excludes this shell, the session leader and the `ps` doing the listing;
+# zombies are not processes.
+_ci_session_members() { # file -> member pids, one per line; nonzero when ps could not answer
+  ps -A -o pid=,ppid=,pgid=,stat=,comm= > "$1.ps" 2>/dev/null || return 1
+  awk -v g="$CONCRETE_GATE_SESSION" -v me="$$" '
+    $3 == g && $1 != me && $1 != g && $4 !~ /^Z/ && !($2 == me && $5 ~ /(^|\/)ps$/) { print $1 }
+  ' "$1.ps" > "$1"
+  local d="${CONCRETE_GATE_LOCK#*:}" e
+  [ -d "$d/groups" ] || return 0
+  for e in "$d"/groups/*; do
+    case "${e##*/}" in ''|*[!0-9]*) continue ;; esac
+    kill -0 -- "-${e##*/}" 2>/dev/null && echo "-${e##*/}" >> "$1"
+  done
+  return 0
+}
+CI_SURVIVORS=0
+if [ "$CI_SESSION_OWNER" = "1" ]; then
+  _sw="$GATE_OUT_TMP/session.members"
+  if ! _ci_session_members "$_sw"; then
+    CI_SURVIVORS="unknown"; CI_KEEP_HEAVY_SLOT=1
+  elif [ -s "$_sw" ]; then
+    CI_SURVIVORS="$(grep -c . "$_sw")"
+    _grace="${CONCRETE_GATE_SESSION_GRACE:-10}"; _grace="${_grace%.*}"; [ -n "$_grace" ] || _grace=10
+    # EVERY POLL RE-LISTS AND RE-SIGNALS: a member that forked after the previous signal is sent one
+    # too. SIGTERM for the grace period, then SIGKILL for 5 s; emptiness must be CONFIRMED before the
+    # summary and the heavy slot are handed on.
+    _empty=0
+    for _phase in "TERM:$((_grace*5))" "KILL:25"; do
+      _psig="${_phase%%:*}"; _pn="${_phase#*:}"
+      for (( _i=0; _i<_pn; _i++ )); do
+        # shellcheck disable=SC2046
+        [ -s "$_sw" ] && kill -"$_psig" -- $(cat "$_sw") 2>/dev/null
+        sleep 0.2
+        if _ci_session_members "$_sw" && [ ! -s "$_sw" ]; then _empty=1; break 2; fi
+      done
+    done
+    if [ "$_empty" != "1" ]; then
+      CI_SURVIVORS="${CI_SURVIVORS}_unterminated"
+      CI_KEEP_HEAVY_SLOT=1
+      echo "  WARNING processes of this run are STILL ALIVE after SIGKILL: $(tr '\n' ' ' < "$_sw")" >&2
+      echo "          the lock stays held until they are gone, and this run does not release its heavy slot" >&2
+    fi
+    [ "$RUN_INTERRUPTED" = "1" ] \
+      || echo "  WARNING $CI_SURVIVORS process(es) outlived their gates and were terminated; this run cannot be a closure run" >&2
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # COMPLETION INTEGRITY. Each dimension that moved is NAMED, so a suppressed completion says which
 # thing changed rather than only that something did.
@@ -832,6 +953,10 @@ REFUSALS=""
 # exactly why closure mode forces JOBS=1.
 MODE_NOTES=""
 [ "$JOBS" = "1" ] || MODE_NOTES=" jobs_not_serial(jobs=$JOBS)"
+# Survivors (bug 244; swept above) block completed=1 in every mode: the tree may have changed after
+# the gate that left them reported. They are a completion fact, not a gate failure: the gates' own
+# verdicts stand, and the warning above names how many there were.
+[ "$CI_SURVIVORS" = "0" ] || MODE_NOTES="$MODE_NOTES processes_outlived_gates($CI_SURVIVORS)"
 # The in-band marker must REFUSE, not be compared: two identical markers satisfy equality exactly
 # like two identical digests. The campaign rejected it and this producer did not.
 case "$START_HEAD$START_TRACKED$START_UNTRACKED" in
@@ -995,16 +1120,23 @@ fi
 # NOT RELEASED AFTER AN INTERRUPTION. Gates run as backgrounded children; a TERM delivered only to
 # this runner sets the flag and `wait` returns early, so releasing here would hand the repository to a
 # new run while those children were still building — exactly the child-liveness risk `fresh.sh`
-# refuses to take when reclaiming a lock. Fail closed: keep the lock and tell the operator how to
-# recover once they have confirmed nothing is running.
+# refuses to take when reclaiming a lock. Fail closed: keep the lock. Inside a gate session the lock
+# records the session's group, and the launcher reclaims it once the kernel reports that group empty
+# (bug 244); outside one, only the operator can.
 if [ "${RUN_INTERRUPTED:-0}" = "1" ]; then
   echo "" >&2
   echo "INTERRUPTED: keeping the repository lock, because gate children may still be running." >&2
-  echo "  Verify nothing is working the tree, then: rm -rf $ROOT_DIR/.gate.lock" >&2
+  if [ "$CI_SESSION_OWNER" = "1" ]; then
+    echo "  It is reclaimed automatically once no process of gate session $CONCRETE_GATE_SESSION remains." >&2
+  else
+    echo "  Verify nothing is working the tree, then: rm -rf $ROOT_DIR/.gate.lock" >&2
+  fi
 else
+  # A no-op inside a gate session (see where fresh.sh is loaded): the launcher reclaims after its sweep.
   _gate_lock_release
 fi
-[ "$HEAVY_RUN" = "1" ] && heavy_slot_release
+# Not while processes of this run are still alive (bug 244): the slot is reclaimed from a dead holder.
+[ "$HEAVY_RUN" = "1" ] && [ "${CI_KEEP_HEAVY_SLOT:-0}" != "1" ] && heavy_slot_release
 [ "${_CI_RUNNER_TEMP_OWNED:-0}" = "1" ] && rm -rf "$RUNNER_TEMP"
 rm -rf "${GATE_OUT_TMP:-}"
 

@@ -1,0 +1,12 @@
+// Bug 223 (R-0492 step 3, Codex review): a method is found by its type's identity but called in
+// Core by its mangled name; a free function `P_mk` of that name here would have received the call,
+// so this was refused (E0299). Since bugs 238 – 239 a method call carries the method namespace in
+// Core and is resolved among methods only, and the free function is respelled apart: the method
+// runs. Expected: 42, natively and --interp.
+mod a {
+    pub struct Copy P {}
+    impl P { pub fn mk() -> i64 { return 42; } }
+}
+import a.{P};
+fn P_mk() -> bool { return true; }
+fn main() -> Int { return P::mk(); }
