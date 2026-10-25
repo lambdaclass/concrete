@@ -1,0 +1,14 @@
+// Bug 233 (R-0492 step 4, Codex review): an imported constant's type is expanded through the
+// defining module's aliases (a chain, inside an array) before it crosses: the importer's own
+// `type N = i64` does not reinterpret it. Returns 42.
+mod cfg {
+    type M = i32;
+    type N = M;
+    pub const A: [N; 2] = [40, 2];
+}
+import cfg.{A};
+type N = i64;
+fn main() -> Int {
+    let x: i32 = A[0] + A[1];
+    return x as Int;
+}

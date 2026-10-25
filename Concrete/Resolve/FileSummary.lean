@@ -452,8 +452,11 @@ def resolveImports (imports : List ImportDecl)
                   -- so `pub fn F` beside `pub const F` stays the function's import (MOD-3).
                   match summary.constants.find? fun c => c.isPublic && c.name == origName with
                   | some c =>
+                    -- Its type with the defining module's aliases expanded throughout (chains,
+                    -- array elements): the importer cannot read the definer's alias names.
                     .ok { acc with constants := acc.constants ++
-                      [{ localName, id := c.constId, ty := resolveAliasesInTy aliasMap c.ty }] }
+                      [{ localName, id := c.constId,
+                         ty := expandAliasDeep aliasMap (aliasMap.length + 64) c.ty }] }
                   | none =>
                   match unimportableKind summary origName with
                   | some kind => .error [{ severity := .error, message := unimportableMsg kind origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := unimportableCode pass }]

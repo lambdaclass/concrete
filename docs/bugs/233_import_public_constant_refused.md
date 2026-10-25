@@ -58,7 +58,8 @@ immutable and inlined at each use):
 
 - `buildFileSummary` stamps each constant's defining module (`ConstSummary.definedIn`, with its
   name the `ConstId`). The import rule Check and Elab share (`FileSummary.resolveImports`) binds a
-  public constant under the importer's spelling as an `ImportedConst` (local name, `ConstId`, type),
+  public constant under the importer's spelling as an `ImportedConst` (local name, `ConstId`, and
+  its type with the defining module's aliases expanded throughout),
   only when the name binds no callable or type, so `pub fn F` beside `pub const F` is still the
   function's import (MOD-3; `regress_233_shared_spelling_import.con`). Resolve binds it in both of
   its import paths (`summaryImports`, `importScope`). Only a public trait is still unimportable
@@ -70,14 +71,17 @@ immutable and inlined at each use):
   with evidence naming the defining module.
 - Lower and the interpreter look that spelling up in a program-wide table
   (`importedConstantsOf`, `collectImportedConsts`) and inline the initializer with the DEFINING
-  tree's constants in scope, so a private constant it names is the defining module's. Bug 132's
+  tree's constants in scope, so a private constant it names is the defining module's; a function
+  the initializer calls runs with its own module's constants, as Lower lowers it (the interpreter
+  restores them at function entry, `outerConsts`). Bug 132's
   refusal of two same-spelled constants stays for bare spellings within one tree; an imported
   constant is never one.
 
 Regression legs in `run_tests.sh`: `regress_233_import_constant.con`,
 `regress_233_nested_import_constant.con`, `regress_233_import_constant_scope.con` (an initializer
 reading the defining module's private constant; two modules' `BASE`, one aliased; an array
-constant) and `regress_233_nested_alias_constant.con`, each `run_ok … 42` and `--interp` = 42;
+constant), `regress_233_nested_alias_constant.con`, `regress_233_initializer_calls_function.con`
+and `regress_233_constant_type_alias.con`, each `run_ok … 42` and `--interp` = 42;
 `error_233_import_constant_collides_local.con` (E0299); `error_233_import_trait.con` (E0126); and
 the project `tests/regressions/bug233_import_public_constant_refused/project`, which now builds and
 exits 42.
