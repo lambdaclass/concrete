@@ -14,6 +14,8 @@ with `--emit-core`, while `--emit-ast` took 0.01 s.
 **Severity:** loud (performance). Every array literal cost the square of its length in Elab, for
 the binary, `--interp` and every report alike.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP exit 2o requires near-linear stage scaling; Elab’s repeated list append was quadratic. Its custom bounded gate is valid, despite lacking plain run_ok registration.
+
 ## Reproducer
 
 `tests/programs/regress_236_array_repeat_literal.con`: `[7; 200000]`. On main `--emit-core` did

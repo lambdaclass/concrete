@@ -16,6 +16,8 @@ an import is refused depends on where the importing module sits: the same import
 top-level module and accepted from a submodule (a module written after `main`, any `mod x;` file of
 a project, every std module).
 
+Codex review 2026-10-25: NOT CONFIRMED — pending owner decision OD20/exit 2n: private imports are accepted contrary to MOD-2, but ROADMAP explicitly leaves this bug awaiting the std.libc visibility decision.
+
 ## Reproducer
 
 `tests/regressions/bug226_submodule_imports_private_function/repro.con`:

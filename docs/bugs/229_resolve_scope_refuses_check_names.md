@@ -13,6 +13,8 @@ submodules carried three Resolve scope rules into them, and each also refuses to
 on main.
 **Severity:** valid programs refused at Resolve; no wrong code.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/scope.md SCOPE-2 distinguishes type and value namespaces; Resolve let a function hide an enum. The bundled child-newtype visibility change remains contingent on OD21.
+
 ## Reproducer
 
 Each fixture holds a top-level and a nested shape; on main `408880cb` each is refused at Resolve,

@@ -15,6 +15,8 @@ module's trait was refused only at the method call (E0265, "no method 'add' for 
 **Severity:** invalid programs accepted (MOD-1); no wrong code. The bound is decorative where it
 is accepted: nothing can be called through it.
 
+Confirmed real by Codex review, 2026-10-25: Unresolved bound names escaped Resolve, violating docs/spec/modules.md MOD-1 even for wholly nonexistent traits; silently discarded bounds also lost written constraints.
+
 ## Reproducer
 
 - `tests/programs/error_231_unknown_bound_trait.con`: `struct Holder<T: NoSuchTrait>` and

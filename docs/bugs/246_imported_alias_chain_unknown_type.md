@@ -12,6 +12,8 @@ silent: no
 imported constant's type through an alias its module imports.
 **Severity:** loud. A valid program is refused.
 
+Confirmed real by Codex review, 2026-10-25: TYPE-12 (docs/spec/types.md): an imported transparent alias retained its private target’s spelling instead of resolving transitively to the underlying type.
+
 ## Reproducer
 
 `tests/programs/regress_246_imported_alias_chain.con`: `mod types { type M = i32; pub type N = M; }`,

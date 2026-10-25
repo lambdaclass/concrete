@@ -16,6 +16,8 @@ finding.
 direct newtype construction and private fields are the defining module's) is accepted; both
 backends then run it.
 
+Confirmed real by Codex review, 2026-10-25: TYPE-11 (docs/spec/types.md): a same-named child declaration granted access to an unrelated imported type’s private representation; OD21 cannot authorize that.
+
 ## Reproducer
 
 `tests/programs/error_253_child_newtype_decoy.con`: `mod m { pub newtype N = i64; }` and a module

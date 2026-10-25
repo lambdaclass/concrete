@@ -13,6 +13,8 @@ silent: no
 **Severity:** a valid program is refused, at a stage that depends on where the modules sit. No
 wrong code: every failure is a refusal or a lowering error.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-1 requires the visible declaration; program-wide spelling lookup substituted another module’s Result for the builtin, rejecting valid code.
+
 ## Reproducer
 
 `tests/programs/regress_227_nested_builtin_result.con` (the former

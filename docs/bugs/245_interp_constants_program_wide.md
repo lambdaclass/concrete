@@ -12,6 +12,8 @@ silent: no
 whose initializer calls another module's function read that module's constant.
 **Severity:** loud. `--interp` refuses a program the native binary runs; no wrong value.
 
+Confirmed real by Codex review, 2026-10-25: MOD-1/MOD-3 (docs/spec/modules.md): interpreter lookup conflated separate modules’ private constants, falsely rejecting valid module-local references.
+
 ## Reproducer
 
 `tests/programs/regress_245_toplevel_private_constants.con` (the former
