@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.IR.SSA
 import Concrete.Check.Layout
@@ -31,6 +32,132 @@ private def enumerate {α : Type} (l : List α) : List (Nat × α) :=
   go 0 l
 
 -- ============================================================
+-- The variable table
+-- ============================================================
+
+/-- A set of binding identities. -/
+abbrev LocalKeySet := Std.TreeMap LocalKey Unit LocalKey.cmp
+
+private def SVal.isReg : SVal → Bool
+  | .reg .. => true
+  | _ => false
+
+/-- One binding of the variable table: its value, the table position it was first bound at
+    (the order the table lists bindings in) and the tick of its latest write. -/
+structure VarEntry where
+  pos : Nat
+  tick : Nat
+  val : SVal
+
+/-- The variable table: each live binding's current SSA value, listed in the order the bindings
+    were first bound.
+
+    Bug 262: this was an association list, searched by `lookupVar` and searched and rebuilt or
+    appended by `setVar`, so a function of n `let`s took time quadratic in n to lower; and every
+    branch merge visited every binding in scope (`reconcileBranchVars`, the scope cleanup after a
+    merge, the `&&`/`||` merge), searching each arm's list for each, so n `let`s each followed by
+    an `if` took time cubic in n. The table is now persistent search trees, so a lookup, a write
+    and a snapshot (a branch keeps the table it started from) are logarithmic, and it records, per
+    binding, the tick of its latest write: every write takes a fresh tick from one counter of the
+    function (`LowerState.varTick`), so a table derived from a snapshot by writes holds exactly the
+    snapshot's bindings at their old ticks plus the bindings written since at ticks above the
+    snapshot's `watermark`. A merge visits only those, and the bindings whose value is not a
+    register (`nonReg`), which the merge rules count as changed even when no arm wrote them.
+
+    Positions are ticks too (a new binding's position is the tick it was first written at), so the
+    listing order is the order the association list kept: a write to a bound name keeps its
+    position, a new name goes last, and erasing a name drops it. -/
+structure VarMap where
+  entries : Std.TreeMap LocalKey VarEntry LocalKey.cmp := {}
+  /-- position → binding: the listing order -/
+  byPos : Std.TreeMap Nat LocalKey compare := {}
+  /-- latest-write tick → binding -/
+  byTick : Std.TreeMap Nat LocalKey compare := {}
+  /-- position → binding, for the bindings whose value is not a register -/
+  nonReg : Std.TreeMap Nat LocalKey compare := {}
+
+namespace VarMap
+
+def empty : VarMap := {}
+
+def find? (m : VarMap) (k : LocalKey) : Option SVal := (m.entries.get? k).map (·.val)
+
+def contains (m : VarMap) (k : LocalKey) : Bool := m.entries.contains k
+
+/-- Bind `k` to `v` at write tick `tick` (fresh, above every tick in the table). A bound name keeps
+    its position; a new one goes last. -/
+def set (m : VarMap) (k : LocalKey) (v : SVal) (tick : Nat) : VarMap :=
+  match m.entries.get? k with
+  | some e =>
+    { entries := m.entries.insert k { e with tick := tick, val := v }
+      byPos := m.byPos
+      byTick := (m.byTick.erase e.tick).insert tick k
+      nonReg := if v.isReg then m.nonReg.erase e.pos else m.nonReg.insert e.pos k }
+  | none =>
+    { entries := m.entries.insert k { pos := tick, tick := tick, val := v }
+      byPos := m.byPos.insert tick k
+      byTick := m.byTick.insert tick k
+      nonReg := if v.isReg then m.nonReg else m.nonReg.insert tick k }
+
+def erase (m : VarMap) (k : LocalKey) : VarMap :=
+  match m.entries.get? k with
+  | some e =>
+    { entries := m.entries.erase k
+      byPos := m.byPos.erase e.pos
+      byTick := m.byTick.erase e.tick
+      nonReg := m.nonReg.erase e.pos }
+  | none => m
+
+/-- The bindings in listing order. -/
+def toList (m : VarMap) : List (LocalKey × SVal) :=
+  m.byPos.foldr (fun _ k acc => match m.entries.get? k with
+    | some e => (k, e.val) :: acc
+    | none => acc) []
+
+/-- The highest write tick in the table (0 when it is empty; ticks start at 1). A table derived
+    from this one by writes holds every binding written since at a tick above it. -/
+def watermark (m : VarMap) : Nat := m.byTick.maxKey?.getD 0
+
+/-- The bindings written at ticks above `w`, oldest write first. -/
+partial def writtenAfter (m : VarMap) (w : Nat) : List LocalKey :=
+  let rec go (t : Nat) (acc : List LocalKey) : List LocalKey :=
+    match m.byTick.getEntryGT? t with
+    | some (t', k) => go t' (k :: acc)
+    | none => acc.reverse
+  go w []
+
+/-- `keys` restricted to the bindings of this table, in its listing order, with their values here. -/
+def restrictOrdered (m : VarMap) (keys : List LocalKey) : List (LocalKey × SVal) :=
+  let byPos : Std.TreeMap Nat LocalKey compare := keys.foldl (fun acc k =>
+    match m.entries.get? k with
+    | some e => acc.insert e.pos k
+    | none => acc) {}
+  byPos.foldr (fun _ k acc => match m.entries.get? k with
+    | some e => (k, e.val) :: acc
+    | none => acc) []
+
+/-- The bindings of `pre` a merge of the tables `arms` (each derived from `pre` by writes) must
+    visit, in `pre`'s listing order with their `pre` values: those some arm wrote since `pre`, and
+    those whose `pre` value is not a register (the merge rules count such a binding as changed even
+    when no arm wrote it). Every other binding holds its `pre` value, a register, in every arm. -/
+def mergeCandidates (pre : VarMap) (arms : List VarMap) : List (LocalKey × SVal) :=
+  let w := pre.watermark
+  let written := arms.foldl (fun acc arm => arm.writtenAfter w ++ acc) []
+  pre.restrictOrdered (pre.nonReg.foldl (fun acc _ k => k :: acc) written)
+
+/-- `pre`'s bindings, each with its value in `cur` where `cur` still binds it: the scope cleanup
+    after a merge (bindings declared inside the branches are dropped). `cur` is derived from `pre`
+    by writes, so only the bindings it wrote since `pre` can differ from `pre`; they keep their
+    `cur` ticks, which are above `pre`'s. -/
+def restrictTo (pre cur : VarMap) : VarMap :=
+  (cur.writtenAfter pre.watermark).foldl (fun acc k =>
+    match pre.entries.get? k, cur.entries.get? k with
+    | some _, some e => acc.set k e.val e.tick
+    | _, _ => acc) pre
+
+end VarMap
+
+-- ============================================================
 -- Lowering state
 -- ============================================================
 
@@ -40,13 +167,13 @@ structure LoopInfo where
   /-- Phi registers created at header: (varName, phiReg, preLoopVal, ty) -/
   headerPhis : List (LocalKey × String × SVal × Ty) := []
   /-- Var snapshots at each break: (varsSnapshot, sourceLabel) -/
-  breakEdges : List (List (LocalKey × SVal) × String) := []
+  breakEdges : List (VarMap × String) := []
   /-- Alloca slot for while-as-expression result (break stores value here). -/
   resultSlot : Option String := none
   /-- Type for the result slot. -/
   resultTy : Ty := .unit
   /-- Var snapshots at each continue: (varsSnapshot, sourceLabel) -/
-  continueEdges : List (List (LocalKey × SVal) × String) := []
+  continueEdges : List (VarMap × String) := []
   /-- Target label for continue (step block for for-loops, header for while-loops). -/
   continueTarget : String := ""
   /-- Optional loop label for labeled break/continue. -/
@@ -72,7 +199,10 @@ structure LowerState where
   labelCounter : Nat
   regCounter : Nat
   -- R-0492 step 4: keyed by binding identity (a compiler temporary by its Core name)
-  vars : List (LocalKey × SVal)
+  vars : VarMap
+  /-- The last write tick issued to the variable table (see `VarMap`). Never restored: a table
+      reinstated from a snapshot keeps its ticks, and every later write is above them. -/
+  varTick : Nat := 0
   stringLits : List (String × String)
   structDefs : List CStructDef
   enumDefs : List CEnumDef
@@ -94,7 +224,7 @@ structure LowerState where
   /-- Aggregate variables promoted to stable allocas during loops.
       Maps (varName, allocaReg, ty). Field assignment GEPs directly into
       the alloca instead of phi-transporting whole struct values. -/
-  promotedAllocas : List (LocalKey × String × Ty) := []
+  promotedAllocas : Std.TreeMap LocalKey (String × Ty) LocalKey.cmp := {}
   scopeStack : List ScopeFrame := []
   /-- True after terminateBlock, cleared by startBlock. Used to detect
       dead code after early returns inside borrow blocks. -/
@@ -232,21 +362,27 @@ private def startBlock (label : String) : LowerM Unit := do
 private def setVar (name : LocalKey) (val : SVal) : LowerM Unit := do
   let s ← getState
   -- If promoted to stable alloca, store there instead of updating var map
-  match s.promotedAllocas.find? fun (n, _, _) => n == name with
-  | some (_, allocaReg, ty) =>
+  match s.promotedAllocas.get? name with
+  | some (allocaReg, ty) =>
     emit (.store val (.reg allocaReg ty))
   | none =>
-    let vars' := if s.vars.any fun (n, _) => n == name then
-      s.vars.map fun (n, v) => if n == name then (n, val) else (n, v)
-    else
-      s.vars ++ [(name, val)]
-    setState { s with vars := vars' }
+    let tick := s.varTick + 1
+    setState { s with vars := s.vars.set name val tick, varTick := tick }
+
+/-- A fresh variable table binding `bindings` in order, at fresh ticks (a loop header's table,
+    a function's parameters). The first binding of a name wins, as `lookup` on a list found it. -/
+private def freshVarMap (bindings : List (LocalKey × SVal)) : LowerM VarMap := do
+  let s ← getState
+  let (m, tick) := bindings.foldl (fun (acc : VarMap × Nat) (k, v) =>
+    if acc.1.contains k then acc else (acc.1.set k v (acc.2 + 1), acc.2 + 1)) (VarMap.empty, s.varTick)
+  setState { s with varTick := tick }
+  return m
 
 private def lookupVar (name : LocalKey) : LowerM (Option SVal) := do
   let s ← getState
   -- Check if this variable is promoted to a stable alloca (aggregate in loop)
-  match s.promotedAllocas.find? fun (n, _, _) => n == name with
-  | some (_, allocaReg, ty) =>
+  match s.promotedAllocas.get? name with
+  | some (allocaReg, ty) =>
     match ty with
     | .array _ _ =>
       -- Arrays are pass-by-ptr: the alloca pointer IS the array value.
@@ -258,7 +394,7 @@ private def lookupVar (name : LocalKey) : LowerM (Option SVal) := do
       emit (.load loadDst (.reg allocaReg ty) ty)
       return some (.reg loadDst ty)
   | none =>
-    return s.vars.lookup name
+    return s.vars.find? name
 
 private def internString (val : String) : LowerM String := do
   let s ← getState
@@ -399,24 +535,24 @@ private def isAggregateForPromotion (ty : Ty) : LowerM Bool := do
 /-- Check if a variable is currently promoted to a stable alloca. -/
 private def isPromoted (name : LocalKey) : LowerM (Option (String × Ty)) := do
   let s ← getState
-  match s.promotedAllocas.find? fun (n, _, _) => n == name with
-  | some (_, reg, ty) => return some (reg, ty)
-  | none => return none
+  return s.promotedAllocas.get? name
 
 /-- Add a promoted alloca for a variable. The NEWEST declaration of a name wins: Elab
     renames every binding that shadows a VISIBLE name (bug 087), so a Core name declared
     again is a sibling scope reusing a DEAD name — `if c { let mut x: [i32; 1] = [1]; .. }
     else { let mut x: [i32; 1] = [2]; .. }`. Appending made `find?` return the then-branch's
     storage inside the else branch, which on that path was never written (Codex review of
-    bug 087). Prepending makes every lookup resolve the declaration in scope. -/
+    bug 087). Prepending made every lookup resolve the declaration in scope; the table is now a
+    map from the name to its newest slot (bug 262), and no caller registers a name already
+    registered (each checks `isPromoted`, or a declaration first removes the dead binding's). -/
 private def addPromotedAlloca (name : LocalKey) (allocaReg : String) (ty : Ty) : LowerM Unit := do
   let s ← getState
-  setState { s with promotedAllocas := (name, allocaReg, ty) :: s.promotedAllocas }
+  setState { s with promotedAllocas := s.promotedAllocas.insert name (allocaReg, ty) }
 
 /-- Remove promoted allocas by name (at loop exit). -/
 private def removePromotedAllocas (names : List LocalKey) : LowerM Unit := do
   let s ← getState
-  setState { s with promotedAllocas := s.promotedAllocas.filter fun (n, _, _) => !names.contains n }
+  setState { s with promotedAllocas := names.foldl (·.erase ·) s.promotedAllocas }
 
 /-- Extract type args from a Ty, unwrapping references/pointers. -/
 private def typeArgsFromTy : Ty → List Ty
@@ -470,7 +606,7 @@ private def loopsExitedBy (label : Option String) : LowerM Nat := do
     | none => return 1
 
 /-- Record a break edge on a specific loop (identified by exitLabel). -/
-private def addBreakEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : String) (targetExitLabel : String) : LowerM Unit := do
+private def addBreakEdgeToLoop (vars : VarMap) (srcLabel : String) (targetExitLabel : String) : LowerM Unit := do
   let s ← getState
   let newStack := s.loopStack.map fun info =>
     if info.exitLabel == targetExitLabel then
@@ -479,7 +615,7 @@ private def addBreakEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : Stri
   setState { s with loopStack := newStack }
 
 /-- Record a break edge on the innermost loop. -/
-private def addBreakEdge (vars : List (LocalKey × SVal)) (label : String) : LowerM Unit := do
+private def addBreakEdge (vars : VarMap) (label : String) : LowerM Unit := do
   let s ← getState
   match s.loopStack with
   | info :: rest =>
@@ -488,7 +624,7 @@ private def addBreakEdge (vars : List (LocalKey × SVal)) (label : String) : Low
   | [] => pure ()
 
 /-- Record a continue edge on a specific loop (identified by headerLabel). -/
-private def addContinueEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : String) (targetHeaderLabel : String) : LowerM Unit := do
+private def addContinueEdgeToLoop (vars : VarMap) (srcLabel : String) (targetHeaderLabel : String) : LowerM Unit := do
   let s ← getState
   let newStack := s.loopStack.map fun info =>
     if info.headerLabel == targetHeaderLabel then
@@ -497,7 +633,7 @@ private def addContinueEdgeToLoop (vars : List (LocalKey × SVal)) (srcLabel : S
   setState { s with loopStack := newStack }
 
 /-- Record a continue edge on the innermost loop. -/
-private def addContinueEdge (vars : List (LocalKey × SVal)) (label : String) : LowerM Unit := do
+private def addContinueEdge (vars : VarMap) (label : String) : LowerM Unit := do
   let s ← getState
   match s.loopStack with
   | info :: rest =>
@@ -506,7 +642,7 @@ private def addContinueEdge (vars : List (LocalKey × SVal)) (label : String) : 
   | [] => pure ()
 
 /-- Peek at the continue edges of the innermost loop without popping. -/
-private def peekContinueEdges : LowerM (List (List (LocalKey × SVal) × String)) := do
+private def peekContinueEdges : LowerM (List (VarMap × String)) := do
   let s ← getState
   match s.loopStack with
   | info :: _ => return info.continueEdges
@@ -521,7 +657,7 @@ private def prependInstsToBlock (label : String) (newInsts : List SInst) : Lower
   setState { s with blocksRev := blocks' }
 
 /-- Get current var map snapshot. -/
-private def snapshotVars : LowerM (List (LocalKey × SVal)) := do
+private def snapshotVars : LowerM VarMap := do
   let s ← getState
   -- `__last_expr` is the internal trailing-value pseudo-variable (set by `.expr`
   -- lowering); it is not a real local. It must never participate in merge/loop phi
@@ -529,7 +665,7 @@ private def snapshotVars : LowerM (List (LocalKey × SVal)) := do
   -- a spurious, mistyped, or non-dominated phi (E0708/E0710/E0715). Snapshots feed
   -- exactly that reconciliation, so drop it here at the single source. The trailing
   -- value is read separately via `lookupVar (.name "__last_expr")` (lastExprVal).
-  return s.vars.filter fun (n, _) => n != .name "__last_expr"
+  return s.vars.erase (.name "__last_expr")
 
 -- ============================================================
 -- Expression and statement lowering
@@ -569,7 +705,7 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
     -- A pure state read: `lookupVar` would emit a load of a promoted local (a dead instruction
     -- that renumbered every later temporary, golden ssa/cap_basic).
     let st ← getState
-    let isLocal := (st.vars.lookup name.key).isSome || st.promotedAllocas.any fun (n, _, _) => n == name.key
+    let isLocal := st.vars.contains name.key || st.promotedAllocas.contains name.key
     if !isLocal && ((st.constants.any fun (n, _, _) => n == name.name)
         || st.importedConstants.any fun (n, _, _) => n == name.name) then
       throwLower s!"cannot take the address of module constant '{name}': a constant has no storage (bug 123)"
@@ -595,56 +731,66 @@ where
         addPromotedAlloca name slot varTy
         return some (.reg slot refTy)
 
--- Does `&name` / `&mut name` (or a `borrow name as ...` block) appear anywhere
+-- Which locals do `&name` / `&mut name` (or a `borrow name as ...` block) name anywhere
 -- in these expressions/statements? A scalar loop variable whose address is taken
 -- in the loop body must be promoted to a stable alloca BEFORE the loop (like
 -- aggregates) rather than phi-carried — otherwise the address-of promotes it to
 -- memory mid-body while the loop still phi-tracks it, and the two representations
 -- diverge (lost condition / re-initialized counter / silent infinite loop — C9).
+-- Bug 263: these were predicates asked once per binding in scope (`does this body take
+-- `&name`?`), a walk of the body per binding at every branch and loop; the walk now runs once
+-- and collects the names. `name ∈ cexprAddrTaken acc e` iff `name ∈ acc` or the old
+-- `cexprTakesAddrOf name e` held (each clause below is the old one's disjunction as a union).
 mutual
-partial def cexprTakesAddrOf (name : LocalKey) : CExpr → Bool
-  | .borrow inner _ => (match inner with | .ident n _ => n.key == name | _ => false) || cexprTakesAddrOf name inner
-  | .borrowMut inner _ => (match inner with | .ident n _ => n.key == name | _ => false) || cexprTakesAddrOf name inner
-  | .binOp _ l r _ => cexprTakesAddrOf name l || cexprTakesAddrOf name r
-  | .unaryOp _ o _ => cexprTakesAddrOf name o
-  | .call _ _ args _ => args.any (cexprTakesAddrOf name)
-  | .structLit _ _ fields _ => fields.any (fun fe => cexprTakesAddrOf name fe.2)
-  | .fieldAccess o _ _ => cexprTakesAddrOf name o
-  | .match_ s arms _ => cexprTakesAddrOf name s || arms.any (cmatchArmTakesAddrOf name)
-  | .deref inner _ => cexprTakesAddrOf name inner
-  | .arrayLit elems _ => elems.any (cexprTakesAddrOf name)
-  | .arrayIndex a i _ => cexprTakesAddrOf name a || cexprTakesAddrOf name i
-  | .cast inner _ => cexprTakesAddrOf name inner
-  | .allocCall inner alloc _ => cexprTakesAddrOf name inner || cexprTakesAddrOf name alloc
-  | .ifExpr c t e _ => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t || cstmtsTakeAddrOf name e
-  | _ => false
+partial def cexprAddrTaken (acc : LocalKeySet) : CExpr → LocalKeySet
+  | .borrow inner _ => cexprAddrTaken (match inner with | .ident n _ => acc.insert n.key () | _ => acc) inner
+  | .borrowMut inner _ => cexprAddrTaken (match inner with | .ident n _ => acc.insert n.key () | _ => acc) inner
+  | .binOp _ l r _ => cexprAddrTaken (cexprAddrTaken acc l) r
+  | .unaryOp _ o _ => cexprAddrTaken acc o
+  | .call _ _ args _ => args.foldl cexprAddrTaken acc
+  | .structLit _ _ fields _ => fields.foldl (fun acc fe => cexprAddrTaken acc fe.2) acc
+  | .fieldAccess o _ _ => cexprAddrTaken acc o
+  | .match_ s arms _ => arms.foldl cmatchArmAddrTaken (cexprAddrTaken acc s)
+  | .deref inner _ => cexprAddrTaken acc inner
+  | .arrayLit elems _ => elems.foldl cexprAddrTaken acc
+  | .arrayIndex a i _ => cexprAddrTaken (cexprAddrTaken acc a) i
+  | .cast inner _ => cexprAddrTaken acc inner
+  | .allocCall inner alloc _ => cexprAddrTaken (cexprAddrTaken acc inner) alloc
+  | .ifExpr c t e _ => cstmtsAddrTaken (cstmtsAddrTaken (cexprAddrTaken acc c) t) e
+  | _ => acc
 
-partial def cmatchArmTakesAddrOf (name : LocalKey) : CMatchArm → Bool
-  | .enumArm _ _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
-  | .litArm v guard body => cexprTakesAddrOf name v || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
-  | .varArm _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
-  | .rangeArm lo hi _ guard body => cexprTakesAddrOf name lo || cexprTakesAddrOf name hi || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
+partial def cguardAddrTaken (acc : LocalKeySet) : Option CExpr → LocalKeySet
+  | some g => cexprAddrTaken acc g
+  | none => acc
 
-partial def cstmtTakesAddrOf (name : LocalKey) : CStmt → Bool
-  | .letDecl _ _ _ v => cexprTakesAddrOf name v
-  | .assign _ v => cexprTakesAddrOf name v
-  | .return_ (some v) _ => cexprTakesAddrOf name v
-  | .return_ none _ => false
-  | .expr e _ => cexprTakesAddrOf name e
-  | .ifElse c t e => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t ||
-      (match e with | some el => cstmtsTakeAddrOf name el | none => false)
-  | .while_ c b _ step => cexprTakesAddrOf name c || cstmtsTakeAddrOf name b || cstmtsTakeAddrOf name step
-  | .fieldAssign o _ v => cexprTakesAddrOf name o || cexprTakesAddrOf name v
-  | .derefAssign t v => cexprTakesAddrOf name t || cexprTakesAddrOf name v
-  | .arrayIndexAssign a i v => cexprTakesAddrOf name a || cexprTakesAddrOf name i || cexprTakesAddrOf name v
-  | .break_ (some v) _ => cexprTakesAddrOf name v
-  | .break_ none _ => false
-  | .defer b => cexprTakesAddrOf name b
-  | .borrowIn var _ _ _ _ body => var.key == name || cstmtsTakeAddrOf name body
-  | .continue_ _ => false
+partial def cmatchArmAddrTaken (acc : LocalKeySet) : CMatchArm → LocalKeySet
+  | .enumArm _ _ _ guard body => cstmtsAddrTaken (cguardAddrTaken acc guard) body
+  | .litArm v guard body => cstmtsAddrTaken (cguardAddrTaken (cexprAddrTaken acc v) guard) body
+  | .varArm _ _ guard body => cstmtsAddrTaken (cguardAddrTaken acc guard) body
+  | .rangeArm lo hi _ guard body =>
+    cstmtsAddrTaken (cguardAddrTaken (cexprAddrTaken (cexprAddrTaken acc lo) hi) guard) body
 
-partial def cstmtsTakeAddrOf (name : LocalKey) (body : List CStmt) : Bool :=
-  body.any (cstmtTakesAddrOf name)
+partial def cstmtAddrTaken (acc : LocalKeySet) : CStmt → LocalKeySet
+  | .letDecl _ _ _ v => cexprAddrTaken acc v
+  | .assign _ v => cexprAddrTaken acc v
+  | .return_ (some v) _ => cexprAddrTaken acc v
+  | .return_ none _ => acc
+  | .expr e _ => cexprAddrTaken acc e
+  | .ifElse c t e =>
+    let acc := cstmtsAddrTaken (cexprAddrTaken acc c) t
+    match e with | some el => cstmtsAddrTaken acc el | none => acc
+  | .while_ c b _ step => cstmtsAddrTaken (cstmtsAddrTaken (cexprAddrTaken acc c) b) step
+  | .fieldAssign o _ v => cexprAddrTaken (cexprAddrTaken acc o) v
+  | .derefAssign t v => cexprAddrTaken (cexprAddrTaken acc t) v
+  | .arrayIndexAssign a i v => cexprAddrTaken (cexprAddrTaken (cexprAddrTaken acc a) i) v
+  | .break_ (some v) _ => cexprAddrTaken acc v
+  | .break_ none _ => acc
+  | .defer b => cexprAddrTaken acc b
+  | .borrowIn var _ _ _ _ body => cstmtsAddrTaken (acc.insert var.key ()) body
+  | .continue_ _ => acc
+
+partial def cstmtsAddrTaken (acc : LocalKeySet) (body : List CStmt) : LocalKeySet :=
+  body.foldl cstmtAddrTaken acc
 end
 
 /-- Bug 031: pre-promote any pre-branch local whose address is taken inside a
@@ -656,15 +802,16 @@ end
     conditional terminator — alloca goes to entry, the store lands here. Same
     rule the while-loop lowering applies to its body (C9). Skips arrays (the
     array SVal is its storage) and already-promoted names; pointer-valued locals
-    are promoted too, since `&mut p` is `p`'s slot (bugs 102, 126). `takes name` = "some branch takes
-    `&name`"; callers compose it from cstmtsTakeAddrOf / cmatchArmTakesAddrOf. -/
-private def prePromoteAddrTaken (preVars : List (LocalKey × SVal))
-    (takes : LocalKey → Bool) : LowerM Unit := do
-  for (name, val) in preVars do
+    are promoted too, since `&mut p` is `p`'s slot (bugs 102, 126). `taken` = the names some branch
+    takes `&name` of (`cstmtsAddrTaken` / `cmatchArmAddrTaken`), less those `excluded` says to skip;
+    the bindings of `preVars` among them are visited in `preVars`'s listing order (bug 263). -/
+private def prePromoteAddrTaken (preVars : VarMap) (taken : LocalKeySet)
+    (excluded : LocalKey → Bool := fun _ => false) : LowerM Unit := do
+  for (name, val) in preVars.restrictOrdered taken.keys do
     match val.ty with
     | .array _ _ => pure ()
     | vty =>
-      if (← isPromoted name).isNone && takes name then
+      if (← isPromoted name).isNone && !excluded name then
         let allocaReg ← freshReg "ifpro."
         emitEntryAlloca (.alloca allocaReg vty)
         emit (.store val (.reg allocaReg vty))
@@ -751,11 +898,15 @@ private def matchMergeRules : BranchMergeRules where
       aggregates bind a fresh load (bug 029) — per
       `rules.arrayRebindsAllocaAddr`.
     * "Changed" detection and the void rule differ per site and are encoded
-      in `rules`, NOT unified away (no behavior change — ROADMAP 1a). -/
+      in `rules`, NOT unified away (no behavior change — ROADMAP 1a).
+    * Bug 263: only the bindings `VarMap.mergeCandidates` names are visited (in
+      `preVars`'s listing order, as before): a binding no arm wrote whose value is a
+      register is unchanged in every arm under every rule set, and visiting it did
+      nothing but cost a search of every arm per binding at every merge. -/
 private def reconcileBranchVars (rules : BranchMergeRules)
-    (preVars : List (LocalKey × SVal))
-    (liveArms : List (List (LocalKey × SVal) × String)) : LowerM Unit := do
-  for (name, preVal) in preVars do
+    (preVars : VarMap)
+    (liveArms : List (VarMap × String)) : LowerM Unit := do
+  for (name, preVal) in preVars.mergeCandidates (liveArms.map (·.1)) do
     -- A promoted variable is memory-backed and written through its alloca in
     -- the branches, so the alloca is the single source of truth —
     -- reconciling it would re-store the stale pre-branch snapshot at the
@@ -767,9 +918,9 @@ private def reconcileBranchVars (rules : BranchMergeRules)
     let mut incoming : List (SVal × String) := []
     let mut anyChanged := false
     for (endVars, endLabel) in liveArms do
-      match endVars.find? fun (n, _) => n == name with
+      match endVars.find? name with
       | none => pure ()
-      | some (_, v) =>
+      | some v =>
         let changed :=
           if rules.unitArmUsesPreVal then
             -- Statement-if: a `.unit` end value only counts as a change for
@@ -867,7 +1018,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- locals and promoted slots are hidden while it lowers, so a name in it is a constant
         -- (and `&X` there reaches addrOfLocal's refusal), then restored.
         let saved ← getState
-        set { saved with vars := [], promotedAllocas := [], inConstInit := true }
+        set { saved with vars := VarMap.empty, promotedAllocas := {}, inConstInit := true }
         let v ← lowerExpr constExpr
         modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas,
                                    inConstInit := saved.inConstInit }
@@ -886,7 +1037,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           if initReachesCallable lookup (scope.length + s.importedConstants.length + 1) constExpr then
             throwLower s!"imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
           let saved ← getState
-          set { saved with vars := [], promotedAllocas := [], inConstInit := true, constants := scope }
+          set { saved with vars := VarMap.empty, promotedAllocas := {}, inConstInit := true, constants := scope }
           let v ← lowerExpr constExpr
           modify fun st => { st with vars := saved.vars, promotedAllocas := saved.promotedAllocas,
                                      inConstInit := saved.inConstInit, constants := saved.constants }
@@ -920,7 +1071,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- pre-promotion the lazy alloca+store lands inside scand.rhs and does
       -- not dominate later uses — silent neighbor corruption (found by
       -- std.cli's `a.len >= 2 && a.get_unchecked(0) == '-'`).
-      prePromoteAddrTaken preVars fun name => cexprTakesAddrOf name rhs
+      prePromoteAddrTaken preVars (cexprAddrTaken {} rhs)
       if op == .and_ then
         terminateBlock (.condBr lVal rhsLabel mergeLabel)
       else
@@ -934,7 +1085,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- Merge: phi any scalar var the RHS remapped (a match/if-expression in
       -- the RHS can contain arm statements), mirroring ifExpr's merge.
       startBlock mergeLabel
-      for (name, preVal) in preVars do
+      -- Bug 263: only the bindings the RHS wrote, or whose value is not a register, can count
+      -- as changed below (`VarMap.mergeCandidates`).
+      for (name, preVal) in preVars.mergeCandidates [rhsEndVars] do
         -- Promoted vars are memory-backed (their alloca slot carries the value;
         -- reads reload) — never phi them. Aggregates are NEVER phi'd either:
         -- emitting `phi %String` is invalid IR (E0714). A var only "changes"
@@ -944,7 +1097,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- promoted `String` in scope produced an aggregate phi.)
         if (← isPromoted name).isSome then continue
         if (← isAggregateForPromotion preVal.ty) then continue
-        let rhsV := (rhsEndVars.find? fun (n, _) => n == name).map (·.2)
+        let rhsV := rhsEndVars.find? name
         let changed := match rhsV with
           | some v => match v, preVal with
             | .reg n1 _, .reg n2 _ => n1 != n2
@@ -1206,7 +1359,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- Snapshot vars before match so each arm starts from the same state
     let preMatchVars ← snapshotVars
     -- Collect (endVars, endLabel, terminated) for each arm for var merge (newest first)
-    let mut armEndSnapshots : List (List (LocalKey × SVal) × String × Bool) := []
+    let mut armEndSnapshots : List (VarMap × String × Bool) := []
 
     -- Bug 031: see prePromoteAddrTaken — the store must dominate every arm.
     -- Exclude names any arm REBINDS (enum payload binding / var arm): promotion
@@ -1216,8 +1369,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       | .enumArm _ _ bindings _ _ => bindings.any fun (bn, _) => bn.key == n
       | .varArm v _ _ _ => v.key == n
       | _ => false
-    prePromoteAddrTaken preMatchVars fun name =>
-      !armShadows name && arms.any (cmatchArmTakesAddrOf name)
+    prePromoteAddrTaken preMatchVars (arms.foldl cmatchArmAddrTaken {}) armShadows
 
     -- Determine if this is an enum match (check first arm)
     let isEnumMatch := arms.any fun arm => match arm with
@@ -1456,22 +1608,14 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- set; merged updates from the phi pass survive because we just
       -- wrote them via `setVar`.
       let st ← getState
-      let cleaned := preMatchVars.map fun (n, preVal) =>
-        match st.vars.find? fun (vn, _) => vn == n with
-        | some (_, v) => (n, v)
-        | none => (n, preVal)
-      setState { st with vars := cleaned }
+      setState { st with vars := preMatchVars.restrictTo st.vars }
     else if liveSnapshots.length == 1 then
       -- Only one arm reached merge — use its vars directly, then drop
       -- arm-local bindings (same WC-0004 leakage applies).
       match liveSnapshots with
       | [(endVars, _, _)] =>
         let st ← getState
-        let cleaned := preMatchVars.map fun (n, preVal) =>
-          match endVars.find? fun (vn, _) => vn == n with
-          | some (_, v) => (n, v)
-          | none => (n, preVal)
-        setState { st with vars := cleaned }
+        setState { st with vars := preMatchVars.restrictTo endVars }
       | _ => pure ()
     else
       -- Bug 175: every arm diverged (return/break/continue), so nothing reaches
@@ -1705,8 +1849,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let resultSlot? ← freshResultSlot "ifslot." ty
     let preIfVars ← snapshotVars
     -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
-    prePromoteAddrTaken preIfVars fun name =>
-      cstmtsTakeAddrOf name then_ || cstmtsTakeAddrOf name else_
+    prePromoteAddrTaken preIfVars (cstmtsAddrTaken (cstmtsAddrTaken {} then_) else_)
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block. Compute termination BEFORE storing the branch value: a branch
     -- that diverged (ended in return/break/continue) has no value, so storing
@@ -2043,7 +2186,7 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
     future guard/OR arms). -/
 partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : Ty)
     (mergeLabel : String) (nextCheck : String)
-    : LowerM (Option (SVal × String) × (List (LocalKey × SVal) × String × Bool)) := do
+    : LowerM (Option (SVal × String) × (VarMap × String × Bool)) := do
   -- A guard is tested after the pattern bindings are live: if it is false, fall
   -- through to the next arm's check; otherwise run the body.
   match guard with
@@ -2063,7 +2206,7 @@ partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : 
     terminateBlock (.br mergeLabel)
     return (some (bodyVal, curLabel), (armEndVars, curLabel, false))
   else
-    return (none, ([], "", true))
+    return (none, (VarMap.empty, "", true))
 
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
@@ -2135,9 +2278,10 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let mergeLabel ← freshLabel "merge"
     let preIfVars ← snapshotVars
     -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
-    prePromoteAddrTaken preIfVars fun name =>
-      cstmtsTakeAddrOf name then_ ||
-        (match else_ with | some el => cstmtsTakeAddrOf name el | none => false)
+    prePromoteAddrTaken preIfVars
+      (match else_ with
+        | some el => cstmtsAddrTaken (cstmtsAddrTaken {} then_) el
+        | none => cstmtsAddrTaken {} then_)
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block
     startBlock thenLabel
@@ -2186,11 +2330,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       -- existed before the `if`; restrict the live set to exactly those names —
       -- the same scope cleanup the match lowering does (WC-0004).
       let st ← getState
-      let cleaned := preIfVars.map fun (n, preVal) =>
-        match st.vars.find? fun (vn, _) => vn == n with
-        | some (_, v) => (n, v)
-        | none => (n, preVal)
-      setState { st with vars := cleaned }
+      setState { st with vars := preIfVars.restrictTo st.vars }
 
   | .while_ cond body whileLabel step =>
     let headerLabel ← freshLabel "while.hdr"
@@ -2204,16 +2344,22 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let preLoopLabel ← getCurrentLabel
     -- Partition live variables: aggregate types get stable allocas,
     -- scalar types get phi nodes as before.
-    let mut headerPhis : List (LocalKey × String × SVal × Ty) := []
-    let mut allPromotedNames : List LocalKey := []  -- all aggregate names (including outer)
-    let mut newlyPromotedNames : List LocalKey := [] -- only promoted by THIS loop
+    -- Bug 263: the loop visits every binding in scope (each gets a header phi or a slot), but
+    -- with a walk of the condition and body for each (now one walk, `addrTaken`), a list search
+    -- per binding (`allPromotedNames.contains`) and a list append per binding; the name sets are
+    -- trees and the lists accumulate newest first.
+    let addrTaken := cstmtsAddrTaken (cexprAddrTaken {} cond) body
+    let preLoopList := preLoopVars.toList
+    let mut headerPhisRev : List (LocalKey × String × SVal × Ty) := []
+    let mut allPromotedNames : LocalKeySet := {}  -- all aggregate names (including outer)
+    let mut newlyPromotedRev : List LocalKey := [] -- only promoted by THIS loop, newest first
     -- Promote aggregate variables BEFORE terminating the block (stores go here)
-    for (name, val) in preLoopVars do
+    for (name, val) in preLoopList do
       let ty := val.ty
       -- Skip if already promoted by an outer loop
       let alreadyPromoted ← isPromoted name
       if alreadyPromoted.isSome then
-        allPromotedNames := allPromotedNames ++ [name]
+        allPromotedNames := allPromotedNames.insert name ()
       else
         let isAgg ← isAggregateForPromotion ty
         -- Also promote a scalar whose address is taken in the body: it must be
@@ -2223,22 +2369,24 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         -- The condition counts too: it is lowered in the header on every iteration, so a
         -- lazy promotion there re-stores the pre-loop value each time round (Codex review
         -- of bug 102: `while next(&mut p as *mut *mut u8, ..) {}` never advanced `p`).
-        if isAgg || cexprTakesAddrOf name cond || cstmtsTakeAddrOf name body then
+        if isAgg || addrTaken.contains name then
           let allocaReg ← freshReg "agg."
           emitEntryAlloca (.alloca allocaReg ty)
           emit (.store val (.reg allocaReg ty))
           addPromotedAlloca name allocaReg ty
-          allPromotedNames := allPromotedNames ++ [name]
-          newlyPromotedNames := newlyPromotedNames ++ [name]
+          allPromotedNames := allPromotedNames.insert name ()
+          newlyPromotedRev := name :: newlyPromotedRev
     terminateBlock (.br headerLabel)
     startBlock headerLabel
     -- Create phi nodes only for scalar variables
-    for (name, val) in preLoopVars do
+    for (name, val) in preLoopList do
       let ty := val.ty
       if !allPromotedNames.contains name then
         let phiReg ← freshReg "phi."
         setVar name (.reg phiReg ty)
-        headerPhis := headerPhis ++ [(name, phiReg, val, ty)]
+        headerPhisRev := (name, phiReg, val, ty) :: headerPhisRev
+    let headerPhis := headerPhisRev.reverse
+    let newlyPromotedNames := newlyPromotedRev.reverse
     let loopInfo : LoopInfo := {
       headerLabel := headerLabel
       exitLabel := exitLabel
@@ -2277,12 +2425,12 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       let continueEdges ← peekContinueEdges
       if !continueEdges.isEmpty then
         for (name, phiReg, _, ty) in headerPhis do
-          let bodyVal := (bodyEndVars.find? fun (n, _) => n == name).map (·.2) |>.getD (.reg phiReg ty)
+          let bodyVal := (bodyEndVars.find? name).getD (.reg phiReg ty)
           let mut incoming : List (SVal × String) := []
           if !term then
             incoming := incoming ++ [(bodyVal, bodyEndLabel)]
           for (contVars, contLabel) in continueEdges do
-            let contVal := (contVars.find? fun (n, _) => n == name).map (·.2) |>.getD (.reg phiReg ty)
+            let contVal := (contVars.find? name).getD (.reg phiReg ty)
             incoming := incoming ++ [(contVal, contLabel)]
           if incoming.length >= 2 then
             let stepPhiReg ← freshReg "step.phi."
@@ -2302,28 +2450,28 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       let loopInfoFinal ← popLoop
       let _ ← popScope
       -- Build header phi instructions (step block is the back-edge source)
-      let mut headerPhiInsts : List SInst := []
+      let mut headerPhiInstsRev : List SInst := []
       for (name, phiReg, preVal, ty) in headerPhis do
         let mut incoming : List (SVal × String) := [(preVal, preLoopLabel)]
         if !stepTerm then
-          let stepVal := (stepEndVars.find? fun (n, _) => n == name).map (·.2) |>.getD (.reg phiReg ty)
+          let stepVal := (stepEndVars.find? name).getD (.reg phiReg ty)
           incoming := incoming ++ [(stepVal, stepEndLabel)]
-        headerPhiInsts := headerPhiInsts ++ [.phi phiReg incoming ty]
-      prependInstsToBlock headerLabel headerPhiInsts
+        headerPhiInstsRev := .phi phiReg incoming ty :: headerPhiInstsRev
+      prependInstsToBlock headerLabel headerPhiInstsRev.reverse
       -- Build exit block
       startBlock exitLabel
       let breakEdges := match loopInfoFinal with
         | some info => info.breakEdges
         | none => []
       -- Replace entire var map (removes body-local vars)
-      let s ← getState
-      setState { s with vars := headerPhis.map fun (name, phiReg, _, ty) => (name, SVal.reg phiReg ty) }
+      let exitVars ← freshVarMap (headerPhis.map fun (name, phiReg, _, ty) => (name, SVal.reg phiReg ty))
+      setState { (← getState) with vars := exitVars }
       if !breakEdges.isEmpty then
         for (name, phiReg, _, ty) in headerPhis do
           let headerVal := SVal.reg phiReg ty
           let mut exitIncoming : List (SVal × String) := [(headerVal, condEndLabel)]
           for (breakVars, breakLabel) in breakEdges do
-            let breakVal := (breakVars.find? fun (n, _) => n == name).map (·.2) |>.getD headerVal
+            let breakVal := (breakVars.find? name).getD headerVal
             exitIncoming := exitIncoming ++ [(breakVal, breakLabel)]
           let allSame := exitIncoming.all fun (v, _) => match v, headerVal with
             | .reg n1 _, .reg n2 _ => n1 == n2
@@ -2353,37 +2501,37 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let loopInfoFinal ← popLoop
     let _ ← popScope
     -- Build header phi instructions (only for non-promoted scalar vars)
-    let mut headerPhiInsts : List SInst := []
+    let mut headerPhiInstsRev : List SInst := []
     for (name, phiReg, preVal, ty) in headerPhis do
       let mut incoming : List (SVal × String) := [(preVal, preLoopLabel)]
       -- Back-edge from body end (only if body didn't fully terminate)
       if !term then
-        let backVal := (bodyEndVars.find? fun (n, _) => n == name).map (·.2) |>.getD (.reg phiReg ty)
+        let backVal := (bodyEndVars.find? name).getD (.reg phiReg ty)
         incoming := incoming ++ [(backVal, bodyEndLabel)]
       -- Continue edges
       match loopInfoFinal with
       | some info =>
         for (contVars, contLabel) in info.continueEdges do
-          let contVal := (contVars.find? fun (n, _) => n == name).map (·.2) |>.getD (.reg phiReg ty)
+          let contVal := (contVars.find? name).getD (.reg phiReg ty)
           incoming := incoming ++ [(contVal, contLabel)]
       | none => pure ()
-      headerPhiInsts := headerPhiInsts ++ [.phi phiReg incoming ty]
-    prependInstsToBlock headerLabel headerPhiInsts
+      headerPhiInstsRev := .phi phiReg incoming ty :: headerPhiInstsRev
+    prependInstsToBlock headerLabel headerPhiInstsRev.reverse
     -- Build exit phis if there are break edges
     startBlock exitLabel
     let breakEdges := match loopInfoFinal with
       | some info => info.breakEdges
       | none => []
     -- Replace entire var map (removes body-local vars)
-    let s ← getState
-    setState { s with vars := headerPhis.map fun (name, phiReg, _, ty) => (name, SVal.reg phiReg ty) }
+    let exitVars ← freshVarMap (headerPhis.map fun (name, phiReg, _, ty) => (name, SVal.reg phiReg ty))
+    setState { (← getState) with vars := exitVars }
     -- If break edges exist, insert exit phis
     if !breakEdges.isEmpty then
       for (name, phiReg, _, ty) in headerPhis do
         let headerVal := SVal.reg phiReg ty
         let mut exitIncoming : List (SVal × String) := [(headerVal, condEndLabel)]
         for (breakVars, breakLabel) in breakEdges do
-          let breakVal := (breakVars.find? fun (n, _) => n == name).map (·.2) |>.getD headerVal
+          let breakVal := (breakVars.find? name).getD headerVal
           exitIncoming := exitIncoming ++ [(breakVal, breakLabel)]
         -- Only emit phi if values actually differ
         let allSame := exitIncoming.all fun (v, _) => match v, headerVal with
@@ -2528,7 +2676,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     currentInsts := []
     labelCounter := 0
     regCounter := 0
-    vars := (f.paramKeys.zip f.params).map fun (k, (n, ty)) => (k, SVal.reg n ty)
+    vars := VarMap.empty
     stringLits := []
     structDefs := structDefs
     enumDefs := enumDefs
@@ -2540,6 +2688,8 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     scopeStack := [{ kind := .function }]
   }
   let result := (do
+    let params ← freshVarMap ((f.paramKeys.zip f.params).map fun (k, (n, ty)) => (k, SVal.reg n ty))
+    setState { (← getState) with vars := params }
     lowerStmts f.body
     -- If the function hasn't terminated, add implicit return
     let term ← currentBlockTerminated

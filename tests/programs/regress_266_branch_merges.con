@@ -1,0 +1,118 @@
+// Bug 266 regression: every branch merge in Lower visited every binding in scope, searching each
+// arm's variable table for each (`reconcileBranchVars`, the scope cleanup after an `if` or a
+// `match`, the `&&`/`||` merge), and every branch and loop walked its body once per binding to ask
+// whether it takes that binding's address, so n `let`s each followed by an `if` took time cubic in
+// n to lower. A merge now visits only the bindings an arm wrote since the branch began and those
+// whose value is not a register; the address-taken names are collected in one walk. This fixture
+// pins the merges those paths must keep: a binding written in one arm only, in both arms, in some
+// arms of a match, a constant binding no arm writes, a binding a `||` right-hand side writes
+// through an if-expression, a far binding whose address a branch or a loop condition takes, and
+// merges after a loop rebuilt the table. run_tests.sh also lowers generated functions of `let`s
+// interleaved with `if`s, `while`s and `match`es within a time bound.
+fn bump(p: &mut i64) -> bool {
+    *p = *p + 1;
+    return *p < 3;
+}
+
+fn one_arm(c: bool, seed: i64) -> i64 {
+    let mut a: i64 = seed + 1;
+    let b: i64 = seed + 2;
+    if c {
+    } else {
+        a = a + 10;
+    }
+    return a + b;
+}
+
+fn both_arms(c: bool, seed: i64) -> i64 {
+    let mut a: i64 = seed;
+    let mut b: i64 = seed;
+    if c {
+        a = a + 1;
+        b = b + 2;
+    } else {
+        a = a + 3;
+        b = b + 4;
+    }
+    return a * 10 + b;
+}
+
+fn match_arms(k: i64, seed: i64) -> i64 {
+    let mut a: i64 = seed;
+    let mut b: i64 = seed;
+    let c: i64 = 7;
+    match k {
+        0 => { a = a + 1; },
+        1 => { b = b + 1; },
+        _ => { },
+    }
+    return a * 100 + b * 10 + c;
+}
+
+fn constant_kept(c: bool) -> i64 {
+    let k: i64 = 5;
+    let mut t: i64 = 0;
+    if c {
+        t = t + 1;
+    }
+    return k + t;
+}
+
+fn short_circuit(c: bool, seed: i64) -> i64 {
+    let mut a: i64 = seed;
+    let ok: bool = c || (if seed > 0 { a = a + 4; true } else { false });
+    if ok {
+        return a;
+    }
+    return 0 - a;
+}
+
+fn addr_in_branch(c: bool, seed: i64) -> i64 {
+    let mut x: i64 = seed;
+    let y: i64 = seed + 1;
+    let z: i64 = seed + 2;
+    if c {
+        let _ok: bool = bump(&mut x);
+    } else {
+        x = x + 5;
+    }
+    return x + y + z;
+}
+
+fn addr_in_condition(seed: i64) -> i64 {
+    let mut p: i64 = seed;
+    let q: i64 = 1;
+    let mut n: i64 = 0;
+    while bump(&mut p) {
+        n = n + q;
+    }
+    return p * 10 + n;
+}
+
+fn after_loop(c: bool) -> i64 {
+    let mut i: i64 = 0;
+    let mut s: i64 = 0;
+    while i < 4 {
+        if i > 1 {
+            s = s + i;
+        }
+        i = i + 1;
+    }
+    if c {
+        s = s + 100;
+    }
+    return s;
+}
+
+fn main() -> Int {
+    // one_arm: 2 + 3 = 5 and 12 + 3 = 15; both_arms: 23 and 45; match_arms: 217, 127, 117
+    // constant_kept: 6 and 5; short_circuit: 2 and 6; addr_in_branch: 2+2+3 = 7 and 6+2+3 = 11
+    // addr_in_condition: 30 + 2 = 32; after_loop: 105 and 5
+    let total: i64 = one_arm(true, 1) + one_arm(false, 1) + both_arms(true, 1) + both_arms(false, 1)
+        + match_arms(0, 1) + match_arms(1, 1) + match_arms(2, 1)
+        + constant_kept(true) + constant_kept(false) + short_circuit(true, 2) + short_circuit(false, 2)
+        + addr_in_branch(true, 1) + addr_in_branch(false, 1) + addr_in_condition(0)
+        + after_loop(true) + after_loop(false);
+    // 5 + 15 + 23 + 45 + 217 + 127 + 117 + 6 + 5 + 2 + 6 + 7 + 11 + 32 + 105 + 5 = 728
+    return (total - 686) as Int;
+}

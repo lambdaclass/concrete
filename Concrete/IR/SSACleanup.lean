@@ -807,6 +807,95 @@ private def stripStalePhiEntries (blocks : List SBlock) : List SBlock :=
       | other => other }
 
 -- ============================================================
+-- Pass 12: Constant branch chains, in one forward pass
+-- ============================================================
+
+/-- Bug 267: the passes above settle one link of a chain of constant branches per run of the
+    whole sequence. A branch on a condition that folds to a constant becomes a `br`
+    (`eliminateConstantBranches`), but the arm it no longer takes is removed only at the end of
+    the sequence (`eliminateDeadBlocks`), so the merge phi that arm fed becomes trivial only in the
+    next run, and only then can the next branch's condition, which reads that phi, fold. A function
+    of n such branches in a row (`if s_i > t { t = t + 1; }` with constant `s_i` and `t`) took n
+    runs of the sequence over the whole function: time quadratic in its size.
+
+    This pass settles the whole chain in one forward walk over the blocks: it propagates the
+    constants `foldConstants` proves (the same folds of the same operands: binary operations, casts,
+    negations), tracks which edges can be taken, and reads a phi as the value `findTrivialPhis`
+    would reduce it to once the entries of edges that cannot be taken are gone. A branch whose
+    condition it proves `true` or `false` becomes a `br`. It never concludes more than the sequence
+    eventually does: an edge from a block not yet visited (a loop back edge) counts as taken with a
+    value not known, an instruction of any other kind proves nothing, and a block with no edge that
+    can be taken is skipped. So every branch it rewrites is one the sequence would rewrite in a later
+    run, and the sequence, which still runs after it to the same fixpoint, reaches the same result
+    in a few runs. Functions with a repeated block label are left alone. -/
+private def resolveConstantBranches (blocks : List SBlock) : List SBlock :=
+  let labelCount : Std.HashSet String := blocks.foldl (fun s b => s.insert b.label) ∅
+  if labelCount.size != blocks.length then blocks
+  else
+    -- label → the labels of the blocks whose terminators target it
+    let preds : Std.HashMap String (List String) := blocks.foldl (fun m b =>
+      (termSuccessors b.term).foldl (fun m s => m.insert s (b.label :: m.getD s [])) m) ∅
+    -- visited: label → the successors its terminator can take (none: the block cannot run)
+    let step := fun (st : Std.HashMap String SVal × Std.HashMap String (Option (List String)) ×
+        Std.HashMap String String) (b : SBlock) =>
+      let (env, visited, rewrites) := st
+      let edgeTaken : String → Bool := fun p => match visited.get? p with
+        | some (some succs) => succs.contains b.label
+        | some none => false
+        | none => true      -- not visited yet (a back edge): it may be taken
+      let runs := visited.isEmpty || (preds.getD b.label []).any edgeTaken
+      if !runs then (env, visited.insert b.label none, rewrites)
+      else
+        let rvNeg : Std.HashMap String SVal → SVal → SVal := fun env v => match v with
+          | .reg r _ => (env.get? r).getD v
+          | _ => v
+        let rv : Std.HashMap String SVal → SVal → SVal := fun env v => normIntConst (rvNeg env v)
+        let env := b.insts.foldl (fun env inst =>
+          match inst with
+          | .phi dst incoming _ =>
+            -- `findTrivialPhis` over the entries of the edges that can be taken
+            let live := incoming.filterMap fun (v, lbl) =>
+              if edgeTaken lbl then some (rvNeg env v) else none
+            let nonSelf := live.filter fun v => match v with
+              | .reg name _ => name != dst
+              | _ => true
+            match nonSelf with
+            | [] => env
+            | v :: rest =>
+              let allSame := rest.all fun v' => match v, v' with
+                | .reg n1 _, .reg n2 _ => n1 == n2
+                | .intConst v1 _, .intConst v2 _ => v1 == v2
+                | .boolConst b1, .boolConst b2 => b1 == b2
+                | _, _ => false
+              if allSame then env.insert dst v else env
+          -- the folds of `foldConstants`, on the same operands
+          | .cast dst val tgt =>
+            match foldCastConst (rv env val) tgt with
+            | some c => env.insert dst c
+            | none => env
+          | .unaryOp dst .neg operand ty =>
+            match rvNeg env operand with
+            | .intConst n _ => if IntArith.fitsType ty (-n) then env.insert dst (.intConst (-n) ty) else env
+            | _ => env
+          | .binOp dst op lhs rhs ty =>
+            match foldBinOp op (rv env lhs) (rv env rhs) ty with
+            | some val => env.insert dst val
+            | none => env
+          | _ => env) env
+        match b.term with
+        | .condBr cond tl el =>
+          match rvNeg env cond with
+          | .boolConst true => (env, visited.insert b.label (some [tl]), rewrites.insert b.label tl)
+          | .boolConst false => (env, visited.insert b.label (some [el]), rewrites.insert b.label el)
+          | _ => (env, visited.insert b.label (some [tl, el]), rewrites)
+        | t => (env, visited.insert b.label (some (termSuccessors t)), rewrites)
+    let (_, _, rewrites) := blocks.foldl step (∅, ∅, ∅)
+    if rewrites.isEmpty then blocks
+    else blocks.map fun b => match rewrites.get? b.label with
+      | some target => { b with term := .br target }
+      | none => b
+
+-- ============================================================
 -- Combined cleanup
 -- ============================================================
 
@@ -817,6 +906,7 @@ private def blocksFingerprint (blocks : List SBlock) : Nat :=
 
 /-- One full pass of all cleanup transformations. -/
 private def cleanupBlocks (blocks : List SBlock) : List SBlock :=
+  let blocks := resolveConstantBranches blocks    -- a chain of constant branches in one pass (bug 267)
   let blocks := eliminateDeadBlocks blocks
   let blocks := eliminateTrivialPhis blocks
   let blocks := foldConstants blocks              -- constant folding + algebraic + strength reduction

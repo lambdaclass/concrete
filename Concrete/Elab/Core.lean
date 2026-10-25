@@ -88,6 +88,13 @@ end CLocal
 
 abbrev LocalKey := CLocal.LocalKey
 
+/-- An order on binding identities, for search trees keyed by them (Lower's variable table, bug
+    265; the post-mono reference-binding verifier's environment, bug 269). Consistent with `==`. -/
+def LocalKey.cmp : LocalKey → LocalKey → Ordering
+  | .id a, .id b => compare a.idx b.idx
+  | .id _, .name _ => .lt
+  | .name _, .id _ => .gt
+  | .name a, .name b => compare a b
 
 /-- What a call's callee IS, decided where scope is known.
 

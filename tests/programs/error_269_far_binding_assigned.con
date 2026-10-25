@@ -1,0 +1,25 @@
+// Bug 269 regression: the post-mono reference-binding verifier (REF-6@1) kept its environment in
+// an association list searched per assignment; it is a map keyed by binding identity. A generic
+// assigns its parameter `x` after other bindings, inside a block, a branch and a loop, and is
+// called at `T := &Int`: the assignment must still find `x`'s type, a reference (E0303, pass
+// post-mono).
+fn pick<T: Copy>(x: T, y: T, k: Int) -> Int {
+    let a: Int = k + 1;
+    let b: Int = a + 1;
+    let mut c: Int = b + 1;
+    if c > 0 {
+        let d: Int = c + 1;
+        c = d;
+    }
+    while c > 100 {
+        c = c - 1;
+    }
+    x = y;
+    return c - 3;
+}
+
+fn main() -> Int {
+    let a: Int = 1;
+    let b: Int = 2;
+    return pick::<&Int>(&a, &b, 41);
+}

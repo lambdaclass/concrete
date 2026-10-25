@@ -1,0 +1,53 @@
+// Bug 267 regression: SSACleanup settled one link of a chain of constant branches per run of its
+// whole pass sequence (the branch's dead arm left only at the end of the sequence, so the merge phi
+// it fed became trivial, and the next branch's condition foldable, one run later). A forward pass
+// now settles the chain in one walk, proving no more than the sequence eventually does. This
+// fixture pins what the folding must keep: a chain of branches each reading the phi the previous
+// one merged, a branch on a cast and a negation of constants, a diamond whose arms both store the
+// same constant, and a loop whose condition is not constant (its back edge is not known).
+// Binary = --interp = 42.
+fn chain() -> i64 {
+    let s0: i64 = 0;
+    let mut t: i64 = 0;
+    let s1: i64 = s0 + 1;
+    if s1 > t { t = t + 1; }
+    let s2: i64 = s1 + 1;
+    if s2 > t { t = t + 1; }
+    let s3: i64 = s2 + 1;
+    if s3 > t { t = t + 1; } else { t = t + 100; }
+    let s4: i64 = s3 + 1;
+    if s4 < t { t = t + 100; }
+    return t;
+}
+
+fn casts_and_negation() -> i64 {
+    let a: i32 = 300;
+    let b: u8 = a as u8;
+    let mut r: i64 = 0;
+    if b == 44 { r = r + 1; }
+    let c: i64 = -5;
+    if -c == 5 { r = r + 1; }
+    return r;
+}
+
+fn diamond(k: bool) -> i64 {
+    let mut x: i64 = 1;
+    if k { x = 7; } else { x = 7; }
+    if x == 7 { return 3; }
+    return 100;
+}
+
+fn loop_not_constant() -> i64 {
+    let mut i: i64 = 0;
+    let mut n: i64 = 0;
+    while i < 5 {
+        if i > 2 { n = n + 1; }
+        i = i + 1;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    // chain 3 + casts 2 + diamond 3 + 3 + loop 2 = 13; + 29 = 42
+    return (chain() + casts_and_negation() + diamond(true) + diamond(false) + loop_not_constant() + 29) as Int;
+}

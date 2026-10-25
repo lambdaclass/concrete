@@ -8403,6 +8403,61 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bugs 265-267 and 269: the back end over long functions. Lower kept its variable table in an
+# association list (265: n chained `let`s took 22 s to lower at 40000, 111 s at 80000); every branch
+# merge visited every binding in scope (266: n `let`s each followed by an `if` or a `match` took
+# time cubic in n); SSACleanup settled one link of a chain of constant branches per run of its
+# whole pass sequence (267: n such branches took n runs over the whole function); the post-mono
+# reference-binding verifier searched its environment list per assignment (269). The fixtures pin the
+# behavior each structure must keep. The leg below times the `lower` stage alone (Lower, SSA
+# verification and cleanup, from --emit-trace-json), so the front end's cost on long functions
+# does not enter the budget: 12000 chained `let`s, and 1500 `let`s each followed by an `if` or a
+# `match`, must lower within 600 ms (retried once with 1200 ms). The old back end took 1.1 s,
+# 9.6 s and over 4 s; the new one 30-60 ms. The verifier's own time leg (269) waits for the front
+# end of bugs 255-261: on this front end a function long enough to show it takes minutes to reach it.
+run_ok "$TESTDIR/regress_265_variable_table.con" 42
+run_ok "$TESTDIR/regress_266_branch_merges.con" 42
+run_ok "$TESTDIR/regress_267_constant_branch_chains.con" 42
+run_err "$TESTDIR/error_269_far_binding_assigned.con" "(E0303)"
+run_ok "$TESTDIR/regress_269_generic_bindings_at_value.con" 42
+r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
+    awk -v shape="$1" -v n="$2" 'BEGIN {
+        print "fn main() -> Int {"
+        print "    let s0: i64 = 0;"
+        print "    let mut t: i64 = 0;"
+        for (i = 1; i <= n; i++) {
+            printf "    let s%d: i64 = s%d + 1;\n", i, i - 1
+            if (shape == "if") printf "    if s%d > t { t = t + 1; }\n", i
+            if (shape == "match") printf "    match s%d { 0 => { t = t + 1; }, _ => { t = t + 2; }, }\n", i
+        }
+        printf "    return ((s%d + t) %% 7) as Int;\n", n
+        print "}"
+    }'
+}
+r265_lower_ms() {  # r265_lower_ms SRC: the `lower` stage time in ms, or nothing when the run failed
+    bounded_run -r 120 120 -- $COMPILER "$1" --emit-trace-json 2>/dev/null \
+        | sed -nE 's/.*"timing_ms":\{[^}]*"lower":([0-9]+).*/\1/p'
+}
+r265_bad=""
+for r265_case in "lets 12000" "if 1500" "match 1500"; do
+    read -r r265_shape r265_n <<< "$r265_case"
+    r265_src="$TMPDIR/r265_${r265_shape}_$r265_n.con"
+    r265_gen "$r265_shape" "$r265_n" > "$r265_src"
+    r265_ms="$(r265_lower_ms "$r265_src")"
+    if [ -z "$r265_ms" ] || [ "$r265_ms" -gt 600 ]; then
+        r265_ms2="$(r265_lower_ms "$r265_src")"
+        if [ -z "$r265_ms2" ] || [ "$r265_ms2" -gt 1200 ]; then
+            r265_bad="$r265_bad $r265_shape/$r265_n:${r265_ms:-none},${r265_ms2:-none}ms"
+        fi
+    fi
+done
+if [ -z "$r265_bad" ]; then
+    echo "  ok  bugs 265-267: long functions (12000 lets, 1500 lets with an if or a match each) lower within 600 ms"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bugs 265-267: the lower stage of a long function exceeded 600 ms (retry 1200 ms):$r265_bad"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 228: the interpreter's loops drop each iteration's bindings, so a loop is linear in its
 # iteration count (200000 iterations did not finish in 60 s on main). Binary 42; --interp 42 in 20 s.
 run_ok "$TESTDIR/regress_228_interp_loop_env.con" 42

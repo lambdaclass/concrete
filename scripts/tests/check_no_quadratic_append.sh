@@ -45,7 +45,9 @@ check Concrete/Frontend/Lexer.lean       1
 check Concrete/Frontend/Parser.lean      51
 # 64->32, 2->1 (2026-10-22, bug 178): match arm lists prepend+reverse, blocks and entry
 # allocas accumulate newest-first, SSAVerify regTypes (dead) removed.
-check Concrete/IR/Lower.lean             32
+# 32->25 (2026-10-25, bugs 265-266): the loop header phis, phi instructions and promoted-name
+# lists accumulate newest first; the variable table is a map.
+check Concrete/IR/Lower.lean             25
 check Concrete/IR/Mono.lean              5
 check Concrete/IR/SSACleanup.lean        1
 check Concrete/IR/SSAVerify.lean         1
