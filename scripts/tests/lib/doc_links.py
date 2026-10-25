@@ -18,6 +18,9 @@ THE ANCHOR. `#frag` (same file) or `path.md#frag` must name an anchor of that Ma
     letter, mark, digit, space, hyphen or underscore removed, each space turned into a hyphen; the
     second heading with one slug gets `-1`, the third `-2` (github-slugger, which GitHub uses);
   - an explicit HTML id (`<a id="REF-3"></a>`, `name=` too), matched exactly.
+Into CHANGELOG.md, and from a fragment to its own `#frag`, the anchors are those of CHANGELOG.md with
+the pending fragments folded in by scripts/gen/changelog.py (its fold, not a copy of it).
+HTML comments, fenced code and code spans hold no headings, ids or links.
 A heading slug is compared case-insensitively (GitHub lowercases the fragment before its lookup);
 a fragment is URL-decoded first. An anchor into a file that is not Markdown (`Foo.lean#L10`) or into
 a directory is not checked: GitHub's line anchors are not headings.
@@ -36,32 +39,55 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 SKIP_PARTS = {".git", ".lake", ".cache", "node_modules"}
 FRAGMENT_DIRS = ("changelog.d",)  # folded into the root CHANGELOG.md, so root-relative
 INLINE = re.compile(r"!?\[(?:[^\[\]]|\[[^\[\]]*\])*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+[\"'(][^)\n]*)?\)")
+IMAGE = re.compile(r"!\[[^\[\]]*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+[\"'(][^)\n]*)?\)")
 REFDEF = re.compile(r"^ {0,3}\[[^\]\n]+\]:\s*(<[^>\n]*>|\S+)", re.MULTILINE)
 EXTERNAL = re.compile(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|@/|//)")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 SETEXT = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 HTML_ID = re.compile(r"<[a-zA-Z][^>]*?\s(?:id|name)\s*=\s*[\"']([^\"']+)[\"']")
-CODE_SPAN = re.compile(r"(`+)(.+?)\1", re.DOTALL)
+# A code span: a backtick run, then the same run again, never across a blank line (a paragraph ends).
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n).)+?)(?<!`)\1(?!`)", re.DOTALL)
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
-def blank_code(text):
-    """The text with fenced blocks and code spans replaced by spaces (offsets and lines preserved)."""
+def _spaces(m):
+    """The match with every character but a newline turned into a space (offsets and lines kept)."""
+    return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def blank_blocks(text):
+    """The text with fenced code blocks and HTML comments blanked: neither holds headings or links."""
     out, fence = [], None
     for line in text.split("\n"):
         m = FENCE.match(line)
         if fence is None and m:
             fence = (m.group(1)[0], len(m.group(1)))
             out.append(" " * len(line))
-            continue
-        if fence is not None:
+        elif fence is not None:
             if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1] \
                     and not line.strip().strip(fence[0]):
                 fence = None
             out.append(" " * len(line))
-            continue
-        out.append(CODE_SPAN.sub(lambda c: " " * len(c.group(0)), line))
-    return "\n".join(out)
+        else:
+            out.append(line)
+    return COMMENT.sub(_spaces, "\n".join(out))
+
+
+def blank_code(text):
+    """blank_blocks, and code spans blanked too (a span may cross lines within a paragraph)."""
+    return CODE_SPAN.sub(_spaces, blank_blocks(text))
+
+
+def _strip_emphasis(s):
+    """Remove paired emphasis delimiters; an unpaired `_` or `*` is a literal character."""
+    for pat in (r"(?<![^\W_])(__?)(?=\S)(.+?)(?<=\S)\1(?![^\W_])", r"(\*{1,3})(?=\S)(.+?)(?<=\S)\1"):
+        while True:
+            t = re.sub(pat, r"\2", s)
+            if t == s:
+                break
+            s = t
+    return s
 
 
 def heading_text(raw):
@@ -80,8 +106,7 @@ def heading_text(raw):
             s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)
             s = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", s)
             s = re.sub(r"<[^>]+>", "", s)
-            s = re.sub(r"(?<![^\W_])_+|_+(?![^\W_])", "", s)  # emphasis delimiters, not snake_case
-            s = s.replace("*", "")
+            s = _strip_emphasis(s)
             s = html.unescape(s)
             s = re.sub(r"\x00(\d+)\x00", lambda e: chr(int(e.group(1))), s)
         out.append(s)
@@ -100,9 +125,8 @@ def slug(text):
 def anchors(text):
     """(heading slugs, explicit ids) of a Markdown file, as GitHub assigns them."""
     seen, slugs = {}, set()
-    lines = blank_fences_only(text).split("\n")
     prev = ""
-    for line in lines:
+    for line in blank_blocks(text).split("\n"):
         m = ATX.match(line)
         heading = None
         if m:
@@ -119,25 +143,23 @@ def anchors(text):
             seen[base] = n
             slugs.add(s)
         prev = line if not m else ""
-    ids = set(HTML_ID.findall(blank_fences_only(text)))
+    ids = set(HTML_ID.findall(blank_code(text)))
     return slugs, ids
 
 
-def blank_fences_only(text):
-    out, fence = [], None
-    for line in text.split("\n"):
-        m = FENCE.match(line)
-        if fence is None and m:
-            fence = (m.group(1)[0], len(m.group(1)))
-            out.append("")
-        elif fence is not None:
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1] \
-                    and not line.strip().strip(fence[0]):
-                fence = None
-            out.append("")
-        else:
-            out.append(line)
-    return "\n".join(out)
+def folded_changelog(root):
+    """CHANGELOG.md as it reads with the pending fragments folded in, by changelog.py's own fold
+    (the one owner of the fold order), or None when the tree has no foldable changelog."""
+    sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "gen"))
+    try:
+        import changelog
+        path = root / "CHANGELOG.md"
+        _, body = changelog.split(changelog.read(str(path)), str(path))
+        return changelog.folded(body, changelog.fragments(str(root)))
+    except (SystemExit, ImportError, OSError, ValueError):
+        return None
+    finally:
+        sys.path.pop(0)
 
 
 def markdown_files(root):
@@ -157,10 +179,14 @@ def main():
     root = ap.parse_args().root.resolve()
 
     cache = {}
+    changelog = (root / "CHANGELOG.md").resolve()
 
     def anchors_of(p):
+        """The anchors a link into p lands on. CHANGELOG.md is read with the pending fragments folded
+        in, since that is the document a fragment's link (or a link to the changelog) reaches."""
         if p not in cache:
-            cache[p] = anchors(p.read_text(errors="replace"))
+            text = folded_changelog(root) if p == changelog else None
+            cache[p] = anchors(text if text is not None else p.read_text(errors="replace"))
         return cache[p]
 
     failures, links, frags = [], 0, 0
@@ -170,20 +196,25 @@ def main():
         scan = blank_code(text)
         fragment = rel.parts[0] in FRAGMENT_DIRS and len(rel.parts) == 2 and rel.name != "README.md"
         base = root if fragment else path.parent
-        found = [m for m in INLINE.finditer(scan)] + [m for m in REFDEF.finditer(scan)]
-        for m in found:
-            target = m.group(1)
+        # An image inside a link's text ([![badge](img)](target)) is a second link; key by position.
+        found = {}
+        for rx in (INLINE, IMAGE, REFDEF):
+            for m in rx.finditer(scan):
+                found.setdefault(m.start(1), m.group(1))
+        for pos, target in sorted(found.items()):
             if target.startswith("<") and target.endswith(">"):
                 target = target[1:-1]
             if EXTERNAL.match(target):
                 continue
             local, _, frag = target.partition("#")
             local = unquote(local.split("?", 1)[0])
-            line = text.count("\n", 0, m.start()) + 1
+            line = text.count("\n", 0, pos) + 1
             if local.startswith("/"):  # GitHub reads a leading slash as the repository root
                 dest = (root / local.lstrip("/")).resolve()
-            else:
-                dest = (base / local).resolve() if local else path
+            elif local:
+                dest = (base / local).resolve()
+            else:  # same file; a fragment's own `#x` lands, once folded, in CHANGELOG.md
+                dest = changelog if fragment and changelog.is_file() else path
             links += 1
             if local and not dest.exists():
                 failures.append(f"{rel}:{line}: missing local link {target}")
@@ -195,11 +226,6 @@ def main():
             slugs, ids = anchors_of(dest)
             if want in ids or want.lower() in slugs:
                 continue
-            if fragment and not local and (root / "CHANGELOG.md").is_file():
-                # a fragment's own `#x` lands, once folded, in CHANGELOG.md
-                slugs, ids = anchors_of(root / "CHANGELOG.md")
-                if want in ids or want.lower() in slugs:
-                    continue
             where = dest.relative_to(root) if dest.is_relative_to(root) else dest
             failures.append(f"{rel}:{line}: no anchor #{want} in {where} (link {target})")
 

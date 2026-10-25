@@ -45,8 +45,11 @@ The checker is `scripts/tests/lib/doc_links.py` (with a `--root` seam) under a s
   files (`Foo.lean#L10`) and directories are not checked;
 - a link in a `changelog.d/` fragment, and a link with a leading `/`, resolve against the root
   (`changelog.d/README.md` states the convention);
-- links inside fenced code and code spans are not links (GitHub renders neither), and a nested
-  image link `[![badge](...)](target)` is read, which the old pattern missed.
+- an anchor into CHANGELOG.md, and a fragment's own `#anchor`, is checked against CHANGELOG.md with
+  the pending fragments folded in by `scripts/gen/changelog.py`'s own fold;
+- fenced code, code spans (also across lines) and HTML comments hold no links, headings or ids
+  (GitHub renders none of them), and both links of a nested badge `[![badge](img)](target)` are
+  read; the old pattern read neither.
 
 The gate registration rule enumerates `scripts/tests/check_*.py` as well as shell gates, so a
 Python gate no workflow step reaches is reported unreachable (checked by adding an unreferenced
@@ -56,11 +59,12 @@ a docs-only edit, a renamed heading and a deleted file can each break the gate. 
 file, so a path no rule maps still selects every gate.
 
 Regression legs: the gate's own controls on throwaway trees (a missing heading, a duplicate suffix
-past the last repeat, a heading inside a fence, a missing file, a fragment link written relative to
-`changelog.d/`, a fragment anchor fail; slugs with punctuation and code, a duplicate suffix, an
-explicit id, case, same-file and root-relative links pass) and two selection controls (a docs-only
+past the last repeat, a heading inside a fence or an HTML comment, an id inside a code span, a
+missing image inside a link, a missing file, a fragment link written relative to `changelog.d/`, a
+fragment anchor fail; slugs with punctuation, code, emphasis and a literal underscore, a duplicate
+suffix, an explicit id, case, same-file, root-relative and sibling-fragment links pass) and two selection controls (a docs-only
 and a research-note diff select the link gate). Repaired links: none beyond `a4c4d8eb`'s three; with
-anchors checked the tree has no other broken link (2601 links, 523 anchors).
+anchors checked the tree has no other broken link (2604 links, 523 anchors).
 
 ## Structural cause
 

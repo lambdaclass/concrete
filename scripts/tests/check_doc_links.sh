@@ -38,7 +38,15 @@ tree() {
 
 ## Repeated
 
+## A literal _ and __init__ and **bold**
+
 <a id="REF-3"></a>
+
+`<a id="in-code"></a>`
+
+<!--
+## Commented out
+-->
 
 ```
 ## Not a heading
@@ -64,11 +72,15 @@ cat > "$TMP/good/docs/LINKS.md" <<'EOF'
 ```
 [inside a fence](MISSING.md)
 ```
-`[inside a span](MISSING.md)`
+`[inside a span](MISSING.md)` and `a span that
+[crosses a line](MISSING.md)`
+[literal](TARGET.md#a-literal-_-and-init-and-bold)
 EOF
-printf '### Entry\n\nSee [the target](docs/TARGET.md#repeated) and [readme](README.md).\n' \
+printf '### Entry\n\nSee [the target](docs/TARGET.md#repeated), [readme](README.md) and [the next](#second-entry).\n' \
   > "$TMP/good/changelog.d/2099-01-01-control.md"
-expect good 0 'DOC-LINKS: PASS' "positive control: slugs, duplicate suffix, explicit id, code skipped, root-relative fragment links pass"
+printf '### Second Entry\n\nBody.\n' > "$TMP/good/changelog.d/2099-01-02-other.md"
+printf '# Changelog\n\n## Major Milestones\n\n### Old Entry\n' > "$TMP/good/CHANGELOG.md"
+expect good 0 'DOC-LINKS: PASS' "positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass"
 
 tree anchor
 printf '[gone](TARGET.md#phase-8-renamed)\n' > "$TMP/anchor/docs/LINKS.md"
@@ -81,6 +93,18 @@ expect dup 1 'no anchor #repeated-2' "a duplicate suffix past the last repeated 
 tree fenced
 printf '[fenced](TARGET.md#not-a-heading)\n' > "$TMP/fenced/docs/LINKS.md"
 expect fenced 1 'no anchor #not-a-heading' "a heading inside a code fence is not an anchor"
+
+tree commented
+printf '[ghost](TARGET.md#commented-out)\n' > "$TMP/commented/docs/LINKS.md"
+expect commented 1 'no anchor #commented-out' "a heading inside an HTML comment is not an anchor"
+
+tree codeid
+printf '[ghost](TARGET.md#in-code)\n' > "$TMP/codeid/docs/LINKS.md"
+expect codeid 1 'no anchor #in-code' "an id written inside a code span is not an anchor"
+
+tree badge
+printf '[![badge](NOPE.svg)](TARGET.md)\n' > "$TMP/badge/docs/LINKS.md"
+expect badge 1 'missing local link NOPE.svg' "an image inside a link's text is checked"
 
 tree missing
 printf '[gone](NOPE.md)\n' > "$TMP/missing/docs/LINKS.md"
