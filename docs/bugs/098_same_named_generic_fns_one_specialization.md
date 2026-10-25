@@ -1,5 +1,13 @@
 # Bug 098 — two modules' same-named generic functions share one specialization
 
+<!-- bug-ledger
+summary: two modules' same-named generic functions shared one Mono specialization (silent wrong code in both engines); fixed by 097's spelling ((`land5`))
+fixtures: regress_097_098_same_named_private_fns.con error_098_nested_generic_collision.con error_098_nested_collision_same_tree.con
+class: 1
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (`land5`)
 **Found:** 2026-10-18, by the probes behind branch `bug096-type-identity`.
 **Severity:** silent wrong code in safe code, natively and in the interpreter: a module's call to

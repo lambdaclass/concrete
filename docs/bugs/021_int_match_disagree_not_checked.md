@@ -1,5 +1,10 @@
 # Bug 021: Integer Match Does Not Check Consumption Agreement
 
+<!-- bug-ledger
+summary: Integer Match Does Not Check Consumption Agreement
+fixtures: bug_int_match_disagree.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-22
 **Discovered in:** `tests/programs/bug_int_match_disagree.con`

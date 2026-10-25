@@ -1,5 +1,12 @@
 # Bug 236 — Elab appends an array literal's elements one by one (quadratic)
 
+<!-- bug-ledger
+summary: Elab built an array literal's Core element list by appending one element at a time, so `[v; n]` (n elements after parsing) took time n² for every consumer (n = 40000: 4 s; 200000: over a minute; now 0.14 s). Prepended and reversed once, as its evidence list already was. Pinned by `regress_236_array_repeat_literal.con`. Found isolating bug 235. Class 17.
+fixtures: regress_236_array_repeat_literal.con
+class: 17 — Elab appended an array literal's elements one at a time
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1025`)
 **Found:** 2026-10-24, by the differential hunt on main `9622f7e0`, isolating bug 235: a program
 whose only statement is `let a: [i64; 40000] = [1; 40000];` took 4 s under `--interp` and as long

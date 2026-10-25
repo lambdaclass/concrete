@@ -1,5 +1,10 @@
 # Bug 007: No Print Path for Standalone Programs
 
+<!-- bug-ledger
+summary: No Print Path for Standalone Programs
+fixtures: bug_print_builtins.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 

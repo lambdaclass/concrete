@@ -1,5 +1,13 @@
 # Bug 052: T_destroy synthesized as no-op for arrays — Vec<[T; N]>.drop() skips element destruction
 
+<!-- bug-ledger
+summary: `Vec<[T; N]>.drop()` skipped element destruction via a synthesized no-op `T_destroy`; Mono now synthesizes per-element glue from the argument type, Check no longer accepts every unmatched type as destroyable (E0241), and an unresolved or destructor-less type is refused (E0814) instead of no-oped (2026-10-18)
+coverage: Vec<[T;N]>.drop() skipped element destruction because tyName is empty for arrays and Mono answered the unresolved T_destroy with an empty no-op. Mono now decides the destructor from the argument type (per-element glue for arrays, nested and generic elements included; no-op only for Copy; E0814 for unresolved or destructor-less types) and Check's destroyable lost its accept-anything catch-all (E0241 for [non-Destroy; N], Heap, HeapArray, &mut). Regression vehicle is a multi-file fixture plus gate legs, not a tests/programs .con: tests/regressions/bug052_vec_array_destroy, asserted by check_collections_copy_only.sh (6 legs: compiled counts 4 8 14 17 21, glue IR calls @Tracked_destroy, compiled and --interp agree on 2 8 9, two refusal controls); all six fail on the pre-fix compiler; see docs/bugs/052 (2026-10-18)
+class: 3
+class: 11
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-18 (arrays of destroyable elements get real glue; every
 other shape that has no destructor is refused at compile time)
 **Discovered:** 2026-07-18, middle-end audit (reproduced:

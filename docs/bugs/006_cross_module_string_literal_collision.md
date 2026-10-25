@@ -1,5 +1,10 @@
 # Bug 006: Cross-Module String Literal Name Collisions
 
+<!-- bug-ledger
+summary: Cross-Module String Literal Name Collisions
+coverage: string literal collision -- fixed in EmitSSA, covered by cross-module tests
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Fix:** `Concrete/IR/Lower.lean` — prefix string constant names with module name

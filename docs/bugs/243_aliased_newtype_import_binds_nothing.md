@@ -1,5 +1,12 @@
 # Bug 243 — an aliased newtype import binds no name
 
+<!-- bug-ledger
+summary: `import m.{N as M}` of a newtype binds no `M` (`resolveImports` appends the newtype under its own name), so `M::mk` is E0106. Owned by R-0492/R-0514; reproducer pinned as an open-bug reproducer (probes of bug 223's fix, 2026-10-25). Class 1.
+coverage: an aliased newtype import binds no name (resolveImports appends the newtype under its own spelling), so the alias is unknown (E0106); owner R-0492/R-0514 imports bind identities; reproducer tests/regressions/bug243_aliased_newtype_import_binds_nothing/repro.con, found by the probes of bug 223's fix 2026-10-25; pinned as an open-bug reproducer (compile-fails)
+class: 1 — an aliased newtype import binds no name: an import copies the declaration under the alias, and the newtype kind has no such copy
+silent: no
+-->
+
 **Status:** OPEN
 **Found:** 2026-10-25, by the probes of bug 223's fix (R-0492 step 3): the alias form of each
 importable type kind.

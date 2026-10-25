@@ -1,5 +1,13 @@
 # Bug 176 — a loop body's shadowing `let` outlived the loop in the checker
 
+<!-- bug-ledger
+summary: a `let` in a `while`/`for` body (or a `for` header) that shadowed an outer name stayed visible to the checker after the loop, so the outer name took the inner binding's type and mutability: valid code was refused (E0217, E0233), a `u8` binding held 300 natively and in `--interp`, and a checked program failed SSA verification (silent wrong code). Check's loops restored only their depth and labels; every block now closes through one helper (`closeBlockScope`/`inBlockScope`). Found by the fuzz farm (`refusal-eea6c54fe796`), 2026-10-22. Fixtures `regress_176_*`, `error_176_*`. Class 2; joins exit 0b.
+fixtures: regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type.con error_176_while_shadow_ssa.con error_176_while_shadow_mut.con error_176_for_header_type.con error_176_loop_body_linear_leak.con error_176_loop_body_leak_while_let.con error_176_loop_body_leak_labelled_break.con error_176_loop_body_leak_labelled_break_mid.con
+class: 2 — a loop body's shadowing `let` outlived the loop in the checker) (and 068's binder half
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug176`)
 **Found:** 2026-10-22 by the fuzz farm (differential generator, finding `refusal-eea6c54fe796`,
 compiler `34f19e97`), reduced by hand.

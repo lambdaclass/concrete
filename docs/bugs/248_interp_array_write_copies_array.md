@@ -1,5 +1,12 @@
 # Bug 248 — an element write under `--interp` copies the whole array
 
+<!-- bug-ledger
+summary: under `--interp` an element write (`a[i] = v`, `s.f[i] = v`, through `&mut`, `vec_push`/`vec_set`/`vec_pop`) built the new array while the environment still held the old one, so every write copied the whole array (regression program: 64.6 s, now 5.5 s). A write takes the value out of its binding and container first, so the update is in place. Pinned by `regress_248_interp_array_write.con`. Found during bug 235's fix. Class 17.
+fixtures: regress_248_interp_array_write.con
+class: 17 — an interpreter element write copied the array the environment still held
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/perf-quadratics`)
 **Found:** 2026-10-24, during bug 235's fix (its record notes that a write still copied the array);
 filed 2026-10-25.

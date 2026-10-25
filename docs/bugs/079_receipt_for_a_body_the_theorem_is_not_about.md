@@ -1,5 +1,12 @@
 # Bug 079 — a receipt was minted for a body the linked theorem says nothing about
 
+<!-- bug-ledger
+summary: a body was compared with a specification only when its source name keyed a side table, so `fn always_seven() { return 7; }` linked to `check_nonce_correct` was proved and minted a receipt; one subject binding (body and parameters ARE the specification the theorem evaluates) now governs proved, issuance and consumption
+coverage: a body was compared with a specification only when its source name keyed Concrete.Proof.specs, so a claim borrowing any theorem by naming that theorem's spec was proved and minted a receipt (always_seven + check_nonce_correct on b87152ba). Regression vehicle is a gate: check_subject_binding.sh mints nothing for always_seven, rejects the receipt b87152ba issued for it (scripts/tests/fixtures/bug079/always_seven.b87152ba.store), and refuses the changed-together, attested-wrong-model and permuted-parameter shapes; see docs/bugs/079 (2026-10-17)
+class: 9
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug079-spec-binding`, from published main `b87152ba`)
 **Found:** 2026-10-17, while building R-0482 P1's negative controls. A cross-package fixture's claim
 reached "proved" once its closure could root, and nothing about its theorem was ever about its body.

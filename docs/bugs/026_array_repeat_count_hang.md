@@ -1,5 +1,11 @@
 # Bug 026: Huge array-repeat count hangs the compiler
 
+<!-- bug-ledger
+summary: huge `[v; N]` repeat count → clean parse diagnostic instead of O(N²) hang/OOM
+coverage: huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)
+class: 17
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-07-08
 **Fixed:** 2026-07-08

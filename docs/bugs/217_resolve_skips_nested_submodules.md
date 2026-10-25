@@ -1,5 +1,12 @@
 # Bug 217 — Resolve does not walk the bodies of nested submodules
 
+<!-- bug-ledger
+summary: Resolve walked only the modules of the top-level list, so a nested submodule (two modules deep, a module written after `main`, and every `mod x;` file of a project, std included) produced no Resolve diagnostics: a cast to an unknown type there reached the backend (panic; `--interp` printed 7) and undeclared names or unknown annotation types met Check's codes. Resolve now walks the module tree, each submodule resolved against the environment Check gives it (its imports by Check's rule, its own declarations, its siblings' types), nothing of an enclosing module. Fixtures `error_217_*`, `regress_217_nested_submodule_scope.con` and a project leg. Codex review of bug 215, 2026-10-23. Class 11.
+fixtures: error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con error_217_nested_enclosing_alias_cast.con regress_217_nested_submodule_scope.con regress_217_sibling_type_precedence.con regress_217_enclosing_type_not_in_scope.con
+class: 11 — a nested submodule Resolve never visits yields no diagnostics
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/bughunt-216-217`)
 **Found:** 2026-10-23, by the Codex review of bug 215 (a constant in `mod Outer { mod Inner { .. } }`
 escaped the new check), confirmed by probes in the post-R-0492 differential hunt.

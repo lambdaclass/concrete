@@ -1,5 +1,13 @@
 # Bug 183 — a dereference assignment evaluates its destination before its right-hand side in the binary
 
+<!-- bug-ledger
+summary: a dereference assignment `*(&mut a[i()]) = j()` lowered its destination before its right-hand side in the binary (exit 12; `--interp` and rule 7: 21). `Lower` now lowers the right-hand side first, like every other assignment form; pinned by `regress_183_deref_assign_rhs_first.con` (three shapes, `--interp == binary`, 129) and the reproducer's `run_ok`
+fixtures: regress_183_deref_assign_rhs_first.con
+class: 7 — a dereference assignment's operand order
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-21, while writing the evaluation-order rule (the semantics decisions of
 2026-10-21; recorded in [STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)

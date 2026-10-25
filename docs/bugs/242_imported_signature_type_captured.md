@@ -1,5 +1,12 @@
 # Bug 242 — a type in an imported signature is captured by the importer's own type of that spelling
 
+<!-- bug-ledger
+summary: a type in an imported signature (`fn make() -> P`) is read in the importer's environment by its definition spelling, and the import closure's copy of `P` comes first, so an importer's own `struct P` is unreachable (E0252 on its literal). Owned by R-0492/R-0514 (signature types carried by identity); reproducer pinned as an open-bug reproducer (probes of bug 223's fix, 2026-10-25). Class 1.
+coverage: a type in an imported signature is read in the importer's environment by its definition spelling, so the import closure's copy of it hides the importer's own type of that spelling (E0252 on a valid literal); owner R-0492/R-0514 signature types by identity; reproducer tests/regressions/bug242_imported_signature_type_captured/repro.con, found by the probes of bug 223's fix 2026-10-25; pinned as an open-bug reproducer (compile-fails)
+class: 1 — a type in an imported signature is a spelling the importer re-reads, so the importer's own type of that spelling is captured
+silent: no
+-->
+
 **Status:** OPEN
 **Found:** 2026-10-25, by the probes of bug 223's fix (R-0492 step 3): an alias of an imported
 type beside a local type of the definition's spelling.

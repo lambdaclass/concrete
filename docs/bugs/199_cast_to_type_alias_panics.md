@@ -1,5 +1,12 @@
 # Bug 199: a cast to a type alias crashed the compiler
 
+<!-- bug-ledger
+summary: a cast to a type alias (`x as IP`) reached the backend unexpanded and the compiler panicked; Elab resolves the cast target through aliases. Pinned by `regress_199_cast_to_alias.con` (`--interp == binary`, 42)
+fixtures: regress_199_cast_to_alias.con
+class: 12 — a cast target was not resolved through type aliases
+silent: no
+-->
+
 **Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-23, by the Codex review of the bug 198 fix (a witness that spelled a raw-pointer
 type through an alias), then reproduced on main.

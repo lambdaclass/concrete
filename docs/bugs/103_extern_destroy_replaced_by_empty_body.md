@@ -1,5 +1,14 @@
 # Bug 103 — an extern whose name ends in `_destroy` is replaced by an empty body
 
+<!-- bug-ledger
+summary: destruction is dispatched by the reserved `$destroy` callee and the argument type, never by a `_destroy` name suffix, so an `extern fn foo_destroy` stays a `declare`. Verified 2026-10-21; fixture `regress_103_extern_destroy.con` linked with a counting C stub (rc 42) (on main by `0c507fb9` (2026-10-18, before it was filed from an older base))
+fixtures: regress_103_extern_destroy.con
+class: 3
+class: 11
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-18 by `0c507fb9` (bug 052 follow-up, "destructor dispatch is typed, never a name lookup"), on main through `13e92ee9`; verified and recorded 2026-10-21 (branch `symbols`)
 **Found:** 2026-10-20 by the RocksDB slice 1 groundwork (`docs/platform/ROCKSDB_SLICE1.md`, G3).
 **Severity:** a silent leak of every foreign resource released through a `*_destroy` function, and

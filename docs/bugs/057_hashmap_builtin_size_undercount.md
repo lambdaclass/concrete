@@ -1,5 +1,11 @@
 # Bug 057: the hardcoded HashMap size undercounts the struct, truncating by-value copies
 
+<!-- bug-ledger
+summary: the hardcoded HashMap size undercounts the struct, truncating by-value copies (fixed in the R-0003 slice)
+fixtures: regress_057_hashmap_by_value/src/main.con
+class: 12
+-->
+
 **Status:** FIXED (2026-07-25, in the R-0003 slice) — `Builtin.hashmapSize` now
 matches std's declaration, and `scripts/tests/check_builtin_layout_sizes.sh`
 derives the size from `std/src/map.con` and fails if the two ever disagree.

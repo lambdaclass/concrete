@@ -1,5 +1,12 @@
 # Bug 226 — a submodule can import a private function of another module
 
+<!-- bug-ledger
+summary: a submodule (a module written after `main`, any `mod x;` file, every std module) may import a private function or `extern fn` of another module, which MOD-2@1 refuses and Resolve refuses from a top-level module (E0111): Check's and Elab's `resolveImports` admits every function. Found by bug 217's fix, 2026-10-24 ((the fix needs a visibility for std's internal `std.libc` imports))
+coverage: a submodule may import a private function or extern of another module (FileSummary.resolveImports, used by Check and Elab for submodules, admits every function), while a top-level module importing it is E0111; fixing it needs a visibility for std's imports of std.libc's non-pub bindings; reproducer tests/regressions/bug226_submodule_imports_private_function/repro.con, found by bug 217's fix 2026-10-24; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)
+class: 12 — which declarations an import may name: Resolve's rule checks `pub`, the submodule rule Check and Elab use does not
+silent: no
+-->
+
 **Status:** OPEN (the fix needs std's internal imports of `std.libc` to be given a visibility, which
 is a std API decision)
 **Found:** 2026-10-24, by bug 217's fix: walking std's submodules with Resolve's own import rule

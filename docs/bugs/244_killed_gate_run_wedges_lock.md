@@ -1,5 +1,12 @@
 # Bug 244 — a killed gate run leaves its children running and the repository lock held
 
+<!-- bug-ledger
+summary: killing a gate run killed only the runner; its gates, compilers and harness copies kept working the tree under init, and the repository lock (which recorded only the creator pid, proving nothing about its children) refused every later run until removed by hand. A run is now one process group of its own session; a signal to the runner terminates the group, the lock records it, and a later run reclaims the lock only once the kernel reports that group (and any campaign group registered in the lock) empty. Covered by the repository-lock gate. Class 16.
+coverage: a killed gate run left its children working the tree and the repository lock held until removed by hand. Regression vehicle is the repository-lock gate's bug-244 legs (a runner sandbox killed by SIGTERM, SIGINT and SIGKILL; the lock library fresh.sh reclaims only a provably empty session group), not a tests/programs fixture (2026-10-25)
+class: 16 — a killed gate run's children and its lock, owned by no process group a signal or a later run could address
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/gate-runner-kill`)
 **Found:** 2026-10-25, operating the pre-push hook on the OVH dev host: a gate run
 (`run_ci_gates_local.sh`, started by `.githooks/pre-push`) was killed mid-run. Its gate processes

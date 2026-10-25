@@ -1,5 +1,10 @@
 # Bug 036: Copy-ness and methods of a cross-module type are import-list-dependent
 
+<!-- bug-ledger
+summary: import closure: type metadata travels with the type
+coverage: import_closure_metadata/src/main.con (project test, exit 0); resolveImports closes over public types reachable through imported signatures
+-->
+
 **Status:** Fixed (2026-07-16)
 **Fixed in:** FileSummary.lean `resolveImports` — after named-symbol
 resolution, a bounded closure pass pulls in PUBLIC types of the imported

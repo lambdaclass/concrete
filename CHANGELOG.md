@@ -9,6 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
+<!-- changelog stamp: 800c5d20b9a232085a802d15c8bbf423 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### A Function With A Result Type Returns On Every Path (bug 194, 2026-10-23)
 

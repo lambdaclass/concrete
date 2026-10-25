@@ -1,5 +1,10 @@
 # Bug 001: Cross-Module Struct Field Offset
 
+<!-- bug-ledger
+summary: Cross-Module Struct Field Offset
+fixtures: bug_cross_module_struct_field.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-14
 **Fixed:** 2026-03-14

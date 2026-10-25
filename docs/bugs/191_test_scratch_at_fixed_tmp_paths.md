@@ -1,5 +1,12 @@
 # Bug 191: test programs and std tests wrote fixed shared `/tmp` paths
 
+<!-- bug-ledger
+summary: test programs (`file_write_read.con`, `file_read_basic.con`) and nine std fs/io tests wrote fixed `/tmp` paths, so on a shared host every user but the first got NULL from `fopen` (the programs segfaulted, rc 139; `concrete test` failed) and concurrent runs shared files. The runner now owns the scratch location: `concrete test` / `--test` (`Main.runTestBinary`), `run_tests.sh` and `test_ssa.sh` set `CONCRETE_TEST_TMPDIR` to a directory private to the run, std tests use `std.test.scratch_path` (no fallback), and the programs check `fopen` (exit 100/101/102). Pinned by the `run_tests.sh` regress_191 legs and a `check_gate_hygiene.sh` leg refusing `/tmp` literals in every `.con` source
+fixtures: file_write_read.con file_read_basic.con regress_191_test_scratch.con
+class: 16 — test scratch files at fixed `/tmp` names, owned by the first user on a shared host
+silent: no
+-->
+
 **Status:** FIXED (branch `train3-tmp-paths`, for landing train 3)
 **Found:** 2026-10-23, when train 3's pre-push hook ran as user `agent` on the OVH server
 (`wip/train3` at ee1fff8e): `test_ssa`, `check_native_libs` and `run_tests` failed there and passed

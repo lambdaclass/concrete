@@ -1,5 +1,11 @@
 # Bug 068 — a ghost let and a runtime let produce the same body evidence
 
+<!-- bug-ledger
+summary: a ghost let and a runtime let produce the same body evidence
+coverage: a ghost let and a runtime let produced IDENTICAL body evidence, so erasure was invisible to the subject digest and a proof over one stayed valid-looking after a change to the other. Found while scoping proof-context elaboration, not by a gate. FIX: EvidenceStmtV2.letBind carries isGhost, on the same principle as exprStmt's isValue. Gated by check_shadow_body_v2.sh; see docs/bugs/068 (2026-08-06)
+class: 10
+-->
+
 **Status:** FIXED 2026-08-06
 **Found:** 2026-08-06, while scoping the proof-context elaboration path that R-0004 step 2a
 needs for `assert`/`assume`. Not found by a gate — found by asking what a ghost binding

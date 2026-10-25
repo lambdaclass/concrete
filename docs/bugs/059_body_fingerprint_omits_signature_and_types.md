@@ -1,5 +1,11 @@
 # Bug 059: the proof body fingerprint omits types and signature facts
 
+<!-- bug-ledger
+summary: the body hash drops declared types and never sees the signature; `i32 -> u32` keeps a proof `proved` (R-0004, 2026-07-25)
+coverage: the authoritative subject is proofSubjectDigestV2, which binds CheckedDeclFacts (full typed signature), so i32 -> u32 now stales the claim; LOAD-BEARING regression = check_proof_freshness.sh '059 CLOSED' leg (whole-signature change must report stale) ((R-0004 V2 activation 2026-08-17))
+class: 10
+-->
+
 **Status:** FIXED 2026-08-17 by the R-0004 V2 activation — second of R-0004's evidence-integrity defect class.
 
 The authoritative freshness comparison is now `proofSubjectDigestV2`, which binds

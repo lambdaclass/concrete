@@ -1,5 +1,15 @@
 # Bug 092: a reference stored in an aggregate did not freeze its source
 
+<!-- bug-ledger
+summary: a reference stored in a struct field, enum payload or array did not freeze its source, so `let w = W { t: &s }; s.drop(); let W { t } = w;` read freed memory. References are never stored in an aggregate (E0239)
+fixtures: error_092_ref_struct_field.con error_092_ref_in_option.con error_092_ref_in_array.con error_092_generic_box_ref.con error_092_generic_array_ref.con error_092_newtype_ref.con error_092_alias_newtype_ref.con error_092_alias_struct_field_ref.con regress_092_type_param_shadows_ref_alias.con error_092_const_ref_array.con error_092_phantom_ref_type_arg.con regress_092_refs_flow_down.con
+class: 4
+class: 5
+class: 13
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-18, checker ownership hunt (probe project `r3/`).
 **Severity:** critical. A program the checker accepted read freed memory through a reference that

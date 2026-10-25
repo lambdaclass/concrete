@@ -1,5 +1,13 @@
 # Bug 094: a binder that shadowed a live linear binding consumed it too
 
+<!-- bug-ledger
+summary: per-binding state updates (consume, use, reassign, `defer`, borrow freeze) marked every entry sharing the name, so a binder shadowing a live linear binding consumed it too and the outer value leaked; state updates now match by binding identity (arm binders may shadow; the outer binding is still owed after the match) and a destructure binder refuses to shadow a live non-Copy binding (E0292)
+fixtures: error_094_arm_binder_shadows_live.con error_094_destructure_shadows_live.con error_094_value_binder_shadows_live.con regress_094_shadowing_binders.con regress_094_shadow_state_by_identity.con error_094_borrow_block_shadow_leak.con error_094_mut_ref_param_shadow_leak.con
+class: 2
+silent: no
+exit: 0b
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-18, checker ownership hunt, while fixing bug 093.
 **Severity:** high. A program the checker accepted leaked a linear value (no E0208), and the

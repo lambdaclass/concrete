@@ -1,5 +1,10 @@
 # Bug 010: No String Substring Extraction Path
 
+<!-- bug-ledger
+summary: No String Substring Extraction Path
+coverage: missing string_substr -- stdlib addition
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Discovered in:** `examples/mal/main.con`

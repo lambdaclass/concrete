@@ -1,5 +1,13 @@
 # Bug 087 — a block-scoped `let` that shadowed an outer name was not lexically scoped
 
+<!-- bug-ledger
+summary: a `let` in an `if`/loop/borrow block that shadowed an outer name kept the outer name's Core spelling, so interp, binary and proof model disagreed (1/100, 3/7, loop leak) and a borrow-block shadow became a heap use-after-free; Elab now alpha-renames shadowing block binders and closes each block, and the normalizer strips `.bN` only where that is capture-free
+fixtures: regress_087_let_block_shadow.con regress_087_borrow_shadow_uaf/src/main.con regress_087_unpromoted_sibling.con regress_2i_scope1_087_renamed.con
+class: 2
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `bug087-let-shadowing`)
 **Found:** 2026-10-18 by the model/scope hunt (`hunt-model/scope`); the memory-safety
 flavour by the checker hunt (`hunt-checker/p17`).

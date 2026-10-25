@@ -1,5 +1,12 @@
 # Bug 252 — the Markdown-link check ignored anchors, misresolved changelog fragments, and nothing ran it
 
+<!-- bug-ledger
+summary: the Markdown-link check dropped every `#anchor`, so links to renamed or moved headings passed; it resolved `changelog.d/` fragment links against `changelog.d/` although fragments fold into the root CHANGELOG.md, so three correct links read as broken; and only the Makefile ran it, so neither CI nor the pre-push selection did. Anchors are checked against GitHub heading slugs and explicit ids, fragments resolve against the root, the check is a workflow step that every diff selects, and gate registration enumerates Python gates. Pinned by the link gate's throwaway-tree controls and the selection controls. Class 11.
+coverage: the Markdown-link check dropped anchors, resolved changelog fragments against their own directory, and was run only by the Makefile. Documentation tooling, no compiler program to reproduce it: the regression vehicle is the link gate's throwaway-tree controls and the selection replay controls over the selector entry point select_gates.sh (2026-10-25)
+class: 11 — a link check that skipped every anchor and that no workflow step ran passed as coverage
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/doc-links-gate`)
 **Found:** 2026-10-25, by the orchestrator's review of documentation links on main `032d8e12`: three
 links in `research/meta/bend-roc-lessons.md` named roadmap headings that had been renamed or moved to

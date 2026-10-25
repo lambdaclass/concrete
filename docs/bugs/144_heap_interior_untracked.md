@@ -1,5 +1,13 @@
 # Bug 144 — heap-shell interiors were not linearity-tracked: a field read duplicated a value, and `free` dropped one
 
+<!-- bug-ledger
+summary: heap-shell interiors were not linearity-tracked (KNOWN_HOLES H11's disclosed exclusion), so `let a = h.s; let b = h.s;` double-freed a String and `free(h)` dropped a live linear interior (EVALUATION2 D2). By-value non-Copy heap-field reads are E0290 and `free(h)` of a non-Copy pointee is E0287; the H11 exclusion is withdrawn. `error_144_*.con`, `regress_144_heap_node_destructure.con`. Joins exit 0b. ((`safety-eval2`))
+fixtures: error_144_heap_field_read_twice.con error_144_free_drops_linear.con error_144_defer_free_drops_linear.con error_144_heap_newtype_unwrap.con regress_144_heap_node_destructure.con
+class: 13 — heap interiors exempted from use-once by a disclosed exclusion
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)
 **Found:** 2026-10-21, by the second semantics evaluation (EVALUATION2 D2; probes `h01`, `h02`,
 `h04`, `h05`), not filed then. It had been disclosed as a design exclusion (KNOWN_HOLES H11:

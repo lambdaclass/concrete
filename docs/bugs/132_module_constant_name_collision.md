@@ -1,5 +1,13 @@
 # Bug 132 — two modules' constants of one name are one constant to Lower
 
+<!-- bug-ledger
+summary: two modules' constants of one name were one constant to Lower, so a submodule read another module's `A` (silent wrong code on main); refused at the use (E0602) until constants carry their module (R-0492) ((contained, batch 2))
+fixtures: error_132_const_name_collision.con
+class: 1 — two modules' constants of one name
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (contained, batch 2, `land2-fix`): refused at the use (E0602) until
 constants carry their module.
 **Found:** 2026-10-21, by batch 2's Codex review of the bug 123 fix (see

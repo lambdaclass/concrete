@@ -1,5 +1,11 @@
 # Bug 062: a stale proof does not invalidate the proofs that depend on it
 
+<!-- bug-ledger
+summary: a reachable non-current dependency downgrades its dependent to `deps_not_current`, at one hop and transitively (in R-0004 slice 3)
+coverage: dependency containment: a reachable dependency that is not current downgrades its dependent to deps_not_current, at one hop and transitively; gated by check_proof_freshness.sh with mutations #34-#36 ((R-0004 slice 3))
+class: 10
+-->
+
 **Status:** Fixed (2026-07-28, R-0004 slice 3) — fourth of R-0004's evidence-integrity defect class, and the
 one the task describes as "stale dependency propagation considers direct callees
 rather than the transitive proof dependency closure". The reproduction shows the

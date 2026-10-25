@@ -1,5 +1,12 @@
 # Bug 234 — the interpreter's recursion is quadratic in its call depth
 
+<!-- bug-ledger
+summary: under `--interp` a recursion of depth n took time n² (depth 64000: 44 s; 0.11 s after): every call, branch, `match` arm, block and borrow read the environment's length, and the environment, one association list shared by every frame, was walked to count it. `Interp.Env` keeps its length. Pinned by `regress_234_interp_deep_recursion.con` (depth 100000 under `--interp` within 20 s). Found by the differential hunt of 2026-10-24. Class 17.
+fixtures: regress_234_interp_deep_recursion.con
+class: 17 — the same environment's length, a scope's restore point and a reference's frame, recomputed by a walk at every call, branch, arm and borrow
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1025`)
 **Found:** 2026-10-24, by the differential hunt on main `9622f7e0` (loops and calls under
 `--interp`): `fn depth(n) { if n == 0 { return 0; } return 1 + depth(n - 1); }` at depth 100000

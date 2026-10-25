@@ -1,5 +1,10 @@
 # Bug 004: Array Variable-Index Assignment Produces Wrong Code
 
+<!-- bug-ledger
+summary: Array Variable-Index Assignment Produces Wrong Code
+fixtures: bug_array_var_index_assign.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Regression test:** `lean_tests/bug_array_var_index_assign.con`

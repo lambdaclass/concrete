@@ -1,5 +1,11 @@
 # Bug 058: `#[proof_by]` without `#[proof_fingerprint]` can never go stale
 
+<!-- bug-ledger
+summary: a missing stored fingerprint is now `unbound`, never `proved`; the full subject digest remains R-0004 work (2026-07-25)
+coverage: #[proof_by] with no #[proof_fingerprint] compares the current fingerprint with ITSELF, so an edited body still reports proved (R-0004 defect 1; reproducer in the bug doc, control case with a fingerprint stales correctly)
+class: 11
+-->
+
 **Status:** CONTAINED (2026-07-25) — such a link now reports the distinct state
 `unbound` ("proof link unbound: no stored proof-subject digest"), never `proved`
 and never `stale`, and fails closed under `[policy] require-proofs` with E0612.

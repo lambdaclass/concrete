@@ -1,5 +1,11 @@
 # Bug 055: project-mode sibling file-module import alias is unusable — valid program rejected
 
+<!-- bug-ledger
+summary: a project sibling `import a.{x as y}` emitted an undefined callee (2026-10-18 with bug 082)
+coverage: a project sibling-submodule alias is spelled by its definition (a_pick) in Core; regress_082_project_alias_binding/src/main.con (project test, exit 0; previous compiler: undefined @pick at llvm-as) (2026-10-18 with bug 082)
+class: 1
+-->
+
 **Status:** Fixed 2026-10-18 with [bug 082](082_import_alias_loses_to_same_named_definition.md)
 **Discovered:** 2026-07-18, middle-end audit (reproduced: `import a.{pick
 as f}` from a sibling file module resolves at Check, then EmitSSA emits a

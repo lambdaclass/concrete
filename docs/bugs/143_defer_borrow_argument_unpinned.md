@@ -1,5 +1,14 @@
 # Bug 143 — a deferred call's borrowed or projected argument reserved nothing (use after free)
 
+<!-- bug-ledger
+summary: a deferred call's borrowed, projected or computed argument reserved nothing, so `defer pb(&h); free(h);` read a freed heap cell at the exit and `defer peek(&t); defer kill(t);` read a consumed value (EVALUATION2 D5). Defer rule (a), reserve by place: arguments are locals, borrows of locals or constants (E0279); a borrowed local is pinned (E0206). D6 (by-name re-resolution) was already closed by bug 087. `error_143_*.con`, `regress_143_defer_reserve_by_place.con`. Joins exit 0b. ((`safety-eval2`))
+fixtures: error_143_defer_borrow_then_free.con error_143_defer_borrow_then_consume.con error_143_defer_observer_before_consumer.con error_143_defer_field_arg.con error_143_defer_call_arg.con error_143_defer_then_use_after_block.con error_143_defer_borrow_only.con error_143_defer_last_in_match_arm.con regress_143_defer_reserve_by_place.con error_143_defer_shadow_refused.con regress_143_defer_sibling_scopes.con
+class: 5 — a deferred call's borrow reserved nothing
+class: 15 — a pending deferred call was not part of the state
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)
 **Found:** 2026-10-21, by the second semantics evaluation (EVALUATION2 D5; probes `d04`, `d06`,
 `d07`, `d11`, `d16`, `d18`, `d19`, `d23`), not filed then.

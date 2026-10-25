@@ -1,5 +1,10 @@
 # Bug 030: non-`mut` array indexed writes accepted (at least in trusted fns)
 
+<!-- bug-ledger
+summary: non-`mut` array indexed writes accepted (at least in trusted fns)
+coverage: error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule (general (not trusted-only))
+-->
+
 **Status:** Fixed (2026-07-14)
 **Scope determined:** GENERAL, not trusted-only (plain fns accepted it too).
 **Fix:** Check.lean `.arrayIndexAssign` — a directly-named array base must be a

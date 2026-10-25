@@ -1,5 +1,10 @@
 # Bug 017: `std.net` Socket Constants Are Linux-Only
 
+<!-- bug-ledger
+summary: `std.net` Socket Constants Are Linux-Only
+coverage: socket constants linux-only -- platform-specific stdlib
+-->
+
 Status: fixed
 
 ## Fix

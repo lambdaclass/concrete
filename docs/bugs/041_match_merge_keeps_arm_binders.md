@@ -1,5 +1,11 @@
 # Bug 041: Match merge kept arm binders — stale Copy binder poisons a later same-named linear binder
 
+<!-- bug-ledger
+summary: Match merge kept arm binders — stale Copy binder poisons a later same-named linear binder
+coverage: regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)
+class: 2
+-->
+
 **Status:** Fixed (2026-07-17)
 **Fixed in:** Check.lean — both post-match merges (enum-arm path and
 value-pattern path) rebuild the var table from `envBefore.vars` instead of

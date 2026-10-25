@@ -1,5 +1,12 @@
 # Bug 237 — the impact selector reads script names in a map's note text as calls
 
+<!-- bug-ledger
+summary: the impact gate selector counted a script name in a keyed array's value (a bug-corpus note) as a call, so a corpus note naming the docs-drift gate made the corpus runners appear to read `docs/` and a docs-only diff selected 19 gate commands in CI (train 16). A keyed array's values are judged by how the script uses them: text names nothing, a file read is a read, anything else stays a call. Pinned by `check_gate_selection.sh` (text is not a call). Class 19.
+coverage: the impact gate selector counted a script name in a keyed array value (a corpus note in this file) as a call, so a docs-only diff selected the corpus runners. Regression vehicle is the text-is-not-a-call controls over the selector entry point select_gates.sh (selection replay gate) (2026-10-25)
+class: 19 — the impact selector counted a script name in a keyed array's note text as a call
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/gate-selector-data`)
 **Found:** 2026-10-24, by CI on train 16: `check_gate_selection.sh` failed its docs-only precision
 control (fixture `docs_only_92861f4e.paths` selected 19 gate commands, among them `run_tests.sh`

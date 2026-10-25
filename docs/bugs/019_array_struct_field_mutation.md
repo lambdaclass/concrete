@@ -1,5 +1,10 @@
 # Bug 019: Array Extracted From Struct Field Cannot Be Mutated
 
+<!-- bug-ledger
+summary: Array Extracted From Struct Field Cannot Be Mutated
+fixtures: bug_array_struct_field_mutation.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-20
 **Discovered in:** `tests/programs/bug_array_struct_field_mutation.con`

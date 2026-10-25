@@ -1,5 +1,14 @@
 # Bug 130 — `x as bool` with an integer `x` passes the checker and fails in `llvm-as`
 
+<!-- bug-ledger
+summary: `x as bool` with `x: Int` passed the checker and failed in `llvm-as` (`bitcast i64 to i1`); CoreCheck no longer admits `<int> as bool` (E0553, the bug 108 fix, ARITHMETIC_POLICY §8.1); pinned by `error_130_int_as_bool_int.con`
+fixtures: error_130_int_as_bool_int.con
+class: 7
+class: 8
+class: 13
+silent: no
+-->
+
 **Status:** FIXED (branch `backend-108-116`, commit 70025ca9, the bug 108 fix)
 **Found:** 2026-10-21, by the semantics probes (finding N4, `cast_bool.con`).
 **Severity:** loud failure on an accepted program: the checker accepts the cast, LLVM validation

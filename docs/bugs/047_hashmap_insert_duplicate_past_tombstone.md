@@ -1,5 +1,11 @@
 # Bug 047: HashMap::insert duplicates a key that lives past a tombstone
 
+<!-- bug-ledger
+summary: HashMap::insert duplicates a key that lives past a tombstone (fixed by R-0003)
+fixtures: regress_047_048_hashmap_probe/src/main.con
+class: 14
+-->
+
 **Status:** FIXED (R-0003, 2026-07-25) — `insert` remembers the first tombstone
 but keeps probing for a live equal key, taking the tombstone only at chain end.
 Gate: `scripts/tests/check_hashmap_probe_invariants.sh` (6 checks, including a

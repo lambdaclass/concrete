@@ -1,5 +1,14 @@
 # Bug 129 — a safe user function named like a C library symbol replaces it for the whole program
 
+<!-- bug-ledger
+summary: a safe `fn malloc` became the program's allocator; every Concrete-defined function is now emitted under a mangled `_C.<module>.<name>` symbol disjoint from C, and the compiler's own C calls are foreign callees (FFI.md "Symbol Names"). Fixtures `regress_129_*`
+fixtures: regress_129_user_fn_named_malloc.con regress_129_extern_beside_same_named_fn.con regress_129_imported_extern_beside_fn.con regress_129_fn_value_extern.con regress_129_runtime_helper_beside_fn.con regress_129_generic_extern.con
+class: 1 — a user function's link symbol was its spelling; fixed 2026-10-21 by mangling every Concrete-defined symbol apart from C
+class: 12
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (branch `symbols`)
 **Found:** 2026-10-21, by the semantics probes (finding N3, `symclash2.con`, `symclash.con`).
 **Severity:** memory and authority safety in safe code. User functions are emitted under their bare

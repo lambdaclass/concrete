@@ -1,5 +1,11 @@
 # Bug 076 — proof admission could not see into dependencies, or through a type parameter
 
+<!-- bug-ledger
+summary: proof admission used a program-only call graph, so indirect calls and foreign bindings inside dependencies, and type-parameter dispatch, were admitted as effect-free; now reads the shared assumption summary, with fixture, gate, #guards and mutations (2026-10-06)
+coverage: proof admission used effectOpaqueSet over the program-only call graph, so indirect calls and foreign bindings inside dependencies, and type-parameter dispatch, were admitted as effect-free. Regression is a two-package fixture (tests/regressions/proof_admission) run by check_proof_admission.sh, plus #guard controls in ProofCore; see docs/bugs/076 (2026-10-06)
+class: 11
+-->
+
 **Status:** FIXED 2026-10-06 (branch `r0484-admission`)
 **Found:** 2026-10-06, while moving proof admission onto the shared assumption summary
 (R-0484 R10). The old/new verdict comparison showed functions the old rule admitted that the

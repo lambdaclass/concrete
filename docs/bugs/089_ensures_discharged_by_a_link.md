@@ -1,5 +1,12 @@
 # Bug 089 — an `#[ensures]` was discharged by a link, not by a checked theorem
 
+<!-- bug-ledger
+summary: `#[ensures_proof(No.Such.Theorem)]` made a false `#[ensures]` read `proved_by_lean` on contracts, vcs, ledger and audit with no Lean run, and `check-proofs` printed ✓ for any type-checking theorem; one verdict (`ensuresVerdictOf`) now decides every surface, and no link or coverage label discharges a postcondition until Exact property acceptance exists
+coverage: an #[ensures] read proved_by_lean on contracts/vcs/obligation-ledger/audit whenever a link named a theorem (even No.Such.Theorem, or only #[proof_coverage(iff)]), check-proofs printed a check mark for any theorem that type-checked, and a rejected ensures theorem exited 1 under 0 failed while its receipt minted. One verdict (ensuresVerdictOf) decides every surface; nothing discharges a postcondition until Exact property acceptance. Regression vehicle is a gate: check_contract_negatives.sh section bug 089 runs tests/regressions/bug089_ensures_proof (four fixtures x every surface, check-proofs summaries/exit, receipts); see docs/bugs/089 (2026-10-18)
+class: 9
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug089-ensures-proof`, on top of the unpublished bug-080 head `00efbaf4`)
 **Found:** 2026-10-18 by red-team review (`rt_ens_only`, `rt_ens`, `rt_ens_bogus`, `rt_ens_noens`).
 **Severity:** a false proof on every evidence surface. This program:

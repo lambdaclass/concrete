@@ -1,5 +1,13 @@
 # Bug 118 — the interpreter cannot call a function imported from a nested module
 
+<!-- bug-ledger
+summary: the interpreter could not call a function imported from a nested module (`undefined function 'f'`); a call spelling now resolves per calling module as the backend resolves it (definitions, the module's import aliases, sibling aliases), with every ambiguity refused instead of first-match. Interp-vs-native leg on the reproducer ((interpreter-coverage pass))
+coverage: the interpreter resolves a call spelling per calling module as the backend does (definitions, the module's import aliases, sibling aliases), refusing every ambiguity. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug118_interp_nested_module_import/repro.con; examples/snippets/import.con and examples/project promoted to interp=yes (2026-10-21 (interpreter-coverage pass))
+class: 1
+class: 7
+silent: no
+-->
+
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement.

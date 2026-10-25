@@ -1,5 +1,13 @@
 # Bug 149 — loop conditions, returns in nested blocks and labelled exits were not checked for ownership
 
+<!-- bug-ledger
+summary: a `while`/`for` condition was checked outside its loop (moving an outer binding there ran every iteration), a `return` inside a nested block was not checked for live owned values (later unreached code was credited), and a labelled `break`/`continue` checked only the innermost loop's locals (found by Codex). E0207/E0208/E0210/E0211. `error_149_*.con`, `regress_149_exits_accounted.con`. Joins exit 0b. ((`safety-eval2`))
+fixtures: error_149_loop_cond_moves_outer.con error_149_return_after_unreached_defer.con error_149_return_in_borrow_block.con error_149_labelled_break_skips.con error_149_labelled_continue_skips.con regress_149_exits_accounted.con regress_149_labelled_exit_runs_defers.con regress_149_return_in_borrow_with_defer.con regress_149_break_in_borrow_with_defer.con error_149_diverging_branches_in_loop.con error_149_loop_cond_in_exiting_branch.con error_149_match_diverge_in_loop.con regress_149_both_branches_return.con regress_149_cond_return_in_borrow.con error_149_continue_in_exit_branch.con regress_149_nested_loop_in_exit_branch.con regress_149_break_value_statement_loop.con error_149_break_value_non_copy.con error_149_break_value_moves_outer.con error_149_loop_revives_consumed.con error_149_rebinding_nested_loop.con regress_149_inner_label_in_exit_branch.con
+class: 15 — loop conditions, nested returns and labelled exits
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)
 **Found:** 2026-10-22, by the Codex review of `safety-eval2` (the checks predate the branch; bug
 146's fix made the loop-condition case release a heap cell twice instead of leaking it).

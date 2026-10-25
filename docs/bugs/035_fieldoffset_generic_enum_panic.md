@@ -1,5 +1,10 @@
 # Bug 035: Layout.fieldOffset PANIC — user enum with generic-container struct payload
 
+<!-- bug-ledger
+summary: layout made program-wide (own-module priority)
+coverage: enum_generic_payload_layout/src/main.con (project test, exit 0); lowerModule now receives program-wide struct/enum/newtype defs (own-module priority, additive fill)
+-->
+
 **Status:** Fixed (2026-07-16)
 **Fixed in:** Lower.lean `lowerModule` — layout is a program-wide fact; the
 pipeline now passes ALL mono modules, and lowerModule appends their

@@ -1,5 +1,12 @@
 # Bug 235 — the interpreter's array element read walks the whole array
 
+<!-- bug-ledger
+summary: under `--interp` every `a[i]` converted the array to a list and walked it (`arrayGet` over `elems.toList`, the form the R-0460 bounds theorems were proved against), so a read cost the array's length (400000 reads of 10000 elements: 35 s, now 0.6 s). `arrayGet` is `elems[n]?` and the theorems are restated against it. Pinned by `regress_235_interp_array_read.con`. Found by the differential hunt of 2026-10-24. Class 17.
+fixtures: regress_235_interp_array_read.con
+class: 17 — an interpreter array read converted the array to a list per read
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1025`)
 **Found:** 2026-10-24, by the differential hunt on main `9622f7e0` (loops under `--interp`): a loop
 reading a 40000-element array took 20 s under `--interp` (after bug 236's share is removed, about

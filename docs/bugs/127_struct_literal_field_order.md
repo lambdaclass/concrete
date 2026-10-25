@@ -1,5 +1,14 @@
 # Bug 127 — the binary evaluates struct-literal fields in declaration order, the interpreter in source order
 
+<!-- bug-ledger
+summary: the binary evaluated struct-literal initializers in declaration order (`Lower` reordered them) while `--interp` followed the ratified source order (`P { b: tick(5), a: tick(6) }`: 65 natively, 56 interpreted); `Lower` now evaluates in source order and stores at the declared offsets; pinned by `regress_127_struct_literal_source_order.con` with an interpreter-versus-binary leg, and a native leg in `check_evidence_build.sh`'s order gate. Checking the neighbours filed 136 (functional update) and 137 (enum literals)
+fixtures: regress_127_struct_literal_source_order.con
+class: 7
+class: 8
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (branch `small-fixes-111-127-135`)
 **Found:** 2026-10-21, by the semantics probes (finding N1, `evalorder.con`).
 **Severity:** silent wrong code. The language ratified source order for struct-literal initializers

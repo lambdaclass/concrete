@@ -1,5 +1,13 @@
 # Bug 126 — a field access through a `&mut Heap<T>` argument treats the slot holding the heap pointer as the struct
 
+<!-- bug-ledger
+summary: a field write through a `&mut Heap<B>` parameter overwrote the caller's heap-pointer slot; the MEMORY_SEMANTICS §5 one-hop rule is implemented on both sides (`&h` is the slot, a field access through `&Heap<S>` / `&mut Heap<S>` dereferences twice). `regress_126_heap_ref_one_hop.con` covers write, read, reborrow, generics, nesting, a binding and control flow ((with 102))
+fixtures: regress_126_heap_ref_one_hop.con
+class: 8
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `lowering-bugs`, with bug 102)
 **Found:** 2026-10-21, while drafting reproducers for the exit 2i specification (bug 123's session).
 **Severity:** memory corruption in safe code. A field write through a `&mut Heap<B>` parameter

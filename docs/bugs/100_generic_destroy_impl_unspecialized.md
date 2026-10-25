@@ -1,5 +1,13 @@
 # Bug 100 — a generic impl's `&self` destructor reached by `destroy(h)` is never specialized
 
+<!-- bug-ledger
+summary: `destroy(h)` on a generic impl's `&self` destructor was left unspecialized (`use of undefined value '@Holder_destroy'`); Mono matches a destructor's receiver through its implicit borrow and refuses (E0814) one it cannot specialize ((`land5`))
+fixtures: regress_100_generic_ref_destroy.con
+class: 3
+silent: no
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (`land5`)
 **Found:** 2026-10-18, by the probes behind branch `bug099-generic-destroy`.
 **Severity:** a valid program fails LLVM validation (`use of undefined value '@Holder_destroy'`);

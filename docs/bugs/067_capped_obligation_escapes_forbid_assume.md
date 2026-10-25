@@ -1,5 +1,12 @@
 # Bug 067 — a capped obligation escapes `forbid-assume` when more kernels attest
 
+<!-- bug-ledger
+summary: a capped obligation escapes `forbid-assume` when more kernels attest
+coverage: a capped obligation escaped forbid-assume when Rocq/Isabelle are present: the cap is display-only, so an obligation resting on an UNSOUND HYPOTHESIS passes the release gate. Asserted by check_known_wrong_corpus.sh, which fails in CI (and only there — no external provers locally). Authority leak. FIX: the capped list keys on hypDebt (kernel-independent) instead of status, so promotion to proved_by_multi_kernel can no longer erase the cap. Gated by check_known_wrong_corpus.sh, which only fires in CI where Rocq/Isabelle exist; see docs/bugs/067 (2026-08-05)
+class: 9
+class: 11
+-->
+
 **Status:** FIXED 2026-08-05
 **Found:** 2026-08-05, by CI on the multi-prover merge (`04fa2426`). Not reproducible
 locally without Rocq/Isabelle installed, which is why local runs were green.

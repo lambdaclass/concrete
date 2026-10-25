@@ -1,5 +1,10 @@
 # Bug 012: No Easy Timing Path For Standalone Benchmark Programs
 
+<!-- bug-ledger
+summary: No Easy Timing Path For Standalone Benchmark Programs
+fixtures: bug_clock_builtin.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Discovered in:** `examples/mal/main.con`

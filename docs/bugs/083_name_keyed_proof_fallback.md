@@ -1,5 +1,12 @@
 # Bug 083 — a function's name was a proof claim, so code that claimed nothing was reported proved
 
+<!-- bug-ledger
+summary: a compiler-side table keyed by function NAME (`Proof.provedFunctions`) attached a claim to any program defining `main.compute_tag` and friends, so `fn compute_tag(…: u8) -> u8` with no proof attributes was reported proved while its binary aborts; the table is deleted, every program it served now links in source with a v2 pin, and `regress_083_no_claim_by_name.con` must report no claim
+coverage: resolveSpec fell back to Proof.provedFunctions, a table keyed by qualified NAME with v1 body-string freshness, so a program with no proof attributes defining main.compute_tag (u8, aborting at runtime) was reported proved (origin hardcoded). The table is deleted; every program it served links in source with a v2 pin. Regression fixture tests/programs/regress_083_no_claim_by_name.con (run_tests.sh: 0 proved, 3 unproved, no hardcoded origin); see docs/bugs/083 (2026-10-18)
+class: 9
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug083-hardcoded-proved`, based on the unpublished bug-080 head `00efbaf4`)
 **Found:** 2026-10-18 by a name-collision hunt, confirmed by running it.
 **Severity:** a false status claim. A program with NO proof attributes,

@@ -1,5 +1,10 @@
 # Bug 028: User function colliding with a compiler-emitted name leaks to LLVM
 
+<!-- bug-ledger
+summary: user fn named `user_main`/`__*` → clean `reserved identifier` instead of an LLVM duplicate-symbol leak
+coverage: reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-07-08
 **Fixed:** 2026-07-08

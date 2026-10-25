@@ -1,5 +1,11 @@
 # Bug 043: hosted std passed non-NUL-terminated String buffers to C string APIs
 
+<!-- bug-ledger
+summary: hosted std passed non-NUL-terminated String buffers to C string APIs
+coverage: check_envcfg.sh env-override leg + std-compiled-coverage env/fs/io/net legs (Linux CI is the discriminating platform); String::to_cstr + all C-string FFI sites converted
+class: 14
+-->
+
 **Status:** Fixed (2026-07-18)
 **Fixed in:** std — `String::to_cstr()` (trusted; allocates len+1, copies,
 NUL-terminates; caller deallocs) + every C-string FFI site converted:

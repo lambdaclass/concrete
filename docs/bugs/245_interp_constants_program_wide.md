@@ -1,5 +1,12 @@
 # Bug 245 — the interpreter refuses two modules' private constants of one spelling
 
+<!-- bug-ledger
+summary: `--interp` refuses two top-level modules' private constants of one spelling ("defined by more than one module") that the binary keeps apart: the interpreter resolves a bare constant spelling program-wide, Lower within the using tree. Owned by R-0492/R-0514 (constant references by `ConstId`); reproducer pinned as an open-bug reproducer (Codex review of bug 233's fix, 2026-10-25). Class 1.
+coverage: the interpreter resolves a module constant's bare spelling program-wide and refuses one two top-level modules define, while Lower resolves it in the using tree, so the binary runs what --interp refuses; owner R-0492/R-0514 constant references by identity; reproducer tests/regressions/bug245_interp_constants_program_wide/repro.con, found by the Codex review of bug 233's fix 2026-10-25; pinned as an open-bug reproducer (interp-fails)
+class: 1 — a constant reference is its spelling, scoped program-wide by the interpreter and per tree by Lower
+silent: no
+-->
+
 **Status:** OPEN
 **Found:** 2026-10-25, by the Codex review (round 2) of bug 233's fix (R-0492 step 4): a fixture
 whose initializer calls another module's function read that module's constant.
