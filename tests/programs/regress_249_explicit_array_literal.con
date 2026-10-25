@@ -1,0 +1,17 @@
+// Bug 249 regression: the parser appended each element of an explicit array literal (`[e1, e2, ...]`)
+// to the list built so far, so a literal of n elements took time n² to parse (40000 elements: 7 s).
+// This fixture pins the shapes the accumulation must keep (order, a trailing comma, nested and
+// computed elements); run_tests.sh parses and compiles a generated 2 x 100000-element literal
+// within 20 s.
+fn first_of(r: [i64; 3]) -> i64 {
+    return r[0];
+}
+
+fn main() -> Int {
+    let a: [i64; 5] = [1, 2, 3, 4, 5,];
+    let m: [[i64; 3]; 2] = [[10, 20, 30], [40, 50, 60]];
+    let k: i64 = 4;
+    let c: [i64; 3] = [k * 2, first_of([7, 8, 9]), a[4] - a[0]];
+    // 1*1 + 5*2 + 20 + 40 + 8 + 7 + 4 - 48 = 42
+    return (a[0] + a[4] * 2 + m[0][1] + m[1][0] + c[0] + c[1] + c[2] - 48) as Int;
+}

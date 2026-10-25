@@ -1,0 +1,67 @@
+// Bug 248 regression: under --interp an element write (`a[i] = v`, `s.f[i] = v`, a write through
+// `&mut`, `vec_push`/`vec_set`/`vec_pop`) built the new array while the environment still held the
+// old one, so every write copied the whole array. Each loop below writes 100000 times into a
+// 100000-element array or Vec; copied, that is 10^10 element copies per loop. run_tests.sh runs
+// it under --interp with a 20 s budget; binary and interpreter agree on 42.
+struct Grid {
+    tag: i64,
+    cells: [i64; 100000],
+}
+
+fn take_tag(g: Grid) -> i64 {
+    let Grid { tag, cells } = g;
+    return tag + cells[99999] - cells[99999];
+}
+
+fn fill(a: &mut [i64; 100000], n: i64) {
+    let mut i: i64 = 0;
+    while i < n {
+        a[(i * 7) % 100000] = a[(i * 7) % 100000] + i % 3;
+        i = i + 1;
+    }
+}
+
+fn main() with(Std) -> Int {
+    // A local array.
+    let mut a: [i64; 100000] = [0; 100000];
+    let mut i: i64 = 0;
+    while i < 100000 {
+        a[i] = i % 5;
+        i = i + 1;
+    }
+    // Through `&mut`.
+    fill(&mut a, 100000);
+    // A struct field's array.
+    let mut g: Grid = Grid { tag: 2, cells: [1; 100000] };
+    let mut j: i64 = 0;
+    while j < 100000 {
+        g.cells[j] = g.cells[j] + a[j];
+        j = j + 1;
+    }
+    // A Vec: push, set, pop.
+    let mut v: Vec<i64> = vec_new::<i64>();
+    let mut k: i64 = 0;
+    while k < 100000 {
+        vec_push::<i64>(&mut v, g.cells[k]);
+        k = k + 1;
+    }
+    let mut m: i64 = 0;
+    while m < 100000 {
+        let x: i64 = vec_get::<i64>(&v, m);
+        vec_set::<i64>(&mut v, m, x % 4);
+        m = m + 1;
+    }
+    let mut s: i64 = 0;
+    let mut n: i64 = 0;
+    while n < 50000 {
+        match vec_pop::<i64>(&mut v) {
+            Option::Some { value } => { s = s + value; }
+            Option::None => {}
+        }
+        n = n + 1;
+    }
+    let left: i64 = vec_len::<i64>(&v);
+    vec_free::<i64>(v);
+    let tag: i64 = take_tag(g);
+    return ((s + left + tag) % 251 - 193) as Int;
+}

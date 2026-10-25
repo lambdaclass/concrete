@@ -1,0 +1,17 @@
+// Bug 027 regression: natively, every element of an array literal was its own `store` (a block of n
+// stores, which clang -O2 schedules in superlinear time), and EmitSSA looked each pointer register
+// up in a list of every pointer register defined so far in the function. Two 100000-element
+// literals and a loop over them took 28 s to compile with the second fixed; `[7; 200000]` alone did
+// not compile in 120 s. run_tests.sh compiles this within 20 s and runs it (42); a generated literal
+// of 2 x 100000 distinct elements is compiled with the same budget.
+fn main() -> Int {
+    let mut a: [i64; 200000] = [7; 200000];
+    let b: [i64; 100000] = [0; 100000];
+    let c: [i32; 100000] = [-2; 100000];
+    let mut i: i64 = 0;
+    while i < 100000 {
+        a[i] = a[i] + b[i] + (c[i] as i64);
+        i = i + 1;
+    }
+    return (a[0] * 8 + a[199999] - 5) as Int;
+}

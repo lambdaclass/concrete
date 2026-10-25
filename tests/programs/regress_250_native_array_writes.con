@@ -1,0 +1,45 @@
+// Bug 250 regression: natively, writing an element or field of an aggregate local carried through a
+// loop rebuilt the whole aggregate and stored it back (`a[i] = v` copied `a` per write), and
+// reading a field of one loaded the whole struct; the first-class loads and stores of these large
+// aggregates made clang -O2 superlinear in their size (a 20000-element array written in a loop: 99
+// s to compile). run_tests.sh compiles this within 20 s; binary and interpreter agree on 42.
+struct Grid {
+    tag: i64,
+    cells: [i64; 100000],
+}
+
+fn total(g: Grid) -> i64 {
+    let Grid { tag, cells } = g;
+    return tag + cells[99999] - cells[99999];
+}
+
+fn main() -> Int {
+    // A local array written and read in a loop.
+    let mut a: [i64; 100000] = [0; 100000];
+    let mut i: i64 = 0;
+    while i < 100000 {
+        a[i] = (a[i] + i) % 7;
+        i = i + 1;
+    }
+    // A copy taken before each write keeps the old element (the write is in place, the copy is not
+    // the place).
+    let mut small: [i64; 64] = [2; 64];
+    let mut k: i64 = 0;
+    let mut diff: i64 = 0;
+    while k < 64 {
+        let before: [i64; 64] = small;
+        small[k] = small[k] + k;
+        diff = diff + small[k] - before[k];
+        k = k + 1;
+    }
+    // A struct's array field written and read in a loop, then passed by value.
+    let mut g: Grid = Grid { tag: 3, cells: [1; 100000] };
+    let mut j: i64 = 0;
+    while j < 100000 {
+        g.cells[j] = g.cells[j] + a[j];
+        g.tag = g.tag + 1;
+        j = j + 1;
+    }
+    let t: i64 = total(g);
+    return ((diff + t) % 1000 + 23) as Int;
+}

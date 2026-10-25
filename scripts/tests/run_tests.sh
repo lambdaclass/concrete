@@ -8438,7 +8438,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 # Bug 236: Elab appended an array literal's elements one by one; [7; 200000] must elaborate and run
-# under --interp within 20 s each (not compiled natively: the backend's cost is bug 027's).
+# under --interp within 20 s each (bug 027's leg compiles literals of this size natively).
 r236_rc=0; bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --emit-core >/dev/null 2>&1 || r236_rc=$?
 r236_interp=$(bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_236_array_repeat_literal.con" --interp 2>&1 || true)
 if [ "$r236_rc" = 0 ] && [ "$r236_interp" = "42" ]; then
@@ -8446,6 +8446,64 @@ if [ "$r236_rc" = 0 ] && [ "$r236_interp" = "42" ]; then
     PASS=$((PASS + 1))
 else
     echo "FAIL  bug 236: --emit-core rc $r236_rc, --interp '$r236_interp' within 20 s each (want 0, 42)"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 027: an array literal compiled natively in time superlinear in its length (EmitSSA searched a
+# list of pointer registers per operand; one store per element made a block clang -O2 schedules in
+# superlinear time). The fixture compiles within 20 s; so does a generated literal of 2 x 100000
+# distinct elements (bug 249: the parser appended explicit elements one by one), which must also
+# parse within 20 s.
+run_ok "$TESTDIR/regress_027_large_array_literals.con" 42
+r027_rc=0; bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_027_large_array_literals.con" -o "$TMPDIR/r027_bin" >/dev/null 2>&1 || r027_rc=$?
+r027_src="$TMPDIR/r027_distinct_literal.con"
+{
+    printf 'fn main() -> Int {\n    let mut a: [i64; 100000] = ['
+    seq -s ', ' 0 99999 | tr -d '\n'
+    printf '];\n    let b: [i64; 100000] = ['
+    seq -s ', ' 100000 199999 | tr -d '\n'
+    printf '];\n    let mut i: i64 = 0;\n    while i < 100000 {\n        a[i] = b[i] - a[i];\n        i = i + 1;\n    }\n'
+    printf '    return (a[99999] - 99958) as Int;\n}\n'
+} > "$r027_src"
+r249_rc=0; bounded_run -r 20 20 -- $COMPILER "$r027_src" --emit-core >/dev/null 2>&1 || r249_rc=$?
+r027d_rc=0; bounded_run -r 20 20 -- $COMPILER "$r027_src" -o "$TMPDIR/r027d_bin" >/dev/null 2>&1 || r027d_rc=$?
+r027d_out=""; [ "$r027d_rc" = 0 ] && { "$TMPDIR/r027d_bin" >/dev/null 2>&1; r027d_out=$?; }
+if [ "$r027_rc" = 0 ] && [ "$r027d_rc" = 0 ] && [ "$r027d_out" = 42 ]; then
+    echo "  ok  bug 027: large array literals compile natively within 20 s (repeated and 2 x 100000 distinct elements, 42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 027: native compile rc $r027_rc (fixture), $r027d_rc (distinct literal, exit '$r027d_out') within 20 s each (want 0, 0, 42)"
+    FAIL=$((FAIL + 1))
+fi
+run_ok "$TESTDIR/regress_249_explicit_array_literal.con" 42
+if [ "$r249_rc" = 0 ]; then
+    echo "  ok  bug 249: a 2 x 100000-element explicit array literal parses and elaborates within 20 s"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 249: --emit-core of a 2 x 100000-element explicit literal rc $r249_rc within 20 s (want 0)"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 248: an element write under --interp copied the whole array (and Vec push/set/pop the whole
+# Vec); 100000 writes per shape into 100000-element arrays must run under --interp in 20 s.
+run_ok "$TESTDIR/regress_248_interp_array_write.con" 42
+r248_interp=$(bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_248_interp_array_write.con" --interp 2>&1 || true)
+if [ "$r248_interp" = "42" ]; then
+    echo "  ok  bug 248: element writes into 100000-element arrays and Vecs run under --interp within 20 s (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 248: interp gave '$r248_interp' within 20 s, want 42"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 250: natively, writing an element or field of an aggregate local in a loop rebuilt the whole
+# aggregate (and reading a field loaded the whole struct), which made clang -O2 superlinear in its
+# size; the fixture must compile within 20 s, and binary and interpreter agree on 42.
+run_ok "$TESTDIR/regress_250_native_array_writes.con" 42
+r250_rc=0; bounded_run -r 20 20 -- $COMPILER "$TESTDIR/regress_250_native_array_writes.con" -o "$TMPDIR/r250_bin" >/dev/null 2>&1 || r250_rc=$?
+r250_interp=$($COMPILER "$TESTDIR/regress_250_native_array_writes.con" --interp 2>&1 || true)
+if [ "$r250_rc" = 0 ] && [ "$r250_interp" = "42" ]; then
+    echo "  ok  bug 250: in-loop writes into large aggregates compile natively within 20 s; interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 250: native compile rc $r250_rc within 20 s, interp '$r250_interp' (want 0, 42)"
     FAIL=$((FAIL + 1))
 fi
 # Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241

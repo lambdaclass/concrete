@@ -40,7 +40,8 @@ check() {
 
 echo "=== O(n^2) '++ [x]' ratchet over hot pipeline files ==="
 check Concrete/Frontend/Lexer.lean       1
-check Concrete/Frontend/Parser.lean      64
+# 64->59 (2026-10-25, bug 249): explicit array literal elements accumulate in an Array.
+check Concrete/Frontend/Parser.lean      59
 # 64->32, 2->1 (2026-10-22, bug 178): match arm lists prepend+reverse, blocks and entry
 # allocas accumulate newest-first, SSAVerify regTypes (dead) removed.
 check Concrete/IR/Lower.lean             32
@@ -49,7 +50,8 @@ check Concrete/IR/SSACleanup.lean        1
 check Concrete/IR/SSAVerify.lean         1
 # 29->34 (2026-07-15): +5 one-shot `saveArgcArgv ++ [...]` instruction lists in
 # wrapper construction, not in any loop.
-check Concrete/Backend/EmitSSA.lean      34
+# 34->29 (2026-10-25, bug 027): the pointer-register facts are sets; baseline pinned to the tree.
+check Concrete/Backend/EmitSSA.lean      29
 check Concrete/Resolve/Resolve.lean      8
 check Concrete/Check/Check.lean          4
 check Concrete/Check/CheckHelpers.lean   8

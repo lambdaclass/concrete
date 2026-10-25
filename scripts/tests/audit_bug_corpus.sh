@@ -146,6 +146,14 @@ declare -A BUG_TEST_MAP=(
   [220]="error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con"
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
+  # Bug 250: native in-loop writes into large aggregates compile in linear time (suite: within 20 s).
+  [250]="regress_250_native_array_writes.con"
+  # Bug 249: an explicit array literal parses in linear time (suite: a generated literal within 20 s).
+  [249]="regress_249_explicit_array_literal.con"
+  # Bug 248: interpreter element writes in place (suite: --interp within 20 s).
+  [248]="regress_248_interp_array_write.con"
+  # Bug 027: large array literals compile natively in linear time (suite: within 20 s).
+  [027]="regress_027_large_array_literals.con"
   # Bug 236: an array literal elaborates in linear time (run_tests.sh: --emit-core and --interp within 20 s).
   [236]="regress_236_array_repeat_literal.con"
   # Bug 235: interpreter array reads O(1) (run_tests.sh: --interp within 20 s).
@@ -303,7 +311,6 @@ declare -A SKIP_BUGS=(
   [025]="no-main linker leak -- covered by check_error_leaks.sh (no_main, empty_file cases)"
   [026]="huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)"
   [178]="FIXED 2026-10-22 -- superlinear match lowering (compile time, not output). Regression vehicle is check_ssa_lowering_scaling.sh (lower-stage heartbeat and instructions:u slope <= 1.3 over 250-2000 arms), not a tests/programs fixture"
-  [027]="EmitSSA O(n^2) rendering -- OPEN perf item; no .con regression (codegen perf, not correctness)"
   [028]="reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)"
   [030]="FIXED general (not trusted-only) -- error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule"
   [029]="FIXED both sites -- regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7)"
