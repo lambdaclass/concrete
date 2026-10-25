@@ -122,6 +122,10 @@ the declaration-collision check compared only free functions, externs and consta
   never a free function an alias of the spelling names
   (`regress_239_method_cap_explained_past_free_alias.con`: 99 for 42 natively before the fix, and
   the explanation borrowed the free function's `Console`).
+- Codex review r16: a method value never inlines a module constant of its spelling, in Lower or
+  the interpreter (`regress_239_method_value_beside_constant.con`: E0602 natively, a refusal under
+  `--interp`, before), and a free call is not made a trusted-call edge by a trusted method's Core
+  name (`regress_239_extern_call_not_trusted_by_method.con`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

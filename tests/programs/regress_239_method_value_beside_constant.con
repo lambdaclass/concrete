@@ -1,0 +1,15 @@
+// Bug 239 (FIXED), Codex review r16: a method value `P_get` beside an unrelated module's constant
+// `P_get`. Lower and the interpreter looked the name up among module constants first and inlined
+// the integer (E0602 in Lower); a method value names the method.
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get(x: i32) -> i32 { return 42; }
+}
+mod unrelated {
+    const P_get: Int = 99;
+}
+fn main() -> Int {
+    let f: fn(i32) -> i32 = P_get;
+    return f(0) as Int;
+}

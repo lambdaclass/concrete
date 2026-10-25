@@ -374,7 +374,11 @@ def build (modules : List CModule)
     for (name, isValue, isMethodCall) in nd.direct.map (·, false, false)
         ++ nd.methodDirect.map (·, false, true) ++ nd.values.map (·, true, false)
         ++ nd.methodValues.map (·, true, true) do
-      let bs := if isMethodCall then #[] else resolve bindings bIdx (·.module) nd.module name
+      let bs0 := if isMethodCall then #[] else resolve bindings bIdx (·.module) nd.module name
+      -- A free function VALUE names a foreign binding only when its function binds the spelling
+      -- to one, or no program definition answers it (Codex review r16).
+      let bs := if isValue && !isMethodCall && !nd.foreign.contains name
+          && !(resolve nodes fnIdx (·.module) nd.module name).isEmpty then #[] else bs0
       let ts := if isMethodCall then
           let methodsNamed := fun (nm : String) => (fnIdx.getD nm #[]).filter fun j => nodes[j]!.isMethod
           let raw := methodsNamed name

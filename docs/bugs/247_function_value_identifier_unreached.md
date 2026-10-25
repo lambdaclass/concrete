@@ -28,6 +28,11 @@ was therefore invisible to it, a free function's as much as a method's.
 `collectFnValueRefsExpr` also collects a function-typed `.ident` with no binding identity (a
 global function used as a value; a local of function type carries its `LocalId`).
 
+A free function value names a foreign binding only when its function binds the spelling to one
+(`foreignCalls`) or no program definition answers it, so a value of the program's own `target`
+beside an unrelated extern `target` assumes nothing
+(`regress_247_free_value_beside_unrelated_extern.con`, Codex review r16).
+
 ## Structural cause
 
 Class 12 ("one fact kept in two places"): a function value has two Core forms, and the walk that

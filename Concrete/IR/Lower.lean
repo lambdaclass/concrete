@@ -848,9 +848,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- Constants reach Lower flattened by bare name (Core carries no module path), so two
       -- modules defining one name are indistinguishable here: a submodule's `A` read the
       -- top-level `A`. Refused at the use rather than guessed (as Mono does for type names).
-      if (s.constants.filter fun (n, _, _) => n == name.name).length > 1 then
+      -- A method value names a method, never a constant of its spelling (bugs 238 – 239, Codex r16).
+      let consts := if name.space == .method then [] else s.constants
+      if (consts.filter fun (n, _, _) => n == name.name).length > 1 then
         throwLower s!"module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names; rename one of them"
-      match s.constants.find? fun (n, _, _) => n == name.name with
+      match consts.find? fun (n, _, _) => n == name.name with
       | some (_, _, constExpr) =>
         -- Hygiene (bug 123 review): the initializer is module-scope code. Inlined in the
         -- caller's environment, a local shadowing a constant it names captured it

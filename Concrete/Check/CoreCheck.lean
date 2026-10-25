@@ -713,7 +713,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     match methodSig? with
     | some (_, _, _, trusted) => if trusted then addTrustEdge .callsTrusted fn
     | none =>
-      if envE.trustedNames.contains fn && !(space == .method && externHere) then
+      -- A free call is trusted by a trusted free function or extern of its spelling, never by a
+      -- trusted method's Core name (Codex review r16).
+      let methodNamed := envE.methodSigs.any (·.1 == fn)
+      if envE.trustedNames.contains fn && !(space == .method && externHere)
+          && !(space == .free && methodNamed) then
         addTrustEdge .callsTrusted fn
     if space == .free && externHere then addTrustEdge .callsFFI fn
     -- Check capability discipline: a method call against the method table first; a method of

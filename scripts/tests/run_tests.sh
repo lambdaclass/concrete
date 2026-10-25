@@ -8761,8 +8761,24 @@ else
     FAIL=$((FAIL + 1))
 fi
 run_ok "$TESTDIR/regress_238_method_value_both_spellings_taken_by_externs.con" 42
+run_ok "$TESTDIR/regress_239_method_value_beside_constant.con" 42
+run_ok "$TESTDIR/regress_239_extern_call_not_trusted_by_method.con" 42
+r239_edges2=$(cached_output "$TESTDIR/regress_239_extern_call_not_trusted_by_method.con" "--report trust-edges")
+if grep -qE "run[[:space:]]+calls-ffi[[:space:]]+defs_P_get" <<<"$r239_edges2" && ! grep -qE "run[[:space:]]+calls-trusted" <<<"$r239_edges2"; then
+    echo "  ok  bug 239: an extern call is not trusted by a trusted method of its spelling"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges for an extern call beside a trusted method of its spelling:"
+    printf '%s\n' "$r239_edges2" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
+run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42
+check_report_multi "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" assumptions \
+    "bug 247: a free function value names the program's function, not an unrelated extern" \
+    "bug 247: --report assumptions attributes an unrelated extern to a free function value" \
+    '"fn":"main.factory","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
     "bug 247: --report caps follows a function value to the foreign binding it reaches" \
     "bug 247: --report caps reports a function returning a value that reaches abs as having no assumption" \
@@ -8805,7 +8821,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_unrelated_alias_beside_method regress_239_imported_extern_alias_beside_capable_method \
             regress_239_method_ffi_beside_free_alias regress_239_method_value_type_agreement \
             regress_239_method_cap_explained_past_free_alias regress_239_method_spelled_like_free_op \
-            regress_238_method_value_both_spellings_taken_by_externs; do
+            regress_238_method_value_both_spellings_taken_by_externs regress_239_method_value_beside_constant \
+            regress_239_extern_call_not_trusted_by_method regress_247_free_value_beside_unrelated_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

@@ -1,0 +1,18 @@
+// Bug 239 (FIXED), Codex review r16: an untrusted extern `defs_P_get` shares its spelling with the
+// trusted method `defs.P::get` (Core name `defs_P_get`). CoreCheck recorded the extern call as a
+// trusted-call edge as well as an FFI edge; only the FFI edge is right.
+// Expected: 42 (`abs(-42)`), natively and --interp; `run` has calls-ffi but no calls-trusted edge.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub trusted fn get(x: i32) -> i32 { return x; }
+    }
+}
+#[link_name = "abs"]
+extern fn defs_P_get(x: i32) with() -> i32;
+fn run() with(Unsafe) -> i32 {
+    return defs_P_get(-42);
+}
+fn main() with(Unsafe) -> Int {
+    return run() as Int;
+}

@@ -1,0 +1,14 @@
+// Bug 247 (FIXED), Codex review r16 control: `factory` returns the free function `target` as a
+// value while an unrelated module declares an extern `target`. The value names the program's
+// function, so `factory` assumes no foreign binding in `--report assumptions`.
+// Expected: 42, natively and --interp.
+fn target(x: i32) -> i32 { return x; }
+mod ffi {
+    #[link_name = "abs"]
+    trusted extern fn target(x: i32) with() -> i32;
+}
+fn factory() -> fn(i32) -> i32 { return target; }
+fn main() -> Int {
+    let f: fn(i32) -> i32 = factory();
+    return f(42) as Int;
+}

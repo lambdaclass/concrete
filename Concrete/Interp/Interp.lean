@@ -2164,7 +2164,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- of its own (module-scope code: a caller's local of the same name must not capture a
       -- name the initializer reads, Lower's bug 123 hygiene). A name two modules define is
       -- refused, as Lower refuses it (E0602, bug 132): Core cannot tell which one is meant.
-      match cx.consts.filter (·.1 == name.name) with
+      -- A method value names a method, never a constant of its spelling (bugs 238 – 239, Codex r16).
+      match (if name.space == .method then [] else cx.consts.filter (·.1 == name.name)) with
       | [(_, init)] =>
         let outerLen := env.length
         let (env', v) ← evalExprVal cx (envEnterFrame env) init
