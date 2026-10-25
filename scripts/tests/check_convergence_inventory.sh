@@ -219,9 +219,17 @@ fi
 #    still recorded both bugs OPEN, so it went green precisely because nobody had updated the record
 #    after the fix landed. A gate that passes by confirming a stale claim is worse than one that
 #    fails, because it certifies the staleness.
+#    Since the ledger migration (R-0542) the status has one owner, the record's **Status:** line, and
+#    the corpus is generated from the records (`bug_ledger.py corpus`: NNN, kind, open|fixed, ...);
+#    this leg reads that, not the emptied legacy map in audit_bug_corpus.sh. The corpus is captured
+#    first, and an unreadable or empty corpus fails the leg rather than passing it.
+ledger_corpus="$(python3 -I scripts/gen/bug_ledger.py corpus 2>/dev/null)" || ledger_corpus=""
 for b in 059 060; do
-  if grep -qE "^\s*\[$b\]=.*FIXED" scripts/tests/audit_bug_corpus.sh; then
+  st="$(awk -F'\t' -v b="$b" '$1 == b { print $3 }' <<<"$ledger_corpus")"
+  if [ "$st" = fixed ]; then
     ok "CLOSED: bug $b is recorded FIXED — the V2 subject binds what the body-only fingerprint could not"
+  elif [ -z "$ledger_corpus" ] || [ -z "$st" ]; then
+    no "bug $b has no row in the generated bug corpus (scripts/gen/bug_ledger.py corpus) — cannot confirm the record agrees with check_proof_freshness.sh"
   else
     no "bug $b is not recorded FIXED in the corpus, but check_proof_freshness.sh asserts its closure — the corpus and the executable evidence disagree"
   fi
