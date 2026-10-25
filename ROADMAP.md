@@ -8493,6 +8493,22 @@ evidence. Measure proof effort, source review clarity, callback/context friction
 runtime costs; use those observations to prioritize subsequent features. Unsupported
 heap, relational, resource-proof and backend claims remain explicit.
 
+**Fixed-requirement repair boundary (2026-10-25; planned):** reuse R-0215's
+frozen-baseline mutation controls before adding an agent as the repair author.
+Keep the accepted requirements outside the agent's writable candidate tree and
+reject changes to their identity or allowed assumptions in this experiment.
+Use this task's already-owned bounded component when its admitted fragment and
+prerequisites are available; the protocol flagship is planned, not an existing
+ready-made example. Retain candidate attempts, failed/refused cases, exact diffs
+and measurement conditions through the existing workflow.
+
+Replay without the agent/network demonstrates independence from candidate search;
+it does not establish an independently implemented checker. Name same-kernel
+replay separately from R-0353's independent-consumer evidence, and keep
+source/model correspondence separate from logical validity. The agent variant
+follows this task's identity, contract and replay prerequisites; it does not
+introduce a new harness requirement or reorder the current queue.
+
 ### Task R-0488
 
 **Phase:** 1, 3
@@ -9404,6 +9420,22 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 - **R-0108** (merged): duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. — [archived body](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0108)
 
+**Explicit reuse comparison (2026-10-25; planned):** only when a real workload
+in this corpus exposes allocation/copy costs, compare the allocating operation
+with existing explicit mutation before proposing consuming collection APIs.
+Retain allocation count/bytes, bytes copied, capacity growth, peak live memory
+and runtime alongside result equivalence. If instrumentation is unavailable,
+record that gap before drawing a reuse conclusion. Begin with a same-type
+operation; arbitrary element-type changes need separate layout and cleanup work.
+
+Include the trusted-code delta, scoped-reference rules, cleanup and partial-failure
+behavior in the comparison. A consuming API is justified only by measured benefit
+and an explicit owner decision; this amendment mandates no new API, implicit
+reference counting, copy-on-write or hidden allocation. Proof-guided optimization
+uses the same fixed requirements and independent conformance/differential controls;
+a proof of one property does not certify external compatibility, resource bounds
+or emitted-binary correctness.
+
 ### Task R-0135
 
 **Phase:** 3, 7
@@ -10009,6 +10041,17 @@ changing the later R-0169/R-0170 investment, but it must not move automation
 ahead of proof-subject identity, exact semantic coverage, or the R-0137
 external-user trial. Cheap to collect now; impossible to reconstruct later.
 
+**Feedback-cost attribution (2026-10-25; planned):** extend existing pipeline
+telemetry on this task's shared workload rather than creating another timing
+system. Distinguish obligation generation, Lean elaboration/checking,
+retained-evidence replay, emission and native compilation from the existing
+front-end stages. Identify overlapping or nested measurements so they are not
+added twice. Mark unavailable phases explicitly rather than reporting zero.
+Record cold/warm cache conditions, exact revision/toolchain, workload and evidence
+scope with the observations. Re-running proof search is not retained-evidence
+replay. These measurements guide investigation of small explicit obligations and
+reusable lemmas; they impose no invented speed target or compiler-rewrite decision.
+
 ### Task R-0151
 
 **Phase:** 3, 4
@@ -10492,6 +10535,28 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
  The gate must fail if a mutated proof/spec still reports the original green
  evidence class without an allowed explanation. This is evidence about the
  evidence: proofs must constrain the implementation, not merely decorate it.
+
+**Frozen-requirement controls (2026-10-25; planned):** extend this mutation
+corpus with an accepted requirement baseline outside the candidate's writable
+scope. Bind it to the exact subject, contract/proposition and allowed assumptions
+through the existing identity machinery; a theorem name or refreshed fingerprint
+alone cannot authorize a changed requirement. Include deletion of a proof link,
+contract changes followed by regenerated fingerprints, transitions to ineligible
+or trusted code, and theorem replacement under an unchanged name. Record the
+checker result, applicable policy result and baseline comparison separately.
+A successful check of the candidate's new requirements must not count as satisfying
+the original frozen requirement. Reject any requirement-identity change in this
+experiment; do not claim to decide semantic weakening from hashes.
+
+Retain a positive control with unchanged requirements and a contract-preserving
+implementation edit whose implementation binding is revalidated. Preserve the
+existing evidence dimensions for eligibility, freshness, logical validity,
+correspondence and assumptions; do not add a flat status vocabulary. Start with
+an already-proved example in this task's corpus after the relevant subject/spec
+binding repairs are qualified. Whether an eligibility/trust transition currently
+escapes a required-claim policy is a hypothesis to test, not a reproduced defect.
+These controls precede the agent variant in R-0486 and add no separate queue row.
+
 ### Task R-0216
 
 **Phase:** 2, 5
@@ -11733,6 +11798,23 @@ ends and the rolled-back lock reproducing the original artifacts. RocksDB slice 
 covers the install-to-test half (a fresh clone, normal commands, no manual flags); the upgrade and
 roll-back half is required before the four-adapter checkpoint closes, and R-0365's lockfile exit
 reuses the same exercise.
+
+**Dependency build authority (2026-10-25; planned):** alongside each adapter's
+existing build inputs and artifact identity, record which transitive dependency
+steps execute code and their access to filesystem paths, environment variables,
+credentials, subprocesses and network resources. Record names/scopes and access
+policy, never secret values. Distinguish enforced restrictions from accepted
+host/toolchain trust; declarative metadata and content hashes do not establish
+confinement. Revisit this record when an upgrade changes the executable recipe.
+
+Retain a controlled build-step fixture that would leave an observable marker if
+executed. Semantic inspection must not fetch or build dependencies or trigger that
+marker; explicit builds identify the executing dependency and its declared trust
+boundary. Test any claimed restriction with a denied-access case and an allowed
+control; otherwise report the access as trusted, not sandboxed. This is part of
+the existing adapter records and first-slice feedback, not a new general-purpose
+cross-platform sandbox entrance requirement. Stronger isolation remains an
+explicit owner decision under the package/security work.
 
 ### Task R-0490
 
@@ -13740,29 +13822,96 @@ positive control where a `Writer<{}>` helper may use no external authority.
 
 ## Open Research Questions: Bend And Roc
 
-These questions remain undecided. They are not planned features, implementation
-tasks, priorities, release requirements, or changes to the current execution queue.
-The [research record](research/meta/bend-roc-lessons.md) contains the reviewed
-sources, video discussion, evidence limits, and full consideration register.
+These questions remain undecided: they add no implementation tasks, priorities,
+release gates or adoption decisions. The narrow agreed clarifications belong to
+R-0215, R-0285, R-0150, R-0486 and R-0416 above. The
+[research record](research/meta/bend-roc-lessons.md) retains the source links,
+video discussion, evidence limits and [complete consideration register](research/meta/bend-roc-lessons.md#11-complete-consideration-register).
+The current execution queue is unchanged.
 
-- Could a required-claim inventory and fixed-specification repair workflow improve
-  verification without duplicating Concrete's existing evidence machinery?
-- Which compiler, elaboration, and proof-replay phases actually dominate feedback
-  time, and could smaller explicit obligations or reusable lemmas reduce that cost?
-- What additional restrictions, if any, would make transitive native trust and
-  dependency build-time authority clearer and enforceable?
-- Where would explicit consuming or mutating collection APIs reduce allocation
-  and copying while preserving ownership, scoped references, and cleanup semantics?
-- Which representation, callback-specialization, check-hoisting, or cache changes
-  would measured workloads justify, and how would their correctness be established?
-- Could fixed-specification, proof-preserving optimization improve an existing
-  workload when runtime, memory, and independent conformance are measured together?
-- Is there a real workload that justifies a restricted GPU experiment with explicit
-  buffers, transfers, synchronization, device eligibility, and failure behavior?
-- What evidence would justify adopting any of these ideas under Concrete's
-  [design policy](docs/project/DESIGN_POLICY.md),
-  [value model](docs/language/VALUE_MODEL.md), and
-  [evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md)?
+### Requirements, repair and developer guidance
 
-No adoption decision follows from listing these questions. The owner is still
-deciding; the [current execution queue](#the-current-execution-queue) is unchanged.
+- Does a declared required-claim set add protection beyond existing inventories,
+  mutation controls and policy, particularly when eligibility or trust changes?
+- After the frozen-baseline controls work, would a bounded agent repair experiment
+  improve authoring cost while retaining every failed, refused or unsupported case?
+- Would version-matched installed guidance, one discoverable verification entry,
+  graded tasks with hidden solutions and correct-refusal cases, and a rejected-bug
+  demonstration improve the existing workflow without duplicating its machinery?
+
+Context: [R-0215](#task-r-0215), [R-0486](#task-r-0486),
+[proof synthesis](docs/verification/PROOF_SYNTHESIS.md), research C01–C07/C10.
+
+### Checking and replay costs
+
+- Which measured phases dominate cold, warm and incremental feedback, and where
+  could smaller generated obligations or reusable lemmas reduce cost without
+  changing the statement, trust boundary or semantic coverage?
+- What complexity discipline and missed-optimization diagnostics would keep the
+  compiler and its guidance understandable without arbitrary token or size caps?
+
+Context: [R-0150](#task-r-0150), [pipeline telemetry](scripts/tests/check_pipeline_telemetry.sh), research C08–C10.
+
+### Dependency and build-time authority
+
+- Beyond the adapter authority inventory, which transitive native/trusted additions
+  should application policy reject, and what explicit foundation can it accept?
+- What isolation is warranted for executable dependency recipes and upgrades, and
+  how should enforced restrictions and accepted host authority be presented?
+- How can tooling communicate authority, caller-visible mutation, determinism,
+  termination/resource bounds and correctness without inferring one from another?
+
+Context: [R-0285](#task-r-0285), [R-0440](#task-r-0440),
+[FFI integration](docs/platform/FFI_GLUE.md), research C11–C13.
+
+### Ownership and allocation
+
+- Which real workloads justify consuming/mutating transforms, capacity reuse,
+  preallocation or explicit arenas, after existing mutation is measured?
+- Can scoped callable specialization and sound alias information remove overhead
+  while preserving non-escape rules, capability effects and the exact backend contract?
+- What allocation, copying, growth and peak-memory regressions should workload
+  evidence expose, including cleanup cascades and arena lifetime tradeoffs?
+
+Context: [R-0416](#task-r-0416), [value model](docs/language/VALUE_MODEL.md),
+[allocator research owner](docs/project/ROADMAP_BACKLOG.md#task-r-0404), research C14–C16/C23.
+
+### Representation and optimization
+
+- Where do profiles justify check hoisting, bounded compile-time tables, intentional
+  wrapping arithmetic, unboxing or tail-call optimization with pending cleanup accounted for?
+- When do immutable snapshots save more downstream work than they cost to retain or copy?
+- Would compact indexed representations or direct-load caches improve measured hot
+  paths while preserving owner/bounds checks, schema/target validation and invalidation?
+
+Context: [R-0416](#task-r-0416), [compiler research](research/compiler/COMPILER_PIPELINE_RESEARCH.md), research C17–C19/C22.
+
+### Proof-guided optimization and artifacts
+
+- Can optimization against fixed requirements improve a measured workload when
+  replay, external conformance, differential results, runtime and memory are evaluated together?
+- Which emitted-code validation would establish the missing semantic edge beyond
+  safe compiler implementation or a theorem about a source model?
+- How should development feedback and optimized deployment be measured separately,
+  with reproducible target/toolchain/artifact identities and honest adverse-case comparisons?
+
+Context: [R-0416](#task-r-0416), [R-0299](#task-r-0299), [R-0300](#task-r-0300),
+[emitted-code research](research/compiler/sparkle-emitted-code-validation.md), research C20–C22/C26–C27.
+
+### GPU feasibility, behind concurrency prerequisites
+
+- After [R-0399's design-only and formal-model prerequisites](docs/project/ROADMAP_BACKLOG.md#task-r-0399)
+  are met, is there a workload justifying one restricted array backend with explicit
+  buffers, transfers, synchronization, address spaces and partial-failure semantics?
+- How would transitive device eligibility, indirect targets, runtime/ABI limits,
+  toolchain/artifact identity and CPU/device differential evidence be checked?
+- Would end-to-end gains survive compilation, transfer, launch, synchronization,
+  irregular work and memory costs, with explicit unavailable-device/fallback behavior?
+
+Synchronous host completion does not remove device-side concurrency. No automatic
+offload, managed shared heap or general recursive device runtime follows from these
+questions. Context: [execution model](docs/language/EXECUTION_MODEL.md), research C24–C26.
+
+Any later adoption needs a forcing workload, bounded evidence and an explicit
+owner decision under the [design policy](docs/project/DESIGN_POLICY.md) and
+[evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md).
