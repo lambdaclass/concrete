@@ -1000,9 +1000,11 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
         -- A fn-typed parameter, or a register loaded from memory (fnTypeRegs),
         -- is still a call THROUGH a value even though it is spelled as a bare
         -- symbol here.
-        if (s.fnParams.any fun (n, t) =>
+        -- Never for a method call, which names a program method (bugs 238 – 239, Codex r11: a
+        -- fn-typed parameter spelled like the method's Core name took the call).
+        if space == CallSpace.free && ((s.fnParams.any fun (n, t) =>
               n == fn && match t with | .fn_ _ _ _ => true | _ => false)
-           || s.fnTypeRegs.contains fn then
+           || s.fnTypeRegs.contains fn) then
           .reg fn
         else
           -- Resolve aliased imports to the definition, then to its link symbol.

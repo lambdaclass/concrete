@@ -103,6 +103,9 @@ the declaration-collision check compared only free functions, externs and consta
   `regress_239_extern_call_beside_capable_method_explained.con`), and the assumption summary does
   not redirect a method edge through a free import alias of its spelling
   (`regress_239_method_edge_beside_free_alias.con`).
+- Codex review r11: native emission no longer turns a direct method call into a call through a
+  function-typed parameter of its spelling (`regress_239_fn_parameter_spelled_like_method.con`:
+  99 natively, 42 under `--interp`, before).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

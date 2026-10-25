@@ -4204,7 +4204,12 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   let methodValues := (scopedValues.map (·.1)).eraseDups
   let foreignFor := fun (n : String) =>
     ((scopedValues.filter (·.1 == n)).flatMap (·.2)).eraseDups
-  let takenBy := fun (n : String) => freeDefs.contains n || (foreignFor n).contains n
+  -- A linker alias that leads to a free definition (an import `wrong as P_get`) takes its spelling
+  -- too: emission and the interpreter follow aliases without the namespace (Codex review r11).
+  let freeAliasSpellings := (aliases.filter fun (_, t) =>
+      freeDefs.contains t || (aliases.filter (·.1 == t)).any (fun (_, t2) => freeDefs.contains t2)).map (·.1)
+  let takenBy := fun (n : String) =>
+    freeDefs.contains n || freeAliasSpellings.contains n || (foreignFor n).contains n
   let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>
@@ -4215,7 +4220,7 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   -- The new spelling must itself be the method's alone: taken by nothing a reference of this
   -- kind could reach instead.
   let bad := resolved.filter fun (n, ts) => match ts with
-    | [t] => freeDefs.contains t || (foreignFor n).contains t
+    | [t] => freeDefs.contains t || freeAliasSpellings.contains t || (foreignFor n).contains t
     | _ => true
   if !bad.isEmpty then
     .error (bad.map fun (n, ts) =>

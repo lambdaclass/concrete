@@ -1,0 +1,16 @@
+// Bug 239 (FIXED), Codex review r11: `run` has a function-typed parameter named `P_get`, the Core
+// name of the method `P::get`, and calls `P::get()`. Native emission turned a direct call into a
+// call through any function-typed parameter of its spelling, so the method call called the
+// argument (99) while `--interp` ran the method (42); a method call names the method.
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    fn get() -> i32 { return 42; }
+}
+fn other() -> i32 { return 99; }
+fn run(P_get: fn() -> i32) -> i32 {
+    return P::get();
+}
+fn main() -> Int {
+    return run(other) as Int;
+}

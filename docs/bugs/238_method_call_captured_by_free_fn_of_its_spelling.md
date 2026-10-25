@@ -67,7 +67,9 @@ function's `foreignCalls`, its module's externs) is respelled by `spellMethodCal
 unrelated module's extern takes nothing from it
 (`regress_238_method_value_beside_unrelated_extern.con`). A function value carries its namespace
 into SSA (`SVal.fnRef`), so a method value devirtualized at its call is still a method call
-(`regress_238_method_value_beside_extern_of_other_arity.con`, Codex review r7).
+(`regress_238_method_value_beside_extern_of_other_arity.con`, Codex review r7). A spelling a linker alias leads to a free definition from (an import `wrong as P_get`) is taken
+for method references too, since emission and the interpreter follow aliases by spelling
+(`regress_238_free_alias_takes_method_spelling.con`, Codex review r11: 99 for 42 before).
 
 Regression legs in `run_tests.sh`: the fixtures above, `run_ok … 42` and `--interp` = 42.
 

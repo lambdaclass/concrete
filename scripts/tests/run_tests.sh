@@ -8724,6 +8724,8 @@ check_report_multi "$TESTDIR/regress_239_method_edge_beside_free_alias.con" assu
     "bug 239: a method edge is not redirected by a free import alias of its spelling" \
     "bug 239: --report assumptions redirected a method edge through a free import alias" \
     '"fn":"user.run","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
+run_ok "$TESTDIR/regress_238_free_alias_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_239_fn_parameter_spelled_like_method.con" 42
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
@@ -8763,7 +8765,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_method_spelled_like_intrinsic regress_239_method_call_reaches_ffi_report \
             regress_239_method_spelled_like_vec_op regress_239_method_spelled_like_alloc_op \
             regress_239_alias_spelled_method_reaches_ffi regress_239_extern_call_beside_capable_method_explained \
-            regress_239_method_edge_beside_free_alias; do
+            regress_239_method_edge_beside_free_alias regress_238_free_alias_takes_method_spelling \
+            regress_239_fn_parameter_spelled_like_method; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
