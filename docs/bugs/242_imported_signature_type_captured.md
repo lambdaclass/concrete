@@ -61,8 +61,9 @@ Self`, a constant's type, an alias target, a generic argument, an aliased newtyp
 another module's of the definition's spelling, two modules' signatures each naming their own `N`,
 an alias target that only the alias names, a child's newtype returned by the child's function),
 each `run_ok … 42` and `--interp` = 42; `regress_242_two_imported_methods_one_core_name.con` (two
-imported types of one spelling both with `mk`: Core still calls a method by its mangled spelling,
-so Check refuses, E0299).
+imported types of one spelling both with `mk`; refused E0299 when this fix landed, since Core
+called both by the mangled spelling `P_mk`; `run_ok … 42` and `--interp` = 42 since bugs 238 – 239,
+see the note below).
 
 ## Structural cause
 
@@ -74,7 +75,8 @@ in whichever environment reads it, so a signature crossing a module boundary cha
 R-0492 (S5 `DefId`), applied to the front end by R-0514. The fix carries the identity in the one
 representation the passes share, a spelling no source can write, bound by import resolution, the
 one place all passes take imports from. `Ty` carrying a `TypeId` (and Core calling methods by
-`MethodKey`, which `regress_242_two_imported_methods_one_core_name.con` still needs) remains R-0514's.
+`MethodKey`, R-0548, which the two-method fixture needed until bugs 238 – 239 gave method calls
+their own namespace and each type's methods their type's spelling) remains R-0514's.
 
 ## Note (bugs 238 – 239)
 
