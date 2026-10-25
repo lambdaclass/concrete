@@ -164,38 +164,11 @@ private def findTrivialPhis (blocks : List SBlock) : List (String × SVal) :=
     ) acc
   ) []
 
-/-- Collect all register uses in an SVal. -/
-private def svalUses : SVal → List String
-  | .reg name _ => [name]
-  | _ => []
-
-/-- Collect all register uses in an instruction. -/
-private def instUses : SInst → List String
-  | .binOp _ _ lhs rhs _ => svalUses lhs ++ svalUses rhs
-  | .unaryOp _ _ operand _ => svalUses operand
-  | .call _ callee args _ =>
-    let argUses := args.foldl (fun acc a => acc ++ svalUses a) []
-    -- An indirect target is a use like any other, so DCE keeps the instruction
-    -- that produces it; `svalUses` also answers `[]` for a `.fnRef`, which is a
-    -- global and needs nothing kept alive.
-    match callee with
-    | .direct _ | .foreign _ => argUses
-    | .indirect target => svalUses target ++ argUses
-  | .alloca _ _ => []
-  | .load _ ptr _ => svalUses ptr
-  | .store val ptr => svalUses val ++ svalUses ptr
-  | .gep _ base indices _ => svalUses base ++ indices.foldl (fun acc i => acc ++ svalUses i) []
-  | .phi _ incoming _ => incoming.foldl (fun acc (v, _) => acc ++ svalUses v) []
-  | .cast _ val _ => svalUses val
-  | .memcpy dst src _ => svalUses dst ++ svalUses src
-
-/-- Collect register uses in a terminator. -/
-private def termUses : STerm → List String
-  | .ret (some v) => svalUses v
-  | .ret none => []
-  | .br _ => []
-  | .condBr cond _ _ => svalUses cond
-  | .unreachable => []
+-- The register uses of a value, instruction and terminator: one definition in `IR/SSA.lean`,
+-- shared with the backend (bug 250).
+private def svalUses : SVal → List String := SVal.regUses
+private def instUses : SInst → List String := SInst.regUses
+private def termUses : STerm → List String := STerm.regUses
 
 /-- Follow a replacement chain from `v` for at most `fuel` steps. -/
 private def chaseRepl (raw : Std.HashMap String SVal) : SVal → Nat → SVal

@@ -82,6 +82,39 @@ inductive STerm where
   | condBr (cond : SVal) (thenLabel elseLabel : String)
   | unreachable
 
+/-- Collect all register uses in an SVal. -/
+def SVal.regUses : SVal → List String
+  | .reg name _ => [name]
+  | _ => []
+
+/-- Collect all register uses in an instruction. -/
+def SInst.regUses : SInst → List String
+  | .binOp _ _ lhs rhs _ => SVal.regUses lhs ++ SVal.regUses rhs
+  | .unaryOp _ _ operand _ => SVal.regUses operand
+  | .call _ callee args _ =>
+    let argUses := args.foldl (fun acc a => acc ++ SVal.regUses a) []
+    -- An indirect target is a use like any other, so DCE keeps the instruction
+    -- that produces it; `SVal.regUses` also answers `[]` for a `.fnRef`, which is a
+    -- global and needs nothing kept alive.
+    match callee with
+    | .direct _ | .foreign _ => argUses
+    | .indirect target => SVal.regUses target ++ argUses
+  | .alloca _ _ => []
+  | .load _ ptr _ => SVal.regUses ptr
+  | .store val ptr => SVal.regUses val ++ SVal.regUses ptr
+  | .gep _ base indices _ => SVal.regUses base ++ indices.foldl (fun acc i => acc ++ SVal.regUses i) []
+  | .phi _ incoming _ => incoming.foldl (fun acc (v, _) => acc ++ SVal.regUses v) []
+  | .cast _ val _ => SVal.regUses val
+  | .memcpy dst src _ => SVal.regUses dst ++ SVal.regUses src
+
+/-- Collect register uses in a terminator. -/
+def STerm.regUses : STerm → List String
+  | .ret (some v) => SVal.regUses v
+  | .ret none => []
+  | .br _ => []
+  | .condBr cond _ _ => SVal.regUses cond
+  | .unreachable => []
+
 -- ============================================================
 -- Basic blocks and functions
 -- ============================================================

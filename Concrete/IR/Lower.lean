@@ -1139,7 +1139,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .reg loadDst ty
 
   | .fieldAccess obj field ty =>
-    let oVal ← lowerExpr obj
+    -- Bug 250: a field of a promoted local (or of a field chain of one) is read at its address;
+    -- `lowerExpr obj` loaded the whole struct to read one field.
+    let oVal ← if ← inPlaceRoot obj then
+        match ← placeAddr obj (.ptrMut obj.ty) with
+        | some p => pure p
+        | none => lowerExpr obj
+      else lowerExpr obj
     let tyName ← structNameFromTy obj.ty
     let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
     let dst ← freshReg
@@ -1604,6 +1610,43 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     emit (.alloca dst ty)
     let baseVal := SVal.reg dst ty
     let elemTy := match ty with | .array t _ => t | _ => .placeholder
+    -- Bug 027: a long literal of one repeated constant (`[v; n]`, which the parser expands to n
+    -- copies of `v`) is filled by a loop. One `store` per element made a block of n stores, and
+    -- clang -O2's instruction scheduler is superlinear in such a block (two 100000-element
+    -- literals and a loop: 28 s). The constant has no effects, so storing it n times in a loop
+    -- writes the same bytes.
+    let uniform : Option CExpr := match elems with
+      | first :: rest =>
+        let same : CExpr → Bool := match first with
+          | .intLit v t => fun e => match e with | .intLit v' t' => v' == v && t' == t | _ => false
+          | .boolLit b => fun e => match e with | .boolLit b' => b' == b | _ => false
+          | .charLit c => fun e => match e with | .charLit c' => c' == c | _ => false
+          | _ => fun _ => false
+        if elems.length ≥ 64 && rest.all same && same first then some first else none
+      | [] => none
+    if let some c := uniform then
+      let eVal ← lowerExpr c
+      let n := elems.length
+      let preLabel ← getCurrentLabel
+      let hdr ← freshLabel "afill.hdr"
+      let body ← freshLabel "afill.body"
+      let exit ← freshLabel "afill.exit"
+      terminateBlock (.br hdr)
+      startBlock hdr
+      let iReg ← freshReg "afill.i"
+      let nextReg ← freshReg "afill.next"
+      emit (.phi iReg [(.intConst 0 .int, preLabel), (.reg nextReg .int, body)] .int)
+      let cmp ← freshReg
+      emit (.binOp cmp .lt (.reg iReg .int) (.intConst (Int.ofNat n) .int) .bool)
+      terminateBlock (.condBr (.reg cmp .bool) body exit)
+      startBlock body
+      let gepDst ← freshReg
+      emit (.gep gepDst baseVal [.reg iReg .int] elemTy)
+      emit (.store eVal (.reg gepDst elemTy))
+      emit (.binOp nextReg .wrappingAdd (.reg iReg .int) (.intConst 1 .int) .int)
+      terminateBlock (.br hdr)
+      startBlock exit
+      return baseVal
     for (idx, elem) in enumerate elems do
       let eVal ← lowerExpr elem
       let gepDst ← freshReg
@@ -1613,7 +1656,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return baseVal
 
   | .arrayIndex arr index ty =>
-    let aVal ← lowerExpr arr
+    -- Bug 250: an array field of a promoted local is read at its address; `lowerExpr arr` loaded
+    -- the whole array (and the struct holding it) to read one element.
+    let aVal ← match arr with
+      | .fieldAccess .. =>
+        if ← inPlaceRoot arr then
+          match ← placeAddr arr (.ptrMut arr.ty) with
+          | some p => pure p
+          | none => lowerExpr arr
+        else lowerExpr arr
+      | _ => lowerExpr arr
     let iVal ← lowerExpr index
     match arrayLenOfTy arr.ty with        -- H8: bounds-check the read
     | some n => emitBoundsCheck iVal n
@@ -1823,6 +1875,24 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
     | _ => addrOfLocal place refTy
   | _ => addrOfLocal place refTy
 
+/-- Bug 250: is `place` a promoted local, or a chain of struct fields of one, all held by value?
+    Such a place's storage is the local's stable alloca, so a scalar written into it can be stored
+    at its address instead of rebuilding the whole aggregate. -/
+private partial def inPlaceRoot (place : CExpr) : LowerM Bool := do
+  match place with
+  | .ident name _ => return (← isPromoted name.key).isSome
+  | .fieldAccess obj _ _ =>
+    match obj.ty with
+    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => return false
+    | _ => inPlaceRoot obj
+  | _ => return false
+
+/-- A scalar store is one `store` of a register-sized value (bug 250's in-place write). -/
+private partial def isScalarStoreTy : Ty → Bool
+  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32
+  | .float32 | .float64 | .bool | .char => true
+  | _ => false
+
 /-- Store `newVal` into the location denoted by the place expression `place`.
     This is the unified lvalue path: it recurses into compound places
     (`o.inner.v`, `a[i].x`, `m[i][j]`, `p.inner.v`) by value-writeback —
@@ -1850,6 +1920,17 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
       emit (.gep gepDst oVal [.intConst (Int.ofNat byteOff) .int] .i8)
       emit (.store newVal (.reg gepDst (SVal.ty newVal)))
     | _ =>
+      -- Bug 250: a scalar field of a promoted local (or of a field chain of one) is written at
+      -- its address. Rebuilding the struct and writing it back copied the whole struct per write.
+      let inPlace ← if isScalarStoreTy (SVal.ty newVal) then inPlaceRoot obj else pure false
+      if inPlace then
+        let baseAddr ← match ← placeAddr obj (.ptrMut obj.ty) with
+          | some p => pure p
+          | none => lowerExpr obj
+        let gepDst ← freshReg
+        emit (.gep gepDst baseAddr [.intConst (Int.ofNat byteOff) .int] .i8)
+        emit (.store newVal (.reg gepDst (SVal.ty newVal)))
+      else
       -- base is a value: build the updated struct value, then write it back
       -- into the base place (recursing to any depth)
       let structTy := obj.ty
@@ -1891,6 +1972,19 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
       emit (.gep gepDst aVal [iVal] elemTy)
       emit (.store storeVal (.reg gepDst elemTy))
     | _ =>
+      -- Bug 250: a scalar element of a promoted array (a local carried through a loop, or a field
+      -- chain of one) is written at its address. Rebuilding the array and writing it back copied
+      -- the whole array per write (at run time, and an aggregate load and store per write that
+      -- made clang -O2 quadratic in the array's length).
+      let inPlace ← if isScalarStoreTy elemTy then inPlaceRoot arr else pure false
+      if inPlace then
+        let baseAddr ← match ← placeAddr arr (.ptrMut arr.ty) with
+          | some p => pure p
+          | none => lowerExpr arr
+        let gepDst ← freshReg
+        emit (.gep gepDst baseAddr [iVal] elemTy)
+        emit (.store storeVal (.reg gepDst elemTy))
+      else
       let arrTy := arr.ty
       let aVal ← lowerExpr arr
       let tmp ← freshReg
