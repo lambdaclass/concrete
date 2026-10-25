@@ -13566,26 +13566,31 @@ positive control where a `Writer<{}>` helper may use no external authority.
 
 ---
 
-## Later Considerations: Bend And Roc
+## Open Research Questions: Bend And Roc
 
-**Research only, recorded 2026-10-24. Not an execution queue, adopted design,
-release requirement, or extension of any task's acceptance criteria.**
+These questions remain undecided. They are not planned features, implementation
+tasks, priorities, release requirements, or changes to the current execution queue.
+The [research record](research/meta/bend-roc-lessons.md) contains the reviewed
+sources, video discussion, evidence limits, and full consideration register.
 
-The [Bend/Roc research record](research/meta/bend-roc-lessons.md) preserves the
-full comparison, including the requested Roc video's timestamped discussion and
-links to source code, papers, benchmarks, articles, and Concrete's governing
-design documents. Its [27-item consideration register](research/meta/bend-roc-lessons.md#11-complete-consideration-register)
-covers proof/agent ergonomics, specification-preserving repair, checking-cost
-measurement, independent evidence accounting, transitive dependency and build-time
-authority, explicit buffer reuse, compiler optimization/validation, and bounded
-GPU research. Upstream measurements are reported, not independently reproduced.
+- Could a required-claim inventory and fixed-specification repair workflow improve
+  verification without duplicating Concrete's existing evidence machinery?
+- Which compiler, elaboration, and proof-replay phases actually dominate feedback
+  time, and could smaller explicit obligations or reusable lemmas reduce that cost?
+- What additional restrictions, if any, would make transitive native trust and
+  dependency build-time authority clearer and enforceable?
+- Where would explicit consuming or mutating collection APIs reduce allocation
+  and copying while preserving ownership, scoped references, and cleanup semantics?
+- Which representation, callback-specialization, check-hoisting, or cache changes
+  would measured workloads justify, and how would their correctness be established?
+- Could fixed-specification, proof-preserving optimization improve an existing
+  workload when runtime, memory, and independent conformance are measured together?
+- Is there a real workload that justifies a restricted GPU experiment with explicit
+  buffers, transfers, synchronization, device eligibility, and failure behavior?
+- What evidence would justify adopting any of these ideas under Concrete's
+  [design policy](docs/project/DESIGN_POLICY.md),
+  [value model](docs/language/VALUE_MODEL.md), and
+  [evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md)?
 
-These are ideas to consider later under the existing
-[design policy](docs/project/DESIGN_POLICY.md),
-[value model](docs/language/VALUE_MODEL.md),
-[anti-features](docs/language/ANTI_FEATURES.md), and
-[evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md). No hidden
-runtime, implicit reference counting/copy-on-write, automatic GPU offload, new
-proof kernel, or compiler rewrite is authorized. A future adoption needs a real
-workload, a bounded investigation, and an explicit decision through the existing
-owner; the [current execution queue](#the-current-execution-queue) is unchanged.
+No adoption decision follows from listing these questions. The owner is still
+deciding; the [current execution queue](#the-current-execution-queue) is unchanged.
