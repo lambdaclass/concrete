@@ -161,6 +161,8 @@ If you want the highest-leverage current research first:
 
 ## Compiler
 
+- [compiler/goose-design-survey.md](compiler/goose-design-survey.md) — Goose comparison: open questions on residual checks, validated indices, compact storage, serialization, destination construction, and performance experiments; no adoption commitment (`P2`, `Open`)
+
 - [compiler/artifact-driven-compiler.md](compiler/artifact-driven-compiler.md) — operationalizing named compiler artifacts (`P0`, `Open`)
 - [compiler/backend-traceability.md](compiler/backend-traceability.md) — source/Core/SSA/LLVM/machine behavior traceability (`P1`, `Open`)
 - [compiler/sparkle-emitted-code-validation.md](compiler/sparkle-emitted-code-validation.md) — dated Sparkle source analysis, emitted-LLVM validation experiment and Lean 4/Concrete native-backend options; R-0299/R-0300 own acceptance (`P1`, `Open`)
